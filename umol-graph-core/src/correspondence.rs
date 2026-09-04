@@ -11,7 +11,7 @@ use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::graph::{EdgeId, Graph, NodeId};
-use crate::remapping::Remapping;
+use crate::remapping::GraphRemapping;
 
 /// Failure to construct a correspondence whose pairs form a partial bijection over its declared id
 /// spaces.
@@ -360,14 +360,14 @@ impl GraphCorrespondence {
         self.is_total_on_left() && self.is_total_on_right()
     }
 
-    /// This correspondence as a [`Remapping`] — a dense old→new relabel of both id spaces. Requires
+    /// This correspondence as a [`GraphRemapping`] — a dense old→new relabel of both id spaces. Requires
     /// it be **total on the left** (every left id matched), as a pushout's coprojection is: left id `i`
     /// maps to its partner.
-    pub fn to_remapping(&self) -> Option<Remapping> {
+    pub fn to_remapping(&self) -> Option<GraphRemapping> {
         if !self.is_total_on_left() {
             return None;
         }
-        Some(Remapping::new(
+        Some(GraphRemapping::new(
             self.nodes
                 .matched_pairs()
                 .iter()
@@ -756,7 +756,10 @@ mod tests {
         );
         assert_eq!(
             c.to_remapping(),
-            Some(Remapping::new(vec![n(2), n(0), n(1)], vec![e(1), e(0)],)),
+            Some(GraphRemapping::new(
+                vec![n(2), n(0), n(1)],
+                vec![e(1), e(0)],
+            )),
         );
     }
 

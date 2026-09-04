@@ -19,6 +19,7 @@ proptest = []
 
 [dependencies]
 bitvec = "1.0.1"
+index_vec = "0.1.4"
 num-bigint = "0.4"
 umol-nauty-sys = { path = "../umol-nauty-sys", version = "0.7.0" }
 

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use umol_graph_core::{EdgeId, Graph, NodeId, Remapping};
+use umol_graph_core::{EdgeId, Graph, GraphRemapping, NodeId};
 
 use super::super::aromatic::AromaticSystems;
 use super::super::dative::DativeBonds;
@@ -73,7 +73,7 @@ impl Molecule {
             return None;
         }
 
-        let graph_remapping = Remapping::new(
+        let graph_remapping = GraphRemapping::new(
             correspondence
                 .atoms()
                 .matched_pairs()

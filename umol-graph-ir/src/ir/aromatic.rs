@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{NodeId, ParticipantPosition, RelationId, Remapping, VarRelationSet};
+use umol_graph_core::{GraphRemapping, NodeId, ParticipantPosition, RelationId, VarRelationSet};
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
@@ -107,7 +107,7 @@ impl AromaticSystems {
             .map(|(_, _, attributes)| attributes)
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
@@ -117,7 +117,7 @@ impl AromaticSystems {
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding systems meet,
     /// non-coinciding systems are carried. `None` when a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
         self.0
             .pushout(
                 &right.remap(remapping).0,
@@ -272,7 +272,7 @@ impl AromaticSystemSpans {
         self.0.data(RelationId::from(id))
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
 }
@@ -577,7 +577,7 @@ mod tests {
         let glued = left
             .glue(
                 &right,
-                &Remapping::new((0..8).map(NodeId).collect(), vec![]),
+                &GraphRemapping::new((0..8).map(NodeId).collect(), vec![]),
             )
             .expect("the sides agree once the right vector is carried into the left frame");
 

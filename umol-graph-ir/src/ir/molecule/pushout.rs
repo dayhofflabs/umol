@@ -3,7 +3,7 @@
 //! attribute layer over graph-core's structural `pushout`. A child of `molecule` so it reaches the
 //! private overlay relation-sets directly, without exposing raw accessors.
 
-use umol_graph_core::{Correspondence, EdgeId, GraphCorrespondence, NodeId, Remapping};
+use umol_graph_core::{Correspondence, EdgeId, GraphCorrespondence, GraphRemapping, NodeId};
 use umol_perm::{DynPermutation, Permutation};
 
 use super::super::atom::AtomForm;
@@ -81,7 +81,7 @@ impl Molecule {
         // Overlays glue over the same pushout: relabel `other`'s participants into the glue space
         // (`self` already keeps its ids), then merge coinciding overlays by `meet`; non-coinciding
         // ones are appended (context). `⊥` on any coincident meet makes the whole glue inadmissible.
-        let participant_remapping = Remapping::new(
+        let participant_remapping = GraphRemapping::new(
             (0..other.raw_graph().node_count())
                 .map(|index| {
                     po.right

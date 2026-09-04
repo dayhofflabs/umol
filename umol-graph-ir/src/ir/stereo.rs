@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use strum::VariantArray;
 use umol_graph_core::{
-    EdgeId, FixedVarBirelationSet, NodeId, ParticipantPosition, RelationId, Remapping,
+    EdgeId, FixedVarBirelationSet, GraphRemapping, NodeId, ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation};
@@ -113,7 +113,7 @@ impl StereoAtoms {
             .map(|(_, _, _, attributes)| attributes)
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
@@ -127,7 +127,7 @@ impl StereoAtoms {
     /// its configuration reframed into the retained `self` ligand frame and then meets, a
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
     /// a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
         self.0
             .pushout(
                 &right.remap(remapping).0,
@@ -341,7 +341,7 @@ impl StereoBonds {
             .map(|(_, _, _, attributes)| attributes)
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
@@ -355,7 +355,7 @@ impl StereoBonds {
     /// its configuration reframed into the retained `self` ligand frame and then meets, a
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
     /// a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
         self.0
             .pushout(
                 &right.remap(remapping).0,
@@ -509,7 +509,7 @@ impl StereoAtomSpans {
         self.0.data(RelationId::from(id))
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
 }
@@ -633,7 +633,7 @@ impl StereoBondSpans {
         self.0.data(RelationId::from(id))
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
 }

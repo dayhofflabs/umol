@@ -12,8 +12,8 @@ use std::mem;
 
 use thiserror::Error;
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, RelationId,
-    Remapping, VarRelationSet,
+    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphRemapping, NodeId,
+    RelationId, VarRelationSet,
 };
 use umol_perm::{DynPermutation, Permutation};
 
@@ -301,7 +301,7 @@ impl ReactionSpan {
             return None;
         }
 
-        let graph_remapping = Remapping::new(
+        let graph_remapping = GraphRemapping::new(
             correspondence
                 .atoms()
                 .matched_pairs()
@@ -667,7 +667,7 @@ impl ReactionSpan {
         // R id → union id per entity kind.
         let atom_union: HashMap<AtomId, AtomId> = union_map(atoms_corr, lhs_atom_count);
         let bond_union: HashMap<BondId, BondId> = union_map(bonds_corr, lhs_bond_count);
-        let participant_remapping = Remapping::new(
+        let participant_remapping = GraphRemapping::new(
             (0..rhs.atoms().count())
                 .map(|index| NodeId::from(atom_union[&AtomId::from(index)]))
                 .collect(),

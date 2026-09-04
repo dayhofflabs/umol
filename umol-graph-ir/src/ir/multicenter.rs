@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{NodeId, ParticipantPosition, RelationId, Remapping, VarRelationSet};
+use umol_graph_core::{GraphRemapping, NodeId, ParticipantPosition, RelationId, VarRelationSet};
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
@@ -108,7 +108,7 @@ impl MulticenterBonds {
             .map(|(_, _, attributes)| attributes)
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
@@ -118,7 +118,7 @@ impl MulticenterBonds {
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding bonds meet,
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
         self.0
             .pushout(
                 &right.remap(remapping).0,
@@ -271,7 +271,7 @@ impl MulticenterBondSpans {
         self.0.data(RelationId::from(id))
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
 }

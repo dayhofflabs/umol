@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{FixedVarBirelationSet, NodeId, ParticipantPosition, RelationId, Remapping};
+use umol_graph_core::{
+    FixedVarBirelationSet, GraphRemapping, NodeId, ParticipantPosition, RelationId,
+};
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
@@ -125,7 +127,7 @@ impl DativeBonds {
             .map(|(_, _, _, attributes)| attributes)
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
@@ -135,7 +137,7 @@ impl DativeBonds {
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding bonds meet,
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
         self.0
             .pushout(
                 &right.remap(remapping).0,
@@ -301,7 +303,7 @@ impl DativeBondSpans {
         self.0.data(RelationId::from(id))
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
 }

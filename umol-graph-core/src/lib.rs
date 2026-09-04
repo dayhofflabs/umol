@@ -55,6 +55,6 @@ pub use relation::{
     ParticipantRefs, RelationId, RelationParticipant, RelationPullback, RelationPushout,
     VarRelationSet, VarVarBirelationSet,
 };
-pub use remapping::Remapping;
+pub use remapping::{GraphRemapping, Remapping};
 pub use rewriting::{Pullback, Pushout, PushoutComplement};
 pub use union_find::UnionFind;

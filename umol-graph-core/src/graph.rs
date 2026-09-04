@@ -10,6 +10,8 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Add, Sub};
 use std::sync::Arc;
 
+use index_vec::Idx;
+
 use crate::compaction::GraphCompaction;
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 
@@ -28,6 +30,16 @@ pub struct Neighbor {
 impl NodeId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl Idx for NodeId {
+    fn from_usize(index: usize) -> Self {
+        Self::from(index)
+    }
+
+    fn index(self) -> usize {
+        NodeId::index(self)
     }
 }
 
@@ -57,6 +69,16 @@ impl Sub<usize> for NodeId {
 impl EdgeId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl Idx for EdgeId {
+    fn from_usize(index: usize) -> Self {
+        Self::from(index)
+    }
+
+    fn index(self) -> usize {
+        EdgeId::index(self)
     }
 }
 

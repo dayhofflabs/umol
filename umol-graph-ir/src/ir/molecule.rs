@@ -11,7 +11,7 @@ pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
-    Correspondence, EdgeId, Graph, NodeId, RelationParticipant, Remapping, UnionFind,
+    Correspondence, EdgeId, Graph, GraphRemapping, NodeId, RelationParticipant, UnionFind,
 };
 
 use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
@@ -1640,7 +1640,7 @@ impl Molecule {
             );
         }
 
-        let ligand_remapping = Remapping::new(
+        let ligand_remapping = GraphRemapping::new(
             (0..other.atoms().count())
                 .map(|index| NodeId((atom_offset + index) as u32))
                 .collect(),
@@ -1790,7 +1790,7 @@ impl Molecule {
         }
         let compact = |a: AtomId| AtomId(atom_compact[a.index()]);
         let component_of = |a: AtomId| atom_component[a.index()];
-        let compaction = Remapping::new(
+        let compaction = GraphRemapping::new(
             (0..atom_count).map(|i| NodeId(atom_compact[i])).collect(),
             Vec::new(),
         );

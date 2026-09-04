@@ -13,10 +13,12 @@
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, Sub};
 
+use index_vec::Idx;
+
 use crate::compaction::{Compaction, GraphCompaction};
 use crate::correspondence::Correspondence;
 use crate::graph::{EdgeId, NodeId};
-use crate::remapping::Remapping;
+use crate::remapping::GraphRemapping;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
@@ -24,6 +26,16 @@ pub struct RelationId(pub u32);
 impl RelationId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl Idx for RelationId {
+    fn from_usize(index: usize) -> Self {
+        Self::from(index)
+    }
+
+    fn index(self) -> usize {
+        RelationId::index(self)
     }
 }
 
@@ -152,7 +164,7 @@ pub struct ParticipantRefs {
     pub edge: Option<EdgeId>,
 }
 /// A value that can occupy a relation factor: routes through a `GraphCompaction`
-/// (removal/compaction, both directions) and a `Remapping` (general relabel,
+/// (removal/compaction, both directions) and a `GraphRemapping` (general relabel,
 /// forward), and exposes its node/edge refs for incidence. One impl per concrete
 /// id type — dispatch is static, since a factor is homogeneous.
 pub trait RelationParticipant: Copy + Ord + Hash {
@@ -163,7 +175,7 @@ pub trait RelationParticipant: Copy + Ord + Hash {
     ///
     /// Every node or edge id read from `remapping` must be reported by [`refs`](Self::refs), so
     /// checked relation-set remapping can establish coverage before calling this method.
-    fn remap(self, remapping: &Remapping) -> Self;
+    fn remap(self, remapping: &GraphRemapping) -> Self;
 
     /// Return every graph id used to represent this participant.
     fn refs(self) -> ParticipantRefs;
@@ -178,7 +190,7 @@ impl RelationParticipant for NodeId {
         compaction.uncompact_node(self)
     }
 
-    fn remap(self, remapping: &Remapping) -> Self {
+    fn remap(self, remapping: &GraphRemapping) -> Self {
         remapping.map_node(self)
     }
 
@@ -199,7 +211,7 @@ impl RelationParticipant for EdgeId {
         compaction.uncompact_edge(self)
     }
 
-    fn remap(self, remapping: &Remapping) -> Self {
+    fn remap(self, remapping: &GraphRemapping) -> Self {
         remapping.map_edge(self)
     }
 
@@ -312,9 +324,9 @@ impl<P: Hash, D: Hash, const N: usize> Hash for FixedRelationSet<P, D, N> {
     }
 }
 
-/// Relabel a factor's participants through a general `Remapping`, preserving their stored order.
+/// Relabel a factor's participants through a general `GraphRemapping`, preserving their stored order.
 /// The owning relation-set constructor canonicalizes the result and transports positional data.
-fn remap_factor<P>(participants: &[P], remapping: &Remapping) -> Vec<P>
+fn remap_factor<P>(participants: &[P], remapping: &GraphRemapping) -> Vec<P>
 where
     P: RelationParticipant,
 {
@@ -323,7 +335,7 @@ where
 
 /// Whether every graph id these participants reference has an image under `remapping` — the
 /// precondition [`FixedRelationSet::try_remap`] and its peers check before relabelling.
-fn remappable_under<P>(participants: &[P], remapping: &Remapping) -> bool
+fn remappable_under<P>(participants: &[P], remapping: &GraphRemapping) -> bool
 where
     P: RelationParticipant,
 {
@@ -526,7 +538,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
@@ -543,7 +555,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover the set.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -886,7 +898,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
@@ -903,7 +915,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover the set.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -1267,7 +1279,7 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
@@ -1287,7 +1299,7 @@ where
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -1719,7 +1731,7 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
@@ -1740,7 +1752,7 @@ where
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -2177,7 +2189,7 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
@@ -2195,7 +2207,7 @@ where
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -2695,7 +2707,7 @@ mod tests {
     fn test_fixed_relation_set_remap() {
         let rs: FixedRelationSet<NodeId, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
-        let remapping = Remapping::new(vec![n(1), n(0)], vec![]);
+        let remapping = GraphRemapping::new(vec![n(1), n(0)], vec![]);
         let out = rs.remap(&remapping);
         assert_eq!(out.participants(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(out.data(RelationId(0)), &PositionLabels(vec![10, 11]));
@@ -2707,7 +2719,7 @@ mod tests {
     fn test_fixed_relation_set_try_remap(#[case] nodes: Vec<NodeId>, #[case] covered: bool) {
         let rs: FixedRelationSet<NodeId, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
-        let remapping = Remapping::new(nodes, vec![]);
+        let remapping = GraphRemapping::new(nodes, vec![]);
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -2956,7 +2968,7 @@ mod tests {
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             PositionLabels(vec![20, 21, 22]),
         )]);
-        let remapping = Remapping::new(vec![], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
+        let remapping = GraphRemapping::new(vec![], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
         let out = rs.remap(&remapping);
         assert_eq!(
             out.participants(RelationId(0)),
@@ -2973,7 +2985,7 @@ mod tests {
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             PositionLabels(vec![20, 21, 22]),
         )]);
-        let remapping = Remapping::new(vec![], edges);
+        let remapping = GraphRemapping::new(vec![], edges);
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3143,7 +3155,7 @@ mod tests {
                     factor_2: vec![20, 21],
                 },
             )]);
-        let remapping = Remapping::new(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)]);
+        let remapping = GraphRemapping::new(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)]);
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[EdgeId(1), EdgeId(0)]);
@@ -3174,7 +3186,7 @@ mod tests {
                     factor_2: vec![20, 21],
                 },
             )]);
-        let remapping = Remapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(nodes, edges);
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3414,7 +3426,7 @@ mod tests {
                     factor_2: vec![40, 41, 42],
                 },
             )]);
-        let remapping = Remapping::new(vec![n(2), n(0), n(1)], vec![EdgeId(2), EdgeId(0)]);
+        let remapping = GraphRemapping::new(vec![n(2), n(0), n(1)], vec![EdgeId(2), EdgeId(0)]);
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[EdgeId(2), EdgeId(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(2), n(0), n(1)]);
@@ -3449,7 +3461,7 @@ mod tests {
                     factor_2: vec![40, 41, 42],
                 },
             )]);
-        let remapping = Remapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(nodes, edges);
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3639,7 +3651,8 @@ mod tests {
                     factor_2: vec![60, 61, 62],
                 },
             )]);
-        let remapping = Remapping::new(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
+        let remapping =
+            GraphRemapping::new(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(
@@ -3677,7 +3690,7 @@ mod tests {
                     factor_2: vec![60, 61, 62],
                 },
             )]);
-        let remapping = Remapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(nodes, edges);
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
