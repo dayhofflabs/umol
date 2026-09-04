@@ -2,6 +2,7 @@
 use rstest::*;
 
 use crate::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use crate::ctfile::error::ParseError;
 use crate::ctfile::parser::{
     has_extended_features, parse_extended_mol, parse_extended_mol_bytes, parse_extended_mol_with,
     parse_mol_bytes_to_table_ir, parse_mol_bytes_to_table_ir_with, parse_mol_to_table_ir,
@@ -119,6 +120,24 @@ fn test_parse_mol_with_config(methane_mol: &str) {
     );
     let molecule = result.unwrap();
     assert_eq!(molecule.atom_count(), 1);
+}
+
+#[rstest]
+#[case::unsupported_flags(
+    CtabParseFlags::BASIC | CtabParseFlags::WILDCARDS,
+    CtabParseFlags::WILDCARDS,
+)]
+fn test_parse_mol_to_table_ir_with_error(
+    methane_mol: &str,
+    #[case] flags: CtabParseFlags,
+    #[case] unsupported_flags: CtabParseFlags,
+) {
+    assert_eq!(
+        parse_mol_to_table_ir_with(methane_mol, &CtfileIoConfig::with_parse_flags(flags)),
+        Err(ParseError::UnsupportedBasicParseFlags {
+            flags: unsupported_flags,
+        })
+    );
 }
 
 #[rstest]

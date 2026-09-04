@@ -6,6 +6,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_utils::error::UmolError;
 
+use super::config::CtabParseFlags;
 use crate::table_ir::SGroupType;
 
 /// An error encountered while parsing a complete MOL or SDF input.
@@ -13,8 +14,11 @@ use crate::table_ir::SGroupType;
 /// Syntax variants identify the CTfile construct that could not be parsed. Line and
 /// column values are zero-based physical byte positions. Construction variants retain
 /// the domain condition that prevented the parsed records from forming a TableIR value.
+/// Configuration variants identify options unsupported by the selected parser.
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
+    #[error("Basic parser does not support parse flags: {flags}")]
+    UnsupportedBasicParseFlags { flags: CtabParseFlags },
     #[error("Invalid counts line at line {line}, col {col}")]
     InvalidCountsLine { line: u32, col: u32 },
     #[error("Invalid atom line at line {line}, col {col}")]

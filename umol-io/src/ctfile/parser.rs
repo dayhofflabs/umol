@@ -49,10 +49,12 @@ fn ctab_block(
     line_offset: u32,
     flags: CtabParseFlags,
 ) -> ModalResult<(Molecule, u32), ParseError> {
-    debug_assert!(
-        CtabParseFlags::BASIC_MAX.contains(flags),
-        "flags must be a subset of BASIC_MAX"
-    );
+    let unsupported_flags = flags.difference(CtabParseFlags::BASIC_MAX);
+    if !unsupported_flags.is_empty() {
+        return Err(ErrMode::Cut(ParseError::UnsupportedBasicParseFlags {
+            flags: unsupported_flags,
+        }));
+    }
     let legacy_atom_lists = flags.contains(CtabParseFlags::LEGACY_ATOM_LISTS);
 
     let (counts, molecule_properties, line_offset) = counts_block(input, line_offset, flags)?;
