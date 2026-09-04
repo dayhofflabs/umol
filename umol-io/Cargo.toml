@@ -28,7 +28,6 @@ bstr = "1.12.0"
 fast-float2 = "0.2.3"
 indexmap = "2.11.1"
 map-macro = "0.3.0"
-nom = { version = "8.0.0" }
 num = "0.4.3"
 regex = "1.11.2"
 smallvec = "1.15.1"

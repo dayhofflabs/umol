@@ -1,6 +1,6 @@
 # 112 — Winnow parser unification
 
-Status: In Progress
+Status: Completed
 Date: 2026-06-13
 Relates: [153](153-format-parsing-outstanding-tasks-2026-07-18.md)
 
@@ -384,9 +384,22 @@ The workspace is green at the end of S1; CTfile still uses nom.
   `cargo test -p umol-io --features conformance` passed 16,105 tests, and
   `cargo test -p umol-io --features proptest` passed 3,424 tests. Clippy passed for all
   `umol-io` targets with warnings denied.
-- **S2g — Full-file regression check** (`mol_parsing` benchmark): rerun the unchanged
+- **S2g — Full-file regression check.** **Done.** (`mol_parsing` benchmark): rerun the unchanged
   S2a benchmark set against Winnow and account for any material regression. Additive,
   green. [dep: S2f]
+
+  The initial integer-field port converted matched bytes through UTF-8 and `FromStr` and
+  caused a material regression. Integer fields now use `atoi` to parse their fixed-width
+  ASCII bytes directly. The final measurements on 2026-09-03 were:
+
+  - caffeine MOL: 2.9984–3.4649 us;
+  - copolymer/SGroup MOL: 4.0682–4.1991 us; and
+  - ten-component SDF: 74.959–76.963 us.
+
+  The caffeine case remains a fraction of a microsecond slower than its nom baseline and
+  was accepted as immaterial. The extended MOL and SDF cases are faster than their nom
+  baselines. `cargo test -p umol-io` passed 3,416 tests, and Clippy passed for all
+  `umol-io` targets with warnings denied.
 
 S2b through S2f are one coordinated breaking migration: the shared parser result and
 error types cross the CTfile modules, so the tree is required to be green at the stage
@@ -395,13 +408,22 @@ the end of S2.
 
 ### S3 — Nom removal and final verification
 
-- **S3a — Direct nom removal** (`umol-io/Cargo.toml`, workspace sources,
+- **S3a — Direct nom removal.** **Done.** (`umol-io/Cargo.toml`, workspace sources,
   `Cargo.lock`): remove the remaining dependency and imports, then confirm that no direct
   nom dependency or source reference remains. The transitive Winnow 0.7 test-infrastructure
   dependency is not part of this cleanup. Breaking cleanup, green. [dep: S1b, S2g]
-- **S3b — Verification gate** (workspace): run formatting; the default, integration,
+
+  The final direct nom dependency was removed from `umol-io` and the lockfile. No nom
+  package remains in the dependency graph, and no workspace source reference remains.
+- **S3b — Verification gate.** **Done.** (workspace): run formatting; the default, integration,
   conformance, and property-test surfaces affected by the parser changes; workspace
   tests and lint; and the final full-file benchmarks. Additive, green. [dep: S3a]
+
+  Nightly formatting passed. The final focused results were 1,218 `umol-edn` tests;
+  6,933 `umol-graph-ir` tests with 7 ignored; and 3,416 default, 16,105 conformance,
+  and 3,424 property-enabled `umol-io` tests. `cargo test --workspace` and
+  `cargo clippy --workspace --all-targets -- -D warnings` passed under the repository
+  Python 3.13 environment. The final full-file benchmark results are recorded in S2g.
 
 The critical path is S0b → S0d → S1 → S3 and S0a → S2 → S3. No stage is deferrable:
 the CXSMILES port, CTfile port, dependency removal, and regression evidence are all
