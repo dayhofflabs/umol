@@ -1,6 +1,6 @@
 # 112 — Winnow parser unification
 
-Status: Proposed
+Status: In Progress
 Date: 2026-06-13
 Relates: [153](153-format-parsing-outstanding-tasks-2026-07-18.md)
 
@@ -19,7 +19,7 @@ implementation sequence.
 As of 2026-09-03:
 
 - `umol-edn` and `umol-graph-ir` depend directly on Winnow 1.x. The lockfile resolves
-  Winnow 1.0.1.
+  Winnow 1.0.4.
 - Winnow 1.0.4 is current. Its changes since 1.0.1 concern `seq!` field capacity,
   `ascii::float`, `binary::bits`, and documentation; none applies to the API used by
   `umol-edn`.
@@ -200,12 +200,26 @@ workspace and no unexplained material full-file parsing regression.
 
 ### S0 — Dependency and evidence baseline
 
-- **S0a — Current parser verification** (`umol-edn`, `umol-graph-ir`, `umol-io`):
-  record the existing test, integration, and applicable feature-gated conformance
-  results before changing dependencies. Additive, green. [dep: none]
-- **S0b — Winnow patch update** (`Cargo.lock`, `umol-edn`, `umol-graph-ir`): retain
-  `winnow = "1.0"`, update the locked compatible patch release, and run both crates'
-  complete feature surfaces. Additive, green. [dep: S0a]
+- **S0a — Current parser verification.** **Done.** (`umol-edn`, `umol-graph-ir`,
+  `umol-io`): record the existing test, integration, and applicable feature-gated
+  conformance results before changing dependencies. Additive, green. [dep: none]
+
+  Baseline on 2026-09-03:
+
+  - `cargo test -p umol-edn --all-features`: 1,218 passed;
+  - `cargo test -p umol-graph-ir --all-features`: 6,933 passed, 7 ignored;
+  - `cargo test -p umol-io`: 3,393 passed;
+  - `cargo test -p umol-io --features conformance`: 16,082 passed; and
+  - `cargo test -p umol-io --features proptest`: 3,401 passed.
+
+  All commands completed with no failures.
+- **S0b — Winnow patch update.** **Done.** (`Cargo.lock`, `umol-edn`,
+  `umol-graph-ir`): retain `winnow = "1.0"`, update the locked compatible patch release,
+  and run both crates' complete feature surfaces. Additive, green. [dep: S0a]
+
+  Winnow 1.x was updated from 1.0.1 to 1.0.4 without changing either manifest.
+  `cargo test -p umol-edn --all-features` passed 1,218 tests, and
+  `cargo test -p umol-graph-ir --all-features` passed 6,933 tests with 7 ignored.
 - **S0c — Unused dependency removal** (`umol-geometric/Cargo.toml`): remove nom and
   verify `umol-geometric`. Additive, green. [dep: S0a]
 - **S0d — `umol-io` migration dependency and CX benchmark** (`umol-io/Cargo.toml`,

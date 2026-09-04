@@ -1713,7 +1713,7 @@ dependencies = [
  "toml_datetime 1.1.0+spec-1.1.0",
  "toml_parser",
  "toml_writer",
- "winnow 1.0.1",
+ "winnow 1.0.4",
 ]
 
 [[package]]
@@ -1748,7 +1748,7 @@ version = "1.1.0+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2334f11ee363607eb04df9b8fc8a13ca1715a72ba8662a26ac285c98aabb4011"
 dependencies = [
- "winnow 1.0.1",
+ "winnow 1.0.4",
 ]
 
 [[package]]
@@ -1824,7 +1824,7 @@ dependencies = [
  "thiserror",
  "umol-edn-macros",
  "uuid",
- "winnow 1.0.1",
+ "winnow 1.0.4",
  "zmij",
 ]
 
@@ -1949,7 +1949,7 @@ dependencies = [
  "umol-graph-ir-macros",
  "umol-perm",
  "umol-utils",
- "winnow 1.0.1",
+ "winnow 1.0.4",
 ]
 
 [[package]]
@@ -2507,9 +2507,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "1.0.1"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09dac053f1cd375980747450bfc7250c264eaae0583872e845c0c7cd578872b5"
+checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
 ]
