@@ -2,8 +2,8 @@
 
 use std::fmt::Debug;
 use std::ops::{Range, RangeInclusive};
-use std::str::{from_utf8, FromStr};
 
+use atoi::{FromRadix10, FromRadix10Signed};
 use bstr::ByteSlice;
 use fast_float2::FastFloat;
 use num::{Float, Integer};
@@ -96,44 +96,48 @@ impl<T: PartialOrd> Contains<T> for RangeInclusive<T> {
     }
 }
 
-pub(super) trait IntParser:
-    Sized + Copy + PartialOrd + Debug + Default + Integer + FromStr
-{
+pub(super) trait IntParser: Sized + Copy + PartialOrd + Debug + Default + Integer {
+    fn parse_ascii(input: &[u8]) -> (Self, usize);
+
     fn parse<'inp>(input: &mut Input<'inp>) -> PResult<Self> {
         let start = input.checkpoint();
         let column = input.current_token_start();
         let bytes: &[u8] = input.as_ref();
-        let sign_len = usize::from(matches!(bytes.first(), Some(b'+' | b'-')));
-        let digit_len = bytes[sign_len..]
-            .iter()
-            .take_while(|byte| byte.is_ascii_digit())
-            .count();
-        if digit_len == 0 {
+        let (value, consumed) = Self::parse_ascii(bytes);
+        if consumed == 0 {
             return Err(field_error(input, &start, column));
         }
-        let digits: &[u8] = take(sign_len + digit_len).parse_next(input)?;
-        let value = from_utf8(digits)
-            .ok()
-            .and_then(|digits| digits.parse().ok());
-
-        match value {
-            Some(value) => Ok(value),
-            None => Err(field_error(input, &start, column)),
-        }
+        let _: &[u8] = take(consumed).parse_next(input)?;
+        Ok(value)
     }
 }
 
-impl IntParser for i8 {}
+macro_rules! impl_signed_int_parser {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl IntParser for $ty {
+                fn parse_ascii(input: &[u8]) -> (Self, usize) {
+                    Self::from_radix_10_signed(input)
+                }
+            }
+        )+
+    };
+}
 
-impl IntParser for i16 {}
+macro_rules! impl_unsigned_int_parser {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl IntParser for $ty {
+                fn parse_ascii(input: &[u8]) -> (Self, usize) {
+                    Self::from_radix_10(input)
+                }
+            }
+        )+
+    };
+}
 
-impl IntParser for i32 {}
-
-impl IntParser for u8 {}
-
-impl IntParser for u32 {}
-
-impl IntParser for usize {}
+impl_signed_int_parser!(i8, i16, i32);
+impl_unsigned_int_parser!(u8, u32, usize);
 
 pub(super) fn is_all_whitespace_or_zeroes(input: &[u8]) -> bool {
     input.trim_ascii().find_not_byteset(b"0").is_none()

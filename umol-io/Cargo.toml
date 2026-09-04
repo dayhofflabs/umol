@@ -22,6 +22,7 @@ depiction = ["coordgen"]
 proptest = []
 
 [dependencies]
+atoi = "3.1.0"
 bitflags = "2.9.4"
 bstr = "1.12.0"
 fast-float2 = "0.2.3"
