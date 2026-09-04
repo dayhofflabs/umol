@@ -311,6 +311,21 @@ The workspace is green at the end of S1; CTfile still uses nom.
   `legacy_atom_list.rs`, `rgroup.rs`): port each record family and its exact success and
   committed failure cases, preserving physical line and column reporting. Breaking
   coordinated migration. [dep: S2b]
+
+  The fixed header, counts, atom, bond, legacy atom-list, and R-group parsers now use
+  Winnow directly. Counted blocks consume physical lines through the shared line reader;
+  missing records are committed `UnexpectedEof` failures, while malformed owned records
+  are committed record-specific failures at the field-start or first trailing byte
+  column. Enumerated atom and bond fields are checked before conversion, so malformed
+  codes report syntax errors rather than reaching infallible conversion branches. The
+  existing success partitions were retained and the failure tables now assert exact
+  Winnow columns; explicit counted-block EOF and formerly panic-prone code cases were
+  added. An isolated fixed-record harness passed 802 tests on Rust 1.87, and the same
+  harness passed Clippy with warnings denied on the current toolchain.
+
+  As expected for the coordinated S2b-S2f migration, the crate remains red at the
+  unmigrated property, accumulation, and top-level composition modules. No Nom adapter
+  was added; S2d owns the next consumers.
 - **S2d — SGroups and properties** (`sgroup.rs`, `properties.rs`): port property
   dispatch and bodies, use `Cut` after recognized tags where ownership is clear, and
   retain the necessary backtracking at multiline-property boundaries. Breaking

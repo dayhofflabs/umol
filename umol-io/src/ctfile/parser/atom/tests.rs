@@ -2,10 +2,10 @@
 
 use bstr::ByteSlice;
 use float_cmp::*;
-use nom::error::ErrorKind as NomErrorKind;
-use nom::Err;
 use pretty_assertions::assert_eq;
 use rstest::*;
+use winnow::error::ErrMode;
+use winnow::Parser;
 
 use super::*;
 use crate::ctfile::config::CtabParseFlags;
@@ -56,10 +56,11 @@ fn test_atom_block(
     #[case] hydrogen_count: Option<u8>,
     #[case] valence: Option<u8>,
 ) {
-    let result = atom_block(1, 0, CtabParseFlags::BASIC).parse(input);
+    let mut remaining = input;
+    let result = atom_block(&mut remaining, 1, 0, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
-    let (remaining, (atoms, positions, _)) = result.unwrap();
+    let (atoms, positions, _) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input_str, remaining);
     assert_eq!(atoms.len(), 1);
     let atom = &atoms[0];
@@ -78,28 +79,25 @@ fn test_atom_block(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_69_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0X\n")]
-#[case::len_62_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0 1\n")]
-#[case::len_61_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  01\n")]
-#[case::len_60_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0X\n")]
-#[case::len_50_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 4\n")]
-#[case::len_49_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  04\n")]
-#[case::len_48_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0X\n")]
-#[case::len_39_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3X\n")]
-#[case::len_38_trailing_data(b"    1.2345    2.3456    3.4567 C  -2 3\n")]
-#[case::len_37_trailing_data(b"    1.2345    2.3456    3.4567 C  -23\n")]
-#[case::len_36_trailing_data(b"    1.0000    2.0000    3.0000 C  -2X\n")]
-#[case::len_35_trailing_data(b"    1.2345    2.3456    3.4567 C  1\n")]
-#[case::len_34_trailing_data(b"    1.0000    2.0000    3.0000 C  X\n")]
-#[case::len_31_too_short(b"    1.0000    2.0000    3.0000 \n")]
-fn test_atom_block_invalid(#[case] input: &[u8]) {
-    let result = atom_block(1, 0, CtabParseFlags::BASIC).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
-    assert!(
-        matches!(result, Err(Err::Error(ParseError::InvalidAtomLine { .. }))),
-        "{:?} should have failed with InvalidAtomLine",
-        input_str,
+#[case::len_69_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0X\n", 69)]
+#[case::len_62_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0 1\n", 61)]
+#[case::len_61_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  01\n", 60)]
+#[case::len_60_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0X\n", 60)]
+#[case::len_50_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 4\n", 49)]
+#[case::len_49_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  04\n", 48)]
+#[case::len_48_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0X\n", 48)]
+#[case::len_39_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3X\n", 39)]
+#[case::len_38_trailing_data(b"    1.2345    2.3456    3.4567 C  -2 3\n", 37)]
+#[case::len_37_trailing_data(b"    1.2345    2.3456    3.4567 C  -23\n", 36)]
+#[case::len_36_trailing_data(b"    1.0000    2.0000    3.0000 C  -2X\n", 36)]
+#[case::len_35_trailing_data(b"    1.2345    2.3456    3.4567 C  1\n", 34)]
+#[case::len_34_trailing_data(b"    1.0000    2.0000    3.0000 C  X\n", 34)]
+#[case::len_31_too_short(b"    1.0000    2.0000    3.0000 \n", 31)]
+fn test_atom_block_error(#[case] input: &[u8], #[case] col: u32) {
+    let mut remaining = input;
+    assert_eq!(
+        atom_block(&mut remaining, 1, 0, CtabParseFlags::BASIC),
+        Err(ErrMode::Cut(ParseError::InvalidAtomLine { line: 0, col }))
     );
 }
 
@@ -145,10 +143,11 @@ fn test_extended_atom_block(
     #[case] hydrogen_count: Option<u8>,
     #[case] valence: Option<u8>,
 ) {
-    let result = extended_atom_block(1, 0, CtabParseFlags::EXTENDED).parse(input);
+    let mut remaining = input;
+    let result = extended_atom_block(&mut remaining, 1, 0, CtabParseFlags::EXTENDED);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
-    let (remaining, (atoms, positions, _)) = result.unwrap();
+    let (atoms, positions, _) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input_str, remaining);
     assert_eq!(atoms.len(), 1);
     let atom = &atoms[0];
@@ -167,27 +166,42 @@ fn test_extended_atom_block(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_70_malformed(b"   -1.9225   -0.6187    0.0000 R20  0  0  0  0  0  0  0  0  0  0  0  0\n")]
-#[case::len_69_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0X\n")]
-#[case::len_60_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0X\n")]
-#[case::len_48_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0X\n")]
-#[case::len_44_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  0 1")]
-#[case::len_43_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  01")]
-#[case::len_41_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3 1")]
-#[case::len_40_trailing_data(b"    1.2345    2.3456    3.4567 C   0  31")]
-#[case::len_39_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3X\n")]
-#[case::len_36_trailing_data(b"    1.0000    2.0000    3.0000 C  -2X\n")]
-#[case::len_34_trailing_data(b"    1.0000    2.0000    3.0000 C  X\n")]
-#[case::len_31_too_short(b"    1.0000    2.0000    3.0000 \n")]
-fn test_extended_atom_block_invalid(#[case] input: &[u8]) {
-    let result = extended_atom_block(1, 0, CtabParseFlags::EXTENDED).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
-    assert!(
-        matches!(result, Err(Err::Error(ParseError::InvalidAtomLine { .. }))),
-        "{:?} should have failed with InvalidAtomLine, output: {:?}",
-        input_str,
-        result.clone().unwrap_err(),
+#[case::len_70_malformed(b"   -1.9225   -0.6187    0.0000 R20  0  0  0  0  0  0  0  0  0  0  0  0\n", 69)]
+#[case::len_69_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0X\n", 69)]
+#[case::len_60_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0X\n", 60)]
+#[case::len_48_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0X\n", 48)]
+#[case::len_44_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  0 1", 43)]
+#[case::len_43_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  01", 42)]
+#[case::len_41_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3 1", 40)]
+#[case::len_40_trailing_data(b"    1.2345    2.3456    3.4567 C   0  31", 39)]
+#[case::len_39_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3X\n", 39)]
+#[case::len_36_trailing_data(b"    1.0000    2.0000    3.0000 C  -2X\n", 36)]
+#[case::len_34_trailing_data(b"    1.0000    2.0000    3.0000 C  X\n", 34)]
+#[case::len_31_too_short(b"    1.0000    2.0000    3.0000 \n", 31)]
+fn test_extended_atom_block_error(#[case] input: &[u8], #[case] col: u32) {
+    let mut remaining = input;
+    assert_eq!(
+        extended_atom_block(&mut remaining, 1, 0, CtabParseFlags::EXTENDED),
+        Err(ErrMode::Cut(ParseError::InvalidAtomLine { line: 0, col }))
+    );
+}
+
+#[rstest]
+#[case::basic(false)]
+#[case::extended(true)]
+fn test_atom_block_eof_error(#[case] extended: bool) {
+    let mut input: &[u8] = b"";
+    let result = if extended {
+        extended_atom_block(&mut input, 1, 4, CtabParseFlags::EXTENDED).map(|_| ())
+    } else {
+        atom_block(&mut input, 1, 4, CtabParseFlags::BASIC).map(|_| ())
+    };
+    assert_eq!(
+        result,
+        Err(ErrMode::Cut(ParseError::UnexpectedEof {
+            line: 4,
+            block: "atom",
+        }))
     );
 }
 
@@ -269,11 +283,10 @@ fn test_atom_input(
     #[case] hydrogen_count: Option<u8>,
     #[case] valence: Option<u8>,
 ) {
-    let result = atom_input(CtabParseFlags::BASIC).parse(input);
+    let result = atom_input(CtabParseFlags::BASIC).parse(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input_str, remaining);
+    let (atom, position) = result.unwrap();
     assert!(
         approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
@@ -329,33 +342,28 @@ fn test_atom_input(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::too_short(b"    1.2345    2.3456    3.4567", NomErrorKind::Eof)]
-#[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Digit)]
-#[case::malformed_coordinate(b"    0.1   0.0    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Digit)]
-#[case::atom_list(b"    0.7145    2.0625    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::pseudoatom(b"   -1.8857    2.4750    0.0000 Psd 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::stereo_parity_out_of_range(b"    1.2345    2.3456    3.4567 C   0  3  4", NomErrorKind::Verify)]
-#[case::non_numeric_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
-#[case::valence_out_of_range(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 16", NomErrorKind::Verify)]
-#[case::non_zero_hydrogen_count_stereo_care(b"    1.0000    2.0000    3.0000 C  -2  3  1  2  1  4", NomErrorKind::Verify)]
-#[case::non_numeric_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", NomErrorKind::Digit)]
-#[case::len69_invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0XXX", NomErrorKind::Verify)]
-#[case::len69_non_zero_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  1", NomErrorKind::Verify)]
-#[case::len48_invalid_extended(b"    1.2345    2.3456    3.4567 C   0  3  0  0XXX", NomErrorKind::Verify)]
-fn test_atom_input_invalid(
+#[case::too_short(b"    1.2345    2.3456    3.4567", 30)]
+#[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", 0)]
+#[case::malformed_coordinate(b"    0.1   0.0    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0", 10)]
+#[case::atom_list(b"    0.7145    2.0625    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0", 31)]
+#[case::pseudoatom(b"   -1.8857    2.4750    0.0000 Psd 0  0  0  0  0  0  0  0  0  0  0  0", 31)]
+#[case::stereo_parity_out_of_range(b"    1.2345    2.3456    3.4567 C   0  3  4", 39)]
+#[case::non_numeric_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", 48)]
+#[case::valence_out_of_range(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 16", 48)]
+#[case::non_zero_hydrogen_count_stereo_care(b"    1.0000    2.0000    3.0000 C  -2  3  1  2  1  4", 45)]
+#[case::non_numeric_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", 60)]
+#[case::len69_invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0XXX", 63)]
+#[case::len69_non_zero_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  1", 63)]
+#[case::len48_invalid_extended(b"    1.2345    2.3456    3.4567 C   0  3  0  0XXX", 45)]
+fn test_atom_input_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] column: u32,
 ) {
-    let result = atom_input(CtabParseFlags::BASIC).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
-    assert! (
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+    let error = atom_input(CtabParseFlags::BASIC)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -388,11 +396,10 @@ fn test_atom_input_strict(
     #[case] hydrogen_count: Option<u8>,
     #[case] valence: Option<u8>,
 ) {
-    let result = atom_input(CtabParseFlags::BASIC).parse(input);
+    let result = atom_input(CtabParseFlags::BASIC).parse(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should consume all input, remaining: {:?}", input_str, remaining);
+    let (atom, position) = result.unwrap();
 
     assert!(
         approx_eq!(f64, position.x, x),
@@ -449,26 +456,21 @@ fn test_atom_input_strict(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_69_invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0XXX  0  0  0  0", NomErrorKind::Verify)]
-#[case::len_51_invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", NomErrorKind::Digit)]
-#[case::invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0XXX  4  0  0  0  0  0  0", NomErrorKind::Verify)]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX", NomErrorKind::Verify)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::non_zero_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  1  0  0", NomErrorKind::Verify)]
-fn test_atom_input_strict_invalid(
+#[case::len_69_invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0XXX  0  0  0  0", 51)]
+#[case::len_51_invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", 42)]
+#[case::invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0XXX  4  0  0  0  0  0  0", 45)]
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX", 51)]
+#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", 31)]
+#[case::non_zero_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  1  0  0", 60)]
+fn test_atom_input_strict_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] column: u32,
 ) {
-    let result = atom_input(CtabParseFlags::BASIC & CtabParseFlags::STRICT).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
-    assert! (
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+    let error = atom_input(CtabParseFlags::BASIC & CtabParseFlags::STRICT)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -500,11 +502,11 @@ fn test_atom_input_ignore_positions(
     #[case] hydrogen_count: Option<u8>,
     #[case] valence: Option<u8>,
 ) {
-    let result = atom_input(CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS).parse(input);
+    let result = atom_input(CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS)
+        .parse(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
-    let (remaining, (atom, _position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should consume all input, remaining: {:?}", input_str, remaining);
+    let (atom, _position) = result.unwrap();
     assert_eq!(
         atom.element, Some(element),
         "{:?} has returned element {:?}, expected {:?}",
@@ -539,26 +541,23 @@ fn test_atom_input_ignore_positions(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len69_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", NomErrorKind::Digit)]
-#[case::len60_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0", NomErrorKind::Digit)]
-#[case::len42_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0", NomErrorKind::Digit)]
-#[case::len39_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3", NomErrorKind::Digit)]
-#[case::len36_invalid_coordinates(b"   invalid   invalid   invalid C  -2", NomErrorKind::Digit)]
-#[case::len34_invalid_coordinates(b"   invalid   invalid   invalid C  ", NomErrorKind::Digit)]
-fn test_atom_input_ignore_positions_strict_invalid(
+#[case::len69_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", 0)]
+#[case::len60_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0", 0)]
+#[case::len42_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0", 0)]
+#[case::len39_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3", 0)]
+#[case::len36_invalid_coordinates(b"   invalid   invalid   invalid C  -2", 0)]
+#[case::len34_invalid_coordinates(b"   invalid   invalid   invalid C  ", 0)]
+fn test_atom_input_ignore_positions_strict_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] column: u32,
 ) {
-    let result = atom_input(CtabParseFlags::BASIC & CtabParseFlags::STRICT | CtabParseFlags::IGNORE_POSITIONS).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+    let error = atom_input(
+        CtabParseFlags::BASIC & CtabParseFlags::STRICT | CtabParseFlags::IGNORE_POSITIONS,
+    )
+    .parse(Input::new(input))
+    .unwrap_err()
+    .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -601,11 +600,10 @@ fn test_extended_atom_input(
     #[case] inversion_retention: Option<AtomInversionRetention>,
     #[case] exact_change: Option<AtomExactChange>,
 ) {
-    let result = extended_atom_input(CtabParseFlags::EXTENDED).parse(input);
+    let result = extended_atom_input(CtabParseFlags::EXTENDED).parse(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+    let (atom, position) = result.unwrap();
     assert!(
         approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
@@ -681,27 +679,24 @@ fn test_extended_atom_input(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_stereo_parity(b"    1.0000    2.0000    3.0000 C  -2  3  4", NomErrorKind::Verify)]
-#[case::negative_hydrogen_count(b"    1.4289    0.8250    0.0000 C   0  0  0 -1  0  0  0  0  0  0  0  0", NomErrorKind::Digit)]
-#[case::non_numeric_hydrogen_count(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", NomErrorKind::Digit)]
-#[case::non_numeric_valence(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
-#[case::chemaxon_wildcard(b"    1.2345    2.3456    3.4567 AH 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::pseudoatom(b"    1.2345    2.3456    3.4567 Ala 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::len_30_too_short(b"    1.2345    2.3456    3.4567", NomErrorKind::Eof)]
-fn test_extended_atom_input_invalid(
+#[case::invalid_stereo_parity(b"    1.0000    2.0000    3.0000 C  -2  3  4", 39)]
+#[case::negative_hydrogen_count(b"    1.4289    0.8250    0.0000 C   0  0  0 -1  0  0  0  0  0  0  0  0", 42)]
+#[case::non_numeric_hydrogen_count(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", 42)]
+#[case::non_numeric_valence(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", 48)]
+#[case::stereo_care_out_of_range(b"    1.0000    2.0000    3.0000 C   0  0  0  0  2", 45)]
+#[case::exact_change_out_of_range(b"    1.0000    2.0000    3.0000 C   0  0  0  0  0  0  0  0  0  0  0  2", 66)]
+#[case::chemaxon_wildcard(b"    1.2345    2.3456    3.4567 AH 0  0  0  0  0  0  0  0  0  0  0  0", 31)]
+#[case::pseudoatom(b"    1.2345    2.3456    3.4567 Ala 0  0  0  0  0  0  0  0  0  0  0  0", 31)]
+#[case::len_30_too_short(b"    1.2345    2.3456    3.4567", 30)]
+fn test_extended_atom_input_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] column: u32,
 ) {
-    let result = extended_atom_input(CtabParseFlags::EXTENDED).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+    let error = extended_atom_input(CtabParseFlags::EXTENDED)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -729,11 +724,10 @@ fn test_extended_atom_input_strict(
     #[case] inversion_retention: Option<AtomInversionRetention>,
     #[case] exact_change: Option<AtomExactChange>,
 ) {
-    let result = extended_atom_input(CtabParseFlags::STRICT).parse(input);
+    let result = extended_atom_input(CtabParseFlags::STRICT).parse(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+    let (atom, position) = result.unwrap();
     assert!(
         approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
@@ -804,21 +798,16 @@ fn test_extended_atom_input_strict(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0", NomErrorKind::Verify)]
-fn test_extended_atom_input_strict_invalid(
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0", 51)]
+fn test_extended_atom_input_strict_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] column: u32,
 ) {
-    let result = extended_atom_input(CtabParseFlags::STRICT).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+    let error = extended_atom_input(CtabParseFlags::STRICT)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -850,11 +839,10 @@ fn test_extended_atom_input_lenient(
     #[case] inversion_retention: Option<AtomInversionRetention>,
     #[case] exact_change: Option<AtomExactChange>,
 ) {
-    let result = extended_atom_input(CtabParseFlags::LENIENT).parse(input);
+    let result = extended_atom_input(CtabParseFlags::LENIENT).parse(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+    let (atom, position) = result.unwrap();
     assert!(
         approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
@@ -925,23 +913,18 @@ fn test_extended_atom_input_lenient(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_stereo_parity(b"    1.0000    2.0000    3.0000 C  -2  3  4", NomErrorKind::Verify)]
-#[case::non_numeric_hydrogen_count(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", NomErrorKind::Digit)]
-#[case::non_numeric_valence(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
-fn test_extended_atom_input_lenient_invalid(
+#[case::invalid_stereo_parity(b"    1.0000    2.0000    3.0000 C  -2  3  4", 39)]
+#[case::non_numeric_hydrogen_count(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", 42)]
+#[case::non_numeric_valence(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", 48)]
+fn test_extended_atom_input_lenient_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] column: u32,
 ) {
-    let result = extended_atom_input(CtabParseFlags::LENIENT).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+    let error = extended_atom_input(CtabParseFlags::LENIENT)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -964,11 +947,10 @@ fn test_extended_atom_input_pseudoatoms(
     #[case] exact_change: Option<AtomExactChange>,
 ) {
     let flags = CtabParseFlags::EXTENDED | CtabParseFlags::PSEUDOATOMS;
-    let result = extended_atom_input(flags).parse(input);
+    let result = extended_atom_input(flags).parse(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+    let (atom, position) = result.unwrap();
     assert!(
         approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
@@ -1062,11 +1044,10 @@ fn test_extended_atom_input_ignore_positions(
     #[case] exact_change: Option<AtomExactChange>,
 ) {
     let flags = CtabParseFlags::LENIENT | CtabParseFlags::IGNORE_POSITIONS;
-    let result = extended_atom_input(flags).parse(input);
+    let result = extended_atom_input(flags).parse(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+    let (atom, position) = result.unwrap();
     assert_eq!(
         atom.symbol, symbol,
         "{:?} has returned symbol {:?}, expected {:?}",
@@ -1131,21 +1112,18 @@ fn test_extended_atom_input_ignore_positions(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", NomErrorKind::Digit)]
-fn test_extended_atom_input_ignore_positions_strict_invalid(
+#[case::invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", 0)]
+fn test_extended_atom_input_ignore_positions_strict_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] column: u32,
 ) {
-    let result = extended_atom_input(CtabParseFlags::EXTENDED & CtabParseFlags::STRICT | CtabParseFlags::IGNORE_POSITIONS).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+    let error = extended_atom_input(
+        CtabParseFlags::EXTENDED & CtabParseFlags::STRICT | CtabParseFlags::IGNORE_POSITIONS,
+    )
+    .parse(Input::new(input))
+    .unwrap_err()
+    .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rstest]
@@ -1165,7 +1143,7 @@ fn test_extended_atom_input_ignore_positions_strict_invalid(
 #[case::element_h_two_characters(b"H ", AtomSymbol::Element(Element::H))]
 #[case::element_hg_two_characters(b"Hg", AtomSymbol::Element(Element::Hg))]
 fn test_parse_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let result = parse_atom_symbol(input, input, true);
+    let result = parse_atom_symbol(input, true, 0);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let symbol = result.unwrap();
@@ -1177,47 +1155,32 @@ fn test_parse_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
 }
 
 #[rstest]
-#[case::empty(b"", NomErrorKind::MapRes)]
-#[case::blank(b"   ", NomErrorKind::MapRes)]
-#[case::element_invalid_1(b"Xx ", NomErrorKind::MapRes)]
-#[case::element_invalid_2(b"LQ ", NomErrorKind::MapRes)]
-#[case::wildcard_atom_a(b"A  ", NomErrorKind::MapRes)]
-#[case::chemaxon_wildcard_atom(b"QH ", NomErrorKind::MapRes)]
-#[case::atom_list(b"L  ", NomErrorKind::MapRes)]
-#[case::lone_pair(b"LP ", NomErrorKind::MapRes)]
-#[case::rgroup(b"R1 ", NomErrorKind::MapRes)]
-#[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
-#[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
-fn test_parse_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = parse_atom_symbol(input, input, true);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::empty(b"")]
+#[case::blank(b"   ")]
+#[case::element_invalid_1(b"Xx ")]
+#[case::element_invalid_2(b"LQ ")]
+#[case::wildcard_atom_a(b"A  ")]
+#[case::chemaxon_wildcard_atom(b"QH ")]
+#[case::atom_list(b"L  ")]
+#[case::lone_pair(b"LP ")]
+#[case::rgroup(b"R1 ")]
+#[case::pseudoatom_ala(b"Ala")]
+#[case::pseudoatom_unicode(b"\xCE\xB1 ")]
+fn test_parse_atom_symbol_error(#[case] input: &[u8]) {
+    assert_eq!(
+        parse_atom_symbol(input, true, 0),
+        Err(ErrMode::Backtrack(InputError { column: 0 }))
     );
 }
 
 #[rstest]
-#[case::named_isotope_d(b"D  ", NomErrorKind::MapRes)]
-#[case::named_isotope_d_lowercase(b"d  ", NomErrorKind::MapRes)]
-#[case::named_isotope_t(b"T  ", NomErrorKind::MapRes)]
-fn test_parse_atom_symbol_strict_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = parse_atom_symbol(input, input, false);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::named_isotope_d(b"D  ")]
+#[case::named_isotope_d_lowercase(b"d  ")]
+#[case::named_isotope_t(b"T  ")]
+fn test_parse_atom_symbol_strict_error(#[case] input: &[u8]) {
+    assert_eq!(
+        parse_atom_symbol(input, false, 0),
+        Err(ErrMode::Backtrack(InputError { column: 0 }))
     );
 }
 
@@ -1247,7 +1210,7 @@ fn test_parse_atom_symbol_strict_invalid(
 #[case::rgroup_r1(b"R1 ", AtomSymbol::RGroup(RGroup::new(Some(1))))]
 #[case::rgroup_r3(b"R3 ", AtomSymbol::RGroup(RGroup::new(Some(3))))]
 fn test_parse_extended_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let result = parse_extended_atom_symbol(input, input, true, true, false, true, true, false);
+    let result = parse_extended_atom_symbol(input, true, true, false, true, true, false, 0);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let symbol = result.unwrap();
@@ -1259,23 +1222,17 @@ fn test_parse_extended_atom_symbol(#[case] input: &[u8], #[case] expected: AtomS
 }
 
 #[rstest]
-#[case::empty(b"", NomErrorKind::MapRes)]
-#[case::blank(b"   ", NomErrorKind::MapRes)]
-#[case::element_invalid_1(b"Xx ", NomErrorKind::MapRes)]
-#[case::element_invalid_2(b"LQ ", NomErrorKind::MapRes)]
-#[case::chemaxon_wildcard_atom(b"QH ", NomErrorKind::MapRes)]
-#[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
-#[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
-fn test_extended_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = parse_extended_atom_symbol(input, input, true, true, false, true, true, false);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::empty(b"")]
+#[case::blank(b"   ")]
+#[case::element_invalid_1(b"Xx ")]
+#[case::element_invalid_2(b"LQ ")]
+#[case::chemaxon_wildcard_atom(b"QH ")]
+#[case::pseudoatom_ala(b"Ala")]
+#[case::pseudoatom_unicode(b"\xCE\xB1 ")]
+fn test_extended_atom_symbol_error(#[case] input: &[u8]) {
+    assert_eq!(
+        parse_extended_atom_symbol(input, true, true, false, true, true, false, 0),
+        Err(ErrMode::Backtrack(InputError { column: 0 }))
     );
 }
 
@@ -1290,7 +1247,7 @@ fn test_extended_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind
 #[case::rgroup_r1(b"R1 ", AtomSymbol::RGroup(RGroup::new(Some(1))))]
 #[case::rgroup_r3(b"R3 ", AtomSymbol::RGroup(RGroup::new(Some(3))))]
 fn test_parse_extended_atom_symbol_strict(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let result = parse_extended_atom_symbol(input, input, false, true, false, true, true, false);
+    let result = parse_extended_atom_symbol(input, false, true, false, true, true, false, 0);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let symbol = result.unwrap();
@@ -1302,24 +1259,15 @@ fn test_parse_extended_atom_symbol_strict(#[case] input: &[u8], #[case] expected
 }
 
 #[rstest]
-#[case::named_isotope_d(b"D  ", NomErrorKind::MapRes)]
-#[case::named_isotope_d_lowercase(b"d  ", NomErrorKind::MapRes)]
-#[case::named_isotope_t(b"T  ", NomErrorKind::MapRes)]
-#[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
-#[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
-fn test_parse_extended_atom_symbol_strict_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = parse_extended_atom_symbol(input, input, false, true, false, true, true, false);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::named_isotope_d(b"D  ")]
+#[case::named_isotope_d_lowercase(b"d  ")]
+#[case::named_isotope_t(b"T  ")]
+#[case::pseudoatom_ala(b"Ala")]
+#[case::pseudoatom_unicode(b"\xCE\xB1 ")]
+fn test_parse_extended_atom_symbol_strict_error(#[case] input: &[u8]) {
+    assert_eq!(
+        parse_extended_atom_symbol(input, false, true, false, true, true, false, 0),
+        Err(ErrMode::Backtrack(InputError { column: 0 }))
     );
 }
 
@@ -1333,7 +1281,7 @@ fn test_extended_atom_symbol_lenient(
     #[case] input: &[u8],
     #[case] expected: AtomSymbol,
 ) {
-    let result = parse_extended_atom_symbol(input, input, true, true, true, true, true, false);
+    let result = parse_extended_atom_symbol(input, true, true, true, true, true, false, 0);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let symbol = result.unwrap();
@@ -1341,32 +1289,23 @@ fn test_extended_atom_symbol_lenient(
 }
 
 #[rstest]
-#[case::empty(b"", NomErrorKind::MapRes)]
-#[case::blank(b"   ", NomErrorKind::MapRes)]
-#[case::element_invalid_1(b"Xx ", NomErrorKind::MapRes)]
-#[case::element_invalid_2(b"LQ ", NomErrorKind::MapRes)]
-#[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
-#[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
-fn test_extended_atom_symbol_lenient_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = parse_extended_atom_symbol(input, input, true, true, true, true, true, false);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::empty(b"")]
+#[case::blank(b"   ")]
+#[case::element_invalid_1(b"Xx ")]
+#[case::element_invalid_2(b"LQ ")]
+#[case::pseudoatom_ala(b"Ala")]
+#[case::pseudoatom_unicode(b"\xCE\xB1 ")]
+fn test_extended_atom_symbol_lenient_error(#[case] input: &[u8]) {
+    assert_eq!(
+        parse_extended_atom_symbol(input, true, true, true, true, true, false, 0),
+        Err(ErrMode::Backtrack(InputError { column: 0 }))
     );
 }
 
 #[rstest]
 #[case::pseudoatom_ala(b"Ala", AtomSymbol::Pseudoatom("Ala".to_string()))]
 fn test_extended_atom_symbol_pseudoatoms(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let result = parse_extended_atom_symbol(input, input, false, false, false, false, false, true);
+    let result = parse_extended_atom_symbol(input, false, false, false, false, false, true, 0);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let symbol = result.unwrap();
@@ -1378,27 +1317,18 @@ fn test_extended_atom_symbol_pseudoatoms(#[case] input: &[u8], #[case] expected:
 }
 
 #[rstest]
-#[case::reserved_named_isotope(b"D  ", NomErrorKind::MapRes)]
-#[case::reserved_wildcard_atom(b"A  ", NomErrorKind::MapRes)]
-#[case::reserved_chemaxon_wildcard_atom(b"QH ", NomErrorKind::MapRes)]
-#[case::reserved_atom_list(b"L  ", NomErrorKind::MapRes)]
-#[case::reserved_lone_pair(b"LP ", NomErrorKind::MapRes)]
-#[case::reserved_rgroup(b"R  ", NomErrorKind::MapRes)]
-#[case::reserved_rgroup_unlabeled(b"R# ", NomErrorKind::MapRes)]
-#[case::reserved_rgroup_r1(b"R1 ", NomErrorKind::MapRes)]
-#[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
-fn test_extended_atom_symbol_pseudoatoms_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = parse_extended_atom_symbol(input, input, false, false, false, false, false, true);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::reserved_named_isotope(b"D  ")]
+#[case::reserved_wildcard_atom(b"A  ")]
+#[case::reserved_chemaxon_wildcard_atom(b"QH ")]
+#[case::reserved_atom_list(b"L  ")]
+#[case::reserved_lone_pair(b"LP ")]
+#[case::reserved_rgroup(b"R  ")]
+#[case::reserved_rgroup_unlabeled(b"R# ")]
+#[case::reserved_rgroup_r1(b"R1 ")]
+#[case::pseudoatom_unicode(b"\xCE\xB1 ")]
+fn test_extended_atom_symbol_pseudoatoms_error(#[case] input: &[u8]) {
+    assert_eq!(
+        parse_extended_atom_symbol(input, false, false, false, false, false, true, 0),
+        Err(ErrMode::Backtrack(InputError { column: 0 }))
     );
 }

@@ -38,6 +38,26 @@ fn test_next_line_error(#[case] input: &[u8]) {
 }
 
 #[rstest]
+#[case::empty(b"")]
+#[case::spaces(b"   ")]
+#[case::tabs(b"\t\t")]
+fn test_finish_line(#[case] input: &[u8]) {
+    let mut input = Input::new(input);
+    assert_eq!(finish_line(&mut input), Ok(()));
+}
+
+#[rstest]
+#[case::text(b"x", 0)]
+#[case::after_spaces(b"  x", 2)]
+fn test_finish_line_error(#[case] input: &[u8], #[case] column: u32) {
+    let mut input = Input::new(input);
+    assert_eq!(
+        finish_line(&mut input),
+        Err(ErrMode::Backtrack(InputError { column }))
+    );
+}
+
+#[rstest]
 #[case::empty(b"", true)]
 #[case::whitespace(b"   ", true)]
 #[case::zero(b"  0", true)]

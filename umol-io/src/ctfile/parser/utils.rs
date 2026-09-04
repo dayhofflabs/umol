@@ -69,6 +69,21 @@ pub(super) fn next_line<'inp>(input: &mut &'inp [u8]) -> ModalResult<Input<'inp>
     Ok(Input::new(line))
 }
 
+pub(super) fn finish_line(input: &mut Input<'_>) -> PResult<()> {
+    let _: &[u8] = space0.parse_next(input)?;
+    if input.is_empty() {
+        Ok(())
+    } else {
+        Err(ErrMode::Backtrack(InputError::at(input)))
+    }
+}
+
+pub(super) fn input_error_column(error: ErrMode<InputError>, input: &Input<'_>) -> u32 {
+    error
+        .into_inner()
+        .map_or_else(|_| InputError::at(input).column, |error| error.column)
+}
+
 pub(super) trait Contains<T: PartialOrd> {
     fn contains(&self, value: &T) -> bool;
 }

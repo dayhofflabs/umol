@@ -3,14 +3,12 @@
 use std::collections::HashMap;
 
 use bstr::ByteSlice;
-use nom::character::complete::space0;
-use nom::combinator::all_consuming;
-use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
-use nom::sequence::terminated;
-use nom::{Err, Parser};
 use umol_chem::element::Element;
 use umol_chem::isotope::NamedIsotope;
 use umol_geometric_core::Point3D;
+use winnow::error::ErrMode;
+use winnow::token::take;
+use winnow::{ModalResult, Parser};
 
 use super::convert::{
     convert_atom_charge_code, convert_atom_exact_change_flag_code,
@@ -19,115 +17,111 @@ use super::convert::{
     convert_atom_valence_code, convert_extended_atom_symbol_mass_diff,
 };
 use super::utils::{
-    is_reserved_atom_symbol, parse_float_f10_4, parse_int_opt, validate_unused_n,
-    LinesWithOffsetExt,
+    finish_line, input_error_column, is_reserved_atom_symbol, next_line, parse_float_f10_4,
+    parse_int_opt, validate_unused_n, Input, InputError, PResult,
 };
 use crate::ctfile::config::CtabParseFlags;
 use crate::ctfile::error::ParseError;
 use crate::ctfile::parser::rgroup::rgroup_symbol;
 use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, WildcardAtom};
 
+type AtomBlockOutput = (Vec<Atom>, Option<Vec<Point3D>>, u32);
+type ExtendedAtomBlockOutput = (Vec<ExtendedAtom>, Option<Vec<Point3D>>, u32);
+
 /// Parse atom block (basic atoms only)
-pub(super) fn atom_block<'inp>(
+pub(super) fn atom_block(
+    input: &mut &[u8],
     atom_count: u32,
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<Atom>, Option<Vec<Point3D>>, u32), Error = ParseError>
-       + use<'inp> {
-    move |input: &'inp [u8]| {
-        let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-        let mut atoms = Vec::with_capacity(atom_count as usize);
-        let mut positions = Vec::with_capacity(if ignore_positions {
-            0
-        } else {
-            atom_count as usize
+) -> ModalResult<AtomBlockOutput, ParseError> {
+    let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
+    let mut atoms = Vec::with_capacity(atom_count as usize);
+    let mut positions = Vec::with_capacity(if ignore_positions {
+        0
+    } else {
+        atom_count as usize
+    });
+
+    for line_index in 0..atom_count {
+        let physical_line = line_offset + line_index;
+        let mut line = next_line(input).map_err(|_| {
+            ErrMode::Cut(ParseError::UnexpectedEof {
+                line: physical_line,
+                block: "atom",
+            })
+        })?;
+        let result = atom_input(flags).parse_next(&mut line).and_then(|value| {
+            finish_line(&mut line)?;
+            Ok(value)
         });
-        let mut lines_iter = input.lines_with_offset();
-        let mut byte_offset = 0;
-
-        for line_index in 0..atom_count {
-            let (line, byte_len) = lines_iter.next().ok_or_else(|| {
-                Err::Error(ParseError::UnexpectedEof {
-                    line: line_offset + line_index,
-                    block: "atom",
-                })
-            })?;
-
-            let (_, (atom, pos)) = all_consuming(terminated(atom_input(flags), space0))
-                .parse(line)
-                .map_err(|e| {
-                    Err::Error(ParseError::atom_from_nom(e, line_offset + line_index, line))
-                })?;
-            atoms.push(atom);
-            if !ignore_positions {
-                positions.push(pos);
-            }
-            byte_offset += byte_len;
-        }
-
-        let remaining = &input[byte_offset..];
-        if ignore_positions || (atom_count > 1 && Point3D::all_zero(&positions)) {
-            Ok((remaining, (atoms, None, line_offset + atom_count)))
-        } else {
-            Ok((
-                remaining,
-                (atoms, Some(positions), line_offset + atom_count),
-            ))
+        let (atom, position) = result.map_err(|error| {
+            ErrMode::Cut(ParseError::InvalidAtomLine {
+                line: physical_line,
+                col: input_error_column(error, &line),
+            })
+        })?;
+        atoms.push(atom);
+        if !ignore_positions {
+            positions.push(position);
         }
     }
+
+    let positions = if ignore_positions || (atom_count > 1 && Point3D::all_zero(&positions)) {
+        None
+    } else {
+        Some(positions)
+    };
+    Ok((atoms, positions, line_offset + atom_count))
 }
 
 /// Parse extended atom block
-pub(super) fn extended_atom_block<'inp>(
+pub(super) fn extended_atom_block(
+    input: &mut &[u8],
     atom_count: u32,
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<
-    &'inp [u8],
-    Output = (Vec<ExtendedAtom>, Option<Vec<Point3D>>, u32),
-    Error = ParseError,
-> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-        let mut atoms = Vec::with_capacity(atom_count as usize);
-        let mut positions = Vec::with_capacity(if ignore_positions {
-            0
-        } else {
-            atom_count as usize
-        });
-        let mut lines_iter = input.lines_with_offset();
-        let mut byte_offset = 0;
+) -> ModalResult<ExtendedAtomBlockOutput, ParseError> {
+    let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
+    let mut atoms = Vec::with_capacity(atom_count as usize);
+    let mut positions = Vec::with_capacity(if ignore_positions {
+        0
+    } else {
+        atom_count as usize
+    });
 
-        for line_index in 0..atom_count {
-            let (line, byte_len) = lines_iter.next().ok_or_else(|| {
-                Err::Error(ParseError::UnexpectedEof {
-                    line: line_offset + line_index,
-                    block: "atom",
-                })
-            })?;
-
-            let (_, (atom, pos)) = all_consuming(terminated(extended_atom_input(flags), space0))
-                .parse(line)
-                .map_err(|e| {
-                    Err::Error(ParseError::atom_from_nom(e, line_offset + line_index, line))
-                })?;
-            atoms.push(atom);
-            if !ignore_positions {
-                positions.push(pos);
-            }
-            byte_offset += byte_len;
-        }
-
-        let remaining = &input[byte_offset..];
-        if ignore_positions || (atom_count > 1 && Point3D::all_zero(&positions)) {
-            Ok((remaining, (atoms, None, line_offset + atom_count)))
-        } else {
-            Ok((
-                remaining,
-                (atoms, Some(positions), line_offset + atom_count),
-            ))
+    for line_index in 0..atom_count {
+        let physical_line = line_offset + line_index;
+        let mut line = next_line(input).map_err(|_| {
+            ErrMode::Cut(ParseError::UnexpectedEof {
+                line: physical_line,
+                block: "atom",
+            })
+        })?;
+        let result = extended_atom_input(flags)
+            .parse_next(&mut line)
+            .and_then(|value| {
+                finish_line(&mut line)?;
+                Ok(value)
+            });
+        let (atom, position) = result.map_err(|error| {
+            ErrMode::Cut(ParseError::InvalidAtomLine {
+                line: physical_line,
+                col: input_error_column(error, &line),
+            })
+        })?;
+        atoms.push(atom);
+        if !ignore_positions {
+            positions.push(position);
         }
     }
+
+    let positions = if ignore_positions || (atom_count > 1 && Point3D::all_zero(&positions)) {
+        None
+    } else {
+        Some(positions)
+    };
+    Ok((atoms, positions, line_offset + atom_count))
 }
 
 /// Parse basic atom input (optimized for performance)
@@ -168,10 +162,13 @@ pub(super) fn extended_atom_block<'inp>(
 ///
 fn atom_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Atom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp> {
-    move |input: &'inp [u8]| {
-        if input.len() < 32 {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+) -> impl Parser<Input<'inp>, (Atom, Point3D), ErrMode<InputError>> + use<'inp> {
+    move |input: &mut Input<'inp>| {
+        let bytes: &[u8] = input.as_ref();
+        if bytes.len() < 32 {
+            return Err(ErrMode::Backtrack(InputError {
+                column: bytes.len() as u32,
+            }));
         }
 
         let mut offset;
@@ -186,9 +183,9 @@ fn atom_input<'inp>(
         let position = if ignore_positions && skip_unused_fields {
             Point3D::zero()
         } else {
-            let x = parse_float_f10_4(input, &input[0..10])?;
-            let y = parse_float_f10_4(input, &input[10..20])?;
-            let z = parse_float_f10_4(input, &input[20..30])?;
+            let x = parse_float_f10_4(&bytes[0..10], 0)?;
+            let y = parse_float_f10_4(&bytes[10..20], 10)?;
+            let z = parse_float_f10_4(&bytes[20..30], 20)?;
             if ignore_positions {
                 Point3D::zero()
             } else {
@@ -197,19 +194,19 @@ fn atom_input<'inp>(
         };
 
         // Blank (30)
-        if input[30] != b' ' {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Char)));
+        if bytes[30] != b' ' {
+            return Err(ErrMode::Backtrack(InputError { column: 30 }));
         }
 
         // Atom symbol (31-33)
-        let end = 34.min(input.len());
-        let symbol = parse_atom_symbol(input, &input[31..end], allow_named_isotopes)?;
+        let end = 34.min(bytes.len());
+        let symbol = parse_atom_symbol(&bytes[31..end], allow_named_isotopes, 31)?;
         offset = end;
 
         // Mass difference (34-35)
-        let mass_diff_code = if input.len() >= 36 {
+        let mass_diff_code = if bytes.len() >= 36 {
             offset = 36;
-            parse_int_opt::<i8>(input, &input[34..36])?
+            parse_int_opt::<i8>(&bytes[34..36], 34)?
                 .filter(|val| (-3..=4).contains(val))
                 .unwrap_or(0)
         } else {
@@ -218,9 +215,9 @@ fn atom_input<'inp>(
         let (element, isotope_mass) = convert_atom_symbol_mass_diff(&symbol, mass_diff_code);
 
         // Charge/radical (36-38)
-        let (charge, unpaired_count) = if input.len() >= 39 {
+        let (charge, unpaired_count) = if bytes.len() >= 39 {
             offset = 39;
-            let val = parse_int_opt::<u8>(input, &input[36..39])?
+            let val = parse_int_opt::<u8>(&bytes[36..39], 36)?
                 .filter(|val| (0..=7).contains(val))
                 .unwrap_or(0);
             convert_atom_charge_code(val)
@@ -231,11 +228,11 @@ fn atom_input<'inp>(
         let multiplicity = None;
 
         // Stereo parity (39-41)
-        let chirality = if input.len() >= 42 {
+        let chirality = if bytes.len() >= 42 {
             offset = 42;
-            let val = parse_int_opt::<u8>(input, &input[39..42])?.unwrap_or(0);
+            let val = parse_int_opt::<u8>(&bytes[39..42], 39)?.unwrap_or(0);
             if val > 3 {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+                return Err(ErrMode::Backtrack(InputError { column: 39 }));
             }
             convert_atom_stereo_parity_code(val)
         } else {
@@ -243,12 +240,12 @@ fn atom_input<'inp>(
         };
 
         // Hydrogen count (42-44)
-        let hydrogen_count = if input.len() >= 45 {
+        let hydrogen_count = if bytes.len() >= 45 {
             offset = 45;
-            let val = parse_int_opt::<u8>(input, &input[42..45])?.unwrap_or(0);
+            let val = parse_int_opt::<u8>(&bytes[42..45], 42)?.unwrap_or(0);
             let max_val = if extended_range { 13 } else { 5 };
             if val > max_val {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+                return Err(ErrMode::Backtrack(InputError { column: 42 }));
             }
             convert_atom_hydrogen_count_code(val)
         } else {
@@ -257,23 +254,23 @@ fn atom_input<'inp>(
         let hydrogens = if atom_map_hcount_fields {
             Ok(hydrogen_count)
         } else if hydrogen_count.is_some() {
-            Err(Err::Error(NomError::new(input, NomErrorKind::Verify)))
+            Err(ErrMode::Backtrack(InputError { column: 42 }))
         } else {
             Ok(None)
         }?;
 
         // Stereo care box (45-47) - extended
-        if input.len() >= 48 {
+        if bytes.len() >= 48 {
             offset = 48;
-            validate_unused_n(input, &input[45..48], 1, 3, false)?;
+            validate_unused_n(&bytes[45..48], 1, 3, false, 45)?;
         }
 
         // Valence (48-50)
-        let valence = if input.len() >= 51 {
+        let valence = if bytes.len() >= 51 {
             offset = 51;
-            let val = parse_int_opt::<u8>(input, &input[48..51])?.unwrap_or(0);
+            let val = parse_int_opt::<u8>(&bytes[48..51], 48)?.unwrap_or(0);
             if val > 15 {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+                return Err(ErrMode::Backtrack(InputError { column: 48 }));
             }
             convert_atom_valence_code(val)
         } else {
@@ -281,22 +278,16 @@ fn atom_input<'inp>(
         };
 
         // Unused fields (51-59)
-        let count = ((input.len().saturating_sub(51)) / 3).min(3);
+        let count = ((bytes.len().saturating_sub(51)) / 3).min(3);
         if count > 0 {
             offset = 51 + count * 3;
-            validate_unused_n(
-                input,
-                &input[51..51 + count * 3],
-                count,
-                3,
-                skip_unused_fields,
-            )?;
+            validate_unused_n(&bytes[51..51 + count * 3], count, 3, skip_unused_fields, 51)?;
         }
 
         // Atom mapping number (60-62)
-        let atom_map_num = if input.len() >= 63 {
+        let atom_map_num = if bytes.len() >= 63 {
             offset = 63;
-            parse_int_opt::<u32>(input, &input[60..63])?.filter(|val| (1..=999).contains(val))
+            parse_int_opt::<u32>(&bytes[60..63], 60)?.filter(|val| (1..=999).contains(val))
         } else {
             None
         };
@@ -304,39 +295,37 @@ fn atom_input<'inp>(
         let class = if atom_map_hcount_fields {
             Ok(atom_map_num)
         } else if atom_map_num.is_some() {
-            Err(Err::Error(NomError::new(input, NomErrorKind::Verify)))
+            Err(ErrMode::Backtrack(InputError { column: 60 }))
         } else {
             Ok(None)
         }?;
 
         // Inversion flag and exact change (63-68) - extended
-        let count = ((input.len().saturating_sub(63)) / 3).min(2);
+        let count = ((bytes.len().saturating_sub(63)) / 3).min(2);
         if count > 0 {
             offset = 63 + count * 3;
-            validate_unused_n(input, &input[63..63 + count * 3], count, 3, false)?;
+            validate_unused_n(&bytes[63..63 + count * 3], count, 3, false, 63)?;
         }
 
+        let _: &[u8] = take(offset).parse_next(input)?;
         Ok((
-            &input[offset..],
-            (
-                Atom {
-                    element: Some(element),
-                    charge,
-                    isotope_mass,
-                    implicit_hydrogens: hydrogens,
-                    valence,
-                    lone_pairs: None,
-                    unpaired_electrons,
-                    multiplicity,
-                    aromatic: None,
-                    chirality,
-                    class,
-                    span: None,
-                    label: None,
-                    value: None,
-                },
-                position,
-            ),
+            Atom {
+                element: Some(element),
+                charge,
+                isotope_mass,
+                implicit_hydrogens: hydrogens,
+                valence,
+                lone_pairs: None,
+                unpaired_electrons,
+                multiplicity,
+                aromatic: None,
+                chirality,
+                class,
+                span: None,
+                label: None,
+                value: None,
+            },
+            position,
         ))
     }
 }
@@ -372,8 +361,7 @@ fn atom_input<'inp>(
 ///
 fn extended_atom_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (ExtendedAtom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp>
-{
+) -> impl Parser<Input<'inp>, (ExtendedAtom, Point3D), ErrMode<InputError>> + use<'inp> {
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
@@ -384,9 +372,12 @@ fn extended_atom_input<'inp>(
     let allow_rgroups = flags.contains(CtabParseFlags::RGROUPS);
     let allow_pseudoatoms = flags.contains(CtabParseFlags::PSEUDOATOMS);
 
-    move |input: &'inp [u8]| {
-        if input.len() < 32 {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+    move |input: &mut Input<'inp>| {
+        let bytes: &[u8] = input.as_ref();
+        if bytes.len() < 32 {
+            return Err(ErrMode::Backtrack(InputError {
+                column: bytes.len() as u32,
+            }));
         }
 
         let mut offset;
@@ -395,9 +386,9 @@ fn extended_atom_input<'inp>(
         let position = if ignore_positions && skip_unused_fields {
             Point3D::zero()
         } else {
-            let x = parse_float_f10_4(input, &input[0..10])?;
-            let y = parse_float_f10_4(input, &input[10..20])?;
-            let z = parse_float_f10_4(input, &input[20..30])?;
+            let x = parse_float_f10_4(&bytes[0..10], 0)?;
+            let y = parse_float_f10_4(&bytes[10..20], 10)?;
+            let z = parse_float_f10_4(&bytes[20..30], 20)?;
             if ignore_positions {
                 Point3D::zero()
             } else {
@@ -406,28 +397,28 @@ fn extended_atom_input<'inp>(
         };
 
         // Blank (30)
-        if input[30] != b' ' {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Char)));
+        if bytes[30] != b' ' {
+            return Err(ErrMode::Backtrack(InputError { column: 30 }));
         }
 
         // Atom symbol (31-33)
-        let end = 34.min(input.len());
+        let end = 34.min(bytes.len());
         let symbol = parse_extended_atom_symbol(
-            input,
-            &input[31..end],
+            &bytes[31..end],
             allow_named_isotopes,
             allow_wildcards,
             allow_chemaxon_wildcards,
             allow_electrons,
             allow_rgroups,
             allow_pseudoatoms,
+            31,
         )?;
         offset = end;
 
         // Mass difference (34-35)
-        let mass_diff_code = if input.len() >= 36 {
+        let mass_diff_code = if bytes.len() >= 36 {
             offset = 36;
-            parse_int_opt::<i8>(input, &input[34..36])?
+            parse_int_opt::<i8>(&bytes[34..36], 34)?
                 .filter(|val| (-3..=4).contains(val))
                 .unwrap_or(0)
         } else {
@@ -436,9 +427,9 @@ fn extended_atom_input<'inp>(
         let isotope_mass = convert_extended_atom_symbol_mass_diff(&symbol, mass_diff_code);
 
         // Charge/radical (36-38)
-        let (charge, unpaired_count) = if input.len() >= 39 {
+        let (charge, unpaired_count) = if bytes.len() >= 39 {
             offset = 39;
-            let val = parse_int_opt::<u8>(input, &input[36..39])?
+            let val = parse_int_opt::<u8>(&bytes[36..39], 36)?
                 .filter(|val| (0..=7).contains(val))
                 .unwrap_or(0);
             convert_atom_charge_code(val)
@@ -449,11 +440,11 @@ fn extended_atom_input<'inp>(
         let multiplicity = None;
 
         // Stereo parity (39-41)
-        let chirality = if input.len() >= 42 {
+        let chirality = if bytes.len() >= 42 {
             offset = 42;
-            let val = parse_int_opt::<u8>(input, &input[39..42])?.unwrap_or(0);
+            let val = parse_int_opt::<u8>(&bytes[39..42], 39)?.unwrap_or(0);
             if val > 3 {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+                return Err(ErrMode::Backtrack(InputError { column: 39 }));
             }
             convert_atom_stereo_parity_code(val)
         } else {
@@ -461,12 +452,12 @@ fn extended_atom_input<'inp>(
         };
 
         // Hydrogen count (42-44)
-        let hydrogens = if input.len() >= 45 {
+        let hydrogens = if bytes.len() >= 45 {
             offset = 45;
-            let val = parse_int_opt::<u8>(input, &input[42..45])?.unwrap_or(0);
+            let val = parse_int_opt::<u8>(&bytes[42..45], 42)?.unwrap_or(0);
             let max_val = if extended_range { 13 } else { 5 };
             if val > max_val {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+                return Err(ErrMode::Backtrack(InputError { column: 42 }));
             }
             convert_atom_hydrogen_count_code(val)
         } else {
@@ -474,22 +465,25 @@ fn extended_atom_input<'inp>(
         };
 
         // Stereo care box (45-47)
-        let stereo_care = if input.len() >= 48 {
+        let stereo_care = if bytes.len() >= 48 {
             offset = 48;
-            let val = parse_int_opt::<u8>(input, &input[45..48])?.unwrap_or(0);
+            let val = parse_int_opt::<u8>(&bytes[45..48], 45)?.unwrap_or(0);
+            if val > 1 {
+                return Err(ErrMode::Backtrack(InputError { column: 45 }));
+            }
             convert_atom_stereo_care_code(val)
         } else {
             None
         };
 
         // Valence (48-50)
-        let valence = if input.len() >= 51 {
+        let valence = if bytes.len() >= 51 {
             offset = 51;
-            let val = parse_int_opt::<u8>(input, &input[48..51])?
+            let val = parse_int_opt::<u8>(&bytes[48..51], 48)?
                 .filter(|val| (0..=15).contains(val))
                 .unwrap_or(0);
             if val > 15 {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+                return Err(ErrMode::Backtrack(InputError { column: 48 }));
             }
             convert_atom_valence_code(val)
         } else {
@@ -497,32 +491,26 @@ fn extended_atom_input<'inp>(
         };
 
         // Unused fields (51-59)
-        let count = ((input.len().saturating_sub(51)) / 3).min(3);
+        let count = ((bytes.len().saturating_sub(51)) / 3).min(3);
         if count > 0 {
             offset = 51 + count * 3;
-            validate_unused_n(
-                input,
-                &input[51..51 + count * 3],
-                count,
-                3,
-                skip_unused_fields,
-            )?;
+            validate_unused_n(&bytes[51..51 + count * 3], count, 3, skip_unused_fields, 51)?;
         }
 
         // Atom mapping number (60-62)
-        let class = if input.len() >= 63 {
+        let class = if bytes.len() >= 63 {
             offset = 63;
-            parse_int_opt::<u32>(input, &input[60..63])?.filter(|val| (1..=999).contains(val))
+            parse_int_opt::<u32>(&bytes[60..63], 60)?.filter(|val| (1..=999).contains(val))
         } else {
             None
         };
 
         // Inversion flag (63-65)
-        let inversion_retention = if input.len() >= 66 {
+        let inversion_retention = if bytes.len() >= 66 {
             offset = 66;
-            let val = parse_int_opt::<u8>(input, &input[63..66])?.unwrap_or(0);
+            let val = parse_int_opt::<u8>(&bytes[63..66], 63)?.unwrap_or(0);
             if val > 2 {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+                return Err(ErrMode::Backtrack(InputError { column: 63 }));
             }
             convert_atom_inversion_flag_code(val)
         } else {
@@ -530,47 +518,48 @@ fn extended_atom_input<'inp>(
         };
 
         // Exact change flag (66-68)
-        let exact_change = if input.len() >= 69 {
+        let exact_change = if bytes.len() >= 69 {
             offset = 69;
-            let val = parse_int_opt::<u8>(input, &input[66..69])?.unwrap_or(0);
+            let val = parse_int_opt::<u8>(&bytes[66..69], 66)?.unwrap_or(0);
+            if val > 1 {
+                return Err(ErrMode::Backtrack(InputError { column: 66 }));
+            }
             convert_atom_exact_change_flag_code(val)
         } else {
             None
         };
 
+        let _: &[u8] = take(offset).parse_next(input)?;
         Ok((
-            &input[offset..],
-            (
-                ExtendedAtom {
-                    symbol,
-                    charge,
-                    isotope_mass,
-                    implicit_hydrogens: hydrogens,
-                    stereo_care,
-                    valence,
-                    lone_pairs: None,
-                    unpaired_electrons,
-                    multiplicity,
-                    inversion_retention,
-                    exact_change,
-                    aromatic: None,
-                    chirality,
-                    class,
-                    span: None,
-                    label: None,
-                    value: None,
-                    pattern: None,
-                    ring_bond_count: None,
-                    substitution_count: None,
-                    unsaturated: None,
-                    link_atom: None,
-                    attachment_point: None,
-                    attachment_order: None,
-                    ligand_order: None,
-                    properties: HashMap::new(),
-                },
-                position,
-            ),
+            ExtendedAtom {
+                symbol,
+                charge,
+                isotope_mass,
+                implicit_hydrogens: hydrogens,
+                stereo_care,
+                valence,
+                lone_pairs: None,
+                unpaired_electrons,
+                multiplicity,
+                inversion_retention,
+                exact_change,
+                aromatic: None,
+                chirality,
+                class,
+                span: None,
+                label: None,
+                value: None,
+                pattern: None,
+                ring_bond_count: None,
+                substitution_count: None,
+                unsaturated: None,
+                link_atom: None,
+                attachment_point: None,
+                attachment_order: None,
+                ligand_order: None,
+                properties: HashMap::new(),
+            },
+            position,
         ))
     }
 }
@@ -581,14 +570,10 @@ fn extended_atom_input<'inp>(
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 ///
 #[inline(always)]
-fn parse_atom_symbol<'inp>(
-    input: &'inp [u8],
-    field: &[u8],
-    allow_named_isotopes: bool,
-) -> Result<AtomSymbol, Err<NomError<&'inp [u8]>>> {
+fn parse_atom_symbol(field: &[u8], allow_named_isotopes: bool, column: u32) -> PResult<AtomSymbol> {
     let trimmed = field.trim_ascii();
     if trimmed.is_empty() {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::MapRes)));
+        return Err(ErrMode::Backtrack(InputError { column }));
     }
     Element::from_symbol_bytes(trimmed)
         .map(AtomSymbol::Element)
@@ -598,7 +583,7 @@ fn parse_atom_symbol<'inp>(
                 .flatten()
                 .map(AtomSymbol::NamedIsotope)
         })
-        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::MapRes)))
+        .ok_or(ErrMode::Backtrack(InputError { column }))
 }
 
 /// Parse extended atom symbol (all atom types allowed in MOL specification).
@@ -627,8 +612,7 @@ fn parse_atom_symbol<'inp>(
 ///
 #[inline(always)]
 #[allow(clippy::too_many_arguments)]
-fn parse_extended_atom_symbol<'inp>(
-    input: &'inp [u8],
+fn parse_extended_atom_symbol(
     field: &[u8],
     allow_named_isotopes: bool,
     allow_wildcards: bool,
@@ -636,19 +620,21 @@ fn parse_extended_atom_symbol<'inp>(
     allow_electrons: bool,
     allow_rgroups: bool,
     allow_pseudoatoms: bool,
-) -> Result<AtomSymbol, Err<NomError<&'inp [u8]>>> {
+    column: u32,
+) -> PResult<AtomSymbol> {
     let s = field.trim_ascii();
     if s.is_empty() {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::MapRes)));
+        return Err(ErrMode::Backtrack(InputError { column }));
     }
 
     if let Some(element) = Element::from_symbol_bytes(s) {
         return Ok(AtomSymbol::Element(element));
     }
-    if allow_named_isotopes {
-        if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
-            return Ok(AtomSymbol::NamedIsotope(isotope));
-        }
+    if let Some(isotope) = allow_named_isotopes
+        .then(|| NamedIsotope::from_symbol_bytes(s))
+        .flatten()
+    {
+        return Ok(AtomSymbol::NamedIsotope(isotope));
     }
     if allow_wildcards {
         match s {
@@ -663,7 +649,7 @@ fn parse_extended_atom_symbol<'inp>(
                         return Ok(AtomSymbol::WildcardAtom(wildcard));
                     }
                 } else {
-                    return Err(Err::Error(NomError::new(input, NomErrorKind::MapRes)));
+                    return Err(ErrMode::Backtrack(InputError { column }));
                 }
             }
             b"L" => return Ok(AtomSymbol::AtomList(AtomList::empty())),
@@ -671,7 +657,9 @@ fn parse_extended_atom_symbol<'inp>(
         }
     }
     if allow_rgroups {
-        if let Ok((_, rgroup)) = rgroup_symbol(s) {
+        let mut input = Input::new(s);
+        let rgroup = rgroup_symbol(&mut input).ok().filter(|_| input.is_empty());
+        if let Some(rgroup) = rgroup {
             return Ok(AtomSymbol::RGroup(rgroup));
         }
     }
@@ -688,14 +676,14 @@ fn parse_extended_atom_symbol<'inp>(
         allow_electrons,
         allow_rgroups,
     ) {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::MapRes)));
+        return Err(ErrMode::Backtrack(InputError { column }));
     }
 
     if allow_pseudoatoms && s.is_ascii() {
         let s = s.to_str_lossy().into_owned();
         return Ok(AtomSymbol::Pseudoatom(s));
     }
-    Err(Err::Error(NomError::new(input, NomErrorKind::MapRes)))
+    Err(ErrMode::Backtrack(InputError { column }))
 }
 
 #[cfg(test)]
