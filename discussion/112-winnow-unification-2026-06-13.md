@@ -326,10 +326,24 @@ The workspace is green at the end of S1; CTfile still uses nom.
   As expected for the coordinated S2b-S2f migration, the crate remains red at the
   unmigrated property, accumulation, and top-level composition modules. No Nom adapter
   was added; S2d owns the next consumers.
-- **S2d — SGroups and properties** (`sgroup.rs`, `properties.rs`): port property
+- **S2d — SGroups and properties** (`sgroup.rs`, `properties.rs`). **Done.** Port property
   dispatch and bodies, use `Cut` after recognized tags where ownership is clear, and
   retain the necessary backtracking at multiline-property boundaries. Breaking
   coordinated migration. [dep: S2b, S2c]
+
+  SGroup helpers and basic and extended property parsers now use Winnow directly.
+  Property dispatch remains backtrackable until a supported tag owns the line; failures
+  in recognized property bodies are committed and the block reports the exact physical
+  line and byte column. Atom aliases and legacy group abbreviations retain their
+  two-line structure, including committed unexpected-EOF errors when the continuation
+  line is absent. The original property test matrix was retained and exact Winnow error
+  modes and locations replaced nom error kinds. An isolated harness passed 656 tests on
+  Rust 1.87, including 297 property-parser and 56 SGroup tests, and passed Clippy with
+  warnings denied on the current toolchain.
+
+  As expected for the coordinated S2b-S2f migration, the crate remains red only at the
+  unmigrated accumulation and top-level composition boundaries. No Nom adapter was
+  added; S2e owns the next consumers.
 - **S2e — Property accumulation and conversion** (`accumulator.rs`, `context.rs`,
   `convert.rs`): route duplicate properties, invalid codes and isotopes, invalid
   references, and SGroup consistency failures through the parser-neutral error contract.

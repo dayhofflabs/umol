@@ -31,7 +31,7 @@ impl InputError {
         Self::at_column(input.current_token_start())
     }
 
-    fn at_column(column: usize) -> Self {
+    pub(super) fn at_column(column: usize) -> Self {
         Self {
             column: column.min(u32::MAX as usize) as u32,
         }
