@@ -1,8 +1,8 @@
 # SMILES / MOL / SDF parsing outstanding tasks
 
-Status: **Active task inventory**
+Status: Proposed
 Date: 2026-07-18
-Relates: [047](047-smiles-conformance-suite-2026-01-21.md), [048](048-smiles-parser-configuration-2026-01-23.md), [100](100-table-ir-raise-ast-2026-05-27.md), [112](112-ctfile-winnow-migration-2026-06-13.md), [151](151-python-molecule-workflows-2026-07-13.md), [152](152-basic-molecule-wildcards-2026-07-18.md),
+Relates: [047](047-smiles-conformance-suite-2026-01-21.md), [048](048-smiles-parser-configuration-2026-01-23.md), [100](100-table-ir-raise-ast-2026-05-27.md), [112](112-winnow-unification-2026-06-13.md), [151](151-python-molecule-workflows-2026-07-13.md), [152](152-basic-molecule-wildcards-2026-07-18.md),
 [206](206-umol-perm-review-2026-08-21.md)
 
 ## Purpose
@@ -119,19 +119,23 @@ Required work:
 - Close the existing `LitSet` TODO in raise code where appropriate.
 - Add or update resolution fixtures for bond-only aromatic constraints.
 
-### T6 — Migrate MOL/SDF parser implementation from nom to winnow
+### T6 — Unify parser implementations on Winnow
 
-Doc 112 remains the active migration record for CTFile parsing internals.
+Doc 112 owns direct nom removal from the workspace at the `0.8.0` compatibility
+boundary.
 
 Required work:
 
+- Update and verify the Winnow 1.x dependency used by `umol-edn`.
+- Remove the unused nom dependency from `umol-geometric`.
+- Port the private CXSMILES parser without folding in the future CXSMILES boundary
+  redesign.
 - Establish baseline MOL/SDF parser tests and benchmarks before changing parser internals.
-- Inventory remaining nom-specific parser code.
 - Build shared winnow parser infrastructure for fixed-width CTFile records.
-- Replace the nom-specific `ParseError` layer with winnow-compatible errors.
+- Replace the nom-specific CTfile `ParseError` layer with parser-library-neutral errors.
 - Preserve current behavior except where error classification, location reporting, or parser commitment is intentionally improved.
 - Rework SDF data-block dispatch with deterministic line-oriented parsing where that is cleaner than directly translating the nom parser.
-- Keep intermediate states controlled; the final migration boundary should leave MOL/SDF parsing green.
+- Remove all direct nom dependencies and source references from the workspace.
 
 ### T7 — Expand conformance, fuzzing, and benchmarks
 
