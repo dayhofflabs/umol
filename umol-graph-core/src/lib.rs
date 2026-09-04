@@ -6,12 +6,12 @@
 //! components, cycle enumeration, maximum independent set).
 
 pub mod algorithms;
-pub(crate) mod compaction;
+pub(crate) mod compact;
 pub(crate) mod correspondence;
 pub(crate) mod digraph;
 pub(crate) mod graph;
 pub(crate) mod relation;
-pub(crate) mod remapping;
+pub(crate) mod remap;
 pub(crate) mod rewriting;
 pub(crate) mod union_find;
 
@@ -46,7 +46,7 @@ pub use algorithms::subgraph_isomorphism::{
 };
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
-pub use compaction::{compact_edge_vec, compact_node_vec, Compaction, GraphCompaction};
+pub use compact::{Compaction, GraphCompaction};
 pub use correspondence::{Correspondence, CorrespondenceError, GraphCorrespondence};
 pub use digraph::DiGraph;
 pub use graph::{EdgeId, Graph, Neighbor, NodeId, SubdividedGraph, SubdivisionNodeSource};
@@ -55,6 +55,6 @@ pub use relation::{
     ParticipantRefs, RelationId, RelationParticipant, RelationPullback, RelationPushout,
     VarRelationSet, VarVarBirelationSet,
 };
-pub use remapping::{GraphRemapping, Remapping};
+pub use remap::{GraphRemapping, Remapping};
 pub use rewriting::{Pullback, Pushout, PushoutComplement};
 pub use union_find::UnionFind;

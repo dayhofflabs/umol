@@ -12,9 +12,10 @@ use strum::VariantArray;
 use umol_perm::{Orientation, Permutation};
 
 use super::super::boolean::BooleanForm;
+use super::super::compact::MoleculeCompaction;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::id::StereoLigandPosition;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::remap::IdRemapping;
 use super::super::stereo::{Stereogenicity, Topicity};
 use super::super::traits::{AsLit, Lattice, Normalize};
 

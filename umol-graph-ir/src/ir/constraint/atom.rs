@@ -6,10 +6,11 @@ use std::mem;
 
 use smallvec::SmallVec;
 
+use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::remap::IdRemapping;
 use super::super::stereo::TetrahedralStereoForm;
 use super::super::traits::{AsLit, Lattice, Normalize};
 

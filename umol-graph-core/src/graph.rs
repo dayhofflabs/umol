@@ -3,7 +3,7 @@
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
 //! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
-//! it and produce a [`crate::compaction::GraphCompaction`] for reindexing external data.
+//! it and produce a [`crate::compact::GraphCompaction`] for reindexing external data.
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use index_vec::Idx;
 
-use crate::compaction::GraphCompaction;
+use crate::compact::GraphCompaction;
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

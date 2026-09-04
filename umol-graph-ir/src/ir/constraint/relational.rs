@@ -19,6 +19,7 @@
 //!   `AllAtoms`, `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraintForm` to a
 //!   role position, quantified over the matching participants.
 
+use super::super::compact::MoleculeCompaction;
 use super::super::entity::Entity;
 use super::super::error::Contradiction;
 use super::super::frame::OverlaysFrameAction;
@@ -26,7 +27,7 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::remap::IdRemapping;
 use super::super::traits::{FrameTransport, Normalize};
 use super::atom::AtomConstraintForm;
 use super::molecule::{ConstraintFrameActionDomain, ConstraintFrameActions};

@@ -17,6 +17,7 @@ use thiserror::Error;
 use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use super::bond::{BondForm, BondUpdate};
+use super::compact::{MoleculeCompaction, UndoCompaction};
 use super::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
     DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
@@ -34,7 +35,7 @@ use super::ligand::{StereoLigand, StereoLigandKind};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBondUpdate};
 use super::num::NumForm;
-use super::remap::{IdRemapping, MoleculeCompaction, UndoCompaction};
+use super::remap::IdRemapping;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,

@@ -27,6 +27,7 @@ proptest = []
 [dependencies]
 bimap = "0.6.3"
 bitflags = "2.9.4"
+index_vec = "0.1.4"
 indexmap = "2.11.1"
 smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }

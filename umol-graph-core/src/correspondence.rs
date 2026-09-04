@@ -11,7 +11,7 @@ use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::graph::{EdgeId, Graph, NodeId};
-use crate::remapping::GraphRemapping;
+use crate::remap::GraphRemapping;
 
 /// Failure to construct a correspondence whose pairs form a partial bijection over its declared id
 /// spaces.

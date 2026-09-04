@@ -1,10 +1,12 @@
 //! Dense renumbering of an id space by removal.
 //!
-//! `Compaction<Id>` is the operation over one id space; `GraphCompaction` pairs one over nodes with
+//! `Compaction<Id>` is the operation over one id space; `GraphCompaction` pairs one over nodes and
 //! one over edges. A removal leaves surviving ids closed up in place, so a stale reference is either
 //! shifted to its new position or reported as removed.
 
 use std::ops::{Add, Sub};
+
+use index_vec::Idx;
 
 use crate::graph::{EdgeId, NodeId};
 
@@ -38,6 +40,23 @@ where
             return None;
         }
         Some(old - self.removed.partition_point(|&r| r < old))
+    }
+
+    /// Compact a source-id-indexed data column by dropping removed positions and preserving the
+    /// order of the survivors. Removed ids outside the column have no effect.
+    pub fn compact_vec<T: Clone>(&self, data: &[T]) -> Vec<T>
+    where
+        Id: Idx,
+    {
+        data.iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                self.removed
+                    .binary_search_by_key(index, |id| id.index())
+                    .is_err()
+            })
+            .map(|(_, value)| value.clone())
+            .collect()
     }
 
     /// The pre-removal id of a surviving post-removal id, re-adding every removed id at or below it.
@@ -106,24 +125,6 @@ impl GraphCompaction {
     }
 }
 
-/// Compact a node-indexed data column to the post-removal layout (drop removed, keep order).
-pub fn compact_node_vec<T: Clone>(compaction: &GraphCompaction, data: &[T]) -> Vec<T> {
-    data.iter()
-        .enumerate()
-        .filter(|(i, _)| compaction.compact_node(NodeId(*i as u32)).is_some())
-        .map(|(_, v)| v.clone())
-        .collect()
-}
-
-/// Compact an edge-indexed data column to the post-removal layout (drop removed, keep order).
-pub fn compact_edge_vec<T: Clone>(compaction: &GraphCompaction, data: &[T]) -> Vec<T> {
-    data.iter()
-        .enumerate()
-        .filter(|(i, _)| compaction.compact_edge(EdgeId(*i as u32)).is_some())
-        .map(|(_, v)| v.clone())
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -176,6 +177,26 @@ mod tests {
         #[case] expected: Option<NodeId>,
     ) {
         assert_eq!(Compaction::new(removed).compact(old), expected);
+    }
+
+    #[rstest]
+    #[case::first(vec![NodeId(0)], vec![20, 30, 40])]
+    #[case::middle(vec![NodeId(1)], vec![10, 30, 40])]
+    #[case::scattered(vec![NodeId(0), NodeId(2)], vec![20, 40])]
+    #[case::outside(vec![NodeId(1), NodeId(8)], vec![10, 30, 40])]
+    fn test_compaction_compact_vec(#[case] removed: Vec<NodeId>, #[case] expected: Vec<i32>) {
+        assert_eq!(
+            Compaction::new(removed).compact_vec(&[10, 20, 30, 40]),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![])]
+    #[case::outside(vec![NodeId(8)])]
+    fn test_compaction_compact_vec_identity(#[case] removed: Vec<NodeId>) {
+        let data = vec![10, 20, 30, 40];
+        assert_eq!(Compaction::new(removed).compact_vec(&data), data);
     }
 
     #[rstest]

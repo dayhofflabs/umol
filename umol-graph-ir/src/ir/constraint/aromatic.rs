@@ -7,9 +7,10 @@ use std::vec::IntoIter;
 
 use umol_perm::DynPermutation;
 
+use super::super::compact::MoleculeCompaction;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::remap::IdRemapping;
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemForm` via

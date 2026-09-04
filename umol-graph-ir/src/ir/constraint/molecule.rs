@@ -8,6 +8,7 @@ use std::vec::IntoIter;
 
 use umol_perm::{DynPermutation, Permutation};
 
+use super::super::compact::MoleculeCompaction;
 use super::super::edit::{CascadedConstraints, ModifiedConstraint, RemovedConstraint};
 use super::super::entity::{Entity, EntityKind};
 use super::super::error::Contradiction;
@@ -17,7 +18,7 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::remap::IdRemapping;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
 use super::super::traits::{FrameTransport, Lattice, Normalize};

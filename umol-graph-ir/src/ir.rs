@@ -6,6 +6,7 @@ pub(crate) mod bond;
 pub(crate) mod boolean;
 pub(crate) mod canonicalize;
 pub(crate) mod coloring;
+pub(crate) mod compact;
 pub(crate) mod compose;
 pub(crate) mod constraint;
 pub(crate) mod correspondence;
@@ -46,6 +47,7 @@ pub use canonicalize::{
     ReactionSpanCanonicalizeError,
 };
 pub use coloring::{ConstitutionColoring, MoleculeColoring, MoleculeColoringFeatures};
+pub use compact::{MoleculeCompaction, UndoCompaction};
 pub use constraint::{
     aromatic_covalence, AromaticSystemConstraintForm, AromaticSystemConstraintKey,
     AromaticSystemConstraintsForm, AromaticValence, AromaticValenceForm, AtomConstraintForm,
@@ -113,7 +115,7 @@ pub use reaction::{
     ReactionProductsIter,
 };
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
-pub use remap::{IdRemapping, MoleculeCompaction, UndoCompaction};
+pub use remap::{IdRemapping, MoleculeRemapping};
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
 };

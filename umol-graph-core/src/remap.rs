@@ -1,7 +1,7 @@
 //! Total relabeling of an id space.
 //!
 //! A remapping gives every source id an image and drops nothing, so it expresses alpha-renaming and
-//! injection into a larger ambient space. Removal is [`crate::compaction::Compaction`].
+//! injection into a larger ambient space. Removal is [`crate::compact::Compaction`].
 
 use index_vec::{Idx, IndexVec};
 

@@ -19,22 +19,22 @@ construction sites. Implementation is in progress.
 
 ## Finding
 
-There are three id-transport concepts. Each should exist at three layers: one id space, the graph's
-node and edge spaces, and the molecule's eight entity families. Only correspondence has all three.
+There are three id-transport concepts. Each has three layers: one id space, the graph's node and
+edge spaces, and the molecule's eight entity families.
 
 | concept | single id space | graph, node and edge | molecule, eight families |
 | --- | --- | --- | --- |
-| partial bijection | `Correspondence<Id>` `correspondence.rs:50` | `GraphCorrespondence` `correspondence.rs:296` | `MoleculeCorrespondence` `ir/correspondence.rs:25` |
-| removal and dense shift | absent, added by doc 211 | `Compaction` `graph.rs:566` | `IdCompaction` `ir/remap.rs:23` |
-| total relabel | absent | `Remapping` `graph.rs:643` | `IdRemapping` `ir/remap.rs:235` |
+| partial bijection | `Correspondence<Id>` | `GraphCorrespondence` | `MoleculeCorrespondence` |
+| removal and dense shift | `Compaction<Id>` | `GraphCompaction` | `MoleculeCompaction` |
+| total relabel | `Remapping<Id>` | `GraphRemapping` | `MoleculeRemapping` |
 
-The third layer is also irregularly named. `MoleculeCorrespondence` names the id space it covers;
-`IdCompaction` and `IdRemapping` do not.
+The aggregate names state the layer they cover. The legacy sparse `IdRemapping` remains only until
+its consumers are classified and migrated later in this plan.
 
 ## How remapping differs from compaction
 
 Doc 211 extracts the compaction layer because the arithmetic is duplicated: `compact_relation`,
-`uncompact_dense`, and `normalize_removed` in `ir/remap.rs` are line-for-line reimplementations of
+`uncompact_dense`, and `normalize_removed` in `ir/compact.rs` are line-for-line reimplementations of
 `Compaction::compact_node`, `Compaction::uncompact_node`, and the sort-and-dedup in
 `Compaction::new`. That extraction is mechanical and deletes code.
 
@@ -200,6 +200,7 @@ currently use `IdRemapping`.
 
 The implementation adds:
 
+- `Compaction<Id>::compact_vec` for applying one id-space compaction to its aligned data column;
 - `Remapping<Id>` with `new`, `map`, and `try_map`;
 - `index_vec::Idx` implementations for the existing graph-core and graph-IR id newtypes;
 - `GraphRemapping` with `new`, `nodes`, `edges`, and the typed node/edge `map_*` and `try_map_*`
@@ -216,6 +217,8 @@ The typed molecule methods use the complete entity names: `map_dative_bond`,
 
 The implementation changes or retires:
 
+- the graph-specific free functions `compact_node_vec` and `compact_edge_vec`, replaced by the
+  generic `Compaction<Id>` method;
 - the current graph aggregate `Remapping`, renamed to `GraphRemapping` so the generic type can own
   the unqualified name;
 - `IdRemapping`, replaced by `MoleculeRemapping`;
@@ -253,20 +256,23 @@ record the benchmark result in this document.
 
 #### S1a — Add `Remapping<Id>` and re-express the graph aggregate **Done**
 
-**Module:** `umol-graph-core/src/remapping.rs`, `graph.rs`, `relation.rs`, `correspondence.rs`,
-`lib.rs`, and their unit tests.
+**Module:** `umol-graph-core/src/remap.rs`, `compact.rs`, `graph.rs`, `relation.rs`,
+`correspondence.rs`, `lib.rs`, and their unit tests.
 
 Add the dense `Remapping<Id>` image vector and its `new`, `map`, and `try_map` methods, backed by
 `index_vec::IndexVec<Id, Id>`. Implement `index_vec::Idx` for `NodeId`, `EdgeId`, and `RelationId`;
 do not add general id-to-`usize` conversions. Rename the existing node/edge aggregate to
 `GraphRemapping`, store one generic remapping for each id space, and preserve its typed lookup
 methods while adding `nodes` and `edges` accessors. Update graph-core relation transport and
-`GraphCorrespondence::to_remapping` to the new aggregate.
+`GraphCorrespondence::to_remapping` to the new aggregate. Name the private operation modules
+`remap` and `compact` consistently. Move aligned-column application from the graph-specific free
+functions to `Compaction<Id>::compact_vec`.
 
 **Tests and evidence:** Table tests cover an empty image vector, first and last images, a sparse
 target image, a repeated target image, checked out-of-domain lookup, and the asserted lookup panic.
 Retain the existing node/edge aggregate and correspondence-conversion cases under
-`GraphRemapping`. Run `cargo test -p umol-graph-core`.
+`GraphRemapping`. Exact `compact_vec` cases cover identity, removed positions, scattered removals,
+and removals outside the supplied column. Run `cargo test -p umol-graph-core`.
 
 **Change class:** breaking rename with an additive generic (red until S1b).
 
@@ -295,23 +301,30 @@ All graph-IR consumers use `GraphRemapping`. `cargo test -p umol-graph-ir` passe
 
 ### S2 — Add the molecule remapping aggregate
 
-#### S2a — Add `MoleculeRemapping`
+#### S2a — Add `MoleculeRemapping` **Done**
 
-**Module:** `umol-graph-ir/src/ir/remap.rs`, `id.rs`, `ir.rs`, and unit tests.
+**Module:** `umol-graph-ir/src/ir/remap.rs`, `compact.rs`, `id.rs`, `ir.rs`, and unit tests.
 
 Add `MoleculeRemapping` alongside the existing `IdRemapping`. It contains a `GraphRemapping` plus
 six `Remapping<..Id>` overlay components. Its constructor takes the graph aggregate and six dense
 image vectors; its component accessors and typed `map_*`/`try_map_*` pairs expose the contract
 listed above. Implement `index_vec::Idx` for the eight molecule id types. Preserve the old
-aggregate's empty `Default` behavior for the replacement type.
+aggregate's empty `Default` behavior for the replacement type. Keep molecule compaction and
+remapping in the separate private `compact` and `remap` modules.
 
 **Tests and evidence:** Exact table cases exercise successful and out-of-domain lookup for every
 entity kind, component access, sparse and repeated target images, and the asserted failure boundary.
-Run `cargo test -p umol-graph-ir ir::remap`.
+Run `cargo test -p umol-graph-ir ir::compact` and `cargo test -p umol-graph-ir ir::remap`.
 
 **Change class:** additive (green).
 
 **Dependencies:** [dep: S1b]
+
+`MoleculeRemapping` now carries the graph remapping and six typed dense overlay remappings, with
+checked and asserted lookup for every entity kind. All eight graph-IR id newtypes implement
+`index_vec::Idx`; no general id-to-`usize` conversion was added. `cargo test -p umol-graph-ir
+ir::compact` passes all 31 selected cases and `cargo test -p umol-graph-ir ir::remap` passes all 25
+selected cases.
 
 ### S3 — Remove uses that are not remappings
 

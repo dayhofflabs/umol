@@ -11,15 +11,15 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    compact_edge_vec, compact_node_vec, Compaction, EdgeId, FixedRelationSet,
-    FixedVarBirelationSet, Graph, GraphCompaction, NodeId, RelationId, RelationParticipant,
-    VarRelationSet,
+    Compaction, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphCompaction, NodeId,
+    RelationId, RelationParticipant, VarRelationSet,
 };
 use umol_perm::{DynPermutation, Permutation};
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
+use super::super::compact::{MoleculeCompaction, UndoCompaction};
 use super::super::constraint::{Constraint, Constraints};
 use super::super::dative::{DativeBondForm, DativeBonds};
 use super::super::edit::{
@@ -35,7 +35,6 @@ use super::super::id::{
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
-use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::super::traits::{FrameTransport, Normalize};
 use super::super::view::{
@@ -1219,8 +1218,8 @@ impl MoleculeEditor {
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
         let compaction = self.graph.remove_cascading(&nodes, &edges);
 
-        let new_atoms = compact_node_vec(&compaction, &self.atoms);
-        let new_bonds = compact_edge_vec(&compaction, &self.bonds);
+        let new_atoms = compaction.nodes().compact_vec(&self.atoms);
+        let new_bonds = compaction.edges().compact_vec(&self.bonds);
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 

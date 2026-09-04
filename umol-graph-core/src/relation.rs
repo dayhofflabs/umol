@@ -15,10 +15,10 @@ use std::ops::{Add, Sub};
 
 use index_vec::Idx;
 
-use crate::compaction::{Compaction, GraphCompaction};
+use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::Correspondence;
 use crate::graph::{EdgeId, NodeId};
-use crate::remapping::GraphRemapping;
+use crate::remap::GraphRemapping;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);

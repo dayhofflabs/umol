@@ -17,6 +17,7 @@ use std::hash::Hash;
 
 use thiserror::Error;
 
+use super::super::compact::{MoleculeCompaction, UndoCompaction};
 use super::super::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint, Constraints,
     DativeBondConstraintForm, MulticenterBondConstraintForm, NoncovalentBondConstraintForm,
@@ -39,7 +40,6 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::traits::Normalize;
 use super::MoleculeEditor;
 

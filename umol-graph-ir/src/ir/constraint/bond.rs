@@ -5,10 +5,11 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::super::boolean::BooleanForm;
+use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::remap::IdRemapping;
 use super::super::stereo::CisTransStereoForm;
 use super::super::traits::{Lattice, Normalize};
 
