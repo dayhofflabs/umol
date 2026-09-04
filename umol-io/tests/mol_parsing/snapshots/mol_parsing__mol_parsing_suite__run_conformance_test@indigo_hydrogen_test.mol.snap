@@ -1,5 +1,5 @@
 ---
-source: umol-models-graph/tests/mol_parsing/mod.rs
+source: umol-io/tests/mol_parsing/mod.rs
 expression: results
 ---
 expected_category: molecule_lenient
@@ -8,7 +8,7 @@ molecule:
   success: false
   error:
     error_type: InvalidBondLine
-    message: "Invalid bond line at line 16, col 0"
+    message: "Invalid bond line at line 16, col 6"
 molecule_lenient:
   success: true
   summary:
@@ -20,7 +20,7 @@ extended_molecule:
   success: false
   error:
     error_type: InvalidBondLine
-    message: "Invalid bond line at line 16, col 0"
+    message: "Invalid bond line at line 16, col 6"
 extended_molecule_lenient:
   success: true
   extended_summary:

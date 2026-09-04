@@ -1,5 +1,5 @@
 ---
-source: umol-models-graph/tests/sdf_parsing/mod.rs
+source: umol-io/tests/sdf_parsing/mod.rs
 expression: results
 ---
 expected_category: invalid
@@ -8,23 +8,23 @@ molecule:
   success: false
   compound_count: 0
   error:
-    error_type: InvalidSdfDataHeader
-    message: Invalid SDF data header at line 24
+    error_type: MissingDelimiter
+    message: Missing record delimiter at line 32
 molecule_lenient:
   success: false
   compound_count: 0
   error:
-    error_type: InvalidSdfDataHeader
-    message: Invalid SDF data header at line 24
+    error_type: MissingDelimiter
+    message: Missing record delimiter at line 32
 extended_molecule:
   success: false
   compound_count: 0
   error:
-    error_type: InvalidSdfDataHeader
-    message: Invalid SDF data header at line 24
+    error_type: MissingDelimiter
+    message: Missing record delimiter at line 32
 extended_molecule_lenient:
   success: false
   compound_count: 0
   error:
-    error_type: InvalidSdfDataHeader
-    message: Invalid SDF data header at line 24
+    error_type: MissingDelimiter
+    message: Missing record delimiter at line 32

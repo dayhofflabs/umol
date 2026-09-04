@@ -5,12 +5,11 @@
 use std::borrow::Cow;
 
 use indexmap::IndexMap;
-use nom::character::complete::multispace0;
-use nom::sequence::terminated;
-use nom::{Err, Parser};
 use umol_geometric_core::Point3D;
 use umol_graph_ir::ir::{Molecule as GraphIrMolecule, TryIntoIr};
 use umol_utils::error::UmolError;
+use winnow::error::ErrMode;
+use winnow::{ModalResult, Parser};
 
 use self::accumulator::PropertyAccumulator;
 use self::atom::{atom_block, extended_atom_block};
@@ -45,107 +44,100 @@ mod utils;
 /// Parse CTAB block (basic parser, optimized for performance, basic molecules only)
 ///
 /// This parser is optimized for basic molecules. For extended molecules, use extended_ctab_block.
-fn ctab_block<'inp>(
+fn ctab_block(
+    input: &mut &[u8],
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Molecule, u32), Error = ParseError> + use<'inp> {
+) -> ModalResult<(Molecule, u32), ParseError> {
     debug_assert!(
         CtabParseFlags::BASIC_MAX.contains(flags),
         "flags must be a subset of BASIC_MAX"
     );
     let legacy_atom_lists = flags.contains(CtabParseFlags::LEGACY_ATOM_LISTS);
 
-    move |input: &'inp [u8]| {
-        let (remaining, (counts, molecule_properties, line_offset)) =
-            counts_block(line_offset, flags).parse(input)?;
-        let atom_count = counts.atom_count;
-        let bond_count = counts.bond_count;
-        let atom_list_count = counts.atom_list_count;
+    let (counts, molecule_properties, line_offset) = counts_block(input, line_offset, flags)?;
+    let atom_count = counts.atom_count;
+    let bond_count = counts.bond_count;
+    let atom_list_count = counts.atom_list_count;
 
-        if !legacy_atom_lists && atom_list_count > 0 {
-            return Err(Err::Error(ParseError::UnsupportedLegacyAtomList {
-                line: line_offset + atom_count + bond_count,
-            }));
-        }
-
-        let (remaining, (atoms, positions, line_offset)) =
-            atom_block(atom_count, line_offset, flags).parse(remaining)?;
-
-        let (remaining, (bonds, line_offset)) =
-            bond_block(bond_count, line_offset, flags).parse(remaining)?;
-
-        let (remaining, (legacy_properties, line_offset)) =
-            legacy_atom_list_block(atom_list_count, line_offset, flags).parse(remaining)?;
-
-        let (remaining, (properties, line_offset)) =
-            properties_block(line_offset, flags).parse(remaining)?;
-
-        let properties = if !legacy_properties.is_empty() || !molecule_properties.is_empty() {
-            properties
-                .into_iter()
-                .chain(molecule_properties)
-                .chain(legacy_properties)
-                .collect()
-        } else {
-            properties
-        };
-
-        let molecule =
-            build_molecule(atoms, bonds, positions, properties, flags).map_err(Err::Error)?;
-        Ok((remaining, (molecule, line_offset)))
+    if !legacy_atom_lists && atom_list_count > 0 {
+        return Err(ErrMode::Cut(ParseError::UnsupportedLegacyAtomList {
+            line: line_offset + atom_count + bond_count,
+        }));
     }
+
+    let (atoms, positions, line_offset) = atom_block(input, atom_count, line_offset, flags)?;
+    let (bonds, line_offset) = bond_block(input, bond_count, line_offset, flags)?;
+    let (legacy_properties, line_offset) =
+        legacy_atom_list_block(input, atom_list_count, line_offset, flags)?;
+    let (properties, line_offset) = properties_block(line_offset, flags).parse_next(input)?;
+
+    let properties = if !legacy_properties.is_empty() || !molecule_properties.is_empty() {
+        properties
+            .into_iter()
+            .chain(molecule_properties)
+            .chain(legacy_properties)
+            .collect()
+    } else {
+        properties
+    };
+
+    let molecule =
+        build_molecule(atoms, bonds, positions, properties, flags).map_err(ErrMode::Cut)?;
+    Ok((molecule, line_offset))
 }
 
 /// Parse CTAB block (general parser, handles all features including queries)
 ///
 /// This parser handles extended molecules. For basic molecules, use ctab_block.
-fn extended_ctab_block<'inp>(
+fn extended_ctab_block(
+    input: &mut &[u8],
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (ExtendedMolecule, u32), Error = ParseError> + use<'inp> {
+) -> ModalResult<(ExtendedMolecule, u32), ParseError> {
     let legacy_atom_lists = flags.contains(CtabParseFlags::LEGACY_ATOM_LISTS);
 
-    move |input: &'inp [u8]| {
-        let (remaining, (counts, molecule_properties, line_offset)) =
-            counts_block(line_offset, flags).parse(input)?;
-        let atom_count = counts.atom_count;
-        let bond_count = counts.bond_count;
-        let atom_list_count = counts.atom_list_count;
+    let (counts, molecule_properties, line_offset) = counts_block(input, line_offset, flags)?;
+    let atom_count = counts.atom_count;
+    let bond_count = counts.bond_count;
+    let atom_list_count = counts.atom_list_count;
 
-        if !legacy_atom_lists && atom_list_count > 0 {
-            return Err(Err::Error(ParseError::UnsupportedLegacyAtomList {
-                line: line_offset + atom_count + bond_count,
-            }));
-        }
+    if !legacy_atom_lists && atom_list_count > 0 {
+        return Err(ErrMode::Cut(ParseError::UnsupportedLegacyAtomList {
+            line: line_offset + atom_count + bond_count,
+        }));
+    }
 
-        let (remaining, (atoms, positions, line_offset)) =
-            extended_atom_block(atom_count, line_offset, flags).parse(remaining)?;
+    let (atoms, positions, line_offset) =
+        extended_atom_block(input, atom_count, line_offset, flags)?;
+    let (bonds, line_offset) = extended_bond_block(input, bond_count, line_offset, flags)?;
+    let (legacy_properties, line_offset) = if legacy_atom_lists {
+        legacy_atom_list_block(input, atom_list_count, line_offset, flags)?
+    } else {
+        (Vec::new(), line_offset + atom_list_count)
+    };
+    let (properties, line_offset) =
+        extended_properties_block(line_offset, flags).parse_next(input)?;
 
-        let (remaining, (bonds, line_offset)) =
-            extended_bond_block(bond_count, line_offset, flags).parse(remaining)?;
+    let properties = if !legacy_properties.is_empty() || !molecule_properties.is_empty() {
+        properties
+            .into_iter()
+            .chain(legacy_properties)
+            .chain(molecule_properties)
+            .collect()
+    } else {
+        properties
+    };
 
-        let (remaining, (legacy_properties, line_offset)) = if legacy_atom_lists {
-            legacy_atom_list_block(atom_list_count, line_offset, flags).parse(remaining)?
-        } else {
-            (remaining, (Vec::new(), line_offset + atom_list_count))
-        };
+    let extended = build_extended_molecule(atoms, bonds, positions, properties, flags)
+        .map_err(ErrMode::Cut)?;
+    Ok((extended, line_offset))
+}
 
-        let (remaining, (properties, line_offset)) =
-            extended_properties_block(line_offset, flags).parse(remaining)?;
-
-        let properties = if !legacy_properties.is_empty() || !molecule_properties.is_empty() {
-            properties
-                .into_iter()
-                .chain(legacy_properties)
-                .chain(molecule_properties)
-                .collect()
-        } else {
-            properties
-        };
-
-        let extended = build_extended_molecule(atoms, bonds, positions, properties, flags)
-            .map_err(Err::Error)?;
-        Ok((remaining, (extended, line_offset)))
+fn parse_error(error: ErrMode<ParseError>, line: u32, block: &'static str) -> ParseError {
+    match error {
+        ErrMode::Backtrack(error) | ErrMode::Cut(error) => error,
+        ErrMode::Incomplete(_) => ParseError::UnexpectedEof { line, block },
     }
 }
 
@@ -281,10 +273,11 @@ pub fn parse_mol_bytes_to_table_ir_with(
         Cow::Borrowed(input)
     };
 
-    let (remaining, (comments, line_offset)) = header_block(0).parse(&*data)?;
-
-    let (_, (mut molecule, _line_offset)) =
-        terminated(ctab_block(line_offset, flags), multispace0).parse(remaining)?;
+    let mut remaining = data.as_ref();
+    let (comments, line_offset) =
+        header_block(&mut remaining, 0).map_err(|error| parse_error(error, 0, "header"))?;
+    let (mut molecule, _) = ctab_block(&mut remaining, line_offset, flags)
+        .map_err(|error| parse_error(error, line_offset, "CTAB"))?;
 
     molecule.comments = comments;
 
@@ -323,10 +316,11 @@ pub fn parse_extended_mol_bytes_with(
         Cow::Borrowed(input)
     };
 
-    let (remaining, (comments, line_offset)) = header_block(0).parse(&*data)?;
-
-    let (_, (mut molecule, _line_offset)) =
-        terminated(extended_ctab_block(line_offset, flags), multispace0).parse(remaining)?;
+    let mut remaining = data.as_ref();
+    let (comments, line_offset) =
+        header_block(&mut remaining, 0).map_err(|error| parse_error(error, 0, "header"))?;
+    let (mut molecule, _) = extended_ctab_block(&mut remaining, line_offset, flags)
+        .map_err(|error| parse_error(error, line_offset, "CTAB"))?;
     molecule.comments = comments;
 
     Ok(molecule)
@@ -354,45 +348,45 @@ pub fn parse_extended_mol(input: &str) -> Result<ExtendedMolecule, ParseError> {
 }
 
 /// Parse single SDF compound into Molecule (basic, optimized)
-fn parse_sdf_molecule<'inp>(
-    input: &'inp [u8],
+fn parse_sdf_molecule(
+    input: &mut &[u8],
     line_offset: u32,
     config: &CtfileIoConfig,
-) -> Result<(&'inp [u8], (Molecule, u32)), ParseError> {
+) -> Result<(Molecule, u32), ParseError> {
     let flags = config.parse_flags;
 
-    let (remaining, (comments, line_offset)) = header_block(line_offset).parse(input)?;
-
-    let (remaining, (mut molecule, line_offset)) =
-        ctab_block(line_offset, flags).parse(remaining)?;
-
-    let (remaining, (mut sdf_data, line_offset)) = sdf_data_block(line_offset).parse(remaining)?;
+    let (comments, line_offset) = header_block(input, line_offset)
+        .map_err(|error| parse_error(error, line_offset, "header"))?;
+    let (mut molecule, line_offset) = ctab_block(input, line_offset, flags)
+        .map_err(|error| parse_error(error, line_offset, "CTAB"))?;
+    let (mut sdf_data, line_offset) = sdf_data_block(input, line_offset)
+        .map_err(|error| parse_error(error, line_offset, "sdf data"))?;
 
     molecule.comments = comments;
     molecule.properties.append(&mut sdf_data);
 
-    Ok((remaining, (molecule, line_offset)))
+    Ok((molecule, line_offset))
 }
 
 /// Parse single SDF compound into ExtendedMolecule
-fn parse_sdf_extended_molecule<'inp>(
-    input: &'inp [u8],
+fn parse_sdf_extended_molecule(
+    input: &mut &[u8],
     line_offset: u32,
     config: &CtfileIoConfig,
-) -> Result<(&'inp [u8], (ExtendedMolecule, u32)), ParseError> {
+) -> Result<(ExtendedMolecule, u32), ParseError> {
     let flags = config.parse_flags;
 
-    let (remaining, (comments, line_offset)) = header_block(line_offset).parse(input)?;
-
-    let (remaining, (mut molecule, line_offset)) =
-        extended_ctab_block(line_offset, flags).parse(remaining)?;
-
-    let (remaining, (mut sdf_data, line_offset)) = sdf_data_block(line_offset).parse(remaining)?;
+    let (comments, line_offset) = header_block(input, line_offset)
+        .map_err(|error| parse_error(error, line_offset, "header"))?;
+    let (mut molecule, line_offset) = extended_ctab_block(input, line_offset, flags)
+        .map_err(|error| parse_error(error, line_offset, "CTAB"))?;
+    let (mut sdf_data, line_offset) = sdf_data_block(input, line_offset)
+        .map_err(|error| parse_error(error, line_offset, "sdf data"))?;
 
     molecule.comments = comments;
     molecule.properties.append(&mut sdf_data);
 
-    Ok((remaining, (molecule, line_offset)))
+    Ok((molecule, line_offset))
 }
 
 /// Parse SDF bytes into `Vec<Molecule>` with config (basic, optimized)
@@ -410,13 +404,11 @@ pub fn parse_sdf_bytes_with(
 
     let mut molecules = Vec::new();
     let mut line_offset = 0u32;
-    let mut remaining: &[u8] = &data;
+    let mut remaining = data.as_ref();
 
     while !remaining.trim_ascii().is_empty() {
-        let (new_remaining, (molecule, new_line_offset)) =
-            parse_sdf_molecule(remaining, line_offset, config)?;
+        let (molecule, new_line_offset) = parse_sdf_molecule(&mut remaining, line_offset, config)?;
         molecules.push(molecule);
-        remaining = new_remaining;
         line_offset = new_line_offset;
     }
 
@@ -454,13 +446,12 @@ pub fn parse_extended_sdf_bytes_with(
 
     let mut molecules = Vec::new();
     let mut line_offset = 0u32;
-    let mut remaining: &[u8] = &data;
+    let mut remaining = data.as_ref();
 
     while !remaining.trim_ascii().is_empty() {
-        let (new_remaining, (molecule, new_line_offset)) =
-            parse_sdf_extended_molecule(remaining, line_offset, config)?;
+        let (molecule, new_line_offset) =
+            parse_sdf_extended_molecule(&mut remaining, line_offset, config)?;
         molecules.push(molecule);
-        remaining = new_remaining;
         line_offset = new_line_offset;
     }
 

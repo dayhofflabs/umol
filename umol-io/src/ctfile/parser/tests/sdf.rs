@@ -2,9 +2,10 @@
 
 use std::str::from_utf8;
 
-use rstest::*;
+use rstest::{fixture, rstest};
 
 use crate::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use crate::ctfile::error::ParseError;
 use crate::ctfile::parser::{
     parse_extended_sdf, parse_extended_sdf_with, parse_sdf, parse_sdf_bytes, parse_sdf_bytes_with,
     parse_sdf_with,
@@ -147,4 +148,47 @@ fn test_parse_sdf_lenient(sdf_with_unicode_whitespace: &[u8]) {
     let molecules = result.unwrap();
     assert_eq!(molecules.len(), 1);
     assert_eq!(molecules[0].atom_count(), 1);
+}
+
+#[rstest]
+#[case::malformed_header_lf(
+    false,
+    "> <Name>",
+    "> Name",
+    ParseError::InvalidSdfDataHeader { line: 6, col: 6 },
+)]
+#[case::malformed_header_crlf(
+    true,
+    "> <Name>",
+    "> Name",
+    ParseError::InvalidSdfDataHeader { line: 6, col: 6 },
+)]
+#[case::missing_delimiter(
+    false,
+    "$$$$\n",
+    "",
+    ParseError::MissingDelimiter { line: 12 },
+)]
+#[case::malformed_delimiter(
+    false,
+    "$$$$\n",
+    "$$$\n",
+    ParseError::MissingDelimiter { line: 12 },
+)]
+fn test_parse_sdf_error(
+    single_compound_sdf: &str,
+    #[case] crlf: bool,
+    #[case] source: &str,
+    #[case] replacement: &str,
+    #[case] expected: ParseError,
+) {
+    let input = if crlf {
+        single_compound_sdf.replace('\n', "\r\n")
+    } else {
+        single_compound_sdf.to_string()
+    };
+    assert_eq!(
+        parse_sdf(&input.replace(source, replacement)),
+        Err(expected)
+    );
 }

@@ -2,124 +2,154 @@
 
 use bstr::{join, ByteSlice};
 use indexmap::IndexMap;
-use nom::bytes::complete::{is_not, tag, take_until1};
-use nom::character::complete::multispace0;
-use nom::combinator::{map, value};
-use nom::sequence::{delimited, preceded};
-use nom::{Err, Parser};
+use winnow::error::ErrMode;
+use winnow::ModalResult;
 
-use super::utils::LinesWithOffsetExt;
+use super::utils::next_line;
 use crate::ctfile::error::ParseError;
 
 /// Parse data field header: `> <Field Name>`
-pub(super) fn sdf_data_header<'inp>(
-    line_offset: u32,
-) -> impl Parser<&'inp [u8], Output = (String, u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let (line, byte_len) =
-            input
-                .lines_with_offset()
-                .next()
-                .ok_or(Err::Error(ParseError::UnexpectedEof {
-                    line: line_offset,
-                    block: "sdf data",
-                }))?;
-        let mut name_input = map(
-            preceded(
-                (tag(">"), is_not("<")),
-                delimited(tag("<"), take_until1(">"), tag(">")),
-            ),
-            move |name: &[u8]| name.trim().to_str_lossy().into_owned(),
-        );
-        let (_, name) = name_input.parse(line)?;
-        let remaining = &input[byte_len..];
-        Ok((remaining, (name, line_offset + 1)))
+fn sdf_data_header(input: &mut &[u8], line_offset: u32) -> ModalResult<(String, u32), ParseError> {
+    let line = next_line(input).map_err(|_| {
+        ErrMode::Cut(ParseError::UnexpectedEof {
+            line: line_offset,
+            block: "sdf data",
+        })
+    })?;
+    let bytes: &[u8] = line.as_ref();
+    if bytes.first() != Some(&b'>') {
+        return Err(ErrMode::Cut(ParseError::InvalidSdfDataHeader {
+            line: line_offset,
+            col: 0,
+        }));
     }
+
+    let Some(open) = bytes[1..]
+        .iter()
+        .position(|byte| *byte == b'<')
+        .map(|position| position + 1)
+    else {
+        return Err(ErrMode::Cut(ParseError::InvalidSdfDataHeader {
+            line: line_offset,
+            col: bytes.len() as u32,
+        }));
+    };
+    if open == 1 {
+        return Err(ErrMode::Cut(ParseError::InvalidSdfDataHeader {
+            line: line_offset,
+            col: 1,
+        }));
+    }
+
+    let name_start = open + 1;
+    let Some(close) = bytes[name_start..]
+        .iter()
+        .position(|byte| *byte == b'>')
+        .map(|position| position + name_start)
+    else {
+        return Err(ErrMode::Cut(ParseError::InvalidSdfDataHeader {
+            line: line_offset,
+            col: bytes.len() as u32,
+        }));
+    };
+    if close == name_start {
+        return Err(ErrMode::Cut(ParseError::InvalidSdfDataHeader {
+            line: line_offset,
+            col: name_start as u32,
+        }));
+    }
+
+    let name = bytes[name_start..close]
+        .trim_ascii()
+        .to_str_lossy()
+        .into_owned();
+    Ok((name, line_offset + 1))
 }
 
 /// Parse multi-line data value until blank line
-pub(super) fn sdf_data_value<'inp>(
-    line_offset: u32,
-) -> impl Parser<&'inp [u8], Output = (String, u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let mut byte_offset = 0;
-        let mut line_index = 0;
-        let mut value_lines = Vec::new();
+fn sdf_data_value(input: &mut &[u8], line_offset: u32) -> ModalResult<(String, u32), ParseError> {
+    let mut line_index = 0;
+    let mut value_lines = Vec::new();
 
-        for (line, byte_len) in input.lines_with_offset() {
-            byte_offset += byte_len;
-            line_index += 1;
-            if line.trim().is_empty() {
-                break;
-            }
-
-            value_lines.push(line.trim())
+    while !input.is_empty() {
+        let line = next_line(input).expect("non-empty input contains a physical line");
+        line_index += 1;
+        let bytes: &[u8] = line.as_ref();
+        if bytes.trim_ascii().is_empty() {
+            break;
         }
-        let value = join(",", value_lines).to_str_lossy().to_string();
-        let remaining = &input[byte_offset..];
-        Ok((remaining, (value, line_offset + line_index)))
+
+        value_lines.push(bytes.trim_ascii());
     }
+
+    let value = join(",", value_lines).to_str_lossy().into_owned();
+    Ok((value, line_offset + line_index))
 }
 
 /// Parse complete data field (header + value)
-pub(super) fn sdf_data_field<'inp>(
+fn sdf_data_field(
+    input: &mut &[u8],
     line_offset: u32,
-) -> impl Parser<&'inp [u8], Output = ((String, String), u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let (remaining, (name, line_offset)) = sdf_data_header(line_offset).parse(input)?;
-        let (remaining, (data, line_offset)) = sdf_data_value(line_offset).parse(remaining)?;
-        Ok((remaining, ((name, data), line_offset)))
-    }
+) -> ModalResult<((String, String), u32), ParseError> {
+    let (name, line_offset) = sdf_data_header(input, line_offset)?;
+    let (data, line_offset) = sdf_data_value(input, line_offset)?;
+    Ok(((name, data), line_offset))
 }
 
 /// Parse SDF record delimiter
-pub(super) fn sdf_delimiter<'inp>(
-    line_offset: u32,
-) -> impl Parser<&'inp [u8], Output = ((), u32), Error = ParseError> {
-    value(((), line_offset + 1), (tag("$$$$"), multispace0))
+fn sdf_delimiter(input: &mut &[u8], line_offset: u32) -> ModalResult<u32, ParseError> {
+    let line = next_line(input)
+        .map_err(|_| ErrMode::Cut(ParseError::MissingDelimiter { line: line_offset }))?;
+    let bytes: &[u8] = line.as_ref();
+    if !bytes.starts_with(b"$$$$") || !bytes[4..].trim_ascii().is_empty() {
+        return Err(ErrMode::Cut(ParseError::MissingDelimiter {
+            line: line_offset,
+        }));
+    }
+
+    let whitespace_len = input
+        .iter()
+        .take_while(|byte| byte.is_ascii_whitespace())
+        .count();
+    let skipped = &input[..whitespace_len];
+    let skipped_lines = skipped.iter().filter(|byte| **byte == b'\n').count() as u32;
+    *input = &input[whitespace_len..];
+
+    Ok(line_offset + 1 + skipped_lines)
 }
 
 /// Parse multiple data fields
-pub(super) fn sdf_data_block<'inp>(
+pub(super) fn sdf_data_block(
+    input: &mut &[u8],
     line_offset: u32,
-) -> impl Parser<&'inp [u8], Output = (IndexMap<String, String>, u32), Error = ParseError> + use<'inp>
-{
-    move |input: &'inp [u8]| {
-        let mut remaining = input;
-        let mut remaining_offset = line_offset;
-        let mut data = IndexMap::new();
-        loop {
-            if remaining.is_empty() {
-                return Err(Err::Error(ParseError::UnexpectedEof {
-                    line: line_offset,
-                    block: "sdf data",
-                }));
-            }
-            if let Ok((new_remaining, ((name, value), new_line_offset))) =
-                sdf_data_field(remaining_offset).parse(remaining)
-            {
-                data.insert(name, value);
-                remaining = new_remaining;
-                remaining_offset = new_line_offset;
-            } else if let Ok((new_remaining, (_, new_line_offset))) =
-                sdf_delimiter(line_offset).parse(remaining)
-            {
-                return Ok((new_remaining, (data, new_line_offset)));
-            } else {
-                return Err(Err::Error(ParseError::InvalidSdfDataHeader {
-                    line: line_offset + 1,
-                }));
-            }
+) -> ModalResult<(IndexMap<String, String>, u32), ParseError> {
+    let mut remaining_offset = line_offset;
+    let mut data = IndexMap::new();
+
+    loop {
+        if input.is_empty() {
+            return Err(ErrMode::Cut(ParseError::MissingDelimiter {
+                line: remaining_offset,
+            }));
+        }
+
+        if input.starts_with(b">") {
+            let ((name, value), new_line_offset) = sdf_data_field(input, remaining_offset)?;
+            data.insert(name, value);
+            remaining_offset = new_line_offset;
+        } else {
+            let new_line_offset = sdf_delimiter(input, remaining_offset)?;
+            return Ok((data, new_line_offset));
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use bstr::ByteSlice;
     use indexmap::indexmap;
     use pretty_assertions::assert_eq;
-    use rstest::*;
+    use rstest::rstest;
+    use winnow::error::ErrMode;
 
     use super::*;
 
@@ -130,26 +160,26 @@ mod tests {
     #[case::interstitial_data(b"> (MD-0894) <CAS NR>\n", "CAS NR".to_string())]
     #[case::trailing_data(b"> <CAS NR> DT12\n", "CAS NR".to_string())]
     #[case::surrounding_data(b"> (MD-0894) <BOILING.POINT> FROM ARCHIVES\n", "BOILING.POINT".to_string())]
+    #[case::crlf(b"> <NAME>\r\n", "NAME".to_string())]
     fn test_sdf_data_header(#[case] input: &[u8], #[case] expected: String) {
-        let result = sdf_data_header(0).parse(input);
-        let input_str = input.to_str_lossy();
-        assert!(
-            result.is_ok(),
-            "{:?} should have succeeded, result: {:?}",
-            input_str,
-            result
-        );
-        let (remaining, (name, _)) = result.unwrap();
-        assert!(
-            remaining.is_empty(),
-            "{:?} leaved unparsed data: {:?}",
-            input_str,
-            remaining
-        );
+        let mut remaining = input;
+        assert_eq!(sdf_data_header(&mut remaining, 7), Ok((expected, 8)));
+        assert!(remaining.is_empty());
+    }
+
+    #[rstest]
+    #[case::missing_open(b"> NAME\n", 6)]
+    #[case::missing_prefix_space(b"><NAME>\n", 1)]
+    #[case::empty_name(b"> <>\n", 3)]
+    #[case::missing_close(b"> <NAME\n", 7)]
+    fn test_sdf_data_header_error(#[case] input: &[u8], #[case] col: u32) {
+        let mut remaining = input;
         assert_eq!(
-            name, expected,
-            "{:?}: name {:?} != expected {:?}",
-            input_str, name, expected
+            sdf_data_header(&mut remaining, 7),
+            Err(ErrMode::Cut(ParseError::InvalidSdfDataHeader {
+                line: 7,
+                col,
+            }))
         );
     }
 
@@ -157,27 +187,15 @@ mod tests {
     #[case::single_line(b"100.5\n\n", "100.5".to_string())]
     #[case::whitespace(b" 100.5 \n\n", "100.5".to_string())]
     #[case::multiple_lines(b"benzene\nBenzol\n\n", "benzene,Benzol".to_string())]
+    #[case::crlf(b"benzene\r\nBenzol\r\n\r\n", "benzene,Benzol".to_string())]
     fn test_sdf_data_value(#[case] input: &[u8], #[case] expected: String) {
-        let result = sdf_data_value(0).parse(input);
-        let input_str = input.to_str_lossy();
-        assert!(
-            result.is_ok(),
-            "{:?} should have succeeded, result: {:?}",
-            input_str,
-            result
-        );
-        let (remaining, (value, _)) = result.unwrap();
-        assert!(
-            remaining.is_empty(),
-            "{:?} leaves unparsed data: {:?}",
-            input_str,
-            remaining
-        );
+        let line_count = input.iter().filter(|byte| **byte == b'\n').count() as u32;
+        let mut remaining = input;
         assert_eq!(
-            value, expected,
-            "{:?}: value {:?} != expected {:?}",
-            input_str, value, expected
+            sdf_data_value(&mut remaining, 4),
+            Ok((expected, 4 + line_count))
         );
+        assert!(remaining.is_empty());
     }
 
     #[rstest]
@@ -188,78 +206,76 @@ mod tests {
         #[case] expected_name: String,
         #[case] expected_value: String,
     ) {
-        let result = sdf_data_field(0).parse(input);
-        let input_str = input.to_str_lossy();
-        assert!(
-            result.is_ok(),
-            "{:?} should have succeeded, result: {:?}",
-            input_str,
-            result
-        );
-        let (remaining, ((name, value), _)) = result.unwrap();
-        assert!(
-            remaining.is_empty(),
-            "{:?} leaves unparsed data: {:?}",
-            input_str,
-            remaining
-        );
+        let line_count = input.iter().filter(|byte| **byte == b'\n').count() as u32;
+        let mut remaining = input;
         assert_eq!(
-            name, expected_name,
-            "{:?}: name {:?} != expected {:?}",
-            input_str, name, expected_name
+            sdf_data_field(&mut remaining, 3),
+            Ok(((expected_name, expected_value), 3 + line_count))
         );
+        assert!(remaining.is_empty());
+    }
+
+    #[rstest]
+    #[case::terminated(b"$$$$\n", b"", 5)]
+    #[case::no_newline(b"$$$$", b"", 5)]
+    #[case::trailing_space(b"$$$$  \n", b"", 5)]
+    #[case::inter_record_whitespace(b"$$$$\r\n\nNext", b"Next", 6)]
+    fn test_sdf_delimiter(
+        #[case] input: &[u8],
+        #[case] expected_remaining: &[u8],
+        #[case] expected_offset: u32,
+    ) {
+        let mut remaining = input;
+        assert_eq!(sdf_delimiter(&mut remaining, 4), Ok(expected_offset));
+        assert_eq!(remaining, expected_remaining);
+    }
+
+    #[rstest]
+    #[case::short(b"$$$\n")]
+    #[case::trailing_data(b"$$$$x\n")]
+    #[case::other_record(b"next\n")]
+    fn test_sdf_delimiter_error(#[case] input: &[u8]) {
+        let mut remaining = input;
         assert_eq!(
-            value, expected_value,
-            "{:?}: value {:?} != expected {:?}",
-            input_str, value, expected_value
+            sdf_delimiter(&mut remaining, 4),
+            Err(ErrMode::Cut(ParseError::MissingDelimiter { line: 4 }))
         );
     }
 
     #[rstest]
-    #[case::terminated(b"$$$$\n")]
-    #[case::no_newline(b"$$$$")]
-    fn test_sdf_delimiter(#[case] input: &[u8]) {
-        let input_str = input.to_str_lossy();
-        let result = sdf_delimiter(0).parse(input);
-        assert!(
-            result.is_ok(),
-            "{:?} should have succeeded, result: {:?}",
-            input_str,
-            result
-        );
-        let (remaining, _) = result.unwrap();
-        assert!(
-            remaining.is_empty(),
-            "{:?} leaves unparsed data: {:?}",
-            input_str,
-            remaining
-        );
-    }
-
-    #[rstest]
-    #[case::single_entry(b"> <NAMES>\nbenzene\nBenzol\n\n$$$$\n", indexmap! {"NAMES".to_string() => "benzene,Benzol".to_string()})]
+    #[case::empty(b"$$$$\n", indexmap! {}, 1)]
+    #[case::single_entry(b"> <NAMES>\nbenzene\nBenzol\n\n$$$$\n", indexmap! {"NAMES".to_string() => "benzene,Benzol".to_string()}, 5)]
     #[case::two_entries(b"> <BOILING.POINT>\n100.5\n\n> <CAS NR>\n110-82-7\n12217-02-6\n\n$$$$\n",
-        indexmap! {"BOILING.POINT".to_string() => "100.5".to_string(), "CAS NR".to_string() => "110-82-7,12217-02-6".to_string()})]
-    fn test_sdf_data_block(#[case] input: &[u8], #[case] expected: IndexMap<String, String>) {
-        let result = sdf_data_block(0).parse(input);
-        let input_str = input.to_str_lossy().into_owned();
-        assert!(
-            result.is_ok(),
-            "{:?} should have succeeded, result: {:?}",
-            input_str,
-            result
-        );
-        let (remaining, (data, _)) = result.unwrap();
-        assert!(
-            remaining.is_empty(),
-            "{:?} leaves unparsed data: {:?}",
-            input_str,
-            remaining
-        );
+        indexmap! {"BOILING.POINT".to_string() => "100.5".to_string(), "CAS NR".to_string() => "110-82-7,12217-02-6".to_string()}, 8)]
+    fn test_sdf_data_block(
+        #[case] input: &[u8],
+        #[case] expected: IndexMap<String, String>,
+        #[case] expected_offset: u32,
+    ) {
+        let mut remaining = input;
         assert_eq!(
-            data, expected,
-            "{:?}: data {:?} != expected {:?}",
-            input_str, data, expected
+            sdf_data_block(&mut remaining, 0),
+            Ok((expected, expected_offset))
+        );
+        assert!(remaining.is_empty());
+    }
+
+    #[rstest]
+    #[case::missing_delimiter(b"", ParseError::MissingDelimiter { line: 5 })]
+    #[case::missing_delimiter_after_field(
+        b"> <NAME>\nvalue\n\n",
+        ParseError::MissingDelimiter { line: 8 },
+    )]
+    #[case::malformed_header(
+        b"> NAME\n",
+        ParseError::InvalidSdfDataHeader { line: 5, col: 6 },
+    )]
+    #[case::malformed_delimiter(b"$$$\n", ParseError::MissingDelimiter { line: 5 })]
+    fn test_sdf_data_block_error(#[case] input: &[u8], #[case] expected: ParseError) {
+        let mut remaining = input;
+        assert_eq!(
+            sdf_data_block(&mut remaining, 5),
+            Err(ErrMode::Cut(expected))
         );
     }
 }

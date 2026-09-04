@@ -60,11 +60,7 @@ pub(super) fn next_line<'inp>(input: &mut &'inp [u8]) -> ModalResult<Input<'inp>
         .position(|byte| *byte == b'\n')
         .map_or(input.len(), |index| index + 1);
     let line_with_terminator: &[u8] = take(line_with_terminator_len).parse_next(input)?;
-    let line = line_with_terminator
-        .strip_suffix(b"\r\n")
-        .or_else(|| line_with_terminator.strip_suffix(b"\n"))
-        .or_else(|| line_with_terminator.strip_suffix(b"\r"))
-        .unwrap_or(line_with_terminator);
+    let line = line_with_terminator.trim_end_with(|byte| byte == '\r' || byte == '\n');
 
     Ok(Input::new(line))
 }
@@ -259,16 +255,6 @@ where
             Err(ErrMode::Backtrack(InputError::at_column(column)))
         }
     }
-}
-
-pub(super) fn fixed_width_int_partial<'inp, T>(
-    width: usize,
-) -> impl Parser<Input<'inp>, T, ErrMode<InputError>>
-where
-    T: IntParser,
-{
-    fixed_width_partial(width, delimited(space0, int::<T>, space0), true)
-        .map(|value| value.unwrap_or_else(T::zero))
 }
 
 #[inline(always)]

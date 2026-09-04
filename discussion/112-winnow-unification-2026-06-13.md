@@ -362,11 +362,28 @@ The workspace is green at the end of S1; CTfile still uses nom.
   As expected for the coordinated S2b-S2f migration, the crate remains red only in the
   unmigrated top-level composition. No Nom adapter was added; S2f owns the remaining
   CTAB, MOL, and SDF consumers.
-- **S2f — CTAB, MOL, and SDF composition** (`parser.rs`, `sdf_data.rs`): port the
+- **S2f — CTAB, MOL, and SDF composition** (`parser.rs`, `sdf_data.rs`). **Done.** Port the
   top-level composition, retain backtracking where block ownership is not yet known, use
   deterministic record-oriented SDF dispatch, preserve all public whole-file entry
   points, and migrate their tests. This completes the breaking rewire and restores a
   green tree. [dep: S2c, S2d, S2e]
+
+  CTAB composition now drives the migrated counted blocks through Winnow's mutable
+  input directly, and the existing whole-MOL and whole-SDF functions retain their
+  public signatures. SDF data parsing dispatches deterministically between `>` fields
+  and the required `$$$$` delimiter. Recognized malformed headers report
+  `InvalidSdfDataHeader`; absent or malformed delimiters report `MissingDelimiter`.
+  Zero-field records, LF and CRLF input, inter-record whitespace, and the legacy
+  repeated-terminator case have focused coverage. No Nom adapter or new public parser
+  surface was added.
+
+  The 313 MOL and 43 SDF snapshots affected by the parser-neutral error migration were
+  audited and updated. Constructed values and success categories are unchanged; the
+  differences are field columns, corrected cross-record line accounting, and the
+  settled delimiter classification. `cargo test -p umol-io` passed 3,416 tests,
+  `cargo test -p umol-io --features conformance` passed 16,105 tests, and
+  `cargo test -p umol-io --features proptest` passed 3,424 tests. Clippy passed for all
+  `umol-io` targets with warnings denied.
 - **S2g — Full-file regression check** (`mol_parsing` benchmark): rerun the unchanged
   S2a benchmark set against Winnow and account for any material regression. Additive,
   green. [dep: S2f]

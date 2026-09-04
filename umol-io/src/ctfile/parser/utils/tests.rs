@@ -16,6 +16,7 @@ use super::*;
 #[case::single_line_no_term(b"abc", b"abc", b"")]
 #[case::first_of_two_lf(b"abc\ndef\n", b"abc", b"def\n")]
 #[case::first_of_two_crlf(b"abc\r\ndef\r\n", b"abc", b"def\r\n")]
+#[case::repeated_crlf(b"abc\r\r\ndef", b"abc", b"def")]
 #[case::interior_cr(b"abc\rdef\n", b"abc\rdef", b"")]
 #[case::trailing_cr(b"abc\r", b"abc", b"")]
 #[case::empty_line(b"\nnext", b"", b"next")]
@@ -200,35 +201,6 @@ fn test_fixed_width_int_minus1(#[case] input: &[u8], #[case] expected: usize) {
 #[case::zero(b"  0", 0)]
 fn test_fixed_width_int_minus1_error(#[case] input: &[u8], #[case] column: u32) {
     let mut parser = fixed_width_int_minus1::<usize>(3);
-    let error = parser.parse(Input::new(input)).unwrap_err().into_inner();
-    assert_eq!(error, InputError { column });
-}
-
-#[rstest]
-#[case::three_digits(b"123", 123)]
-#[case::two_digits(b"12", 12)]
-#[case::one_digit(b"1", 1)]
-#[case::empty(b"", 0)]
-#[case::two_digits_padded_right(b"12 ", 12)]
-#[case::one_digit_padded_right(b"1  ", 1)]
-#[case::two_digits_padded_left(b" 12", 12)]
-#[case::one_digit_padded_left(b"  1", 1)]
-#[case::two_digits_padded_both_sides(b" 1 ", 1)]
-#[case::blank_width3(b"   ", 0)]
-#[case::blank_width2(b"  ", 0)]
-#[case::blank_width1(b" ", 0)]
-#[case::negative(b" -1", -1)]
-fn test_fixed_width_int_partial(#[case] input: &[u8], #[case] expected: i32) {
-    let mut parser = fixed_width_int_partial::<i32>(3);
-    assert_eq!(parser.parse(Input::new(input)), Ok(expected));
-}
-
-#[rstest]
-#[case::too_many_characters(b"1234", 3)]
-#[case::non_numeric(b"abc", 0)]
-#[case::trailing_characters(b"1a ", 0)]
-fn test_fixed_width_int_partial_error(#[case] input: &[u8], #[case] column: u32) {
-    let mut parser = fixed_width_int_partial::<i32>(3);
     let error = parser.parse(Input::new(input)).unwrap_err().into_inner();
     assert_eq!(error, InputError { column });
 }

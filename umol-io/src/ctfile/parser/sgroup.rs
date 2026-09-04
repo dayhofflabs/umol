@@ -3,6 +3,7 @@
 use bstr::ByteSlice;
 use winnow::ascii::space0;
 use winnow::combinator::alt;
+use winnow::error::ErrMode;
 use winnow::stream::{Location, Stream};
 use winnow::token::{rest, take, take_while};
 use winnow::Parser;
@@ -191,9 +192,7 @@ pub(super) fn sgroup_data_display_chars(input: &mut Input<'_>) -> PResult<SGroup
         Ok(value) if field_input.is_empty() => Ok(SGroupDataDisplayChars::Number(value)),
         Ok(_) | Err(_) => {
             input.reset(&start);
-            Err(winnow::error::ErrMode::Backtrack(InputError::at_column(
-                column,
-            )))
+            Err(ErrMode::Backtrack(InputError::at_column(column)))
         }
     }
 }
