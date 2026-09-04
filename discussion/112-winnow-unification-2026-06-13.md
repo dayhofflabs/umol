@@ -245,10 +245,17 @@ The workspace is green at the end of S0.
 
 ### S1 — Private CXSMILES parser
 
-- **S1a — CXSMILES parser port** (`umol-io/src/smiles/parser/cx.rs`): port the private
-  CX parsing functions and their tests to Winnow, preserving accepted input, returned
-  payloads, configuration behavior, unknown-tag handling, and public
-  `smiles::ParseError` results. Additive with respect to public API, green. [dep: S0d]
+- **S1a — CXSMILES parser port.** **Done.**
+  (`umol-io/src/smiles/parser/cx.rs`): port the private CX parsing functions and their
+  tests to Winnow, preserving accepted input, returned payloads, configuration behavior,
+  unknown-tag handling, and public `smiles::ParseError` results. Additive with respect to
+  public API, green. [dep: S0d]
+
+  The private parser now uses Winnow's mutable byte-slice input and its backtrack/cut
+  distinction; no CX parser details or new error types were added to the public API.
+  `cargo test -p umol-io cx` passed 196 focused tests, and `cargo test -p umol-io`
+  passed 3,393 tests in total (3,387 unit tests and 6 integration tests).
+  `cargo clippy -p umol-io --all-targets -- -D warnings` also passed.
 - **S1b — CXSMILES evidence** (`umol-io` tests and `smiles_parsing` benchmark): run the
   existing CX tests and the S0d top-level CX cases, and account for any material
   regression. Additive, green. [dep: S1a]
