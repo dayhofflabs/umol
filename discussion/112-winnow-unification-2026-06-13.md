@@ -288,10 +288,25 @@ The workspace is green at the end of S1; CTfile still uses nom.
   unchanged. `cargo test -p umol-io` passed 3,393 tests (3,387 unit tests and 6
   integration tests), and `cargo clippy -p umol-io --all-targets -- -D warnings`
   passed.
-- **S2b — Parser-neutral errors and input foundation** (`umol-io/src/ctfile/error.rs`,
-  `umol-io/src/ctfile/parser/utils.rs`): replace the nom-bearing public error machinery
-  with the cause-based contract above and port line, location, fixed-width, integer,
-  float, and field helpers to Winnow. Breaking coordinated migration. [dep: S2a]
+- **S2b — Parser-neutral errors and input foundation.** **Done.**
+  (`umol-io/src/ctfile/error.rs`, `umol-io/src/ctfile/parser/utils.rs`): replace the
+  nom-bearing public error machinery with the cause-based contract above and port line,
+  location, fixed-width, integer, float, and field helpers to Winnow. Breaking
+  coordinated migration. [dep: S2a]
+
+  `ctfile::ParseError` no longer exposes nom types, streaming-incomplete states, or
+  generic parser errors. Its remaining variants describe reachable CTfile syntax and
+  construction conditions; counted-record and SDF-header errors carry physical
+  locations, and invalid references distinguish atom and bond indices. The private
+  parser foundation now uses line-local Winnow `LocatingSlice` inputs and preserves
+  field-start columns while retaining CTfile's zero-padded decimal and LF/CRLF
+  behavior. An isolated build of the foundation passed 182 focused tests.
+
+  As specified for the coordinated S2b–S2f rewire, `cargo check -p umol-io --lib`
+  remains red at the unmigrated record and composition modules: they still import the
+  removed line iterator, call the former helper signatures and nom conversions, and
+  require nom's error traits. No compatibility adapters were added; S2c owns the first
+  consumer migration.
 - **S2c — Fixed CTfile records** (`header.rs`, `counts.rs`, `atom.rs`, `bond.rs`,
   `legacy_atom_list.rs`, `rgroup.rs`): port each record family and its exact success and
   committed failure cases, preserving physical line and column reporting. Breaking

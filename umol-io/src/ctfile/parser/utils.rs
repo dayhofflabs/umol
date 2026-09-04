@@ -1,60 +1,72 @@
-//! Parsing utilities for CTab files.
+//! Parsing utilities for CTfile inputs.
 
 use std::fmt::Debug;
 use std::ops::{Range, RangeInclusive};
+use std::str::FromStr;
 
 use bstr::ByteSlice;
 use fast_float2::FastFloat;
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take};
-use nom::character::complete::{
-    alpha1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32, u8 as nom_u8,
-    usize as nom_usize,
-};
-use nom::combinator::{map, map_opt, rest, success, verify};
-use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
-use nom::multi::separated_list1;
-use nom::sequence::delimited;
-use nom::{Err, Parser};
 use num::{Float, Integer};
 use umol_chem::element::Element;
 use umol_chem::isotope::NamedIsotope;
+use winnow::ascii::{alpha1, space0};
+use winnow::combinator::{alt, delimited, empty, separated};
+use winnow::error::{ErrMode, ParserError};
+use winnow::stream::{Location, Stream};
+use winnow::token::{rest, take};
+use winnow::{LocatingSlice, ModalResult, Parser};
 
 use crate::table_ir::RGroupOccurrence;
 
-/// Iterator over lines that yields each line without terminator and its byte length including terminator.
-pub(super) struct LinesWithOffset<'inp> {
-    inner: bstr::LinesWithTerminator<'inp>,
+pub(super) type Input<'inp> = LocatingSlice<&'inp [u8]>;
+pub(super) type PResult<T> = ModalResult<T, InputError>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct InputError {
+    pub(super) column: u32,
 }
 
-impl<'inp> LinesWithOffset<'inp> {
-    pub(super) fn new(input: &'inp [u8]) -> Self {
+impl InputError {
+    fn at(input: &Input<'_>) -> Self {
+        Self::at_column(input.current_token_start())
+    }
+
+    fn at_column(column: usize) -> Self {
         Self {
-            inner: input.lines_with_terminator(),
+            column: column.min(u32::MAX as usize) as u32,
         }
     }
 }
 
-impl<'inp> Iterator for LinesWithOffset<'inp> {
-    type Item = (&'inp [u8], usize);
+impl ParserError<Input<'_>> for InputError {
+    type Inner = Self;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|line_with_term| {
-            let byte_len = line_with_term.len();
-            let line = line_with_term.trim_end_with(|c| c == '\r' || c == '\n');
-            (line, byte_len)
-        })
+    fn from_input(input: &Input<'_>) -> Self {
+        Self::at(input)
+    }
+
+    fn into_inner(self) -> Result<Self::Inner, Self> {
+        Ok(self)
     }
 }
 
-pub(super) trait LinesWithOffsetExt<'inp> {
-    fn lines_with_offset(self) -> LinesWithOffset<'inp>;
-}
-
-impl<'inp> LinesWithOffsetExt<'inp> for &'inp [u8] {
-    fn lines_with_offset(self) -> LinesWithOffset<'inp> {
-        LinesWithOffset::new(self)
+pub(super) fn next_line<'inp>(input: &mut &'inp [u8]) -> ModalResult<Input<'inp>, ()> {
+    if input.is_empty() {
+        return Err(ErrMode::Backtrack(()));
     }
+
+    let line_with_terminator_len = input
+        .iter()
+        .position(|byte| *byte == b'\n')
+        .map_or(input.len(), |index| index + 1);
+    let line_with_terminator: &[u8] = take(line_with_terminator_len).parse_next(input)?;
+    let line = line_with_terminator
+        .strip_suffix(b"\r\n")
+        .or_else(|| line_with_terminator.strip_suffix(b"\n"))
+        .or_else(|| line_with_terminator.strip_suffix(b"\r"))
+        .unwrap_or(line_with_terminator);
+
+    Ok(Input::new(line))
 }
 
 pub(super) trait Contains<T: PartialOrd> {
@@ -73,383 +85,363 @@ impl<T: PartialOrd> Contains<T> for RangeInclusive<T> {
     }
 }
 
-pub(super) trait IntParser: Sized + Copy + PartialOrd + Debug + Default + Integer {
-    fn nom_parser<'inp>() -> impl Parser<&'inp [u8], Output = Self, Error = NomError<&'inp [u8]>>;
-}
+pub(super) trait IntParser:
+    Sized + Copy + PartialOrd + Debug + Default + Integer + FromStr
+{
+    fn parse<'inp>(input: &mut Input<'inp>) -> PResult<Self> {
+        let start = input.checkpoint();
+        let column = input.current_token_start();
+        let bytes: &[u8] = input.as_ref();
+        let sign_len = usize::from(matches!(bytes.first(), Some(b'+' | b'-')));
+        let digit_len = bytes[sign_len..]
+            .iter()
+            .take_while(|byte| byte.is_ascii_digit())
+            .count();
+        if digit_len == 0 {
+            return Err(field_error(input, &start, column));
+        }
+        let digits: &[u8] = take(sign_len + digit_len).parse_next(input)?;
+        let value = std::str::from_utf8(digits)
+            .ok()
+            .and_then(|digits| digits.parse().ok());
 
-impl IntParser for i8 {
-    fn nom_parser<'inp>() -> impl Parser<&'inp [u8], Output = Self, Error = NomError<&'inp [u8]>> {
-        nom_i8
+        match value {
+            Some(value) => Ok(value),
+            None => Err(field_error(input, &start, column)),
+        }
     }
 }
 
-impl IntParser for i16 {
-    fn nom_parser<'inp>() -> impl Parser<&'inp [u8], Output = Self, Error = NomError<&'inp [u8]>> {
-        nom_i16
-    }
-}
+impl IntParser for i8 {}
 
-impl IntParser for i32 {
-    fn nom_parser<'inp>() -> impl Parser<&'inp [u8], Output = Self, Error = NomError<&'inp [u8]>> {
-        nom_i32
-    }
-}
+impl IntParser for i16 {}
 
-impl IntParser for u8 {
-    fn nom_parser<'inp>() -> impl Parser<&'inp [u8], Output = Self, Error = NomError<&'inp [u8]>> {
-        nom_u8
-    }
-}
+impl IntParser for i32 {}
 
-impl IntParser for u32 {
-    fn nom_parser<'inp>() -> impl Parser<&'inp [u8], Output = Self, Error = NomError<&'inp [u8]>> {
-        nom_u32
-    }
-}
+impl IntParser for u8 {}
 
-impl IntParser for usize {
-    fn nom_parser<'inp>() -> impl Parser<&'inp [u8], Output = Self, Error = NomError<&'inp [u8]>> {
-        nom_usize
-    }
-}
+impl IntParser for u32 {}
 
-/// Verify that a slice contains only whitespace or zeroes
+impl IntParser for usize {}
+
 pub(super) fn is_all_whitespace_or_zeroes(input: &[u8]) -> bool {
     input.trim_ascii().find_not_byteset(b"0").is_none()
 }
 
-/// Parse a fixed-width field, making it optional.
-///
-/// This parser handles two cases of "optionality":
-/// 1. The line is truncated, and the field is not present at all.
-/// 2. The field is present but consists only of whitespace.
-///
-/// In both cases, it succeeds with `None`. If the field contains non-whitespace data, it runs
-/// the `inner_parser`. If `inner_parser` fails on that data, it's a fatal error.
-///
-/// If `partial_ok` is true, the parser will succeed with `None` if the field is present but
-/// consists only of whitespace. Otherwise, it will return an error.
+fn at_field_start(mode: ErrMode<InputError>, column: usize) -> ErrMode<InputError> {
+    let error = InputError::at_column(column);
+    match mode {
+        ErrMode::Backtrack(_) | ErrMode::Incomplete(_) => ErrMode::Backtrack(error),
+        ErrMode::Cut(_) => ErrMode::Cut(error),
+    }
+}
+
+fn field_error<'inp>(
+    input: &mut Input<'inp>,
+    checkpoint: &<Input<'inp> as Stream>::Checkpoint,
+    column: usize,
+) -> ErrMode<InputError> {
+    input.reset(checkpoint);
+    ErrMode::Backtrack(InputError::at_column(column))
+}
+
 pub(super) fn fixed_width_partial<'inp, O, P>(
     width: usize,
     mut inner: P,
     partial_ok: bool,
-) -> impl Parser<&'inp [u8], Output = Option<O>, Error = NomError<&'inp [u8]>>
+) -> impl Parser<Input<'inp>, Option<O>, ErrMode<InputError>>
 where
-    P: Parser<&'inp [u8], Output = O, Error = NomError<&'inp [u8]>>,
+    P: Parser<Input<'inp>, O, ErrMode<InputError>>,
 {
-    move |input: &'inp [u8]| {
-        let min_width = width.min(input.len());
-        let (remaining, field) = take(min_width).parse(input)?;
+    move |input: &mut Input<'inp>| {
+        let start = input.checkpoint();
+        let column = input.current_token_start();
+        let available = width.min(input.len());
+        let field: &[u8] = take(available).parse_next(input)?;
 
-        // If the slice is shorter than the expected width, it's only valid if it's all whitespace
-        // or if `partial_ok` is true.
         if field.len() < width && !partial_ok && field.find_not_byteset(b"  \t").is_some() {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+            return Err(field_error(input, &start, column));
         }
 
         if field.find_not_byteset(b"  \t").is_none() {
-            return Ok((remaining, None));
+            return Ok(None);
         }
 
-        match inner.parse(field) {
-            Ok((remaining_inner, val)) => {
-                if remaining_inner.is_empty() {
-                    Ok((remaining, Some(val)))
-                } else {
-                    Err(Err::Error(NomError::new(input, NomErrorKind::Eof)))
-                }
+        let mut field_input = Input::new(field);
+        match inner.parse_next(&mut field_input) {
+            Ok(value) if field_input.is_empty() => Ok(Some(value)),
+            Ok(_) => {
+                input.reset(&start);
+                Err(ErrMode::Backtrack(InputError::at_column(column)))
             }
-            Err(Err::Error(e)) => Err(Err::Error(NomError::new(input, e.code))),
-            Err(Err::Failure(e)) => Err(Err::Failure(NomError::new(input, e.code))),
-            Err(Err::Incomplete(needed)) => Err(Err::Incomplete(needed)),
+            Err(error) => {
+                input.reset(&start);
+                Err(at_field_start(error, column))
+            }
         }
     }
 }
 
-/// Parse an optional fixed-width field. If the field is present but consists only of whitespace,
-/// it succeeds with `None`. Otherwise, it runs the `inner` parser. Partial fields are not allowed.
 pub(super) fn fixed_width_opt<'inp, O, P>(
     width: usize,
     inner: P,
-) -> impl Parser<&'inp [u8], Output = Option<O>, Error = NomError<&'inp [u8]>>
+) -> impl Parser<Input<'inp>, Option<O>, ErrMode<InputError>>
 where
-    P: Parser<&'inp [u8], Output = O, Error = NomError<&'inp [u8]>>,
+    P: Parser<Input<'inp>, O, ErrMode<InputError>>,
 {
     fixed_width_partial(width, inner, false)
 }
 
-/// Parse a fixed-width field as an integer type. Interprets empty/whitespace field as default.
+fn int<'inp, T: IntParser>(input: &mut Input<'inp>) -> PResult<T> {
+    T::parse(input)
+}
+
 pub(super) fn fixed_width_int<'inp, T>(
     width: usize,
-) -> impl Parser<&'inp [u8], Output = T, Error = NomError<&'inp [u8]>>
+) -> impl Parser<Input<'inp>, T, ErrMode<InputError>>
 where
     T: IntParser,
 {
-    map(
-        fixed_width_opt(width, delimited(space0, T::nom_parser(), space0)),
-        |opt| opt.unwrap_or_else(T::zero),
-    )
+    fixed_width_opt(width, delimited(space0, int::<T>, space0))
+        .map(|value| value.unwrap_or_else(T::zero))
 }
 
-/// Parse a fixed-width field as an integer type, applying range bounds.
 pub(super) fn fixed_width_int_in_range<'inp, T, R>(
     width: usize,
     range: R,
-) -> impl Parser<&'inp [u8], Output = T, Error = NomError<&'inp [u8]>>
+) -> impl Parser<Input<'inp>, T, ErrMode<InputError>>
 where
     T: IntParser,
     R: Contains<T> + Clone,
 {
-    verify(fixed_width_int::<T>(width), move |val: &T| {
-        range.contains(val)
-    })
-}
-
-/// Parse a fixed-width field as an integer type, subtracting one.
-pub(super) fn fixed_width_int_minus1<'inp, T>(
-    width: usize,
-) -> impl Parser<&'inp [u8], Output = T, Error = NomError<&'inp [u8]>>
-where
-    T: IntParser,
-{
-    map(
-        verify(fixed_width_int(width), |val: &T| *val >= T::one()),
-        |x: T| x - T::one(),
-    )
-}
-
-/// Parse a fixed-width field as integer, allow partial fields
-pub(super) fn fixed_width_int_partial<'inp, T>(
-    width: usize,
-) -> impl Parser<&'inp [u8], Output = T, Error = NomError<&'inp [u8]>>
-where
-    T: IntParser,
-{
-    map(
-        fixed_width_partial(width, delimited(space0, T::nom_parser(), space0), true),
-        |opt| opt.unwrap_or_else(T::zero),
-    )
-}
-
-/// Parse a fixed-width field as float with Fortran semantics (Fw.d).
-/// Parser combinator version for use with nom combinators.
-#[inline(always)]
-pub(super) fn fixed_width_float_f10_4<'inp, T>(
-) -> impl Parser<&'inp [u8], Output = T, Error = NomError<&'inp [u8]>>
-where
-    T: Float + FastFloat,
-{
-    move |input: &'inp [u8]| {
-        let min_width = 10.min(input.len());
-        let (remaining, field) = take(min_width).parse(input)?;
-        let trimmed = field.trim_ascii();
-        if trimmed.is_empty() {
-            return Ok((remaining, T::zero()));
-        }
-        if trimmed.find_not_byteset(b"0123456789+-.").is_some() {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Digit)));
-        }
-        let val = if trimmed.find_byte(b'.').is_some() {
-            fast_float2::parse::<T, _>(trimmed)
-                .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Digit)))?
+    move |input: &mut Input<'inp>| {
+        let start = input.checkpoint();
+        let column = input.current_token_start();
+        let value = fixed_width_int::<T>(width).parse_next(input)?;
+        if range.contains(&value) {
+            Ok(value)
         } else {
-            let val = fast_float2::parse::<T, _>(trimmed)
-                .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Digit)))?;
-            val / T::from(10.0).unwrap().powi(4)
-        };
-        Ok((remaining, val))
+            input.reset(&start);
+            Err(ErrMode::Backtrack(InputError::at_column(column)))
+        }
     }
 }
 
-/// Parse a fixed-width field as element symbol
+pub(super) fn fixed_width_int_minus1<'inp, T>(
+    width: usize,
+) -> impl Parser<Input<'inp>, T, ErrMode<InputError>>
+where
+    T: IntParser,
+{
+    move |input: &mut Input<'inp>| {
+        let start = input.checkpoint();
+        let column = input.current_token_start();
+        let value = fixed_width_int::<T>(width).parse_next(input)?;
+        if value >= T::one() {
+            Ok(value - T::one())
+        } else {
+            input.reset(&start);
+            Err(ErrMode::Backtrack(InputError::at_column(column)))
+        }
+    }
+}
+
+pub(super) fn fixed_width_int_partial<'inp, T>(
+    width: usize,
+) -> impl Parser<Input<'inp>, T, ErrMode<InputError>>
+where
+    T: IntParser,
+{
+    fixed_width_partial(width, delimited(space0, int::<T>, space0), true)
+        .map(|value| value.unwrap_or_else(T::zero))
+}
+
+#[inline(always)]
+pub(super) fn fixed_width_float_f10_4<'inp, T>() -> impl Parser<Input<'inp>, T, ErrMode<InputError>>
+where
+    T: Float + FastFloat,
+{
+    move |input: &mut Input<'inp>| {
+        let start = input.checkpoint();
+        let column = input.current_token_start();
+        let available = 10.min(input.len());
+        let field: &[u8] = take(available).parse_next(input)?;
+        let trimmed = field.trim_ascii();
+        if trimmed.is_empty() {
+            return Ok(T::zero());
+        }
+        if trimmed.find_not_byteset(b"0123456789+-.").is_some() {
+            input.reset(&start);
+            return Err(ErrMode::Backtrack(InputError::at_column(column)));
+        }
+        let value = match fast_float2::parse::<T, _>(trimmed) {
+            Ok(value) => value,
+            Err(_) => {
+                input.reset(&start);
+                return Err(ErrMode::Backtrack(InputError::at_column(column)));
+            }
+        };
+        if trimmed.find_byte(b'.').is_some() {
+            Ok(value)
+        } else {
+            Ok(value / T::from(10.0).unwrap().powi(4))
+        }
+    }
+}
+
 pub(super) fn fixed_width_element_partial<'inp>(
     width: usize,
-) -> impl Parser<&'inp [u8], Output = Option<Element>, Error = NomError<&'inp [u8]>> {
+) -> impl Parser<Input<'inp>, Option<Element>, ErrMode<InputError>> {
     fixed_width_partial(
         width,
-        delimited(space0, map_opt(alpha1, Element::from_symbol_bytes), space0),
+        delimited(
+            space0,
+            alpha1.verify_map(Element::from_symbol_bytes),
+            space0,
+        ),
         true,
     )
 }
 
-/// Unused field of fixed width `width`
-/// Only validate unused field if `skip_unused_fields` is false.
 pub(super) fn fixed_width_unused<'inp>(
     width: usize,
     skip_unused_fields: bool,
-) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
-    move |input: &'inp [u8]| {
-        let (remaining, unused) = take(width).parse(input)?;
-        if skip_unused_fields {
-            return Ok((remaining, ()));
+) -> impl Parser<Input<'inp>, (), ErrMode<InputError>> {
+    move |input: &mut Input<'inp>| {
+        let start = input.checkpoint();
+        let column = input.current_token_start();
+        let unused: &[u8] = take(width).parse_next(input)?;
+        if skip_unused_fields || is_all_whitespace_or_zeroes(unused) {
+            Ok(())
+        } else {
+            input.reset(&start);
+            Err(ErrMode::Backtrack(InputError::at_column(column)))
         }
-        if !is_all_whitespace_or_zeroes(unused) {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
-        }
-        Ok((remaining, ()))
     }
 }
 
-/// Parse a fixed-width field as a string, allow partial fields
-pub(super) fn fixed_width_str_partial<'inp>(
-    width: usize,
-) -> impl Parser<&'inp [u8], Output = Option<String>, Error = NomError<&'inp [u8]>> {
-    map(fixed_width_partial(width, rest, true), move |opt| {
-        opt.map(|s| s.trim_ascii().to_str_lossy().into_owned())
-    })
+fn string_field<'inp>(input: &mut Input<'inp>) -> PResult<String> {
+    let value: &[u8] = rest.parse_next(input)?;
+    Ok(value.trim_ascii().to_str_lossy().into_owned())
 }
 
-/// Parse a single RGroup occurrence.
+pub(super) fn fixed_width_str_partial<'inp>(
+    width: usize,
+) -> impl Parser<Input<'inp>, Option<String>, ErrMode<InputError>> {
+    fixed_width_partial(width, string_field, true)
+}
+
+fn u8_value<'inp>(input: &mut Input<'inp>) -> PResult<u8> {
+    <u8 as IntParser>::parse(input)
+}
+
 pub(super) fn rgroup_occurrence<'inp>(
-) -> impl Parser<&'inp [u8], Output = RGroupOccurrence, Error = NomError<&'inp [u8]>> {
+) -> impl Parser<Input<'inp>, RGroupOccurrence, ErrMode<InputError>> {
     alt((
-        map((nom_u8, tag("-"), nom_u8), |(n, _, m)| {
-            RGroupOccurrence::Range(n, m)
-        }),
-        map(nom_u8, RGroupOccurrence::Exactly),
-        map((tag(">"), nom_u8), |(_, n)| {
-            RGroupOccurrence::GreaterThan(n)
-        }),
-        map((tag("<"), nom_u8), |(_, n)| RGroupOccurrence::FewerThan(n)),
+        (u8_value, b'-', u8_value).map(|(lower, _, upper)| RGroupOccurrence::Range(lower, upper)),
+        u8_value.map(RGroupOccurrence::Exactly),
+        (b'>', u8_value).map(|(_, value)| RGroupOccurrence::GreaterThan(value)),
+        (b'<', u8_value).map(|(_, value)| RGroupOccurrence::FewerThan(value)),
     ))
 }
 
-/// Parse a comma-separated list of RGroup occurrences.
 pub(super) fn rgroup_occurrences<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<RGroupOccurrence>, Error = NomError<&'inp [u8]>> {
-    delimited(
-        space0,
-        separated_list1(tag(","), rgroup_occurrence()),
-        space0,
-    )
-    .or(success(vec![RGroupOccurrence::GreaterThan(0)]))
+) -> impl Parser<Input<'inp>, Vec<RGroupOccurrence>, ErrMode<InputError>> {
+    alt((
+        delimited(space0, separated(1.., rgroup_occurrence(), b','), space0),
+        empty.value(vec![RGroupOccurrence::GreaterThan(0)]),
+    ))
 }
 
-/// Check if a symbol is a reserved atom symbol that requires a specific flag.
-///
-/// Returns `true` if the symbol is reserved and should be rejected when the corresponding
-/// flag is not set. This prevents reserved symbols from being incorrectly parsed as pseudoatoms.
 pub(super) fn is_reserved_atom_symbol(
-    s: &[u8],
+    symbol: &[u8],
     allow_named_isotopes: bool,
     allow_wildcards: bool,
     allow_chemaxon_wildcards: bool,
     allow_electrons: bool,
     allow_rgroups: bool,
 ) -> bool {
-    // Check for named isotopes (D, T)
-    if !allow_named_isotopes && NamedIsotope::is_named_isotope_bytes(s) {
+    if !allow_named_isotopes && NamedIsotope::is_named_isotope_bytes(symbol) {
         return true;
     }
 
-    // Check for wildcard atoms (A, Q, *, X, M) and atom lists (L)
-    if !allow_wildcards {
-        match s {
-            b"A" | b"Q" | b"*" | b"X" | b"M" | b"L" => return true,
-            _ => {}
-        }
-    }
-
-    // Check for ChemAxon wildcard atoms (AH, QH, XH, MH)
-    if !allow_chemaxon_wildcards {
-        match s {
-            b"AH" | b"QH" | b"XH" | b"MH" => return true,
-            _ => {}
-        }
-    }
-
-    // Check for lone pairs (LP)
-    if !allow_electrons && s == b"LP" {
+    if !allow_wildcards && matches!(symbol, b"A" | b"Q" | b"*" | b"X" | b"M" | b"L") {
         return true;
     }
 
-    // Check for R-groups (R, R#, R0, R1, R2, etc.)
-    if !allow_rgroups && s.starts_with(b"R") {
-        // Check if it's a valid R-group pattern: "R", "R#", or "R" followed by digits
-        if s.len() == 1 {
-            // "R"
-            return true;
-        } else if s == b"R#" {
-            // "R#"
-            return true;
-        } else if s.len() > 1 && s[1..].iter().all(|&b| b.is_ascii_digit()) {
-            // "R0", "R1", "R12", etc.
-            return true;
-        }
+    if !allow_chemaxon_wildcards && matches!(symbol, b"AH" | b"QH" | b"XH" | b"MH") {
+        return true;
+    }
+
+    if !allow_electrons && symbol == b"LP" {
+        return true;
+    }
+
+    if !allow_rgroups && symbol.starts_with(b"R") {
+        return symbol.len() == 1
+            || symbol == b"R#"
+            || symbol[1..].iter().all(|byte| byte.is_ascii_digit());
     }
 
     false
 }
 
-/// Parse an optional integer field. Returns None if field is whitespace only.
 #[inline(always)]
-pub(super) fn parse_int_opt<'inp, T: IntParser>(
-    input: &'inp [u8],
-    field: &[u8],
-) -> Result<Option<T>, Err<NomError<&'inp [u8]>>> {
+pub(super) fn parse_int_opt<T: IntParser>(field: &[u8], column: u32) -> PResult<Option<T>> {
     let trimmed = field.trim_ascii();
     if trimmed.is_empty() {
         return Ok(None);
     }
-    match T::nom_parser().parse(trimmed) {
-        Ok(([], val)) => Ok(Some(val)),
-        Ok(_) => Err(Err::Error(NomError::new(input, NomErrorKind::Eof))), // trailing garbage
-        Err(Err::Error(_)) => Err(Err::Error(NomError::new(input, NomErrorKind::Digit))),
-        Err(Err::Failure(e)) => Err(Err::Failure(NomError::new(input, e.code))),
-        Err(Err::Incomplete(n)) => Err(Err::Incomplete(n)),
+
+    let mut input = Input::new(trimmed);
+    match T::parse(&mut input) {
+        Ok(value) if input.is_empty() => Ok(Some(value)),
+        Ok(_) | Err(_) => Err(ErrMode::Backtrack(InputError { column })),
     }
 }
 
-/// Parse a float field with F10.4 format. Returns 0.0 if field is whitespace only.
 #[inline(always)]
-pub(super) fn parse_float_f10_4<'inp>(
-    input: &'inp [u8],
-    field: &[u8],
-) -> Result<f64, Err<NomError<&'inp [u8]>>> {
+pub(super) fn parse_float_f10_4(field: &[u8], column: u32) -> PResult<f64> {
     let trimmed = field.trim_ascii();
     if trimmed.is_empty() {
         return Ok(0.0);
     }
     if trimmed.find_not_byteset(b"0123456789+-.").is_some() {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::Digit)));
+        return Err(ErrMode::Backtrack(InputError { column }));
     }
+
+    let value = fast_float2::parse::<f64, _>(trimmed)
+        .map_err(|_| ErrMode::Backtrack(InputError { column }))?;
     if trimmed.find_byte(b'.').is_some() {
-        fast_float2::parse::<f64, _>(trimmed)
-            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Digit)))
+        Ok(value)
     } else {
-        let val = fast_float2::parse::<f64, _>(trimmed)
-            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Digit)))?;
-        Ok(val / 10_000.0)
+        Ok(value / 10_000.0)
     }
 }
 
-/// Validate that `count` consecutive fields of `width` bytes each contain only whitespace or zeros.
-/// If `skip_unused_fields` is true, validation is skipped and always succeeds.
 #[inline(always)]
-pub(super) fn validate_unused_n<'inp>(
-    input: &'inp [u8],
+pub(super) fn validate_unused_n(
     field: &[u8],
     count: usize,
     width: usize,
     skip_unused_fields: bool,
-) -> Result<(), Err<NomError<&'inp [u8]>>> {
-    if field.len() < count * width {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+    column: u32,
+) -> PResult<()> {
+    let required = count.saturating_mul(width);
+    if field.len() < required {
+        return Err(ErrMode::Backtrack(InputError { column }));
     }
     if skip_unused_fields || count == 0 || width == 0 {
         return Ok(());
     }
-    for i in 0..count {
-        let start = i * width;
-        let end = start + width;
-        if end > field.len() {
-            break;
-        }
-        if !is_all_whitespace_or_zeroes(&field[start..end]) {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
-        }
+    if field[..required]
+        .chunks_exact(width)
+        .all(is_all_whitespace_or_zeroes)
+    {
+        Ok(())
+    } else {
+        Err(ErrMode::Backtrack(InputError { column }))
     }
-    Ok(())
 }
 
 #[cfg(test)]
