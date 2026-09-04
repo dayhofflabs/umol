@@ -1846,7 +1846,6 @@ dependencies = [
  "float-cmp",
  "insta",
  "nalgebra",
- "nom",
  "num",
  "num-traits",
  "pretty_assertions",
@@ -1992,6 +1991,7 @@ dependencies = [
  "umol-graph-ir",
  "umol-perm",
  "umol-utils",
+ "winnow 1.0.4",
 ]
 
 [[package]]

@@ -23,8 +23,10 @@ As of 2026-09-03:
 - Winnow 1.0.4 is current. Its changes since 1.0.1 concern `seq!` field capacity,
   `ascii::float`, `binary::bits`, and documentation; none applies to the API used by
   `umol-edn`.
-- The CTfile parser and the private CXSMILES parser in `umol-io` use nom 8.
-- `umol-geometric` declares nom 8 but has no nom use in its source.
+- The CTfile parser and the private CXSMILES parser in `umol-io` use nom 8;
+  `umol-io` also depends on Winnow 1.x for the staged migration.
+- The unused nom 8 dependency has been removed from `umol-geometric`; `umol-io` is
+  now the only direct nom user in the workspace.
 - `ctfile::ParseError` publicly exposes `nom::error::ErrorKind`, and its public
   conversion functions accept nom error types. Removing nom therefore changes public
   API even if accepted CTfile input remains unchanged.
@@ -220,12 +222,24 @@ workspace and no unexplained material full-file parsing regression.
   Winnow 1.x was updated from 1.0.1 to 1.0.4 without changing either manifest.
   `cargo test -p umol-edn --all-features` passed 1,218 tests, and
   `cargo test -p umol-graph-ir --all-features` passed 6,933 tests with 7 ignored.
-- **S0c — Unused dependency removal** (`umol-geometric/Cargo.toml`): remove nom and
-  verify `umol-geometric`. Additive, green. [dep: S0a]
-- **S0d — `umol-io` migration dependency and CX benchmark** (`umol-io/Cargo.toml`,
-  `umol-io/benches/smiles_parsing.rs`): add Winnow alongside nom and add a small set of
-  genuine CX-annotation cases to the existing top-level extended-SMILES benchmark.
-  Record the nom baseline. Additive, green. [dep: S0b]
+- **S0c — Unused dependency removal.** **Done.** (`umol-geometric/Cargo.toml`): remove
+  nom and verify `umol-geometric`. Additive, green. [dep: S0a]
+
+  `cargo test -p umol-geometric --all-features` passed 218 tests. `cargo tree -i nom`
+  now reports only `umol-io` as a direct workspace dependency.
+- **S0d — `umol-io` migration dependency and CX benchmark.** **Done.**
+  (`umol-io/Cargo.toml`, `umol-io/benches/smiles_parsing.rs`): add Winnow alongside nom
+  and add a small set of genuine CX-annotation cases to the existing top-level
+  extended-SMILES benchmark. Record the nom baseline. Additive, green. [dep: S0b]
+
+  The nom baseline on 2026-09-03 was:
+
+  - coordinates: 263.77–267.76 ns;
+  - ferrocene multicenter bonds: 750.11–753.19 ns; and
+  - SGroup hierarchy: 302.30–305.83 ns.
+
+  `cargo test -p umol-io` passed 3,393 tests after the dependency and benchmark
+  additions.
 
 The workspace is green at the end of S0.
 

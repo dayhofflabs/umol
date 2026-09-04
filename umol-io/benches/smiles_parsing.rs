@@ -213,6 +213,20 @@ fn wildcard_inputs() -> Vec<(&'static str, &'static [u8])> {
     ]
 }
 
+fn cx_inputs() -> Vec<(&'static str, &'static [u8])> {
+    vec![
+        ("coordinates", b"CC |(1.5,2.5;3.5,4.5)|"),
+        (
+            "multicenter_ferrocene",
+            b"[Fe]c1cccc1.c1cccc1 |m:0:1.2.3.4.5,0:6.7.8.9.10|",
+        ),
+        (
+            "sgroup_hierarchy",
+            b"CCC |Sg:n:0,1:n,SgD:0:MW:150:::::,SgD:1,2:MW:200:::::,SgH:0:1.2|",
+        ),
+    ]
+}
+
 fn smiles_parsing(c: &mut Criterion) {
     // Chains
     let mut group_chain = c.benchmark_group("smiles_parsing/chain");
@@ -508,6 +522,14 @@ fn extended_smiles_parsing(c: &mut Criterion) {
         });
     }
     group_wild.finish();
+
+    let mut group_cx = c.benchmark_group("extended_smiles_parsing/cx");
+    for (name, bytes) in cx_inputs().iter() {
+        group_cx.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
+            b.iter(|| parse_extended_smiles_bytes(black_box(input)).unwrap())
+        });
+    }
+    group_cx.finish();
 }
 
 criterion_group!(benches, smiles_parsing, extended_smiles_parsing);
