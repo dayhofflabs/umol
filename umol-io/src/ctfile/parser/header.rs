@@ -1,42 +1,39 @@
 //! Header parser for MOL files.
 
 use bstr::ByteSlice;
-use nom::{Err, Parser};
+use winnow::error::ErrMode;
+use winnow::ModalResult;
 
-use super::utils::LinesWithOffsetExt;
+use super::utils::next_line;
 use crate::ctfile::error::ParseError;
 
 /// Parse the 3-line MOL file header block (name, program info, comment)
 ///
 /// Returns (Vec of 3 strings, updated line offset)
-pub(super) fn header_block<'inp>(
+pub(super) fn header_block(
+    input: &mut &[u8],
     line_offset: u32,
-) -> impl Parser<&'inp [u8], Output = (Vec<String>, u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let mut lines_iter = input.lines_with_offset();
-        let mut headers = Vec::with_capacity(3);
-        let mut byte_offset = 0;
+) -> ModalResult<(Vec<String>, u32), ParseError> {
+    let mut headers = Vec::with_capacity(3);
 
-        for i in 0..3 {
-            let (line, byte_len) = lines_iter.next().ok_or_else(|| {
-                Err::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
-                    block: "header",
-                })
-            })?;
-            headers.push(line.to_str_lossy().into_owned());
-            byte_offset += byte_len;
-        }
-
-        let remaining = &input[byte_offset..];
-        Ok((remaining, (headers, line_offset + 3)))
+    for index in 0..3 {
+        let line = next_line(input).map_err(|_| {
+            ErrMode::Cut(ParseError::UnexpectedEof {
+                line: line_offset + index,
+                block: "header",
+            })
+        })?;
+        let line: &[u8] = line.as_ref();
+        headers.push(line.to_str_lossy().into_owned());
     }
+
+    Ok((headers, line_offset + 3))
 }
 
 #[cfg(test)]
 mod tests {
-    use nom::Parser;
     use rstest::*;
+    use winnow::error::ErrMode;
 
     use super::*;
 
@@ -58,19 +55,17 @@ mod tests {
         vec!["Name".to_string(), "Program".to_string(), "Comment".to_string()]
     )]
     fn test_header_block(#[case] input: &[u8], #[case] expected: Vec<String>) {
-        let result = header_block(0).parse(input);
-        assert!(result.is_ok(), "should have succeeded: {:?}", result.err());
-        let (remaining, (headers, line_offset)) = result.unwrap();
-        assert!(remaining.is_empty(), "has remaining data");
+        let mut remaining = input;
+        let (headers, line_offset) = header_block(&mut remaining, 0).unwrap();
+        assert!(remaining.is_empty());
         assert_eq!(headers, expected);
         assert_eq!(line_offset, 3);
     }
 
     #[rstest]
-    #[case::two_lines(b"Line1\nLine2\n", Err::Error(ParseError::UnexpectedEof { line: 2, block: "header" }))]
-    fn test_header_block_invalid(#[case] input: &[u8], #[case] expected_error: Err<ParseError>) {
-        let result = header_block(0).parse(input);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), expected_error);
+    #[case::two_lines(b"Line1\nLine2\n", ErrMode::Cut(ParseError::UnexpectedEof { line: 2, block: "header" }))]
+    fn test_header_block_error(#[case] input: &[u8], #[case] expected_error: ErrMode<ParseError>) {
+        let mut remaining = input;
+        assert_eq!(header_block(&mut remaining, 0), Err(expected_error));
     }
 }

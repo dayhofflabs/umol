@@ -602,7 +602,7 @@ impl PropertyAccumulator {
         if self.context.current_data_sgroup_index.is_some()
             || self.context.current_data_field.is_some()
         {
-            return Err(ParseError::MissingSgroupDataEnd {
+            return Err(ParseError::MissingSGroupDataEnd {
                 index: self.context.current_data_sgroup_index.unwrap(),
             });
         }
@@ -687,7 +687,7 @@ impl PropertyAccumulator {
         // Apply atom properties (only basic ones compatible with Atom)
         for (&atom_idx, props) in &self.atom_properties {
             let Some(atom) = molecule.atoms.get_mut(atom_idx as usize) else {
-                return Err(ParseError::IndexOutOfBounds(atom_idx));
+                return Err(ParseError::AtomIndexOutOfBounds(atom_idx));
             };
 
             // Apply alias
@@ -734,7 +734,7 @@ impl PropertyAccumulator {
         for (&bond_idx, props) in &self.bond_properties {
             if let Some(bo) = props.order_override {
                 let Some(bond) = molecule.bonds.get_mut(bond_idx as usize) else {
-                    return Err(ParseError::IndexOutOfBounds(bond_idx));
+                    return Err(ParseError::BondIndexOutOfBounds(bond_idx));
                 };
                 bond.order = bo;
             }
@@ -763,7 +763,7 @@ impl PropertyAccumulator {
         // Apply atom properties
         for (&atom_idx, props) in &self.atom_properties {
             let Some(atom) = molecule.atoms.get_mut(atom_idx as usize) else {
-                return Err(ParseError::IndexOutOfBounds(atom_idx));
+                return Err(ParseError::AtomIndexOutOfBounds(atom_idx));
             };
 
             // Apply alias
@@ -940,7 +940,7 @@ impl PropertyAccumulator {
         for (&bond_idx, props) in &self.bond_properties {
             if let Some(bo) = props.order_override {
                 let Some(bond) = molecule.bonds.get_mut(bond_idx as usize) else {
-                    return Err(ParseError::IndexOutOfBounds(bond_idx));
+                    return Err(ParseError::BondIndexOutOfBounds(bond_idx));
                 };
                 bond.order = bo;
             }

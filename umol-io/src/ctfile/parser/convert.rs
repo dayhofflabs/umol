@@ -493,15 +493,16 @@ mod tests {
 
     #[rstest]
     #[case::not_catalogued(Element::C, 40)]
-    fn test_convert_atom_isotope_mass_number_invalid(
+    fn test_convert_atom_isotope_mass_number_error(
         #[case] element: Element,
         #[case] mass_number: u32,
     ) {
-        assert!(
-            convert_atom_isotope_mass_number(element, mass_number, false).is_err(),
-            "{}{} is not catalogued",
-            mass_number,
-            element
+        assert_eq!(
+            convert_atom_isotope_mass_number(element, mass_number, false),
+            Err(ParseError::InvalidIsotopeMass {
+                mass: mass_number,
+                element,
+            })
         );
     }
 
@@ -593,11 +594,13 @@ mod tests {
     #[case::zero(0)]
     #[case::query(5)]
     #[case::extended_range_high(9)]
-    fn test_convert_bond_type_code_invalid(#[case] code: u8) {
-        assert!(
-            convert_bond_type_code(code, false).is_err(),
-            "{} should have failed",
-            code
+    fn test_convert_bond_type_code_error(#[case] code: u8) {
+        assert_eq!(
+            convert_bond_type_code(code, false),
+            Err(ParseError::InvalidCode {
+                field: "bond type",
+                value: code as i32,
+            })
         );
     }
 
@@ -624,11 +627,13 @@ mod tests {
     #[case::zero(0)]
     #[case::quadruple(9)]
     #[case::out_of_range_high(12)]
-    fn test_convert_extended_bond_type_code_invalid(#[case] code: u8) {
-        assert!(
-            convert_extended_bond_type_code(code, false, false).is_err(),
-            "{} should have failed",
-            code
+    fn test_convert_extended_bond_type_code_error(#[case] code: u8) {
+        assert_eq!(
+            convert_extended_bond_type_code(code, false, false),
+            Err(ParseError::InvalidCode {
+                field: "bond type",
+                value: code as i32,
+            })
         );
     }
 
@@ -710,8 +715,14 @@ mod tests {
     #[case::invalid_combination(3)]
     #[case::out_of_range_high(16)]
     #[case::out_of_range_low(-2)]
-    fn test_convert_bond_reacting_center_code_invalid(#[case] code: i8) {
-        assert!(convert_bond_reacting_center_code(code, false).is_err());
+    fn test_convert_bond_reacting_center_code_error(#[case] code: i8) {
+        assert_eq!(
+            convert_bond_reacting_center_code(code, false),
+            Err(ParseError::InvalidCode {
+                field: "reacting center",
+                value: code as i32,
+            })
+        );
     }
 
     // Extended range allows codes 3,6,7,10,11,14,15 which all map to just NO_CHANGE
@@ -744,8 +755,14 @@ mod tests {
 
     #[rstest]
     #[case::out_of_range_high(4)]
-    fn test_convert_radical_type_code_invalid(#[case] code: u8) {
-        assert!(convert_radical_type_code(code).is_err());
+    fn test_convert_radical_type_code_error(#[case] code: u8) {
+        assert_eq!(
+            convert_radical_type_code(code),
+            Err(ParseError::InvalidCode {
+                field: "radical type",
+                value: code as i32,
+            })
+        );
     }
 
     #[rstest]
@@ -763,8 +780,14 @@ mod tests {
 
     #[rstest]
     #[case::out_of_range_high(5)]
-    fn test_convert_ring_bond_count_code_invalid(#[case] code: i8) {
-        assert!(convert_ring_bond_count_code(code).is_err());
+    fn test_convert_ring_bond_count_code_error(#[case] code: i8) {
+        assert_eq!(
+            convert_ring_bond_count_code(code),
+            Err(ParseError::InvalidCode {
+                field: "ring bond count",
+                value: code as i32,
+            })
+        );
     }
 
     #[rstest]
@@ -784,8 +807,14 @@ mod tests {
 
     #[rstest]
     #[case::out_of_range_high(7)]
-    fn test_convert_substitution_count_code_invalid(#[case] code: i8) {
-        assert!(convert_substitution_count_code(code, false).is_err());
+    fn test_convert_substitution_count_code_error(#[case] code: i8) {
+        assert_eq!(
+            convert_substitution_count_code(code, false),
+            Err(ParseError::InvalidCode {
+                field: "substitution count",
+                value: code as i32,
+            })
+        );
     }
 
     #[rstest]
@@ -812,8 +841,14 @@ mod tests {
 
     #[rstest]
     #[case::out_of_range_high(2)]
-    fn test_convert_unsaturated_atom_code_invalid(#[case] code: u8) {
-        assert!(convert_unsaturated_atom_code(code).is_err());
+    fn test_convert_unsaturated_atom_code_error(#[case] code: u8) {
+        assert_eq!(
+            convert_unsaturated_atom_code(code),
+            Err(ParseError::InvalidCode {
+                field: "unsaturated atom",
+                value: code as i32,
+            })
+        );
     }
 
     #[rstest]
@@ -830,7 +865,13 @@ mod tests {
 
     #[rstest]
     #[case::out_of_range_high(4)]
-    fn test_convert_attachment_point_code_invalid(#[case] code: u8) {
-        assert!(convert_attachment_point_code(code).is_err());
+    fn test_convert_attachment_point_code_error(#[case] code: u8) {
+        assert_eq!(
+            convert_attachment_point_code(code),
+            Err(ParseError::InvalidCode {
+                field: "attachment point",
+                value: code as i32,
+            })
+        );
     }
 }

@@ -3,6 +3,7 @@
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_chem::e;
+use umol_chem::element::Element;
 use umol_chem::isotope::NamedIsotope;
 
 use super::*;
@@ -224,15 +225,17 @@ fn test_apply_atom_alias(mut single_atom: Molecule) {
 }
 
 #[rstest]
-fn test_apply_atom_alias_invalid_index(mut single_atom: Molecule) {
+fn test_apply_atom_alias_error(mut single_atom: Molecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 5,
         alias: "CF3".to_string(),
     });
     acc.add_entry(entry, CtabParseFlags::BASIC).unwrap();
-    let result = acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -251,15 +254,17 @@ fn test_apply_atom_value(mut single_atom: Molecule) {
 }
 
 #[rstest]
-fn test_apply_atom_value_invalid_index(mut single_atom: Molecule) {
+fn test_apply_atom_value_error(mut single_atom: Molecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 5,
         value: "*".to_string(),
     });
     acc.add_entry(entry, CtabParseFlags::BASIC).unwrap();
-    let result = acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -306,15 +311,17 @@ fn test_apply_charge_multiple(mut triatomic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_apply_charge_invalid_index(mut single_atom: Molecule) {
+fn test_apply_charge_error(mut single_atom: Molecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 5,
         charge: -1,
     }]);
     acc.add_entry(entry, CtabParseFlags::BASIC).unwrap();
-    let result = acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -351,26 +358,33 @@ fn test_apply_radical(mut single_atom: Molecule) {
 }
 
 #[rstest]
-fn test_apply_radical_invalid_index(mut single_atom: Molecule) {
+fn test_apply_radical_index_error(mut single_atom: Molecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 5,
         radical_type: 2,
     }]);
     acc.add_entry(entry, CtabParseFlags::BASIC).unwrap();
-    let result = acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
-fn test_apply_radical_invalid_code() {
+fn test_apply_radical_code_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 4,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::BASIC);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::BASIC),
+        Err(ParseError::InvalidCode {
+            field: "radical type",
+            value: 4,
+        })
+    );
 }
 
 #[rstest]
@@ -406,15 +420,21 @@ fn test_apply_isotope(mut single_atom: Molecule) {
 }
 
 #[rstest]
-fn test_apply_isotope_invalid_index(mut single_atom: Molecule) {
+#[case::invalid_index(5, 13, ParseError::AtomIndexOutOfBounds(5))]
+#[case::invalid_mass(0, 40, ParseError::InvalidIsotopeMass { mass: 40, element: Element::C })]
+fn test_apply_isotope_error(
+    mut single_atom: Molecule,
+    #[case] atom_index: u32,
+    #[case] mass: u32,
+    #[case] expected: ParseError,
+) {
     let mut acc = PropertyAccumulator::new();
-    let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
-        atom_index: 5,
-        mass: 13,
-    }]);
+    let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index, mass }]);
     acc.add_entry(entry, CtabParseFlags::BASIC).unwrap();
-    let result = acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC),
+        Err(expected)
+    );
 }
 
 #[rstest]
@@ -448,7 +468,7 @@ fn test_apply_bond_order_override(mut with_bond: Molecule) {
 }
 
 #[rstest]
-fn test_apply_bond_order_override_invalid(mut single_atom: Molecule) {
+fn test_apply_bond_order_override_error(mut single_atom: Molecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 5,
@@ -456,8 +476,10 @@ fn test_apply_bond_order_override_invalid(mut single_atom: Molecule) {
     }]);
     let flags = CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT;
     acc.add_entry(entry, flags).unwrap();
-    let result = acc.update_molecule(&mut single_atom, flags);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_molecule(&mut single_atom, flags),
+        Err(ParseError::BondIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -476,7 +498,7 @@ fn test_apply_atom_charge_override(mut single_atom: Molecule) {
 }
 
 #[rstest]
-fn test_apply_atom_charge_override_invalid(mut single_atom: Molecule) {
+fn test_apply_atom_charge_override_error(mut single_atom: Molecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 5,
@@ -484,8 +506,10 @@ fn test_apply_atom_charge_override_invalid(mut single_atom: Molecule) {
     }]);
     let flags = CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT;
     acc.add_entry(entry, flags).unwrap();
-    let result = acc.update_molecule(&mut single_atom, flags);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_molecule(&mut single_atom, flags),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -504,7 +528,7 @@ fn test_apply_atom_hydrogen_count(mut single_atom: Molecule) {
 }
 
 #[rstest]
-fn test_apply_atom_hydrogen_count_invalid(mut single_atom: Molecule) {
+fn test_apply_atom_hydrogen_count_error(mut single_atom: Molecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 5,
@@ -512,8 +536,10 @@ fn test_apply_atom_hydrogen_count_invalid(mut single_atom: Molecule) {
     }]);
     let flags = CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT;
     acc.add_entry(entry, flags).unwrap();
-    let result = acc.update_molecule(&mut single_atom, flags);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_molecule(&mut single_atom, flags),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -556,15 +582,17 @@ fn test_apply_extended_atom_alias(mut single_extended_atom: ExtendedMolecule) {
 }
 
 #[rstest]
-fn test_apply_extended_atom_alias_invalid_index(mut single_extended_atom: ExtendedMolecule) {
+fn test_apply_extended_atom_alias_error(mut single_extended_atom: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 5,
         alias: "CF3".to_string(),
     });
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -605,15 +633,17 @@ fn test_apply_extended_atom_value(mut single_extended_atom: ExtendedMolecule) {
 }
 
 #[rstest]
-fn test_apply_extended_atom_value_invalid_index(mut single_extended_atom: ExtendedMolecule) {
+fn test_apply_extended_atom_value_error(mut single_extended_atom: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 5,
         value: "*".to_string(),
     });
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -660,15 +690,17 @@ fn test_apply_extended_charge_multiple(mut triatomic_extended_molecule: Extended
 }
 
 #[rstest]
-fn test_apply_extended_charge_invalid_index(mut single_extended_atom: ExtendedMolecule) {
+fn test_apply_extended_charge_error(mut single_extended_atom: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 5,
         charge: -1,
     }]);
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -705,26 +737,33 @@ fn test_apply_extended_radical(mut single_extended_atom: ExtendedMolecule) {
 }
 
 #[rstest]
-fn test_apply_extended_radical_invalid_index(mut single_extended_atom: ExtendedMolecule) {
+fn test_apply_extended_radical_index_error(mut single_extended_atom: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 5,
         radical_type: 2,
     }]);
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
-fn test_apply_extended_radical_invalid_code() {
+fn test_apply_extended_radical_code_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 4,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::InvalidCode {
+            field: "radical type",
+            value: 4,
+        })
+    );
 }
 
 #[rstest]
@@ -760,15 +799,21 @@ fn test_apply_extended_isotope(mut single_extended_atom: ExtendedMolecule) {
 }
 
 #[rstest]
-fn test_apply_extended_isotope_invalid_index(mut single_extended_atom: ExtendedMolecule) {
+#[case::invalid_index(5, 13, ParseError::AtomIndexOutOfBounds(5))]
+#[case::invalid_mass(0, 40, ParseError::InvalidIsotopeMass { mass: 40, element: Element::C })]
+fn test_apply_extended_isotope_error(
+    mut single_extended_atom: ExtendedMolecule,
+    #[case] atom_index: u32,
+    #[case] mass: u32,
+    #[case] expected: ParseError,
+) {
     let mut acc = PropertyAccumulator::new();
-    let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
-        atom_index: 5,
-        mass: 13,
-    }]);
+    let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index, mass }]);
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED),
+        Err(expected)
+    );
 }
 
 #[rstest]
@@ -817,15 +862,17 @@ fn test_apply_extended_bond_order_override(mut with_extended_bond: ExtendedMolec
 }
 
 #[rstest]
-fn test_apply_extended_bond_order_override_invalid(mut single_extended_atom: ExtendedMolecule) {
+fn test_apply_extended_bond_order_override_error(mut single_extended_atom: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 5,
         bond_order: BondOrder::Zero,
     }]);
     acc.add_entry(entry, CtabParseFlags::LENIENT).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::LENIENT);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::LENIENT),
+        Err(ParseError::BondIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -843,15 +890,17 @@ fn test_apply_extended_atom_charge_override(mut single_extended_atom: ExtendedMo
 }
 
 #[rstest]
-fn test_apply_extended_atom_charge_override_invalid(mut single_extended_atom: ExtendedMolecule) {
+fn test_apply_extended_atom_charge_override_error(mut single_extended_atom: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 5,
         charge: -1,
     }]);
     acc.add_entry(entry, CtabParseFlags::LENIENT).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::LENIENT);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::LENIENT),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -868,15 +917,17 @@ fn test_apply_extended_atom_hydrogen_count(mut single_extended_atom: ExtendedMol
 }
 
 #[rstest]
-fn test_apply_extended_atom_hydrogen_count_invalid(mut single_extended_atom: ExtendedMolecule) {
+fn test_apply_extended_atom_hydrogen_count_error(mut single_extended_atom: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 5,
         hydrogen_count: Some(1),
     }]);
     acc.add_entry(entry, CtabParseFlags::LENIENT).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::LENIENT);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::LENIENT),
+        Err(ParseError::AtomIndexOutOfBounds(5))
+    );
 }
 
 #[rstest]
@@ -896,7 +947,7 @@ fn test_apply_extended_sgroup_type(mut single_extended_atom: ExtendedMolecule) {
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_type_conflict() {
+fn test_apply_extended_sgroup_type_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupTypeEntries(vec![
         SGroupTypeEntry {
@@ -908,8 +959,12 @@ fn test_apply_extended_sgroup_type_conflict() {
             sgroup_type: SGroupType::Data,
         },
     ]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::DuplicateProperty(
+            "S-group type for index 0".to_string()
+        ))
+    );
 }
 
 #[rstest]
@@ -933,21 +988,19 @@ fn test_apply_extended_sgroup_subtype(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_subtype_no_sgroup() {
+fn test_apply_extended_sgroup_subtype_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry {
         sgroup_index: 0,
         sgroup_subtype: SGroupSubtype::Alternating,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "subtype"
-        }
-    ));
+            property: "subtype",
+        })
+    );
 }
 
 #[rstest]
@@ -971,21 +1024,19 @@ fn test_apply_extended_sgroup_label(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_label_no_sgroup() {
+fn test_apply_extended_sgroup_label_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry {
         sgroup_index: 0,
         label: 1,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "label"
-        }
-    ));
+            property: "label",
+        })
+    );
 }
 
 #[rstest]
@@ -1009,21 +1060,19 @@ fn test_apply_extended_sgroup_connectivity(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_connectivity_no_sgroup() {
+fn test_apply_extended_sgroup_connectivity_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupConnectivityEntries(vec![SGroupConnectivityEntry {
         sgroup_index: 0,
         connectivity: SGroupConnectivity::HeadToTail,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "connectivity"
-        }
-    ));
+            property: "connectivity",
+        })
+    );
 }
 
 #[rstest]
@@ -1045,19 +1094,17 @@ fn test_apply_extended_sgroup_expansion(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_expansion_no_sgroup() {
+fn test_apply_extended_sgroup_expansion_error() {
     let mut acc = PropertyAccumulator::new();
     let entry =
         PropertyEntries::SGroupExpansionEntries(vec![SGroupExpansionEntry { sgroup_index: 0 }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "expansion"
-        }
-    ));
+            property: "expansion",
+        })
+    );
 }
 
 #[rstest]
@@ -1081,21 +1128,19 @@ fn test_apply_extended_sgroup_atom_list(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_atom_list_no_sgroup() {
+fn test_apply_extended_sgroup_atom_list_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry {
         sgroup_index: 0,
         atom_indices: vec![0, 1],
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "atom list"
-        }
-    ));
+            property: "atom list",
+        })
+    );
 }
 
 #[rstest]
@@ -1119,21 +1164,19 @@ fn test_apply_extended_sgroup_bond_list(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_bond_list_no_sgroup() {
+fn test_apply_extended_sgroup_bond_list_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupBondListEntry(SGroupBondListEntry {
         sgroup_index: 0,
         bond_indices: vec![0, 1],
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "bond list"
-        }
-    ));
+            property: "bond list",
+        })
+    );
 }
 
 #[rstest]
@@ -1157,22 +1200,19 @@ fn test_apply_extended_sgroup_parent_atom(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_parent_atom_no_sgroup() {
+fn test_apply_extended_sgroup_parent_atom_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry {
         sgroup_index: 0,
         atom_indices: vec![0, 1],
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    println!("{:?}", result);
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "parent atom"
-        }
-    ));
+            property: "parent atom",
+        })
+    );
 }
 
 #[rstest]
@@ -1198,22 +1238,61 @@ fn test_apply_extended_sgroup_subscript(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_subscript_no_sgroup() {
+fn test_apply_extended_sgroup_subscript_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
         sgroup_index: 0,
         multiplier: None,
         subscript: Some("Ph".to_string()),
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "subscript"
-        }
-    ));
+            property: "subscript",
+        })
+    );
+}
+
+#[rstest]
+#[case::unsupported(
+    SGroupType::Data,
+    None,
+    Some("pH".to_string()),
+    "subscript and multiplier not allowed"
+)]
+#[case::missing_subscript(SGroupType::Superatom, None, None, "subscript required")]
+#[case::missing_multiplier(SGroupType::MultipleGroup, None, None, "multiplier required")]
+fn test_apply_extended_sgroup_subscript_type_error(
+    #[case] sgroup_type: SGroupType,
+    #[case] multiplier: Option<SGroupMultiplier>,
+    #[case] subscript: Option<String>,
+    #[case] message: &'static str,
+) {
+    let mut acc = PropertyAccumulator::new();
+    acc.add_entry(
+        PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
+            sgroup_index: 0,
+            sgroup_type,
+        }]),
+        CtabParseFlags::EXTENDED,
+    )
+    .unwrap();
+
+    assert_eq!(
+        acc.add_entry(
+            PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
+                sgroup_index: 0,
+                multiplier,
+                subscript,
+            }),
+            CtabParseFlags::EXTENDED,
+        ),
+        Err(ParseError::SGroupTypeConstraint {
+            sgroup_type,
+            message,
+        })
+    );
 }
 
 #[rstest]
@@ -1266,21 +1345,19 @@ fn test_apply_extended_sgroup_correspondence(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_correspondence_no_sgroup() {
+fn test_apply_extended_sgroup_correspondence_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry {
         sgroup_index: 0,
         bond_indices: vec![0, 1],
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "correspondence"
-        }
-    ));
+            property: "correspondence",
+        })
+    );
 }
 
 #[rstest]
@@ -1312,21 +1389,19 @@ fn test_apply_extended_sgroup_display_info(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_display_info_no_sgroup() {
+fn test_apply_extended_sgroup_display_info_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry {
         sgroup_index: 0,
         bracket_coords: vec![1.0, 2.0, 3.0, 4.0],
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "display info"
-        }
-    ));
+            property: "display info",
+        })
+    );
 }
 
 #[rstest]
@@ -1357,22 +1432,20 @@ fn test_apply_extended_sgroup_connecting_bond(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_connecting_bond_no_sgroup() {
+fn test_apply_extended_sgroup_connecting_bond_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry {
         sgroup_index: 0,
         bond_index: 0,
         bond_vector: (1.0, 2.0),
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "connecting bond"
-        }
-    ));
+            property: "connecting bond",
+        })
+    );
 }
 
 #[rstest]
@@ -1395,7 +1468,7 @@ fn test_apply_extended_sgroup_data_entry(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_data_description_no_sgroup() {
+fn test_apply_extended_sgroup_data_description_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry {
         sgroup_index: 0,
@@ -1405,37 +1478,33 @@ fn test_apply_extended_sgroup_data_description_no_sgroup() {
         query_identifier: None,
         data_query_operator: None,
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "data description"
-        }
-    ));
+            property: "data description",
+        })
+    );
 }
 
 #[rstest]
-fn test_apply_extended_data_continuation_no_sgroup() {
+fn test_apply_extended_data_continuation_sgroup_context_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
         sgroup_index: 0,
         data_content: "test".to_string(),
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::MissingSGroupDataContext {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::MissingSGroupDataContext {
             index: 0,
-            location: "continuation"
-        }
-    ));
+            location: "continuation",
+        })
+    );
 }
 
 #[rstest]
-fn test_apply_extended_data_continuation_no_description() {
+fn test_apply_extended_data_continuation_description_context_error() {
     let mut acc = PropertyAccumulator::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -1446,37 +1515,33 @@ fn test_apply_extended_data_continuation_no_description() {
         sgroup_index: 0,
         data_content: "test".to_string(),
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::MissingSGroupDataContext {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::MissingSGroupDataContext {
             index: 0,
-            location: "continuation"
-        }
-    ));
+            location: "continuation",
+        })
+    );
 }
 
 #[rstest]
-fn test_apply_extended_data_end_with_data_no_sgroup() {
+fn test_apply_extended_data_end_with_data_sgroup_context_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData {
         sgroup_index: 0,
         data_content: "test".to_string(),
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::MissingSGroupDataContext {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::MissingSGroupDataContext {
             index: 0,
-            location: "end with data"
-        }
-    ));
+            location: "end with data",
+        })
+    );
 }
 
 #[rstest]
-fn test_apply_extended_data_end_with_data_no_description() {
+fn test_apply_extended_data_end_with_data_description_context_error() {
     let mut acc = PropertyAccumulator::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -1487,34 +1552,30 @@ fn test_apply_extended_data_end_with_data_no_description() {
         sgroup_index: 0,
         data_content: "test".to_string(),
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::MissingSGroupDataContext {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::MissingSGroupDataContext {
             index: 0,
-            location: "end with data"
-        }
-    ));
+            location: "end with data",
+        })
+    );
 }
 
 #[rstest]
-fn test_apply_extended_data_end_blank_no_sgroup() {
+fn test_apply_extended_data_end_blank_sgroup_context_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::MissingSGroupDataContext {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::MissingSGroupDataContext {
             index: 0,
-            location: "end blank"
-        }
-    ));
+            location: "end blank",
+        })
+    );
 }
 
 #[rstest]
-fn test_apply_extended_data_end_blank_no_description() {
+fn test_apply_extended_data_end_blank_description_context_error() {
     let mut acc = PropertyAccumulator::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -1522,15 +1583,118 @@ fn test_apply_extended_data_end_blank_no_description() {
     }]);
     acc.add_entry(type_entry, CtabParseFlags::EXTENDED).unwrap();
     let entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::MissingSGroupDataContext {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::MissingSGroupDataContext {
             index: 0,
-            location: "end blank"
-        }
-    ));
+            location: "end blank",
+        })
+    );
+}
+
+#[rstest]
+fn test_apply_extended_data_end_blank_content_context_error() {
+    let mut acc = PropertyAccumulator::new();
+    acc.add_entry(
+        PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
+            sgroup_index: 0,
+            sgroup_type: SGroupType::Data,
+        }]),
+        CtabParseFlags::EXTENDED,
+    )
+    .unwrap();
+    acc.add_entry(
+        PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry {
+            sgroup_index: 0,
+            field_name: "pH".to_string(),
+            field_type: SGroupDataType::Numeric,
+            field_units: None,
+            query_identifier: None,
+            data_query_operator: None,
+        }),
+        CtabParseFlags::EXTENDED,
+    )
+    .unwrap();
+
+    assert_eq!(
+        acc.add_entry(
+            PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 }),
+            CtabParseFlags::EXTENDED,
+        ),
+        Err(ParseError::MissingSGroupDataContext {
+            index: 0,
+            location: "end",
+        })
+    );
+}
+
+#[rstest]
+fn test_apply_extended_data_sgroup_index_error() {
+    let mut acc = PropertyAccumulator::new();
+    acc.add_entry(
+        PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
+            sgroup_index: 0,
+            sgroup_type: SGroupType::Data,
+        }]),
+        CtabParseFlags::EXTENDED,
+    )
+    .unwrap();
+    acc.add_entry(
+        PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry {
+            sgroup_index: 0,
+            field_name: "pH".to_string(),
+            field_type: SGroupDataType::Numeric,
+            field_units: None,
+            query_identifier: None,
+            data_query_operator: None,
+        }),
+        CtabParseFlags::EXTENDED,
+    )
+    .unwrap();
+
+    assert_eq!(
+        acc.add_entry(
+            PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
+                sgroup_index: 1,
+                data_content: "7.0".to_string(),
+            }),
+            CtabParseFlags::EXTENDED,
+        ),
+        Err(ParseError::SGroupIndexMismatch {
+            expected: 0,
+            actual: 1,
+        })
+    );
+}
+
+#[rstest]
+fn test_apply_extended_data_end_error(mut single_extended_atom: ExtendedMolecule) {
+    let mut acc = PropertyAccumulator::new();
+    acc.add_entry(
+        PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
+            sgroup_index: 0,
+            sgroup_type: SGroupType::Data,
+        }]),
+        CtabParseFlags::EXTENDED,
+    )
+    .unwrap();
+    acc.add_entry(
+        PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry {
+            sgroup_index: 0,
+            field_name: "pH".to_string(),
+            field_type: SGroupDataType::Numeric,
+            field_units: None,
+            query_identifier: None,
+            data_query_operator: None,
+        }),
+        CtabParseFlags::EXTENDED,
+    )
+    .unwrap();
+
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED),
+        Err(ParseError::MissingSGroupDataEnd { index: 0 })
+    );
 }
 
 #[rstest]
@@ -1567,7 +1731,7 @@ fn test_apply_extended_sgroup_data_display(
 }
 
 #[rstest]
-fn test_apply_extended_data_display_no_sgroup() {
+fn test_apply_extended_data_display_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry {
         sgroup_index: 0,
@@ -1578,16 +1742,13 @@ fn test_apply_extended_data_display_no_sgroup() {
         display_chars: SGroupDataDisplayChars::Number(5),
         display_tag: Some(5),
     });
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    println!("{:?}", result);
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "data description"
-        }
-    ));
+            property: "data description",
+        })
+    );
 }
 
 #[rstest]
@@ -1621,38 +1782,33 @@ fn test_apply_extended_sgroup_hierarchy(
 }
 
 #[rstest]
-fn test_apply_extended_hierarchy_no_parent(mut acc_with_superatom_sgroup: PropertyAccumulator) {
+fn test_apply_extended_hierarchy_parent_error(mut acc_with_superatom_sgroup: PropertyAccumulator) {
     let entry = PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry {
         sgroup_index: 0,
         parent_sgroup_index: 1,
     }]);
-    let result = acc_with_superatom_sgroup.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc_with_superatom_sgroup.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 1,
-            property: "hierarchy parent"
-        }
-    ));
+            property: "hierarchy parent",
+        })
+    );
 }
 
 #[rstest]
-fn test_apply_extended_hierarchy_no_sgroup(mut acc_with_data_sgroup: PropertyAccumulator) {
+fn test_apply_extended_hierarchy_sgroup_error(mut acc_with_data_sgroup: PropertyAccumulator) {
     let entry = PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry {
         sgroup_index: 1,
         parent_sgroup_index: 0,
     }]);
-    let result = acc_with_data_sgroup.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    println!("{:?}", result);
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc_with_data_sgroup.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 1,
-            property: "hierarchy"
-        }
-    ));
+            property: "hierarchy",
+        })
+    );
 }
 
 #[rstest]
@@ -1676,21 +1832,19 @@ fn test_apply_extended_sgroup_component(
 }
 
 #[rstest]
-fn test_apply_extended_component_no_sgroup() {
+fn test_apply_extended_component_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry {
         sgroup_index: 0,
         component_number: 12,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        ParseError::UndefinedSGroup {
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::UndefinedSGroup {
             index: 0,
-            property: "component"
-        }
-    ));
+            property: "component",
+        })
+    );
 }
 
 #[rstest]
@@ -1715,29 +1869,39 @@ fn test_apply_extended_ring_bond_count(
 }
 
 #[rstest]
-fn test_apply_extended_ring_bond_count_conflict(mut with_extended_properties: ExtendedMolecule) {
+fn test_apply_extended_ring_bond_count_conflict_error(
+    mut with_extended_properties: ExtendedMolecule,
+) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
         atom_index: 0,
         ring_bond_count: 3,
     }]);
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result =
-        acc.update_extended_molecule(&mut with_extended_properties, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut with_extended_properties, CtabParseFlags::EXTENDED),
+        Err(ParseError::DuplicateProperty(
+            "Ring bond count conflict: existing value for atom 0".to_string()
+        ))
+    );
 }
 
 #[rstest]
 #[case::out_of_range_low(1)]
 #[case::out_of_range_high(5)]
-fn test_apply_extended_ring_bond_count_invalid(#[case] code: i8) {
+fn test_apply_extended_ring_bond_count_code_error(#[case] code: i8) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
         atom_index: 0,
         ring_bond_count: code,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::InvalidCode {
+            field: "ring bond count",
+            value: code as i32,
+        })
+    );
 }
 
 #[rstest]
@@ -1762,29 +1926,39 @@ fn test_apply_extended_substitution_count(
 }
 
 #[rstest]
-fn test_apply_extended_substitution_count_conflict(mut with_extended_properties: ExtendedMolecule) {
+fn test_apply_extended_substitution_count_conflict_error(
+    mut with_extended_properties: ExtendedMolecule,
+) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
         atom_index: 0,
         substitution_count: 3,
     }]);
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result =
-        acc.update_extended_molecule(&mut with_extended_properties, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut with_extended_properties, CtabParseFlags::EXTENDED),
+        Err(ParseError::DuplicateProperty(
+            "Substitution count conflict: existing value for atom 0".to_string()
+        ))
+    );
 }
 
 #[rstest]
 #[case::out_of_range_low(-3)]
 #[case::out_of_range_high(7)]
-fn test_apply_extended_substitution_count_invalid(#[case] code: i8) {
+fn test_apply_extended_substitution_count_code_error(#[case] code: i8) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
         atom_index: 0,
         substitution_count: code,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::InvalidCode {
+            field: "substitution count",
+            value: code as i32,
+        })
+    );
 }
 
 #[rstest]
@@ -1808,14 +1982,19 @@ fn test_apply_extended_unsaturated(
 
 #[rstest]
 #[case::out_of_range_high(2)]
-fn test_apply_extended_unsaturated_invalid(#[case] code: u8) {
+fn test_apply_extended_unsaturated_error(#[case] code: u8) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry {
         atom_index: 0,
         unsaturated: code,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::InvalidCode {
+            field: "unsaturated atom",
+            value: code as i32,
+        })
+    );
 }
 
 #[rstest]
@@ -1842,7 +2021,7 @@ fn test_apply_extended_link_atom(mut single_extended_atom: ExtendedMolecule) {
 }
 
 #[rstest]
-fn test_apply_extended_link_atom_conflict() {
+fn test_apply_extended_link_atom_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::LinkAtomEntries(vec![
         LinkAtomEntry {
@@ -1858,8 +2037,12 @@ fn test_apply_extended_link_atom_conflict() {
             subs_index2: Some(3),
         },
     ]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::DuplicateProperty(
+            "link atom for atom 0".to_string()
+        ))
+    );
 }
 
 #[rstest]
@@ -1883,7 +2066,7 @@ fn test_apply_extended_atom_list(mut single_extended_atom: ExtendedMolecule) {
 }
 
 #[rstest]
-fn test_apply_extended_atom_list_conflict(mut with_rgroup: ExtendedMolecule) {
+fn test_apply_extended_atom_list_error(mut with_rgroup: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomListEntry(AtomListEntry {
         atom_index: 0,
@@ -1891,8 +2074,12 @@ fn test_apply_extended_atom_list_conflict(mut with_rgroup: ExtendedMolecule) {
         exclusion: false,
     });
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result = acc.update_extended_molecule(&mut with_rgroup, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut with_rgroup, CtabParseFlags::EXTENDED),
+        Err(ParseError::DuplicateProperty(
+            "Atom list conflict: existing symbol for atom 0".to_string()
+        ))
+    );
 }
 
 #[rstest]
@@ -1917,7 +2104,7 @@ fn test_apply_extended_attachment_point(
 }
 
 #[rstest]
-fn test_apply_extended_attachment_point_conflict() {
+fn test_apply_extended_attachment_point_duplicate_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AttachmentPointEntries(vec![
         AttachmentPointEntry {
@@ -1929,19 +2116,28 @@ fn test_apply_extended_attachment_point_conflict() {
             attachment_type: 2,
         },
     ]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::DuplicateProperty(
+            "attachment point for atom 0".to_string()
+        ))
+    );
 }
 
 #[rstest]
-fn test_apply_extended_attachment_point_invalid() {
+fn test_apply_extended_attachment_point_code_error() {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry {
         atom_index: 0,
         attachment_type: 4,
     }]);
-    let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.add_entry(entry, CtabParseFlags::EXTENDED),
+        Err(ParseError::InvalidCode {
+            field: "attachment point",
+            value: 4,
+        })
+    );
 }
 
 #[rstest]
@@ -2020,19 +2216,23 @@ fn test_apply_extended_rgroup_label_overwrite(mut with_unlabeled_rgroup: Extende
 }
 
 #[rstest]
-fn test_apply_extended_rgroup_label_conflict(mut with_rgroup: ExtendedMolecule) {
+fn test_apply_extended_rgroup_label_conflict_error(mut with_rgroup: ExtendedMolecule) {
     let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
         atom_index: 0,
         label: 2,
     }]);
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result = acc.update_extended_molecule(&mut with_rgroup, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut with_rgroup, CtabParseFlags::EXTENDED),
+        Err(ParseError::DuplicateProperty(
+            "RGroup label conflict: atom 0 already has RGroup label 1, cannot set 2".to_string()
+        ))
+    );
 }
 
 #[rstest]
-fn test_apply_extended_rgroup_label_invalid(mut single_extended_atom: ExtendedMolecule) {
+fn test_apply_extended_rgroup_label_symbol_error(mut single_extended_atom: ExtendedMolecule) {
     single_extended_atom.atoms[0].symbol = AtomSymbol::AtomList(AtomList {
         elements: vec![e!(N), e!(O)],
         exclusion: false,
@@ -2043,8 +2243,12 @@ fn test_apply_extended_rgroup_label_invalid(mut single_extended_atom: ExtendedMo
         label: 1,
     }]);
     acc.add_entry(entry, CtabParseFlags::EXTENDED).unwrap();
-    let result = acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED);
-    assert!(result.is_err());
+    assert_eq!(
+        acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED),
+        Err(ParseError::DuplicateProperty(
+            "RGroup label conflict: atom 0 already has AtomList".to_string()
+        ))
+    );
 }
 
 #[rstest]

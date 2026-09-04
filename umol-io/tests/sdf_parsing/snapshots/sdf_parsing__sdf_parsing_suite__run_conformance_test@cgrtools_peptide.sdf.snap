@@ -1,5 +1,5 @@
 ---
-source: umol-models-graph/tests/sdf_parsing/mod.rs
+source: umol-io/tests/sdf_parsing/mod.rs
 expression: results
 ---
 expected_category: invalid
@@ -9,22 +9,22 @@ molecule:
   compound_count: 0
   error:
     error_type: InvalidCountsLine
-    message: Invalid counts line at line 397
+    message: "Invalid counts line at line 398, col 3"
 molecule_lenient:
   success: false
   compound_count: 0
   error:
     error_type: InvalidCountsLine
-    message: Invalid counts line at line 397
+    message: "Invalid counts line at line 398, col 3"
 extended_molecule:
   success: false
   compound_count: 0
   error:
     error_type: InvalidCountsLine
-    message: Invalid counts line at line 397
+    message: "Invalid counts line at line 398, col 3"
 extended_molecule_lenient:
   success: false
   compound_count: 0
   error:
     error_type: InvalidCountsLine
-    message: Invalid counts line at line 397
+    message: "Invalid counts line at line 398, col 3"

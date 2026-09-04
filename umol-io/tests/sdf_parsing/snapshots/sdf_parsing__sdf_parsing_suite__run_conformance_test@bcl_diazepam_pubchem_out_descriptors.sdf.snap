@@ -1,5 +1,5 @@
 ---
-source: umol-models-graph/tests/sdf_parsing/mod.rs
+source: umol-io/tests/sdf_parsing/mod.rs
 expression: results
 ---
 expected_category: invalid
@@ -9,22 +9,22 @@ molecule:
   compound_count: 0
   error:
     error_type: InvalidBondLine
-    message: "Invalid bond line at line 59, col 0"
+    message: "Invalid bond line at line 59, col 15"
 molecule_lenient:
   success: false
   compound_count: 0
   error:
     error_type: InvalidBondLine
-    message: "Invalid bond line at line 59, col 0"
+    message: "Invalid bond line at line 59, col 15"
 extended_molecule:
   success: false
   compound_count: 0
   error:
-    error_type: InvalidSdfDataHeader
-    message: Invalid SDF data header at line 74
+    error_type: MissingDelimiter
+    message: Missing record delimiter at line 193
 extended_molecule_lenient:
   success: false
   compound_count: 0
   error:
-    error_type: InvalidSdfDataHeader
-    message: Invalid SDF data header at line 74
+    error_type: MissingDelimiter
+    message: Missing record delimiter at line 193

@@ -1,5 +1,5 @@
 ---
-source: umol-models-graph/tests/mol_parsing/mod.rs
+source: umol-io/tests/mol_parsing/mod.rs
 expression: results
 ---
 expected_category: invalid
@@ -8,7 +8,7 @@ molecule:
   success: false
   error:
     error_type: InvalidCountsLine
-    message: Invalid counts line at line 3
+    message: "Invalid counts line at line 3, col 33"
 molecule_lenient:
   success: false
   error:
@@ -18,7 +18,7 @@ extended_molecule:
   success: false
   error:
     error_type: InvalidCountsLine
-    message: Invalid counts line at line 3
+    message: "Invalid counts line at line 3, col 33"
 extended_molecule_lenient:
   success: false
   error:

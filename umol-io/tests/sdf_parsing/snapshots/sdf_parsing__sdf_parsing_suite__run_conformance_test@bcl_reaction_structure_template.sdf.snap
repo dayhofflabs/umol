@@ -1,5 +1,5 @@
 ---
-source: umol-models-graph/tests/sdf_parsing/mod.rs
+source: umol-io/tests/sdf_parsing/mod.rs
 expression: results
 ---
 expected_category: invalid
@@ -9,13 +9,13 @@ molecule:
   compound_count: 0
   error:
     error_type: InvalidAtomLine
-    message: "Invalid atom line at line 4, col 0"
+    message: "Invalid atom line at line 4, col 63"
 molecule_lenient:
   success: false
   compound_count: 0
   error:
     error_type: InvalidAtomLine
-    message: "Invalid atom line at line 4, col 0"
+    message: "Invalid atom line at line 4, col 63"
 extended_molecule:
   success: false
   compound_count: 0

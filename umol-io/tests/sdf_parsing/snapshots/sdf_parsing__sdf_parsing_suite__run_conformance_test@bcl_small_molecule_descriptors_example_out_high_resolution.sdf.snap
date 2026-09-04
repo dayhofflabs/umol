@@ -1,5 +1,5 @@
 ---
-source: umol-models-graph/tests/sdf_parsing/mod.rs
+source: umol-io/tests/sdf_parsing/mod.rs
 expression: results
 ---
 expected_category: extended_molecule
@@ -9,13 +9,13 @@ molecule:
   compound_count: 0
   error:
     error_type: InvalidBondLine
-    message: "Invalid bond line at line 37, col 0"
+    message: "Invalid bond line at line 37, col 15"
 molecule_lenient:
   success: false
   compound_count: 0
   error:
     error_type: InvalidBondLine
-    message: "Invalid bond line at line 37, col 0"
+    message: "Invalid bond line at line 37, col 15"
 extended_molecule:
   success: true
   compound_count: 8

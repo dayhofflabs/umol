@@ -1,21 +1,19 @@
 //! Parsers for CTab property lines.
 
 use bstr::ByteSlice;
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take};
-use nom::character::complete::{space0, u8 as nom_u8};
-use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, rest};
-use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
-use nom::multi::{count as nom_count, length_count};
-use nom::sequence::{delimited, preceded, terminated};
-use nom::{Err, Parser};
 use umol_chem::element::Element;
+use winnow::combinator::{cond, delimited, opt, preceded, terminated};
+use winnow::error::ErrMode;
+use winnow::stream::Location;
+use winnow::token::{rest, take};
+use winnow::Parser;
 
 use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
-    fixed_width_element_partial, fixed_width_float_f10_4, fixed_width_int,
-    fixed_width_int_in_range, fixed_width_int_minus1, fixed_width_str_partial, fixed_width_unused,
-    rgroup_occurrences, LinesWithOffsetExt,
+    finish_line, fixed_width_element_partial, fixed_width_float_f10_4, fixed_width_int,
+    fixed_width_int_in_range, fixed_width_int_minus1, fixed_width_partial, fixed_width_str_partial,
+    fixed_width_unused, input_error_column, next_line, rgroup_occurrences, Input, InputError,
+    IntParser, PResult,
 };
 use crate::ctfile::config::CtabParseFlags;
 use crate::ctfile::error::ParseError;
@@ -333,414 +331,423 @@ pub enum PropertyEntries {
 pub(super) fn properties_block<'inp>(
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp> {
+) -> impl Parser<&'inp [u8], (Vec<PropertyEntries>, u32), ErrMode<ParseError>> + use<'inp> {
     let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
 
-    move |input: &'inp [u8]| {
+    move |input: &mut &'inp [u8]| {
         let mut properties = Vec::new();
-        let mut lines_iter = input.lines_with_offset();
-        let mut byte_offset = 0;
         let mut line_index = 0;
         let mut end_found = false;
 
-        while let Some((line, byte_len)) = lines_iter.next() {
-            if line.starts_with(b"M  END") {
-                byte_offset += byte_len;
+        while !input.is_empty() {
+            let mut line = next_line(input).expect("non-empty input contains a physical line");
+            if line.as_ref().starts_with(b"M  END") {
                 line_index += 1;
                 end_found = true;
                 break;
             }
 
-            // Handle atom alias (two-line property)
-            if line.starts_with(b"A  ") {
-                let (next_line, next_byte_len) = lines_iter.next().ok_or_else(|| {
-                    Err::Error(ParseError::UnexpectedEof {
+            if line.as_ref().starts_with(b"A  ") {
+                let alias = next_line(input).map_err(|_| {
+                    ErrMode::Cut(ParseError::UnexpectedEof {
                         line: line_offset + line_index + 1,
                         block: "atom alias",
                     })
                 })?;
-                let property = parse_atom_alias_input(line, next_line).map_err(|_| {
-                    Err::Error(ParseError::InvalidPropertyLine {
-                        line: line_offset + line_index,
-                        col: 0,
-                    })
-                })?;
-                properties.push(property);
-                byte_offset += byte_len + next_byte_len;
-                line_index += 2;
-            } else {
-                let (_, property) = all_consuming(terminated(property_input(flags), space0))
-                    .parse(line)
-                    .map_err(|_| {
-                        Err::Error(ParseError::InvalidPropertyLine {
+                let property =
+                    parse_atom_alias_input(line.as_ref(), alias.as_ref()).map_err(|error| {
+                        ErrMode::Cut(ParseError::InvalidPropertyLine {
                             line: line_offset + line_index,
-                            col: 0,
+                            col: input_error_column(error, &line),
                         })
                     })?;
                 properties.push(property);
-                byte_offset += byte_len;
+                line_index += 2;
+            } else {
+                let property = property_input(flags)
+                    .parse_next(&mut line)
+                    .and_then(|value| {
+                        finish_line(&mut line)?;
+                        Ok(value)
+                    })
+                    .map_err(|error| {
+                        ErrMode::Cut(ParseError::InvalidPropertyLine {
+                            line: line_offset + line_index,
+                            col: input_error_column(error, &line),
+                        })
+                    })?;
+                properties.push(property);
                 line_index += 1;
             }
         }
 
         if !end_found && !no_v2000_end_tags {
-            return Err(Err::Error(ParseError::MissingMEndTag {
+            return Err(ErrMode::Cut(ParseError::MissingMEndTag {
                 line: line_offset + line_index,
             }));
         }
 
-        let remaining = &input[byte_offset..];
-        Ok((remaining, (properties, line_offset + line_index)))
+        Ok((properties, line_offset + line_index))
     }
 }
 
-/// Parse extended properties block
+/// Parse extended properties block.
 pub(super) fn extended_properties_block<'inp>(
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp> {
+) -> impl Parser<&'inp [u8], (Vec<PropertyEntries>, u32), ErrMode<ParseError>> + use<'inp> {
     let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
 
-    move |input: &'inp [u8]| {
+    move |input: &mut &'inp [u8]| {
         let mut properties = Vec::new();
-        let mut lines_iter = input.lines_with_offset();
-        let mut byte_offset = 0;
         let mut line_index = 0;
         let mut end_found = false;
 
-        while let Some((line, byte_len)) = lines_iter.next() {
-            if line.starts_with(b"M  END") {
-                byte_offset += byte_len;
+        while !input.is_empty() {
+            let mut line = next_line(input).expect("non-empty input contains a physical line");
+            if line.as_ref().starts_with(b"M  END") {
                 line_index += 1;
                 end_found = true;
                 break;
             }
 
-            // Handle atom alias (two-line property)
-            if line.starts_with(b"A  ") {
-                let (next_line, next_byte_len) = lines_iter.next().ok_or_else(|| {
-                    Err::Error(ParseError::UnexpectedEof {
+            if line.as_ref().starts_with(b"A  ") {
+                let alias = next_line(input).map_err(|_| {
+                    ErrMode::Cut(ParseError::UnexpectedEof {
                         line: line_offset + line_index + 1,
                         block: "atom alias",
                     })
                 })?;
-                let property = parse_atom_alias_input(line, next_line).map_err(|_| {
-                    Err::Error(ParseError::InvalidPropertyLine {
-                        line: line_offset + line_index,
-                        col: 0,
-                    })
-                })?;
+                let property =
+                    parse_atom_alias_input(line.as_ref(), alias.as_ref()).map_err(|error| {
+                        ErrMode::Cut(ParseError::InvalidPropertyLine {
+                            line: line_offset + line_index,
+                            col: input_error_column(error, &line),
+                        })
+                    })?;
                 properties.push(property);
-                byte_offset += byte_len + next_byte_len;
                 line_index += 2;
-            // Handle legacy group abbreviation (two-line property)
-            } else if line.starts_with(b"G  ") {
-                let (next_line, next_byte_len) = lines_iter.next().ok_or_else(|| {
-                    Err::Error(ParseError::UnexpectedEof {
+            } else if line.as_ref().starts_with(b"G  ") {
+                let label = next_line(input).map_err(|_| {
+                    ErrMode::Cut(ParseError::UnexpectedEof {
                         line: line_offset + line_index + 1,
                         block: "legacy group abbreviation",
                     })
                 })?;
-                let property =
-                    parse_legacy_group_abbreviation_input(line, next_line).map_err(|_| {
-                        Err::Error(ParseError::InvalidPropertyLine {
+                let property = parse_legacy_group_abbreviation_input(line.as_ref(), label.as_ref())
+                    .map_err(|error| {
+                        ErrMode::Cut(ParseError::InvalidPropertyLine {
                             line: line_offset + line_index,
-                            col: 0,
+                            col: input_error_column(error, &line),
                         })
                     })?;
                 properties.push(property);
-                byte_offset += byte_len + next_byte_len;
                 line_index += 2;
             } else {
-                let (_, property) =
-                    all_consuming(terminated(extended_property_input(flags), space0))
-                        .parse(line)
-                        .map_err(|_| {
-                            Err::Error(ParseError::InvalidPropertyLine {
-                                line: line_offset + line_index,
-                                col: 0,
-                            })
-                        })?;
+                let property = extended_property_input(flags)
+                    .parse_next(&mut line)
+                    .and_then(|value| {
+                        finish_line(&mut line)?;
+                        Ok(value)
+                    })
+                    .map_err(|error| {
+                        ErrMode::Cut(ParseError::InvalidPropertyLine {
+                            line: line_offset + line_index,
+                            col: input_error_column(error, &line),
+                        })
+                    })?;
                 properties.push(property);
-                byte_offset += byte_len;
                 line_index += 1;
             }
         }
 
         if !end_found && !no_v2000_end_tags {
-            return Err(Err::Error(ParseError::MissingMEndTag {
+            return Err(ErrMode::Cut(ParseError::MissingMEndTag {
                 line: line_offset + line_index,
             }));
         }
 
-        let remaining = &input[byte_offset..];
-        Ok((remaining, (properties, line_offset + line_index)))
+        Ok((properties, line_offset + line_index))
     }
 }
 
 /// Parse property line (basic properties only)
 /// Note: A  (atom alias) and M  END are handled at the block level, not here.
-pub fn property_input<'inp>(
+fn property_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> + use<'inp> {
+) -> impl Parser<Input<'inp>, PropertyEntries, ErrMode<InputError>> + use<'inp> {
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
     let allow_editor_extensions = flags.contains(CtabParseFlags::EDITOR_EXTENSIONS);
-    move |input: &'inp [u8]| {
-        if input.len() < 3 {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+    move |input: &mut Input<'inp>| {
+        let column = input.current_token_start();
+        let bytes: &[u8] = input.as_ref();
+        if bytes.len() < 3 {
+            return Err(ErrMode::Backtrack(InputError::at_column(column)));
         }
 
-        // A  (atom alias) and M  END are handled at block level
-        debug_assert!(
-            &input[0..3] != b"A  ",
-            "A   should be handled at block level"
-        );
-
-        // Handle V lines
-        if &input[0..3] == b"V  " {
-            return atom_value_entry()
-                .parse(&input[3..])
-                .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o)));
+        debug_assert!(&bytes[0..3] != b"A  ", "A should be handled at block level");
+        if &bytes[0..3] == b"V  " {
+            let _: &[u8] = take(3usize).parse_next(input)?;
+            return atom_value_entry
+                .map(PropertyEntries::AtomValueEntry)
+                .parse_next(input)
+                .map_err(ErrMode::cut);
         }
 
-        // Handle M lines
-        if input.len() < 6 {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        if bytes.len() < 6 {
+            return Err(ErrMode::Backtrack(InputError::at_column(column)));
         }
 
         debug_assert!(
-            &input[0..6] != b"M  END",
+            &bytes[0..6] != b"M  END",
             "M  END should be handled at block level"
         );
-        let (remaining, tag_bytes) = take(6u8)(input)?;
+        let tag = &bytes[0..6];
+        let known = matches!(tag, b"M  CHG" | b"M  RAD" | b"M  ISO")
+            || (allow_clark_extensions && matches!(tag, b"M  ZBO" | b"M  ZCH" | b"M  HYD"))
+            || (allow_editor_extensions && tag == b"M  ZZC");
+        if !known {
+            return Err(ErrMode::Backtrack(InputError::at_column(column)));
+        }
+        let _: &[u8] = take(6usize).parse_next(input)?;
 
-        // General M properties
-        let (remaining, result) = match tag_bytes {
-            b"M  CHG" => charge_entries()
-                .parse(remaining)
-                .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
-            b"M  RAD" => radical_entries()
-                .parse(remaining)
-                .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
-            b"M  ISO" => isotope_entries()
-                .parse(remaining)
-                .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-            // Clark extensions
-            tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") => {
-                if allow_clark_extensions {
-                    match tag {
-                        b"M  ZBO" => bond_order_override_entries()
-                            .parse(remaining)
-                            .map(|(i, o)| (i, PropertyEntries::BondOrderOverrideEntries(o))),
-                        b"M  ZCH" => atom_charge_overrides_entries()
-                            .parse(remaining)
-                            .map(|(i, o)| (i, PropertyEntries::AtomChargeOverrideEntries(o))),
-                        b"M  HYD" => atom_hydrogen_count_entries()
-                            .parse(remaining)
-                            .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
-                        _ => unreachable!(),
-                    }
-                } else {
-                    Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
-                }
-            }
-            // Editor extensions
-            tag @ b"M  ZZC" => {
-                if allow_editor_extensions {
-                    match tag {
-                        b"M  ZZC" => chemsketch_label_entry()
-                            .parse(remaining)
-                            .map(|(i, o)| (i, PropertyEntries::ChemSketchLabelEntry(o))),
-                        _ => unreachable!(),
-                    }
-                } else {
-                    Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
-                }
-            }
-            _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
-        }?;
-        Ok((remaining, result))
+        let result = match tag {
+            b"M  CHG" => charge_entries
+                .map(PropertyEntries::ChargeEntries)
+                .parse_next(input),
+            b"M  RAD" => radical_entries
+                .map(PropertyEntries::RadicalEntries)
+                .parse_next(input),
+            b"M  ISO" => isotope_entries
+                .map(PropertyEntries::IsotopeEntries)
+                .parse_next(input),
+            b"M  ZBO" => bond_order_override_entries
+                .map(PropertyEntries::BondOrderOverrideEntries)
+                .parse_next(input),
+            b"M  ZCH" => atom_charge_overrides_entries
+                .map(PropertyEntries::AtomChargeOverrideEntries)
+                .parse_next(input),
+            b"M  HYD" => atom_hydrogen_count_entries
+                .map(PropertyEntries::AtomHydrogenCountEntries)
+                .parse_next(input),
+            b"M  ZZC" => chemsketch_label_entry
+                .map(PropertyEntries::ChemSketchLabelEntry)
+                .parse_next(input),
+            _ => unreachable!(),
+        };
+        result.map_err(ErrMode::cut)
     }
 }
 
 /// Parse extended property line
 /// Note: A  (atom alias) and M  END are handled at the block level, not here.
-pub fn extended_property_input<'inp>(
+fn extended_property_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> + use<'inp> {
+) -> impl Parser<Input<'inp>, PropertyEntries, ErrMode<InputError>> + use<'inp> {
     let allow_queries = flags.contains(CtabParseFlags::WILDCARDS);
     let allow_rgroups = flags.contains(CtabParseFlags::RGROUPS);
     let allow_sgroups = flags.contains(CtabParseFlags::SGROUPS);
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
     let allow_editor_extensions = flags.contains(CtabParseFlags::EDITOR_EXTENSIONS);
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
-    move |input: &'inp [u8]| {
-        if input.len() < 3 {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+    move |input: &mut Input<'inp>| {
+        let column = input.current_token_start();
+        let bytes: &[u8] = input.as_ref();
+        if bytes.len() < 3 {
+            return Err(ErrMode::Backtrack(InputError::at_column(column)));
         }
 
-        // A  (atom alias), G  (legacy group abbreviation), and M  END are handled at block level
         debug_assert!(
-            &input[0..3] != b"A  " && &input[0..3] != b"G  ",
+            &bytes[0..3] != b"A  " && &bytes[0..3] != b"G  ",
             "A or G should be handled at block level"
         );
 
-        // Handle V lines
-        if &input[0..3] == b"V  " {
-            return atom_value_entry()
-                .parse(&input[3..])
-                .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o)));
+        if &bytes[0..3] == b"V  " {
+            let _: &[u8] = take(3usize).parse_next(input)?;
+            return atom_value_entry
+                .map(PropertyEntries::AtomValueEntry)
+                .parse_next(input)
+                .map_err(ErrMode::cut);
         }
 
-        // Handle M lines
-        if input.len() < 6 {
-            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        if bytes.len() < 6 {
+            return Err(ErrMode::Backtrack(InputError::at_column(column)));
         }
 
         debug_assert!(
-            &input[0..6] != b"M  END",
+            &bytes[0..6] != b"M  END",
             "M  END should be handled at block level"
         );
-        let (remaining, tag_bytes) = take(6u8)(input)?;
+        let tag = &bytes[0..6];
+        let known = matches!(tag, b"M  CHG" | b"M  RAD" | b"M  ISO")
+            || (allow_queries
+                && matches!(
+                    tag,
+                    b"M  RBC" | b"M  SUB" | b"M  UNS" | b"M  LIN" | b"M  ALS"
+                ))
+            || (allow_rgroups && matches!(tag, b"M  APO" | b"M  AAL" | b"M  RGP" | b"M  LOG"))
+            || (allow_sgroups
+                && matches!(
+                    tag,
+                    b"M  STY"
+                        | b"M  SST"
+                        | b"M  SLB"
+                        | b"M  SCN"
+                        | b"M  SAL"
+                        | b"M  SBL"
+                        | b"M  SMT"
+                        | b"M  SDS"
+                        | b"M  SPA"
+                        | b"M  CRS"
+                        | b"M  SDI"
+                        | b"M  SBV"
+                        | b"M  SDT"
+                        | b"M  SDD"
+                        | b"M  SCD"
+                        | b"M  SED"
+                        | b"M  SPL"
+                        | b"M  SNC"
+                ))
+            || (allow_clark_extensions && matches!(tag, b"M  ZBO" | b"M  ZCH" | b"M  HYD"))
+            || (allow_editor_extensions
+                && (tag == b"M  ZZC" || (allow_queries && tag == b"M  MRV")));
+        if !known {
+            return Err(ErrMode::Backtrack(InputError::at_column(column)));
+        }
+        let _: &[u8] = take(6usize).parse_next(input)?;
 
-        let (remaining, result) = match tag_bytes {
-            // General M properties
-            b"M  CHG" => charge_entries()
-                .parse(remaining)
-                .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
-            b"M  RAD" => radical_entries()
-                .parse(remaining)
-                .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
-            b"M  ISO" => isotope_entries()
-                .parse(remaining)
-                .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-            // Query properties
+        let result = match tag {
+            b"M  CHG" => charge_entries
+                .map(PropertyEntries::ChargeEntries)
+                .parse_next(input),
+            b"M  RAD" => radical_entries
+                .map(PropertyEntries::RadicalEntries)
+                .parse_next(input),
+            b"M  ISO" => isotope_entries
+                .map(PropertyEntries::IsotopeEntries)
+                .parse_next(input),
             tag @ (b"M  RBC" | b"M  SUB" | b"M  UNS" | b"M  LIN" | b"M  ALS") if allow_queries => {
                 match tag {
-                    b"M  RBC" => ring_bond_count_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::RingBondCountEntries(o))),
-                    b"M  SUB" => substitution_count_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SubstitutionCountEntries(o))),
-                    b"M  UNS" => unsaturated_atom_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::UnsaturatedAtomEntries(o))),
-                    b"M  LIN" => link_atom_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::LinkAtomEntries(o))),
-                    b"M  ALS" => atom_list_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
+                    b"M  RBC" => ring_bond_count_entries
+                        .map(PropertyEntries::RingBondCountEntries)
+                        .parse_next(input),
+                    b"M  SUB" => substitution_count_entries
+                        .map(PropertyEntries::SubstitutionCountEntries)
+                        .parse_next(input),
+                    b"M  UNS" => unsaturated_atom_entries
+                        .map(PropertyEntries::UnsaturatedAtomEntries)
+                        .parse_next(input),
+                    b"M  LIN" => link_atom_entries
+                        .map(PropertyEntries::LinkAtomEntries)
+                        .parse_next(input),
+                    b"M  ALS" => atom_list_entry
+                        .map(PropertyEntries::AtomListEntry)
+                        .parse_next(input),
                     _ => unreachable!(),
                 }
             }
-            // RGroup properties
             tag @ (b"M  APO" | b"M  AAL" | b"M  RGP" | b"M  LOG") if allow_rgroups => match tag {
-                b"M  APO" => attachment_point_entries()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
-                b"M  AAL" => atom_attachment_order_entry()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
-                b"M  RGP" => rgroup_label_entries()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
-                b"M  LOG" => rgroup_logic_entry()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
+                b"M  APO" => attachment_point_entries
+                    .map(PropertyEntries::AttachmentPointEntries)
+                    .parse_next(input),
+                b"M  AAL" => atom_attachment_order_entry
+                    .map(PropertyEntries::AtomAttachmentOrderEntry)
+                    .parse_next(input),
+                b"M  RGP" => rgroup_label_entries
+                    .map(PropertyEntries::RGroupLabelEntries)
+                    .parse_next(input),
+                b"M  LOG" => rgroup_logic_entry
+                    .map(PropertyEntries::RGroupLogicEntry)
+                    .parse_next(input),
                 _ => unreachable!(),
             },
-            // SGroup properties
             tag @ (b"M  STY" | b"M  SST" | b"M  SLB" | b"M  SCN" | b"M  SAL" | b"M  SBL"
             | b"M  SMT" | b"M  SDS" | b"M  SPA" | b"M  CRS" | b"M  SDI" | b"M  SBV"
             | b"M  SDT" | b"M  SDD" | b"M  SCD" | b"M  SED" | b"M  SPL" | b"M  SNC")
                 if allow_sgroups =>
             {
                 match tag {
-                    b"M  STY" => sgroup_type_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
-                    b"M  SST" => sgroup_subtype_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
-                    b"M  SLB" => sgroup_label_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
-                    b"M  SCN" => sgroup_connectivity_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
-                    b"M  SAL" => sgroup_atom_list_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
-                    b"M  SBL" => sgroup_bond_list_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                    b"M  SMT" => sgroup_subscript_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
-                    b"M  SDS" => sgroup_expansion_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
-                    b"M  SPA" => sgroup_parent_atom_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
-                    b"M  CRS" => sgroup_correspondence_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
-                    b"M  SDI" => sgroup_display_info_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
-                    b"M  SBV" => sgroup_connecting_bond_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupConnectingBondEntry(o))),
-                    b"M  SDT" => sgroup_data_description_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
+                    b"M  STY" => sgroup_type_entries
+                        .map(PropertyEntries::SGroupTypeEntries)
+                        .parse_next(input),
+                    b"M  SST" => sgroup_subtype_entries
+                        .map(PropertyEntries::SGroupSubtypeEntries)
+                        .parse_next(input),
+                    b"M  SLB" => sgroup_label_entries
+                        .map(PropertyEntries::SGroupLabelEntries)
+                        .parse_next(input),
+                    b"M  SCN" => sgroup_connectivity_entries
+                        .map(PropertyEntries::SGroupConnectivityEntries)
+                        .parse_next(input),
+                    b"M  SAL" => sgroup_atom_list_entry
+                        .map(PropertyEntries::SGroupAtomListEntry)
+                        .parse_next(input),
+                    b"M  SBL" => sgroup_bond_list_entry
+                        .map(PropertyEntries::SGroupBondListEntry)
+                        .parse_next(input),
+                    b"M  SMT" => sgroup_subscript_entry
+                        .map(PropertyEntries::SGroupSubscriptEntry)
+                        .parse_next(input),
+                    b"M  SDS" => sgroup_expansion_entries
+                        .map(PropertyEntries::SGroupExpansionEntries)
+                        .parse_next(input),
+                    b"M  SPA" => sgroup_parent_atom_entries
+                        .map(PropertyEntries::SGroupParentAtomEntry)
+                        .parse_next(input),
+                    b"M  CRS" => sgroup_correspondence_entry
+                        .map(PropertyEntries::SGroupCorrespondenceEntry)
+                        .parse_next(input),
+                    b"M  SDI" => sgroup_display_info_entry
+                        .map(PropertyEntries::SGroupDisplayInfoEntry)
+                        .parse_next(input),
+                    b"M  SBV" => sgroup_connecting_bond_entry
+                        .map(PropertyEntries::SGroupConnectingBondEntry)
+                        .parse_next(input),
+                    b"M  SDT" => sgroup_data_description_entry
+                        .map(PropertyEntries::SGroupDataDescriptionEntry)
+                        .parse_next(input),
                     b"M  SDD" => sgroup_data_display_entry(skip_unused_fields)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o))),
-                    b"M  SCD" => sgroup_data_continuation_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
-                    b"M  SED" => sgroup_data_end_entry()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
-                    b"M  SPL" => sgroup_hierarchy_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupHierarchyEntries(o))),
-                    b"M  SNC" => sgroup_component_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupComponentEntries(o))),
+                        .map(PropertyEntries::SGroupDataDisplayEntry)
+                        .parse_next(input),
+                    b"M  SCD" => sgroup_data_continuation_entry
+                        .map(PropertyEntries::SGroupDataEntry)
+                        .parse_next(input),
+                    b"M  SED" => sgroup_data_end_entry
+                        .map(PropertyEntries::SGroupDataEntry)
+                        .parse_next(input),
+                    b"M  SPL" => sgroup_hierarchy_entries
+                        .map(PropertyEntries::SGroupHierarchyEntries)
+                        .parse_next(input),
+                    b"M  SNC" => sgroup_component_entries
+                        .map(PropertyEntries::SGroupComponentEntries)
+                        .parse_next(input),
                     _ => unreachable!(),
                 }
             }
-            // Clark extensions
             tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") if allow_clark_extensions => match tag {
-                b"M  ZBO" => bond_order_override_entries()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::BondOrderOverrideEntries(o))),
-                b"M  ZCH" => atom_charge_overrides_entries()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::AtomChargeOverrideEntries(o))),
-                b"M  HYD" => atom_hydrogen_count_entries()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
+                b"M  ZBO" => bond_order_override_entries
+                    .map(PropertyEntries::BondOrderOverrideEntries)
+                    .parse_next(input),
+                b"M  ZCH" => atom_charge_overrides_entries
+                    .map(PropertyEntries::AtomChargeOverrideEntries)
+                    .parse_next(input),
+                b"M  HYD" => atom_hydrogen_count_entries
+                    .map(PropertyEntries::AtomHydrogenCountEntries)
+                    .parse_next(input),
                 _ => unreachable!(),
             },
-            // Editor extensions
             tag @ (b"M  ZZC" | b"M  MRV") if allow_editor_extensions => match tag {
-                b"M  ZZC" => chemsketch_label_entry()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::ChemSketchLabelEntry(o))),
-                b"M  MRV" if allow_queries => marvin_smarts_pattern_entry()
-                    .parse(remaining)
-                    .map(|(i, o)| (i, PropertyEntries::MarvinSmartsPatternEntry(o))),
+                b"M  ZZC" => chemsketch_label_entry
+                    .map(PropertyEntries::ChemSketchLabelEntry)
+                    .parse_next(input),
+                b"M  MRV" if allow_queries => marvin_smarts_pattern_entry
+                    .map(PropertyEntries::MarvinSmartsPatternEntry)
+                    .parse_next(input),
                 _ => unreachable!(),
             },
-            _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
-        }?;
-        Ok((remaining, result))
+            _ => unreachable!(),
+        };
+        result.map_err(ErrMode::cut)
     }
 }
 
@@ -748,13 +755,12 @@ pub fn extended_property_input<'inp>(
 /// A  aaa
 /// x...
 /// aaa: atom index, x...: alias text
-pub(super) fn parse_atom_alias_input<'a>(
-    first_line: &'a [u8],
+pub(super) fn parse_atom_alias_input(
+    first_line: &[u8],
     second_line: &[u8],
-) -> Result<PropertyEntries, NomError<&'a [u8]>> {
-    let (_, atom_index) = preceded(tag("A  "), fixed_width_int_minus1::<u32>(3))
-        .parse(first_line)
-        .map_err(|_: Err<NomError<_>>| NomError::new(first_line, NomErrorKind::Digit))?;
+) -> PResult<PropertyEntries> {
+    let mut input = Input::new(first_line);
+    let atom_index = preceded(b"A  ", fixed_width_int_minus1::<u32>(3)).parse_next(&mut input)?;
 
     Ok(PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index,
@@ -767,19 +773,19 @@ pub(super) fn parse_atom_alias_input<'a>(
 /// x...
 /// aaa: atom index1, ppp: atom index2, x...: abbreviation label
 /// The atoms on the side of atom index1 are abbreviated
-pub(super) fn parse_legacy_group_abbreviation_input<'a>(
-    first_line: &'a [u8],
+pub(super) fn parse_legacy_group_abbreviation_input(
+    first_line: &[u8],
     second_line: &[u8],
-) -> Result<PropertyEntries, NomError<&'a [u8]>> {
-    let (_, (atom_index1, atom_index2)) = preceded(
-        tag("G  "),
+) -> PResult<PropertyEntries> {
+    let mut input = Input::new(first_line);
+    let (atom_index1, atom_index2) = preceded(
+        b"G  ",
         (
             fixed_width_int_minus1::<u32>(3),
             fixed_width_int_minus1::<u32>(3),
         ),
     )
-    .parse(first_line)
-    .map_err(|_: Err<NomError<_>>| NomError::new(first_line, NomErrorKind::Digit))?;
+    .parse_next(&mut input)?;
 
     Ok(PropertyEntries::LegacyGroupAbbreviationEntry(
         LegacyGroupAbbreviationEntry {
@@ -793,52 +799,65 @@ pub(super) fn parse_legacy_group_abbreviation_input<'a>(
 /// Parse atom value entry.
 /// V  aaa v..
 /// aaa: atom index, v..: value string (can contain spaces)
-fn atom_value_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = AtomValueEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (fixed_width_int_minus1::<u32>(3), preceded(tag(" "), rest)),
-        move |(atom_index, value)| AtomValueEntry {
+fn atom_value_entry(input: &mut Input<'_>) -> PResult<AtomValueEntry> {
+    (fixed_width_int_minus1::<u32>(3), preceded(b' ', rest))
+        .map(|(atom_index, value): (u32, &[u8])| AtomValueEntry {
             atom_index,
             value: value.to_str_lossy().into_owned(),
-        },
-    )
+        })
+        .parse_next(input)
+}
+
+fn counted<'inp, N, O, Count, Item>(
+    mut count: Count,
+    mut item: Item,
+) -> impl Parser<Input<'inp>, Vec<O>, ErrMode<InputError>>
+where
+    N: Into<usize>,
+    Count: Parser<Input<'inp>, N, ErrMode<InputError>>,
+    Item: Parser<Input<'inp>, O, ErrMode<InputError>>,
+{
+    move |input: &mut Input<'inp>| {
+        let count = count.parse_next(input)?.into();
+        let mut values = Vec::with_capacity(count);
+        for _ in 0..count {
+            values.push(item.parse_next(input)?);
+        }
+        Ok(values)
+    }
 }
 
 /// Parse charge property entries.
 /// nn8 aaa vvv ...
 /// vvv: -15..= 15.
-fn charge_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<ChargeEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn charge_entries(input: &mut Input<'_>) -> PResult<Vec<ChargeEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -15..=15)),
-            ),
-            |(atom_index, charge)| ChargeEntry { atom_index, charge },
-        ),
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<i8, _>(3, -15..=15)),
+        )
+            .map(|(atom_index, charge)| ChargeEntry { atom_index, charge }),
     )
+    .parse_next(input)
 }
 
 /// Parse radical property entries.
 /// nn8 aaa vvv ...
 /// vvv: 0..= 3: 0 = no radical, 1 = singlet (:), 2 = doublet (. or ^), 3 = triplet (^^).
-fn radical_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<RadicalEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn radical_entries(input: &mut Input<'_>) -> PResult<Vec<RadicalEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
-            ),
-            |(atom_index, radical_type)| RadicalEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<u8, _>(3, 0..=3)),
+        )
+            .map(|(atom_index, radical_type)| RadicalEntry {
                 atom_index,
                 radical_type,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse isotope property entries.
@@ -846,146 +865,126 @@ fn radical_entries<'inp>(
 /// vvv: isotope mass number (not difference)
 /// Difference between the isotope mass number and reference isotope mass number
 /// should be in the range -18..=12.
-fn isotope_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<IsotopeEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn isotope_entries(input: &mut Input<'_>) -> PResult<Vec<IsotopeEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int::<u32>(3)),
-            ),
-            |(atom_index, mass)| IsotopeEntry { atom_index, mass },
-        ),
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int::<u32>(3)),
+        )
+            .map(|(atom_index, mass)| IsotopeEntry { atom_index, mass }),
     )
+    .parse_next(input)
 }
 
 /// Parse ring bond count property entries.
 /// M  RBCnn8 aaa vvv ...
 /// vvv: Ring bond count (-2 = as drawn (r*), -1 = no ring bonds (r0), 0 = off, 2 = r2, 3 = r3, 4 = r4+)
-fn ring_bond_count_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<RingBondCountEntry>, Error = NomError<&'inp [u8]>> {
-    move |input: &'inp [u8]| {
-        length_count(
-            fixed_width_int_in_range::<u8, _>(3, 1..=8),
-            map(
-                (
-                    preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                    preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=4)),
-                ),
-                |(atom_index, ring_bond_count)| RingBondCountEntry {
-                    atom_index,
-                    ring_bond_count,
-                },
-            ),
+fn ring_bond_count_entries(input: &mut Input<'_>) -> PResult<Vec<RingBondCountEntry>> {
+    counted(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<i8, _>(3, -2..=4)),
         )
-        .parse(input)
-    }
+            .map(|(atom_index, ring_bond_count)| RingBondCountEntry {
+                atom_index,
+                ring_bond_count,
+            }),
+    )
+    .parse_next(input)
 }
 
 /// Parse substitution count property entries.
 /// M  SUBnn8 aaa vvv ...
 /// vvv: Substitution count (-2 = as drawn (s*), -1 = no substitution (s0), 0 = off, 1-5 = s1-s5,
 /// 6 = s6+)
-fn substitution_count_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<SubstitutionCountEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn substitution_count_entries(input: &mut Input<'_>) -> PResult<Vec<SubstitutionCountEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=15)),
-            ),
-            |(atom_index, substitution_count)| SubstitutionCountEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<i8, _>(3, -2..=15)),
+        )
+            .map(|(atom_index, substitution_count)| SubstitutionCountEntry {
                 atom_index,
                 substitution_count,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse unsaturated atom property entries.
 /// M  UNSnn8 aaa vvv ...
 /// vvv: Unsaturated flag (0 = off, 1 = on)
-fn unsaturated_atom_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<UnsaturatedAtomEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn unsaturated_atom_entries(input: &mut Input<'_>) -> PResult<Vec<UnsaturatedAtomEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
-            ),
-            |(atom_index, unsaturated)| UnsaturatedAtomEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<u8, _>(3, 0..=1)),
+        )
+            .map(|(atom_index, unsaturated)| UnsaturatedAtomEntry {
                 atom_index,
                 unsaturated,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse link atom property entries.
 /// M  LINnn4 aaa vvv bbb ccc
 /// nn4: Count (max 4), aaa: Atom index, vvv: Upper repeat count (>= 2, lower repeat count is 1),
 /// bbb/ccc: Substituent indices (can be 0)
-fn link_atom_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<LinkAtomEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn link_atom_entries(input: &mut Input<'_>) -> PResult<Vec<LinkAtomEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=4),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 2..=255)),
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                opt(preceded(tag(" "), fixed_width_int_minus1::<u32>(3))),
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<u8, _>(3, 2..=255)),
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            opt(preceded(b' ', fixed_width_int_minus1::<u32>(3))),
+        )
+            .map(
+                |(atom_index, repeat_count, subs_index1, subs_index2)| LinkAtomEntry {
+                    atom_index,
+                    repeat_count,
+                    subs_index1,
+                    subs_index2,
+                },
             ),
-            |(atom_index, repeat_count, subs_index1, subs_index2)| LinkAtomEntry {
-                atom_index,
-                repeat_count,
-                subs_index1,
-                subs_index2,
-            },
-        ),
     )
+    .parse_next(input)
 }
 
 /// Parse atom list property entry.
 /// M  ALS aaannn e 11112222333344445555...
 /// aaa: Atom number, nnn: Number of entries (16 max), e: Exclusion (T/F), 1111: 4-char symbols
-fn atom_list_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = AtomListEntry, Error = NomError<&'inp [u8]>> {
-    move |input: &'inp [u8]| {
-        let (remaining, atom_index) =
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)).parse(input)?;
+fn atom_list_entry(input: &mut Input<'_>) -> PResult<AtomListEntry> {
+    let atom_index = preceded(b' ', fixed_width_int_minus1::<u32>(3)).parse_next(input)?;
+    let count = fixed_width_int_in_range::<usize, _>(3, 1..=16).parse_next(input)?;
+    let column = input.current_token_start() + 1;
+    let exclusion_byte: &[u8] = delimited(b' ', take(1usize), b' ').parse_next(input)?;
+    let exclusion = match exclusion_byte {
+        b"T" => true,
+        b"F" | b" " => false,
+        _ => return Err(ErrMode::Backtrack(InputError::at_column(column))),
+    };
 
-        let (remaining, count) =
-            fixed_width_int_in_range::<usize, _>(3, 1..=16).parse(remaining)?;
-
-        let (remaining, exclusion_byte) =
-            delimited(tag(" "), take(1usize), tag(" ")).parse(remaining)?;
-        let exclusion = match exclusion_byte {
-            b"T" => true,
-            b"F" | b" " => false,
-            _ => return Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
-        };
-
-        let (remaining, elements) =
-            nom_count(fixed_width_element_partial(4), count).parse(remaining)?;
-        let elements = elements
-            .iter()
-            .copied()
-            .collect::<Option<Vec<Element>>>()
-            .ok_or_else(|| Err::Error(NomError::new(remaining, NomErrorKind::Verify)))?;
-
-        Ok((
-            remaining,
-            AtomListEntry {
-                atom_index,
-                exclusion,
-                elements,
-            },
-        ))
+    let mut elements = Vec::with_capacity(count);
+    for _ in 0..count {
+        let column = input.current_token_start();
+        let element = fixed_width_element_partial(4)
+            .parse_next(input)?
+            .ok_or(ErrMode::Backtrack(InputError::at_column(column)))?;
+        elements.push(element);
     }
+
+    Ok(AtomListEntry {
+        atom_index,
+        exclusion,
+        elements,
+    })
 }
 
 /// Parse attachment point property entries.
@@ -994,62 +993,56 @@ fn atom_list_entry<'inp>(
 /// M  APOnn2 aaa vvv ...
 /// nn2: count (max 2), aaa: atom index, vvv: attachment type (0-3)
 /// 0 = no attachment, 1 = first attachment point, 2 = second attachment point, 3 = both attachment points
-fn attachment_point_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<AttachmentPointEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn attachment_point_entries(input: &mut Input<'_>) -> PResult<Vec<AttachmentPointEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=2),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
-            ),
-            |(atom_index, attachment_type)| AttachmentPointEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<u8, _>(3, 0..=3)),
+        )
+            .map(|(atom_index, attachment_type)| AttachmentPointEntry {
                 atom_index,
                 attachment_type,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse atom attachment order entry.
 /// M  AAL aaann2 111 v1v 222 v2v ...
 /// Atom aaa refers to an RGroup, atoms 111, 222 are ordinary atoms (opposite of APO)
 /// aaa: atom index, n2: pair count (max 2), 111/222: neighbor indices, v1v/v2v: attachment orders
-fn atom_attachment_order_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = AtomAttachmentOrderEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            length_count(
-                fixed_width_int_in_range::<u8, _>(3, 1..=2),
-                (
-                    preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                    preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 1..=2)),
-                ),
+fn atom_attachment_order_entry(input: &mut Input<'_>) -> PResult<AtomAttachmentOrderEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        counted(
+            fixed_width_int_in_range::<u8, _>(3, 1..=2),
+            (
+                preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+                preceded(b' ', fixed_width_int_in_range::<u8, _>(3, 1..=2)),
             ),
         ),
-        |(atom_index, attachments)| AtomAttachmentOrderEntry {
+    )
+        .map(|(atom_index, attachments)| AtomAttachmentOrderEntry {
             atom_index,
             attachments,
-        },
-    )
+        })
+        .parse_next(input)
 }
 
 /// Parse RGroup label property entries.
 /// M  RGPnn8 aaa rrr ...
 /// aaa: atom index, rrr: RGroup label (0 = no label, 1-32 in CTab spec, 1-999 in RDKit)
-fn rgroup_label_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<RGroupLabelEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn rgroup_label_entries(input: &mut Input<'_>) -> PResult<Vec<RGroupLabelEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int::<u32>(3)),
-            ),
-            |(atom_index, label)| RGroupLabelEntry { atom_index, label },
-        ),
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int::<u32>(3)),
+        )
+            .map(|(atom_index, label)| RGroupLabelEntry { atom_index, label }),
     )
+    .parse_next(input)
 }
 
 // Parse RGroup logic entry.
@@ -1060,205 +1053,169 @@ fn rgroup_label_entries<'inp>(
 /// ooo...: Range of RGroup occurrence required: n=exactly n, n-m=from n through m (inclusive),
 /// >n=greater n, <n=fewer than n, blank (default): > 0.
 /// > Any non-contradictory combination of the preceding values is allowed, separated by commas.
-fn rgroup_logic_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = RGroupLogicEntry, Error = NomError<&'inp [u8]>> {
-    move |input: &'inp [u8]| {
-        let count = fixed_width_int_in_range::<u8, _>(3, 1..=1);
-        let label = preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=999));
-        let dependent_label = preceded(
-            tag(" "),
-            map(fixed_width_int::<u32>(3), |label| {
-                if label == 0 {
-                    None
-                } else {
-                    Some(label)
-                }
-            }),
-        );
-        let (i, (count, label, dependent_label)) = (count, label, dependent_label).parse(input)?;
-        debug_assert!(count == 1, "count should be 1");
+fn rgroup_logic_entry(input: &mut Input<'_>) -> PResult<RGroupLogicEntry> {
+    let _count = fixed_width_int_in_range::<u8, _>(3, 1..=1).parse_next(input)?;
+    let label = preceded(b' ', fixed_width_int_in_range::<u32, _>(3, 1..=999)).parse_next(input)?;
+    let dependent_label = preceded(b' ', fixed_width_int::<u32>(3))
+        .map(|label| (label != 0).then_some(label))
+        .parse_next(input)?;
+    let rgroup_or_h = cond(
+        input.len() >= 4,
+        preceded(b' ', fixed_width_int_in_range::<u8, _>(3, 0..=1)),
+    )
+    .map(|value| value.is_some_and(|value| value != 0))
+    .parse_next(input)?;
+    let occurrence = cond(!input.is_empty(), rgroup_occurrences())
+        .map(|value| value.unwrap_or_else(|| vec![RGroupOccurrence::GreaterThan(0)]))
+        .parse_next(input)?;
 
-        let (i, rgroup_or_h) = map(
-            cond(
-                i.len() >= 4,
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
-            ),
-            |r| r.is_some_and(|r| r != 0),
-        )
-        .parse(i)?;
-
-        let (i, occurrence) = map(cond(!i.is_empty(), rgroup_occurrences()), |o| {
-            o.unwrap_or(vec![RGroupOccurrence::GreaterThan(0)])
-        })
-        .parse(i)?;
-
-        Ok((
-            i,
-            RGroupLogicEntry {
-                label,
-                dependent_label,
-                rgroup_or_h,
-                occurrence,
-            },
-        ))
-    }
+    Ok(RGroupLogicEntry {
+        label,
+        dependent_label,
+        rgroup_or_h,
+        occurrence,
+    })
 }
 
 /// Parse SGroup type entries.
 /// M  STYnn8 sss ttt ...
 /// sss: SGroup index, ttt: SGroup type (3-character string)
-fn sgroup_type_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<SGroupTypeEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn sgroup_type_entries(input: &mut Input<'_>) -> PResult<Vec<SGroupTypeEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), sgroup_type()),
-            ),
-            |(sgroup_index, sgroup_type)| SGroupTypeEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', sgroup_type),
+        )
+            .map(|(sgroup_index, sgroup_type)| SGroupTypeEntry {
                 sgroup_index,
                 sgroup_type,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse SGroup subtype entries.
 /// M  SSTnn8 sss ttt ...
 /// sss: SGroup index, ttt: SGroup subtype (3-character string)
-fn sgroup_subtype_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<SGroupSubtypeEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn sgroup_subtype_entries(input: &mut Input<'_>) -> PResult<Vec<SGroupSubtypeEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), sgroup_subtype()),
-            ),
-            |(sgroup_index, sgroup_subtype)| SGroupSubtypeEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', sgroup_subtype),
+        )
+            .map(|(sgroup_index, sgroup_subtype)| SGroupSubtypeEntry {
                 sgroup_index,
                 sgroup_subtype,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse SGroup label entries.
 /// M  SLBnn8 sss vvv ...
 /// sss: SGroup index, vvv: integer label is from 1-512
-fn sgroup_label_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<SGroupLabelEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn sgroup_label_entries(input: &mut Input<'_>) -> PResult<Vec<SGroupLabelEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=512)),
-            ),
-            |(sgroup_index, label)| SGroupLabelEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<u32, _>(3, 1..=512)),
+        )
+            .map(|(sgroup_index, label)| SGroupLabelEntry {
                 sgroup_index,
                 label,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse SGroup connectivity entries.
 /// M  SCNnn8 sss ttt ...
 /// sss: SGroup index, ttt: SGroup connectivity (2-character string), left-justified
-fn sgroup_connectivity_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<SGroupConnectivityEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn sgroup_connectivity_entries(input: &mut Input<'_>) -> PResult<Vec<SGroupConnectivityEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), sgroup_connectivity()),
-            ),
-            |(sgroup_index, connectivity)| SGroupConnectivityEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', sgroup_connectivity),
+        )
+            .map(|(sgroup_index, connectivity)| SGroupConnectivityEntry {
                 sgroup_index,
                 connectivity,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse SGroup expansion entries.
 /// M SDS EXPn15 sss ...
 /// sss: SGroup index, n15: count (max 15)
-fn sgroup_expansion_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<SGroupExpansionEntry>, Error = NomError<&'inp [u8]>> {
+fn sgroup_expansion_entries(input: &mut Input<'_>) -> PResult<Vec<SGroupExpansionEntry>> {
     preceded(
-        tag(" EXP"),
-        length_count(
+        b" EXP".as_slice(),
+        counted(
             fixed_width_int_in_range::<u8, _>(3, 1..=15),
-            map(
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                |sgroup_index| SGroupExpansionEntry { sgroup_index },
-            ),
+            preceded(b' ', fixed_width_int_minus1::<u32>(3))
+                .map(|sgroup_index| SGroupExpansionEntry { sgroup_index }),
         ),
     )
+    .parse_next(input)
 }
 
 /// Parse SGroup atom list entry.
 /// M  SAL sssn15 aaa ...
 /// sss: SGroup index, n15: count (max 15), aaa: atom indices (each 4 chars: " aaa")
-fn sgroup_atom_list_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupAtomListEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            length_count(
-                fixed_width_int_in_range::<u8, _>(3, 1..=15),
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            ),
+fn sgroup_atom_list_entry(input: &mut Input<'_>) -> PResult<SGroupAtomListEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        counted(
+            fixed_width_int_in_range::<u8, _>(3, 1..=15),
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
         ),
-        |(sgroup_index, atom_indices)| SGroupAtomListEntry {
+    )
+        .map(|(sgroup_index, atom_indices)| SGroupAtomListEntry {
             sgroup_index,
             atom_indices,
-        },
-    )
+        })
+        .parse_next(input)
 }
 
 /// Parse SGroup bond list entry.
 /// M  SBL sssn15 bbb ...
 /// sss: SGroup index (3 chars), n: count (3 chars), bbb: bond indices (each 4 chars: " bbb")
-fn sgroup_bond_list_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupBondListEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            length_count(
-                fixed_width_int_in_range::<u8, _>(3, 1..=15),
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            ),
+fn sgroup_bond_list_entry(input: &mut Input<'_>) -> PResult<SGroupBondListEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        counted(
+            fixed_width_int_in_range::<u8, _>(3, 1..=15),
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
         ),
-        |(sgroup_index, bond_indices)| SGroupBondListEntry {
+    )
+        .map(|(sgroup_index, bond_indices)| SGroupBondListEntry {
             sgroup_index,
             bond_indices,
-        },
-    )
+        })
+        .parse_next(input)
 }
 
 /// Parse SGroup parent atom entries.
 /// M  SPA sssn15 aaa ...
 /// sss: SGroup index, n15: count (max 15), aaa: atom indices (each 4 chars: " aaa")
-fn sgroup_parent_atom_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupParentAtomEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            length_count(
-                fixed_width_int_in_range::<u8, _>(3, 1..=15),
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            ),
+fn sgroup_parent_atom_entries(input: &mut Input<'_>) -> PResult<SGroupParentAtomEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        counted(
+            fixed_width_int_in_range::<u8, _>(3, 1..=15),
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
         ),
-        |(sgroup_index, atom_indices)| SGroupParentAtomEntry {
+    )
+        .map(|(sgroup_index, atom_indices)| SGroupParentAtomEntry {
             sgroup_index,
             atom_indices,
-        },
-    )
+        })
+        .parse_next(input)
 }
 
 /// Parse SGroup subscript entry.
@@ -1266,36 +1223,19 @@ fn sgroup_parent_atom_entries<'inp>(
 /// sss: SGroup index, m: subscript text
 /// For multiple groups, m... is the text representation of the multiple group multiplier.For superatoms,
 /// m... is the text of the superatom label.)
-fn sgroup_subscript_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupSubscriptEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            preceded(
-                tag(" "),
-                map_res(rest, move |s: &[u8]| {
-                    let multiplier = sgroup_multiplier()
-                        .parse(s)
-                        .ok()
-                        .map(|(_, multiplier)| multiplier);
-                    let subscript = sgroup_subscript()
-                        .parse(s)
-                        .ok()
-                        .map(|(_, subscript)| subscript);
-                    if multiplier.is_none() && subscript.is_none() {
-                        Err(NomError::new(s, NomErrorKind::MapRes))
-                    } else {
-                        Ok((multiplier, subscript))
-                    }
-                }),
-            ),
-        ),
-        |(sgroup_index, (multiplier, subscript))| SGroupSubscriptEntry {
-            sgroup_index,
-            multiplier,
-            subscript,
-        },
-    )
+fn sgroup_subscript_entry(input: &mut Input<'_>) -> PResult<SGroupSubscriptEntry> {
+    let sgroup_index = preceded(b' ', fixed_width_int_minus1::<u32>(3)).parse_next(input)?;
+    let value: &[u8] = preceded(b' ', rest).parse_next(input)?;
+    let mut multiplier_input = Input::new(value);
+    let multiplier = sgroup_multiplier.parse_next(&mut multiplier_input).ok();
+    let mut subscript_input = Input::new(value);
+    let subscript = sgroup_subscript.parse_next(&mut subscript_input).ok();
+
+    Ok(SGroupSubscriptEntry {
+        sgroup_index,
+        multiplier,
+        subscript,
+    })
 }
 
 /// Parse SGroup correspondence entry.
@@ -1303,61 +1243,57 @@ fn sgroup_subscript_entry<'inp>(
 /// sss: SGroup index, nn6: count (max 6), bb1-bb3: bond indices
 /// bb1, bb2: Crossing bonds that share a common bracket
 /// bb3: Crossing bond in repeating unit that connects to bond bb1
-fn sgroup_correspondence_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupCorrespondenceEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            length_count(
-                fixed_width_int_in_range::<usize, _>(3, 1..=6),
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            ),
+fn sgroup_correspondence_entry(input: &mut Input<'_>) -> PResult<SGroupCorrespondenceEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        counted(
+            fixed_width_int_in_range::<usize, _>(3, 1..=6),
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
         ),
-        |(sgroup_index, bond_indices)| SGroupCorrespondenceEntry {
+    )
+        .map(|(sgroup_index, bond_indices)| SGroupCorrespondenceEntry {
             sgroup_index,
             bond_indices,
-        },
-    )
+        })
+        .parse_next(input)
 }
 
 /// Parse SGroup display info entry.
 /// M  SDI sssnn4 x1 y1 x2 y2
 /// sss: SGroup index, nn4: count (max 4), x1, y1: opening bracket, x2, y2: closing bracket (f10.4)
-fn sgroup_display_info_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupDisplayInfoEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            length_count(
-                fixed_width_int_in_range::<usize, _>(3, 1..=4),
-                fixed_width_float_f10_4::<f64>(),
-            ),
+fn sgroup_display_info_entry(input: &mut Input<'_>) -> PResult<SGroupDisplayInfoEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        counted(
+            fixed_width_int_in_range::<usize, _>(3, 1..=4),
+            fixed_width_float_f10_4::<f64>(),
         ),
-        |(sgroup_index, bracket_coords)| SGroupDisplayInfoEntry {
+    )
+        .map(|(sgroup_index, bracket_coords)| SGroupDisplayInfoEntry {
             sgroup_index,
             bracket_coords,
-        },
-    )
+        })
+        .parse_next(input)
 }
 
 /// Parse SGroup connecting bond entry.
 /// M  SBV sss bb1 x1 y1
 /// sss: SGroup index, bb1: bond index, x1, y1: bond vector (f10.4)
-fn sgroup_connecting_bond_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupConnectingBondEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            fixed_width_float_f10_4::<f64>(),
-            fixed_width_float_f10_4::<f64>(),
-        ),
-        |(sgroup_index, bond_index, x1, y1)| SGroupConnectingBondEntry {
-            sgroup_index,
-            bond_index,
-            bond_vector: (x1, y1),
-        },
+fn sgroup_connecting_bond_entry(input: &mut Input<'_>) -> PResult<SGroupConnectingBondEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        fixed_width_float_f10_4::<f64>(),
+        fixed_width_float_f10_4::<f64>(),
     )
+        .map(
+            |(sgroup_index, bond_index, x1, y1)| SGroupConnectingBondEntry {
+                sgroup_index,
+                bond_index,
+                bond_vector: (x1, y1),
+            },
+        )
+        .parse_next(input)
 }
 
 /// Parse SGroup data field description entry.
@@ -1365,35 +1301,35 @@ fn sgroup_connecting_bond_entry<'inp>(
 /// sss: SGroup index, fff..fff: field name (30 chars), gg: field type (2 chars, F=formatted, N=numeric, T=text)
 /// hh: field units or format (20 chars), ii: Query identifier (MQ: MACCS-II, IQ: ISIS, PQ: program code)
 /// jjj: data query operator
-fn sgroup_data_description_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupDataDescriptionEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            preceded(tag(" "), fixed_width_str_partial(30)),
-            sgroup_data_type(),
-            fixed_width_str_partial(20),
-            fixed_width_str_partial(2),
-            fixed_width_str_partial(1),
-        ),
-        |(
-            sgroup_index,
-            field_name,
-            field_type,
-            field_units,
-            query_identifier,
-            data_query_operator,
-        )| {
-            SGroupDataDescriptionEntry {
+fn sgroup_data_description_entry(input: &mut Input<'_>) -> PResult<SGroupDataDescriptionEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        preceded(b' ', fixed_width_str_partial(30)),
+        sgroup_data_type,
+        fixed_width_str_partial(20),
+        fixed_width_str_partial(2),
+        fixed_width_str_partial(1),
+    )
+        .map(
+            |(
                 sgroup_index,
-                field_name: field_name.unwrap_or_default(),
+                field_name,
                 field_type,
                 field_units,
                 query_identifier,
                 data_query_operator,
-            }
-        },
-    )
+            )| {
+                SGroupDataDescriptionEntry {
+                    sgroup_index,
+                    field_name: field_name.unwrap_or_default(),
+                    field_type,
+                    field_units,
+                    query_identifier,
+                    data_query_operator,
+                }
+            },
+        )
+        .parse_next(input)
 }
 
 /// Parse SGroup data display entry.
@@ -1406,69 +1342,67 @@ fn sgroup_data_description_entry<'inp>(
 /// show numerical data in the first position as well).
 fn sgroup_data_display_entry<'inp>(
     skip_unused_fields: bool,
-) -> impl Parser<&'inp [u8], Output = SGroupDataDisplayEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            preceded(tag(" "), fixed_width_float_f10_4::<f64>()),
-            terminated(fixed_width_float_f10_4::<f64>(), tag(" ")),
-            preceded(
-                fixed_width_unused(3, skip_unused_fields),
-                sgroup_data_display_type(),
-            ),
-            sgroup_data_display_placement(),
-            sgroup_data_display_units(),
-            preceded(
-                fixed_width_unused(3, skip_unused_fields),
-                sgroup_data_display_chars(),
-            ),
-            delimited(
-                fixed_width_unused(7, skip_unused_fields),
-                map_parser(take(1usize), opt(nom_u8)),
-                opt((tag(" "), fixed_width_unused(2, skip_unused_fields))),
-            ),
+) -> impl Parser<Input<'inp>, SGroupDataDisplayEntry, ErrMode<InputError>> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        preceded(b' ', fixed_width_float_f10_4::<f64>()),
+        terminated(fixed_width_float_f10_4::<f64>(), b' '),
+        preceded(
+            fixed_width_unused(3, skip_unused_fields),
+            sgroup_data_display_type,
         ),
-        |(
-            sgroup_index,
-            x,
-            y,
-            display_type,
-            display_placement,
-            display_units,
-            display_chars,
-            display_tag,
-        )| SGroupDataDisplayEntry {
-            sgroup_index,
-            coords: (x, y),
-            display_type,
-            display_placement,
-            display_units,
-            display_chars,
-            display_tag,
-        },
+        sgroup_data_display_placement,
+        sgroup_data_display_units,
+        preceded(
+            fixed_width_unused(3, skip_unused_fields),
+            sgroup_data_display_chars,
+        ),
+        delimited(
+            fixed_width_unused(7, skip_unused_fields),
+            fixed_width_partial(1, <u8 as IntParser>::parse, true),
+            opt((b' ', fixed_width_unused(2, skip_unused_fields))),
+        ),
     )
+        .map(
+            |(
+                sgroup_index,
+                x,
+                y,
+                display_type,
+                display_placement,
+                display_units,
+                display_chars,
+                display_tag,
+            )| SGroupDataDisplayEntry {
+                sgroup_index,
+                coords: (x, y),
+                display_type,
+                display_placement,
+                display_units,
+                display_chars,
+                display_tag,
+            },
+        )
 }
 
 /// Parse SGroup data continuation entry.
 /// M  SCD sss d...
 /// sss: SGroup index, d...: data content (max 69 chars)
-fn sgroup_data_continuation_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupDataEntry, Error = NomError<&'inp [u8]>> {
-    map_res(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            opt(preceded(tag(" "), rest)),
-        ),
-        move |(sgroup_index, data_content)| -> Result<SGroupDataEntry, NomError<&[u8]>> {
+fn sgroup_data_continuation_entry(input: &mut Input<'_>) -> PResult<SGroupDataEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        opt(preceded(b' ', rest)),
+    )
+        .map(|(sgroup_index, data_content): (u32, Option<&[u8]>)| {
             let data_content = data_content.unwrap_or_default();
-            Ok(SGroupDataEntry::Continuation {
+            SGroupDataEntry::Continuation {
                 sgroup_index,
                 data_content: data_content[..data_content.len().min(69)]
                     .to_str_lossy()
                     .into_owned(),
-            })
-        },
-    )
+            }
+        })
+        .parse_next(input)
 }
 
 /// Parse SGroup data end entry.
@@ -1477,165 +1411,142 @@ fn sgroup_data_continuation_entry<'inp>(
 /// sss: SGroup index, d...: data content (max 69 chars)
 /// The data content is the same as the data content in the SCD entry.
 /// The second form is used to indicate the end of the data content, in which case it should be empty.
-fn sgroup_data_end_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = SGroupDataEntry, Error = NomError<&'inp [u8]>> {
-    alt((
-        map_res(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), rest),
-            ),
-            move |(sgroup_index, data_content)| -> Result<SGroupDataEntry, NomError<&[u8]>> {
-                Ok(SGroupDataEntry::EndWithData {
-                    sgroup_index,
-                    data_content: data_content[..data_content.len().min(69)]
-                        .to_str_lossy()
-                        .into_owned(),
-                })
-            },
-        ),
-        map(
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            |sgroup_index| SGroupDataEntry::EndBlank { sgroup_index },
-        ),
-    ))
+fn sgroup_data_end_entry(input: &mut Input<'_>) -> PResult<SGroupDataEntry> {
+    let sgroup_index = preceded(b' ', fixed_width_int_minus1::<u32>(3)).parse_next(input)?;
+    match opt(preceded(b' ', rest)).parse_next(input)? {
+        Some(data_content) => Ok(SGroupDataEntry::EndWithData {
+            sgroup_index,
+            data_content: data_content[..data_content.len().min(69)]
+                .to_str_lossy()
+                .into_owned(),
+        }),
+        None => Ok(SGroupDataEntry::EndBlank { sgroup_index }),
+    }
 }
 
 /// Parse SGroup hierarchy entries.
 /// M  SPLnn8 sss ppp ...
 /// sss: SGroup index, ppp: Parent SGroup index
-fn sgroup_hierarchy_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<SGroupHierarchyEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn sgroup_hierarchy_entries(input: &mut Input<'_>) -> PResult<Vec<SGroupHierarchyEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            ),
-            |(sgroup_index, parent_sgroup_index)| SGroupHierarchyEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        )
+            .map(|(sgroup_index, parent_sgroup_index)| SGroupHierarchyEntry {
                 sgroup_index,
                 parent_sgroup_index,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse SGroup component number entries.
 /// M  SNCnn8 sss ccc ...
 /// sss: SGroup index, ccc: Component number
-fn sgroup_component_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<SGroupComponentEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn sgroup_component_entries(input: &mut Input<'_>) -> PResult<Vec<SGroupComponentEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int::<u32>(3)),
-            ),
-            |(sgroup_index, component_number)| SGroupComponentEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int::<u32>(3)),
+        )
+            .map(|(sgroup_index, component_number)| SGroupComponentEntry {
                 sgroup_index,
                 component_number,
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse zero bond order entries.
 /// M  ZBOnn8 bbb vvv ...
 /// bbb: bond index, vvv: bond vector override (>= 0, limited to 6 here)
-fn bond_order_override_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<BondOrderOverrideEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn bond_order_override_entries(input: &mut Input<'_>) -> PResult<Vec<BondOrderOverrideEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map_opt(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=6)),
-            ),
-            |(bond_index, bond_order)| {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<u8, _>(3, 0..=6)),
+        )
+            .verify_map(|(bond_index, bond_order)| {
                 BondOrder::from_value(bond_order).map(|bo| BondOrderOverrideEntry {
                     bond_index,
                     bond_order: bo,
                 })
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse zero atom charge entries.
 /// M  ZCHnn8 aaa ccc ...
 /// aaa: atom index, ccc: atom charge override (-8..=8)
-fn atom_charge_overrides_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<AtomChargeOverrideEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn atom_charge_overrides_entries(input: &mut Input<'_>) -> PResult<Vec<AtomChargeOverrideEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -8..=8)),
-            ),
-            |(atom_index, charge)| AtomChargeOverrideEntry { atom_index, charge },
-        ),
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<i8, _>(3, -8..=8)),
+        )
+            .map(|(atom_index, charge)| AtomChargeOverrideEntry { atom_index, charge }),
     )
+    .parse_next(input)
 }
 
 /// Parse atom explicit hydrogen count entries.
 /// M  HYDnn8 aaa hhh ...
 /// aaa: atom index, hhh: atom explicit hydrogen count (>= 0, limited to 8 here, -1 = no override)
-fn atom_hydrogen_count_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<AtomHydrogenCountEntry>, Error = NomError<&'inp [u8]>> {
-    length_count(
+fn atom_hydrogen_count_entries(input: &mut Input<'_>) -> PResult<Vec<AtomHydrogenCountEntry>> {
+    counted(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
-            (
-                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -1..=8)),
-            ),
-            |(atom_index, hydrogen_count)| AtomHydrogenCountEntry {
+        (
+            preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+            preceded(b' ', fixed_width_int_in_range::<i8, _>(3, -1..=8)),
+        )
+            .map(|(atom_index, hydrogen_count)| AtomHydrogenCountEntry {
                 atom_index,
                 hydrogen_count: if hydrogen_count == -1 {
                     None
                 } else {
                     Some(hydrogen_count as u8)
                 },
-            },
-        ),
+            }),
     )
+    .parse_next(input)
 }
 
 /// Parse ACD/ChemSketch label entry
 /// M  ZZC aaa x...
 /// aaa: atom index, x: text label
-fn chemsketch_label_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = ChemSketchLabelEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            preceded(tag(" "), rest),
-        ),
-        |(atom_index, label)| ChemSketchLabelEntry {
+fn chemsketch_label_entry(input: &mut Input<'_>) -> PResult<ChemSketchLabelEntry> {
+    (
+        preceded(b' ', fixed_width_int_minus1::<u32>(3)),
+        preceded(b' ', rest),
+    )
+        .map(|(atom_index, label): (u32, &[u8])| ChemSketchLabelEntry {
             atom_index,
             label: label.to_str_lossy().into_owned(),
-        },
-    )
+        })
+        .parse_next(input)
 }
 
 /// Parse Marvin SMARTS pattern entry
 /// M  MRV SMA aaa p...
 /// aaa: atom index, p: SMARTS pattern
-fn marvin_smarts_pattern_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = MarvinSmartsPatternEntry, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            preceded(tag(" SMA "), fixed_width_int_minus1::<u32>(3)),
-            preceded(tag(" "), rest),
-        ),
-        |(atom_index, smarts_pattern)| MarvinSmartsPatternEntry {
-            atom_index,
-            smarts_pattern: smarts_pattern.to_str_lossy().into_owned(),
-        },
+fn marvin_smarts_pattern_entry(input: &mut Input<'_>) -> PResult<MarvinSmartsPatternEntry> {
+    (
+        preceded(b" SMA ".as_slice(), fixed_width_int_minus1::<u32>(3)),
+        preceded(b' ', rest),
     )
+        .map(
+            |(atom_index, smarts_pattern): (u32, &[u8])| MarvinSmartsPatternEntry {
+                atom_index,
+                smarts_pattern: smarts_pattern.to_str_lossy().into_owned(),
+            },
+        )
+        .parse_next(input)
 }
 
 #[cfg(test)]

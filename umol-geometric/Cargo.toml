@@ -21,7 +21,6 @@ bench = false
 
 [dependencies]
 nalgebra = "0.34.0"
-nom = { version = "8.0.0" }
 num = "0.4.3"
 num-traits = "0.2.19"
 umol-chem = { path = "../umol-chem", version = "0.7.0" }

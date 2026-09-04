@@ -1,10 +1,10 @@
 use bstr::ByteSlice;
 use float_cmp::*;
-use nom::error::ErrorKind as NomErrorKind;
-use nom::Err;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_chem::element::Element;
+use winnow::error::ErrMode;
+use winnow::Parser;
 
 use super::*;
 use crate::ctfile::config::CtabParseFlags;
@@ -13,8 +13,9 @@ use crate::table_ir::{SGroupMultiplierOp, SGroupMultiplierTerm};
 #[rstest]
 #[case::end_only(b"M  END", vec![])]
 #[case::charge(b"M  CHG  1   2  -1\nM  END", vec![PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 1, charge: -1 }])])]
+#[case::atom_alias(b"A    1\nMe\nM  END", vec![PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "Me".to_string() })])]
 fn test_properties_block(#[case] input: &[u8], #[case] expected: Vec<PropertyEntries>) {
-    let result = properties_block(0, CtabParseFlags::BASIC).parse(input);
+    let result = properties_block(0, CtabParseFlags::BASIC).parse_peek(input);
     let input_str = input.to_str_lossy();
     assert!(
         result.is_ok(),
@@ -37,65 +38,66 @@ fn test_properties_block(#[case] input: &[u8], #[case] expected: Vec<PropertyEnt
 }
 
 #[rstest]
-#[case::trailing_chars(b"M  CHG  1   1  -1  a")]
-#[case::item_list_exceeds_count(b"M  ISO  2   1   1   4   1   5   1")]
-fn test_properties_block_invalid(#[case] input: &[u8]) {
-    let result = properties_block(0, CtabParseFlags::BASIC).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(
-            result,
-            Err(Err::Error(ParseError::InvalidPropertyLine { .. }))
-        ),
-        "{:?} should have failed with InvalidPropertyLine",
-        input_str
+fn test_properties_block_missing_atom_alias_error() {
+    assert_eq!(
+        properties_block(0, CtabParseFlags::BASIC).parse_peek(b"A    1"),
+        Err(ErrMode::Cut(ParseError::UnexpectedEof {
+            line: 1,
+            block: "atom alias",
+        }))
+    );
+}
+
+#[rstest]
+#[case::trailing_chars(b"M  CHG  1   1  -1  a", 19)]
+#[case::item_list_exceeds_count(b"M  ISO  2   1   1   4   1   5   1", 28)]
+fn test_properties_block_error(#[case] input: &[u8], #[case] col: u32) {
+    assert_eq!(
+        properties_block(0, CtabParseFlags::BASIC).parse_peek(input),
+        Err(ErrMode::Cut(ParseError::InvalidPropertyLine {
+            line: 0,
+            col,
+        }))
     );
 }
 
 #[rstest]
 #[case::end_only(b"M  END", vec![])]
-#[case::atom_list(b"M  ALS   1  2 F Cl  Br\nM  END", vec![PropertyEntries::AtomListEntry( 
+#[case::atom_list(b"M  ALS   1  2 F Cl  Br\nM  END", vec![PropertyEntries::AtomListEntry(
     AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::Cl, Element::Br] })])]
+#[case::group_abbreviation(b"G    5  1\nNH2\nM  END", vec![PropertyEntries::LegacyGroupAbbreviationEntry(
+    LegacyGroupAbbreviationEntry { atom_index1: 4, atom_index2: 0, label: "NH2".to_string() })])]
 fn test_extended_properties_block(#[case] input: &[u8], #[case] expected: Vec<PropertyEntries>) {
-    let result = extended_properties_block(0, CtabParseFlags::EXTENDED).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(
-        result.is_ok(),
-        "{:?} should parse successfully: {:?}",
-        input_str,
-        result
-    );
-    let (remaining, (properties, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "{:?} should consume all input, remaining: {:?}",
-        input_str,
-        remaining
-    );
+    let (remaining, (properties, _)) = extended_properties_block(0, CtabParseFlags::EXTENDED)
+        .parse_peek(input)
+        .unwrap();
+    assert!(remaining.is_empty());
+    assert_eq!(properties, expected);
+}
+
+#[rstest]
+fn test_extended_properties_block_missing_group_abbreviation_error() {
     assert_eq!(
-        properties, expected,
-        "{:?}: properties {:?} != expected {:?}",
-        input_str, properties, expected
+        extended_properties_block(0, CtabParseFlags::EXTENDED).parse_peek(b"G    5  1"),
+        Err(ErrMode::Cut(ParseError::UnexpectedEof {
+            line: 1,
+            block: "legacy group abbreviation",
+        }))
     );
 }
 
 #[rstest]
-#[case::trailing_chars(b"M  CHG  1   1  -1  a")]
-#[case::item_list_exceeds_count(b"M  ISO  2   1   1   4   1   5   1")]
-#[case::count_malformed(b"M  ISO   2   2   2   3   3")]
-#[case::value_malformed(b"M  CHG  2  1  1  3  -1")]
-fn test_extended_properties_block_invalid(#[case] input: &[u8]) {
-    let result = extended_properties_block(0, CtabParseFlags::EXTENDED).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(
-            result,
-            Err(Err::Error(ParseError::InvalidPropertyLine { .. }))
-        ),
-        "{:?} should have failed with InvalidPropertyLine",
-        input_str
+#[case::trailing_chars(b"M  CHG  1   1  -1  a", 19)]
+#[case::item_list_exceeds_count(b"M  ISO  2   1   1   4   1   5   1", 28)]
+#[case::count_malformed(b"M  ISO   2   2   2   3   3", 6)]
+#[case::value_malformed(b"M  CHG  2  1  1  3  -1", 17)]
+fn test_extended_properties_block_error(#[case] input: &[u8], #[case] col: u32) {
+    assert_eq!(
+        extended_properties_block(0, CtabParseFlags::EXTENDED).parse_peek(input),
+        Err(ErrMode::Cut(ParseError::InvalidPropertyLine {
+            line: 0,
+            col,
+        }))
     );
 }
 
@@ -105,68 +107,61 @@ fn test_extended_properties_block_invalid(#[case] input: &[u8]) {
 #[case::rad(b"M  RAD  1   1   2", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
 #[case::iso(b"M  ISO  1   1  13", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
 fn test_property_input(#[case] input: &[u8], #[case] expected: PropertyEntries) {
-    let (remaining, result) = all_consuming(property_input(CtabParseFlags::BASIC))
-        .parse(input)
-        .unwrap();
-    let input_str = input.to_str_lossy();
-    assert!(
-        remaining.is_empty(),
-        "remaining should be empty for {:?}",
-        input_str
+    assert_eq!(
+        property_input(CtabParseFlags::BASIC).parse(Input::new(input)),
+        Ok(expected)
     );
-    assert_eq!(result, expected);
 }
 
 #[rustfmt::skip]
 #[rstest]
-#[case::chg_entry_malformed(b"M  CHG  2  1  1  3  -1", NomErrorKind::Tag)]
-#[case::rbc_query(b"M  RBC  1   1   2", NomErrorKind::Tag)]
-#[case::sub_query(b"M  SUB  1   1   3", NomErrorKind::Tag)]
-#[case::uns_query(b"M  UNS  1   1   1", NomErrorKind::Tag)]
-#[case::lin_query(b"M  LIN  1   1   2   5   7", NomErrorKind::Tag)]
-#[case::als_query(b"M  ALS  1  3FC   N   O   ", NomErrorKind::Tag)]
-#[case::apo_query(b"M  APO  1   1   1", NomErrorKind::Tag)]
-#[case::aal_query(b"M  AAL  1 1   2   1", NomErrorKind::Tag)]
-#[case::rgp_rgroup(b"M  RGP   1   1   2", NomErrorKind::Tag)]
-#[case::log_rgroup(b"M  LOG   1   1   0   0  >2", NomErrorKind::Tag)]
-#[case::sty_sgroup(b"M  STY  1   1 SUP", NomErrorKind::Tag)]
-#[case::sst_sgroup(b"M  SST  1   1 ALT", NomErrorKind::Tag)]
-#[case::slb_sgroup(b"M  SLB  1   1  19", NomErrorKind::Tag)]
-#[case::scn_sgroup(b"M  SCN  1   1 HH ", NomErrorKind::Tag)]
-#[case::sal_sgroup(b"M  SAL   1  1   5", NomErrorKind::Tag)]
-#[case::sbl_sgroup(b"M  SBL   1  1   3", NomErrorKind::Tag)]
-#[case::smt_sgroup(b"M  SMT   1 n", NomErrorKind::Tag)]
-#[case::sds_sgroup(b"M  SDS EXP  1   1", NomErrorKind::Tag)]
-#[case::crs_sgroup(b"M  CRS   1  3  10   9   4", NomErrorKind::Tag)]
-#[case::sdi_sgroup(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", NomErrorKind::Tag)]
-#[case::sbv_sgroup(b"M  SBV   1  11    0.6400    0.9700", NomErrorKind::Tag)]
-#[case::sdt_sgroup(b"M  SDT   1 pH   ", NomErrorKind::Tag)]
-#[case::sdd_sgroup(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", NomErrorKind::Tag)]
-#[case::scd_sgroup(b"M  SCD   1   1   0", NomErrorKind::Tag)]
-#[case::sed_sgroup(b"M  SED   1   1   0", NomErrorKind::Tag)]
-#[case::spl_sgroup(b"M  SPL   1   1   0", NomErrorKind::Tag)]
-#[case::snc_sgroup(b"M  SNC   1   1   0", NomErrorKind::Tag)]
-#[case::sty_sgroup(b"M  STY  1   1 SUP", NomErrorKind::Tag)]
-#[case::sst_sgroup(b"M  SST  1   1 ALT", NomErrorKind::Tag)]
-#[case::slb_sgroup(b"M  SLB  1   1  19", NomErrorKind::Tag)]
-#[case::sal_sgroup(b"M  SAL   1  1   5", NomErrorKind::Tag)]
-#[case::sbl_sgroup(b"M  SBL   1  1   3", NomErrorKind::Tag)]
-#[case::smt_sgroup(b"M  SMT   1 n", NomErrorKind::Tag)]
-#[case::zbo_clark_extensions(b"M  ZBO  1   1   0", NomErrorKind::Tag)]
-#[case::zch_clark_extensions(b"M  ZCH  1   1  -1", NomErrorKind::Tag)]
-#[case::hyd_clark_extensions(b"M  HYD  1   1   1", NomErrorKind::Tag)]
-#[case::zzc_editor_extensions(b"M  ZZC   1 1", NomErrorKind::Tag)]
-#[case::mrv_editor_extensions(b"M  MRV SMA   1 [#6;X0]", NomErrorKind::Tag)]
-fn test_property_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = property_input(CtabParseFlags::BASIC).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?}", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?}, kind {:?} =! expected {:?}",
-        input_str,
-        result,
-        expected_kind
+#[case::chg_entry_malformed(b"M  CHG  2  1  1  3  -1", ErrMode::Cut(InputError { column: 17 }))]
+#[case::rbc_query(b"M  RBC  1   1   2", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sub_query(b"M  SUB  1   1   3", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::uns_query(b"M  UNS  1   1   1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::lin_query(b"M  LIN  1   1   2   5   7", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::als_query(b"M  ALS  1  3FC   N   O   ", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::apo_query(b"M  APO  1   1   1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::aal_query(b"M  AAL  1 1   2   1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::rgp_rgroup(b"M  RGP   1   1   2", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::log_rgroup(b"M  LOG   1   1   0   0  >2", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sty_sgroup(b"M  STY  1   1 SUP", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sst_sgroup(b"M  SST  1   1 ALT", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::slb_sgroup(b"M  SLB  1   1  19", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::scn_sgroup(b"M  SCN  1   1 HH ", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sal_sgroup(b"M  SAL   1  1   5", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sbl_sgroup(b"M  SBL   1  1   3", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::smt_sgroup(b"M  SMT   1 n", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sds_sgroup(b"M  SDS EXP  1   1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::crs_sgroup(b"M  CRS   1  3  10   9   4", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sdi_sgroup(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sbv_sgroup(b"M  SBV   1  11    0.6400    0.9700", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sdt_sgroup(b"M  SDT   1 pH   ", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sdd_sgroup(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::scd_sgroup(b"M  SCD   1   1   0", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sed_sgroup(b"M  SED   1   1   0", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::spl_sgroup(b"M  SPL   1   1   0", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::snc_sgroup(b"M  SNC   1   1   0", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sty_sgroup_duplicate(b"M  STY  1   1 SUP", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sst_sgroup_duplicate(b"M  SST  1   1 ALT", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::slb_sgroup_duplicate(b"M  SLB  1   1  19", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sal_sgroup_duplicate(b"M  SAL   1  1   5", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::sbl_sgroup_duplicate(b"M  SBL   1  1   3", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::smt_sgroup_duplicate(b"M  SMT   1 n", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::zbo_clark_extensions(b"M  ZBO  1   1   0", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::zch_clark_extensions(b"M  ZCH  1   1  -1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::hyd_clark_extensions(b"M  HYD  1   1   1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::zzc_editor_extensions(b"M  ZZC   1 1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::mrv_editor_extensions(b"M  MRV SMA   1 [#6;X0]", ErrMode::Backtrack(InputError { column: 0 }))]
+fn test_property_input_error(
+    #[case] input: &[u8],
+    #[case] expected: ErrMode<InputError>,
+) {
+    assert_eq!(
+        property_input(CtabParseFlags::BASIC)
+            .parse_peek(Input::new(input))
+            .unwrap_err(),
+        expected
     );
 }
 
@@ -178,7 +173,7 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomE
 #[case::chemsketch_atom_label(b"M  ZZC   1 1", PropertyEntries::ChemSketchLabelEntry(ChemSketchLabelEntry { atom_index: 0, label: "1".to_string()}))]
 fn test_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyEntries) {
     let result = property_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT)
-        .parse(input);
+        .parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should parse successfully: {:?}", input_str, result);
     let (remaining, property) = result.unwrap();
@@ -235,7 +230,7 @@ fn test_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyE
 #[case::spl_sgroup(b"M  SPL  1   1   2", PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 1 }]))]
 #[case::snc_sgroup(b"M  SNC  2   1   1   2   2", PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry { sgroup_index: 0, component_number: 1 }, SGroupComponentEntry { sgroup_index: 1, component_number: 2 }]))]
 fn test_extended_property_input(#[case] input: &[u8], #[case] expected: PropertyEntries) {
-    let result = extended_property_input(CtabParseFlags::EXTENDED).parse(input);
+    let result = extended_property_input(CtabParseFlags::EXTENDED).parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -249,25 +244,24 @@ fn test_extended_property_input(#[case] input: &[u8], #[case] expected: Property
 
 #[rustfmt::skip]
 #[rstest]
-#[case::count_mismatch(b"M  CHG  2   1  -1", NomErrorKind::Tag)]
-#[case::count_is_zero(b"M  CHG  0", NomErrorKind::Verify)]
-#[case::atom_index_zero(b"M  CHG  1   0 -10", NomErrorKind::Verify)]
-#[case::invalid_property_tag(b"M  XXX  1   1  -1", NomErrorKind::Tag)]
-#[case::zbo_clark_extensions(b"M  ZBO  1   1   0", NomErrorKind::Tag)]
-#[case::zch_clark_extensions(b"M  ZCH  1   1  -1", NomErrorKind::Tag)]
-#[case::hyd_clark_extensions(b"M  HYD  1   1   1", NomErrorKind::Tag)]
-#[case::zzc_editor_extensions(b"M  ZZC   1 1", NomErrorKind::Tag)]
-#[case::mrv_editor_extensions(b"M  MRV SMA   1 [#6;X0]", NomErrorKind::Tag)]
-fn test_extended_property_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = extended_property_input(CtabParseFlags::EXTENDED).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Expected {:?} error for {:?}, got {:?}",
-        expected_kind,
-        input_str,
-        result
+#[case::count_mismatch(b"M  CHG  2   1  -1", ErrMode::Cut(InputError { column: 17 }))]
+#[case::count_is_zero(b"M  CHG  0", ErrMode::Cut(InputError { column: 6 }))]
+#[case::atom_index_zero(b"M  CHG  1   0 -10", ErrMode::Cut(InputError { column: 10 }))]
+#[case::invalid_property_tag(b"M  XXX  1   1  -1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::zbo_clark_extensions(b"M  ZBO  1   1   0", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::zch_clark_extensions(b"M  ZCH  1   1  -1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::hyd_clark_extensions(b"M  HYD  1   1   1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::zzc_editor_extensions(b"M  ZZC   1 1", ErrMode::Backtrack(InputError { column: 0 }))]
+#[case::mrv_editor_extensions(b"M  MRV SMA   1 [#6;X0]", ErrMode::Backtrack(InputError { column: 0 }))]
+fn test_extended_property_input_error(
+    #[case] input: &[u8],
+    #[case] expected: ErrMode<InputError>,
+) {
+    assert_eq!(
+        extended_property_input(CtabParseFlags::EXTENDED)
+            .parse_peek(Input::new(input))
+            .unwrap_err(),
+        expected
     );
 }
 
@@ -279,7 +273,7 @@ fn test_extended_property_input_invalid(#[case] input: &[u8], #[case] expected_k
 #[case::chemsketch_atom_label(b"M  ZZC   1 1", PropertyEntries::ChemSketchLabelEntry(ChemSketchLabelEntry { atom_index: 0, label: "1".to_string()}))]
 #[case::marvin_smarts_pattern(b"M  MRV SMA   1 [#6;X0]", PropertyEntries::MarvinSmartsPatternEntry(MarvinSmartsPatternEntry { atom_index: 0, smarts_pattern: "[#6;X0]".to_string() }))]
 fn test_extended_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyEntries) {
-    let result = extended_property_input(CtabParseFlags::LENIENT).parse(input);
+    let result = extended_property_input(CtabParseFlags::LENIENT).parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -316,20 +310,18 @@ fn test_parse_atom_alias_input(
 }
 
 #[rstest]
-#[case::atom_index_is_zero(b"A    0", b"Et", NomErrorKind::Digit)]
-#[case::too_short(b"A   1", b"Et", NomErrorKind::Digit)]
-fn test_parse_atom_alias_input_invalid(
+#[case::atom_index_is_zero(b"A    0", b"Et", 3)]
+#[case::too_short(b"A   1", b"Et", 3)]
+fn test_parse_atom_alias_input_error(
     #[case] first_line: &[u8],
     #[case] second_line: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = parse_atom_alias_input(first_line, second_line);
-    assert!(result.is_err(), "{:?} should have failed", first_line);
-    assert!(
-        matches!(result.as_ref(), Err(e) if e.code == expected_kind),
-        "Expected {:?} error, got {:?}",
-        expected_kind,
-        result
+    assert_eq!(
+        parse_atom_alias_input(first_line, second_line),
+        Err(ErrMode::Backtrack(InputError {
+            column: expected_column,
+        }))
     );
 }
 
@@ -352,21 +344,19 @@ fn test_parse_legacy_group_abbreviation_input(
 }
 
 #[rstest]
-#[case::from_atom_is_zero(b"G    0  1", b"Et", NomErrorKind::Digit)]
-#[case::to_atom_is_zero(b"G    1  0", b"Et", NomErrorKind::Digit)]
-#[case::too_short(b"G   12", b"Et", NomErrorKind::Digit)]
-fn test_parse_legacy_group_abbreviation_input_invalid(
+#[case::from_atom_is_zero(b"G    0  1", b"Et", 3)]
+#[case::to_atom_is_zero(b"G    1  0", b"Et", 6)]
+#[case::too_short(b"G   12", b"Et", 6)]
+fn test_parse_legacy_group_abbreviation_input_error(
     #[case] first_line: &[u8],
     #[case] second_line: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = parse_legacy_group_abbreviation_input(first_line, second_line);
-    assert!(result.is_err(), "{:?} should have failed", first_line);
-    assert!(
-        matches!(result.as_ref(), Err(e) if e.code == expected_kind),
-        "Expected {:?} error, got {:?}",
-        expected_kind,
-        result
+    assert_eq!(
+        parse_legacy_group_abbreviation_input(first_line, second_line),
+        Err(ErrMode::Backtrack(InputError {
+            column: expected_column,
+        }))
     );
 }
 
@@ -374,7 +364,7 @@ fn test_parse_legacy_group_abbreviation_input_invalid(
 #[case::asterisk(b"  1 *", AtomValueEntry { atom_index: 0, value: "*".to_string() })]
 #[case::text(b" 15 query", AtomValueEntry { atom_index: 14, value: "query".to_string() })]
 fn test_atom_value_entry(#[case] input: &[u8], #[case] expected: AtomValueEntry) {
-    let result = atom_value_entry().parse(input);
+    let result = atom_value_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -383,17 +373,14 @@ fn test_atom_value_entry(#[case] input: &[u8], #[case] expected: AtomValueEntry)
 }
 
 #[rstest]
-#[case::atom_index_is_zero(b"  0 *", NomErrorKind::Verify)]
-fn test_atom_value_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = atom_value_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?}", input_str);
-    assert!(
-        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Expected {:?} error for {:?}, got {:?}",
-        expected_kind,
-        input_str,
-        result
+#[case::atom_index_is_zero(b"  0 *", 0)]
+fn test_atom_value_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = atom_value_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -411,7 +398,7 @@ fn test_charge_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<ChargeEntry>,
 ) {
-    let result = charge_entries().parse(input);
+    let result = charge_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -421,19 +408,14 @@ fn test_charge_entries(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::count_exceeds_item_list_length(b"  2   1  -1", NomErrorKind::Tag)]
-#[case::count_is_zero(b"  0", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0 -10", NomErrorKind::Verify)]
-fn test_charge_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = charge_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::count_exceeds_item_list_length(b"  2   1  -1", 11)]
+#[case::count_is_zero(b"  0", 0)]
+#[case::atom_index_is_zero(b"  1   0 -10", 4)]
+fn test_charge_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = charge_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -445,7 +427,7 @@ fn test_radical_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<RadicalEntry>,
 ) {
-    let result = radical_entries().parse(input);
+    let result = radical_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -455,24 +437,19 @@ fn test_radical_entries(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::value_out_of_range(b"  1   1   4", NomErrorKind::Verify)]
-#[case::value_is_negative(b"  1   1  -1", NomErrorKind::Digit)]
-#[case::count_exceeds_item_list_length(b"  2   1   1", NomErrorKind::Tag)]
-#[case::count_is_zero(b"  0", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0   2", NomErrorKind::Verify)]
-fn test_radical_entries_invalid(
+#[case::value_out_of_range(b"  1   1   4", 8)]
+#[case::value_is_negative(b"  1   1  -1", 8)]
+#[case::count_exceeds_item_list_length(b"  2   1   1", 11)]
+#[case::count_is_zero(b"  0", 0)]
+#[case::atom_index_is_zero(b"  1   0   2", 4)]
+fn test_radical_entries_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = radical_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+    let result = radical_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -480,7 +457,7 @@ fn test_radical_entries_invalid(
 #[case::single_entry(b"  1   1  13", vec![IsotopeEntry { atom_index: 0, mass: 13 }])]
 #[case::two_entries(b"  2  12   2  15  14", vec![IsotopeEntry { atom_index: 11, mass: 2 }, IsotopeEntry { atom_index: 14, mass: 14 }])]
 fn test_isotope_entries(#[case] input: &[u8], #[case] expected: Vec<IsotopeEntry>) {
-    let result = isotope_entries().parse(input);
+    let result = isotope_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -490,23 +467,18 @@ fn test_isotope_entries(#[case] input: &[u8], #[case] expected: Vec<IsotopeEntry
 
 #[rustfmt::skip]
 #[rstest]
-#[case::value_is_negative(b"  1   1  -1", NomErrorKind::Digit)]
-#[case::count_exceeds_item_list_length(b"  2   1  10", NomErrorKind::Tag)]
-#[case::count_is_zero(b"  0", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0  12", NomErrorKind::Verify)]
-fn test_isotope_entries_invalid(
+#[case::value_is_negative(b"  1   1  -1", 8)]
+#[case::count_exceeds_item_list_length(b"  2   1  10", 11)]
+#[case::count_is_zero(b"  0", 0)]
+#[case::atom_index_is_zero(b"  1   0  12", 4)]
+fn test_isotope_entries_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = isotope_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+    let result = isotope_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -516,7 +488,7 @@ fn test_isotope_entries_invalid(
 #[case::zero_value(b"  1   3   0", vec![RingBondCountEntry { atom_index: 2, ring_bond_count: 0 }])]
 #[case::max_value(b"  1  10   4", vec![RingBondCountEntry { atom_index: 9, ring_bond_count: 4 }])]
 fn test_ring_bond_count_entries(#[case] input: &[u8], #[case] expected: Vec<RingBondCountEntry>) {
-    let result = ring_bond_count_entries().parse(input);
+    let result = ring_bond_count_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -525,20 +497,17 @@ fn test_ring_bond_count_entries(#[case] input: &[u8], #[case] expected: Vec<Ring
 }
 
 #[rstest]
-#[case::value_out_of_range(b"  1   1   5", NomErrorKind::Verify)]
-#[case::value_out_of_range_negative(b"  1   1  -3", NomErrorKind::Verify)]
-#[case::count_is_zero(b"  0", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0   2", NomErrorKind::Verify)]
-fn test_ring_bond_count_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = ring_bond_count_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::value_out_of_range(b"  1   1   5", 8)]
+#[case::value_out_of_range_negative(b"  1   1  -3", 8)]
+#[case::count_is_zero(b"  0", 0)]
+#[case::atom_index_is_zero(b"  1   0   2", 4)]
+fn test_ring_bond_count_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = ring_bond_count_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -550,7 +519,7 @@ fn test_substitution_count_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<SubstitutionCountEntry>,
 ) {
-    let result = substitution_count_entries().parse(input);
+    let result = substitution_count_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -559,23 +528,17 @@ fn test_substitution_count_entries(
 }
 
 #[rstest]
-#[case::value_out_of_range(b"  1   1  16", NomErrorKind::Verify)]
-#[case::value_out_of_range_negative(b"  1   1  -3", NomErrorKind::Verify)]
-#[case::count_is_zero(b"  0", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0   3", NomErrorKind::Verify)]
-fn test_substitution_count_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = substitution_count_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::value_out_of_range(b"  1   1  16", 8)]
+#[case::value_out_of_range_negative(b"  1   1  -3", 8)]
+#[case::count_is_zero(b"  0", 0)]
+#[case::atom_index_is_zero(b"  1   0   3", 4)]
+fn test_substitution_count_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = substitution_count_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -587,7 +550,7 @@ fn test_unsaturated_atom_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<UnsaturatedAtomEntry>,
 ) {
-    let result = unsaturated_atom_entries().parse(input);
+    let result = unsaturated_atom_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -596,23 +559,17 @@ fn test_unsaturated_atom_entries(
 }
 
 #[rstest]
-#[case::value_out_of_range(b"  1   1   2", NomErrorKind::Verify)]
-#[case::unsigned_value_is_negative(b"  1   1  -1", NomErrorKind::Digit)]
-#[case::count_is_zero(b"  0", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0   1", NomErrorKind::Verify)]
-fn test_unsaturated_atom_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = unsaturated_atom_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::value_out_of_range(b"  1   1   2", 8)]
+#[case::unsigned_value_is_negative(b"  1   1  -1", 8)]
+#[case::count_is_zero(b"  0", 0)]
+#[case::atom_index_is_zero(b"  1   0   1", 4)]
+fn test_unsaturated_atom_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = unsaturated_atom_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -622,7 +579,7 @@ fn test_unsaturated_atom_entries_invalid(
        vec![LinkAtomEntry { atom_index: 2, repeat_count: 3, subs_index1: 0, subs_index2: Some(2) },
             LinkAtomEntry { atom_index: 7, repeat_count: 4, subs_index1: 4, subs_index2: Some(5) }])]
 fn test_link_atom_entries(#[case] input: &[u8], #[case] expected: Vec<LinkAtomEntry>) {
-    let result = link_atom_entries().parse(input);
+    let result = link_atom_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -632,23 +589,18 @@ fn test_link_atom_entries(#[case] input: &[u8], #[case] expected: Vec<LinkAtomEn
 
 #[rustfmt::skip]
 #[rstest]
-#[case::repeat_count_less_than_2(b"  1   1   1   5   7", NomErrorKind::Verify)]
-#[case::count_exceeds_4(b"  5   1   2   5   7", NomErrorKind::Verify)]
-#[case::count_is_zero(b"  0", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0   2   5   7", NomErrorKind::Verify)]
-fn test_link_atom_entries_invalid(
+#[case::repeat_count_less_than_2(b"  1   1   1   5   7", 8)]
+#[case::count_exceeds_4(b"  5   1   2   5   7", 0)]
+#[case::count_is_zero(b"  0", 0)]
+#[case::atom_index_is_zero(b"  1   0   2   5   7", 4)]
+fn test_link_atom_entries_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = link_atom_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.unwrap_err().map(|e| e.code),
+    let result = link_atom_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -662,7 +614,7 @@ fn test_link_atom_entries_invalid(
 #[case::no_exclusion_flag(b"  10  1   H   ",
        AtomListEntry { atom_index: 9, exclusion: false, elements: vec![Element::H] })]
 fn test_atom_list_entry(#[case] input: &[u8], #[case] expected: AtomListEntry) {
-    let result = atom_list_entry().parse(input);
+    let result = atom_list_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -671,20 +623,17 @@ fn test_atom_list_entry(#[case] input: &[u8], #[case] expected: AtomListEntry) {
 }
 
 #[rstest]
-#[case::count_is_zero(b"   1  0 F C   ", NomErrorKind::Verify)]
-#[case::count_exceeds_16(b"   1 17 F C   N   ", NomErrorKind::Verify)]
-#[case::invalid_exclusion_flag(b"   1  1 X C   ", NomErrorKind::Tag)]
-#[case::invalid_element_symbol(b"   1  1 F XX  ", NomErrorKind::MapOpt)]
-fn test_atom_list_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = atom_list_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.unwrap_err().map(|e| e.code),
+#[case::count_is_zero(b"   1  0 F C   ", 4)]
+#[case::count_exceeds_16(b"   1 17 F C   N   ", 4)]
+#[case::invalid_exclusion_flag(b"   1  1 X C   ", 8)]
+#[case::invalid_element_symbol(b"   1  1 F XX  ", 10)]
+fn test_atom_list_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = atom_list_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -697,7 +646,7 @@ fn test_attachment_point_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<AttachmentPointEntry>,
 ) {
-    let result = attachment_point_entries().parse(input);
+    let result = attachment_point_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -707,23 +656,18 @@ fn test_attachment_point_entries(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::attachment_type_out_of_range(b"  1   1   4", NomErrorKind::Verify)]
-#[case::count_is_zero(b"  0   1", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0   1", NomErrorKind::Verify)]
-#[case::count_exceeds_2(b"  3   1   1   2   2   3   3", NomErrorKind::Verify)]
-fn test_attachment_point_entries_invalid(
+#[case::attachment_type_out_of_range(b"  1   1   4", 8)]
+#[case::count_is_zero(b"  0   1", 0)]
+#[case::atom_index_is_zero(b"  1   0   1", 4)]
+#[case::count_exceeds_2(b"  3   1   1   2   2   3   3", 0)]
+fn test_attachment_point_entries_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = attachment_point_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.unwrap_err().map(|e| e.code),
+    let result = attachment_point_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -733,7 +677,7 @@ fn test_atom_attachment_order_entry(
     #[case] input: &[u8],
     #[case] expected: AtomAttachmentOrderEntry,
 ) {
-    let result = atom_attachment_order_entry().parse(input);
+    let result = atom_attachment_order_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -743,24 +687,19 @@ fn test_atom_attachment_order_entry(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::count_is_zero(b"   1   0", NomErrorKind::Verify)]
-#[case::count_exceeds_2(b"   1   3   1   2", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"   0   1   1   2", NomErrorKind::Verify)]
-#[case::attachment_type_is_zero(b"   1   1   1   2", NomErrorKind::Verify)]
-#[case::attachment_type_out_of_range(b"   1   1   1   3", NomErrorKind::Verify)]
-fn test_atom_attachment_order_entry_invalid(
+#[case::count_is_zero(b"   1   0", 4)]
+#[case::count_exceeds_2(b"   1   3   1   2", 4)]
+#[case::atom_index_is_zero(b"   0   1   1   2", 1)]
+#[case::attachment_type_is_zero(b"   1   1   1   2", 4)]
+#[case::attachment_type_out_of_range(b"   1   1   1   3", 4)]
+fn test_atom_attachment_order_entry_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = atom_attachment_order_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.unwrap_err().map(|e| e.code),
+    let result = atom_attachment_order_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -769,7 +708,7 @@ fn test_atom_attachment_order_entry_invalid(
 #[case::two_entries(b"  2   1   1   2   2",
        vec![RGroupLabelEntry { atom_index: 0, label: 1 }, RGroupLabelEntry { atom_index: 1, label: 2 }])]
 fn test_rgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<RGroupLabelEntry>) {
-    let result = rgroup_label_entries().parse(input);
+    let result = rgroup_label_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -778,19 +717,16 @@ fn test_rgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<RGroupL
 }
 
 #[rstest]
-#[case::label_is_zero(b"  1   0", NomErrorKind::Verify)]
-#[case::count_exceeds_8(b"  9   1   2", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0   2", NomErrorKind::Verify)]
-fn test_rgroup_label_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = rgroup_label_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?}", input_str);
-    assert!(
-        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Expected {:?} error for {:?}, got {:?}",
-        expected_kind,
-        input_str,
-        result
+#[case::label_is_zero(b"  1   0", 4)]
+#[case::count_exceeds_8(b"  9   1   2", 0)]
+#[case::atom_index_is_zero(b"  1   0   2", 4)]
+fn test_rgroup_label_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = rgroup_label_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -806,7 +742,7 @@ fn test_rgroup_label_entries_invalid(#[case] input: &[u8], #[case] expected_kind
 #[case::no_occurrence(b"  1   1   2",
        RGroupLogicEntry { label: 1, dependent_label: Some(2), rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
 fn test_rgroup_logic_entry(#[case] input: &[u8], #[case] expected: RGroupLogicEntry) {
-    let result = rgroup_logic_entry().parse(input);
+    let result = rgroup_logic_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -816,23 +752,18 @@ fn test_rgroup_logic_entry(#[case] input: &[u8], #[case] expected: RGroupLogicEn
 
 #[rustfmt::skip]
 #[rstest]
-#[case::count_is_zero(b"  0   1   0", NomErrorKind::Verify)]
-#[case::count_exceeds_1(b"  2   1   0", NomErrorKind::Verify)]
-#[case::label_is_zero(b"  1   0   0", NomErrorKind::Verify)]
-#[case::rgroup_or_h_out_of_range(b"  1   1   0   2", NomErrorKind::Verify)]
-fn test_rgroup_logic_entry_invalid(
+#[case::count_is_zero(b"  0   1   0", 0)]
+#[case::count_exceeds_1(b"  2   1   0", 0)]
+#[case::label_is_zero(b"  1   0   0", 4)]
+#[case::rgroup_or_h_out_of_range(b"  1   1   0   2", 12)]
+fn test_rgroup_logic_entry_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = rgroup_logic_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+    let result = rgroup_logic_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -844,7 +775,7 @@ fn test_rgroup_logic_entry_invalid(
     SGroupTypeEntry { sgroup_index: 1, sgroup_type: SGroupType::Data }
 ])]
 fn test_sgroup_type_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupTypeEntry>) {
-    let result = sgroup_type_entries().parse(input);
+    let result = sgroup_type_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -853,17 +784,14 @@ fn test_sgroup_type_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupTy
 }
 
 #[rstest]
-#[case::invalid_sgroup_type(b"  1   1 FOO", NomErrorKind::MapRes)]
-fn test_sgroup_type_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = sgroup_type_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::invalid_sgroup_type(b"  1   1 FOO", 8)]
+fn test_sgroup_type_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_type_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -874,7 +802,7 @@ fn test_sgroup_type_entries_invalid(#[case] input: &[u8], #[case] expected_kind:
     SGroupSubtypeEntry { sgroup_index: 1, sgroup_subtype: SGroupSubtype::Block }
 ])]
 fn test_sgroup_subtype_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupSubtypeEntry>) {
-    let result = sgroup_subtype_entries().parse(input);
+    let result = sgroup_subtype_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -883,17 +811,14 @@ fn test_sgroup_subtype_entries(#[case] input: &[u8], #[case] expected: Vec<SGrou
 }
 
 #[rstest]
-#[case::invalid_sgroup_subtype(b"  1   1 FOO", NomErrorKind::MapRes)]
-fn test_sgroup_subtype_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = sgroup_subtype_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::invalid_sgroup_subtype(b"  1   1 FOO", 8)]
+fn test_sgroup_subtype_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_subtype_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -902,7 +827,7 @@ fn test_sgroup_subtype_entries_invalid(#[case] input: &[u8], #[case] expected_ki
 #[case::two_entries(b"  2   1  14   2  15",
        vec![SGroupLabelEntry { sgroup_index: 0, label: 14 }, SGroupLabelEntry { sgroup_index: 1, label: 15 }])]
 fn test_sgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupLabelEntry>) {
-    let result = sgroup_label_entries().parse(input);
+    let result = sgroup_label_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -911,18 +836,15 @@ fn test_sgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupL
 }
 
 #[rstest]
-#[case::label_out_of_range(b"  1   1   0", NomErrorKind::Verify)]
-#[case::label_out_of_range_high(b"  1   1 513", NomErrorKind::Verify)]
-fn test_sgroup_label_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = sgroup_label_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::label_out_of_range(b"  1   1   0", 8)]
+#[case::label_out_of_range_high(b"  1   1 513", 8)]
+fn test_sgroup_label_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_label_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -940,7 +862,7 @@ fn test_sgroup_connectivity_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<SGroupConnectivityEntry>,
 ) {
-    let result = sgroup_connectivity_entries().parse(input);
+    let result = sgroup_connectivity_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -949,21 +871,15 @@ fn test_sgroup_connectivity_entries(
 }
 
 #[rstest]
-#[case::count_is_zero(b"  0", NomErrorKind::Verify)]
-#[case::invalid_connectivity(b"  1   1 FOO", NomErrorKind::MapRes)]
-fn test_sgroup_connectivity_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = sgroup_connectivity_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::count_is_zero(b"  0", 0)]
+#[case::invalid_connectivity(b"  1   1 FOO", 8)]
+fn test_sgroup_connectivity_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_connectivity_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -977,7 +893,7 @@ fn test_sgroup_expansion_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<SGroupExpansionEntry>,
 ) {
-    let result = sgroup_expansion_entries().parse(input);
+    let result = sgroup_expansion_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -986,20 +902,14 @@ fn test_sgroup_expansion_entries(
 }
 
 #[rstest]
-#[case::count_is_zero(b" EXP  0   1", NomErrorKind::Verify)]
-fn test_sgroup_expansion_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = sgroup_expansion_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::count_is_zero(b" EXP  0   1", 4)]
+fn test_sgroup_expansion_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_expansion_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1007,7 +917,7 @@ fn test_sgroup_expansion_entries_invalid(
 #[case::two_entries(b"   1  2   1   2", SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![0, 1] })]
 #[case::single_entry(b"   3  1  15", SGroupAtomListEntry { sgroup_index: 2, atom_indices: vec![14] })]
 fn test_sgroup_atom_list_entry(#[case] input: &[u8], #[case] expected: SGroupAtomListEntry) {
-    let result = sgroup_atom_list_entry().parse(input);
+    let result = sgroup_atom_list_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1016,17 +926,14 @@ fn test_sgroup_atom_list_entry(#[case] input: &[u8], #[case] expected: SGroupAto
 }
 
 #[rstest]
-#[case::count_exceeds_15(b"   1 16   1", NomErrorKind::Verify)]
-fn test_sgroup_atom_list_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = sgroup_atom_list_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::count_exceeds_15(b"   1 16   1", 4)]
+fn test_sgroup_atom_list_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_atom_list_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1034,7 +941,7 @@ fn test_sgroup_atom_list_entry_invalid(#[case] input: &[u8], #[case] expected_ki
 #[case::two_entries(b"   1  2   1   2", SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![0, 1] })]
 #[case::single_entry(b"   3  1  15", SGroupBondListEntry { sgroup_index: 2, bond_indices: vec![14] })]
 fn test_sgroup_bond_list_entry(#[case] input: &[u8], #[case] expected: SGroupBondListEntry) {
-    let result = sgroup_bond_list_entry().parse(input);
+    let result = sgroup_bond_list_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1043,24 +950,21 @@ fn test_sgroup_bond_list_entry(#[case] input: &[u8], #[case] expected: SGroupBon
 }
 
 #[rstest]
-#[case::count_exceeds_15(b"   1 16   1", NomErrorKind::Verify)]
-fn test_sgroup_bond_list_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = sgroup_bond_list_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::count_exceeds_15(b"   1 16   1", 4)]
+fn test_sgroup_bond_list_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_bond_list_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
 #[rstest]
 #[case::four_entries(b"   1  4   3   4   5   6", SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5] })]
 fn test_sgroup_parent_atom_entries(#[case] input: &[u8], #[case] expected: SGroupParentAtomEntry) {
-    let result = sgroup_parent_atom_entries().parse(input);
+    let result = sgroup_parent_atom_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1069,20 +973,14 @@ fn test_sgroup_parent_atom_entries(#[case] input: &[u8], #[case] expected: SGrou
 }
 
 #[rstest]
-#[case::count_exceeds_15(b"   1 16   3", NomErrorKind::Verify)]
-fn test_sgroup_parent_atom_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = sgroup_parent_atom_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::count_exceeds_15(b"   1 16   3", 4)]
+fn test_sgroup_parent_atom_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_parent_atom_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1092,7 +990,7 @@ fn test_sgroup_parent_atom_entries_invalid(
 #[case::ph_subscript(b"   1 Ph", SGroupSubscriptEntry { sgroup_index: 0, multiplier: Some(SGroupMultiplier::Expression
      { left: SGroupMultiplierTerm::Variable('P'), op: SGroupMultiplierOp::Mul, right: SGroupMultiplierTerm::Variable('h') }), subscript: Some("Ph".to_string()) })]
 fn test_sgroup_subscript_entry(#[case] input: &[u8], #[case] expected: SGroupSubscriptEntry) {
-    let result = sgroup_subscript_entry().parse(input);
+    let result = sgroup_subscript_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1101,17 +999,14 @@ fn test_sgroup_subscript_entry(#[case] input: &[u8], #[case] expected: SGroupSub
 }
 
 #[rstest]
-#[case::sgroup_index_is_zero(b"   0 1", NomErrorKind::Verify)]
-fn test_sgroup_subscript_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = sgroup_subscript_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::sgroup_index_is_zero(b"   0 1", 1)]
+fn test_sgroup_subscript_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_subscript_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1121,7 +1016,7 @@ fn test_sgroup_correspondence_entry(
     #[case] input: &[u8],
     #[case] expected: SGroupCorrespondenceEntry,
 ) {
-    let result = sgroup_correspondence_entry().parse(input);
+    let result = sgroup_correspondence_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1130,20 +1025,14 @@ fn test_sgroup_correspondence_entry(
 }
 
 #[rstest]
-#[case::count(b"   3  0", NomErrorKind::Verify)]
-fn test_sgroup_correspondence_entry_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = sgroup_correspondence_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::count(b"   3  0", 4)]
+fn test_sgroup_correspondence_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_correspondence_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1151,7 +1040,7 @@ fn test_sgroup_correspondence_entry_invalid(
 #[case::all_coordinates(b"   1  4  -13.0153    4.4289  -13.0153    8.2211",
        SGroupDisplayInfoEntry { sgroup_index: 0,  bracket_coords: vec![-13.0153, 4.4289, -13.0153, 8.2211]})]
 fn test_sgroup_display_info_entry(#[case] input: &[u8], #[case] expected: SGroupDisplayInfoEntry) {
-    let result = sgroup_display_info_entry().parse(input);
+    let result = sgroup_display_info_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1168,21 +1057,16 @@ fn test_sgroup_display_info_entry(#[case] input: &[u8], #[case] expected: SGroup
 
 #[rustfmt::skip]
 #[rstest]
-#[case::sgroup_index_is_zero(b"   0  4    4.4700   -3.1700    4.4700   -5.7500", NomErrorKind::Verify)]
-#[case::count_is_zero(b"   1  0", NomErrorKind::Verify)]
-fn test_sgroup_display_info_entry_invalid(
+#[case::sgroup_index_is_zero(b"   0  4    4.4700   -3.1700    4.4700   -5.7500", 1)]
+#[case::count_is_zero(b"   1  0", 4)]
+fn test_sgroup_display_info_entry_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = sgroup_display_info_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+    let result = sgroup_display_info_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -1192,10 +1076,9 @@ fn test_sgroup_connecting_bond_entry(
     #[case] input: &[u8],
     #[case] expected: SGroupConnectingBondEntry,
 ) {
-    let (remaining, result) = all_consuming(sgroup_connecting_bond_entry())
-        .parse(input)
+    let result = sgroup_connecting_bond_entry
+        .parse(Input::new(input))
         .unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result.sgroup_index, expected.sgroup_index);
     assert_eq!(result.bond_index, expected.bond_index);
     assert!(approx_eq!(
@@ -1212,21 +1095,16 @@ fn test_sgroup_connecting_bond_entry(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::sgroup_index_is_zero(b"   0   1   -0.7200   -0.4200", NomErrorKind::Verify)]
-#[case::bond_index_is_zero(b"   1   0   -0.7200   -0.4200", NomErrorKind::Verify)]
-fn test_sgroup_connecting_bond_entry_invalid(
+#[case::sgroup_index_is_zero(b"   0   1   -0.7200   -0.4200", 1)]
+#[case::bond_index_is_zero(b"   1   0   -0.7200   -0.4200", 5)]
+fn test_sgroup_connecting_bond_entry_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = sgroup_connecting_bond_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+    let result = sgroup_connecting_bond_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -1241,7 +1119,7 @@ fn test_sgroup_data_description_entry(
     #[case] input: &[u8],
     #[case] expected: SGroupDataDescriptionEntry,
 ) {
-    let result = sgroup_data_description_entry().parse(input);
+    let result = sgroup_data_description_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1251,21 +1129,16 @@ fn test_sgroup_data_description_entry(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::sgroup_index_is_zero(b"   0 pH   ", NomErrorKind::Verify)]
-#[case::invalid_field_type(b"   1 pH                            X", NomErrorKind::MapRes)]
-fn test_sgroup_data_description_entry_invalid(
+#[case::sgroup_index_is_zero(b"   0 pH   ", 1)]
+#[case::invalid_field_type(b"   1 pH                            X", 35)]
+fn test_sgroup_data_description_entry_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = sgroup_data_description_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+    let result = sgroup_data_description_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -1295,7 +1168,7 @@ fn test_sgroup_data_description_entry_invalid(
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::All, display_tag: None })]
 fn test_sgroup_data_display_entry(#[case] input: &[u8], #[case] expected: SGroupDataDisplayEntry) {
-    let result = sgroup_data_display_entry(true).parse(input);
+    let result = sgroup_data_display_entry(true).parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1310,23 +1183,18 @@ fn test_sgroup_data_display_entry(#[case] input: &[u8], #[case] expected: SGroup
 
 #[rustfmt::skip]
 #[rstest]
-#[case::sgroup_index_is_zero(b"   0     0.0000    0.0000    DR    ALL  0       0", NomErrorKind::Verify)]
-#[case::invalid_display_type(b"   1     0.0000    0.0000    XR    ALL  0       0", NomErrorKind::MapRes)]
-#[case::invalid_placement_type(b"   1     0.0000    0.0000    DX    ALL  0       0", NomErrorKind::MapRes)]
-#[case::invalid_chars_type(b"   1     0.0000    0.0000    DR    NON  0       0", NomErrorKind::Digit)]
-fn test_sgroup_data_display_entry_invalid(
+#[case::sgroup_index_is_zero(b"   0     0.0000    0.0000    DR    ALL  0       0", 1)]
+#[case::invalid_display_type(b"   1     0.0000    0.0000    XR    ALL  0       0", 29)]
+#[case::invalid_placement_type(b"   1     0.0000    0.0000    DX    ALL  0       0", 30)]
+#[case::invalid_chars_type(b"   1     0.0000    0.0000    DR    NON  0       0", 35)]
+fn test_sgroup_data_display_entry_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = sgroup_data_display_entry(true).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected: {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+    let result = sgroup_data_display_entry(true).parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -1334,8 +1202,8 @@ fn test_sgroup_data_display_entry_invalid(
 #[case::numerical(b"   1 4.6", SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() })]
 #[case::text(b"   2 E/Z unknown", SGroupDataEntry::Continuation { sgroup_index: 1, data_content: "E/Z unknown".to_string() })]
 #[case::empty(b"   1", SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "".to_string() })]
-fn tests_sgroup_data_continuation_entry(#[case] input: &[u8], #[case] expected: SGroupDataEntry) {
-    let result = sgroup_data_continuation_entry().parse(input);
+fn test_sgroup_data_continuation_entry(#[case] input: &[u8], #[case] expected: SGroupDataEntry) {
+    let result = sgroup_data_continuation_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1344,20 +1212,14 @@ fn tests_sgroup_data_continuation_entry(#[case] input: &[u8], #[case] expected: 
 }
 
 #[rstest]
-#[case::sgroup_index_is_zero(b"   0 4.6", NomErrorKind::Verify)]
-fn test_sgroup_data_continuation_entry_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = sgroup_data_continuation_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+#[case::sgroup_index_is_zero(b"   0 4.6", 1)]
+fn test_sgroup_data_continuation_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_data_continuation_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1365,8 +1227,8 @@ fn test_sgroup_data_continuation_entry_invalid(
 #[case::numerical(b"   1 4.6", SGroupDataEntry::EndWithData { sgroup_index: 0, data_content: "4.6".to_string() })]
 #[case::text(b"   2 E/Z unknown", SGroupDataEntry::EndWithData { sgroup_index: 1, data_content: "E/Z unknown".to_string() })]
 #[case::empty(b"   1", SGroupDataEntry::EndBlank { sgroup_index: 0 })]
-fn tests_sgroup_data_end_entry(#[case] input: &[u8], #[case] expected: SGroupDataEntry) {
-    let result = sgroup_data_end_entry().parse(input);
+fn test_sgroup_data_end_entry(#[case] input: &[u8], #[case] expected: SGroupDataEntry) {
+    let result = sgroup_data_end_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1375,17 +1237,14 @@ fn tests_sgroup_data_end_entry(#[case] input: &[u8], #[case] expected: SGroupDat
 }
 
 #[rstest]
-#[case::sgroup_index_is_zero(b"   0  1", NomErrorKind::Verify)]
-fn test_sgroup_data_end_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = sgroup_data_end_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::sgroup_index_is_zero(b"   0  1", 1)]
+fn test_sgroup_data_end_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_data_end_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1400,7 +1259,7 @@ fn test_sgroup_hierarchy_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<SGroupHierarchyEntry>,
 ) {
-    let result = sgroup_hierarchy_entries().parse(input);
+    let result = sgroup_hierarchy_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1410,22 +1269,17 @@ fn test_sgroup_hierarchy_entries(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::count_is_zero(b"  0   1   2", NomErrorKind::Verify)]
-#[case::sgroup_index_is_zero(b"  1   0   2", NomErrorKind::Verify)]
-#[case::parent_sgroup_index_is_zero(b"  1   1   0", NomErrorKind::Verify)]
-fn test_sgroup_hierarchy_entries_invalid(
+#[case::count_is_zero(b"  0   1   2", 0)]
+#[case::sgroup_index_is_zero(b"  1   0   2", 4)]
+#[case::parent_sgroup_index_is_zero(b"  1   1   0", 8)]
+fn test_sgroup_hierarchy_entries_error(
     #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
+    #[case] expected_column: u32,
 ) {
-    let result = sgroup_hierarchy_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+    let result = sgroup_hierarchy_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError { column: expected_column }),
     );
 }
 
@@ -1438,7 +1292,7 @@ fn test_sgroup_component_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<SGroupComponentEntry>,
 ) {
-    let result = sgroup_component_entries().parse(input);
+    let result = sgroup_component_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1447,21 +1301,15 @@ fn test_sgroup_component_entries(
 }
 
 #[rstest]
-#[case::count_is_zero(b"  0   1   2", NomErrorKind::Verify)]
-#[case::component_number_is_zero(b"  1   0   2", NomErrorKind::Verify)]
-fn test_sgroup_component_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = sgroup_component_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::count_is_zero(b"  0   1   2", 0)]
+#[case::component_number_is_zero(b"  1   0   2", 4)]
+fn test_sgroup_component_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = sgroup_component_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1475,7 +1323,7 @@ fn test_bond_order_override_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<BondOrderOverrideEntry>,
 ) {
-    let result = bond_order_override_entries().parse(input);
+    let result = bond_order_override_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1484,22 +1332,16 @@ fn test_bond_order_override_entries(
 }
 
 #[rstest]
-#[case::count_is_zero(b"  0   1   0", NomErrorKind::Verify)]
-#[case::bond_index_is_zero(b"  1   0   0", NomErrorKind::Verify)]
-#[case::bond_order_out_of_range(b"  1   1   7", NomErrorKind::Verify)]
-fn test_bond_order_override_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = bond_order_override_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::count_is_zero(b"  0   1   0", 0)]
+#[case::bond_index_is_zero(b"  1   0   0", 4)]
+#[case::bond_order_out_of_range(b"  1   1   7", 8)]
+fn test_bond_order_override_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = bond_order_override_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1513,7 +1355,7 @@ fn test_atom_charge_override_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<AtomChargeOverrideEntry>,
 ) {
-    let result = atom_charge_overrides_entries().parse(input);
+    let result = atom_charge_overrides_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1522,22 +1364,16 @@ fn test_atom_charge_override_entries(
 }
 
 #[rstest]
-#[case::count_is_zero(b"  0   1   0", NomErrorKind::Verify)]
-#[case::atom_index_is_zero(b"  1   0   0", NomErrorKind::Verify)]
-#[case::hydrogen_count_out_of_range(b"  1   1   9", NomErrorKind::Verify)]
-fn test_atom_charge_override_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_charge_overrides_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::count_is_zero(b"  0   1   0", 0)]
+#[case::atom_index_is_zero(b"  1   0   0", 4)]
+#[case::hydrogen_count_out_of_range(b"  1   1   9", 8)]
+fn test_atom_charge_override_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = atom_charge_overrides_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1552,7 +1388,7 @@ fn test_atom_hydrogen_count_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<AtomHydrogenCountEntry>,
 ) {
-    let result = atom_hydrogen_count_entries().parse(input);
+    let result = atom_hydrogen_count_entries.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1561,22 +1397,16 @@ fn test_atom_hydrogen_count_entries(
 }
 
 #[rstest]
-#[case::count_is_zero(b"  0   1   0", NomErrorKind::Verify)]
-#[case::atom_index_zero(b"  1   0   0", NomErrorKind::Verify)]
-#[case::hydrogen_count_out_of_range(b"  1   1   9", NomErrorKind::Verify)]
-fn test_atom_hydrogen_count_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_hydrogen_count_entries().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::count_is_zero(b"  0   1   0", 0)]
+#[case::atom_index_zero(b"  1   0   0", 4)]
+#[case::hydrogen_count_out_of_range(b"  1   1   9", 8)]
+fn test_atom_hydrogen_count_entries_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = atom_hydrogen_count_entries.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1584,7 +1414,7 @@ fn test_atom_hydrogen_count_entries_invalid(
 #[case::numerical_label(b"   1 1", ChemSketchLabelEntry { atom_index: 0, label: "1".to_string()})]
 #[case::long_label(b"   1 ABCDEFGHIJKLMNOPQRSTUVWXYZ", ChemSketchLabelEntry { atom_index: 0, label: "ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_string()})]
 fn test_chemsketch_atom_label_entry(#[case] input: &[u8], #[case] expected: ChemSketchLabelEntry) {
-    let result = chemsketch_label_entry().parse(input);
+    let result = chemsketch_label_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1593,20 +1423,14 @@ fn test_chemsketch_atom_label_entry(#[case] input: &[u8], #[case] expected: Chem
 }
 
 #[rstest]
-#[case::atom_index_zero(b"   0 1", NomErrorKind::Verify)]
-fn test_chemsketch_atom_label_entry_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = chemsketch_label_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::atom_index_zero(b"   0 1", 1)]
+fn test_chemsketch_atom_label_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = chemsketch_label_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }
 
@@ -1617,7 +1441,7 @@ fn test_marvin_smarts_pattern_entry(
     #[case] input: &[u8],
     #[case] expected: MarvinSmartsPatternEntry,
 ) {
-    let result = marvin_smarts_pattern_entry().parse(input);
+    let result = marvin_smarts_pattern_entry.parse_peek(Input::new(input));
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1626,20 +1450,14 @@ fn test_marvin_smarts_pattern_entry(
 }
 
 #[rstest]
-#[case::invalid_atom_index(b" SMA   0 [#6;X0]", NomErrorKind::Verify)]
-#[case::non_numeric_atom_index(b" SMA   a [#6;X0]", NomErrorKind::Digit)]
-fn test_marvin_smarts_pattern_entry_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = marvin_smarts_pattern_entry().parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {:?}, expected {:?}, got {}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
+#[case::invalid_atom_index(b" SMA   0 [#6;X0]", 5)]
+#[case::non_numeric_atom_index(b" SMA   a [#6;X0]", 5)]
+fn test_marvin_smarts_pattern_entry_error(#[case] input: &[u8], #[case] expected_column: u32) {
+    let result = marvin_smarts_pattern_entry.parse_peek(Input::new(input));
+    assert_eq!(
+        result.unwrap_err(),
+        ErrMode::Backtrack(InputError {
+            column: expected_column
+        }),
     );
 }

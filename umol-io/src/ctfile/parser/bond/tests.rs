@@ -1,10 +1,10 @@
 #![allow(clippy::too_many_arguments)]
 
 use bstr::ByteSlice;
-use nom::error::ErrorKind as NomErrorKind;
-use nom::{Err, Parser};
 use pretty_assertions::assert_eq;
 use rstest::*;
+use winnow::error::ErrMode;
+use winnow::Parser;
 
 use super::*;
 use crate::ctfile::config::CtabParseFlags;
@@ -28,10 +28,11 @@ fn test_bond_block(
     #[case] wedge: Option<BondWedge>,
 ) {
     let flags = CtabParseFlags::BASIC;
-    let result = bond_block(1, 0, flags).parse(input);
+    let mut remaining = input;
+    let result = bond_block(&mut remaining, 1, 0, flags);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should parse successfully: {:?}", input_str, result);
-    let (remaining, (bonds, _)) = result.unwrap();
+    let (bonds, _) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} should consume all input", input_str);
     assert_eq!(bonds.len(), 1);
     let bond = &bonds[0];
@@ -44,20 +45,17 @@ fn test_bond_block(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len19_incomplete_field(b"  1  21  0     0  0\n")]
-#[case::len21_trailing_data(b"  1  2  1  0  0  0  0X\n")]
-#[case::len12_trailing_data(b"  1  2  1 1\n")]
-#[case::len8_too_short(b"  1  2  \n")]
-fn test_bond_block_invalid(#[case] input: &[u8]) {
+#[case::len19_incomplete_field(b"  1  21  0     0  0\n", 18)]
+#[case::len21_trailing_data(b"  1  2  1  0  0  0  0X\n", 21)]
+#[case::len12_trailing_data(b"  1  2  1 1\n", 10)]
+#[case::len8_too_short(b"  1  2  \n", 8)]
+fn test_bond_block_error(#[case] input: &[u8], #[case] col: u32) {
     use crate::ctfile::error::ParseError;
     let flags = CtabParseFlags::BASIC;
-    let result = bond_block(1, 0, flags).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result, Err(Err::Error(ParseError::InvalidBondLine { .. }))),
-        "{:?} should have failed with InvalidBondLine",
-        input_str,
+    let mut remaining = input;
+    assert_eq!(
+        bond_block(&mut remaining, 1, 0, flags),
+        Err(ErrMode::Cut(ParseError::InvalidBondLine { line: 0, col }))
     );
 }
 
@@ -79,10 +77,11 @@ fn test_extended_bond_block(
     #[case] wedge: Option<BondWedge>,
 ) {
     let flags = CtabParseFlags::EXTENDED;
-    let result = extended_bond_block(1, 0, flags).parse(input);
+    let mut remaining = input;
+    let result = extended_bond_block(&mut remaining, 1, 0, flags);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should parse successfully: {:?}", input_str, result);
-    let (remaining, (bonds, _)) = result.unwrap();
+    let (bonds, _) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} should consume all input", input_str);
     assert_eq!(bonds.len(), 1);
     let bond = &bonds[0];
@@ -95,18 +94,34 @@ fn test_extended_bond_block(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_21_trailing_data(b"  1  2  1  0  0  0  0X\n")]
-#[case::len_8_too_short(b"  1  2  \n")]
-fn test_extended_bond_block_invalid(#[case] input: &[u8]) {
+#[case::len_21_trailing_data(b"  1  2  1  0  0  0  0X\n", 21)]
+#[case::len_8_too_short(b"  1  2  \n", 8)]
+fn test_extended_bond_block_error(#[case] input: &[u8], #[case] col: u32) {
     use crate::ctfile::error::ParseError;
     let flags = CtabParseFlags::EXTENDED;
-    let result = extended_bond_block(1, 0, flags).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result, Err(Err::Error(ParseError::InvalidBondLine { .. }))),
-        "{:?} should have failed with InvalidBondLine",
-        input_str,
+    let mut remaining = input;
+    assert_eq!(
+        extended_bond_block(&mut remaining, 1, 0, flags),
+        Err(ErrMode::Cut(ParseError::InvalidBondLine { line: 0, col }))
+    );
+}
+
+#[rstest]
+#[case::basic(false)]
+#[case::extended(true)]
+fn test_bond_block_eof_error(#[case] extended: bool) {
+    let mut input: &[u8] = b"";
+    let result = if extended {
+        extended_bond_block(&mut input, 1, 9, CtabParseFlags::EXTENDED).map(|_| ())
+    } else {
+        bond_block(&mut input, 1, 9, CtabParseFlags::BASIC).map(|_| ())
+    };
+    assert_eq!(
+        result,
+        Err(ErrMode::Cut(ParseError::UnexpectedEof {
+            line: 9,
+            block: "bond",
+        }))
     );
 }
 
@@ -147,11 +162,9 @@ fn test_bond_input(
     #[case] wedge: Option<BondWedge>,
 ) {
     let input_str = input.to_str_lossy();
-    let mut parser = bond_input(CtabParseFlags::BASIC);
-    let result = parser.parse(input);
+    let result = bond_input(CtabParseFlags::BASIC).parse(Input::new(input));
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, bond) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-blank remaining", input_str);
+    let bond = result.unwrap();
     assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} has returned atom1", input_str);
     assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} has returned atom2", input_str);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
@@ -160,47 +173,36 @@ fn test_bond_input(
 }
 
 #[rstest]
-#[case::len6_too_short(b"  1  2", NomErrorKind::Eof)]
-#[case::len9_non_numeric_atom_1(b"  a  1  1", NomErrorKind::Digit)]
-#[case::len9_non_numeric_atom_2(b"  1  a  1", NomErrorKind::Digit)]
-#[case::len9_extended_range_quadruple(b"  1  2  9", NomErrorKind::MapRes)]
-#[case::len9_extended_range_zero(b"  1  2  0", NomErrorKind::MapRes)]
-#[case::len21_extended_range_quadruple(b"  2  5  9  0  0  0  0", NomErrorKind::MapRes)]
-#[case::len21_extended_range_zero(b"  2  5  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::len21_non_numeric_atom(b"  A  2  1  1  0  0  0", NomErrorKind::Digit)]
-#[case::len21_non_numeric_type(b"  1  2  A  1  0  0  0", NomErrorKind::Digit)]
-#[case::len12_non_numeric_stereo(b"  1  2  1  A", NomErrorKind::Digit)]
-#[case::len21_invalid_extended(b"  1  2  1  1  0  0  1", NomErrorKind::Verify)]
-fn test_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let input_str = input.to_str_lossy();
-    let mut parser = bond_input(CtabParseFlags::BASIC);
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+#[case::len6_too_short(b"  1  2", 6)]
+#[case::len9_non_numeric_atom_1(b"  a  1  1", 0)]
+#[case::len9_non_numeric_atom_2(b"  1  a  1", 3)]
+#[case::len9_extended_range_quadruple(b"  1  2  9", 6)]
+#[case::len9_extended_range_zero(b"  1  2  0", 6)]
+#[case::len21_extended_range_quadruple(b"  2  5  9  0  0  0  0", 6)]
+#[case::len21_extended_range_zero(b"  2  5  0  0  0  0  0", 6)]
+#[case::len21_non_numeric_atom(b"  A  2  1  1  0  0  0", 0)]
+#[case::len21_non_numeric_type(b"  1  2  A  1  0  0  0", 6)]
+#[case::len12_non_numeric_stereo(b"  1  2  1  A", 9)]
+#[case::len12_stereo_out_of_range(b"  1  2  1  2", 9)]
+#[case::len21_invalid_extended(b"  1  2  1  1  0  0  1", 15)]
+fn test_bond_input_error(#[case] input: &[u8], #[case] column: u32) {
+    let error = bond_input(CtabParseFlags::BASIC)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rstest]
-#[case::len21_invalid_unused(b"  1  2  1  1  0  0XXX", NomErrorKind::Verify)]
-#[case::len21_nonzero_unused(b"  1  2  1  0  1  0  0", NomErrorKind::Verify)]
-#[case::len15_invalid_unused(b"  1  2  1  1XXX", NomErrorKind::Verify)]
-fn test_bond_input_strict_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let input_str = input.to_str_lossy();
-    let mut parser = bond_input(CtabParseFlags::STRICT);
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+#[case::len21_invalid_unused(b"  1  2  1  1  0  0XXX", 15)]
+#[case::len21_nonzero_unused(b"  1  2  1  0  1  0  0", 12)]
+#[case::len15_invalid_unused(b"  1  2  1  1XXX", 12)]
+fn test_bond_input_strict_error(#[case] input: &[u8], #[case] column: u32) {
+    let error = bond_input(CtabParseFlags::STRICT)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -218,10 +220,10 @@ fn test_bond_input_lenient(
     #[case] wedge: Option<BondWedge>,
 ) {
     let input_str = input.to_str_lossy();
-    let result = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT).parse(input);
+    let result = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT)
+        .parse(Input::new(input));
     assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
-    let (remaining, bond) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input_str, remaining.to_str_lossy());
+    let bond = result.unwrap();
     assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} has returned atom1", input_str);
     assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} has returned atom2", input_str);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
@@ -238,19 +240,13 @@ fn test_bond_input_lenient(
 }
 
 #[rstest]
-#[case::len6_too_short(b"  1  2", NomErrorKind::Eof)]
-fn test_bond_input_lenient_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let input_str = input.to_str_lossy();
-    let mut parser = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT);
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+#[case::len6_too_short(b"  1  2", 6)]
+fn test_bond_input_lenient_error(#[case] input: &[u8], #[case] column: u32) {
+    let error = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -278,11 +274,9 @@ fn test_extended_bond_input(
     #[case] reacting_center: Option<BondReactingCenter>,
 ) {
     let input_str = input.to_str_lossy();
-    let mut parser = extended_bond_input(CtabParseFlags::EXTENDED);
-    let result = parser.parse(input);
+    let result = extended_bond_input(CtabParseFlags::EXTENDED).parse(Input::new(input));
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, bond) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+    let bond = result.unwrap();
     assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} has returned atom1", input_str);
     assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} has returned atom2", input_str);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
@@ -293,43 +287,29 @@ fn test_extended_bond_input(
 }
 
 #[rstest]
-#[case::len_6_too_short(b"  1  2", NomErrorKind::Eof)]
-#[case::bond_type_above_range(b"  1  2  9", NomErrorKind::MapRes)]
-#[case::bond_type_below_range(b"  1  2  0", NomErrorKind::MapRes)]
-#[case::invalid_topology(b"  2  5  2  0  0  4  0", NomErrorKind::Verify)]
-#[case::invalid_reacting_center(b"  2  3  1  0  0  0XXX", NomErrorKind::Digit)]
-#[case::extended_reacting_center(b"  2  3  1  0  0  0  6", NomErrorKind::Verify)]
-fn test_extended_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let input_str = input.to_str_lossy();
-    let mut parser = extended_bond_input(CtabParseFlags::EXTENDED);
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+#[case::len_6_too_short(b"  1  2", 6)]
+#[case::bond_type_above_range(b"  1  2  9", 6)]
+#[case::bond_type_below_range(b"  1  2  0", 6)]
+#[case::stereo_out_of_range(b"  1  2  1  2", 9)]
+#[case::invalid_topology(b"  2  5  2  0  0  4  0", 15)]
+#[case::invalid_reacting_center(b"  2  3  1  0  0  0XXX", 18)]
+#[case::extended_reacting_center(b"  2  3  1  0  0  0  6", 18)]
+fn test_extended_bond_input_error(#[case] input: &[u8], #[case] column: u32) {
+    let error = extended_bond_input(CtabParseFlags::EXTENDED)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rstest]
-#[case::len_15_invalid_unused(b"  1  2  8  0XXX  1", NomErrorKind::Verify)]
-fn test_extended_bond_input_strict_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let input_str = input.to_str_lossy();
-    let mut parser = extended_bond_input(CtabParseFlags::STRICT);
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+#[case::len_15_invalid_unused(b"  1  2  8  0XXX  1", 12)]
+fn test_extended_bond_input_strict_error(#[case] input: &[u8], #[case] column: u32) {
+    let error = extended_bond_input(CtabParseFlags::STRICT)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
 
 #[rustfmt::skip]
@@ -347,11 +327,9 @@ fn test_extended_bond_input_lenient(
     #[case] topology: Option<BondTopology>,
     #[case] reacting_center: Option<BondReactingCenter>) {
         let input_str = input.to_str_lossy();
-        let mut parser = extended_bond_input(CtabParseFlags::LENIENT);
-        let result = parser.parse(input);
+        let result = extended_bond_input(CtabParseFlags::LENIENT).parse(Input::new(input));
         assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-        let (remaining, bond) = result.unwrap();
-        assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+        let bond = result.unwrap();
         assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} has returned atom1", input_str);
         assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} has returned atom2", input_str);
         assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
@@ -362,20 +340,11 @@ fn test_extended_bond_input_lenient(
     }
 
 #[rstest]
-#[case::len6_too_short(b"  1  2", NomErrorKind::Eof)]
-fn test_extended_bond_input_lenient_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let input_str = input.to_str_lossy();
-    let mut parser = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT);
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
+#[case::len6_too_short(b"  1  2", 6)]
+fn test_extended_bond_input_lenient_error(#[case] input: &[u8], #[case] column: u32) {
+    let error = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT)
+        .parse(Input::new(input))
+        .unwrap_err()
+        .into_inner();
+    assert_eq!(error, InputError { column });
 }
