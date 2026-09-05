@@ -19,7 +19,6 @@ use super::ligand::StereoLigand;
 use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
-use super::remap::IdRemapping;
 
 /// A molecule correspondence component has incompatible intermediate counts.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -503,36 +502,6 @@ impl MoleculeCorrespondence {
             })
     }
 
-    /// This correspondence as an [`IdRemapping`], or `None` unless every entity kind is total on
-    /// the left. Each left id then maps to its matched right id.
-    pub fn to_remapping(&self) -> Option<IdRemapping> {
-        if !self.is_total_on_left() {
-            return None;
-        }
-        Some(IdRemapping::new(
-            self.atoms.matched_pairs().iter().copied().collect(),
-            self.bonds.matched_pairs().iter().copied().collect(),
-            self.dative_bonds.matched_pairs().iter().copied().collect(),
-            self.aromatic_systems
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-            self.multicenter_bonds
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-            self.noncovalent_bonds
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-            self.stereo_atoms.matched_pairs().iter().copied().collect(),
-            self.stereo_bonds.matched_pairs().iter().copied().collect(),
-        ))
-    }
-
     /// The atom correspondence — the spine the other entity correspondences are induced from.
     pub fn atoms(&self) -> &Correspondence<AtomId> {
         &self.atoms
@@ -778,7 +747,6 @@ fn sorted_ligands(ligands: impl IntoIterator<Item = StereoLigand>) -> Vec<Stereo
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -1310,61 +1278,5 @@ mod tests {
             ],
             [(false, false, false); 8],
         );
-    }
-
-    #[rstest]
-    fn test_molecule_correspondence_to_remapping() {
-        let correspondence = MoleculeCorrespondence::new(
-            Correspondence::from_images(&[AtomId(1), AtomId(0)], 3),
-            Correspondence::from_images(&[BondId(1), BondId(0)], 3),
-            Correspondence::from_images(&[DativeBondId(1), DativeBondId(0)], 3),
-            Correspondence::from_images(&[AromaticSystemId(1), AromaticSystemId(0)], 3),
-            Correspondence::from_images(&[MulticenterBondId(1), MulticenterBondId(0)], 3),
-            Correspondence::from_images(&[NoncovalentBondId(1), NoncovalentBondId(0)], 3),
-            Correspondence::from_images(&[StereoAtomId(1), StereoAtomId(0)], 3),
-            Correspondence::from_images(&[StereoBondId(1), StereoBondId(0)], 3),
-        );
-        let expected = IdRemapping::new(
-            HashMap::from([(AtomId(0), AtomId(1)), (AtomId(1), AtomId(0))]),
-            HashMap::from([(BondId(0), BondId(1)), (BondId(1), BondId(0))]),
-            HashMap::from([
-                (DativeBondId(0), DativeBondId(1)),
-                (DativeBondId(1), DativeBondId(0)),
-            ]),
-            HashMap::from([
-                (AromaticSystemId(0), AromaticSystemId(1)),
-                (AromaticSystemId(1), AromaticSystemId(0)),
-            ]),
-            HashMap::from([
-                (MulticenterBondId(0), MulticenterBondId(1)),
-                (MulticenterBondId(1), MulticenterBondId(0)),
-            ]),
-            HashMap::from([
-                (NoncovalentBondId(0), NoncovalentBondId(1)),
-                (NoncovalentBondId(1), NoncovalentBondId(0)),
-            ]),
-            HashMap::from([
-                (StereoAtomId(0), StereoAtomId(1)),
-                (StereoAtomId(1), StereoAtomId(0)),
-            ]),
-            HashMap::from([
-                (StereoBondId(0), StereoBondId(1)),
-                (StereoBondId(1), StereoBondId(0)),
-            ]),
-        );
-
-        assert_eq!(
-            (
-                correspondence.is_total_on_left(),
-                correspondence.is_total_on_right(),
-                correspondence.to_remapping(),
-            ),
-            (true, false, Some(expected)),
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_correspondence_to_remapping_partial(correspondence: MoleculeCorrespondence) {
-        assert_eq!(correspondence.to_remapping(), None);
     }
 }

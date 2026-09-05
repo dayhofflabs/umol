@@ -494,16 +494,14 @@ A correspondence is **valueless** — it records pairing and nothing else. Addin
 direction is what lifts it to a reaction span.
 
 Correspondences compose and reverse, which is what lets a chain of operations be followed end to
-end. The current `to_remapping` conversion produces a dense total-map carrier when a correspondence
-is total on the left; the result may map into a larger target id space. It is a semantic remapping
-only when the correspondence is also total on the right, so the target tables are dense and contain
-exactly the mapped entities.
+end. Reference transport consumes a correspondence directly; no correspondence-to-remapping
+conversion is exposed.
 
 **Not:** a compaction, because being unmatched does not mean that an entity was removed; not a
 remapping, because a correspondence may be partial and records a relation rather than performing
 transport.
 **In code:** `MoleculeCorrespondence`, `Correspondence<T>`, `GraphCorrespondence`, `induce`,
-`compose`, `reverse`, `left_of`, `right_of`, `is_total`, `to_remapping`.
+`compose`, `reverse`, `left_of`, `right_of`, `is_total`, `map`, `try_map`.
 
 ### Coset
 
@@ -1523,18 +1521,13 @@ sparse or repeated target images. `GraphRemapping` aggregates the node and edge 
 `MoleculeRemapping` aggregates all eight molecule entity kinds. Producers and consumers that need a
 semantic remapping must therefore establish bijectivity separately.
 
-`IdRemapping` is the legacy sparse molecule-wide reference-transport carrier. It declares no source
-or target counts and remains in use while operation witnesses are redesigned. Its name does not
-make an arbitrary sparse map a remapping.
-
-A correspondence produces a semantic remapping only when it is total on both sides and both id
+A correspondence describes a semantic remapping only when it is total on both sides and both id
 spaces are dense. Relabeling relation participants preserves their stored sequence, so a positional
 payload stays aligned without being touched.
 
 **Not:** a correspondence, which may be partial and only records pairing; not a compaction, which
 expresses removal by leaving removed source ids without images.
-**In code:** `Remapping`, `GraphRemapping`, `MoleculeRemapping`, `IdRemapping`, `remap`,
-`to_remapping`.
+**In code:** `Remapping`, `GraphRemapping`, `MoleculeRemapping`, `remap`.
 
 ### Reset
 

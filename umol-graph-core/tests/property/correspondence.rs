@@ -294,29 +294,4 @@ proptest! {
         prop_assert_eq!(correspondence.is_total(), total_on_left && total_on_right);
     }
 
-    #[test]
-    fn test_graph_correspondence_to_remapping(
-        correspondence in graph_correspondence_strategy(),
-    ) {
-        let remapping = correspondence.to_remapping();
-        if correspondence.is_total_on_left() {
-            let remapping = remapping.expect("total-left correspondence defines a remapping");
-            for left in 0..correspondence.nodes().left_count() {
-                let left = NodeId::from(left);
-                prop_assert_eq!(
-                    Some(remapping.map_node(left)),
-                    correspondence.nodes().right_of(left),
-                );
-            }
-            for left in 0..correspondence.edges().left_count() {
-                let left = EdgeId::from(left);
-                prop_assert_eq!(
-                    Some(remapping.map_edge(left)),
-                    correspondence.edges().right_of(left),
-                );
-            }
-        } else {
-            prop_assert_eq!(remapping, None);
-        }
-    }
 }

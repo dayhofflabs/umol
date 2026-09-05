@@ -15,7 +15,6 @@ use super::super::boolean::BooleanForm;
 use super::super::compact::MoleculeCompaction;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::id::StereoLigandPosition;
-use super::super::remap::IdRemapping;
 use super::super::stereo::{Stereogenicity, Topicity};
 use super::super::traits::{AsLit, Lattice, Normalize};
 
@@ -74,11 +73,6 @@ macro_rules! stereo_constraint {
             /// Frame-relative ligand positions carry no atom ids, so compact is a no-op.
             pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
                 Some(self)
-            }
-
-            /// Frame-relative ligand positions carry no atom ids, so remap is a no-op.
-            pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
-                self
             }
 
             pub(crate) fn uses_participant_frame(&self) -> bool {

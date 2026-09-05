@@ -10,7 +10,6 @@ use umol_perm::DynPermutation;
 use super::super::compact::MoleculeCompaction;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::IdRemapping;
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Multicenter-bond-scope constraint. Held inline on `MulticenterBondForm` via
@@ -44,11 +43,6 @@ impl MulticenterBondConstraintForm {
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         // Value-only: no indices to compact.
         Some(self)
-    }
-
-    /// Value-only: no indices to remap.
-    pub fn remap(self, _map: &IdRemapping) -> Self {
-        self
     }
 
     pub(crate) fn uses_participant_frame(&self) -> bool {

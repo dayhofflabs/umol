@@ -1,9 +1,6 @@
 //! Graph-IR id remappings between `Molecule` id spaces.
 //!
 //! [`MoleculeRemapping`] is the dense total relabeling over all eight molecule entity id spaces.
-//! [`IdRemapping`] supplies sparse lookup tables for current reference-transport operations.
-
-use std::collections::HashMap;
 
 use umol_graph_core::{EdgeId, GraphRemapping, NodeId, Remapping};
 
@@ -218,79 +215,6 @@ impl Default for MoleculeRemapping {
             Vec::new(),
             Vec::new(),
         )
-    }
-}
-
-/// Sparse lookup tables used to transport references between `Molecule` id spaces.
-///
-/// Every id read by a consuming operation must be present. Unlike [`MoleculeRemapping`], this type
-/// does not declare a dense source domain.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct IdRemapping {
-    atom: HashMap<AtomId, AtomId>,
-    bond: HashMap<BondId, BondId>,
-    dative: HashMap<DativeBondId, DativeBondId>,
-    aromatic: HashMap<AromaticSystemId, AromaticSystemId>,
-    multicenter: HashMap<MulticenterBondId, MulticenterBondId>,
-    noncovalent: HashMap<NoncovalentBondId, NoncovalentBondId>,
-    stereo_atom: HashMap<StereoAtomId, StereoAtomId>,
-    stereo_bond: HashMap<StereoBondId, StereoBondId>,
-}
-
-impl IdRemapping {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        atom: HashMap<AtomId, AtomId>,
-        bond: HashMap<BondId, BondId>,
-        dative: HashMap<DativeBondId, DativeBondId>,
-        aromatic: HashMap<AromaticSystemId, AromaticSystemId>,
-        multicenter: HashMap<MulticenterBondId, MulticenterBondId>,
-        noncovalent: HashMap<NoncovalentBondId, NoncovalentBondId>,
-        stereo_atom: HashMap<StereoAtomId, StereoAtomId>,
-        stereo_bond: HashMap<StereoBondId, StereoBondId>,
-    ) -> Self {
-        Self {
-            atom,
-            bond,
-            dative,
-            aromatic,
-            multicenter,
-            noncovalent,
-            stereo_atom,
-            stereo_bond,
-        }
-    }
-
-    pub fn map_atom(&self, id: AtomId) -> AtomId {
-        self.atom[&id]
-    }
-
-    pub fn map_bond(&self, id: BondId) -> BondId {
-        self.bond[&id]
-    }
-
-    pub fn map_dative(&self, id: DativeBondId) -> DativeBondId {
-        self.dative[&id]
-    }
-
-    pub fn map_aromatic(&self, id: AromaticSystemId) -> AromaticSystemId {
-        self.aromatic[&id]
-    }
-
-    pub fn map_multicenter(&self, id: MulticenterBondId) -> MulticenterBondId {
-        self.multicenter[&id]
-    }
-
-    pub fn map_noncovalent(&self, id: NoncovalentBondId) -> NoncovalentBondId {
-        self.noncovalent[&id]
-    }
-
-    pub fn map_stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
-        self.stereo_atom[&id]
-    }
-
-    pub fn map_stereo_bond(&self, id: StereoBondId) -> StereoBondId {
-        self.stereo_bond[&id]
     }
 }
 

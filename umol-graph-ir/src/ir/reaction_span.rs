@@ -50,7 +50,6 @@ use super::noncovalent::{
     reframe_noncovalent_bond_spans_with, NoncovalentBondForm, NoncovalentBondSpans,
 };
 use super::reaction::{normalize_reaction_deltas, Reaction};
-use super::remap::IdRemapping;
 use super::stereo::{
     reframe_stereo_atom_spans_with, reframe_stereo_bond_spans_with, StereoAtomForm,
     StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind,
@@ -315,7 +314,6 @@ impl ReactionSpan {
                 .map(|&(_, right)| EdgeId::from(right))
                 .collect(),
         );
-        let id_remapping = correspondence.to_remapping()?;
 
         let atoms = reorder_dense(
             self.atoms.clone(),
@@ -417,13 +415,13 @@ impl ReactionSpan {
             .iter()
             .map(|span| match span {
                 ConstraintSpan::Unchanged(value) => {
-                    ConstraintSpan::Unchanged(value.clone().remap(&id_remapping))
+                    ConstraintSpan::Unchanged(value.clone().map(correspondence))
                 }
                 ConstraintSpan::Added(value) => {
-                    ConstraintSpan::Added(value.clone().remap(&id_remapping))
+                    ConstraintSpan::Added(value.clone().map(correspondence))
                 }
                 ConstraintSpan::Removed(value) => {
-                    ConstraintSpan::Removed(value.clone().remap(&id_remapping))
+                    ConstraintSpan::Removed(value.clone().map(correspondence))
                 }
             })
             .collect();
@@ -1029,15 +1027,79 @@ impl ReactionSpan {
         }
 
         // Constraints: R's remapped into the union frame, then set-diffed against L's.
-        let remapping = IdRemapping::new(
-            atom_union.iter().map(|(&r, &u)| (r, u)).collect(),
-            bond_union,
-            union_map(dative_corr, lhs.dative_bonds().count()),
-            union_map(aromatic_corr, lhs.aromatic_systems().count()),
-            union_map(multicenter_corr, lhs.multicenter_bonds().count()),
-            union_map(noncovalent_corr, lhs.noncovalent_bonds().count()),
-            union_map(stereo_atom_corr, lhs.stereo_atoms().count()),
-            union_map(stereo_bond_corr, lhs.stereo_bonds().count()),
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::new(
+                atom_union
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                rhs.atoms().count(),
+                atoms.len(),
+            )
+            .expect("union assignment is injective and covers the right side"),
+            Correspondence::new(
+                bond_union
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                rhs.bonds().count(),
+                bonds.len(),
+            )
+            .expect("union assignment is injective and covers the right side"),
+            Correspondence::new(
+                union_map(dative_corr, lhs.dative_bonds().count())
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                rhs.dative_bonds().count(),
+                dative.len(),
+            )
+            .expect("union assignment is injective and covers the right side"),
+            Correspondence::new(
+                union_map(aromatic_corr, lhs.aromatic_systems().count())
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                rhs.aromatic_systems().count(),
+                aromatic.len(),
+            )
+            .expect("union assignment is injective and covers the right side"),
+            Correspondence::new(
+                union_map(multicenter_corr, lhs.multicenter_bonds().count())
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                rhs.multicenter_bonds().count(),
+                multicenter.len(),
+            )
+            .expect("union assignment is injective and covers the right side"),
+            Correspondence::new(
+                union_map(noncovalent_corr, lhs.noncovalent_bonds().count())
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                rhs.noncovalent_bonds().count(),
+                noncovalent.len(),
+            )
+            .expect("union assignment is injective and covers the right side"),
+            Correspondence::new(
+                union_map(stereo_atom_corr, lhs.stereo_atoms().count())
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                rhs.stereo_atoms().count(),
+                stereo_atoms.len(),
+            )
+            .expect("union assignment is injective and covers the right side"),
+            Correspondence::new(
+                union_map(stereo_bond_corr, lhs.stereo_bonds().count())
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                rhs.stereo_bonds().count(),
+                stereo_bonds.len(),
+            )
+            .expect("union assignment is injective and covers the right side"),
         );
         let lhs_constraints: BTreeSet<Constraint> = lhs
             .constraints()
@@ -1050,7 +1112,7 @@ impl ReactionSpan {
             .constraints()
             .iter()
             .cloned()
-            .map(|c| c.remap(&remapping))
+            .map(|c| c.map(&correspondence))
             .map(Normalize::normalize)
             .collect::<Result<_, _>>()
             .ok()?;
@@ -1397,15 +1459,79 @@ impl ReactionSpan {
                     .lhs()
                     .is_some()
             }));
-        let remapping = IdRemapping::new(
-            atom_ids.clone(),
-            bond_ids.clone(),
-            dative_ids.clone(),
-            aromatic_ids.clone(),
-            multicenter_ids.clone(),
-            noncovalent_ids.clone(),
-            stereo_atom_ids.clone(),
-            stereo_bond_ids.clone(),
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::new(
+                atom_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.atoms.len(),
+                self.atoms.len(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                bond_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.bonds.len(),
+                self.bonds.len(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                dative_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.dative_bonds.count(),
+                self.dative_bonds.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                aromatic_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.aromatic_systems.count(),
+                self.aromatic_systems.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                multicenter_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.multicenter_bonds.count(),
+                self.multicenter_bonds.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                noncovalent_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.noncovalent_bonds.count(),
+                self.noncovalent_bonds.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                stereo_atom_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.stereo_atoms.count(),
+                self.stereo_atoms.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                stereo_bond_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.stereo_bonds.count(),
+                self.stereo_bonds.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
         );
 
         let mut deltas = Deltas::new();
@@ -1581,10 +1707,10 @@ impl ReactionSpan {
         for span in &self.constraints {
             match span {
                 ConstraintSpan::Added(c) => deltas.push(Delta::Constraint(ConstraintDelta::Add(
-                    c.clone().remap(&remapping),
+                    c.clone().map(&correspondence),
                 ))),
                 ConstraintSpan::Removed(c) => deltas.push(Delta::Constraint(
-                    ConstraintDelta::Remove(c.clone().remap(&remapping)),
+                    ConstraintDelta::Remove(c.clone().map(&correspondence)),
                 )),
                 ConstraintSpan::Unchanged(_) => {}
             }
@@ -1740,15 +1866,79 @@ impl ReactionSpan {
             })
             .collect();
 
-        let remapping = IdRemapping::new(
-            atom_ids,
-            bond_ids,
-            dative_ids,
-            aromatic_ids,
-            multicenter_ids,
-            noncovalent_ids,
-            stereo_atom_ids,
-            stereo_bond_ids,
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::new(
+                atom_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.atoms.len(),
+                self.atoms.len(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                bond_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.bonds.len(),
+                self.bonds.len(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                dative_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.dative_bonds.count(),
+                self.dative_bonds.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                aromatic_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.aromatic_systems.count(),
+                self.aromatic_systems.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                multicenter_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.multicenter_bonds.count(),
+                self.multicenter_bonds.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                noncovalent_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.noncovalent_bonds.count(),
+                self.noncovalent_bonds.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                stereo_atom_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.stereo_atoms.count(),
+                self.stereo_atoms.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
+            Correspondence::new(
+                stereo_bond_ids
+                    .iter()
+                    .map(|(&left, &right)| (left, right))
+                    .collect(),
+                self.stereo_bonds.count(),
+                self.stereo_bonds.count(),
+            )
+            .expect("projection assignment permutes the complete union id space"),
         );
         let constraints = self
             .constraints
@@ -1758,7 +1948,7 @@ impl ReactionSpan {
                 Side::Right => span.rhs(),
             })
             .cloned()
-            .map(|constraint| constraint.remap(&remapping))
+            .map(|constraint| constraint.map(&correspondence))
             .collect();
 
         MoleculeEntries {

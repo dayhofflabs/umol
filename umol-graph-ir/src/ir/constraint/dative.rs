@@ -12,7 +12,6 @@ use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::IdRemapping;
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Dative-bond constraint.
@@ -54,11 +53,6 @@ impl DativeBondConstraintForm {
     /// Value-only payload: no entity ids to compact, so this never drops.
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
-    }
-
-    /// Value-only payload: no entity ids to remap.
-    pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
-        self
     }
 
     pub(crate) fn uses_participant_frame(&self) -> bool {

@@ -33,7 +33,6 @@ use super::id::{
 use super::ligand::StereoLigand;
 use super::multicenter::{reframe_multicenter_bonds_with, MulticenterBondForm, MulticenterBonds};
 use super::noncovalent::{reframe_noncovalent_bonds_with, NoncovalentBondForm, NoncovalentBonds};
-use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{
     reframe_stereo_atoms_with, reframe_stereo_bonds_with, StereoAtomForm, StereoAtoms,
@@ -1496,25 +1495,7 @@ impl Molecule {
                 ));
             }
 
-            if !molecule.constraints.is_empty() {
-                let remapping = IdRemapping::new(
-                    offset_map(atom_offset, molecule_atom_count),
-                    offset_map(bond_offset, molecule_bond_count),
-                    offset_map(dative_offset, molecule_dative_count),
-                    offset_map(aromatic_offset, molecule_aromatic_count),
-                    offset_map(multicenter_offset, molecule_multicenter_count),
-                    offset_map(noncovalent_offset, molecule_noncovalent_count),
-                    offset_map(stereo_atom_offset, molecule_stereo_atom_count),
-                    offset_map(stereo_bond_offset, molecule_stereo_bond_count),
-                );
-                for constraint in molecule.constraints.iter() {
-                    entries
-                        .constraints
-                        .push(constraint.clone().remap(&remapping));
-                }
-            }
-
-            correspondences.push(MoleculeCorrespondence::new(
+            let correspondence = MoleculeCorrespondence::new(
                 offset_correspondence(atom_offset, molecule_atom_count, atom_count),
                 offset_correspondence(bond_offset, molecule_bond_count, bond_count),
                 offset_correspondence(dative_offset, molecule_dative_count, dative_count),
@@ -1539,7 +1520,13 @@ impl Molecule {
                     molecule_stereo_bond_count,
                     stereo_bond_count,
                 ),
-            ));
+            );
+            for constraint in molecule.constraints.iter() {
+                entries
+                    .constraints
+                    .push(constraint.clone().map(&correspondence));
+            }
+            correspondences.push(correspondence);
 
             atom_offset += molecule_atom_count;
             bond_offset += molecule_bond_count;
@@ -1669,26 +1656,7 @@ impl Molecule {
             editor.add_stereo_bond(site, ligands, other.stereo_bonds.attributes(id).clone());
         }
 
-        if !other.constraints.is_empty() {
-            let remapping = IdRemapping::new(
-                offset_map(atom_offset, other.atoms().count()),
-                offset_map(bond_offset, other.bonds().count()),
-                offset_map(dative_offset, other.dative_bonds().count()),
-                offset_map(aromatic_offset, other.aromatic_systems().count()),
-                offset_map(multicenter_offset, other.multicenter_bonds().count()),
-                offset_map(noncovalent_offset, other.noncovalent_bonds().count()),
-                offset_map(stereo_atom_offset, other.stereo_atoms().count()),
-                offset_map(stereo_bond_offset, other.stereo_bonds().count()),
-            );
-            for constraint in other.constraints.iter() {
-                editor
-                    .constraints_mut()
-                    .push(constraint.clone().remap(&remapping));
-            }
-        }
-        *self = editor.build();
-
-        MoleculeCorrespondence::new(
+        let correspondence = MoleculeCorrespondence::new(
             offset_correspondence(
                 atom_offset,
                 other.atoms().count(),
@@ -1729,7 +1697,14 @@ impl Molecule {
                 other.stereo_bonds().count(),
                 stereo_bond_offset + other.stereo_bonds().count(),
             ),
-        )
+        );
+        for constraint in other.constraints.iter() {
+            editor
+                .constraints_mut()
+                .push(constraint.clone().map(&correspondence));
+        }
+        *self = editor.build();
+        correspondence
     }
 
     /// Decompose into connected components — a conservative partition where every relation keeps its
@@ -2284,13 +2259,6 @@ fn offset_correspondence<Id: Copy + Ord + From<usize>>(
 ) -> Correspondence<Id> {
     let images: Vec<Id> = (0..input_count).map(|k| Id::from(offset + k)).collect();
     Correspondence::from_images(&images, combined_count)
-}
-
-/// The per-entity-kind offset map used to remap constraints into a combined molecule.
-fn offset_map<Id: Copy + Eq + Hash + From<usize>>(offset: usize, count: usize) -> HashMap<Id, Id> {
-    (0..count)
-        .map(|k| (Id::from(k), Id::from(offset + k)))
-        .collect()
 }
 
 /// Union every atom of a relation into one component (all participants share the first's set).

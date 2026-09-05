@@ -52,8 +52,8 @@ returned.
 - `split` returns one component-to-source correspondence per component. This
   is the reverse of a covariant source-to-result operation witness.
 - `MoleculeRemapping`, added by doc 212, currently has no production
-  consumers. `IdRemapping` remains the sparse transport used by constraints,
-  deltas, molecule construction, and reaction-span operations.
+  consumers. Constraint transport now consumes `MoleculeCorrespondence`;
+  S1e removed `IdRemapping` and migrated its live consumers.
 
 ## Settled semantic foundation
 
@@ -832,7 +832,7 @@ estimates.
   Verification: graph-IR library tests (6,659 passed, 3 ignored), graph-IR
   all-targets clippy with `-D warnings`, graph/IO all-targets checks, nightly
   formatting, and `git diff --check` passed.
-- [ ] **S1e — Constraint transport and legacy removal.** Graph-IR constraint,
+- [x] **S1e — Constraint transport and legacy removal.** Graph-IR constraint,
   molecule, reaction-span, correspondence, and delta modules. Breaking
   (red→green). [dep: S1c, S1d]
   Replace sparse `IdRemapping` constraint transport with correspondence-based
@@ -849,6 +849,21 @@ estimates.
   exist solely for that legacy traversal. Keep the current public molecule/
   span renumbering signatures until S2b. Verify live edit, projection,
   superimposition, pushout, and renumbering tests and absence of retired names.
+  Completed: `Constraint`, `MoleculeConstraint`, and `RelationalConstraint`
+  expose correspondence-based `map`/`try_map`; value-only constraint payloads
+  are preserved directly. Combination and pushout reuse their correspondences;
+  span transport declares the relevant id-space counts. Side projection still
+  assigns absent entities beyond the valid side prefix, preserving integrity
+  diagnostics; that internal assignment permutes the full union-sized domain,
+  not the selected molecule's domain.
+  Removed `IdRemapping`, both narrowing conversions, the unused delta helper
+  and its tests, and orphaned no-op/offset helpers. The composition identity
+  property now checks correspondence images directly without changing its law.
+  Live guides are synchronized. Verification: core/IR library tests (7,471
+  passed, 3 ignored), graph/IO library tests (4,297 passed), core/IR properties
+  with `PROPTEST_CASES=256` (487 passed, 1 ignored), workspace all-targets
+  check with Python 3.13.15, core/IR all-targets clippy with `-D warnings`,
+  nightly formatting, and `git diff --check` passed.
 - [ ] **S1f — Four graph transport producer migrations.** Graph-IR molecule combination,
   split, pushout, and reaction-span superimposition. Breaking internal
   rewiring (red→green). [dep: S1d, S1e] Replace their non-bijective

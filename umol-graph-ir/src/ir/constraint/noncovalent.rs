@@ -10,7 +10,6 @@ use umol_perm::DynPermutation;
 use super::super::boolean::BooleanForm;
 use super::super::compact::MoleculeCompaction;
 use super::super::error::{Contradiction, NoJoin};
-use super::super::remap::IdRemapping;
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
@@ -44,11 +43,6 @@ impl NoncovalentBondConstraintForm {
     /// Value-only: no indices to compact.
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
-    }
-
-    /// Value-only: no indices to remap.
-    pub fn remap(self, _map: &IdRemapping) -> Self {
-        self
     }
 
     pub(crate) fn uses_participant_frame(&self) -> bool {

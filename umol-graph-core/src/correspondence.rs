@@ -11,7 +11,6 @@ use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::graph::{EdgeId, Graph, NodeId};
-use crate::remap::GraphRemapping;
 
 /// Failure to construct a correspondence whose pairs form a partial bijection over its declared id
 /// spaces.
@@ -447,27 +446,6 @@ impl GraphCorrespondence {
     pub fn is_total(&self) -> bool {
         self.is_total_on_left() && self.is_total_on_right()
     }
-
-    /// This correspondence as a [`GraphRemapping`] — a dense old→new relabel of both id spaces. Requires
-    /// it be **total on the left** (every left id matched), as a pushout's coprojection is: left id `i`
-    /// maps to its partner.
-    pub fn to_remapping(&self) -> Option<GraphRemapping> {
-        if !self.is_total_on_left() {
-            return None;
-        }
-        Some(GraphRemapping::new(
-            self.nodes
-                .matched_pairs()
-                .iter()
-                .map(|&(_, right)| right)
-                .collect(),
-            self.edges
-                .matched_pairs()
-                .iter()
-                .map(|&(_, right)| right)
-                .collect(),
-        ))
-    }
 }
 
 /// The ids `0..count` absent from `sorted_matched` (which must be ascending, no duplicates) — a
@@ -849,39 +827,6 @@ mod tests {
             ),
             expected,
         );
-    }
-
-    #[rstest]
-    fn test_graph_correspondence_to_remapping() {
-        // total-on-left node map 0→2, 1→0, 2→1 and edge map 0→1, 1→0.
-        let c = GraphCorrespondence::new(
-            Correspondence::from_images(&[n(2), n(0), n(1)], 3),
-            Correspondence::from_images(&[e(1), e(0)], 2),
-        );
-        assert_eq!(
-            c.to_remapping(),
-            Some(GraphRemapping::new(
-                vec![n(2), n(0), n(1)],
-                vec![e(1), e(0)],
-            )),
-        );
-    }
-
-    #[rstest]
-    #[case::nodes(GraphCorrespondence::new(
-        Correspondence::new(vec![(n(0), n(0))], 2, 1)
-            .expect("correspondence producer preserves partial-bijection invariants"),
-        Correspondence::new(Vec::new(), 0, 0)
-            .expect("correspondence producer preserves partial-bijection invariants"),
-    ))]
-    #[case::edges(GraphCorrespondence::new(
-        Correspondence::new(Vec::new(), 0, 0)
-            .expect("correspondence producer preserves partial-bijection invariants"),
-        Correspondence::new(vec![(e(0), e(0))], 2, 1)
-            .expect("correspondence producer preserves partial-bijection invariants"),
-    ))]
-    fn test_graph_correspondence_to_remapping_partial(#[case] correspondence: GraphCorrespondence) {
-        assert_eq!(correspondence.to_remapping(), None);
     }
 
     #[rstest]

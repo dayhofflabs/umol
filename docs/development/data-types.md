@@ -707,9 +707,8 @@ property:
 For example, converting a partial correspondence to a semantic remapping may return `None` because
 the correspondence is not total on both sides. This can occur for a correspondence correctly
 produced for its molecule pair: partiality is part of the correspondence model, whereas a
-remapping is a total bijection. The current `to_remapping` conversions check only totality on the
-left; their results must not be treated as semantic remappings unless the producer also establishes
-totality on the right.
+remapping is a total bijection. Such narrowing is not currently exposed; reference transport
+consumes correspondence directly.
 It does not make correspondence construction, composition, reversal, or unrelated consumers
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
@@ -735,9 +734,11 @@ A relation-set remapping relabels each factor and leaves both the participant se
 payload as supplied. Graph core never reorders a frame or reads a payload; a positional payload
 stays aligned because nothing moved.
 
-`IdRemapping` is the legacy sparse molecule-wide reference-transport carrier used by graph-IR
-constraints, deltas, and several construction operations. It declares neither source nor target
-counts and does not itself establish remapping semantics.
+Constraint reference transport consumes `MoleculeCorrespondence`. `try_map` requires an image for
+every referenced entity and returns `None` if any is absent; `map` asserts that same coverage.
+Unused correspondence entries need not be matched. Predicates and frame positions are preserved.
+Edit handle resolution is separate: it uses only the entities referenced by the edited constraint,
+not a molecule-wide correspondence.
 
 When a higher-level operation moves molecular data with coordinated graph-core and graph-IR maps,
 both must derive from the same operation witness: the graph-core mapping transports topology and

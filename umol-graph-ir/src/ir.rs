@@ -115,7 +115,7 @@ pub use reaction::{
     ReactionProductsIter,
 };
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
-pub use remap::{IdRemapping, MoleculeRemapping};
+pub use remap::MoleculeRemapping;
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
 };

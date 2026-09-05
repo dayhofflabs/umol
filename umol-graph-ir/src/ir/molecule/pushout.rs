@@ -13,7 +13,6 @@ use super::super::correspondence::MoleculeCorrespondence;
 use super::super::entity::EntityKind;
 use super::super::id::{AtomId, BondId};
 use super::super::ligand::StereoLigand;
-use super::super::remap::IdRemapping;
 use super::super::traits::Lattice;
 use super::{ConstraintFrameActionMap, Molecule, MoleculeEntries};
 
@@ -300,49 +299,9 @@ impl Molecule {
         // Molecule-level constraints: `self`'s hold in the glue as-is (it keeps `self`'s ids and
         // frames); `other`'s are first transported into the retained object frames, then
         // re-anchored through the `right` embedding. Conjunction, deduplicated.
-        let remapping = IdRemapping::new(
-            right.atoms().matched_pairs().iter().copied().collect(),
-            right.bonds().matched_pairs().iter().copied().collect(),
-            right
-                .dative_bonds()
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-            right
-                .aromatic_systems()
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-            right
-                .multicenter_bonds()
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-            right
-                .noncovalent_bonds()
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-            right
-                .stereo_atoms()
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-            right
-                .stereo_bonds()
-                .matched_pairs()
-                .iter()
-                .copied()
-                .collect(),
-        );
         let mut constraints = self.constraints.clone();
         for constraint in right_constraints {
-            let remapped = constraint.remap(&remapping);
+            let remapped = constraint.map(&right);
             if !constraints.iter().any(|existing| existing == &remapped) {
                 constraints.push(remapped);
             }

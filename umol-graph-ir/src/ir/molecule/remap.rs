@@ -89,7 +89,6 @@ impl Molecule {
                 .map(|&(_, right)| EdgeId::from(right))
                 .collect(),
         );
-        let id_remapping = correspondence.to_remapping()?;
 
         let atoms = reorder(
             self.atoms.as_ref().clone(),
@@ -191,7 +190,7 @@ impl Molecule {
             .constraints
             .clone()
             .into_iter()
-            .map(|constraint| constraint.remap(&id_remapping))
+            .map(|constraint| constraint.map(correspondence))
             .collect();
 
         Some(
