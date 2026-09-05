@@ -6,7 +6,8 @@
 //! properties use the asserted producer route; independently supplied coverage failures remain in
 //! the exact unit suite for `try_remap`.
 
-use index_vec::Idx;
+use std::fmt::Debug;
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{EdgeId, GraphRemapping, NodeId, Remapping};
@@ -16,14 +17,14 @@ use crate::strategies::*;
 
 fn identity<Id>(count: usize) -> Remapping<Id>
 where
-    Id: Idx + From<usize>,
+    Id: Copy + Debug + Into<usize> + From<usize>,
 {
     Remapping::new((0..count).map(Id::from).collect()).unwrap()
 }
 
 fn crossing<Id>(count: usize, seed: u64, entity_kind: u32) -> Remapping<Id>
 where
-    Id: Idx + From<usize>,
+    Id: Copy + Debug + Into<usize> + From<usize>,
 {
     let shift = 1 + seed.rotate_right(entity_kind * 8) as usize % (count - 1);
     let images = (0..count)
@@ -249,19 +250,22 @@ fn remapping_scenario_strategy(
     )
 }
 
-fn inverse_images<Id: Idx>(remapping: &Remapping<Id>) -> Vec<Id> {
+fn inverse_images<Id: Copy + Into<usize> + From<usize>>(remapping: &Remapping<Id>) -> Vec<Id> {
     let mut pairs = (0..remapping.len())
-        .map(Id::from_usize)
-        .map(|source| (remapping.map(source).index(), source))
+        .map(Id::from)
+        .map(|source| (Into::<usize>::into(remapping.map(source)), source))
         .collect::<Vec<_>>();
     pairs.sort_unstable_by_key(|&(target, _)| target);
     pairs.into_iter().map(|(_, source)| source).collect()
 }
 
-fn composed_images<Id: Idx>(first: &Remapping<Id>, second: &Remapping<Id>) -> Vec<Id> {
+fn composed_images<Id: Copy + Into<usize> + From<usize>>(
+    first: &Remapping<Id>,
+    second: &Remapping<Id>,
+) -> Vec<Id> {
     assert_eq!(first.len(), second.len());
     (0..first.len())
-        .map(Id::from_usize)
+        .map(Id::from)
         .map(|source| second.map(first.map(source)))
         .collect()
 }

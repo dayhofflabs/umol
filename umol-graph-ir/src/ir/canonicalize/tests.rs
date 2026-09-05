@@ -5020,9 +5020,12 @@ fn test_canonicalize_constitution_properties(
     )
     .unwrap();
     let acted = initial_color_molecule.remap(&remapping).reframe().unwrap();
-    fn inverse_images<Id: Idx>(remapping: &Remapping<Id>) -> Vec<usize> {
+    fn inverse_images<Id: Copy + Into<usize> + From<usize>>(
+        remapping: &Remapping<Id>,
+    ) -> Vec<usize> {
         let mut sources = (0..remapping.len()).collect::<Vec<_>>();
-        sources.sort_unstable_by_key(|&source| remapping.map(Id::from_usize(source)).index());
+        sources
+            .sort_unstable_by_key(|&source| Into::<usize>::into(remapping.map(Id::from(source))));
         sources
     }
     let inverse = molecule_remapping(&[

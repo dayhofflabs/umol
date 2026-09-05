@@ -3,8 +3,6 @@
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
-use index_vec::{Idx, IndexVec};
-
 use crate::graph::{EdgeId, NodeId};
 
 /// Failure to construct a permutation of a dense id space.
@@ -33,39 +31,37 @@ impl<Id: Debug> Error for RemappingError<Id> {}
 /// and target ids therefore range over `0..images.len()`. Each image occurs exactly once.
 /// Compatibility with an independently supplied object's id space is checked by its consumer.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Remapping<Id: Idx> {
-    images: IndexVec<Id, Id>,
+pub struct Remapping<Id> {
+    images: Vec<Id>,
 }
 
-impl<Id: Idx> Default for Remapping<Id> {
+impl<Id> Default for Remapping<Id> {
     fn default() -> Self {
-        Self {
-            images: IndexVec::new(),
-        }
+        Self { images: Vec::new() }
     }
 }
 
-impl<Id: Idx> Remapping<Id> {
+impl<Id: Copy + Into<usize>> Remapping<Id> {
     /// Construct a permutation of `0..images.len()` without changing the supplied images.
     ///
     /// # Errors
     ///
     /// Returns an error for the first out-of-range or repeated image.
     pub fn new(images: Vec<Id>) -> Result<Self, RemappingError<Id>> {
-        let mut seen = IndexVec::<Id, bool>::from_vec(vec![false; images.len()]);
+        let mut seen = vec![false; images.len()];
         for &id in &images {
-            let entry = seen.get_mut(id).ok_or(RemappingError::ImageOutOfRange {
-                id,
-                count: images.len(),
-            })?;
+            let entry = seen
+                .get_mut(id.into())
+                .ok_or(RemappingError::ImageOutOfRange {
+                    id,
+                    count: images.len(),
+                })?;
             if *entry {
                 return Err(RemappingError::DuplicateImage { id });
             }
             *entry = true;
         }
-        Ok(Self {
-            images: IndexVec::from_vec(images),
-        })
+        Ok(Self { images })
     }
 
     /// Return the shared source and target size.
@@ -102,9 +98,9 @@ impl<Id: Idx> Remapping<Id> {
         if values.len() != self.len() {
             return None;
         }
-        let mut target: IndexVec<Id, Option<T>> = (0..self.len()).map(|_| None).collect();
-        for (old, value) in IndexVec::<Id, T>::from_vec(values).into_iter_enumerated() {
-            target[self.map(old)] = Some(value);
+        let mut target: Vec<Option<T>> = (0..self.len()).map(|_| None).collect();
+        for (&image, value) in self.images.iter().zip(values) {
+            target[image.into()] = Some(value);
         }
         Some(
             target
@@ -116,7 +112,7 @@ impl<Id: Idx> Remapping<Id> {
 
     /// Return the image of `old`, or `None` when it lies outside the source domain.
     pub fn try_map(&self, old: Id) -> Option<Id> {
-        self.images.get(old).copied()
+        self.images.get(old.into()).copied()
     }
 
     /// Return the image of `old`.
@@ -189,6 +185,15 @@ mod tests {
 
     use super::*;
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct TestId(u8);
+
+    impl From<TestId> for usize {
+        fn from(id: TestId) -> Self {
+            id.0 as usize
+        }
+    }
+
     #[rstest]
     #[case(RemappingError::ImageOutOfRange { id: NodeId(3), count: 2 }, "image NodeId(3) is out of range for 2 entries")]
     #[case(RemappingError::DuplicateImage { id: NodeId(1) }, "image NodeId(1) occurs more than once")]
@@ -203,7 +208,7 @@ mod tests {
     #[case::crossing(vec![NodeId(2), NodeId(0), NodeId(1)])]
     fn test_remapping_new(#[case] images: Vec<NodeId>) {
         let expected = Remapping {
-            images: IndexVec::from_vec(images.clone()),
+            images: images.clone(),
         };
         assert_eq!(Remapping::new(images), Ok(expected));
     }
@@ -277,8 +282,7 @@ mod tests {
     #[case::singleton(vec![10])]
     #[case::multiple(vec![10, 20, 30])]
     fn test_remapping_reorder_identity(#[case] values: Vec<u32>) {
-        let remapping =
-            Remapping::new((0..values.len()).map(NodeId::from_usize).collect()).unwrap();
+        let remapping = Remapping::new((0..values.len()).map(NodeId::from).collect()).unwrap();
         assert_eq!(remapping.reorder(values.clone()), values);
     }
 
@@ -363,6 +367,16 @@ mod tests {
             Remapping::new(vec![NodeId(1), NodeId(0)]).unwrap().map(old),
             expected
         );
+    }
+
+    #[rstest]
+    #[case::first(TestId(0), TestId(2))]
+    #[case::last(TestId(2), TestId(1))]
+    fn test_remapping_map_index_type(#[case] old: TestId, #[case] expected: TestId) {
+        let remapping = Remapping::new(vec![TestId(2), TestId(0), TestId(1)]).unwrap();
+
+        assert_eq!(remapping.map(old), expected);
+        assert_eq!(remapping.try_map(old), Some(expected));
     }
 
     #[rstest]

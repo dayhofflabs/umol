@@ -7,6 +7,14 @@ Relates: [211](211-relation-frames-and-api-2026-08-26.md),
 [218](218-mutation-witness-2026-08-31.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
+## Partial supersession — 2026-09-04
+
+The `index_vec` storage decision below is superseded by
+doc [218](218-mutation-witness-2026-08-31.md). `index_vec` and its `Idx`
+implementations were removed. `Remapping<Id>` now uses a private `Vec<Id>`
+with `Copy + Into<usize>` bounds for construction and lookup, preserving
+typed public lookup. The remainder of this historical record is unchanged.
+
 ## Purpose
 
 Doc [211](211-relation-frames-and-api-2026-08-26.md) completes the compaction row of the

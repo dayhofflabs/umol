@@ -2,9 +2,9 @@
 //! independently generated span entries. The parent module retains the bridge and serialization
 //! properties; its children exercise dense union-frame remapping and aggregate canonicalization.
 
+use std::fmt::Debug;
 use std::iter;
 
-use index_vec::Idx;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
@@ -370,7 +370,7 @@ where
 
 fn dense_permutation<Id>(count: usize, seed: u64, entity_kind: u32) -> Remapping<Id>
 where
-    Id: Idx + From<usize>,
+    Id: Copy + Debug + Into<usize> + From<usize>,
 {
     if count == 0 {
         return Remapping::default();

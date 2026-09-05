@@ -4,7 +4,6 @@
 //! generated total correspondences exercise exact identity, inverse, composition, and preservation
 //! of both compact side projections.
 
-use index_vec::Idx;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{Correspondence, EdgeId, GraphRemapping, NodeId, Remapping};
@@ -81,19 +80,22 @@ fn projection(span: &ReactionSpan, side: Side) -> Molecule {
     }
 }
 
-fn inverse_images<Id: Idx>(remapping: &Remapping<Id>) -> Vec<Id> {
+fn inverse_images<Id: Copy + Into<usize> + From<usize>>(remapping: &Remapping<Id>) -> Vec<Id> {
     let mut pairs = (0..remapping.len())
-        .map(Id::from_usize)
-        .map(|source| (remapping.map(source).index(), source))
+        .map(Id::from)
+        .map(|source| (Into::<usize>::into(remapping.map(source)), source))
         .collect::<Vec<_>>();
     pairs.sort_unstable_by_key(|&(target, _)| target);
     pairs.into_iter().map(|(_, source)| source).collect()
 }
 
-fn composed_images<Id: Idx>(first: &Remapping<Id>, second: &Remapping<Id>) -> Vec<Id> {
+fn composed_images<Id: Copy + Into<usize> + From<usize>>(
+    first: &Remapping<Id>,
+    second: &Remapping<Id>,
+) -> Vec<Id> {
     assert_eq!(first.len(), second.len());
     (0..first.len())
-        .map(Id::from_usize)
+        .map(Id::from)
         .map(|source| second.map(first.map(source)))
         .collect()
 }

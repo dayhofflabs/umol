@@ -7,7 +7,8 @@
 //! intrinsically contradictory inputs have separate relation-law properties because only the
 //! successful domain produces a canonical correspondence witness.
 
-use index_vec::Idx;
+use std::fmt::Debug;
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Remapping};
@@ -33,7 +34,7 @@ fn context() -> CanonicalizeContext {
 fn identity_remapping(molecule: &Molecule) -> MoleculeRemapping {
     fn identity<Id>(count: usize) -> Remapping<Id>
     where
-        Id: Idx + From<usize>,
+        Id: Copy + Debug + Into<usize> + From<usize>,
     {
         let images: Vec<Id> = (0..count).map(Id::from).collect();
         Remapping::new(images).unwrap()
@@ -56,7 +57,7 @@ fn identity_remapping(molecule: &Molecule) -> MoleculeRemapping {
 fn atom_only_remapping(images: &[AtomId], _count: usize) -> MoleculeRemapping {
     fn empty<Id>() -> Remapping<Id>
     where
-        Id: Idx + From<usize>,
+        Id: Copy + Debug + Into<usize> + From<usize>,
     {
         Remapping::default()
     }
@@ -74,10 +75,13 @@ fn atom_only_remapping(images: &[AtomId], _count: usize) -> MoleculeRemapping {
     )
 }
 
-fn composed_images<Id: Idx>(first: &Remapping<Id>, second: &Remapping<Id>) -> Vec<Id> {
+fn composed_images<Id: Copy + Into<usize> + From<usize>>(
+    first: &Remapping<Id>,
+    second: &Remapping<Id>,
+) -> Vec<Id> {
     assert_eq!(first.len(), second.len());
     (0..first.len())
-        .map(Id::from_usize)
+        .map(Id::from)
         .map(|source| second.map(first.map(source)))
         .collect()
 }

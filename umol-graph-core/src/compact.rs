@@ -6,8 +6,6 @@
 
 use std::ops::{Add, Sub};
 
-use index_vec::Idx;
-
 use crate::graph::{EdgeId, NodeId};
 
 /// Dense renumbering of one id space by removal: a surviving id maps to its position in the
@@ -46,13 +44,13 @@ where
     /// order of the survivors. Removed ids outside the column have no effect.
     pub fn compact_vec<T: Clone>(&self, data: &[T]) -> Vec<T>
     where
-        Id: Idx,
+        Id: Into<usize>,
     {
         data.iter()
             .enumerate()
             .filter(|(index, _)| {
                 self.removed
-                    .binary_search_by_key(index, |id| id.index())
+                    .binary_search_by_key(index, |&id| id.into())
                     .is_err()
             })
             .map(|(_, value)| value.clone())

@@ -2,10 +2,10 @@
 //!
 //! Criterion ids include the measured graph's node and edge counts.
 
+use std::fmt::Debug;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use index_vec::Idx;
 use umol_chem::element::Element;
 use umol_edn::FromEdn;
 use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Remapping};
@@ -621,7 +621,7 @@ fn graph_size(nodes: usize, edges: usize) -> String {
 fn reverse_remapping(molecule: &Molecule) -> MoleculeRemapping {
     fn reverse<Id>(count: usize) -> Remapping<Id>
     where
-        Id: Idx + From<usize>,
+        Id: Copy + Debug + Into<usize> + From<usize>,
     {
         let images = (0..count).rev().map(Id::from).collect::<Vec<_>>();
         Remapping::new(images).unwrap()

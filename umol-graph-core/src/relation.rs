@@ -13,8 +13,6 @@
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, Sub};
 
-use index_vec::Idx;
-
 use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::graph::{EdgeId, NodeId};
@@ -29,13 +27,9 @@ impl RelationId {
     }
 }
 
-impl Idx for RelationId {
-    fn from_usize(index: usize) -> Self {
-        Self::from(index)
-    }
-
-    fn index(self) -> usize {
-        RelationId::index(self)
+impl From<RelationId> for usize {
+    fn from(id: RelationId) -> Self {
+        id.0 as usize
     }
 }
 

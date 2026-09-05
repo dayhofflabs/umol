@@ -1,6 +1,7 @@
 //! Dense permutation witnesses at the Python boundary.
 
-use index_vec::Idx;
+use std::fmt::Debug;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_graph_core::{
@@ -31,7 +32,7 @@ impl Remapping {
     #[getter]
     fn images(&self) -> Vec<u32> {
         (0..self.0.len())
-            .map(|idx| self.0.map(NodeId::from_usize(idx)).0)
+            .map(|idx| self.0.map(NodeId::from(idx)).0)
             .collect()
     }
 
@@ -65,22 +66,26 @@ impl Remapping {
 }
 
 impl Remapping {
-    pub(crate) fn from_rust<Id: Idx>(remapping: &GraphCoreRemapping<Id>) -> Self {
+    pub(crate) fn from_rust<Id: Copy + Into<usize> + From<usize>>(
+        remapping: &GraphCoreRemapping<Id>,
+    ) -> Self {
         Self(
             GraphCoreRemapping::new(
                 (0..remapping.len())
-                    .map(|idx| NodeId::from_usize(remapping.map(Id::from_usize(idx)).index()))
+                    .map(|idx| NodeId::from(Into::<usize>::into(remapping.map(Id::from(idx)))))
                     .collect(),
             )
             .expect("typed permutation preserves images"),
         )
     }
 
-    pub(crate) fn to_rust<Id: Idx>(&self) -> GraphCoreRemapping<Id> {
+    pub(crate) fn to_rust<Id: Copy + Debug + Into<usize> + From<usize>>(
+        &self,
+    ) -> GraphCoreRemapping<Id> {
         GraphCoreRemapping::new(
             self.images()
                 .into_iter()
-                .map(|idx| Id::from_usize(idx as usize))
+                .map(|idx| Id::from(idx as usize))
                 .collect(),
         )
         .expect("Python permutation preserves images")

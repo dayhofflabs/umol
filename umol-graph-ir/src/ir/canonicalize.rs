@@ -2,10 +2,10 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{iter, mem};
 
-use index_vec::Idx;
 use thiserror::Error;
 use umol_graph_core::{
     AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, GraphRemapping, NodeId, Remapping,
@@ -3731,8 +3731,8 @@ fn reaction_span_counts(span: &ReactionSpan) -> [usize; 8] {
 }
 
 fn molecule_remapping(images: &[Vec<usize>; 8]) -> MoleculeRemapping {
-    fn remapping<Id: Idx>(images: &[usize]) -> Remapping<Id> {
-        Remapping::new(images.iter().copied().map(Id::from_usize).collect())
+    fn remapping<Id: Copy + Debug + Into<usize> + From<usize>>(images: &[usize]) -> Remapping<Id> {
+        Remapping::new(images.iter().copied().map(Id::from).collect())
             .expect("selected entity order is a permutation")
     }
     MoleculeRemapping::new(

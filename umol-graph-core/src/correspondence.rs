@@ -10,8 +10,6 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
-use index_vec::Idx;
-
 use crate::graph::{EdgeId, Graph, NodeId};
 use crate::remap::{GraphRemapping, Remapping};
 
@@ -99,13 +97,13 @@ pub struct Correspondence<Id> {
     right_count: usize,
 }
 
-impl<Id: Idx> From<&Remapping<Id>> for Correspondence<Id> {
+impl<Id: Copy + Into<usize> + From<usize>> From<&Remapping<Id>> for Correspondence<Id> {
     /// Preserve every pairing and both counts of the permutation.
     fn from(remapping: &Remapping<Id>) -> Self {
         Self {
             matched_pairs: (0..remapping.len())
                 .map(|idx| {
-                    let left = Id::from_usize(idx);
+                    let left = Id::from(idx);
                     (left, remapping.map(left))
                 })
                 .collect(),

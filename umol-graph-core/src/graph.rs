@@ -10,8 +10,6 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Add, Sub};
 use std::sync::Arc;
 
-use index_vec::Idx;
-
 use crate::compact::GraphCompaction;
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 
@@ -33,13 +31,9 @@ impl NodeId {
     }
 }
 
-impl Idx for NodeId {
-    fn from_usize(index: usize) -> Self {
-        Self::from(index)
-    }
-
-    fn index(self) -> usize {
-        NodeId::index(self)
+impl From<NodeId> for usize {
+    fn from(id: NodeId) -> Self {
+        id.0 as usize
     }
 }
 
@@ -72,13 +66,9 @@ impl EdgeId {
     }
 }
 
-impl Idx for EdgeId {
-    fn from_usize(index: usize) -> Self {
-        Self::from(index)
-    }
-
-    fn index(self) -> usize {
-        EdgeId::index(self)
+impl From<EdgeId> for usize {
+    fn from(id: EdgeId) -> Self {
+        id.0 as usize
     }
 }
 

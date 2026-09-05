@@ -726,6 +726,11 @@ already-valid component remappings and do not repeat validation. Borrowed `From`
 widen remappings to correspondences without changing pairings or source and target counts.
 Agreement with an independently supplied object remains contextual.
 
+The private storage is `Vec<Id>`. Construction and lookup require `Copy + Into<usize>`;
+lookup accepts and returns the same `Id` type, with integer extraction confined to storage access.
+Operations that enumerate source ids additionally require `From<usize>`. These conversions do not
+bind an id to a particular object or establish its validity in that object's namespace.
+
 The facility has three coordinated levels:
 
 - `umol_graph_core::Remapping<Id>` stores the dense image vector for one typed id space;

@@ -3,7 +3,6 @@
 use std::fmt;
 use std::ops::{Add, Sub};
 
-use index_vec::Idx;
 use umol_edn::{FromEdn, ToEdn};
 use umol_graph_core::{EdgeId, NodeId, RelationId};
 
@@ -23,14 +22,8 @@ macro_rules! define_id {
                 pub fn index(self) -> usize { self.0 as usize }
             }
 
-            impl Idx for $name {
-                fn from_usize(index: usize) -> Self {
-                    Self::from(index)
-                }
-
-                fn index(self) -> usize {
-                    $name::index(self)
-                }
+            impl From<$name> for usize {
+                fn from(id: $name) -> Self { id.0 as usize }
             }
 
             impl fmt::Display for $name {

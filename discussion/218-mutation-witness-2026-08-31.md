@@ -167,6 +167,16 @@ necessarily cover the target space. `Remapping::new` returns
 `Result<Remapping<Id>, RemappingError<Id>>`; `len` and `is_empty` expose the
 shared source and target size.
 
+The image storage is a private `Vec<Id>`. Construction, lookup, and vector
+reordering require `Id: Copy + Into<usize>`; operations that enumerate
+source ids additionally require `From<usize>`. The public lookup still
+accepts and returns `Id`, so different entity-id types cannot be mixed.
+ID newtypes implement `From<Id> for usize`; their existing `From<usize>`
+and inherent `index` methods remain. `index_vec` and its `Idx` implementations
+are removed: typed lookup does not require a typed storage dependency, and
+the trait never prevented integer extraction. This does not change the
+existing narrowing behavior of `usize`-to-ID conversion.
+
 The aggregate constructors receive already-valid components and are
 infallible. `GraphRemapping::new` takes the node and edge `Remapping` values,
 and `MoleculeRemapping::new` takes the graph aggregate and the six overlay
