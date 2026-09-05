@@ -85,23 +85,26 @@ an editor; it writes through the molecule's entity and constraint views.
 
 An operation-issued iterator captures one configured execution and cannot be constructed
 independently. Reaction application is the reference case. `Reaction.apply` performs the
-reaction-wide precondition check and returns a one-shot iterator over derivations;
+reaction-wide precondition check and returns a one-shot iterator over product molecules;
+`tracked_apply` yields `(product, correspondence)` tuples, while `apply_to_reaction` and
+`apply_to_reaction_span` yield realized reactions and spans.
 `Molecule.react` and `Molecule.react_all` return a one-shot iterator over product-component lists.
 These iterator classes are not exported or directly constructible.
 
 The iterator owns snapshots of every input needed by the operation, so mutating the source reaction
 or molecules after the call does not change the pending results. Matching is completed when the
-iterator is issued; derivations, products, and product splitting are realized lazily in match order.
-An eager reaction-wide failure is raised by the operation call. A non-rejection failure while
+iterator is issued; products, realized reactions/spans, and product splitting are realized lazily
+in match order.
+An eager reaction-wide failure is raised by the operation call. An execution failure while
 realizing a selected match is raised by `next` once and terminates the iterator. This placement
 parallels the outer `Result` and fallible iterator item on the Rust side.
 
-Use `apply` when the derivation and correspondence are required; use `react` when only disconnected
+Use `tracked_apply` when product provenance is required; use `react` when only disconnected
 product molecules are needed:
 
 ```python
-for derivation in reaction.apply(host):
-    print(derivation.comap)
+for product, correspondence in reaction.tracked_apply(host):
+    print(correspondence)
 
 for products in Molecule.react_all([first, second], reaction):
     print(products)

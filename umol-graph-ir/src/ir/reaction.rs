@@ -31,7 +31,6 @@ use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
-use super::derivation::ReactionDerivation;
 use super::edit::{
     AddBond, AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle,
     BondFieldChange, BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit,
@@ -77,25 +76,29 @@ pub struct Reaction {
 
 /// One-shot reaction applications over an eagerly enumerated correspondence set.
 ///
-/// This operation-issued iterator is created by [`Reaction::apply`] and has no independent public
-/// constructor. It owns snapshots of the reaction and host plus the reaction's normalized deltas,
+/// This operation-issued iterator is created by the [`Reaction::apply`] family and has no public
+/// constructor. The type parameter is the selected output: a molecule, a molecule with its
+/// correspondence, a reaction, or a reaction span. It owns snapshots of the reaction and host
+/// plus the reaction's normalized deltas,
 /// so later changes to the inputs cannot affect iteration. Matching is completed when the iterator
-/// is created; derivations are constructed lazily in match order. Match-local rejection is skipped;
+/// is created; outputs are constructed lazily in match order. Match-local rejection is skipped;
 /// another application failure is yielded once and terminates the iterator.
 #[derive(Debug)]
-pub struct ReactionApplicationIter {
+pub struct ReactionApplicationIter<T> {
     reaction: Reaction,
     host: Molecule,
     deltas: Deltas,
     correspondences: IntoIter<MoleculeCorrespondence>,
     failed: bool,
+    output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
 }
 
-impl ReactionApplicationIter {
+impl<T> ReactionApplicationIter<T> {
     fn new(
         reaction: Reaction,
         host: Molecule,
         match_config: SubstructureMatchConfig,
+        output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
     ) -> Result<Self, ApplyPreconditionError> {
         let deltas = reaction.application_deltas()?;
         let correspondences = reaction
@@ -108,12 +111,13 @@ impl ReactionApplicationIter {
             deltas,
             correspondences,
             failed: false,
+            output,
         })
     }
 }
 
-impl Iterator for ReactionApplicationIter {
-    type Item = Result<ReactionDerivation, ApplyError>;
+impl<T> Iterator for ReactionApplicationIter<T> {
+    type Item = Result<T, ApplyError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.failed {
@@ -123,11 +127,7 @@ impl Iterator for ReactionApplicationIter {
                 .apply_at_canonical(&self.host, &correspondence, self.deltas.clone())
             {
                 Ok(Some((product, correspondence))) => {
-                    return Some(Ok(ReactionDerivation::new(
-                        self.host.clone(),
-                        product,
-                        correspondence,
-                    )));
+                    return Some(Ok((self.output)(&self.host, product, correspondence)));
                 }
                 Ok(None) => {}
                 Err(error) => {
@@ -146,15 +146,15 @@ impl Iterator for ReactionApplicationIter {
 /// constructor. It owns the underlying [`ReactionApplicationIter`] and therefore the reaction and
 /// reactant snapshots. Each successful application is replaced lazily by the conservative
 /// connected-component split of its right-hand side. Component order is inherited from
-/// [`Molecule::split`]. The rest of the derivation is intentionally discarded.
+/// [`Molecule::split`].
 /// Application errors pass through unchanged.
 #[derive(Debug)]
 pub struct ReactionProductsIter {
-    applications: ReactionApplicationIter,
+    applications: ReactionApplicationIter<Molecule>,
 }
 
 impl ReactionProductsIter {
-    fn new(applications: ReactionApplicationIter) -> Self {
+    fn new(applications: ReactionApplicationIter<Molecule>) -> Self {
         Self { applications }
     }
 }
@@ -165,7 +165,7 @@ impl Iterator for ReactionProductsIter {
     fn next(&mut self) -> Option<Self::Item> {
         self.applications
             .next()
-            .map(|application| application.map(|derivation| derivation.rhs().split()))
+            .map(|application| application.map(|product| product.split()))
     }
 }
 
@@ -178,7 +178,7 @@ impl Iterator for ReactionProductsIter {
 /// # Semantic properties
 ///
 /// For a molecule slice `reactants`, the result is identical to combining `reactants` in slice
-/// order, applying `reaction`, and splitting every successful derivation's right-hand side while
+/// order, applying `reaction`, and splitting every successful product while
 /// discarding the split correspondences. An empty slice follows the same rule through the empty
 /// combined molecule.
 ///
@@ -246,8 +246,10 @@ impl React for [Molecule] {
         match_config: SubstructureMatchConfig,
     ) -> Result<ReactionProductsIter, ApplyPreconditionError> {
         let host = Molecule::combine_all(self);
-        ReactionApplicationIter::new(reaction.clone(), host, match_config)
-            .map(ReactionProductsIter::new)
+        ReactionApplicationIter::new(reaction.clone(), host, match_config, |_, product, _| {
+            product
+        })
+        .map(ReactionProductsIter::new)
     }
 }
 
@@ -2159,11 +2161,11 @@ impl Reaction {
         Ok(deltas)
     }
 
-    /// Every derivation of applying the reaction to `host`: one per injective match of `lhs` into
+    /// Every product of applying the reaction to `host`: one per injective match of `lhs` into
     /// `host` under `match_config` that satisfies the match-local DPO and structural conditions.
     ///
     /// The returned iterator owns snapshots of this reaction and `host`. Matching is eager;
-    /// derivation construction is lazy and follows match order. Match-local rejection is skipped;
+    /// output construction is lazy and follows match order. Match-local rejection is skipped;
     /// another application failure is yielded once and terminates the iterator.
     ///
     /// # Errors
@@ -2175,8 +2177,79 @@ impl Reaction {
         &self,
         host: &Molecule,
         match_config: SubstructureMatchConfig,
-    ) -> Result<ReactionApplicationIter, ApplyPreconditionError> {
-        ReactionApplicationIter::new(self.clone(), host.clone(), match_config)
+    ) -> Result<ReactionApplicationIter<Molecule>, ApplyPreconditionError> {
+        ReactionApplicationIter::new(self.clone(), host.clone(), match_config, |_, product, _| {
+            product
+        })
+    }
+
+    /// Apply in match order, retaining the host-to-product correspondence.
+    ///
+    /// Matching, ownership, and failure behavior are the same as [`Self::apply`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the same precondition errors and iterator execution errors as [`Self::apply`].
+    pub fn tracked_apply(
+        &self,
+        host: &Molecule,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionApplicationIter<(Molecule, MoleculeCorrespondence)>, ApplyPreconditionError>
+    {
+        ReactionApplicationIter::new(
+            self.clone(),
+            host.clone(),
+            match_config,
+            |_, product, correspondence| (product, correspondence),
+        )
+    }
+
+    /// Apply in match order, expressing each application as a reaction.
+    ///
+    /// Matching, ownership, and failure behavior are the same as [`Self::apply`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the same precondition errors and iterator execution errors as [`Self::apply`].
+    pub fn apply_to_reaction(
+        &self,
+        host: &Molecule,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionApplicationIter<Reaction>, ApplyPreconditionError> {
+        ReactionApplicationIter::new(
+            self.clone(),
+            host.clone(),
+            match_config,
+            |host, product, correspondence| {
+                let deltas = host
+                    .difference_to(&product, &correspondence)
+                    .expect("application correspondence describes compatible molecule sides");
+                Reaction::new(host.clone(), deltas)
+            },
+        )
+    }
+
+    /// Apply in match order, expressing each application as a reaction span.
+    ///
+    /// Matching, ownership, and failure behavior are the same as [`Self::apply`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the same precondition errors and iterator execution errors as [`Self::apply`].
+    pub fn apply_to_reaction_span(
+        &self,
+        host: &Molecule,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionApplicationIter<ReactionSpan>, ApplyPreconditionError> {
+        ReactionApplicationIter::new(
+            self.clone(),
+            host.clone(),
+            match_config,
+            |host, product, correspondence| {
+                ReactionSpan::superimpose(host, &product, &correspondence)
+                    .expect("application correspondence describes compatible molecule sides")
+            },
+        )
     }
 }
 
@@ -2975,11 +3048,10 @@ mod tests {
         #[case] expected: Vec<Molecule>,
     ) {
         let mut applications =
-            ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap();
+            ReactionApplicationIter::new(reaction, host, MATCH_CONFIG, |_, product, _| product).unwrap();
         let products = applications
             .by_ref()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect::<Vec<_>>();
 
         assert_eq!(products, expected);
@@ -3011,7 +3083,9 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
-        let mut applications = ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap();
+        let mut applications =
+            ReactionApplicationIter::new(reaction, host, MATCH_CONFIG, |_, product, _| product)
+                .unwrap();
 
         assert_eq!(
             applications.next(),
@@ -3036,8 +3110,13 @@ mod tests {
                 },
             })]),
         );
-        let mut applications =
-            ReactionApplicationIter::new(reaction.clone(), host.clone(), MATCH_CONFIG).unwrap();
+        let mut applications = ReactionApplicationIter::new(
+            reaction.clone(),
+            host.clone(),
+            MATCH_CONFIG,
+            |_, product, _| product,
+        )
+        .unwrap();
         let mut changed_reaction = reaction;
         changed_reaction.deltas = Deltas::new();
         let expected_changed_reaction = Reaction::new(changed_reaction.lhs.clone(), Deltas::new());
@@ -3047,9 +3126,9 @@ mod tests {
             ..Default::default()
         }));
 
-        let derivation = applications.next().unwrap().unwrap();
+        let product = applications.next().unwrap().unwrap();
         assert_eq!(
-            derivation.rhs(),
+            &product,
             &Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64)],
                 ..Default::default()
@@ -3101,7 +3180,7 @@ mod tests {
         #[case] expected: Vec<Vec<Molecule>>,
     ) {
         let mut products = ReactionProductsIter {
-            applications: ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap(),
+            applications: ReactionApplicationIter::new(reaction, host, MATCH_CONFIG, |_, product, _| product).unwrap(),
         };
         let actual = products
             .by_ref()
@@ -3132,7 +3211,13 @@ mod tests {
             ..Default::default()
         });
         let mut products = ReactionProductsIter {
-            applications: ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap(),
+            applications: ReactionApplicationIter::new(
+                reaction,
+                host,
+                MATCH_CONFIG,
+                |_, product, _| product,
+            )
+            .unwrap(),
         };
 
         assert_eq!(
@@ -5613,7 +5698,6 @@ mod tests {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         assert_eq!(products, expected);
@@ -5638,7 +5722,6 @@ mod tests {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         assert_eq!(products, vec![host]);
@@ -5726,7 +5809,7 @@ mod tests {
 
     // Applying the ascending-frame inversion rule to a host that states the same center in a different
     // ligand order: the match succeeds (the matcher reframes), and `apply_at` now reframes the rule's
-    // `ModifyField` coset into the host frame before lowering it, so the derivation inverts the host's
+    // `ModifyField` coset into the host frame before lowering it, so application inverts the host's
     // stored coset in the host's own frame. `same_frame` is the control; `swapped_frame` (ligands 1↔2,
     // its physically-equal coset 1) forces the reframe.
     #[rstest]
@@ -5793,9 +5876,7 @@ mod tests {
             .unwrap()
             .next()
             .expect("the inversion rule matches the host")
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         assert_eq!(rhs, expected);
     }
 
@@ -5889,9 +5970,7 @@ mod tests {
             .unwrap()
             .next()
             .expect("the removal rule matches the host")
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         assert_eq!(rhs, expected);
     }
 
@@ -5987,9 +6066,7 @@ mod tests {
                 let rhs = applications
                     .next()
                     .expect("the modification rule matches the host")
-                    .unwrap()
-                    .rhs()
-                    .clone();
+                    .unwrap();
                 assert_eq!(rhs, molecule(coset));
             }
             None => assert!(applications.next().is_none()),
@@ -6059,9 +6136,7 @@ mod tests {
             .unwrap()
             .next()
             .expect("the reaction applies to a lone carbon")
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         assert_eq!(rhs, expected);
     }
 
@@ -6114,9 +6189,7 @@ mod tests {
             .unwrap()
             .next()
             .expect("a two-stereo-center molecule matches itself")
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         assert_eq!(rhs, center);
     }
 

@@ -136,6 +136,12 @@ fn reversal_case() -> Reaction {
 
 fn benchmark_reaction(c: &mut Criterion) {
     let (reaction, host, correspondence) = application_case();
+    let applications = reaction
+        .apply(&host, MATCH_CONFIG)
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(applications.len(), 1);
     let reversal = reversal_case();
     let mut group = c.benchmark_group("reaction");
     group.bench_function("match_enumeration", |b| {
@@ -164,6 +170,46 @@ fn benchmark_reaction(c: &mut Criterion) {
         b.iter(|| {
             black_box(
                 reaction.apply_at_to_reaction_span(black_box(&host), black_box(&correspondence)),
+            )
+        })
+    });
+    group.bench_function("apply/all_matches", |b| {
+        b.iter(|| {
+            black_box(
+                reaction
+                    .apply(black_box(&host), MATCH_CONFIG)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+            )
+        })
+    });
+    group.bench_function("tracked_apply/all_matches", |b| {
+        b.iter(|| {
+            black_box(
+                reaction
+                    .tracked_apply(black_box(&host), MATCH_CONFIG)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+            )
+        })
+    });
+    group.bench_function("apply_to_reaction/all_matches", |b| {
+        b.iter(|| {
+            black_box(
+                reaction
+                    .apply_to_reaction(black_box(&host), MATCH_CONFIG)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+            )
+        })
+    });
+    group.bench_function("apply_to_reaction_span/all_matches", |b| {
+        b.iter(|| {
+            black_box(
+                reaction
+                    .apply_to_reaction_span(black_box(&host), MATCH_CONFIG)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
             )
         })
     });

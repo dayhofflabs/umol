@@ -284,11 +284,10 @@ edit plan and publishes the result only when edit execution and the result's pub
 succeed. Reaction application applies a rule at a supplied or enumerated match.
 The supplied-match methods distinguish a result, ordinary non-applicability, and execution
 failure through `Result<Option<T>, ApplyError>`. Non-applicability is not an error category.
-The application iterator skips inapplicable matches and emits one `ReactionDerivation` per
-successful match.
+The application iterator skips inapplicable matches and emits one selected output per successful
+match: a product, product with correspondence, realized reaction, or reaction span.
 
-**Not:** plan (which is derived without mutating), `react` (which intentionally discards the
-derivation and emits only product components).
+**Not:** plan (which is derived without mutating), `react` (which emits product components).
 **In code:** `apply`, `apply_at`, `ReactionApplicationIter`.
 
 ### Attributes
@@ -579,14 +578,14 @@ coined sense collides with the established one.
 - **Reaction derivation** — one firing of a reaction: the two concrete molecule sides plus the
   correspondence between them. This is the standard sense in algebraic graph transformation, where a
   derivation is the result of applying a production, and it is the sense the whitepaper glossary
-  uses. `ReactionDerivation` is `apply`'s codomain; a rule is to a derivation as a function is to one
-  evaluation.
+  uses. It describes an application, not a separate API result type; a realized application can be
+  returned as a `Reaction` or `ReactionSpan`.
 - **Perception derivation** — the policy-free result of perception, including candidates and exact
   inconsistencies.
 
 **Not:** resolution (which applies policy), validation. The two senses are not related; the second
 would be the one to rename if either were.
-**In code:** `ReactionDerivation`, `apply`, `to_reaction`.
+**In code:** `apply_to_reaction`, `apply_to_reaction_span`.
 
 ### Derived and asserted
 
@@ -1360,11 +1359,10 @@ may be used descriptively when explaining that an entity relation induces partic
 **React** is the product-oriented convenience operation over reaction application. For one molecule
 it applies the reaction and splits each successful right-hand side. For several molecules it first
 combines them by disjoint union in input order, then performs the same apply-and-split operation. It
-emits one product-component collection per successful match and discards the derivation and split
+emits one product-component collection per successful match without application or split
 correspondences.
 
-**Not:** `apply`, which returns complete `ReactionDerivation` values; reaction construction or
-composition.
+**Not:** `apply`, which returns unsplit products; reaction construction or composition.
 **In code:** `React`, `react`, `react_all`, `ReactionProductsIter`.
 
 ### Reaction
@@ -1377,8 +1375,7 @@ The type is homoiconic in the sense the whitepaper claims: a molecule is the emp
 rule is a pattern left-hand side plus deltas, and applying a rule yields a concrete reaction of the
 same type.
 
-**Not:** a derivation, which is one firing of a reaction against a concrete host. A reaction is the
-rule; a derivation is an evaluation of it.
+A reaction can represent either a reusable rule or its realized application to a concrete host.
 **In code:** `Reaction`, `lhs`, `Deltas`.
 
 ### Reaction span

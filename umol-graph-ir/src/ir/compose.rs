@@ -754,18 +754,15 @@ mod tests {
             )
             .iter()
             .flat_map(|c| c.apply(&host, MATCH_CONFIG).unwrap().map(Result::unwrap))
-            .map(|derivation| derivation.rhs().clone())
             .collect();
         let sequential: Vec<Molecule> = a
             .apply(&host, MATCH_CONFIG)
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .flat_map(|intermediate| {
                 b.apply(&intermediate, MATCH_CONFIG)
                     .unwrap()
                     .map(Result::unwrap)
-                    .map(|derivation| derivation.rhs().clone())
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -843,9 +840,7 @@ mod tests {
             .unwrap()
             .next()
             .unwrap()
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         let sequential = b
             .apply(
                 &intermediate,
@@ -857,9 +852,7 @@ mod tests {
             .unwrap()
             .next()
             .unwrap()
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         let composed = composite
             .apply(
                 &host,
@@ -871,9 +864,7 @@ mod tests {
             .unwrap()
             .next()
             .unwrap()
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         assert_eq!(composed, sequential);
     }
 

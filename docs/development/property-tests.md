@@ -478,12 +478,12 @@ Reaction properties span several operational domains:
 
 | Domain | Representative properties |
 | --- | --- |
-| Generated well-formed reactions | Reaction/span reconstruction, derivation reversal, composition, and serialization |
+| Generated well-formed reactions | Reaction/span reconstruction, correspondence reversal and composition, and serialization |
 | Comprehensive entity reactions | Roundtrips and transformations across all eight entity kinds |
 | Host-relative refinements | Pattern-relative updates lower against the matched host value rather than replacing it with the pattern value |
 | Explicit correspondences | `apply_at` agrees with a matching-derived application for the same match |
 | Malformed reactions | Invalid references, incidence mismatches, discontinuous updates, and invalid stereo configurations return exact typed errors without panics |
-| Owned application iteration | Eager match order is preserved, derivations are emitted lazily, source mutation cannot affect the captured operation, and a fatal error is emitted once before terminal exhaustion |
+| Owned application iteration | Eager match order is preserved, selected outputs are emitted lazily, source mutation cannot affect the captured operation, and a fatal error is emitted once before terminal exhaustion |
 | Product convenience | `React` on one molecule or an ordered molecule slice agrees with the manual combine → apply → split pipeline for results, multiplicity, match order, component order, precondition errors, and iterator-item errors |
 
 The error properties are part of the executable specification just as much as

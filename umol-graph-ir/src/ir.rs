@@ -12,7 +12,6 @@ pub(crate) mod constraint;
 pub(crate) mod correspondence;
 pub(crate) mod dative;
 pub(crate) mod delta;
-pub(crate) mod derivation;
 pub(crate) mod edit;
 pub(crate) mod electrons;
 pub(crate) mod entity;
@@ -70,7 +69,6 @@ pub use delta::{
     Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
     StereoBondDelta,
 };
-pub use derivation::ReactionDerivation;
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,

@@ -70,7 +70,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -112,7 +111,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -158,7 +156,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -217,7 +214,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -276,7 +272,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -322,7 +317,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -392,7 +386,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -462,7 +455,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -547,7 +539,7 @@ proptest! {
         prop_assert_eq!(reaction.apply_at_to_reaction_span(&host, &defective), Err(error));
     }
 
-    /// The public owned iterator is exactly explicit match enumeration followed by `apply_at`,
+    /// The tracked iterator is exactly explicit match enumeration followed by `tracked_apply_at`,
     /// including skipped inapplicable matches and termination after the first execution failure.
     #[test]
     fn test_reaction_apply(
@@ -569,12 +561,39 @@ proptest! {
             }
         }
         let actual = reaction
-            .apply(&host, MATCH_CONFIG)
+            .tracked_apply(&host, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
-            .map(|result| result.map(|derivation| (derivation.rhs().clone(), derivation.comap().clone())))
             .collect::<Vec<_>>();
 
-        prop_assert_eq!(actual, expected);
+        prop_assert_eq!(&actual, &expected);
+        let products = reaction.apply(&host, MATCH_CONFIG).unwrap().collect::<Vec<_>>();
+        let expected_products = expected.iter().cloned().map(|result| result.map(|(product, _)| product)).collect::<Vec<_>>();
+        prop_assert_eq!(products, expected_products);
+        let realized = reaction.apply_to_reaction(&host, MATCH_CONFIG).unwrap().collect::<Vec<_>>();
+        let spans = reaction.apply_to_reaction_span(&host, MATCH_CONFIG).unwrap().collect::<Vec<_>>();
+        prop_assert_eq!(realized.len(), expected.len());
+        prop_assert_eq!(spans.len(), expected.len());
+        let context = CanonicalizeContext {
+            para_stereo: false,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        };
+        for ((application, realized), span) in expected.into_iter().zip(realized).zip(spans) {
+            match application {
+                Ok((product, witness)) => {
+                    let realized = realized.unwrap();
+                    let span = span.unwrap();
+                    prop_assert!(witness.is_compatible(&host, &product));
+                    prop_assert_eq!(realized.lhs(), &host);
+                    prop_assert_eq!(span.lhs(), host.clone());
+                    prop_assert!(product.canonical_eq(&span.rhs(), &context));
+                    prop_assert_eq!(realized.normalize(), span.to_reaction().normalize());
+                }
+                Err(error) => {
+                    prop_assert_eq!(realized, Err(error.clone()));
+                    prop_assert_eq!(span, Err(error));
+                }
+            }
+        }
     }
 
     /// `Molecule::react` is exactly reaction application followed by conservative splitting.
@@ -586,7 +605,7 @@ proptest! {
             .apply(&host, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
             .map(|application| {
-                application.map(|derivation| derivation.rhs().split())
+                application.map(|product| product.split())
             })
             .collect::<Vec<_>>();
         let actual = host
@@ -609,7 +628,7 @@ proptest! {
             .apply(&host, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
             .map(|application| {
-                application.map(|derivation| derivation.rhs().split())
+                application.map(|product| product.split())
             })
             .collect::<Vec<_>>();
         let actual = reactants
@@ -651,7 +670,7 @@ proptest! {
                 MATCH_CONFIG,
             )
             .unwrap()
-            .any(|derivation| derivation.unwrap().rhs() == &right));
+            .any(|product| product.unwrap() == right));
     }
 
     /// Isolation probe: a plain overlay reaction's `apply` at its own `lhs` reproduces its
@@ -668,7 +687,7 @@ proptest! {
                 MATCH_CONFIG,
             )
             .unwrap()
-            .any(|derivation| derivation.unwrap().rhs() == &right));
+            .any(|product| product.unwrap() == right));
     }
 
     #[test]
@@ -735,7 +754,6 @@ proptest! {
                 MATCH_CONFIG,
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
-            .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
             .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
 
@@ -797,7 +815,6 @@ proptest! {
                 MATCH_CONFIG,
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
-            .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
             .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
 
@@ -873,7 +890,6 @@ proptest! {
                 MATCH_CONFIG,
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
-            .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
             .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
 
@@ -940,7 +956,6 @@ proptest! {
                 MATCH_CONFIG,
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
-            .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
             .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
 

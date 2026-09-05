@@ -661,10 +661,12 @@ object independently violates the operation contract; rollback must not panic, b
 correct restoration for the compromised pairing.
 
 Reaction iterators are operation-issued values with a different lifecycle. `Reaction::apply`
-checks reaction-wide preconditions and then issues a `ReactionApplicationIter` that owns snapshots
+checks reaction-wide preconditions and then issues a `ReactionApplicationIter<T>` that owns snapshots
 of the reaction and host, normalized application state, and an eagerly enumerated correspondence
 set. `React::react` issues a `ReactionProductsIter` over the same application lifecycle. Neither
-iterator has a public constructor. Derivations and product-component lists are realized lazily in
+iterator has a public constructor. The output type is selected by `apply` (molecule),
+`tracked_apply` (molecule and correspondence), `apply_to_reaction`, or `apply_to_reaction_span`.
+Outputs and product-component lists are realized lazily in
 match order, so failures at that stage remain iterator items; a fatal item error is yielded once and
 terminates the iterator. Later mutation of the source reaction or molecules cannot change the
 issued operation.

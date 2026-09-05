@@ -104,9 +104,7 @@ use crate::{
         NoncovalentBondView, NoncovalentBondViews,
     },
     num::{ArithExpr, MemOp, NumForm, PredExpr, RelOp},
-    reaction::{
-        Reaction, ReactionApplicationConfig, ReactionCompositionConfig, ReactionDerivation,
-    },
+    reaction::{Reaction, ReactionApplicationConfig, ReactionCompositionConfig},
     reaction_span::ReactionSpan,
     remap::{MoleculeRemapping, Remapping},
     resolve::{
@@ -306,7 +304,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ReactionCompositionConfig>()?;
         module.add_class::<ReactionApplicationConfig>()?;
         module.add_class::<Reaction>()?;
-        module.add_class::<ReactionDerivation>()?;
         module.add_class::<ReactionSpan>()?;
         module.add_class::<RingConfig>()?;
         module.add_class::<SmilesIoConfig>()?;

@@ -148,7 +148,6 @@ PUBLIC_EXPORTS = frozenset(
     ReactionCombinedFingerprintConfig
     ReactionCompositionConfig
     ReactionDefaults
-    ReactionDerivation
     ReactionMetadata
     ReactionSide
     ReactionSpan

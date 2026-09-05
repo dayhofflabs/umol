@@ -1339,10 +1339,10 @@ the same object-only/tracked split, preserving their categorical mapping directi
   21.97 µs, and realized span 16.97 µs. Criterion used 10 samples with
   1-second warmup and measurement; match enumeration is outside these calls.
 
-- [ ] **S7b — Iteration and derivation retirement.** Graph-IR reaction
+- [x] **S7b — Iteration and derivation retirement.** Graph-IR reaction
   iterators and their Rust/Python consumers. Breaking (red→green).
   [dep: S7a, S5a] Mirror S7a per iterator item: `apply` is product-only,
-  `tracked_apply` adds optional provenance, and `apply_to_reaction` /
+  `tracked_apply` returns the product and its correspondence, and `apply_to_reaction` /
   `apply_to_reaction_span` return the primary objects directly. Add no further
   tracked variants. Iterator items are `Result<T, ApplyError>`; inapplicable
   matches are skipped rather than yielded as `None`. Implement these forms, preserving captured-input
@@ -1351,6 +1351,28 @@ the same object-only/tracked split, preserving their categorical mapping directi
   consumers. Keep `React` methods separate and verify their products still
   match explicit combine/application/split. No new result container duplicates
   the returned molecule/reaction/span.
+
+  Implemented with the approved `ReactionApplicationIter<T>`; construction is
+  private and the operation selects one of the four output types. No result
+  enum or public conversion trait was added. Python mirrors the four methods
+  through unexported iterator bindings. Retired-type observation tests were
+  removed; product, correspondence, reconstruction, reversal, and composition
+  checks now exercise the surviving APIs. `React` remains combine/apply/split.
+
+  Verification (2026-09-05): core/IR library, integration, and doc tests
+  passed (7,876 tests; 6 ignored). Explicit property targets passed 497 tests
+  at `PROPTEST_CASES=256` (1 ignored). Reaction binding Rust tests passed
+  (126; 2 ignored), and the rebuilt Python extension passed the full pytest
+  suite (1,380; 2 skipped). Workspace all-target checks, core-IR/binding
+  all-target Clippy with IR properties enabled, nightly formatting, and
+  whitespace checks passed. Existing ignored cases remain unchanged.
+
+  The six-atom ring fixture has one successful match, asserted outside the
+  timed loop. Matching plus complete iteration measured approximately 6 µs
+  for product/tracked product, 25 µs for a realized reaction, and 19 µs for a
+  span. Supplied-match product/tracked calls remain about 4.5 µs. Criterion:
+  20 samples, 1-second warmup and measurement. These are fixture timings,
+  not corpus-scale estimates.
 
 ### S8 — Python parity and integrated verification
 
