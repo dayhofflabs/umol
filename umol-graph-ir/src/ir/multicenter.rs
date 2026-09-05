@@ -762,9 +762,7 @@ mod tests {
         );
 
         let source = spans.clone();
-        let (reframed, actions) = spans
-            .reframe_with_action()
-            .expect("the forms are satisfiable");
+        let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
 
         assert_eq!(
             reframed.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
@@ -906,10 +904,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bonds_reframe_with_action(unsorted_bond: MulticenterBonds) {
+    fn test_multicenter_bonds_tracked_reframe(unsorted_bond: MulticenterBonds) {
         let (reframed, actions) = unsorted_bond
             .clone()
-            .reframe_with_action()
+            .tracked_reframe()
             .expect("the form is satisfiable");
 
         let action = actions

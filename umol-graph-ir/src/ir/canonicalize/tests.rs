@@ -1092,7 +1092,7 @@ fn test_molecule_canonicalize_description_level(
         .expect("representative molecule canonicalizes by its effective level");
     let (with_remapping, remapping) = source
         .clone()
-        .canonicalize_with_remapping(&canonicalize_context)
+        .tracked_canonicalize(&canonicalize_context)
         .expect("representative molecule canonicalizes with a remapping");
     let remapped = source.remap(&reverse_remapping(&source));
 
@@ -1207,7 +1207,7 @@ fn test_reaction_canonicalize_description_level(
         .expect("representative reaction canonicalizes by its effective level");
     let (with_remapping, remapping) = source
         .clone()
-        .canonicalize_with_remapping(&canonicalize_context)
+        .tracked_canonicalize(&canonicalize_context)
         .expect("representative reaction canonicalizes with a remapping");
     let transported = source
         .to_reaction_span()
@@ -1330,7 +1330,7 @@ fn test_reaction_span_canonicalize_description_level(
         .expect("representative span canonicalizes by its effective level");
     let (with_remapping, remapping) = source
         .clone()
-        .canonicalize_with_remapping(&canonicalize_context)
+        .tracked_canonicalize(&canonicalize_context)
         .expect("representative span canonicalizes with a remapping");
     let images = reaction_span_counts(&source).map(|count| (0..count).rev().collect::<Vec<_>>());
     let remapped = source.remap(&molecule_remapping(&images));
@@ -1979,7 +1979,7 @@ fn test_canonicalize_molecule_by_effective_regression(
 
     let (canonical, remapping) = source
         .clone()
-        .canonicalize_with_remapping(&canonicalize_context)
+        .tracked_canonicalize(&canonicalize_context)
         .expect("retained molecule canonicalizes with a remapping");
     let transported = source.remap(&remapping);
 

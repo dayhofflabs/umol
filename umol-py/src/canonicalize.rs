@@ -133,14 +133,14 @@ impl Molecule {
     /// frames are selected internally and are not encoded in it. Canonical representatives may
     /// change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize_with_remapping(
+    fn tracked_canonicalize(
         &self,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<(Self, MoleculeRemapping)> {
         self.to_rust()
             .clone()
-            .canonicalize_with_remapping(&canonicalize_context(stereo_model, config))
+            .tracked_canonicalize(&canonicalize_context(stereo_model, config))
             .map(|(canonical, remapping)| {
                 (
                     Self::from_rust(canonical),
@@ -187,14 +187,14 @@ impl ReactionSpan {
     /// participant frames are selected internally and are not encoded in it. Canonical
     /// representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize_with_remapping(
+    fn tracked_canonicalize(
         &self,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<(Self, MoleculeRemapping)> {
         self.to_rust()
             .clone()
-            .canonicalize_with_remapping(&canonicalize_context(stereo_model, config))
+            .tracked_canonicalize(&canonicalize_context(stereo_model, config))
             .map(|(canonical, remapping)| {
                 (
                     Self::from_rust(canonical),
@@ -242,7 +242,7 @@ impl Reaction {
     /// entity ids; participant frames are selected internally and are not encoded in it. Canonical
     /// representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize_with_remapping(
+    fn tracked_canonicalize(
         &self,
         py: Python<'_>,
         stereo_model: Option<StereoModel>,
@@ -250,7 +250,7 @@ impl Reaction {
     ) -> PyResult<(Self, MoleculeRemapping)> {
         let (canonical, remapping) = self
             .to_rust(py)?
-            .canonicalize_with_remapping(&canonicalize_context(stereo_model, config))
+            .tracked_canonicalize(&canonicalize_context(stereo_model, config))
             .map_err(reaction_canonicalization_error)?;
         Ok((
             Self::from_rust(py, canonical)?,

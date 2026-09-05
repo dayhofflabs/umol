@@ -63,11 +63,11 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_reframe_with_action(molecule in molecule_with_constraints_strategy()) {
+    fn test_molecule_tracked_reframe(molecule in molecule_with_constraints_strategy()) {
         let fused = molecule.clone().reframe().map_err(|_| {
             TestCaseError::fail("generated molecule is intrinsically contradictory")
         })?;
-        let (witnessed, action) = molecule.clone().reframe_with_action().map_err(|_| {
+        let (witnessed, action) = molecule.clone().tracked_reframe().map_err(|_| {
             TestCaseError::fail("generated molecule is intrinsically contradictory")
         })?;
         let transported = molecule

@@ -198,7 +198,7 @@ pub trait FrameTransport: Sized {
 /// The aggregate is the carrier that knows both which factor bears a frame and what the payload means,
 /// so it owns the quotient rather than the storage shape or the form.
 /// `representative_action` exposes the complete witness when a downstream consumer needs it;
-/// `reframe` may fuse local selection and transport when it does not. `reframe_with_action` and
+/// `reframe` may fuse local selection and transport when it does not. `tracked_reframe` and
 /// `framed_eq` are provided from those operations.
 /// Aggregate action values are operation-issued witnesses with private construction. Their algebra
 /// preserves an exact input domain, while `reframe_by` consumers may accept a covering witness and
@@ -207,7 +207,7 @@ pub trait FrameTransport: Sized {
 /// # Semantic properties
 ///
 /// `representative_action` is total for every integrity-valid receiver. For every satisfiable
-/// receiver, `reframe` agrees with the value returned by `reframe_with_action`; transporting the
+/// receiver, `reframe` agrees with the value returned by `tracked_reframe`; transporting the
 /// normalized input by the returned action and normalizing again reproduces that value. Reframing
 /// is idempotent, and the representative action of a reframed value is identity. Normalized
 /// equality implies framed equality. As with normalized equality, framed equality counts two
@@ -220,7 +220,7 @@ pub trait Reframe: Normalize + FrameTransport {
 
     /// Reduce every entry, apply the action selected from the input frames, reduce again, and
     /// return that same input-domain action with the representative.
-    fn reframe_with_action(self) -> Result<(Self, Self::Action), Contradiction> {
+    fn tracked_reframe(self) -> Result<(Self, Self::Action), Contradiction> {
         let action = self.representative_action();
         let reframed = self
             .normalize()?

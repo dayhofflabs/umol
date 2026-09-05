@@ -336,7 +336,7 @@ proptest! {
         prop_assert!(second.canonical_eq(&third, &context));
         prop_assert!(first.canonical_eq(&third, &context));
         prop_assert_eq!(
-            first.canonicalize_with_remapping(&context),
+            first.tracked_canonicalize(&context),
             Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),
         );
     }

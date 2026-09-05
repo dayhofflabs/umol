@@ -194,14 +194,14 @@ def test_reaction_span_canonicalize():
     assert source.canonical_eq(expected)
 
 
-def test_reaction_span_canonicalize_with_remapping():
+def test_reaction_span_tracked_canonicalize():
     source = ReactionSpan.parse(
         '{:atoms [{:add "O"} {:modify ["C" "N"]} {:remove "F"} "Cl"] '
         ':bonds [{:remove [2 3 :single]} {:add [0 1 :double]} '
         '{:modify [1 3 [:single :double]]}]}'
     )
 
-    canonical, remapping = source.canonicalize_with_remapping()
+    canonical, remapping = source.tracked_canonicalize()
 
     assert canonical == source.canonicalize()
     assert isinstance(remapping, MoleculeRemapping)
@@ -223,7 +223,7 @@ def test_reaction_span_canonicalize_error():
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         span.canonicalize()
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        span.canonicalize_with_remapping()
+        span.tracked_canonicalize()
 
 
 def test_reaction_to_reaction_span_error():

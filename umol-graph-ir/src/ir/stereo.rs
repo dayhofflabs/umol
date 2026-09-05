@@ -3509,9 +3509,7 @@ mod tests {
         )]);
 
         let source = spans.clone();
-        let (reframed, actions) = spans
-            .reframe_with_action()
-            .expect("the forms are satisfiable");
+        let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
         let action = actions
             .action(StereoAtomId(0))
             .expect("the dense action covers the stereo atom");
@@ -3643,7 +3641,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atoms_reframe_with_action() {
+    fn test_stereo_atoms_tracked_reframe() {
         let atoms = StereoAtoms::new(vec![(
             AtomId(0),
             vec![
@@ -3657,7 +3655,7 @@ mod tests {
 
         let (reframed, actions) = atoms
             .clone()
-            .reframe_with_action()
+            .tracked_reframe()
             .expect("the form is satisfiable");
 
         let action = actions
@@ -3730,9 +3728,7 @@ mod tests {
         )]);
 
         let source = spans.clone();
-        let (reframed, actions) = spans
-            .reframe_with_action()
-            .expect("the forms are satisfiable");
+        let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
         let action = actions
             .action(StereoBondId(0))
             .expect("the dense action covers the stereo bond");
@@ -3845,7 +3841,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bonds_reframe_with_action() {
+    fn test_stereo_bonds_tracked_reframe() {
         let bonds = StereoBonds::new(vec![(
             BondId(0),
             vec![
@@ -3859,7 +3855,7 @@ mod tests {
 
         let (reframed, actions) = bonds
             .clone()
-            .reframe_with_action()
+            .tracked_reframe()
             .expect("the form is satisfiable");
 
         let action = actions

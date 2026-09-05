@@ -1551,10 +1551,10 @@ fn test_molecule_representative_action(#[from(molecule_reframe_source)] source: 
 }
 
 #[rstest]
-fn test_molecule_reframe_with_action(#[from(molecule_reframe_source)] source: Molecule) {
+fn test_molecule_tracked_reframe(#[from(molecule_reframe_source)] source: Molecule) {
     let (reframed, actions) = source
         .clone()
-        .reframe_with_action()
+        .tracked_reframe()
         .expect("the molecule is satisfiable");
 
     let transported = source

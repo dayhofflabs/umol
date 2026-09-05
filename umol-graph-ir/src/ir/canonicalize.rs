@@ -352,7 +352,7 @@ pub trait Canonicalize: Reframe {
     /// Discarding the remapping yields exactly [`Self::canonicalize`] under the same context.
     /// Remapping the input through the remapping and then applying [`Reframe::reframe`]
     /// reconstructs the returned canonical value.
-    fn canonicalize_with_remapping(
+    fn tracked_canonicalize(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error>;
@@ -4663,7 +4663,7 @@ impl Canonicalize for Molecule {
         canonicalize_molecule_by_effective(&self, level, context)
     }
 
-    fn canonicalize_with_remapping(
+    fn tracked_canonicalize(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error> {
@@ -4851,7 +4851,7 @@ impl Canonicalize for ReactionSpan {
         canonicalize_reaction_span_by_effective(&self, level, context)
     }
 
-    fn canonicalize_with_remapping(
+    fn tracked_canonicalize(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error> {
@@ -4923,7 +4923,7 @@ impl Canonicalize for Reaction {
         canonicalize_reaction_by_effective(&self, level, context)
     }
 
-    fn canonicalize_with_remapping(
+    fn tracked_canonicalize(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error> {
