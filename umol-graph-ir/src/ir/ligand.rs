@@ -1,7 +1,8 @@
 //! Stereo ligand representation: a ligand occupying a coordination position of a stereo site.
 
 use umol_graph_core::{
-    GraphCompaction, GraphRemapping, NodeId, ParticipantRefs, RelationParticipant,
+    GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId, ParticipantRefs,
+    RelationParticipant,
 };
 
 use super::id::AtomId;
@@ -28,6 +29,16 @@ impl StereoLigand {
 }
 
 impl RelationParticipant for StereoLigand {
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self {
+            atom_id: AtomId::from(
+                correspondence
+                    .nodes()
+                    .right_of(NodeId::from(self.atom_id))?,
+            ),
+            kind: self.kind,
+        })
+    }
     fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
         Some(Self {
             atom_id: AtomId::from(compaction.compact_node(NodeId::from(self.atom_id))?),
@@ -61,8 +72,42 @@ impl RelationParticipant for StereoLigand {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_graph_core::Correspondence;
 
     use super::*;
+
+    #[rstest]
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    fn test_stereo_ligand_map(#[case] kind: StereoLigandKind) {
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(2), NodeId(5))], 4, 6).unwrap(),
+            Correspondence::empty(),
+        );
+        let ligand = StereoLigand::new(AtomId(2), kind);
+        let expected = StereoLigand::new(AtomId(5), kind);
+        assert_eq!(
+            RelationParticipant::try_map(ligand, &correspondence),
+            Some(expected)
+        );
+        assert_eq!(RelationParticipant::map(ligand, &correspondence), expected);
+    }
+
+    #[rstest]
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    fn test_stereo_ligand_try_map_error(#[case] kind: StereoLigandKind) {
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(vec![], 4, 6).unwrap(),
+            Correspondence::empty(),
+        );
+        assert_eq!(
+            RelationParticipant::try_map(StereoLigand::new(AtomId(2), kind), &correspondence),
+            None
+        );
+    }
 
     #[rstest]
     fn test_stereo_ligand_new() {

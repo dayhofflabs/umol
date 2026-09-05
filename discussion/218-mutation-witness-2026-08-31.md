@@ -769,11 +769,25 @@ estimates.
   (1,634 passed, 2 ignored), rebuilt-extension molecule/reaction pytest
   (178 passed, 2 skipped), workspace all-targets check, core/IR all-targets
   clippy with `-D warnings`, nightly formatting, and `git diff --check` passed.
-- [ ] **S1b — Graph participant transport.** Graph-core relation participants
+- [x] **S1b — Graph participant transport.** Graph-core relation participants
   and all five relation-set families. Additive (green). [dep: S1a]
   Add `map`/`try_map` using `GraphCorrespondence`; share traversal with
   remapping transport. Test covered subsets, missing images, atom/edge
   factors, nonidentity mappings, preserved row order, and positional payloads.
+  Completed 2026-09-04. `RelationParticipant` and all five relation-set families
+  expose `map`/`try_map` over `GraphCorrespondence`. Mapping requires images
+  only for referenced ids, preserves rows/frames/payloads, and rebuilds
+  incidence indexes. Mapping and remapping share private participant traversal;
+  constructors and public remapping contracts are unchanged. The existing
+  `StereoLigand` trait implementation was adapted, including virtual anchors;
+  inherent molecular reference transport remains S1c.
+  Exact tests cover partial coverage, missing/out-of-range references in both
+  factors, asserted failures, identity, inverse, composition, and incidence.
+  Generated permutation cases check composition, inverse, and remapping parity
+  for all five families. Verification: core/IR unit tests (7,377 passed,
+  3 ignored), relation properties with `PROPTEST_CASES=256` (10 passed),
+  workspace all-targets check with Python 3.13.15 activated, core/IR all-targets
+  clippy with `-D warnings`, nightly formatting, and `git diff --check` passed.
 - [ ] **S1c — Molecular reference transport.** Graph-IR ligand, constraint,
   and entity-set transport methods. Additive (green). [dep: S1b]
   Add correspondence-based `map`/`try_map` with the accepted coverage

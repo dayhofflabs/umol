@@ -16,7 +16,7 @@ use std::ops::{Add, Sub};
 use index_vec::Idx;
 
 use crate::compact::{Compaction, GraphCompaction};
-use crate::correspondence::Correspondence;
+use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::graph::{EdgeId, NodeId};
 use crate::remap::GraphRemapping;
 
@@ -163,13 +163,26 @@ pub struct ParticipantRefs {
     pub node: Option<NodeId>,
     pub edge: Option<EdgeId>,
 }
-/// A value that can occupy a relation factor: routes through a `GraphCompaction`
-/// (removal/compaction, both directions) and a `GraphRemapping` (general relabel,
-/// forward), and exposes its node/edge refs for incidence. One impl per concrete
+/// A value that can occupy a relation factor: supports compaction, remapping, and
+/// correspondence-based id transport, and exposes its node/edge refs for incidence. One impl per concrete
 /// id type — dispatch is static, since a factor is homogeneous.
 pub trait RelationParticipant: Copy + Ord + Hash {
     fn compact(self, compaction: &GraphCompaction) -> Option<Self>;
     fn uncompact(self, compaction: &GraphCompaction) -> Self;
+
+    /// Relabel every referenced id through a correspondence, preserving other participant data.
+    ///
+    /// # Panics
+    /// Panics when a referenced node or edge has no image.
+    fn map(self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel every referenced id, or return `None` if any reference has no image.
+    /// Unused correspondence entries need not be matched. Every id looked up must be
+    /// reported by [`refs`](Self::refs); all other participant data must be preserved.
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self>;
 
     /// Relabel this participant through `remapping`.
     ///
@@ -182,6 +195,9 @@ pub trait RelationParticipant: Copy + Ord + Hash {
 }
 
 impl RelationParticipant for NodeId {
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        correspondence.nodes().right_of(self)
+    }
     fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
         compaction.compact_node(self)
     }
@@ -203,6 +219,9 @@ impl RelationParticipant for NodeId {
 }
 
 impl RelationParticipant for EdgeId {
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        correspondence.edges().right_of(self)
+    }
     fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
         compaction.compact_edge(self)
     }
@@ -322,15 +341,6 @@ impl<P: Hash, D: Hash, const N: usize> Hash for FixedRelationSet<P, D, N> {
         self.participants.hash(state);
         self.data.hash(state);
     }
-}
-
-/// Relabel a factor's participants through a general `GraphRemapping`, preserving their stored order.
-/// The owning relation-set constructor canonicalizes the result and transports positional data.
-fn remap_factor<P>(participants: &[P], remapping: &GraphRemapping) -> Vec<P>
-where
-    P: RelationParticipant,
-{
-    participants.iter().map(|&p| p.remap(remapping)).collect()
 }
 
 /// Whether every graph id these participants reference has an image under `remapping` — the
@@ -529,7 +539,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         (Self::new(entries), Compaction::new(removed))
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -542,16 +552,55 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     where
         D: Clone,
     {
-        let entries: Vec<([P; N], D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                let parts: [P; N] = remap_factor(self.participants(rid), remapping)
+        self.map_participants(|participant| Some(participant.remap(remapping)))
+            .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(|participant| participant.try_map(correspondence))
+    }
+
+    fn map_participants(&self, mut map_1: impl FnMut(P) -> Option<P>) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: [P; N] = self
+                    .participants(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                (parts, self.data(rid).clone())
+                Some((parts_1, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover the set.
@@ -569,7 +618,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// the data of a coincidence (`None` = ⊥ ⇒ the whole glue is inadmissible ⇒ `None`); every other
     /// relation is carried. `self`'s ids are the identity prefix of the object, `right`'s
     /// non-coinciding relations are appended. The caller brings both sides, including positional
-    /// data, into the common space with [`remap`](Self::remap) first.
+    /// data, into the common space with [`map`](Self::map) or [`remap`](Self::remap) first.
     pub fn pushout(
         &self,
         right: &Self,
@@ -889,7 +938,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         (Self::new(entries), Compaction::new(removed))
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -902,16 +951,53 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
     where
         D: Clone,
     {
-        let entries: Vec<(Vec<P>, D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                (
-                    remap_factor(self.participants(rid), remapping),
-                    self.data(rid).clone(),
-                )
+        self.map_participants(|participant| Some(participant.remap(remapping)))
+            .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(|participant| participant.try_map(correspondence))
+    }
+
+    fn map_participants(&self, mut map_1: impl FnMut(P) -> Option<P>) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: Vec<P> = self
+                    .participants(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?;
+                Some((parts_1, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover the set.
@@ -1269,7 +1355,7 @@ where
         (Self::new(entries), Compaction::new(removed))
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -1283,19 +1369,73 @@ where
     where
         D: Clone,
     {
-        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                let f1: [L1; N1] = remap_factor(self.participants_1(rid), remapping)
+        self.map_participants(
+            |participant| Some(participant.remap(remapping)),
+            |participant| Some(participant.remap(remapping)),
+        )
+        .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(
+            |participant| participant.try_map(correspondence),
+            |participant| participant.try_map(correspondence),
+        )
+    }
+
+    fn map_participants(
+        &self,
+        mut map_1: impl FnMut(L1) -> Option<L1>,
+        mut map_2: impl FnMut(L2) -> Option<L2>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: [L1; N1] = self
+                    .participants_1(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                let f2: [L2; N2] = remap_factor(self.participants_2(rid), remapping)
+                let parts_2: [L2; N2] = self
+                    .participants_2(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_2)
+                    .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                (f1, f2, self.data(rid).clone())
+                Some((parts_1, parts_2, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
@@ -1721,7 +1861,7 @@ where
         (Self::new(entries), Compaction::new(removed))
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -1735,20 +1875,71 @@ where
     where
         D: Clone,
     {
-        let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                let f1: [L1; N1] = remap_factor(self.participants_1(rid), remapping)
+        self.map_participants(
+            |participant| Some(participant.remap(remapping)),
+            |participant| Some(participant.remap(remapping)),
+        )
+        .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(
+            |participant| participant.try_map(correspondence),
+            |participant| participant.try_map(correspondence),
+        )
+    }
+
+    fn map_participants(
+        &self,
+        mut map_1: impl FnMut(L1) -> Option<L1>,
+        mut map_2: impl FnMut(L2) -> Option<L2>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: [L1; N1] = self
+                    .participants_1(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                (
-                    f1,
-                    remap_factor(self.participants_2(rid), remapping),
-                    self.data(rid).clone(),
-                )
+                let parts_2: Vec<L2> = self
+                    .participants_2(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_2)
+                    .collect::<Option<Vec<_>>>()?;
+                Some((parts_1, parts_2, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
@@ -2179,7 +2370,7 @@ where
         (Self::new(entries), Compaction::new(removed))
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -2193,17 +2384,69 @@ where
     where
         D: Clone,
     {
-        let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                (
-                    remap_factor(self.participants_1(rid), remapping),
-                    remap_factor(self.participants_2(rid), remapping),
-                    self.data(rid).clone(),
-                )
+        self.map_participants(
+            |participant| Some(participant.remap(remapping)),
+            |participant| Some(participant.remap(remapping)),
+        )
+        .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(
+            |participant| participant.try_map(correspondence),
+            |participant| participant.try_map(correspondence),
+        )
+    }
+
+    fn map_participants(
+        &self,
+        mut map_1: impl FnMut(L1) -> Option<L1>,
+        mut map_2: impl FnMut(L2) -> Option<L2>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: Vec<L1> = self
+                    .participants_1(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?;
+                let parts_2: Vec<L2> = self
+                    .participants_2(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_2)
+                    .collect::<Option<Vec<_>>>()?;
+                Some((parts_1, parts_2, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
@@ -2349,6 +2592,40 @@ mod tests {
     use super::*;
     use crate::correspondence::GraphCorrespondence;
     use crate::graph::Graph;
+
+    #[fixture]
+    fn participant_correspondence() -> GraphCorrespondence {
+        GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(0), NodeId(5)), (NodeId(2), NodeId(1))], 4, 6)
+                .unwrap(),
+            Correspondence::new(vec![(EdgeId(0), EdgeId(6)), (EdgeId(2), EdgeId(3))], 4, 7)
+                .unwrap(),
+        )
+    }
+
+    #[rstest]
+    #[case::mapped(NodeId(2), Some(NodeId(1)))]
+    #[case::unmatched(NodeId(1), None)]
+    #[case::outside(NodeId(4), None)]
+    fn test_node_id_try_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] id: NodeId,
+        #[case] expected: Option<NodeId>,
+    ) {
+        assert_eq!(id.try_map(&participant_correspondence), expected);
+    }
+
+    #[rstest]
+    #[case::mapped(EdgeId(2), Some(EdgeId(3)))]
+    #[case::unmatched(EdgeId(1), None)]
+    #[case::outside(EdgeId(4), None)]
+    fn test_edge_id_try_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] id: EdgeId,
+        #[case] expected: Option<EdgeId>,
+    ) {
+        assert_eq!(id.try_map(&participant_correspondence), expected);
+    }
 
     fn hash<T: Hash>(value: &T) -> u64 {
         let mut hasher = DefaultHasher::new();
@@ -2706,6 +2983,68 @@ mod tests {
     }
 
     #[rstest]
+    #[case::rows(FixedRelationSet::new(vec![([NodeId(2), NodeId(0)], vec![7, 11]), ([NodeId(2), NodeId(0)], vec![13, 17])]),
+        FixedRelationSet::new(vec![([NodeId(1), NodeId(5)], vec![7, 11]), ([NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_fixed_relation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: FixedRelationSet<NodeId, Vec<u32>, 2>,
+        #[case] expected: FixedRelationSet<NodeId, Vec<u32>, 2>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+    }
+
+    #[rstest]
+    #[case::empty(FixedRelationSet::new(vec![]))]
+    #[case::rows(FixedRelationSet::new(vec![([NodeId(2), NodeId(0)], vec![7, 11]), ([NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_fixed_relation_set_map_identity(#[case] input: FixedRelationSet<NodeId, Vec<u32>, 2>) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1)]
+    #[case::outside_node(4)]
+    fn test_fixed_relation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+    ) {
+        let input: FixedRelationSet<NodeId, Vec<u32>, 2> = FixedRelationSet::new(vec![
+            ([NodeId(2), NodeId(0)], vec![7, 11]),
+            ([NodeId(node), NodeId(0)], vec![13, 17]),
+        ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_fixed_relation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+
+        let input: FixedRelationSet<NodeId, Vec<u32>, 2> =
+            FixedRelationSet::new(vec![([NodeId(node), NodeId(0)], vec![7, 11])]);
+        input.map(&participant_correspondence);
+    }
+
+    #[rstest]
     fn test_fixed_relation_set_remap() {
         let rs: FixedRelationSet<NodeId, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
@@ -2965,6 +3304,68 @@ mod tests {
     }
 
     #[rstest]
+    #[case::rows(VarRelationSet::new(vec![(vec![NodeId(2), NodeId(0)], vec![7, 11]), (vec![NodeId(2), NodeId(0)], vec![13, 17])]),
+        VarRelationSet::new(vec![(vec![NodeId(1), NodeId(5)], vec![7, 11]), (vec![NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_var_relation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: VarRelationSet<NodeId, Vec<u32>>,
+        #[case] expected: VarRelationSet<NodeId, Vec<u32>>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+    }
+
+    #[rstest]
+    #[case::empty(VarRelationSet::new(vec![]))]
+    #[case::rows(VarRelationSet::new(vec![(vec![NodeId(2), NodeId(0)], vec![7, 11]), (vec![NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_var_relation_set_map_identity(#[case] input: VarRelationSet<NodeId, Vec<u32>>) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1)]
+    #[case::outside_node(4)]
+    fn test_var_relation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+    ) {
+        let input: VarRelationSet<NodeId, Vec<u32>> = VarRelationSet::new(vec![
+            (vec![NodeId(2), NodeId(0)], vec![7, 11]),
+            (vec![NodeId(node), NodeId(0)], vec![13, 17]),
+        ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_var_relation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+
+        let input: VarRelationSet<NodeId, Vec<u32>> =
+            VarRelationSet::new(vec![(vec![NodeId(node), NodeId(0)], vec![7, 11])]);
+        input.map(&participant_correspondence);
+    }
+
+    #[rstest]
     fn test_var_relation_set_remap() {
         let rs: VarRelationSet<EdgeId, PositionLabels> = VarRelationSet::new(vec![(
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
@@ -3144,6 +3545,86 @@ mod tests {
         let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
         assert_eq!(unchanged, rs);
         assert_eq!(none_removed.removed(), &[]);
+    }
+
+    #[rstest]
+    #[case::rows(FixedFixedBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![13, 17])]),
+        FixedFixedBirelationSet::new(vec![([EdgeId(3), EdgeId(6)], [NodeId(1), NodeId(5)], vec![7, 11]), ([EdgeId(3), EdgeId(6)], [NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_fixed_fixed_birelation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+        #[case] expected: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+        assert_eq!(
+            expected.incident_edge(EdgeId(3)),
+            expected.incident(NodeId(1))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(FixedFixedBirelationSet::new(vec![]))]
+    #[case::rows(FixedFixedBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_fixed_fixed_birelation_set_map_identity(
+        #[case] input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+    ) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1, 2)]
+    #[case::outside_node(4, 2)]
+    #[case::missing_edge(2, 1)]
+    #[case::outside_edge(2, 4)]
+    fn test_fixed_fixed_birelation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+        #[case] edge: u32,
+    ) {
+        let input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>> =
+            FixedFixedBirelationSet::new(vec![
+                ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]),
+                (
+                    [EdgeId(edge), EdgeId(0)],
+                    [NodeId(node), NodeId(0)],
+                    vec![13, 17],
+                ),
+            ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_fixed_fixed_birelation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+        let edge = 2;
+        let input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>> =
+            FixedFixedBirelationSet::new(vec![(
+                [EdgeId(edge), EdgeId(0)],
+                [NodeId(node), NodeId(0)],
+                vec![7, 11],
+            )]);
+        input.map(&participant_correspondence);
     }
 
     #[rstest]
@@ -3418,6 +3899,90 @@ mod tests {
     }
 
     #[rstest]
+    #[case::rows(FixedVarBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![13, 17])]),
+        FixedVarBirelationSet::new(vec![([EdgeId(3), EdgeId(6)], vec![NodeId(1), NodeId(5)], vec![7, 11]), ([EdgeId(3), EdgeId(6)], vec![NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_fixed_var_birelation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>>,
+        #[case] expected: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+        assert_eq!(
+            expected.incident_edge(EdgeId(3)),
+            expected.incident(NodeId(1))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(FixedVarBirelationSet::new(vec![]))]
+    #[case::rows(FixedVarBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_fixed_var_birelation_set_map_identity(
+        #[case] input: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>>,
+    ) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1, 2)]
+    #[case::outside_node(4, 2)]
+    #[case::missing_edge(2, 1)]
+    #[case::outside_edge(2, 4)]
+    fn test_fixed_var_birelation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+        #[case] edge: u32,
+    ) {
+        let input: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>> =
+            FixedVarBirelationSet::new(vec![
+                (
+                    [EdgeId(2), EdgeId(0)],
+                    vec![NodeId(2), NodeId(0)],
+                    vec![7, 11],
+                ),
+                (
+                    [EdgeId(edge), EdgeId(0)],
+                    vec![NodeId(node), NodeId(0)],
+                    vec![13, 17],
+                ),
+            ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_fixed_var_birelation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+        let edge = 2;
+        let input: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>> =
+            FixedVarBirelationSet::new(vec![(
+                [EdgeId(edge), EdgeId(0)],
+                vec![NodeId(node), NodeId(0)],
+                vec![7, 11],
+            )]);
+        input.map(&participant_correspondence);
+    }
+
+    #[rstest]
     fn test_fixed_var_birelation_set_remap() {
         let rs: FixedVarBirelationSet<EdgeId, 2, NodeId, BiPositionLabels> =
             FixedVarBirelationSet::new(vec![(
@@ -3668,6 +4233,89 @@ mod tests {
         let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
         assert_eq!(unchanged, rs);
         assert_eq!(none_removed.removed(), &[]);
+    }
+
+    #[rstest]
+    #[case::rows(VarVarBirelationSet::new(vec![(vec![EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![7, 11]), (vec![EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![13, 17])]),
+        VarVarBirelationSet::new(vec![(vec![EdgeId(3), EdgeId(6)], vec![NodeId(1), NodeId(5)], vec![7, 11]), (vec![EdgeId(3), EdgeId(6)], vec![NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_var_var_birelation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>>,
+        #[case] expected: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+        assert_eq!(
+            expected.incident_edge(EdgeId(3)),
+            expected.incident(NodeId(1))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(VarVarBirelationSet::new(vec![]))]
+    #[case::rows(VarVarBirelationSet::new(vec![(vec![EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![7, 11]), (vec![EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_var_var_birelation_set_map_identity(
+        #[case] input: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>>,
+    ) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1, 2)]
+    #[case::outside_node(4, 2)]
+    #[case::missing_edge(2, 1)]
+    #[case::outside_edge(2, 4)]
+    fn test_var_var_birelation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+        #[case] edge: u32,
+    ) {
+        let input: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>> = VarVarBirelationSet::new(vec![
+            (
+                vec![EdgeId(2), EdgeId(0)],
+                vec![NodeId(2), NodeId(0)],
+                vec![7, 11],
+            ),
+            (
+                vec![EdgeId(edge), EdgeId(0)],
+                vec![NodeId(node), NodeId(0)],
+                vec![13, 17],
+            ),
+        ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_var_var_birelation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+        let edge = 2;
+        let input: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>> =
+            VarVarBirelationSet::new(vec![(
+                vec![EdgeId(edge), EdgeId(0)],
+                vec![NodeId(node), NodeId(0)],
+                vec![7, 11],
+            )]);
+        input.map(&participant_correspondence);
     }
 
     #[rstest]
