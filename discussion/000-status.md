@@ -34,9 +34,6 @@ the statuses recorded here remain authoritative.
   documentation, and the eventual arXiv link.
 - [213 - Collapsing the editor's overlay storage](213-editor-overlay-storage-2026-08-27.md)
   records the proposed entity-set abstraction for editor overlays.
-- [218 - Mutation witness](218-mutation-witness-2026-08-31.md) defines covariant
-  operation witnesses, subsumes reaction-application redesign, and owns
-  composition across witness types.
 
 ## Document index
 
@@ -256,6 +253,6 @@ the statuses recorded here remain authoritative.
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |
 | [217-rhea-participant-failures-2026-08-30.md](217-rhea-participant-failures-2026-08-30.md)                       | Proposed      | 2026-08-30   | Preserve wedge focus, replace a parser panic, improve resolver diagnostics, and resolve 13 stereo cases.    |
-| [218-mutation-witness-2026-08-31.md](218-mutation-witness-2026-08-31.md)                                         | In Progress   | 2026-09-05   | S8b laws and measurements complete; S8c documentation and closeout next. |
+| [218-mutation-witness-2026-08-31.md](218-mutation-witness-2026-08-31.md)                                         | Completed     | 2026-09-05   |                                                                                                            |
 | [220-readable-depiction-2026-09-02.md](220-readable-depiction-2026-09-02.md)                                     | Completed     | 2026-09-03   |                                                                                                               |
 | [221-depiction-api-2026-09-03.md](221-depiction-api-2026-09-03.md)                                               | Completed     | 2026-09-03   | Final Rust/Python depiction API, feature boundary, release notes, and verification are complete.               |

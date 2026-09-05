@@ -1681,6 +1681,30 @@ including the inherent values carried by those entities. It does not include ove
 algorithmic representation constructed from selected structure; constraints.
 **In code:** private `DescriptionLevel::Topology`; public `IncidenceLevel::Topology`.
 
+### Tracked operation
+
+A **tracked operation** returns optional id-space provenance together with the same primary result
+as its bare counterpart. The bare name returns only the primary result; `tracked_<operation>`
+returns that result together with the operation's compaction, remapping, correspondence, or
+categorical mappings. Discarding the tracked value must preserve the ordinary output, failure or
+absence behavior, result ordering, and final mutable state.
+
+Use `try_tracked_<operation>` when `try_` distinguishes a checked counterpart; `try_` remains the
+outermost prefix. The return type identifies the particular witness, so do not repeat it in names
+such as `_with_correspondence` or `_with_compaction`. This rule does not replace an established
+operation-family name such as `canonicalize_with_remapping` or `reframe_with_action`, where the
+additional result is intrinsic to that named form rather than optional mutation tracking.
+
+Do not add a tracked form when ids are preserved or an append layout makes the mapping directly
+recoverable. `tracked_` names returned provenance, not an audit journal or a promise to preserve an
+internal action history. For categorical operations, the returned mappings retain their categorical
+direction; the prefix does not imply a covariant mutation witness.
+
+**Not:** a transaction, which records undo actions; a result-delivery prefix; a general marker for
+any method returning more than one value.
+**In code:** `tracked_remove`, `tracked_apply`, `tracked_split`, `tracked_pushout`,
+`tracked_rollback`; `try_tracked_remove`, `try_tracked_build`.
+
 ### Transaction
 
 A **transaction** is the journal of realized undos for one batch of edits. `transact` applies a batch

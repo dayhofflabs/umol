@@ -1,13 +1,14 @@
 # 218 — Mutation witnesses for the editing surface
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-31
 Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [184](184-deltas-and-edits-2026-08-04.md),
 [199](199-open-container-integrity-2026-08-18.md),
 [204](204-reaction-application-redesign-2026-08-19.md),
 [212](212-remapping-layer-2026-08-26.md),
-[data type contracts guide](../docs/development/data-types.md)
+[data type contracts guide](../docs/development/data-types.md),
+[nomenclature guide](../docs/development/nomenclature.md)
 
 ## Purpose
 
@@ -22,37 +23,36 @@ must be able to surrender the move as a value** — a mutation witness.
 
 The triggering request is a downstream repair/assemble workflow: repair
 (delete a misread atom, fix a bond order, correct a stereocentre — the editor
-path) and assemble (build from several sources — `combine`, which already
-returns a correspondence). The transactional design is not in question; what
-the consumer needs becomes knowable exactly at commit and is currently not
-returned.
+path) and assemble (build from several sources, where `combine` has a
+caller-recoverable append layout). The transactional design is not in question;
+what the consumer needs becomes knowable exactly at commit and was not
+previously returned.
 
 ## Current state
 
-- The editor returns piecewise information in Rust: additions return their
-  new ids, and `MoleculeEditor::tracked_remove` returns a pre-to-post
-  `MoleculeCompaction`; plain `remove` returns unit. Tracked snapshot and
-  finalization now expose the accumulated initial-to-current correspondence;
-  plain publication returns only the molecule.
-- `Molecule::apply(edits)` returns only the new molecule. Its editor now
-  accumulates a session correspondence, but operation-level application
-  witnesses remain for S6b.
-- Transactions retain undo payloads but expose no forward or rollback
-  witness.
-- `canonicalize_with_correspondence` returns a source-to-canonical
-  correspondence even though canonicalization has the stronger remapping
-  semantics.
-- Reaction application returns `ReactionDerivation`, which duplicates the two
-  sides and correspondence already representable by `Reaction` and
-  `ReactionSpan` without being a complete application record.
-- S5a makes combination witness-free: `combine` and `combine_all` return
-  the molecule; `combine_from` mutates in place and returns unit. Per-kind
-  append order determines the caller-computable mappings.
-- `split` returns component molecules; `tracked_split` returns those same
-  components paired with source-to-component correspondences.
-- `MoleculeRemapping`, added by doc 212, currently has no production
-  consumers. Constraint transport now consumes `MoleculeCorrespondence`;
-  S1e removed `IdRemapping` and migrated its live consumers.
+- Correspondence, remapping, and compaction are distinct carriers with partial
+  bijection, dense bijection, and order-preserving removal semantics. Their
+  graph and molecule aggregates compose component-wise, and remappings widen
+  infallibly to correspondences.
+- Graph-core and graph-IR operations with optional provenance use paired bare
+  and `tracked_` methods. The pairs have identical ordinary outputs, failure
+  behavior, iteration order, and resulting mutable state.
+- `MoleculeEditor` accumulates an initial-to-current correspondence. Tracked
+  snapshot, build, application, transaction, removal, and rollback methods
+  expose the applicable correspondence or compaction without cloning molecular
+  payloads.
+- Canonicalization returns `MoleculeRemapping` from
+  `canonicalize_with_remapping`; correspondence transport handles non-bijective
+  mapping, and `IdRemapping` is retired.
+- Reaction application returns products directly, products paired with
+  host-to-product correspondences, realized reactions, or realized reaction
+  spans. `ReactionDerivation` is retired.
+- Combination remains witness-free under its append law. `split` returns
+  component molecules, while `tracked_split` pairs each component with its
+  source-to-component correspondence.
+- Python mirrors the accepted high-level compaction, correspondence, remapping,
+  editor, transaction, molecule, and reaction surfaces. Graph-core carriers,
+  categorical pushout carriers, and `meet_pushout` remain Rust-only.
 
 ## Settled semantic foundation
 
@@ -74,15 +74,14 @@ The carrier follows the operation's semantics:
   appropriate when selection or removal is the operation.
 
 The special carriers are used only when their stronger property is part of
-the operation's semantics; correspondence is the default otherwise. The
-current dense `Remapping` and `MoleculeRemapping` constructors enforce only a
-total dense source map and still permit repeated or sparse target images.
-They do not yet enforce the semantic remapping contract.
+the operation's semantics; correspondence is the default otherwise.
+`Remapping` construction enforces that its dense image vector is a permutation,
+and `MoleculeRemapping` aggregates already-valid component remappings.
 
 ### Dense-carrier audit
 
-The current `GraphRemapping` producers confirm that the weaker contract is in
-active use rather than merely permitted by its constructor:
+The pre-migration `GraphRemapping` producers confirmed that the weaker contract
+was in active use rather than merely permitted by its constructor:
 
 - `GraphCorrespondence::to_remapping` requires only totality on the left, so
   the result may be an injection into a larger right-hand space;
@@ -96,14 +95,14 @@ active use rather than merely permitted by its constructor:
 - graph-core relation transport accepts the aggregate as an arbitrary total
   participant-id map.
 
-Only the complete molecule `remap` path first establishes totality on both
-sides and therefore uses the carrier as a semantic remapping. Tightening the
-current constructor in place would break legitimate injection and transport
-uses. Split's aggregate map also lacks a component tag and is replaced by
+Only the complete molecule `remap` path first established totality on both
+sides and therefore used the carrier as a semantic remapping. Tightening the
+pre-migration constructor in place would have broken legitimate injection and
+transport uses. Split's aggregate map also lacked a component tag and was replaced by
 separate source-to-component correspondences rather than forced into a
-remapping. These transport uses migrate to correspondences with explicit
-source and target counts. `MoleculeRemapping` becomes canonicalization's
-witness only after its bijection contract is enforced.
+remapping. These transport uses were migrated to correspondences with explicit
+source and target counts. `MoleculeRemapping` became canonicalization's
+witness after its bijection contract was enforced.
 
 The constructor-check experiment on 2026-09-04 required every image to be
 in range and unique. Library tests for graph-core, graph-IR, and graph yielded
@@ -128,7 +127,7 @@ sites. The temporary assertions were removed after the experiment.
   existing union assignment and explicit union counts. Use it to transport
   RHS entities and references.
 
-Relation participants, stereo ligands, and constraints gain
+Relation participants, stereo ligands, and constraints use
 correspondence-based transport. Every source id referenced by the transported
 value must have an image. An unmatched reference is a transport failure,
 never an instruction to delete the referencing entity or constraint. Each
@@ -153,8 +152,8 @@ stereo ligands and entity sets also accept `&GraphCorrespondence`. The
 inherent ligand methods delegate to `RelationParticipant`; they do not add
 a separate atom-correspondence API. Constraints follow the same naming and
 coverage contract with `MoleculeCorrespondence` for their entity references.
-These methods consume a correspondence; the `with_correspondence` suffix is
-reserved for operations that return a witness.
+These methods consume a correspondence; they are transport operations, not
+tracked operations that return provenance.
 
 ### Remapping construction and consumption
 
@@ -198,15 +197,13 @@ while their asserted companions document and panic on the same mismatch.
 The carrier itself already establishes bijectivity, so consumers do not
 recheck it.
 
-There is no correspondence-to-remapping conversion in the intended public
-surface. The current `GraphCorrespondence::to_remapping` has no production
-consumer and admits total-left injections, while
-`MoleculeCorrespondence::to_remapping` exists only to construct the legacy
-sparse `IdRemapping` inside the current correspondence-based molecule and
-reaction-span remapping implementations. Remove both methods. Canonicalization
-constructs `MoleculeRemapping` directly from its selected entity orders and
-uses the infallible remapping-to-correspondence conversion when it needs the
-general carrier. `Molecule::framed_eq_under` likewise accepts a
+There is no correspondence-to-remapping conversion in the public surface.
+The former graph narrowing admitted total-left injections, and the molecule
+narrowing existed only to construct the legacy sparse `IdRemapping`; both were
+removed. Canonicalization constructs `MoleculeRemapping` directly from its
+selected entity orders and uses the infallible remapping-to-correspondence
+conversion when it needs the general carrier. `Molecule::framed_eq_under`
+likewise accepts a
 `&MoleculeRemapping`, because complete framed equality under a supplied id
 relation requires exactly a dense total bijection. A checked narrowing can be
 added later if a concrete consumer requires it; theoretical convertibility is
@@ -224,8 +221,8 @@ This holds for the current `Edits` semantics because additions append,
 compaction preserves order, and an entity added and then removed in the same
 script never materializes. A caller that removed some of its own `New(n)`
 handles knows which additions survived, so `New(n)` resolution is
-caller-computable from the correspondence alone. This law still requires
-tests, including an add-then-remove case.
+caller-computable from the correspondence alone. Tests cover the law,
+including an add-then-remove case.
 
 ### Transformation classification
 
@@ -278,23 +275,23 @@ that transform a `Reaction` or `ReactionSpan` without issuing a molecule
 result. These exclusions have no source molecule ids to transport or belong
 to a different aggregate's witness contract.
 
-| Operation family | Shape and id effect | Current return | Required witness conclusion |
+| Operation family | Shape and id effect | Final return | Witness conclusion |
 | --- | --- | --- | --- |
 | Direct molecule attribute and constraint mutation; `Normalize`; `Reframe`; `DelocalizeCharge`; bond and multicenter-bond resolution | one to one, every entity id preserved | value or `()` | Identity law; no returned carrier. |
 | Editor `add_*`; `AromaticityPerceiver::add_systems` | one to one, append | new id for individual editor additions; `add_systems` returns `()` | Existing ids and allocation order are contractual, so counts determine all new ids. Keep primitive created-id returns needed for continued construction; do not add witness or created-id returns to higher-level append operations. |
 | `Aromatizer`; `Fragment::finish_open`; hydrogen unfolding | one to one, high-level append transformation | bare result | Append law; no witness-bearing form. |
-| Editor relation-family `remove_*` | one to one, order-preserving removal in a selected relation family | `()` | Keep plain methods witness-free; add `with_compaction` forms where surviving ids can move. Each method already constructs the required family compaction internally. |
+| Editor relation-family `remove_*` | one to one, order-preserving removal in a selected relation family | `()`; `tracked_remove_*` returns `MoleculeCompaction` | Plain methods remain witness-free; tracked forms expose the full compaction wherever surviving ids can move. |
 | `Kekulizer` | one to one, removes every aromatic system and preserves every other family | bare result | No returned witness: the affected family has no survivors and every other id is unchanged. |
-| `MoleculeEditor::remove` | one to one, order-preserving removal with cascades | `MoleculeCompaction` | Keep `remove` witness-free and provide `remove_with_compaction`. |
-| `Molecule::extract` | one to one, selection followed by order-preserving removal | molecule only | Keep `extract` returning the molecule and provide `extract_with_compaction`. The supplied subgraph correspondence is a sub-to-host selection descriptor, not the result witness. |
-| `Molecule::apply`; editor `apply`, `transact`, `snapshot`, and finalization; transaction rollback | one to one, arbitrary additions, removals, and modifications | molecule, editor, transaction, or `()` without an aggregate witness | Witness-bearing application returns a source-to-result correspondence; rollback returns its inverse. Witness-bearing snapshot/finalization exposes the session correspondence when the editor originated from an existing molecule. Plain variants return no witness. |
+| `MoleculeEditor::remove` | one to one, order-preserving removal with cascades | `()`; `tracked_remove` returns `MoleculeCompaction` | Plain removal is witness-free; tracked removal exposes the compaction. |
+| `Molecule::extract` | one to one, selection followed by order-preserving removal | molecule; `tracked_extract` also returns `MoleculeCompaction` | The supplied subgraph correspondence is a sub-to-host selection descriptor, not the result witness. |
+| `Molecule::apply`; editor `apply`, `transact`, `snapshot`, and finalization; transaction rollback | one to one, arbitrary additions, removals, and modifications | primary result; `tracked_` form also returns `MoleculeCorrespondence` | Application returns a source-to-result correspondence; rollback returns its inverse. Tracked snapshot and finalization expose the editor's session correspondence. |
 | Aromaticity, stereo, and aggregate resolution | one to one, replacement-capable in overlay families | successful `Solution` without a witness | No witness-bearing form in this work. |
 | `Transformer::transform` and `generate_all` | one source to one result, or to alternative results; effect depends on transformer | bare molecule values | No blanket witness method. Add an operation-specific form only when a transformer has nontrivial transport that callers need. |
-| `canonicalize_with_correspondence`; `Molecule::remap`; `ReactionSpan::remap`; `Molecule::framed_eq_under` | one to one, dense bijective renumbering | canonical value plus correspondence; remapped value, remapped span, or Boolean from a caller-supplied correspondence | Canonicalization's witness-bearing form becomes `canonicalize_with_remapping`; the other operations accept `MoleculeRemapping`. Remapping operations return no witness because the caller supplied it. |
-| `Reaction::apply_at` and `Reaction::apply` | one host to one product per application | `ReactionDerivation` with host-to-product `comap` | Remove `ReactionDerivation`. Offer product-only, product-with-correspondence, realized-`Reaction`, and realized-`ReactionSpan` application forms. |
-| `combine`, `combine_all`, and `combine_from` | one or many inputs to one result by disjoint append | operand-to-result or all input-to-result correspondences | Append order determines every input mapping. Return only the combined molecule, with preservation and ordering made contractual. |
-| `meet_pushout` | two inputs to one result with possible identification | `MoleculePushout` containing both input-to-result correspondences | The correspondences are nontrivial. Keep a witness-bearing result; align the plain and `with_correspondence` forms with the naming rule. |
-| `split` | one source to several simultaneous component results | one component-to-source correspondence per result | Plain `split` returns components. A witness-bearing form returns each component with its source-to-component correspondence. The collection supplies component identity. |
+| `canonicalize_with_remapping`; `Molecule::remap`; `ReactionSpan::remap`; `Molecule::framed_eq_under` | one to one, dense bijective renumbering | canonical value plus `MoleculeRemapping`; remapped value, remapped span, or Boolean from a caller-supplied remapping | Remapping operations return no second witness because the caller supplied it. |
+| `Reaction::apply_at` and `Reaction::apply` | one host to one product per application | product; tracked product and host-to-product correspondence; realized `Reaction` or `ReactionSpan` | The useful application results are exposed directly; no additional result container remains. |
+| `combine`, `combine_all`, and `combine_from` | one or many inputs to one result by disjoint append | molecule or `()` | Append order determines every input mapping; preservation and ordering are contractual. |
+| `meet_pushout` | two inputs to one result with possible identification | molecule; `tracked_meet_pushout` also returns `MoleculePushoutCorrespondence` | The two nontrivial input-to-result correspondences remain explicit. |
+| `split` | one source to several simultaneous component results | components; `tracked_split` pairs each with a source-to-component correspondence | The collection supplies component identity. |
 | `Fragment::attach` and fragment `Add` | two fragment bodies to one result body by append | fragment only; the internal `combine` correspondence is discarded | Append law; no witness-bearing form and no extra created-id return. `finish` alone is identity. |
 | `React` for `Molecule` and `[Molecule]` | one or many reactants to alternative sets of product components | component molecules only | Keep the convenience operation product-only. Callers needing transport compose the explicit combine, reaction-application, and split operations. |
 
@@ -354,8 +351,9 @@ the same names and result shapes. The `React` trait methods remain separate,
 providing the product-component convenience workflow.
 
 The graph-core surface supports the same distinctions rather than supplying
-one universal answer. Graph additions return their new ids; removals return a
-`GraphCompaction`; pushout returns both input-to-object coprojections; and
+one universal answer. Graph additions return their new ids; tracked removals
+return `GraphCompaction`; tracked pushout returns both input-to-object
+coprojections; and
 subdivision has an operation-specific result because source edges become
 different result entities. Conversely, the `PushoutComplement::context` arrow
 is context-to-host because that is its categorical meaning. It is not a
@@ -367,7 +365,7 @@ molecule-operation direction.
 The single-pair aggregate types are insufficient by themselves when an
 operation changes object arity.
 
-The public representation should retain the operation's individual
+The public representation retains the operation's individual
 correspondences rather than flatten every object into one tagged carrier when
 the mappings are nontrivial. `combine`, `combine_all`, and `combine_from` are
 deterministic append layouts, so input counts and ordering recover every
@@ -389,10 +387,10 @@ tagged ids.
 
 ### Composition across carrier types
 
-Composition must preserve covariant direction while allowing the strongest
-operational carrier at each step. For example, an editor removal should not
-stop returning a compact `MoleculeCompaction` merely so it can compose with a
-later general edit.
+Composition preserves covariant direction while allowing the strongest
+operational carrier at each step. For example, tracked editor removal returns
+a compact `MoleculeCompaction` even when it is later composed with a general
+edit.
 
 The general composition vocabulary is correspondence. A compaction carries
 its pre-state counts and can therefore be lowered losslessly: enumerate its
@@ -415,14 +413,13 @@ not collapsed into a relation that permits arbitrary many-to-many
 "identity".
 
 Subtype-to-correspondence conversion follows the information carried by each
-type. Once `MoleculeRemapping` enforces its bijection contract, lowering it is
-infallible and context-free, so `From<&MoleculeRemapping> for
+type. `MoleculeRemapping` enforces its bijection contract, so lowering it is
+infallible and context-free through `From<&MoleculeRemapping> for
 MoleculeCorrespondence` is the idiomatic baseline. An owned `From` is added
 only if an owned call site needs it.
 
-The inverse narrowing is not exposed. Neither current `to_remapping` method
-produces a needed semantic remapping after the remapping consumers and
-canonicalization use `MoleculeRemapping` directly.
+The inverse narrowing is not exposed. Remapping consumers and canonicalization
+use `MoleculeRemapping` directly.
 
 `Compaction<Id>` is a complete witness between two finite dense id spaces. It
 stores the source count and the sorted, deduplicated removed ids; the result
@@ -447,9 +444,9 @@ pub fn result_count(&self) -> usize;
 `new` rejects a removed id outside `0..source_count`; input order and repeated
 removed ids do not matter. There is no separate asserted public constructor:
 operation producers already know their source counts and handle an impossible
-construction error internally. A context-free `Default` or `empty` cannot
-mean identity over an undeclared id space and is removed; callers use
-`identity(source_count)`.
+construction error internally. `identity(source_count)` declares identity on
+a known domain. `empty()` is the distinct zero-source, zero-result compaction,
+not a context-free identity for an arbitrary domain.
 
 Compaction consumers respect these declared bounds. `compact` returns `None`
 for a removed or out-of-source-range id. `uncompact` asserts that its input
@@ -489,8 +486,8 @@ condition. `compose_all` returns `Result<Option<Self>, _>`: `None` denotes an
 empty input, while `Err` denotes incompatible consecutive carriers. An
 `Into<&MoleculeCorrespondence>` argument cannot represent conversions that
 materialize a new value, while `Into<MoleculeCorrespondence>` would hide the
-allocation performed by lowering. The replacement of non-semantic
-`IdRemapping` consumers follows the migration above; exact composition error
+allocation performed by lowering. The non-semantic `IdRemapping` consumers
+were replaced by the transport carriers described above; exact composition error
 variants are implementation details within the settled count-agreement
 contract.
 
@@ -501,25 +498,21 @@ operations state their layouts as contracts. General mutations expose a
 witness only when the mapping cannot be recovered from the operation and the
 pre- and post-state shapes.
 
-The method without a `with_*` suffix never returns a witness. A
-witness-bearing companion names its carrier precisely:
+The bare method returns no optional provenance. Its companion uses the
+`tracked_` prefix regardless of whether the returned carrier is a compaction,
+correspondence, remapping, or categorical mapping. `try_` remains outermost in
+checked companions such as `try_tracked_remove` and `try_tracked_build`. The
+return type identifies the carrier without repeating it in a long suffix.
 
-- `with_correspondence` for `MoleculeCorrespondence`;
-- `with_compaction` for `MoleculeCompaction`; and
-- `with_remapping` for `MoleculeRemapping`.
-
-This requires breaking alignment of existing methods whose plain form
-currently returns a witness. The intended pairs include
-`MoleculeEditor::remove` / `remove_with_compaction`, `Molecule::extract` /
-`extract_with_compaction`, and the applicable relation-family removal methods.
-`Molecule::apply`, editor finalization, and the transaction path gain
-correspondence-bearing companions while retaining their existing primary
-results in the plain forms. The witness-bearing canonicalization method is
-`canonicalize_with_remapping`, not `canonicalize_with_correspondence`.
+This rule governs optional operation tracking. It does not rename established
+operation-family forms whose additional result is intrinsic to that form:
+canonicalization remains `canonicalize_with_remapping`, and frame transport
+remains `reframe_with_action`. The normative naming rule is recorded in the
+nomenclature guide.
 
 `split` returns component molecules; `tracked_split` returns each
 component paired with its covariant source-to-component correspondence.
-Transaction `rollback_with_correspondence` returns the inverse witness while
+Transaction `tracked_rollback` returns the inverse witness while
 plain `rollback` retains its ordinary result.
 
 The molecule pushout pair is:
@@ -583,22 +576,22 @@ transport that callers need.
 - Identity: an attribute-only mutation yields the identity correspondence,
   so consumers need no moved-or-not case split.
 
-**Python parity and shape.** Python should catch up to the resulting Rust
-surface: `MoleculeCompaction` (recently redesigned; the bindings are behind)
-and the applicable variant pairs, mirrored by name. The
+**Python parity and shape.** Python mirrors the resulting high-level Rust
+surface: `MoleculeCompaction`, correspondence and remapping carriers, and the
+applicable bare/tracked pairs. The
 scikit-learn keyword shape
 (`with_correspondence=True` selecting a richer return) was considered and
 rejected: a flag-dependent return type needs `Literal` overloads to type
 precisely and degrades to a union under a runtime flag, while method pairs
 type exactly — decisive for a surface that maintains a signature inventory.
-The existing `canonicalize_with_correspondence` binding migrates with Rust to
-the remapping-bearing name and return type. Python exposes frozen `Remapping`
+Canonicalization uses the remapping-bearing name and return type in both
+languages. Python exposes frozen `Remapping`
 values constructed from image lists, and frozen `MoleculeRemapping` values
 constructed from eight remapping components named `atoms`, `bonds`, and the
 six overlay kinds. It does not expose `GraphRemapping`. Python mirrors the accepted
-method pairs and `(output, witness)` shapes, including
-`MoleculePushoutCorrespondence`. Existing APIs may break to follow these
-contracts; no return-type-changing witness flag is introduced.
+high-level method pairs and `(output, witness)` shapes. Graph-core carriers,
+`MoleculePushoutCorrespondence`, and `meet_pushout` remain Rust-only. No
+return-type-changing witness flag is introduced.
 
 ## Related work
 
@@ -606,10 +599,9 @@ contracts; no return-type-changing witness flag is introduced.
   this document. Its diagnosis of `ReactionDerivation` and reaction
   application result requirements is incorporated above.
 - Doc [212](212-remapping-layer-2026-08-26.md): the id-transport
-  foundation is complete. It introduced the dense carriers but deliberately
-  left their full bijection contract, the remaining `IdRemapping` migration,
-  and cross-witness composition to this document. There is no existing
-  `Molecule::apply` correspondence to reuse.
+  foundation is complete. It introduced the dense carriers; this document
+  completed their bijection contract, retired `IdRemapping`, and added
+  cross-carrier composition and operation-produced correspondences.
 
 ## Boundaries
 
@@ -620,40 +612,31 @@ contracts; no return-type-changing witness flag is introduced.
 - No unconditional witness returns on the plain operations.
 - No witness-bearing variants for operations whose identity behavior is fully
   expressed by an identity or append-preservation law.
-- No migration from `IdRemapping` merely because a consumer needs an id map;
-  the producer must first establish the selected witness semantics.
+- No generic id-map carrier selected merely because a consumer needs indexed
+  transport; the producer must establish correspondence, compaction, or
+  remapping semantics.
 - No universal multi-object carrier without a demonstrated operation that
   cannot be represented clearly by an operation-specific collection of
   correspondences.
 - No editor API redesign beyond the witness-bearing variants and bindings.
 
-## Remaining implementation work
+## Implemented scope
 
-- Add source counts and checked construction to compaction, migrate its
-  producers, and implement the settled infallible remapping-to-correspondence
-  and compaction-to-correspondence conversions. Implement checked
-  correspondence composition and define its exact error types.
-- Enforce permutation construction in `Remapping`, compose
-  `GraphRemapping` and `MoleculeRemapping` from valid components, migrate the
-  remapping consumers, and remove correspondence-to-remapping narrowing.
-- Migrate the four identified non-bijective transport producers and their
-  consumers to correspondence-based `map`/`try_map`; replace remaining
-  `IdRemapping` uses consistently with their operation semantics.
-- Record and test existing-id preservation and allocation order for primitive
-  additions, `combine`, `combine_all`, `combine_from`, and fragment assembly;
-  add the covariant witness-bearing `split` form.
-- Implement source-to-result correspondence accumulation for `Molecule::apply`,
-  editor finalization, and transactions, and the inverse witness for
-  `rollback_with_correspondence`.
-- Implement witness-bearing variants for direct relation removals and extraction
-  in graph-core and graph-IR; chemistry-layer transformer APIs remain separate.
-- Replace `MoleculePushout` with the accepted plain molecule result and
-  `(Molecule, MoleculePushoutCorrespondence)` witnessed result.
-- Replace `ReactionDerivation` in the Rust and Python application iterators
-  with the direct product, product-with-correspondence, `Reaction`, and
-  `ReactionSpan` forms.
-- Verify output equivalence for every bare/witnessed pair and mirror the
-  settled Rust surface in Python.
+- Correspondence composition and consuming right-domain updates support
+  efficient provenance accumulation across remapping, compaction, and general
+  mutation steps.
+- Remappings enforce dense bijections; compactions retain complete source
+  counts; both widen to correspondences without contextual molecule data.
+- Non-bijective transport uses correspondence directly, while canonicalization
+  and explicit renumbering use remapping.
+- Graph-core and graph-IR expose the settled bare/tracked operation pairs;
+  editor sessions and transactions accumulate and return provenance without
+  cloning molecular payloads.
+- Reaction application exposes products, tracked products, realized reactions,
+  and realized spans directly. Rust and Python no longer expose
+  `ReactionDerivation`.
+- Python exposes the accepted high-level carriers and operation pairs, with
+  graph-core and molecule pushout carriers deliberately left Rust-only.
 
 ## Implementation plan
 
@@ -1459,12 +1442,22 @@ the same object-only/tracked split, preserving their categorical mapping directi
   cases as improved by 3.6-4.7%, and the other nine cases as unchanged or
   within the noise threshold. Benchmark targets compile and run with the new
   bare/tracked graph and split ids.
-- [ ] **S8c — Documentation and closeout.** Normative development guides,
+- [x] **S8c — Documentation and closeout.** Normative development guides,
   public documentation, doc 218, and status index. Documentation (green).
   [dep: S8b] Reconcile the final exported API against this design, update
   obsolete normative descriptions, and remove retired names from live
   examples and inventories. Preserve historical closed discussion records.
   Run the final gates below; record results before marking the work complete.
+  Completed 2026-09-05: reconciled the final Rust and Python surface with the
+  settled carrier, construction, conversion, and bare/tracked contracts. Added
+  the tracked-operation rule to the nomenclature guide and removed obsolete
+  live descriptions of retired names and return shapes. The only
+  `ReactionDerivation` occurrence outside discussion history is the Python
+  negative-export test. `cargo +nightly fmt --all`, `cargo test --workspace`,
+  and clippy with warnings denied passed. With `PROPTEST_CASES=256`, the
+  graph-core/graph-IR property targets passed 499 properties with one ignored,
+  and the graph target passed all five. Python 3.13.15 built the extension;
+  pytest passed 1,479 tests with two skipped. `git diff --check` passed.
 
 ### Verification gates and critical path
 
