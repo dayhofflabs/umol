@@ -452,8 +452,8 @@ fn reorder_dense<T>(
     let mut target = (0..target_count).map(|_| None).collect::<Vec<_>>();
     for (left, right) in pairs {
         let value = source.get_mut(left)?.take()?;
-        let slot = target.get_mut(right)?;
-        if slot.replace(value).is_some() {
+        let entry = target.get_mut(right)?;
+        if entry.replace(value).is_some() {
             return None;
         }
     }

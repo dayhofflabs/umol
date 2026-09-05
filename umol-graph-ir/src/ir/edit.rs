@@ -34,7 +34,6 @@ use super::ligand::{StereoLigand, StereoLigandKind};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBondUpdate};
 use super::num::NumForm;
-use super::remap::IdRemapping;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
@@ -1280,7 +1279,7 @@ pub enum ConstraintEditError {
 
 /// Molecule-level constraint whose target-molecule references are stable edit handles.
 ///
-/// The stored constraint uses normalized, per-kind slot ids. Each slot indexes the corresponding
+/// The stored constraint uses normalized, per-kind indices. Each index addresses the corresponding
 /// private handle vector.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConstraintEdit {
@@ -1299,7 +1298,7 @@ impl ConstraintEdit {
     /// Normalize a concrete constraint through a complete mapping of its target-molecule entities.
     ///
     /// The mapping is requested once for each distinct referenced entity. Repeated mapped handles
-    /// share one normalized slot within their entity kind.
+    /// share one normalized index within their entity kind.
     pub fn new(
         constraint: Constraint,
         mut handle_for: impl FnMut(Entity) -> Option<EntityHandle>,
@@ -1320,53 +1319,53 @@ impl ConstraintEdit {
             let handle = handle_for(entity).ok_or(ConstraintEditError::MissingHandle { entity })?;
             match (entity, handle) {
                 (Entity::Atom(id), EntityHandle::Atom(handle)) => {
-                    let slot = intern_handle(handle, &mut atoms);
-                    entity_map.insert(Entity::Atom(id), Entity::Atom(AtomId::from(slot)));
+                    let idx = intern_handle(handle, &mut atoms);
+                    entity_map.insert(Entity::Atom(id), Entity::Atom(AtomId::from(idx)));
                 }
                 (Entity::Bond(id), EntityHandle::Bond(handle)) => {
-                    let slot = intern_handle(handle, &mut bonds);
-                    entity_map.insert(Entity::Bond(id), Entity::Bond(BondId::from(slot)));
+                    let idx = intern_handle(handle, &mut bonds);
+                    entity_map.insert(Entity::Bond(id), Entity::Bond(BondId::from(idx)));
                 }
                 (Entity::DativeBond(id), EntityHandle::DativeBond(handle)) => {
-                    let slot = intern_handle(handle, &mut dative_bonds);
+                    let idx = intern_handle(handle, &mut dative_bonds);
                     entity_map.insert(
                         Entity::DativeBond(id),
-                        Entity::DativeBond(DativeBondId::from(slot)),
+                        Entity::DativeBond(DativeBondId::from(idx)),
                     );
                 }
                 (Entity::AromaticSystem(id), EntityHandle::AromaticSystem(handle)) => {
-                    let slot = intern_handle(handle, &mut aromatic_systems);
+                    let idx = intern_handle(handle, &mut aromatic_systems);
                     entity_map.insert(
                         Entity::AromaticSystem(id),
-                        Entity::AromaticSystem(AromaticSystemId::from(slot)),
+                        Entity::AromaticSystem(AromaticSystemId::from(idx)),
                     );
                 }
                 (Entity::MulticenterBond(id), EntityHandle::MulticenterBond(handle)) => {
-                    let slot = intern_handle(handle, &mut multicenter_bonds);
+                    let idx = intern_handle(handle, &mut multicenter_bonds);
                     entity_map.insert(
                         Entity::MulticenterBond(id),
-                        Entity::MulticenterBond(MulticenterBondId::from(slot)),
+                        Entity::MulticenterBond(MulticenterBondId::from(idx)),
                     );
                 }
                 (Entity::NoncovalentBond(id), EntityHandle::NoncovalentBond(handle)) => {
-                    let slot = intern_handle(handle, &mut noncovalent_bonds);
+                    let idx = intern_handle(handle, &mut noncovalent_bonds);
                     entity_map.insert(
                         Entity::NoncovalentBond(id),
-                        Entity::NoncovalentBond(NoncovalentBondId::from(slot)),
+                        Entity::NoncovalentBond(NoncovalentBondId::from(idx)),
                     );
                 }
                 (Entity::StereoAtom(id), EntityHandle::StereoAtom(handle)) => {
-                    let slot = intern_handle(handle, &mut stereo_atoms);
+                    let idx = intern_handle(handle, &mut stereo_atoms);
                     entity_map.insert(
                         Entity::StereoAtom(id),
-                        Entity::StereoAtom(StereoAtomId::from(slot)),
+                        Entity::StereoAtom(StereoAtomId::from(idx)),
                     );
                 }
                 (Entity::StereoBond(id), EntityHandle::StereoBond(handle)) => {
-                    let slot = intern_handle(handle, &mut stereo_bonds);
+                    let idx = intern_handle(handle, &mut stereo_bonds);
                     entity_map.insert(
                         Entity::StereoBond(id),
-                        Entity::StereoBond(StereoBondId::from(slot)),
+                        Entity::StereoBond(StereoBondId::from(idx)),
                     );
                 }
                 (entity, handle) => {
@@ -1404,55 +1403,50 @@ impl ConstraintEdit {
         mut stereo_atom: impl FnMut(StereoAtomHandle) -> Result<StereoAtomId, E>,
         mut stereo_bond: impl FnMut(StereoBondHandle) -> Result<StereoBondId, E>,
     ) -> Result<Constraint, E> {
-        let remapping = IdRemapping::new(
-            self.atoms
-                .into_iter()
-                .enumerate()
-                .map(|(slot, handle)| atom(handle).map(|id| (AtomId::from(slot), id)))
-                .collect::<Result<_, _>>()?,
-            self.bonds
-                .into_iter()
-                .enumerate()
-                .map(|(slot, handle)| bond(handle).map(|id| (BondId::from(slot), id)))
-                .collect::<Result<_, _>>()?,
-            self.dative_bonds
-                .into_iter()
-                .enumerate()
-                .map(|(slot, handle)| dative_bond(handle).map(|id| (DativeBondId::from(slot), id)))
-                .collect::<Result<_, _>>()?,
-            self.aromatic_systems
-                .into_iter()
-                .enumerate()
-                .map(|(slot, handle)| {
-                    aromatic_system(handle).map(|id| (AromaticSystemId::from(slot), id))
-                })
-                .collect::<Result<_, _>>()?,
-            self.multicenter_bonds
-                .into_iter()
-                .enumerate()
-                .map(|(slot, handle)| {
-                    multicenter_bond(handle).map(|id| (MulticenterBondId::from(slot), id))
-                })
-                .collect::<Result<_, _>>()?,
-            self.noncovalent_bonds
-                .into_iter()
-                .enumerate()
-                .map(|(slot, handle)| {
-                    noncovalent_bond(handle).map(|id| (NoncovalentBondId::from(slot), id))
-                })
-                .collect::<Result<_, _>>()?,
-            self.stereo_atoms
-                .into_iter()
-                .enumerate()
-                .map(|(slot, handle)| stereo_atom(handle).map(|id| (StereoAtomId::from(slot), id)))
-                .collect::<Result<_, _>>()?,
-            self.stereo_bonds
-                .into_iter()
-                .enumerate()
-                .map(|(slot, handle)| stereo_bond(handle).map(|id| (StereoBondId::from(slot), id)))
-                .collect::<Result<_, _>>()?,
-        );
-        Ok(self.constraint.remap(&remapping))
+        let mut entities = HashMap::new();
+        for (idx, handle) in self.atoms.into_iter().enumerate() {
+            entities.insert(Entity::Atom(AtomId::from(idx)), Entity::Atom(atom(handle)?));
+        }
+        for (idx, handle) in self.bonds.into_iter().enumerate() {
+            entities.insert(Entity::Bond(BondId::from(idx)), Entity::Bond(bond(handle)?));
+        }
+        for (idx, handle) in self.dative_bonds.into_iter().enumerate() {
+            entities.insert(
+                Entity::DativeBond(DativeBondId::from(idx)),
+                Entity::DativeBond(dative_bond(handle)?),
+            );
+        }
+        for (idx, handle) in self.aromatic_systems.into_iter().enumerate() {
+            entities.insert(
+                Entity::AromaticSystem(AromaticSystemId::from(idx)),
+                Entity::AromaticSystem(aromatic_system(handle)?),
+            );
+        }
+        for (idx, handle) in self.multicenter_bonds.into_iter().enumerate() {
+            entities.insert(
+                Entity::MulticenterBond(MulticenterBondId::from(idx)),
+                Entity::MulticenterBond(multicenter_bond(handle)?),
+            );
+        }
+        for (idx, handle) in self.noncovalent_bonds.into_iter().enumerate() {
+            entities.insert(
+                Entity::NoncovalentBond(NoncovalentBondId::from(idx)),
+                Entity::NoncovalentBond(noncovalent_bond(handle)?),
+            );
+        }
+        for (idx, handle) in self.stereo_atoms.into_iter().enumerate() {
+            entities.insert(
+                Entity::StereoAtom(StereoAtomId::from(idx)),
+                Entity::StereoAtom(stereo_atom(handle)?),
+            );
+        }
+        for (idx, handle) in self.stereo_bonds.into_iter().enumerate() {
+            entities.insert(
+                Entity::StereoBond(StereoBondId::from(idx)),
+                Entity::StereoBond(stereo_bond(handle)?),
+            );
+        }
+        Ok(map_constraint_entities(self.constraint, &entities))
     }
 }
 
@@ -3826,5 +3820,235 @@ mod tests {
     )]
     fn test_constraint_edit_from(#[case] input: Constraint, #[case] expected: ConstraintEdit) {
         assert_eq!(ConstraintEdit::from(input), expected);
+    }
+
+    #[fixture]
+    fn constraint_edit() -> ConstraintEdit {
+        ConstraintEdit {
+            constraint: Constraint::And(vec![
+                Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
+                Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
+                Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(true)),
+                Constraint::AromaticSystem(
+                    AromaticSystemId(0),
+                    AromaticSystemConstraintForm::electron_count(6_i64),
+                ),
+                Constraint::MulticenterBond(
+                    MulticenterBondId(0),
+                    MulticenterBondConstraintForm::electron_count(2_i64),
+                ),
+                Constraint::NoncovalentBond(
+                    NoncovalentBondId(0),
+                    NoncovalentBondConstraintForm::intramolecular(true),
+                ),
+                Constraint::StereoAtom(
+                    StereoAtomId(0),
+                    StereoKind::Tetrahedral,
+                    StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+                ),
+                Constraint::StereoBond(
+                    StereoBondId(0),
+                    StereoKind::CisTrans,
+                    StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+                ),
+                Constraint::Or(vec![
+                    Constraint::Not(Box::new(Constraint::Relational(
+                        RelationalConstraint::DativeBondParallels {
+                            dative: DativeBondId(0),
+                            parallel: BondId(0),
+                        },
+                    ))),
+                    Constraint::Molecule(MoleculeConstraint::Connected {
+                        atoms: Some(vec![AtomId(0), AtomId(1), AtomId(0)]),
+                    }),
+                ]),
+                Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                    atoms: None,
+                    sum: NumForm::Lit(0),
+                }),
+                Constraint::Molecule(MoleculeConstraint::BondOrderSum {
+                    bonds: Some(vec![]),
+                    sum: NumForm::Lit(0),
+                }),
+            ]),
+            atoms: vec![AtomHandle::New(3), AtomHandle::Id(AtomId(9))],
+            bonds: vec![BondHandle::New(3)],
+            dative_bonds: vec![DativeBondHandle::New(3)],
+            aromatic_systems: vec![AromaticSystemHandle::New(3)],
+            multicenter_bonds: vec![MulticenterBondHandle::New(3)],
+            noncovalent_bonds: vec![NoncovalentBondHandle::New(3)],
+            stereo_atoms: vec![StereoAtomHandle::New(3)],
+            stereo_bonds: vec![StereoBondHandle::New(3)],
+        }
+    }
+
+    #[rstest]
+    fn test_constraint_edit_resolve(constraint_edit: ConstraintEdit) {
+        let mut atom_calls = Vec::new();
+        let actual = constraint_edit.resolve(
+            |handle| {
+                atom_calls.push(handle.clone());
+                Ok::<_, EntityKind>(match handle {
+                    AtomHandle::New(3) => AtomId(4),
+                    AtomHandle::Id(AtomId(9)) => AtomId(12),
+                    _ => panic!("unexpected atom handle"),
+                })
+            },
+            |handle| {
+                assert_eq!(handle, BondHandle::New(3));
+                Ok(BondId(5))
+            },
+            |handle| {
+                assert_eq!(handle, DativeBondHandle::New(3));
+                Ok(DativeBondId(6))
+            },
+            |handle| {
+                assert_eq!(handle, AromaticSystemHandle::New(3));
+                Ok(AromaticSystemId(7))
+            },
+            |handle| {
+                assert_eq!(handle, MulticenterBondHandle::New(3));
+                Ok(MulticenterBondId(8))
+            },
+            |handle| {
+                assert_eq!(handle, NoncovalentBondHandle::New(3));
+                Ok(NoncovalentBondId(9))
+            },
+            |handle| {
+                assert_eq!(handle, StereoAtomHandle::New(3));
+                Ok(StereoAtomId(10))
+            },
+            |handle| {
+                assert_eq!(handle, StereoBondHandle::New(3));
+                Ok(StereoBondId(11))
+            },
+        );
+        assert_eq!(
+            actual,
+            Ok(Constraint::And(vec![
+                Constraint::Atom(AtomId(4), AtomConstraintForm::valence(3_i64)),
+                Constraint::Bond(BondId(5), BondConstraintForm::aromatic(true)),
+                Constraint::DativeBond(DativeBondId(6), DativeBondConstraintForm::aromatic(true)),
+                Constraint::AromaticSystem(
+                    AromaticSystemId(7),
+                    AromaticSystemConstraintForm::electron_count(6_i64)
+                ),
+                Constraint::MulticenterBond(
+                    MulticenterBondId(8),
+                    MulticenterBondConstraintForm::electron_count(2_i64)
+                ),
+                Constraint::NoncovalentBond(
+                    NoncovalentBondId(9),
+                    NoncovalentBondConstraintForm::intramolecular(true)
+                ),
+                Constraint::StereoAtom(
+                    StereoAtomId(10),
+                    StereoKind::Tetrahedral,
+                    StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)
+                ),
+                Constraint::StereoBond(
+                    StereoBondId(11),
+                    StereoKind::CisTrans,
+                    StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)
+                ),
+                Constraint::Or(vec![
+                    Constraint::Not(Box::new(Constraint::Relational(
+                        RelationalConstraint::DativeBondParallels {
+                            dative: DativeBondId(6),
+                            parallel: BondId(5),
+                        }
+                    ))),
+                    Constraint::Molecule(MoleculeConstraint::Connected {
+                        atoms: Some(vec![AtomId(4), AtomId(12), AtomId(4)])
+                    }),
+                ]),
+                Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                    atoms: None,
+                    sum: NumForm::Lit(0)
+                }),
+                Constraint::Molecule(MoleculeConstraint::BondOrderSum {
+                    bonds: Some(vec![]),
+                    sum: NumForm::Lit(0)
+                }),
+            ]))
+        );
+        assert_eq!(
+            atom_calls,
+            vec![AtomHandle::New(3), AtomHandle::Id(AtomId(9))]
+        );
+    }
+
+    #[rstest]
+    #[case::atoms(EntityKind::Atom)]
+    #[case::bonds(EntityKind::Bond)]
+    #[case::dative_bonds(EntityKind::DativeBond)]
+    #[case::aromatic_systems(EntityKind::AromaticSystem)]
+    #[case::multicenter_bonds(EntityKind::MulticenterBond)]
+    #[case::noncovalent_bonds(EntityKind::NoncovalentBond)]
+    #[case::stereo_atoms(EntityKind::StereoAtom)]
+    #[case::stereo_bonds(EntityKind::StereoBond)]
+    fn test_constraint_edit_resolve_error(
+        constraint_edit: ConstraintEdit,
+        #[case] failing_kind: EntityKind,
+    ) {
+        let actual = constraint_edit.resolve(
+            |_| {
+                if failing_kind == EntityKind::Atom {
+                    Err(failing_kind)
+                } else {
+                    Ok(AtomId(4))
+                }
+            },
+            |_| {
+                if failing_kind == EntityKind::Bond {
+                    Err(failing_kind)
+                } else {
+                    Ok(BondId(5))
+                }
+            },
+            |_| {
+                if failing_kind == EntityKind::DativeBond {
+                    Err(failing_kind)
+                } else {
+                    Ok(DativeBondId(6))
+                }
+            },
+            |_| {
+                if failing_kind == EntityKind::AromaticSystem {
+                    Err(failing_kind)
+                } else {
+                    Ok(AromaticSystemId(7))
+                }
+            },
+            |_| {
+                if failing_kind == EntityKind::MulticenterBond {
+                    Err(failing_kind)
+                } else {
+                    Ok(MulticenterBondId(8))
+                }
+            },
+            |_| {
+                if failing_kind == EntityKind::NoncovalentBond {
+                    Err(failing_kind)
+                } else {
+                    Ok(NoncovalentBondId(9))
+                }
+            },
+            |_| {
+                if failing_kind == EntityKind::StereoAtom {
+                    Err(failing_kind)
+                } else {
+                    Ok(StereoAtomId(10))
+                }
+            },
+            |_| {
+                if failing_kind == EntityKind::StereoBond {
+                    Err(failing_kind)
+                } else {
+                    Ok(StereoBondId(11))
+                }
+            },
+        );
+        assert_eq!(actual, Err(failing_kind));
     }
 }

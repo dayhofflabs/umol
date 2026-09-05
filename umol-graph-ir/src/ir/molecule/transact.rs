@@ -82,7 +82,7 @@ pub enum TransactionError {
     ///
     /// A transaction guarantees exact restoration only when rolled back against the exact
     /// post-transaction state (or the end of the consecutive chain represented by an appended
-    /// journal). Other states are rejected when a required receiver or reconstruction slot is
+    /// journal). Other states are rejected when a required receiver or reconstruction entry is
     /// absent; structurally compatible but unrelated states are outside that guarantee.
     #[error("rollback journal does not match editor state")]
     RollbackStateMismatch,
@@ -1886,7 +1886,7 @@ fn reconstruction_fits(
         }
         occupied[restored] = true;
     }
-    occupied.into_iter().all(|slot| slot)
+    occupied.into_iter().all(|is_occupied| is_occupied)
 }
 
 fn restored_constraints(
@@ -1898,21 +1898,21 @@ fn restored_constraints(
     let mut modified = vec![None; restored_count];
 
     for entry in &update.removed {
-        let slot = removed.get_mut(entry.position)?;
-        if slot.is_some() {
+        let target = removed.get_mut(entry.position)?;
+        if target.is_some() {
             return None;
         }
-        *slot = Some(&entry.constraint);
+        *target = Some(&entry.constraint);
     }
     for entry in &update.modified {
         if removed.get(entry.position)?.is_some() {
             return None;
         }
-        let slot = modified.get_mut(entry.position)?;
-        if slot.is_some() {
+        let target = modified.get_mut(entry.position)?;
+        if target.is_some() {
             return None;
         }
-        *slot = Some(entry);
+        *target = Some(entry);
     }
 
     let mut current = current.as_slice().iter();
@@ -5156,7 +5156,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_transaction_rollback_reconstruction_slot(mut empty: MoleculeEditor) {
+    fn test_transaction_rollback_reconstruction_entry(mut empty: MoleculeEditor) {
         let transaction = Transaction {
             undo: vec![Undo::RestoreRemovedAromaticSystems {
                 removed: vec![RemovedAromaticSystem {

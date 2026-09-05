@@ -397,7 +397,7 @@ impl StructuralDomainPosition {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct EntityBlockPosition {
     domain: StructuralDomainPosition,
-    slot: u16,
+    idx: u16,
 }
 
 impl EntityBlockPosition {
@@ -410,8 +410,8 @@ impl EntityBlockPosition {
     const STEREO_ATOM: Self = Self::new(StructuralDomainPosition::STEREO, 0);
     const STEREO_BOND: Self = Self::new(StructuralDomainPosition::STEREO, 1);
 
-    const fn new(domain: StructuralDomainPosition, slot: u16) -> Self {
-        Self { domain, slot }
+    const fn new(domain: StructuralDomainPosition, idx: u16) -> Self {
+        Self { domain, idx }
     }
 }
 
@@ -469,12 +469,12 @@ impl PartialOrd for ConstraintBlockPosition {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct RelationalConstraintPosition {
     entity: EntityBlockPosition,
-    slot: u16,
+    idx: u16,
 }
 
 impl RelationalConstraintPosition {
-    const fn new(entity: EntityBlockPosition, slot: u16) -> Self {
-        Self { entity, slot }
+    const fn new(entity: EntityBlockPosition, idx: u16) -> Self {
+        Self { entity, idx }
     }
 }
 
@@ -1248,17 +1248,17 @@ fn stereo_bond_constraint_form_key(value: &StereoBondConstraintForm) -> Canonica
 
 fn relational_constraint_key(value: &RelationalConstraint) -> CanonicalKeyValue {
     let atom_predicate = |value: &AtomConstraintForm| atom_constraint_form_key(value);
-    let position = |entity: EntityBlockPosition, slot: u64| {
-        let position = RelationalConstraintPosition::new(entity, slot as u16);
+    let position = |entity: EntityBlockPosition, idx: u64| {
+        let position = RelationalConstraintPosition::new(entity, idx as u16);
         product([
             CanonicalKeyValue::Unsigned(position.entity.domain.0.into()),
-            CanonicalKeyValue::Unsigned(position.entity.slot.into()),
-            CanonicalKeyValue::Unsigned(position.slot.into()),
+            CanonicalKeyValue::Unsigned(position.entity.idx.into()),
+            CanonicalKeyValue::Unsigned(position.idx.into()),
         ])
     };
     let atom_ids = |ids: &[AtomId]| index_sequence(ids.iter().map(|id| id.index()));
 
-    let (entity, slot, fields) = match value {
+    let (entity, idx, fields) = match value {
         RelationalConstraint::DativeBondDonors { bond, atoms } => (
             EntityBlockPosition::DATIVE_BOND,
             0,
@@ -1434,7 +1434,7 @@ fn relational_constraint_key(value: &RelationalConstraint) -> CanonicalKeyValue 
         ),
     };
 
-    product([position(entity, slot), sequence(fields)])
+    product([position(entity, idx), sequence(fields)])
 }
 
 fn molecule_constraint_key(value: &MoleculeConstraint) -> CanonicalKeyValue {
@@ -1487,7 +1487,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
             [
                 product([
                     CanonicalKeyValue::Unsigned(EntityBlockPosition::ATOM.domain.0.into()),
-                    CanonicalKeyValue::Unsigned(EntityBlockPosition::ATOM.slot.into()),
+                    CanonicalKeyValue::Unsigned(EntityBlockPosition::ATOM.idx.into()),
                 ]),
                 index_key(id.index()),
                 atom_constraint_form_key(constraint),
@@ -1498,7 +1498,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
             [
                 product([
                     CanonicalKeyValue::Unsigned(EntityBlockPosition::BOND.domain.0.into()),
-                    CanonicalKeyValue::Unsigned(EntityBlockPosition::BOND.slot.into()),
+                    CanonicalKeyValue::Unsigned(EntityBlockPosition::BOND.idx.into()),
                 ]),
                 index_key(id.index()),
                 bond_constraint_form_key(constraint),
@@ -1509,7 +1509,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
             [
                 product([
                     CanonicalKeyValue::Unsigned(EntityBlockPosition::DATIVE_BOND.domain.0.into()),
-                    CanonicalKeyValue::Unsigned(EntityBlockPosition::DATIVE_BOND.slot.into()),
+                    CanonicalKeyValue::Unsigned(EntityBlockPosition::DATIVE_BOND.idx.into()),
                 ]),
                 index_key(id.index()),
                 dative_bond_constraint_form_key(constraint),
@@ -1522,7 +1522,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
                     CanonicalKeyValue::Unsigned(
                         EntityBlockPosition::AROMATIC_SYSTEM.domain.0.into(),
                     ),
-                    CanonicalKeyValue::Unsigned(EntityBlockPosition::AROMATIC_SYSTEM.slot.into()),
+                    CanonicalKeyValue::Unsigned(EntityBlockPosition::AROMATIC_SYSTEM.idx.into()),
                 ]),
                 index_key(id.index()),
                 aromatic_system_constraint_form_key(constraint),
@@ -1535,7 +1535,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
                     CanonicalKeyValue::Unsigned(
                         EntityBlockPosition::MULTICENTER_BOND.domain.0.into(),
                     ),
-                    CanonicalKeyValue::Unsigned(EntityBlockPosition::MULTICENTER_BOND.slot.into()),
+                    CanonicalKeyValue::Unsigned(EntityBlockPosition::MULTICENTER_BOND.idx.into()),
                 ]),
                 index_key(id.index()),
                 multicenter_bond_constraint_form_key(constraint),
@@ -1548,7 +1548,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
                     CanonicalKeyValue::Unsigned(
                         EntityBlockPosition::NONCOVALENT_BOND.domain.0.into(),
                     ),
-                    CanonicalKeyValue::Unsigned(EntityBlockPosition::NONCOVALENT_BOND.slot.into()),
+                    CanonicalKeyValue::Unsigned(EntityBlockPosition::NONCOVALENT_BOND.idx.into()),
                 ]),
                 index_key(id.index()),
                 noncovalent_bond_constraint_form_key(constraint),
@@ -1559,7 +1559,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
             [
                 product([
                     CanonicalKeyValue::Unsigned(EntityBlockPosition::STEREO_ATOM.domain.0.into()),
-                    CanonicalKeyValue::Unsigned(EntityBlockPosition::STEREO_ATOM.slot.into()),
+                    CanonicalKeyValue::Unsigned(EntityBlockPosition::STEREO_ATOM.idx.into()),
                 ]),
                 index_key(id.index()),
                 stereo_kind_key(*kind),
@@ -1571,7 +1571,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
             [
                 product([
                     CanonicalKeyValue::Unsigned(EntityBlockPosition::STEREO_BOND.domain.0.into()),
-                    CanonicalKeyValue::Unsigned(EntityBlockPosition::STEREO_BOND.slot.into()),
+                    CanonicalKeyValue::Unsigned(EntityBlockPosition::STEREO_BOND.idx.into()),
                 ]),
                 index_key(id.index()),
                 stereo_kind_key(*kind),

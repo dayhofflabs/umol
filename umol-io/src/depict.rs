@@ -133,7 +133,7 @@ impl DepictionItem {
 /// Typographic content of an atom label.
 ///
 /// Each optional script is positioned relative to `base`. The carrier describes presentation
-/// structure only; it does not require nonempty text or assign chemical meaning to a slot.
+/// structure only; it does not require nonempty text or assign chemical meaning to a field.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AtomLabel {
     /// Text on the ordinary baseline.

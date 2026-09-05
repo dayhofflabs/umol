@@ -1,5 +1,5 @@
 //! Covalent-bond resolver: fills `BondForm` charge and unpaired-electron defaults on bonds
-//! whose corresponding inherent slots are still `Undetermined` after the
+//! whose corresponding inherent fields are still `Undetermined` after the
 //! valence and aromaticity passes.
 
 use thiserror::Error;

@@ -88,7 +88,7 @@ approximate.
 | `*Level` | closed enum selecting one of several nested named layers | 2 | graph-ir |
 | `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
 | `*Constraints` | the container holding an entity's constraints | 9 | graph-ir, py — as `*ConstraintsForm`, because the container is lattice-shaped |
-| `*Key` | identifies a constraint slot within a container | 13 | graph-ir, perm, py |
+| `*Key` | identifies a constraint entry within a container | 13 | graph-ir, perm, py |
 | `*View` / `*Views` / `*ViewMut` | borrowed accessor into a molecule; plural is the collection; `Mut` is the editing form | 37 / 15 / 16 | graph-ir, io, py |
 | `*Delta` | an encoded change belonging to a reaction side | 18 | graph-ir, py |
 | `*Update` | a field-level change applied to one entity | 10 | graph-ir |
@@ -122,7 +122,7 @@ a different question:
 - **role** — `Constraint`, `Update`, `Delta`, `Editor`, `Defaults`, `Overrides`;
 - **plurality** — a trailing `s` on the role marks the container, not "several of these";
 - **representation** — `Form` (implements `Lattice`), `Dsl` (boundary surface), `View` (borrowed
-  accessor), `Key` (identifies a slot);
+  accessor), `Key` (identifies an entry);
 - **mutability** — `Mut`, last, only on views.
 
 `AtomConstraintsForm` is therefore correct in every position: one atom's constraint *container*, which
@@ -1778,7 +1778,7 @@ but is enforced by graph-IR construction rather than by a validator.
 ## Maintaining this guide
 
 Add a term when it has a durable meaning that future code or documentation must preserve. Every
-entry carries three slots:
+entry carries three fields:
 
 - the definition, in one sentence where possible;
 - `Not:` — the nearby terms it must not be used to mean, spelled out so a search for the wrong word

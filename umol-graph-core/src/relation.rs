@@ -2806,7 +2806,7 @@ mod tests {
     /// Two right entries coinciding with one left entry is rejected, not merged: the right
     /// coprojection must be injective, and `Correspondence` asserts that.
     ///
-    /// This is why `pushout` may read the left payload out of its own output buffer — the slot can
+    /// This is why `pushout` may read the left payload out of its own output buffer — the entry can
     /// never be merged into twice. `pullback` reads the same payload from the source instead, and
     /// the two agree because the case that would separate them cannot be constructed.
     #[rstest]

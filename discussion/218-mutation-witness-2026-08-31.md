@@ -630,6 +630,16 @@ the later Python stage completes exposure and behavioral parity. Changes in
 umol-graph and umol-io are limited to adapting consumers. No mutating git
 operations are part of this plan.
 
+The remaining order follows the transport dependencies. First separate edit
+handle resolution from molecular correspondence, then migrate constraint
+transport and its callers together. Do not introduce an adapter between
+`IdRemapping` and correspondence to preserve the old constraint API.
+Strict remapping construction follows the four non-bijective producer fixes;
+it does not depend on compaction. True constraint renumbering uses the
+approved remapping-to-correspondence conversion once that conversion exists.
+Completed S0/S1a/S1b items retain their identifiers. Dependencies below name
+prerequisites, not merely the preceding item in the chosen execution order.
+
 ### S0 — Regression cases and measurement baseline
 
 - [x] **S0a — Transport regressions.** Graph-core relation/rewriting tests and
@@ -780,7 +790,7 @@ estimates.
   incidence indexes. Mapping and remapping share private participant traversal;
   constructors and public remapping contracts are unchanged. The existing
   `StereoLigand` trait implementation was adapted, including virtual anchors;
-  inherent molecular reference transport remains S1c.
+  inherent molecular reference transport remains S1d.
   Exact tests cover partial coverage, missing/out-of-range references in both
   factors, asserted failures, identity, inverse, composition, and incidence.
   Generated permutation cases check composition, inverse, and remapping parity
@@ -788,26 +798,74 @@ estimates.
   3 ignored), relation properties with `PROPTEST_CASES=256` (10 passed),
   workspace all-targets check with Python 3.13.15 activated, core/IR all-targets
   clippy with `-D warnings`, nightly formatting, and `git diff --check` passed.
-- [ ] **S1c — Molecular reference transport.** Graph-IR ligand, constraint,
-  and entity-set transport methods. Additive (green). [dep: S1b]
+- [ ] **S1c — Edit handle resolution.** Graph-IR `ConstraintEdit` construction
+  and resolution. Internal rewiring (green). [dep: S0a]
+  Remove this consumer of `IdRemapping` before changing constraint transport.
+  Resolve the existing per-kind handle indices as an edit operation, using the
+  existing edit-local entity traversal rather than manufacturing a molecular
+  witness. Preserve handle interning, kind checks, resolution failures, and
+  nested constraints. Test all entity kinds and repeated handle references.
+  No new public lookup abstraction or witness API is part of this item.
+- [ ] **S1d — Ligand and entity-set transport.** Graph-IR ligand and
+  entity-set methods. Additive (green). [dep: S1b]
   Add correspondence-based `map`/`try_map` with the accepted coverage
-  contract. Reuse traversal for the remapping route. Test references to every
-  entity kind, virtual ligand anchors, and nested constraints. An unmapped
-  reference must fail rather than disappear. Preserve frame order and keep
-  frame transport distinct from id transport.
-- [ ] **S1d — Four producer migrations.** Graph-IR molecule combination,
+  contract, using the graph-core participant transport already implemented.
+  Test atom/bond references, virtual ligand anchors, preserved entity rows,
+  payloads, and frames. An unmapped reference must fail rather than disappear.
+  Keep frame transport distinct from id transport.
+- [ ] **S1e — Constraint transport and legacy removal.** Graph-IR constraint,
+  molecule, reaction-span, correspondence, and delta modules. Breaking
+  (red→green). [dep: S1c, S1d]
+  Replace sparse `IdRemapping` constraint transport with correspondence-based
+  `map`/`try_map`. Migrate every live caller in this same item: pushout uses
+  its existing correspondence; span union/side assignments use explicit
+  source/result counts; molecule/span renumbering uses its already-supplied
+  correspondence. Check coverage only for references actually transported,
+  including every entity kind, nested constraints, and optional subsets;
+  preserve predicates and frame positions. Do not retain the old constraint
+  signature through a shim or a second traversal.
+  Remove the unused `remap_delta` and its orphaned tests, both
+  correspondence-to-remapping conversions, and `IdRemapping` after its last
+  caller is migrated. Remove value-only no-op transport methods where they
+  exist solely for that legacy traversal. Keep the current public molecule/
+  span renumbering signatures until S2b. Verify live edit, projection,
+  superimposition, pushout, and renumbering tests and absence of retired names.
+- [ ] **S1f — Four graph transport producer migrations.** Graph-IR molecule combination,
   split, pushout, and reaction-span superimposition. Breaking internal
-  rewiring (red→green). [dep: S1c] Replace their non-bijective
+  rewiring (red→green). [dep: S1d, S1e] Replace their non-bijective
   `GraphRemapping` construction with the correspondences specified above.
+  Reuse the constraint correspondences established in S1e where applicable;
+  do not reconstruct a legacy sparse carrier.
   Keep existing public return shapes until their dedicated stages. Use
   actual source/result counts and the existing pushout correspondences;
   split constructs a separate correspondence for each selected component.
   Run S0a regressions and downstream composition/application/ingest tests.
 
-### S2 — Complete compaction carriers
+### S2 — Bijective remapping and renumbering
 
-- [ ] **S2a — Single-space and graph compaction.** Graph-core compact, graph,
-  and relation modules. Breaking (red→green). [dep: S1d]
+- [ ] **S2a — Strict remapping construction.** Graph-core remap and graph-IR
+  remap modules. Breaking (red→green). [dep: S1f]
+  Enforce dense bijective images, assemble graph/molecule aggregates from
+  validated components, and add infallible widening to correspondences.
+  Replace non-bijective lookup fixtures with valid permutations; retain
+  invalid images as exact constructor rejection cases. Migrate all remaining
+  constructors in the same item. The original four production regressions
+  must now pass with the permanent construction checks.
+- [ ] **S2b — Molecule/span renumbering and canonicalization.** Graph-IR
+  molecule remap, constraints, reaction span, canonicalization, traits, and
+  dependent bindings. Breaking (red→green). [dep: S2a, S1e]
+  Accept `MoleculeRemapping` in renumbering and `framed_eq_under`, and return
+  it from `canonicalize_with_remapping`. Canonicalization constructs it
+  directly. Route genuine constraint renumbering through the approved
+  remapping-to-correspondence conversion and S1e's traversal, not a new lookup
+  adapter. Migrate consumers, benchmarks, and tests together. Check exact
+  identity/inverse/composition, all-family reference transport, framed
+  equivalence, and equality of bare/witnessed canonical outputs.
+
+### S3 — Complete compaction carriers
+
+- [ ] **S3a — Single-space and graph compaction.** Graph-core compact, graph,
+  and relation modules. Breaking (red→green). [dep: S0a, S1a]
   Add checked source-count construction, declared-count identity, and count
   accessors. Build graph aggregates from valid components; remove unbounded
   empty/default identities. Migrate graph and relation producers, including
@@ -815,8 +873,8 @@ estimates.
   conversions to single-space and graph correspondences. Test out-of-range
   removals, duplicate/order handling, empty and fully removed domains,
   survivor ordering, and compact/uncompact roundtrips.
-- [ ] **S2b — Molecule compaction.** Graph-IR compact, editor, transaction,
-  and constraint consumers. Breaking (red→green). [dep: S2a]
+- [ ] **S3b — Molecule compaction.** Graph-IR compact, editor, transaction,
+  and constraint consumers. Breaking (red→green). [dep: S3a]
   Assemble all eight count-bearing components, including identity components
   for untouched families. Migrate `relations`, `empty`, and raw-vector
   construction sites to the settled component-based construction. Preserve
@@ -824,44 +882,17 @@ estimates.
   conversion. Test cascaded removals and exact all-family pairings against
   the source/result tables, plus existing rollback laws.
 
-### S3 — Bijective remapping and legacy transport removal
-
-- [ ] **S3a — Strict remapping construction.** Graph-core remap and graph-IR
-  remap modules. Breaking (red→green). [dep: S1d, S2b]
-  Enforce dense bijective images, assemble graph/molecule aggregates from
-  validated components, and add infallible widening to correspondences.
-  Replace non-bijective lookup fixtures with valid permutations; retain
-  invalid images as exact constructor rejection cases. Migrate all remaining
-  constructors in the same item. The original four production regressions
-  must now pass with the permanent construction checks.
-- [ ] **S3b — Molecule/span renumbering and canonicalization.** Graph-IR
-  molecule remap, reaction span, canonicalization, traits, and dependent
-  bindings. Breaking (red→green). [dep: S3a]
-  Accept `MoleculeRemapping` in renumbering and `framed_eq_under`, and return
-  it from `canonicalize_with_remapping`. Canonicalization constructs it
-  directly. Migrate consumers, benchmarks, and tests together. Check exact
-  identity/inverse/composition, all-family reference transport, framed
-  equivalence, and equality of bare/witnessed canonical outputs.
-- [ ] **S3c — Remaining sparse transport.** Graph-IR edit, delta, constraints,
-  molecule, correspondence, and reaction-span modules. Breaking (red→green).
-  [dep: S3b] Replace remaining `IdRemapping` uses according to their actual
-  role, including handle-slot resolution and side/union assignments. Handle
-  resolution remains an edit operation, without a new public witness API.
-  Remove both correspondence-to-remapping conversions, `IdRemapping`, and
-  the unused `remap_delta` helper and its orphaned tests. Retain tests for
-  live operations and verify no dangling imports, exports, or callers remain.
-
 ### S4 — Graph-core output/witness separation
 
 - [ ] **S4a — Removal and relation compaction.** Graph-core graph and relation
-  modules. Breaking (red→green). [dep: S2b, S3c]
+  modules. Breaking (red→green). [dep: S3a]
   Give graph removal methods and relation-set compaction plain output-only
   forms and `*_with_compaction` companions. Preserve cascading versus
   dangling-condition behavior. Migrate editor and rewriting callers that
   need the compaction. Test identical resulting graphs/sets and failures for
   each pair, plus the witness's expected survivor images.
 - [ ] **S4b — Pushout families.** Graph-core rewriting and relation modules.
-  Breaking (red→green). [dep: S4a]
+  Breaking (red→green). [dep: S1a, S1b]
   Replace `Pushout` and `RelationPushout<S>` output containers with the
   accepted graph and relation pushout correspondence types. Bare methods
   return the object; witnessed methods return `(object, correspondence)`.
@@ -869,7 +900,7 @@ estimates.
   Migrate graph-IR gluing/composition callers. Test both input mappings and
   bare/witnessed output equivalence, including coincidences.
 - [ ] **S4c — Pullback and pushout complement.** Graph-core rewriting.
-  Breaking (red→green). [dep: S4b]
+  Breaking (red→green). [dep: S1a]
   Introduce the accepted `PullbackCorrespondence` and
   `PushoutComplementCorrespondence` result separation and method pairs.
   Preserve categorical directions and existing admissibility conditions.
@@ -880,7 +911,7 @@ estimates.
 ### S5 — Graph-IR molecule operation returns
 
 - [ ] **S5a — Combination and split.** Graph-IR molecule and fragment callers.
-  Breaking (red→green). [dep: S4c]
+  Breaking (red→green). [dep: S1f]
   Make combination methods witness-free and state append order. Make split
   return components, with `split_with_correspondence` returning component/
   source-to-component pairs. Migrate Rust/Python callers, including `React`
@@ -888,13 +919,13 @@ estimates.
   entity families, component ordering, append layout, and exact output
   equivalence. Keep chemistry-layer public signatures unchanged.
 - [ ] **S5b — Molecule pushout.** Graph-IR molecule pushout and composition
-  callers. Breaking (red→green). [dep: S5a]
+  callers. Breaking (red→green). [dep: S1f, S4b]
   Replace `MoleculePushout` with `MoleculePushoutCorrespondence` and the
   accepted method pair. Keep left/right correspondence access independent
   of the molecule and preserve common result counts. Test overlay meets,
   stereo frames, constraints, inadmissible input, and output equivalence.
 - [ ] **S5c — Removal and extraction.** Graph-IR editor removal families and
-  molecule extraction. Breaking (red→green). [dep: S5b]
+  molecule extraction. Breaking (red→green). [dep: S3b, S4a]
   Add the `with_compaction` variants and make plain methods witness-free.
   Preserve selection order, cascading behavior, constraints, and transaction
   use of removal. Test exact all-family compactions and equality of resulting
@@ -904,7 +935,7 @@ estimates.
 ### S6 — Editor and transaction correspondences
 
 - [ ] **S6a — Editor session witness.** Graph-IR molecule editor.
-  Additive (green). [dep: S5c]
+  Additive (green). [dep: S1a, S3b, S5c]
   Track source-to-current pairings across direct additions, removals,
   modifications, and restoration. Expose witnessed snapshot and checked/
   asserted build companions using existing publication boundaries. The
@@ -925,7 +956,7 @@ estimates.
 ### S7 — Reaction application results
 
 - [ ] **S7a — Application at a supplied match.** Graph-IR reaction application.
-  Breaking (red→green). [dep: S6b]
+  Breaking (red→green). [dep: S6b, S5b]
   Implement the four accepted `apply_at` result forms. Keep host-to-product
   correspondence direction, existing preconditions, and stereo/frame
   handling. Migrate direct consumers of the old derivation return. Test
@@ -933,7 +964,7 @@ estimates.
   consistency, and expected atom pairings.
 - [ ] **S7b — Iteration and derivation retirement.** Graph-IR reaction
   iterators and their Rust/Python consumers. Breaking (red→green).
-  [dep: S7a] Implement the four accepted iterative method forms, preserving
+  [dep: S7a, S5a] Implement the four accepted iterative method forms, preserving
   captured-input ownership, match order, lazy result production, and terminal
   error behavior. Remove `ReactionDerivation`, its exports and bindings, and
   update all consumers. Keep `React` methods separate and verify their
@@ -944,7 +975,8 @@ estimates.
 
 - [ ] **S8a — Python exposure.** umol-py correspondence, molecule, edit,
   reaction, exports, and API inventory. Additive/breaking (red→green).
-  [dep: S7b] Complete bindings for the accepted witness types, conversions,
+  [dep: S2b, S3b, S4c, S5a, S5b, S5c, S6b, S7b]
+  Complete bindings for the accepted witness types, conversions,
   and operation pairs beyond earlier compile adaptations. Mirror Rust names,
   construction constraints, errors, and tuple/iterator shapes. Rebuild the
   native extension before tests. Verify direct calls outside notebooks,
@@ -992,9 +1024,14 @@ it. Run affected conformance targets explicitly where consumer changes reach
 their code paths. Re-run S0 benchmark commands with the saved baseline and
 include fixture sizes and absolute timings in the closeout.
 
-Critical path: baseline → correspondence transport → producer migration →
-complete compaction and strict remapping → core and molecule return shapes →
-editor witnesses → reaction results → Python and final verification.
+Transport dependency path: baseline → graph participant transport → edit
+handle separation and molecular reference transport → legacy removal and
+four producer fixes → strict remapping/conversions → renumbering consumers.
+The independent compaction path is baseline/composition → counted compaction
+→ removal/extraction pairs → editor witnesses → reaction results. Output/
+witness separation for pushout, pullback, and complement builds on the
+correspondence foundation. These paths join at Python parity and integrated
+verification; compaction is not a prerequisite for the remapping fix.
 No implementation stage above is optional for this work's completion.
 Chemistry-layer witness API design remains separate and is not a deferred
 stage of this plan.

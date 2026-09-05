@@ -490,13 +490,13 @@ prefixes to select the least search carrier containing the complete input; this 
 not a public description-level operation. Complete canonicalization appends normalized entity-level
 and molecule-level constraints after the complete structure key.
 
-| Domain position | Structural domain | Entity slots |
+| Domain position | Structural domain | Entity indices |
 | ---: | --- | --- |
 | 0 | Topology | Atom = 0, Bond = 1 |
 | 1 | NonStereo | Dative bond = 0, Aromatic system = 1, Multicenter bond = 2, Noncovalent bond = 3 |
 | 2 | Stereo | Stereo atom = 0, Stereo bond = 1 |
 
-An entity-block position is the composite `(domain position, entity slot)`. Entity blocks compare by
+An entity-block position is the composite `(domain position, entity index)`. Entity blocks compare by
 this position and then by their dense row sequence. This hierarchy makes topology, constitution,
 and structure exact internal domain prefixes while allowing a future entity kind to be appended
 within the domain to which it belongs. An absent block contributes no entry. The separate terminal
@@ -610,10 +610,10 @@ where present, and inline constraint key. This comparison-key grouping does not 
 and `Connected = 3`. Payload fields compare in their declaration's semantic order: the optional
 entity subset first, then the asserted value where one exists.
 
-`RelationalConstraint` uses the composite position `(owning entity-block position, local slot)`.
-The assigned local slots are:
+`RelationalConstraint` uses the composite position `(owning entity-block position, local index)`.
+The assigned local indices are:
 
-| Owning entity | Local slots and variants in order |
+| Owning entity | Local indices and variants in order |
 | --- | --- |
 | Dative bond | 0–7: `DativeBondDonors`, `DativeBondDonor`, `DativeBondContainsAllDonors`, `DativeBondAllDonors`, `DativeBondAnyDonor`, `DativeBondAcceptor`, `DativeBondAcceptorSatisfies`, `DativeBondParallels` |
 | Aromatic system | 0–4: `AromaticSystemAtoms`, `AromaticSystemContains`, `AromaticSystemContainsAll`, `AromaticSystemAllAtoms`, `AromaticSystemAnyAtom` |

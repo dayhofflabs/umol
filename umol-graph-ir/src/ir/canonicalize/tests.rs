@@ -5691,17 +5691,17 @@ fn test_entity_block_position(
 }
 
 #[rstest]
-#[case::topology_slots(EntityBlockPosition::ATOM, EntityBlockPosition::BOND)]
+#[case::topology_indices(EntityBlockPosition::ATOM, EntityBlockPosition::BOND)]
 #[case::topology_before_non_stereo(
     EntityBlockPosition::new(StructuralDomainPosition::TOPOLOGY, 2),
     EntityBlockPosition::DATIVE_BOND
 )]
-#[case::non_stereo_slots(EntityBlockPosition::DATIVE_BOND, EntityBlockPosition::AROMATIC_SYSTEM)]
+#[case::non_stereo_indices(EntityBlockPosition::DATIVE_BOND, EntityBlockPosition::AROMATIC_SYSTEM)]
 #[case::non_stereo_before_stereo(
     EntityBlockPosition::new(StructuralDomainPosition::NON_STEREO, 4),
     EntityBlockPosition::STEREO_ATOM
 )]
-#[case::stereo_slots(EntityBlockPosition::STEREO_ATOM, EntityBlockPosition::STEREO_BOND)]
+#[case::stereo_indices(EntityBlockPosition::STEREO_ATOM, EntityBlockPosition::STEREO_BOND)]
 fn test_entity_block_position_cmp(
     #[case] lhs: EntityBlockPosition,
     #[case] rhs: EntityBlockPosition,
@@ -5986,11 +5986,11 @@ fn test_constraint_block_position_cmp(
 }
 
 #[rstest]
-#[case::local_slot(
+#[case::local_idx(
     RelationalConstraintPosition::new(EntityBlockPosition::DATIVE_BOND, 0),
     RelationalConstraintPosition::new(EntityBlockPosition::DATIVE_BOND, 1)
 )]
-#[case::entity_slot(
+#[case::entity_idx(
     RelationalConstraintPosition::new(EntityBlockPosition::DATIVE_BOND, 7),
     RelationalConstraintPosition::new(EntityBlockPosition::AROMATIC_SYSTEM, 0)
 )]

@@ -1979,7 +1979,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         }
     }
     if let Some((atoms, mut attributes)) = removed {
-        for (_slot, change) in fields {
+        for (_idx, change) in fields {
             F::apply_field(&mut attributes, F::field_inverse(change))?;
         }
         for (_key, (old, new)) in constraints {
@@ -1988,7 +1988,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         return Ok(vec![EntityOp::Remove { atoms, attributes }]);
     }
     let mut out = Vec::new();
-    for (_slot, change) in fields {
+    for (_idx, change) in fields {
         if !F::field_is_identity(&change) {
             out.push(EntityOp::ModifyField(change));
         }
