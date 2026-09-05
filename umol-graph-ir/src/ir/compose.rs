@@ -36,18 +36,17 @@ fn compose_overlap(
     b: &Reaction,
     overlap: &GraphCorrespondence,
 ) -> Option<Reaction> {
-    let glue = a_inverse.lhs().meet_pushout(b.lhs(), overlap)?;
-    let derivation_a = a_inverse.apply_at(&glue.object, &glue.left).ok()?;
-    let derivation_b = b.apply_at(&glue.object, &glue.right).ok()?;
-    let correspondence = derivation_a
-        .atom_correspondence()
+    let (glue, correspondence) = a_inverse.lhs().tracked_meet_pushout(b.lhs(), overlap)?;
+    let (lhs, left) = a_inverse
+        .tracked_apply_at(&glue, &correspondence.left)
+        .ok()??;
+    let (rhs, right) = b.tracked_apply_at(&glue, &correspondence.right).ok()??;
+    let correspondence = left
+        .atoms()
         .reverse()
-        .compose(derivation_b.atom_correspondence());
-    let composite = Reaction::from_sides(
-        derivation_a.rhs().clone(),
-        derivation_b.rhs().clone(),
-        correspondence,
-    )?;
+        .compose(right.atoms())
+        .expect("both applications share the pushout host");
+    let composite = Reaction::from_sides(lhs, rhs, correspondence)?;
     let (lhs, deltas) = composite.into_parts();
     Some(Reaction::new(lhs, deltas.normalize().ok()?))
 }
@@ -755,18 +754,15 @@ mod tests {
             )
             .iter()
             .flat_map(|c| c.apply(&host, MATCH_CONFIG).unwrap().map(Result::unwrap))
-            .map(|derivation| derivation.rhs().clone())
             .collect();
         let sequential: Vec<Molecule> = a
             .apply(&host, MATCH_CONFIG)
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .flat_map(|intermediate| {
                 b.apply(&intermediate, MATCH_CONFIG)
                     .unwrap()
                     .map(Result::unwrap)
-                    .map(|derivation| derivation.rhs().clone())
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -844,9 +840,7 @@ mod tests {
             .unwrap()
             .next()
             .unwrap()
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         let sequential = b
             .apply(
                 &intermediate,
@@ -858,9 +852,7 @@ mod tests {
             .unwrap()
             .next()
             .unwrap()
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         let composed = composite
             .apply(
                 &host,
@@ -872,9 +864,7 @@ mod tests {
             .unwrap()
             .next()
             .unwrap()
-            .unwrap()
-            .rhs()
-            .clone();
+            .unwrap();
         assert_eq!(composed, sequential);
     }
 

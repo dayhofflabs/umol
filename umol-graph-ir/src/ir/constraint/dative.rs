@@ -8,10 +8,10 @@ use std::vec::IntoIter;
 use umol_perm::DynPermutation;
 
 use super::super::boolean::BooleanForm;
+use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Dative-bond constraint.
@@ -53,11 +53,6 @@ impl DativeBondConstraintForm {
     /// Value-only payload: no entity ids to compact, so this never drops.
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
-    }
-
-    /// Value-only payload: no entity ids to remap.
-    pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
-        self
     }
 
     pub(crate) fn uses_participant_frame(&self) -> bool {
@@ -465,7 +460,7 @@ impl From<Vec<DativeBondConstraintForm>> for DativeBondConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     #[rustfmt::skip]
@@ -791,13 +786,16 @@ mod tests {
             DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
         ]);
         let compaction = MoleculeCompaction::new(
-            GraphCompaction::new(vec![NodeId(1)], vec![EdgeId(1)]),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            GraphCompaction::new(
+                Compaction::new(2, vec![NodeId(1)]).unwrap(),
+                Compaction::new(2, vec![EdgeId(1)]).unwrap(),
+            ),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
         );
         assert_eq!(cs.clone().compact(&compaction), cs);
     }

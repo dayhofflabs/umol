@@ -9,14 +9,14 @@ pub use build::MoleculeBuilder;
 pub use editor::MoleculeEditor;
 pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
+pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
-use umol_graph_core::{
-    Correspondence, EdgeId, Graph, NodeId, RelationParticipant, Remapping, UnionFind,
-};
+use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId, UnionFind};
 
 use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
 use super::bond::BondForm;
+use super::compact::MoleculeCompaction;
 use super::constraint::{
     Constraint, ConstraintFrameActionMap, Constraints, MoleculeConstraint, RelationalConstraint,
 };
@@ -33,7 +33,7 @@ use super::id::{
 use super::ligand::StereoLigand;
 use super::multicenter::{reframe_multicenter_bonds_with, MulticenterBondForm, MulticenterBonds};
 use super::noncovalent::{reframe_noncovalent_bonds_with, NoncovalentBondForm, NoncovalentBonds};
-use super::remap::IdRemapping;
+use super::remap::MoleculeRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{
     reframe_stereo_atoms_with, reframe_stereo_bonds_with, StereoAtomForm, StereoAtoms,
@@ -53,7 +53,7 @@ mod editor;
 mod fragment;
 pub(crate) mod integrity;
 mod pushout;
-mod remapping;
+mod remap;
 pub mod spec;
 pub(crate) mod transact;
 
@@ -412,21 +412,17 @@ impl Molecule {
         &self.graph
     }
 
-    /// Complete framed equality under a dense entity-id correspondence from `self` to `other`.
+    /// Complete framed equality under an entity-id remapping from `self` to `other`.
     ///
-    /// The correspondence is checked as a complete dense remapping of `self`. The remapped
-    /// molecule is then compared with `other` modulo participant frames. This returns `false`
-    /// when the correspondence has the wrong source domain, is partial, is not bijective onto a
-    /// dense target domain, or maps `self` to a molecule outside `other`'s framed-equality class.
+    /// Returns `false` when a component length differs from `self`'s entity count or the
+    /// remapped molecule lies outside `other`'s framed-equality class.
     ///
-    /// Under the identity correspondence this is exactly [`Reframe::framed_eq`]. Reversing
-    /// a correspondence reverses the comparison, and sequential correspondences compose.
-    /// For integrity-valid molecules whose complete canonicalizations both succeed,
-    /// `canonical_eq` holds exactly when some admissible total correspondence makes this
-    /// comparison true. Equality totalization for two intrinsic contradictions does not require
-    /// such a witness.
-    pub fn framed_eq_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
-        self.try_remap(correspondence)
+    /// Under identity this is [`Reframe::framed_eq`]. Inverting the permutations reverses the
+    /// comparison, and successive remappings compose. For molecules whose canonicalizations
+    /// succeed, `canonical_eq` holds exactly when some remapping makes this comparison true.
+    /// Equality totalization for two intrinsic contradictions does not require such a witness.
+    pub fn framed_eq_under(&self, other: &Self, remapping: &MoleculeRemapping) -> bool {
+        self.try_remap(remapping)
             .is_some_and(|remapped| remapped.framed_eq(other))
     }
 
@@ -628,6 +624,15 @@ impl Molecule {
     /// molecule: drop every host atom/bond absent from `sub`. Host order preserved, gaps compacted;
     /// overlay drops cascade through the builder.
     pub fn extract(&self, sub: &MoleculeCorrespondence) -> Molecule {
+        self.tracked_extract(sub).0
+    }
+
+    /// Extract the same molecule as [`Self::extract`] together with its host-to-result compaction.
+    ///
+    /// The right-hand atom ids of `sub` select host atoms. Result ids follow host order, not
+    /// the selection's left-hand numbering. The compaction covers all eight entity kinds,
+    /// including cascaded removals; its source counts are those of this molecule.
+    pub fn tracked_extract(&self, sub: &MoleculeCorrespondence) -> (Molecule, MoleculeCompaction) {
         let kept: HashSet<AtomId> = sub
             .atoms()
             .matched_pairs()
@@ -648,8 +653,8 @@ impl Molecule {
             .map(|b| b.id)
             .collect();
         let mut builder = self.edit();
-        builder.remove(&remove_atoms, &remove_bonds);
-        builder.build()
+        let compaction = builder.tracked_remove(&remove_atoms, &remove_bonds);
+        (builder.build(), compaction)
     }
 
     /// Edits transforming `self` into the extracted subgraph `sub`: one `RemoveTopology` over the
@@ -1368,12 +1373,27 @@ impl Molecule {
         Ok(editor.try_build()?)
     }
 
+    /// Apply a batch and return the resulting molecule with its source-to-result correspondence.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same transaction or integrity error as [`Self::apply`]. The source is unchanged.
+    ///
+    /// # Semantic properties
+    ///
+    /// Discarding the correspondence gives the same molecule as the plain operation.
+    pub fn tracked_apply(
+        &self,
+        edits: Edits,
+    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeApplyError> {
+        let editor = self.edit().apply(edits)?;
+        Ok(editor.try_tracked_build()?)
+    }
+
     /// Combine molecules by disjoint concatenation. Input order determines each entity kind's
-    /// id ranges in the result. Returns one correspondence per input, in input order, mapping that
-    /// molecule's ids into the combined molecule. Pure renumbering — no gluing, no chemistry.
-    pub fn combine_all<'a>(
-        molecules: impl IntoIterator<Item = &'a Molecule>,
-    ) -> (Molecule, Vec<MoleculeCorrespondence>) {
+    /// id ranges in the result: each input's entities follow all preceding inputs' entities of
+    /// the same kind, preserving their order. No entities are identified or removed.
+    pub fn combine_all<'a>(molecules: impl IntoIterator<Item = &'a Molecule>) -> Molecule {
         let molecules: Vec<&Molecule> = molecules.into_iter().collect();
         let atom_count = molecules.iter().map(|m| m.atoms().count()).sum();
         let bond_count = molecules.iter().map(|m| m.bonds().count()).sum();
@@ -1401,7 +1421,6 @@ impl Molecule {
             stereo_bonds: Vec::with_capacity(stereo_bond_count),
             constraints: Constraints::new(),
         };
-        let mut correspondences = Vec::with_capacity(molecules.len());
         let mut atom_offset = 0;
         let mut bond_offset = 0;
         let mut dative_offset = 0;
@@ -1496,25 +1515,7 @@ impl Molecule {
                 ));
             }
 
-            if !molecule.constraints.is_empty() {
-                let remapping = IdRemapping::new(
-                    offset_map(atom_offset, molecule_atom_count),
-                    offset_map(bond_offset, molecule_bond_count),
-                    offset_map(dative_offset, molecule_dative_count),
-                    offset_map(aromatic_offset, molecule_aromatic_count),
-                    offset_map(multicenter_offset, molecule_multicenter_count),
-                    offset_map(noncovalent_offset, molecule_noncovalent_count),
-                    offset_map(stereo_atom_offset, molecule_stereo_atom_count),
-                    offset_map(stereo_bond_offset, molecule_stereo_bond_count),
-                );
-                for constraint in molecule.constraints.iter() {
-                    entries
-                        .constraints
-                        .push(constraint.clone().remap(&remapping));
-                }
-            }
-
-            correspondences.push(MoleculeCorrespondence::new(
+            let correspondence = MoleculeCorrespondence::new(
                 offset_correspondence(atom_offset, molecule_atom_count, atom_count),
                 offset_correspondence(bond_offset, molecule_bond_count, bond_count),
                 offset_correspondence(dative_offset, molecule_dative_count, dative_count),
@@ -1539,7 +1540,12 @@ impl Molecule {
                     molecule_stereo_bond_count,
                     stereo_bond_count,
                 ),
-            ));
+            );
+            for constraint in molecule.constraints.iter() {
+                entries
+                    .constraints
+                    .push(constraint.clone().map(&correspondence));
+            }
 
             atom_offset += molecule_atom_count;
             bond_offset += molecule_bond_count;
@@ -1551,22 +1557,18 @@ impl Molecule {
             stereo_bond_offset += molecule_stereo_bond_count;
         }
 
-        (Molecule::from_entries(entries), correspondences)
+        Molecule::from_entries(entries)
     }
 
-    /// Combine `self` and `other` as a fresh molecule by disjoint concatenation. Returns the
-    /// correspondence mapping `other` into the combined molecule.
-    pub fn combine(&self, other: &Molecule) -> (Molecule, MoleculeCorrespondence) {
-        let (combined, mut correspondences) = Self::combine_all([self, other]);
-        let correspondence = correspondences
-            .pop()
-            .expect("two inputs produce two correspondences");
-        (combined, correspondence)
+    /// Combine `self` and `other` by disjoint concatenation. For every entity kind,
+    /// `self` keeps its ids as the prefix and `other` follows in its original order.
+    pub fn combine(&self, other: &Molecule) -> Molecule {
+        Self::combine_all([self, other])
     }
 
-    /// Append `other` by disjoint concatenation. `self` keeps its ids as the prefix; `other`'s
-    /// entities follow. Returns the correspondence mapping `other` into the combined molecule.
-    pub fn combine_from(&mut self, other: &Molecule) -> MoleculeCorrespondence {
+    /// Append `other` by disjoint concatenation. For every entity kind, existing ids remain
+    /// unchanged and `other` follows in its original order.
+    pub fn combine_from(&mut self, other: &Molecule) {
         let atom_offset = self.atoms().count();
         let bond_offset = self.bonds().count();
         let dative_offset = self.dative_bonds().count();
@@ -1640,13 +1642,17 @@ impl Molecule {
             );
         }
 
-        let ligand_remapping = Remapping::new(
-            (0..other.atoms().count())
-                .map(|index| NodeId((atom_offset + index) as u32))
-                .collect(),
-            (0..other.bonds().count())
-                .map(|index| EdgeId((bond_offset + index) as u32))
-                .collect(),
+        let participant_correspondence = GraphCorrespondence::new(
+            offset_correspondence(
+                atom_offset,
+                other.atoms().count(),
+                atom_offset + other.atoms().count(),
+            ),
+            offset_correspondence(
+                bond_offset,
+                other.bonds().count(),
+                bond_offset + other.bonds().count(),
+            ),
         );
         for id in other.stereo_atoms.ids() {
             let site = shift_atom(other.stereo_atoms.site(id));
@@ -1654,7 +1660,7 @@ impl Molecule {
                 .stereo_atoms
                 .ligands(id)
                 .iter()
-                .map(|ligand| ligand.remap(&ligand_remapping))
+                .map(|ligand| ligand.map(&participant_correspondence))
                 .collect();
             editor.add_stereo_atom(site, ligands, other.stereo_atoms.attributes(id).clone());
         }
@@ -1664,31 +1670,12 @@ impl Molecule {
                 .stereo_bonds
                 .ligands(id)
                 .iter()
-                .map(|ligand| ligand.remap(&ligand_remapping))
+                .map(|ligand| ligand.map(&participant_correspondence))
                 .collect();
             editor.add_stereo_bond(site, ligands, other.stereo_bonds.attributes(id).clone());
         }
 
-        if !other.constraints.is_empty() {
-            let remapping = IdRemapping::new(
-                offset_map(atom_offset, other.atoms().count()),
-                offset_map(bond_offset, other.bonds().count()),
-                offset_map(dative_offset, other.dative_bonds().count()),
-                offset_map(aromatic_offset, other.aromatic_systems().count()),
-                offset_map(multicenter_offset, other.multicenter_bonds().count()),
-                offset_map(noncovalent_offset, other.noncovalent_bonds().count()),
-                offset_map(stereo_atom_offset, other.stereo_atoms().count()),
-                offset_map(stereo_bond_offset, other.stereo_bonds().count()),
-            );
-            for constraint in other.constraints.iter() {
-                editor
-                    .constraints_mut()
-                    .push(constraint.clone().remap(&remapping));
-            }
-        }
-        *self = editor.build();
-
-        MoleculeCorrespondence::new(
+        let correspondence = MoleculeCorrespondence::new(
             offset_correspondence(
                 atom_offset,
                 other.atoms().count(),
@@ -1729,15 +1716,31 @@ impl Molecule {
                 other.stereo_bonds().count(),
                 stereo_bond_offset + other.stereo_bonds().count(),
             ),
-        )
+        );
+        for constraint in other.constraints.iter() {
+            editor
+                .constraints_mut()
+                .push(constraint.clone().map(&correspondence));
+        }
+        *self = editor.build();
     }
 
     /// Decompose into connected components — a conservative partition where every relation keeps its
     /// atoms in one component (a spanning overlay prevents the split rather than being dropped). Each
-    /// component is a fresh, compactly-renumbered `Molecule` paired with the
-    /// `MoleculeCorrespondence` mapping its ids back to `self`. Components are ordered by their lowest
-    /// original atom.
-    pub fn split(&self) -> Vec<(Molecule, MoleculeCorrespondence)> {
+    /// component is a fresh, compactly-renumbered molecule. Components are ordered by their lowest
+    /// original atom; each entity kind retains source order within its component.
+    pub fn split(&self) -> Vec<Molecule> {
+        self.tracked_split()
+            .into_iter()
+            .map(|(component, _)| component)
+            .collect()
+    }
+
+    /// Split into conservatively connected components, paired with correspondences from
+    /// this molecule to each component. Ordering and components are identical to [`Self::split`].
+    /// Each entity correspondence has this molecule's full source count and the component's
+    /// result count. Every result entity is matched; source entities in other components are unmatched.
+    pub fn tracked_split(&self) -> Vec<(Molecule, MoleculeCorrespondence)> {
         let atom_count = self.atoms().count();
         let mut uf = UnionFind::new(atom_count);
         for bond in self.bonds().iter() {
@@ -1775,25 +1778,18 @@ impl Molecule {
         }
 
         let mut atom_component = vec![0usize; atom_count];
-        let mut atom_compact = vec![0u32; atom_count];
         let mut component_atoms: Vec<Vec<AtomId>> = Vec::new();
         let mut index_of_root: HashMap<usize, usize> = HashMap::new();
-        for i in 0..atom_count {
-            let root = uf.find(i);
+        for (idx, assigned_component) in atom_component.iter_mut().enumerate() {
+            let root = uf.find(idx);
             let component = *index_of_root.entry(root).or_insert_with(|| {
                 component_atoms.push(Vec::new());
                 component_atoms.len() - 1
             });
-            atom_component[i] = component;
-            atom_compact[i] = component_atoms[component].len() as u32;
-            component_atoms[component].push(AtomId(i as u32));
+            *assigned_component = component;
+            component_atoms[component].push(AtomId(idx as u32));
         }
-        let compact = |a: AtomId| AtomId(atom_compact[a.index()]);
         let component_of = |a: AtomId| atom_component[a.index()];
-        let compaction = Remapping::new(
-            (0..atom_count).map(|i| NodeId(atom_compact[i])).collect(),
-            Vec::new(),
-        );
 
         component_atoms
             .iter()
@@ -1803,29 +1799,60 @@ impl Molecule {
                 let mut atom_pairs = Vec::new();
                 for atom in atoms {
                     let added = editor.add_atom(self.atom(*atom).attributes.clone());
-                    atom_pairs.push((added, *atom));
+                    atom_pairs.push((*atom, added));
                 }
+                let atom_correspondence = Correspondence::new(atom_pairs, atom_count, atoms.len())
+                    .expect("split assigns each selected source atom a component id");
+                let map_atom = |id: AtomId| {
+                    atom_correspondence
+                        .right_of(id)
+                        .expect("the component contains every routed atom reference")
+                };
                 let mut bond_pairs = Vec::new();
-                let mut bond_compact: HashMap<BondId, BondId> = HashMap::new();
                 for bond in self.bonds().iter() {
                     let [a, b] = bond.atom_ids();
                     if component_of(a) == component {
                         let new_bond =
-                            editor.add_bond(compact(a), compact(b), bond.attributes.clone());
-                        bond_pairs.push((new_bond, bond.id));
-                        bond_compact.insert(bond.id, new_bond);
+                            editor.add_bond(map_atom(a), map_atom(b), bond.attributes.clone());
+                        bond_pairs.push((bond.id, new_bond));
                     }
                 }
+                let component_bond_count = bond_pairs.len();
+                let bond_correspondence =
+                    Correspondence::new(bond_pairs, self.bonds().count(), component_bond_count)
+                        .expect("split assigns each selected source bond a component id");
+                let participant_correspondence = GraphCorrespondence::new(
+                    Correspondence::new(
+                        atom_correspondence
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(source, target)| (NodeId::from(source), NodeId::from(target)))
+                            .collect(),
+                        atom_count,
+                        atoms.len(),
+                    )
+                    .expect("component node pairs are injective"),
+                    Correspondence::new(
+                        bond_correspondence
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(source, target)| (EdgeId::from(source), EdgeId::from(target)))
+                            .collect(),
+                        self.bonds().count(),
+                        component_bond_count,
+                    )
+                    .expect("component edge pairs are injective"),
+                );
                 let mut dative_pairs = Vec::new();
                 for dative in self.dative_bonds().iter() {
                     if component_of(dative.acceptor_id()) == component {
-                        let donors = dative.donors().map(|d| compact(d.id)).collect();
+                        let donors = dative.donors().map(|d| map_atom(d.id)).collect();
                         let added = editor.add_dative_bond(
                             donors,
-                            compact(dative.acceptor_id()),
+                            map_atom(dative.acceptor_id()),
                             dative.attributes.clone(),
                         );
-                        dative_pairs.push((added, dative.id));
+                        dative_pairs.push((dative.id, added));
                     }
                 }
                 let mut aromatic_pairs = Vec::new();
@@ -1836,10 +1863,10 @@ impl Molecule {
                         .is_some_and(|a| component_of(*a) == component)
                     {
                         let added = editor.add_aromatic_system(
-                            members.iter().map(|a| compact(*a)).collect(),
+                            members.iter().map(|a| map_atom(*a)).collect(),
                             system.attributes.clone(),
                         );
-                        aromatic_pairs.push((added, system.id));
+                        aromatic_pairs.push((system.id, added));
                     }
                 }
                 let mut multicenter_pairs = Vec::new();
@@ -1850,10 +1877,10 @@ impl Molecule {
                         .is_some_and(|a| component_of(*a) == component)
                     {
                         let added = editor.add_multicenter_bond(
-                            members.iter().map(|a| compact(*a)).collect(),
+                            members.iter().map(|a| map_atom(*a)).collect(),
                             bond.attributes.clone(),
                         );
-                        multicenter_pairs.push((added, bond.id));
+                        multicenter_pairs.push((bond.id, added));
                     }
                 }
                 let mut noncovalent_pairs = Vec::new();
@@ -1861,10 +1888,10 @@ impl Molecule {
                     let [a, b] = bond.atom_ids();
                     if component_of(a) == component {
                         let added = editor.add_noncovalent_bond(
-                            [compact(a), compact(b)],
+                            [map_atom(a), map_atom(b)],
                             bond.attributes.clone(),
                         );
-                        noncovalent_pairs.push((added, bond.id));
+                        noncovalent_pairs.push((bond.id, added));
                     }
                 }
                 let mut stereo_atom_pairs = Vec::new();
@@ -1875,14 +1902,14 @@ impl Molecule {
                             .stereo_atoms
                             .ligands(rid)
                             .iter()
-                            .map(|ligand| ligand.remap(&compaction))
+                            .map(|ligand| ligand.map(&participant_correspondence))
                             .collect();
                         let added = editor.add_stereo_atom(
-                            compact(site),
+                            map_atom(site),
                             ligands,
                             self.stereo_atoms.attributes(rid).clone(),
                         );
-                        stereo_atom_pairs.push((added, rid));
+                        stereo_atom_pairs.push((rid, added));
                     }
                 }
                 let mut stereo_bond_pairs = Vec::new();
@@ -1894,64 +1921,63 @@ impl Molecule {
                             .stereo_bonds
                             .ligands(rid)
                             .iter()
-                            .map(|ligand| ligand.remap(&compaction))
+                            .map(|ligand| ligand.map(&participant_correspondence))
                             .collect();
                         let added = editor.add_stereo_bond(
-                            bond_compact[&bond],
+                            bond_correspondence
+                                .right_of(bond)
+                                .expect("the component contains the routed stereo-bond site"),
                             ligands,
                             self.stereo_bonds.attributes(rid).clone(),
                         );
-                        stereo_bond_pairs.push((added, rid));
+                        stereo_bond_pairs.push((rid, added));
                     }
                 }
                 let entities = editor.build();
 
                 let correspondence = MoleculeCorrespondence::new(
-                    Correspondence::new(atom_pairs, entities.atoms().count(), atom_count)
-                        .expect("split assigns each component atom its original id"),
-                    Correspondence::new(bond_pairs, entities.bonds().count(), self.bonds().count())
-                        .expect("split assigns each component bond its original id"),
+                    atom_correspondence,
+                    bond_correspondence,
                     Correspondence::new(
                         dative_pairs,
-                        entities.dative_bonds().count(),
                         self.dative_bonds().count(),
+                        entities.dative_bonds().count(),
                     )
-                    .expect("split assigns each component dative bond its original id"),
+                    .expect("split assigns each selected source dative bond a component id"),
                     Correspondence::new(
                         aromatic_pairs,
-                        entities.aromatic_systems().count(),
                         self.aromatic_systems().count(),
+                        entities.aromatic_systems().count(),
                     )
-                    .expect("split assigns each component aromatic system its original id"),
+                    .expect("split assigns each selected source aromatic system a component id"),
                     Correspondence::new(
                         multicenter_pairs,
-                        entities.multicenter_bonds().count(),
                         self.multicenter_bonds().count(),
+                        entities.multicenter_bonds().count(),
                     )
-                    .expect("split assigns each component multicenter bond its original id"),
+                    .expect("split assigns each selected source multicenter bond a component id"),
                     Correspondence::new(
                         noncovalent_pairs,
-                        entities.noncovalent_bonds().count(),
                         self.noncovalent_bonds().count(),
+                        entities.noncovalent_bonds().count(),
                     )
-                    .expect("split assigns each component noncovalent bond its original id"),
+                    .expect("split assigns each selected source noncovalent bond a component id"),
                     Correspondence::new(
                         stereo_atom_pairs,
-                        entities.stereo_atoms().count(),
                         self.stereo_atoms().count(),
+                        entities.stereo_atoms().count(),
                     )
-                    .expect("split assigns each component stereo atom its original id"),
+                    .expect("split assigns each selected source stereo atom a component id"),
                     Correspondence::new(
                         stereo_bond_pairs,
-                        entities.stereo_bonds().count(),
                         self.stereo_bonds().count(),
+                        entities.stereo_bonds().count(),
                     )
-                    .expect("split assigns each component stereo bond its original id"),
+                    .expect("split assigns each selected source stereo bond a component id"),
                 );
 
-                // route each constraint to the component holding its atoms (conservative union
-                // guarantees they share one), remapped to compact ids
-                let remapping = idremapping_from_correspondence(&correspondence);
+                // Route each constraint to the component holding its atoms. The conservative union
+                // guarantees that all its references are present in the component correspondence.
                 let mut editor = entities.edit();
                 for constraint in self.constraints.iter() {
                     if self
@@ -1959,12 +1985,11 @@ impl Molecule {
                         .first()
                         .is_some_and(|a| component_of(*a) == component)
                     {
-                        editor
-                            .constraints_mut()
-                            .push(constraint.clone().remap(&remapping));
+                        editor.push_constraint(constraint.clone().map(&correspondence));
                     }
                 }
-                (editor.build(), correspondence)
+                let entities = editor.build();
+                (entities, correspondence)
             })
             .collect()
     }
@@ -2280,13 +2305,6 @@ fn offset_correspondence<Id: Copy + Ord + From<usize>>(
     Correspondence::from_images(&images, combined_count)
 }
 
-/// The per-entity-kind offset map used to remap constraints into a combined molecule.
-fn offset_map<Id: Copy + Eq + Hash + From<usize>>(offset: usize, count: usize) -> HashMap<Id, Id> {
-    (0..count)
-        .map(|k| (Id::from(k), Id::from(offset + k)))
-        .collect()
-}
-
 /// Union every atom of a relation into one component (all participants share the first's set).
 fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId>) {
     let mut atoms = atoms.into_iter();
@@ -2295,61 +2313,6 @@ fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId
             uf.union(first.index(), atom.index());
         }
     }
-}
-
-/// The per-entity-kind `original → compact` remapping a `split` component induces, read off its
-/// `component → original` correspondence.
-fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> IdRemapping {
-    IdRemapping::new(
-        correspondence
-            .atoms()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .dative_bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .aromatic_systems()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .multicenter_bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .noncovalent_bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .stereo_atoms()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .stereo_bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-    )
 }
 
 #[cfg(test)]

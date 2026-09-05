@@ -7,9 +7,9 @@ use std::vec::IntoIter;
 
 use umol_perm::DynPermutation;
 
+use super::super::compact::MoleculeCompaction;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemForm` via
@@ -43,11 +43,6 @@ impl AromaticSystemConstraintForm {
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         // Value-only: no indices to compact.
         Some(self)
-    }
-
-    /// Value-only: no indices to remap.
-    pub fn remap(self, _map: &IdRemapping) -> Self {
-        self
     }
 
     pub(crate) fn uses_participant_frame(&self) -> bool {
@@ -417,7 +412,7 @@ impl From<Vec<AromaticSystemConstraintForm>> for AromaticSystemConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
 
     use super::*;
 
@@ -709,13 +704,16 @@ mod tests {
         let cs =
             AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         let compaction = MoleculeCompaction::new(
-            GraphCompaction::new(vec![NodeId(0), NodeId(1)], vec![EdgeId(0)]),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            GraphCompaction::new(
+                Compaction::new(2, vec![NodeId(0), NodeId(1)]).unwrap(),
+                Compaction::new(1, vec![EdgeId(0)]).unwrap(),
+            ),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
         );
         assert_eq!(cs.clone().compact(&compaction), cs);
     }

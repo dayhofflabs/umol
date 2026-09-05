@@ -346,7 +346,7 @@ ordinary conversion must not perform one as an incidental implementation step.
 Derived `==` compares the stored IR structure exactly, including constraints, ids, ordering, and
 non-normal value encodings. `normalized_eq` compares normal forms in the current participant and
 entity-id frame. `framed_eq` additionally selects participant frames, while
-`framed_eq_under` first applies an explicitly supplied entity-id correspondence and then performs
+`framed_eq_under` first applies an explicitly supplied entity-id remapping and then performs
 framed equality. Aggregate `canonical_eq` compares complete canonical IR values after selecting
 participant frames and entity ids. Every semantic comparison includes constraints. This
 distinction matters for patterns, where constraints are not redundant with the structural
@@ -387,7 +387,7 @@ The equality operations form the same nested quotient pipeline:
 - `==` compares the exact stored representation;
 - `normalized_eq` compares normal forms in the current participant and entity-id frame;
 - `framed_eq` compares after selecting participant frames, while `framed_eq_under` first applies an
-  explicitly supplied entity-id correspondence and then performs framed equality; and
+  explicitly supplied entity-id remapping and then performs framed equality; and
 - `canonical_eq` compares complete aggregate canonical forms under a shared context, selecting the
   participant frames and entity ids rather than receiving an id witness from the caller.
 
@@ -408,10 +408,10 @@ pub trait Canonicalize: Reframe {
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         self,
         context: &CanonicalizeContext,
-    ) -> Result<(Self, MoleculeCorrespondence), Self::Error>;
+    ) -> Result<(Self, MoleculeRemapping), Self::Error>;
 
     fn canonical_hash(
         self,
@@ -426,8 +426,8 @@ pub trait Canonicalize: Reframe {
 }
 ```
 
-`canonicalize_with_correspondence` returns the entity-id-renumbering witness, not the participant
-frame action. Applying that correspondence and then `reframe` reconstructs the canonical value;
+`canonicalize_with_remapping` returns the entity-id-renumbering witness, not the participant
+frame action. Applying that remapping and then `reframe` reconstructs the canonical value;
 remapping alone need not do so.
 
 Use one concrete context for `Molecule`, `ReactionSpan`, and `Reaction` unless an
@@ -490,13 +490,13 @@ prefixes to select the least search carrier containing the complete input; this 
 not a public description-level operation. Complete canonicalization appends normalized entity-level
 and molecule-level constraints after the complete structure key.
 
-| Domain position | Structural domain | Entity slots |
+| Domain position | Structural domain | Entity indices |
 | ---: | --- | --- |
 | 0 | Topology | Atom = 0, Bond = 1 |
 | 1 | NonStereo | Dative bond = 0, Aromatic system = 1, Multicenter bond = 2, Noncovalent bond = 3 |
 | 2 | Stereo | Stereo atom = 0, Stereo bond = 1 |
 
-An entity-block position is the composite `(domain position, entity slot)`. Entity blocks compare by
+An entity-block position is the composite `(domain position, entity index)`. Entity blocks compare by
 this position and then by their dense row sequence. This hierarchy makes topology, constitution,
 and structure exact internal domain prefixes while allowing a future entity kind to be appended
 within the domain to which it belongs. An absent block contributes no entry. The separate terminal
@@ -610,10 +610,10 @@ where present, and inline constraint key. This comparison-key grouping does not 
 and `Connected = 3`. Payload fields compare in their declaration's semantic order: the optional
 entity subset first, then the asserted value where one exists.
 
-`RelationalConstraint` uses the composite position `(owning entity-block position, local slot)`.
-The assigned local slots are:
+`RelationalConstraint` uses the composite position `(owning entity-block position, local index)`.
+The assigned local indices are:
 
-| Owning entity | Local slots and variants in order |
+| Owning entity | Local indices and variants in order |
 | --- | --- |
 | Dative bond | 0–7: `DativeBondDonors`, `DativeBondDonor`, `DativeBondContainsAllDonors`, `DativeBondAllDonors`, `DativeBondAnyDonor`, `DativeBondAcceptor`, `DativeBondAcceptorSatisfies`, `DativeBondParallels` |
 | Aromatic system | 0–4: `AromaticSystemAtoms`, `AromaticSystemContains`, `AromaticSystemContainsAll`, `AromaticSystemAllAtoms`, `AromaticSystemAnyAtom` |
@@ -661,10 +661,12 @@ object independently violates the operation contract; rollback must not panic, b
 correct restoration for the compromised pairing.
 
 Reaction iterators are operation-issued values with a different lifecycle. `Reaction::apply`
-checks reaction-wide preconditions and then issues a `ReactionApplicationIter` that owns snapshots
+checks reaction-wide preconditions and then issues a `ReactionApplicationIter<T>` that owns snapshots
 of the reaction and host, normalized application state, and an eagerly enumerated correspondence
 set. `React::react` issues a `ReactionProductsIter` over the same application lifecycle. Neither
-iterator has a public constructor. Derivations and product-component lists are realized lazily in
+iterator has a public constructor. The output type is selected by `apply` (molecule),
+`tracked_apply` (molecule and correspondence), `apply_to_reaction`, or `apply_to_reaction_span`.
+Outputs and product-component lists are realized lazily in
 match order, so failures at that stage remain iterator items; a fatal item error is yielded once and
 terminates the iterator. Later mutation of the source reaction or molecules cannot change the
 issued operation.
@@ -704,37 +706,170 @@ property:
   changes;
 - assert only on internal paths whose producer establishes the required property.
 
-For example, converting a partial correspondence to a total-on-source remapping may return `None`
-because no total-left mapping exists. This can occur for a correspondence correctly produced for
-its molecule pair: partiality is part of the correspondence model, whereas a remapping is total on
-its source.
+For example, converting a partial correspondence to a semantic remapping may return `None` because
+the correspondence is not total on both sides. This can occur for a correspondence correctly
+produced for its molecule pair: partiality is part of the correspondence model, whereas a
+remapping is a total bijection. Such narrowing is not currently exposed; reference transport
+consumes correspondence directly.
 It does not make correspondence construction, composition, reversal, or unrelated consumers
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
+### Supplied-match reaction application
+
+The four supplied-match reaction methods return `Result<Option<T>, ApplyError>`:
+`apply_at` produces a molecule, `tracked_apply_at` produces a molecule and its
+host-to-product correspondence, and `apply_at_to_reaction` /
+`apply_at_to_reaction_span` produce the realized primary objects.
+`Ok(None)` is ordinary non-applicability caused by dangling incidence or a structural
+conflict; it is not an execution error. Iteration skips that outcome directly.
+Actual errors are yielded once and terminate iteration; error variants are not
+classified to recover continuation policy.
+
+All four methods preserve the same application and applicability behavior. The supplied
+correspondence maps the rule into the host; the produced witness maps host to product.
+Other entity pairings are induced from atom provenance and compatible incidence. Equal
+stereo kinds remain matchable, while different determined kinds identify different entities
+and produce removal plus addition. An undetermined kind does not assert a conflicting geometry.
+Realized reactions and spans use the existing lhs-anchored representation and constraint
+normal form; their product projections preserve the produced molecule's semantics rather
+than promising its exact row ordering.
+
+### Consuming correspondence updates
+
+`Correspondence::identity(count)` initializes a declared identity without temporary images.
+`extend_right` consumes the correspondence and adds unmatched right-domain ids by increasing
+its right count. `compact_right` discards affected pairs and compacts surviving right ids;
+`uncompact_right` expands those ids through the inverse compaction, leaving restored positions
+unmatched. Both check the applicable intermediate count using the existing composition errors.
+They preserve the left count and reuse the pair-vector allocation, including when all pairs
+are removed. Compaction followed by expansion does not recreate discarded pairings.
+
+Graph and molecule correspondences expose component-wise versions. Graph extension takes node
+and edge increments; molecule extension selects an `EntityKind`. Molecule compaction adapts only
+the removed atom/bond id lists from graph ids, not the vectors of matched pairs. These operations
+do not clone molecular payloads or require intermediate molecules. Ordinary `compose` remains
+borrowed and returns a separate correspondence.
+
+### Editor session correspondence
+
+`MoleculeEditor` accumulates an initial-to-current correspondence over all eight entity kinds.
+Tracking retains only id pairs and counts. Additions extend the right domains, removals compact
+them, and undo restoration applies inverse compaction without recreating discarded pairs.
+Attribute changes preserve pairings. A failed transaction whose rollback succeeds restores the
+pre-transaction session correspondence, alongside the molecular state.
+
+`tracked_snapshot` returns the same integrity-checked molecule as `snapshot`, plus an independent
+copy of the session correspondence. `try_tracked_build` and `tracked_build` transfer the accumulated
+vectors into the result and share the ordinary checked/asserted publication boundary. Plain
+publication returns only the molecule; plain snapshots do not copy the correspondence.
+
+## Pushout results
+
+Graph and relation-set `pushout` methods return only the resulting object.
+Their `tracked_pushout` companions return that object and its two input-to-result
+mappings: `(Graph, GraphPushoutCorrespondence)` and
+`Option<(Self, RelationPushoutCorrespondence)>`, respectively. Each pair has identical
+outputs and failure behavior; mapping carriers are optional API output.
+The carriers contain public `left` and `right` fields, not the result object; no constructors
+are added.
+Each operation produces components with equal target counts covering their respective
+inputs. Independently assembled fields do not establish agreement with a result object.
+Relation payload-combination failure still returns `None`.
+
+Molecule `meet_pushout` returns `Option<Molecule>`; `tracked_meet_pushout` returns
+`Option<(Molecule, MoleculePushoutCorrespondence)>`. Its carrier likewise contains only public
+`left` and `right` correspondences, with no constructor. Operation-produced components map each
+input into the result and share its target counts for all eight entity kinds. Both forms preserve
+the same attribute meets, constraint transport, and inadmissibility behavior.
+
+## Pullback and pushout-complement results
+
+Graph and relation-set `pullback` methods return the object; `tracked_pullback`
+also returns `PullbackCorrespondence` or `RelationPullbackCorrespondence`.
+Their public `left` and `right` components map the result into each input and
+have equal source counts when produced by the operation. Graph pullback retains
+its count-mismatch `Result`; relation-set pullback retains `Option` for rejected
+payload combinations.
+
+Graph `pushout_complement` returns the context graph; `tracked_pushout_complement`
+also returns `PushoutComplementCorrespondence`. Its public `context` maps context
+to host, and `interface` maps interface to context. Both forms retain `None` for
+dangling or count disagreement. Each plain/tracked pair has identical results
+and failure behavior. These carriers contain no result object or new constructors;
+agreement of independently supplied fields with their graphs remains contextual.
+
+## Compaction
+
+`Compaction<Id>` declares a finite source count and stores sorted, distinct removed ids.
+Construction rejects out-of-range removals with `CompactionError`; the result count is the
+source count minus the number removed. Identity requires an explicit source count, not `Default`.
+`empty()` on compaction or remapping types means zero source and result counts in every component;
+it is not a domain-independent identity. `Remapping::identity(count)` and
+`GraphRemapping::identity(node_count, edge_count)` construct declared-domain identities. Existing remapping defaults remain zero-domain values.
+Graph and molecule aggregates accept validated component compactions, including count-bearing
+identities for untouched entity kinds. Producers capture counts before removal; `UndoCompaction`
+preserves them.
+
+`compact` returns `None` for removed or out-of-source-range ids. `uncompact` asserts result-domain
+membership; `try_uncompact` returns `None` outside that domain. `compact_vec` requires exactly the
+source count of values, and `try_compact_vec` returns `None` on a length mismatch. Survivor order
+is preserved. Borrowed conversions to single-space, graph, and molecule correspondences preserve
+both counts and every survivor pairing in each entity kind.
+
+Graph `remove_cascading` returns `()`, and `try_remove` returns `Option<()>`;
+`tracked_remove_cascading` and `try_tracked_remove` return the graph compaction instead.
+The checked removal leaves the graph unchanged when the dangling condition fails.
+Single-node/edge cascading-removal conveniences return no witness. Relation-set
+`compact` returns the resulting set; `tracked_compact` returns that set
+and its relation-id compaction. Each pair preserves the same output and failure behavior.
+
+Molecule editor `remove` and the six bulk relation-removal methods return `()`; their
+`tracked_` companions return a full `MoleculeCompaction`, including unchanged-family counts.
+Molecule `extract` returns only the molecule; `tracked_extract` pairs it with the actual
+host-to-result compaction. Its sub-to-host input describes selection, not result numbering:
+extraction preserves host order. Both forms retain the same cascades and constraint transport.
+
+Rollback checks result counts against the current editor before applying an inverse compaction.
+A mismatch remains `TransactionError::RollbackStateMismatch`, not an indexing panic.
+
 ## Remapping
 
-Remapping is an explicit transformation between id spaces. It transports represented values and
-incidence along a total function; it does not validate chemistry, normalize attributes, repair
-references, or remove entities. The image vectors passed to a remapping constructor define its
-source domains, and every id in those domains has an image. Construction is therefore infallible.
-A general remapping need not be injective or surjective; injection or bijection is a contextual
-precondition of operations that require distinct or dense target entities. Removal uses compaction
-instead because a removed id has no image.
+Remapping is an explicit total bijection between dense id spaces. It transports represented values
+and incidence without adding, dropping, or identifying entities; it does not validate chemistry,
+normalize attributes, repair references, or remove entities. Removal uses compaction instead.
 
-The facility has two coordinated levels:
+`Remapping::new` checks that the image vector is a permutation of `0..images.len()` and returns
+`RemappingError` for the first out-of-range or repeated image. It does not modify the images.
+The private vector has no public mutable access. Graph and molecule aggregate constructors take
+already-valid component remappings and do not repeat validation. Borrowed `From` conversions
+widen remappings to correspondences without changing pairings or source and target counts.
+Agreement with an independently supplied object remains contextual.
 
-- `umol_graph_core::Remapping` maps node and edge ids used by graphs and relation participants. A
-  relation-set remapping relabels each factor and leaves both the participant sequence and the
-  payload as supplied. Graph core never reorders a frame or reads a payload; a positional payload
-  stays aligned because nothing moved.
-- `IdRemapping` maps ids for all eight molecule entity kinds. It is used for graph-IR values that contain
-  entity references, including constraints and deltas; it does not duplicate graph-core participant
-  canonicalization.
+The private storage is `Vec<Id>`. Construction and lookup require `Copy + Into<usize>`;
+lookup accepts and returns the same `Id` type, with integer extraction confined to storage access.
+Operations that enumerate source ids additionally require `From<usize>`. These conversions do not
+bind an id to a particular object or establish its validity in that object's namespace.
 
-A higher-level operation that moves molecular data into another namespace derives both mappings
-from the same correspondence or construction result: the graph-core mapping transports topology
-and relation participants, while the IR mapping transports references to owned entity rows. Do not
+The facility has three coordinated levels:
+
+- `umol_graph_core::Remapping<Id>` stores the dense image vector for one typed id space;
+- `GraphRemapping` aggregates node and edge remappings used by graphs and relation participants; and
+- `MoleculeRemapping` aggregates remappings for all eight molecule entity kinds.
+
+A relation-set remapping relabels each factor and leaves both the participant sequence and the
+payload as supplied. Graph core never reorders a frame or reads a payload; a positional payload
+stays aligned because nothing moved.
+
+Constraint reference transport consumes `MoleculeCorrespondence`. `try_map` requires an image for
+every referenced entity and returns `None` if any is absent; `map` asserts that same coverage.
+Unused correspondence entries need not be matched. Predicates and frame positions are preserved.
+Edit handle resolution is separate: it uses only the entities referenced by the edited constraint,
+not a molecule-wide correspondence.
+
+When a higher-level operation moves molecular data with coordinated graph-core and graph-IR maps,
+both must derive from the same operation witness: the graph-core mapping transports topology and
+relation participants, while the IR mapping transports references to owned entity rows. Do not
 manually sort remapped relation participants or permute their payloads at individual call sites;
 that belongs to graph IR, which owns frame selection and transport.
 
@@ -861,11 +996,11 @@ therefore related operations with different codomains.
 
 ### Dense molecule remapping
 
-A public end-to-end remapping operation on `Molecule` accepts a `MoleculeCorrespondence` that
-describes the complete old and new id spaces. The correspondence source counts must equal the
-molecule counts, and every component correspondence must be total on both sides. The operation
-returns `None` when these independently supplied structural conditions do not hold. The asserted
-route panics under the same condition. The published source is already closed and is not rechecked.
+A public end-to-end remapping operation on `Molecule` accepts a `MoleculeRemapping`.
+Each component length must equal the corresponding molecule entity count; bijectivity is already
+established by construction. The checked operation returns `None` on a count mismatch, and the
+asserted route panics under the same condition. Component `remap_vec` operations move table values;
+constraint transport widens the remapping to a correspondence and uses the existing traversal.
 
 On success, it transports topology, every relation participant, position-sensitive relation data,
 stereo frames, entity forms, and every typed reference in constraints. It does not validate
@@ -874,14 +1009,14 @@ entities. Identity remapping is exact; applying a remapping and its inverse reco
 and sequential remapping agrees with correspondence composition.
 
 Dense molecule remapping is semantics-preserving alpha-renaming. Its primary semantic law is
-`source.framed_eq_under(&remapped, &correspondence)`. Property tests must state this law directly in
+`source.framed_eq_under(&remapped, &remapping)`. Property tests must state this law directly in
 addition to testing identity, inverse, composition, and referential integrity. Generated cases must
 include crossing permutations, all entity kinds, position-sensitive relation data and stereo
 frames, and constraints containing typed entity references; testing only reordered atom and bond
 tables is insufficient.
 
 Canonicalization is a consumer of this operation, not an alternative implementation of it. It
-derives a complete correspondence from a canonical labeling and applies the ordinary molecule
+constructs a complete remapping directly from its selected entity order and applies the ordinary molecule
 remapping operation. Canonicalization code must not introduce a second path for transporting entity
 tables or referenced values.
 
@@ -934,16 +1069,14 @@ for an LHS-anchored span in the documented constraint normal form; for another v
 returns the equivalent LHS-anchored normal form.
 
 Dense span remapping follows the molecule remapping API. `ReactionSpan::remap` and
-`ReactionSpan::try_remap` accept a `MoleculeCorrespondence` over the eight union tables. Its source
-counts must equal the span's table sizes and each component must be a total bijection onto a dense
-target id space. The operation transports both values of every `EntitySpan`, relation participants,
+`ReactionSpan::try_remap` accept a `MoleculeRemapping` over the eight union tables. Component
+lengths must equal the span's table sizes; each component is already a dense bijection. The operation transports both values of every `EntitySpan`, relation participants,
 position-sensitive relation data, stereo frames, and all constraint references. It does not
 normalize, repair, project, or reanchor the span implicitly. The asserted route panics when its
-documented producer contract is violated; the checked route returns `None` only for an unsuitable
-correspondence. The published source and remapped result are closed by construction and are not
+documented producer contract is violated; the checked route returns `None` only for a component-count mismatch. The published source and remapped result are closed by construction and are not
 rechecked.
 
-Canonicalization derives an LHS-anchored correspondence and applies this ordinary remapping
+Canonicalization constructs an LHS-anchored remapping and applies this ordinary remapping
 operation. It does not maintain a second canonicalization-only transport path. For
 `S(s) = s.to_reaction().to_reaction_span()?` and span canonicalization `C`, the normal-form laws are
 `S(C(s)) == C(s)`, `S(S(s)) == S(s)`, and `C(S(s)) == C(s)`. Only the first requires exact

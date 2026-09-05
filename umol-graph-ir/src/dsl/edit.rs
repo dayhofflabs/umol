@@ -3189,7 +3189,7 @@ impl ConstraintEditDsl {
             handles,
         } = self;
         ConstraintEdit::new(constraint, |entity| handles.get(entity))
-            .expect("constraint-edit DSL slots have kind-correct handles")
+            .expect("constraint-edit DSL indices have kind-correct handles")
     }
 }
 

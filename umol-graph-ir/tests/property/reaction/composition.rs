@@ -50,7 +50,7 @@ proptest! {
                         MATCH_CONFIG,
                     )
                     .unwrap()
-                    .any(|derivation| derivation.unwrap().rhs() == &right));
+                    .any(|product| product.unwrap() == right));
             }
         }
     }
@@ -76,7 +76,6 @@ proptest! {
                     .map(Result::unwrap)
                     .collect::<Vec<_>>()
             })
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         let intermediates: Vec<Molecule> = a
@@ -86,7 +85,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
         let mut sequential: Vec<Molecule> = Vec::new();
         for intermediate in &intermediates {
@@ -96,8 +94,7 @@ proptest! {
                     MATCH_CONFIG,
                 )
                     .unwrap()
-                    .map(Result::unwrap)
-                    .map(|derivation| derivation.rhs().clone()),
+                    .map(Result::unwrap),
             );
         }
 
@@ -128,7 +125,7 @@ proptest! {
                         MATCH_CONFIG,
                     )
                     .unwrap()
-                    .any(|derivation| derivation.unwrap().rhs() == &right));
+                    .any(|product| product.unwrap() == right));
             }
         }
     }
@@ -154,7 +151,6 @@ proptest! {
                     .map(Result::unwrap)
                     .collect::<Vec<_>>()
             })
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         let intermediates: Vec<Molecule> = a
@@ -164,7 +160,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
         let mut sequential: Vec<Molecule> = Vec::new();
         for intermediate in &intermediates {
@@ -174,8 +169,7 @@ proptest! {
                     MATCH_CONFIG,
                 )
                     .unwrap()
-                    .map(Result::unwrap)
-                    .map(|derivation| derivation.rhs().clone()),
+                    .map(Result::unwrap),
             );
         }
 
@@ -207,7 +201,6 @@ proptest! {
                     .map(Result::unwrap)
                     .collect::<Vec<_>>()
             })
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         let intermediates: Vec<Molecule> = a
@@ -217,7 +210,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
         let mut sequential: Vec<Molecule> = Vec::new();
         for intermediate in &intermediates {
@@ -227,8 +219,7 @@ proptest! {
                     MATCH_CONFIG,
                 )
                     .unwrap()
-                    .map(Result::unwrap)
-                    .map(|derivation| derivation.rhs().clone()),
+                    .map(Result::unwrap),
             );
         }
 

@@ -11,16 +11,17 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    compact_edge_vec, compact_node_vec, Compaction, EdgeId, FixedRelationSet,
-    FixedVarBirelationSet, Graph, GraphCompaction, NodeId, RelationId, RelationParticipant,
-    VarRelationSet,
+    Compaction, Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph,
+    GraphCompaction, NodeId, RelationId, RelationParticipant, VarRelationSet,
 };
 use umol_perm::{DynPermutation, Permutation};
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
+use super::super::compact::{MoleculeCompaction, UndoCompaction};
 use super::super::constraint::{Constraint, Constraints};
+use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::{DativeBondForm, DativeBonds};
 use super::super::edit::{
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
@@ -28,6 +29,7 @@ use super::super::edit::{
     RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
     RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
 };
+use super::super::entity::EntityKind;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -35,7 +37,6 @@ use super::super::id::{
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
-use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::super::traits::{FrameTransport, Normalize};
 use super::super::view::{
@@ -134,10 +135,11 @@ where
     fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             FixedSetStorage::Shared(arc) => {
-                let (compacted, removed) = arc.compact(compaction);
+                let (compacted, removed) = arc.tracked_compact(compaction);
                 (FixedSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedSetStorage::Mutable(vec) => {
+                let source_count = vec.len();
                 let mut removed = Vec::new();
                 let mut compacted: Vec<([P; N], D)> = Vec::with_capacity(vec.len());
                 for (index, (mut participants, d)) in vec.into_iter().enumerate() {
@@ -158,7 +160,8 @@ where
                 }
                 (
                     FixedSetStorage::Mutable(compacted),
-                    Compaction::new(removed),
+                    Compaction::new(source_count, removed)
+                        .expect("removed relations belong to the source set"),
                 )
             }
         }
@@ -282,10 +285,11 @@ where
     fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             VarSetStorage::Shared(arc) => {
-                let (compacted, removed) = arc.compact(compaction);
+                let (compacted, removed) = arc.tracked_compact(compaction);
                 (VarSetStorage::Shared(Arc::new(compacted)), removed)
             }
             VarSetStorage::Mutable(vec) => {
+                let source_count = vec.len();
                 let mut removed = Vec::new();
                 let mut compacted: Vec<(Vec<P>, D)> = Vec::with_capacity(vec.len());
                 for (index, (participants, d)) in vec.into_iter().enumerate() {
@@ -298,7 +302,11 @@ where
                         None => removed.push(RelationId(index as u32)),
                     }
                 }
-                (VarSetStorage::Mutable(compacted), Compaction::new(removed))
+                (
+                    VarSetStorage::Mutable(compacted),
+                    Compaction::new(source_count, removed)
+                        .expect("removed relations belong to the source set"),
+                )
             }
         }
     }
@@ -435,10 +443,11 @@ where
     fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             FixedVarSetStorage::Shared(arc) => {
-                let (compacted, removed) = arc.compact(compaction);
+                let (compacted, removed) = arc.tracked_compact(compaction);
                 (FixedVarSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedVarSetStorage::Mutable(vec) => {
+                let source_count = vec.len();
                 let mut removed = Vec::new();
                 let mut compacted: Vec<([L1; N1], Vec<L2>, D)> = Vec::with_capacity(vec.len());
                 for (index, (mut participants_1, participants_2, d)) in vec.into_iter().enumerate()
@@ -465,7 +474,8 @@ where
                 }
                 (
                     FixedVarSetStorage::Mutable(compacted),
-                    Compaction::new(removed),
+                    Compaction::new(source_count, removed)
+                        .expect("removed relations belong to the source set"),
                 )
             }
         }
@@ -558,7 +568,19 @@ fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
 /// Mutable editor for a `Molecule`. Accumulates atoms, bonds, and
 /// relations (dative, aromatic, multicenter, noncovalent), then finalizes
 /// into an immutable `Molecule`. Supports incremental removal with
-/// index remapping via `remove`.
+/// compaction via `remove`.
+///
+/// The session correspondence maps the editor's initial id spaces to its current ones.
+/// Tracking stores only id pairs and counts, not a source molecule. Additions are right-unmatched;
+/// removals discard pairs. Restoration expands the id spaces without recreating discarded pairs.
+/// Attribute-only changes preserve the pairings.
+///
+/// # Semantic properties
+///
+/// The session correspondence composes the id changes since editor creation. Discarding the
+/// correspondence from a tracked publication gives the same molecule or integrity error as its
+/// plain counterpart. Repeated snapshots without intervening edits are equal; later edits do not
+/// change an earlier snapshot or its correspondence.
 #[derive(Clone)]
 pub struct MoleculeEditor {
     graph: Graph,
@@ -571,6 +593,7 @@ pub struct MoleculeEditor {
     stereo_atoms: FixedVarSetStorage<NodeId, 1, StereoLigand, StereoAtomForm>,
     stereo_bonds: FixedVarSetStorage<EdgeId, 1, StereoLigand, StereoBondForm>,
     constraints: Constraints,
+    pub(super) correspondence: MoleculeCorrespondence,
 }
 
 impl MoleculeEditor {
@@ -587,7 +610,18 @@ impl MoleculeEditor {
         stereo_bonds: StereoBonds,
         constraints: Constraints,
     ) -> Self {
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::identity(atoms.len()),
+            Correspondence::identity(bonds.len()),
+            Correspondence::identity(dative_bonds.count()),
+            Correspondence::identity(aromatic_systems.count()),
+            Correspondence::identity(multicenter_bonds.count()),
+            Correspondence::identity(noncovalent_bonds.count()),
+            Correspondence::identity(stereo_atoms.count()),
+            Correspondence::identity(stereo_bonds.count()),
+        );
         Self {
+            correspondence,
             graph,
             atoms,
             bonds,
@@ -608,6 +642,9 @@ impl MoleculeEditor {
     pub fn add_atom(&mut self, atom: AtomForm) -> AtomId {
         let id = self.graph.add_node();
         Arc::make_mut(&mut self.atoms).push(atom);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::Atom, 1);
         AtomId::from(id)
     }
 
@@ -620,6 +657,9 @@ impl MoleculeEditor {
             .graph
             .add_edge(NodeId::from(first), NodeId::from(second));
         Arc::make_mut(&mut self.bonds).push(bond);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::Bond, 1);
         BondId::from(id)
     }
 
@@ -633,10 +673,14 @@ impl MoleculeEditor {
         bond: DativeBondForm,
     ) -> DativeBondId {
         let donors: Vec<NodeId> = donors.into_iter().map(NodeId::from).collect();
-        DativeBondId(
+        let id = DativeBondId(
             self.dative_bonds
                 .push([NodeId::from(acceptor)], donors, bond),
-        )
+        );
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::DativeBond, 1);
+        id
     }
 
     /// Append an aromatic-system overlay directly to the editor.
@@ -647,6 +691,9 @@ impl MoleculeEditor {
     ) -> AromaticSystemId {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         let i = self.aromatic_systems.push(nodes, data);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::AromaticSystem, 1);
         AromaticSystemId(i)
     }
 
@@ -658,6 +705,9 @@ impl MoleculeEditor {
     ) -> MulticenterBondId {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         let i = self.multicenter_bonds.push(nodes, data);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::MulticenterBond, 1);
         MulticenterBondId(i)
     }
 
@@ -670,6 +720,9 @@ impl MoleculeEditor {
         let i = self
             .noncovalent_bonds
             .push([NodeId::from(ends[0]), NodeId::from(ends[1])], bond);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::NoncovalentBond, 1);
         NoncovalentBondId(i)
     }
 
@@ -680,10 +733,14 @@ impl MoleculeEditor {
         ligands: Vec<StereoLigand>,
         attributes: StereoAtomForm,
     ) -> StereoAtomId {
-        StereoAtomId(
+        let id = StereoAtomId(
             self.stereo_atoms
                 .push([NodeId::from(site)], ligands, attributes),
-        )
+        );
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::StereoAtom, 1);
+        id
     }
 
     /// Append a stereo-bond overlay directly to the editor.
@@ -693,10 +750,14 @@ impl MoleculeEditor {
         ligands: Vec<StereoLigand>,
         attributes: StereoBondForm,
     ) -> StereoBondId {
-        StereoBondId(
+        let id = StereoBondId(
             self.stereo_bonds
                 .push([EdgeId::from(site)], ligands, attributes),
-        )
+        );
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::StereoBond, 1);
+        id
     }
 
     /// Add a molecule-level constraint (molecule-scope predicate or
@@ -1100,72 +1161,181 @@ impl MoleculeEditor {
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
     pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
+        self.tracked_remove_dative_bonds(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_dative_bonds`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_dative_bonds(&mut self, ids: &[DativeBondId]) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.dative_bonds.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            ids.to_vec(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::new(self.dative_bond_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.dative_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
+        compaction
     }
 
     /// Remove aromatic-system overlays directly from the editor.
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
     pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
+        self.tracked_remove_aromatic_systems(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_aromatic_systems`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_aromatic_systems(
+        &mut self,
+        ids: &[AromaticSystemId],
+    ) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.aromatic_systems.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            ids.to_vec(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::new(self.aromatic_system_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.aromatic_systems.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
+        compaction
     }
 
     /// Remove multicenter-bond overlays directly from the editor.
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
     pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
+        self.tracked_remove_multicenter_bonds(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_multicenter_bonds`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_multicenter_bonds(
+        &mut self,
+        ids: &[MulticenterBondId],
+    ) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.multicenter_bonds.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            Vec::new(),
-            ids.to_vec(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::new(self.multicenter_bond_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.multicenter_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
+        compaction
     }
 
     /// Remove noncovalent-bond overlays directly from the editor.
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
     pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
+        self.tracked_remove_noncovalent_bonds(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_noncovalent_bonds`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_noncovalent_bonds(
+        &mut self,
+        ids: &[NoncovalentBondId],
+    ) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.noncovalent_bonds.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            ids.to_vec(),
-            Vec::new(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::new(self.noncovalent_bond_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.noncovalent_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
+        compaction
     }
 
     /// Remove stereo-atom overlays directly from the editor.
@@ -1173,17 +1343,38 @@ impl MoleculeEditor {
     /// Low-level dense removal primitive; compacts molecule-level constraints but
     /// does not build rollback data.
     pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
+        self.tracked_remove_stereo_atoms(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_stereo_atoms`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.stereo_atoms.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            ids.to_vec(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::new(self.stereo_atom_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.stereo_atoms.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
+        compaction
     }
 
     /// Remove stereo-bond overlays directly from the editor.
@@ -1191,36 +1382,64 @@ impl MoleculeEditor {
     /// Low-level dense removal primitive; compacts molecule-level constraints but
     /// does not build rollback data.
     pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
+        self.tracked_remove_stereo_bonds(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_stereo_bonds`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_stereo_bonds(&mut self, ids: &[StereoBondId]) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.stereo_bonds.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            ids.to_vec(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::new(self.stereo_bond_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
         );
+        self.stereo_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
+        compaction
     }
 
     // -- Topological removal --------------------------------------------------
 
-    /// Remove topology directly from the editor and return the forward compaction.
+    /// Remove topology directly from the editor, cascading dependent relations and constraints.
     ///
     /// This is the low-level dense topology-removal primitive. It removes the
     /// requested atoms and bonds, cascades relations whose participants were
-    /// removed, compacts molecule-level constraints, and returns the forward
-    /// `MoleculeCompaction` for downstream id holders. It does not build rollback
+    /// removed, and compacts molecule-level constraints. It does not build rollback
     /// data; checked transactions capture the removed payloads before calling
     /// this method.
-    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> MoleculeCompaction {
+    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) {
+        self.tracked_remove(atoms, bonds);
+    }
+
+    /// Remove topology and return the source-to-result compaction for all eight entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove`], including cascading relation and constraint
+    /// removal. Every component retains the source count from before removal.
+    pub fn tracked_remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> MoleculeCompaction {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
-        let compaction = self.graph.remove_cascading(&nodes, &edges);
+        let compaction = self.graph.tracked_remove_cascading(&nodes, &edges);
 
-        let new_atoms = compact_node_vec(&compaction, &self.atoms);
-        let new_bonds = compact_edge_vec(&compaction, &self.bonds);
+        let new_atoms = compaction.nodes().compact_vec(&self.atoms);
+        let new_bonds = compaction.edges().compact_vec(&self.bonds);
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
@@ -1272,38 +1491,66 @@ impl MoleculeEditor {
 
         let id_compaction = MoleculeCompaction::new(
             compaction,
-            removed_dative
-                .removed()
-                .iter()
-                .map(|&id| DativeBondId::from(id))
-                .collect(),
-            removed_aromatic
-                .removed()
-                .iter()
-                .map(|&id| AromaticSystemId::from(id))
-                .collect(),
-            removed_multicenter
-                .removed()
-                .iter()
-                .map(|&id| MulticenterBondId::from(id))
-                .collect(),
-            removed_noncovalent
-                .removed()
-                .iter()
-                .map(|&id| NoncovalentBondId::from(id))
-                .collect(),
-            removed_stereo_atoms
-                .removed()
-                .iter()
-                .map(|&id| StereoAtomId::from(id))
-                .collect(),
-            removed_stereo_bonds
-                .removed()
-                .iter()
-                .map(|&id| StereoBondId::from(id))
-                .collect(),
+            Compaction::new(
+                removed_dative.source_count(),
+                removed_dative
+                    .removed()
+                    .iter()
+                    .map(|&id| DativeBondId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_aromatic.source_count(),
+                removed_aromatic
+                    .removed()
+                    .iter()
+                    .map(|&id| AromaticSystemId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_multicenter.source_count(),
+                removed_multicenter
+                    .removed()
+                    .iter()
+                    .map(|&id| MulticenterBondId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_noncovalent.source_count(),
+                removed_noncovalent
+                    .removed()
+                    .iter()
+                    .map(|&id| NoncovalentBondId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_stereo_atoms.source_count(),
+                removed_stereo_atoms
+                    .removed()
+                    .iter()
+                    .map(|&id| StereoAtomId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_stereo_bonds.source_count(),
+                removed_stereo_bonds
+                    .removed()
+                    .iter()
+                    .map(|&id| StereoBondId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
         );
         self.constraints.compact(&id_compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&id_compaction)
+                .expect("removal compaction describes the editor's current id spaces");
         id_compaction
     }
 
@@ -1341,6 +1588,7 @@ impl MoleculeEditor {
 
     // -- Undo of removals -----------------------------------------------------
 
+    // Undo application updates the session correspondence after all affected tables are restored.
     pub(super) fn restore_topology(
         &mut self,
         atoms: Vec<RemovedAtom>,
@@ -1550,7 +1798,31 @@ impl MoleculeEditor {
     /// Returns [`MoleculeIntegrityError`] when the transient editor state cannot be published as a
     /// molecule.
     pub fn snapshot(&self) -> Result<Molecule, MoleculeIntegrityError> {
-        self.clone().try_build()
+        Molecule::try_from_arcs(
+            self.graph.clone(),
+            Arc::clone(&self.atoms),
+            Arc::clone(&self.bonds),
+            DativeBonds::from_arc(self.dative_bonds.clone().into_arc()),
+            AromaticSystems::from_arc(self.aromatic_systems.clone().into_arc()),
+            MulticenterBonds::from_arc(self.multicenter_bonds.clone().into_arc()),
+            NoncovalentBonds::from_arc(self.noncovalent_bonds.clone().into_arc()),
+            StereoAtoms::from_arc(self.stereo_atoms.clone().into_arc()),
+            StereoBonds::from_arc(self.stereo_bonds.clone().into_arc()),
+            self.constraints.clone(),
+        )
+    }
+
+    /// Publish a reusable snapshot and the initial-to-current session correspondence.
+    ///
+    /// Subsequent edits do not change either returned value.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same integrity error as [`Self::snapshot`].
+    pub fn tracked_snapshot(
+        &self,
+    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeIntegrityError> {
+        Ok((self.snapshot()?, self.correspondence.clone()))
     }
 
     /// Publish the editor's current state after checking molecule integrity.
@@ -1569,6 +1841,21 @@ impl MoleculeEditor {
         )
     }
 
+    /// Consume the editor, publishing its molecule and initial-to-current session correspondence.
+    ///
+    /// Moves the accumulated id-pair vectors into the result without copying them.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same integrity error as [`Self::try_build`]. The editor is consumed on failure.
+    pub fn try_tracked_build(
+        mut self,
+    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeIntegrityError> {
+        let correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty());
+        Ok((self.try_build()?, correspondence))
+    }
+
     /// Publish editor state whose molecule integrity is established by the producer.
     ///
     /// # Panics
@@ -1577,6 +1864,17 @@ impl MoleculeEditor {
     /// [`Self::try_build`] for independently assembled or potentially conflicting edits.
     pub fn build(self) -> Molecule {
         self.try_build()
+            .unwrap_or_else(|error| panic!("invalid molecule editor state: {error}"))
+    }
+
+    /// Consume an integrity-established editor, returning its molecule and session correspondence.
+    ///
+    /// # Panics
+    ///
+    /// Panics on the same integrity failure as [`Self::build`]. Use [`Self::try_tracked_build`]
+    /// when the edits do not establish molecule integrity.
+    pub fn tracked_build(self) -> (Molecule, MoleculeCorrespondence) {
+        self.try_tracked_build()
             .unwrap_or_else(|error| panic!("invalid molecule editor state: {error}"))
     }
 }
@@ -1999,7 +2297,7 @@ mod tests {
             },
         ];
 
-        let compaction = triatomic.remove(&[AtomId(1)], &[]);
+        let compaction = triatomic.tracked_remove(&[AtomId(1)], &[]);
         triatomic.restore_topology(
             removed_atoms,
             removed_bonds,
@@ -2044,13 +2342,15 @@ mod tests {
         };
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
-        let undo = MoleculeCompaction::relations(
-            vec![removed.id],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let undo = MoleculeCompaction::new(
+            GraphCompaction::new(Compaction::identity(2), Compaction::empty()),
+            Compaction::new(2, vec![removed.id])
+                .expect("removed entities belong to the source table"),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
         )
         .undo_compaction();
         b.restore_dative_bonds(vec![removed], &undo);

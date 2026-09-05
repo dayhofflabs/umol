@@ -1,3 +1,4 @@
+from umol import MoleculeRemapping
 import re
 
 import pytest
@@ -21,6 +22,7 @@ from umol import (
     ContradictionError,
     Correspondence,
     DativeBondForm,
+    Edits,
     ElectronCountsForm,
     Element,
     ElementForm,
@@ -31,6 +33,7 @@ from umol import (
     MetadataError,
     ModelConversionError,
     Molecule,
+    MoleculeCompaction,
     MoleculeConstraint,
     MoleculeCorrespondence,
     MoleculeDefaults,
@@ -392,18 +395,18 @@ def test_molecule_canonicalize():
     assert source.canonical_eq(expected)
 
 
-def test_molecule_canonicalize_with_correspondence():
+def test_molecule_canonicalize_with_remapping():
     source = Molecule.parse(
         '{:atoms ["C#c+" "C"] :constraints '
         '[{:charge-sum {:atoms [0 0] :sum 0}}]}'
     )
 
-    canonical, correspondence = source.canonicalize_with_correspondence()
+    canonical, remapping = source.canonicalize_with_remapping()
 
     assert canonical == source.canonicalize()
-    assert isinstance(correspondence, MoleculeCorrespondence)
-    assert correspondence.is_total()
-    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 0)]
+    assert isinstance(remapping, MoleculeRemapping)
+    assert remapping.to_correspondence().is_total()
+    assert remapping.atoms.images == [1, 0]
 
 
 def test_molecule_canonicalize_error():
@@ -414,7 +417,7 @@ def test_molecule_canonicalize_error():
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         molecule.canonicalize()
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        molecule.canonicalize_with_correspondence()
+        molecule.canonicalize_with_remapping()
 
 
 def test_molecule_stereo_mutation_integrity_error():
@@ -436,7 +439,7 @@ def test_molecule_stereo_mutation_integrity_error():
         StereoCoset.Lit(0),
     )
     molecule.canonicalize()
-    molecule.canonicalize_with_correspondence()
+    molecule.canonicalize_with_remapping()
 
 
 def test_molecule_from_smiles():
@@ -958,7 +961,7 @@ def test_molecule_combine():
         bonds=[(0, 1, BondForm(2))],
     )
 
-    combined, correspondence = left.combine(right)
+    combined = left.combine(right)
 
     assert combined == Molecule.from_entries(
         [
@@ -968,9 +971,6 @@ def test_molecule_combine():
         ],
         bonds=[(1, 2, BondForm(2))],
     )
-    assert isinstance(correspondence, MoleculeCorrespondence)
-    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 2)]
-    assert correspondence.bonds.matched_pairs == [(0, 0)]
     assert left == left_before
     assert right == right_before
 
@@ -986,7 +986,7 @@ def test_molecule_combine_from():
         bonds=[(0, 1, BondForm(2))],
     )
 
-    correspondence = recipient.combine_from(other)
+    result = recipient.combine_from(other)
 
     assert recipient == Molecule.from_entries(
         [
@@ -996,8 +996,7 @@ def test_molecule_combine_from():
         ],
         bonds=[(1, 2, BondForm(2))],
     )
-    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 2)]
-    assert correspondence.bonds.matched_pairs == [(0, 0)]
+    assert result is None
     assert other == other_before
 
 
@@ -1007,8 +1006,9 @@ def test_molecule_combine_from_alias():
         bonds=[(0, 1, BondForm(1))],
     )
 
-    correspondence = molecule.combine_from(molecule)
+    result = molecule.combine_from(molecule)
 
+    assert result is None
     assert molecule == Molecule.from_entries(
         [
             AtomForm(Element("C")),
@@ -1018,8 +1018,6 @@ def test_molecule_combine_from_alias():
         ],
         bonds=[(0, 1, BondForm(1)), (2, 3, BondForm(1))],
     )
-    assert correspondence.atoms.matched_pairs == [(0, 2), (1, 3)]
-    assert correspondence.bonds.matched_pairs == [(0, 1)]
 
 
 def test_molecule_combine_all():
@@ -1040,7 +1038,7 @@ def test_molecule_combine_all():
         Molecule.from_entries([AtomForm(Element("F"))]),
     ]
 
-    combined, correspondences = Molecule.combine_all(
+    combined = Molecule.combine_all(
         molecule for molecule in molecules
     )
 
@@ -1053,21 +1051,11 @@ def test_molecule_combine_all():
         ],
         bonds=[(1, 2, BondForm(2))],
     )
-    assert [correspondence.atoms.matched_pairs for correspondence in correspondences] == [
-        [(0, 0)],
-        [(0, 1), (1, 2)],
-        [(0, 3)],
-    ]
-    assert [correspondence.bonds.matched_pairs for correspondence in correspondences] == [
-        [],
-        [(0, 0)],
-        [],
-    ]
     assert molecules == snapshots
 
 
 def test_molecule_combine_all_empty():
-    assert Molecule.combine_all([]) == (Molecule(), [])
+    assert Molecule.combine_all([]) == Molecule()
 
 
 def test_correspondence_constructor():
@@ -1125,7 +1113,7 @@ def test_correspondence_constructor_error(
 
 
 def test_correspondence_value():
-    _, molecule_correspondence = Molecule.from_entries(
+    combined = Molecule.from_entries(
         [AtomForm(Element("C"))]
     ).combine(
         Molecule.from_entries(
@@ -1133,7 +1121,8 @@ def test_correspondence_value():
             bonds=[(0, 1, BondForm(2))],
         )
     )
-    correspondence = molecule_correspondence.atoms
+    _, source_to_component = combined.tracked_split()[1]
+    correspondence = source_to_component.reverse().atoms
 
     assert isinstance(correspondence, Correspondence)
     assert len(correspondence) == 2
@@ -1162,8 +1151,43 @@ def test_correspondence_value():
     assert Correspondence.compose_all(iter(())) is None
 
 
+@pytest.mark.parametrize("right_count,next_left_count", [(3, 1), (1, 3), (0, 1)])
+def test_correspondence_compose_error(right_count, next_left_count):
+    left = Correspondence([], 2, right_count)
+    right = Correspondence([], next_left_count, 2)
+    message = f"intermediate counts differ: {right_count} and {next_left_count}"
+    with pytest.raises(ValueError, match=message):
+        left.compose(right)
+    with pytest.raises(ValueError, match=message):
+        Correspondence.compose_all([left.reverse(), left, right])
+
+
+@pytest.mark.parametrize(
+    "entity_kind",
+    [
+        "atoms", "bonds", "dative_bonds", "aromatic_systems",
+        "multicenter_bonds", "noncovalent_bonds", "stereo_atoms", "stereo_bonds",
+    ],
+)
+def test_molecule_correspondence_empty(entity_kind):
+    correspondence = MoleculeCorrespondence.empty()
+
+    assert getattr(correspondence, entity_kind) == Correspondence([], 0, 0)
+
+
+def test_molecule_correspondence_compose_error():
+    molecule = Molecule.from_entries([AtomForm(Element("C"))])
+    combined = molecule.combine(molecule)
+    _, source_to_component = combined.tracked_split()[1]
+    correspondence = source_to_component.reverse()
+    with pytest.raises(ValueError, match="atom: intermediate counts differ: 2 and 1"):
+        correspondence.compose(correspondence)
+    with pytest.raises(ValueError, match="atom: intermediate counts differ: 2 and 1"):
+        MoleculeCorrespondence.compose_all([correspondence, correspondence])
+
+
 def test_molecule_correspondence_value():
-    _, correspondence = Molecule.from_entries(
+    combined = Molecule.from_entries(
         [AtomForm(Element("C"))]
     ).combine(
         Molecule.from_entries(
@@ -1172,6 +1196,8 @@ def test_molecule_correspondence_value():
         )
     )
 
+    _, source_to_component = combined.tracked_split()[1]
+    correspondence = source_to_component.reverse()
     assert not correspondence.is_total()
 
     reverse = correspondence.reverse()
@@ -1189,6 +1215,56 @@ def test_molecule_correspondence_value():
     assert MoleculeCorrespondence.compose_all(iter(())) is None
 
 
+def test_molecule_correspondence_constructor():
+    component = Correspondence([(0, 1)], 2, 3)
+    empty = Correspondence([], 0, 0)
+    correspondence = MoleculeCorrespondence(
+        component, empty, empty, empty, empty, empty, empty, empty
+    )
+
+    assert correspondence.atoms == component
+    assert correspondence.bonds == empty
+
+
+def test_molecule_tracked_apply():
+    molecule = Molecule.parse('{:atoms ["N#h3"]}')
+    edits = Edits.parse('[{:atom {:add "C#h4"}}]')
+
+    product, correspondence = molecule.tracked_apply(edits)
+
+    assert product == molecule.apply(edits)
+    assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
+    assert correspondence.bonds == Correspondence([], 0, 0)
+
+
+def test_molecule_tracked_extract():
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C")), AtomForm(Element("O")), AtomForm(Element("N"))],
+        bonds=[(0, 1, BondForm(1)), (1, 2, BondForm(1))],
+    )
+    empty = Correspondence([], 0, 0)
+    selection = MoleculeCorrespondence(
+        Correspondence([(0, 2), (1, 0)], 2, 3),
+        Correspondence([], 0, 2),
+        empty,
+        empty,
+        empty,
+        empty,
+        empty,
+        empty,
+    )
+
+    extracted, compaction = molecule.tracked_extract(selection)
+
+    assert isinstance(compaction, MoleculeCompaction)
+    assert extracted == molecule.extract(selection)
+    assert extracted == Molecule.from_entries(
+        [AtomForm(Element("C")), AtomForm(Element("N"))]
+    )
+    assert compaction.atoms.removed == [1]
+    assert compaction.bonds.removed == [0, 1]
+
+
 def test_molecule_split():
     molecule = Molecule.from_entries(
         [
@@ -1199,7 +1275,8 @@ def test_molecule_split():
         bonds=[(1, 2, BondForm(2))],
     )
 
-    components = molecule.split()
+    components = molecule.tracked_split()
+    assert molecule.split() == [component for component, _ in components]
 
     assert [component for component, _ in components] == [
         Molecule.from_entries([AtomForm(Element("C"))]),
@@ -1210,14 +1287,23 @@ def test_molecule_split():
     ]
     assert [
         correspondence.atoms.matched_pairs for _, correspondence in components
-    ] == [[(0, 0)], [(0, 1), (1, 2)]]
+    ] == [[(0, 0)], [(1, 0), (2, 1)]]
     assert [
         correspondence.bonds.matched_pairs for _, correspondence in components
     ] == [[], [(0, 0)]]
+    assert [
+        (correspondence.atoms.left_count, correspondence.atoms.right_count)
+        for _, correspondence in components
+    ] == [(3, 1), (3, 2)]
+    assert [
+        (correspondence.bonds.left_count, correspondence.bonds.right_count)
+        for _, correspondence in components
+    ] == [(1, 0), (1, 1)]
 
 
 def test_molecule_split_empty():
     assert Molecule().split() == []
+    assert Molecule().tracked_split() == []
 
 
 def test_molecule_bonds_error():

@@ -334,25 +334,22 @@ def test_reaction_application_workflow():
         subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
     )
 
-    derivations = list(reaction.apply(host, config=config))
+    applications = list(reaction.tracked_apply(host, config=config))
 
-    assert len(derivations) == 1
-    assert derivations[0].lhs == host_snapshot
-    assert derivations[0].rhs == Molecule.from_smiles("CC")
-    assert derivations[0].atom_correspondence.matched_pairs == [(0, 0), (1, 1)]
-    assert derivations[0].atom_correspondence.left_count == 3
-    assert derivations[0].atom_correspondence.right_count == 2
-    assert derivations[0].comap.bonds.matched_pairs == [(0, 0)]
+    assert len(applications) == 1
+    product, correspondence = applications[0]
+    assert product == Molecule.from_smiles("CC")
+    assert correspondence.atoms.matched_pairs == [(0, 0), (1, 1)]
+    assert correspondence.atoms.left_count == 3
+    assert correspondence.atoms.right_count == 2
+    assert correspondence.bonds.matched_pairs == [(0, 0)]
     assert reaction == reaction_snapshot
     assert host == host_snapshot
-
-    detached_lhs = derivations[0].lhs
-    detached_rhs = derivations[0].rhs
-    detached_lhs.atoms[0].charge = 4
-    detached_rhs.atoms[0].charge = 5
-
-    assert derivations[0].lhs == host_snapshot
-    assert derivations[0].rhs == Molecule.from_smiles("CC")
-    assert derivations[0].rhs.hashed_fingerprint(
+    assert list(reaction.apply(host, config=config)) == [product]
+    assert product.hashed_fingerprint(
         config=HashedFingerprintConfig.Morgan(radius=0)
     ).ids == [2246728737]
+
+    product.atoms[0].charge = 5
+    assert host == host_snapshot
+    assert list(reaction.apply(host, config=config)) == [Molecule.from_smiles("CC")]

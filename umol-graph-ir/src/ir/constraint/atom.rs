@@ -6,10 +6,10 @@ use std::mem;
 
 use smallvec::SmallVec;
 
+use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::TetrahedralStereoForm;
 use super::super::traits::{AsLit, Lattice, Normalize};
 
@@ -134,11 +134,6 @@ impl AtomConstraintForm {
     /// Value-only payload: no entity ids to compact, so this never drops.
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
-    }
-
-    /// Value-only payload: no entity ids to remap.
-    pub fn remap(self, _map: &IdRemapping) -> Self {
-        self
     }
 }
 
@@ -1065,7 +1060,7 @@ impl AsLit for MulticenterValenceForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::num::ArithExpr;
@@ -1796,13 +1791,16 @@ mod tests {
             AtomConstraintForm::degree(3),
         ]);
         let compaction = MoleculeCompaction::new(
-            GraphCompaction::new(vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0)]),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            GraphCompaction::new(
+                Compaction::new(3, vec![NodeId(0), NodeId(1), NodeId(2)]).unwrap(),
+                Compaction::new(1, vec![EdgeId(0)]).unwrap(),
+            ),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
         );
         assert_eq!(cs.clone().compact(&compaction), cs);
     }

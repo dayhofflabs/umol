@@ -384,7 +384,7 @@ The comparison suite already records distinct relations:
 - `==` compares stored representation;
 - `normalized_eq` compares normal forms in the current entity-id and participant frame;
 - `framed_eq` compares after participant-frame selection;
-- `framed_eq_under` first applies an explicit entity-id correspondence and then compares under
+- `framed_eq_under` first applies an explicit entity-id remapping and then compares under
   `framed_eq`;
 - aggregate `canonical_eq` compares complete canonical forms after selecting the frame.
 
@@ -392,12 +392,12 @@ The properties exercise:
 
 - reflexivity and symmetry of `normalized_eq`;
 - agreement of `normalized_eq` with `==` on normalized forms;
-- reduction of `framed_eq_under` to `framed_eq` under the identity correspondence;
-- symmetry under reversing a correspondence;
-- composition of correspondence-aware equivalence on generated atom reorderings;
+- reduction of `framed_eq_under` to `framed_eq` under the identity remapping;
+- symmetry under inverting a remapping;
+- composition of remapping-aware equivalence on generated atom reorderings;
 - exact idempotence and dense-remapping invariance of complete molecule canonicalization;
 - reflexivity, symmetry, and dense-remapping invariance of complete `canonical_eq`; and
-- agreement of `canonicalize_with_correspondence` with `canonicalize`, including that remapping and
+- agreement of `canonicalize_with_remapping` with `canonicalize`, including that remapping and
   reframing the input under its operation-issued witnesses produces the returned canonical form.
 
 This example shows why the comparison relation must appear in every public
@@ -413,7 +413,7 @@ correspondence. When both fail, the first diagnostic need not be identical becau
 change which of several invalid embeddings or stereo frames is encountered first.
 
 If an operation is publicly presented as an equivalence relation, transitivity is part of that
-claim. The suite directly checks reflexivity and symmetry of `normalized_eq`, while correspondence
+claim. The suite directly checks reflexivity and symmetry of `normalized_eq`, while remapping
 composition checks the mapped `framed_eq_under` relation on a restricted atom-reordering domain.
 The coherent pipeline property stage systematizes the remaining `framed_eq` and cross-quotient
 laws.
@@ -462,14 +462,14 @@ N(C(x)) = C(x)    R(C(x)) = C(x)
 State the equality appropriate to each equation; do not hide a frame or id quotient behind `==`.
 The relation ladder is `==` implies `normalized_eq`, which implies `framed_eq`, which implies
 `canonical_eq`. For satisfiable integrity-valid values, canonical equality is exactly framed
-equality under some complete correspondence. Two intrinsic contradictions compare equal at each
+equality under some remapping. Two intrinsic contradictions compare equal at each
 semantic quotient, while one contradiction and one satisfiable value do not. A transformation that
 must produce a value still returns its contradiction error rather than manufacturing a witness.
 
 Run these properties over raw satisfiable, normalized, reframed, and canonical values, plus focused
 intrinsic-contradiction and incompatible-action cases. Cover all six overlay kinds and every
-aggregate root. Preserve the operational distinction between the id correspondence and the
-participant-frame action: applying the correspondence alone preserves stored participant order,
+aggregate root. Preserve the operational distinction between the id remapping and the
+participant-frame action: applying the remapping alone preserves stored participant order,
 and the corresponding reframe step completes the canonical transport.
 
 ### Reaction operations
@@ -478,12 +478,12 @@ Reaction properties span several operational domains:
 
 | Domain | Representative properties |
 | --- | --- |
-| Generated well-formed reactions | Reaction/span reconstruction, derivation reversal, composition, and serialization |
+| Generated well-formed reactions | Reaction/span reconstruction, correspondence reversal and composition, and serialization |
 | Comprehensive entity reactions | Roundtrips and transformations across all eight entity kinds |
 | Host-relative refinements | Pattern-relative updates lower against the matched host value rather than replacing it with the pattern value |
 | Explicit correspondences | `apply_at` agrees with a matching-derived application for the same match |
 | Malformed reactions | Invalid references, incidence mismatches, discontinuous updates, and invalid stereo configurations return exact typed errors without panics |
-| Owned application iteration | Eager match order is preserved, derivations are emitted lazily, source mutation cannot affect the captured operation, and a fatal error is emitted once before terminal exhaustion |
+| Owned application iteration | Eager match order is preserved, selected outputs are emitted lazily, source mutation cannot affect the captured operation, and a fatal error is emitted once before terminal exhaustion |
 | Product convenience | `React` on one molecule or an ordered molecule slice agrees with the manual combine → apply → split pipeline for results, multiplicity, match order, component order, precondition errors, and iterator-item errors |
 
 The error properties are part of the executable specification just as much as

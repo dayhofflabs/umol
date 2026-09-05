@@ -2,16 +2,18 @@
 //! independently generated span entries. The parent module retains the bridge and serialization
 //! properties; its children exercise dense union-frame remapping and aggregate canonicalization.
 
+use std::fmt::Debug;
 use std::iter;
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
-use umol_graph_core::Correspondence;
+use umol_graph_core::{Correspondence, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomForm, AtomId, BondId, DativeBondId, EntitySpan, Molecule,
-    MoleculeCorrespondence, MoleculeEntries, MulticenterBondId, NoncovalentBondId, Reaction,
-    ReactionSpan, ReactionSpanEntries, StereoAtomId, StereoBondId, StereoLigand,
+    MoleculeCorrespondence, MoleculeEntries, MoleculeRemapping, MulticenterBondId,
+    NoncovalentBondId, Reaction, ReactionSpan, ReactionSpanEntries, StereoAtomId, StereoBondId,
+    StereoLigand,
 };
 
 use crate::strategies::{
@@ -24,8 +26,8 @@ use crate::strategies::{
 mod canonicalize;
 #[path = "span/reframe.rs"]
 mod reframe;
-#[path = "span/remapping.rs"]
-mod remapping;
+#[path = "span/remap.rs"]
+mod remap;
 
 #[derive(Clone, Copy)]
 enum SpanPresence {
@@ -366,12 +368,12 @@ where
     correspondence.left_count() + correspondence.right_count() - correspondence.matched_pair_count()
 }
 
-fn dense_permutation<Id>(count: usize, seed: u64, entity_kind: u32) -> Correspondence<Id>
+fn dense_permutation<Id>(count: usize, seed: u64, entity_kind: u32) -> Remapping<Id>
 where
-    Id: Copy + Ord + From<usize>,
+    Id: Copy + Debug + Into<usize> + From<usize>,
 {
     if count == 0 {
-        return Correspondence::empty();
+        return Remapping::default();
     }
     let mut state = seed ^ (u64::from(entity_kind) + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
     let mut images = (0..count).collect::<Vec<_>>();
@@ -382,14 +384,16 @@ where
         images.swap(index, state as usize % (index + 1));
     }
     let images = images.into_iter().map(Id::from).collect::<Vec<_>>();
-    Correspondence::from_images(&images, count)
+    Remapping::new(images).unwrap()
 }
 
-fn dense_union_correspondence(span: &ReactionSpan, seed: u64) -> MoleculeCorrespondence {
+fn dense_union_remapping(span: &ReactionSpan, seed: u64) -> MoleculeRemapping {
     let side = span.correspondence();
-    MoleculeCorrespondence::new(
-        dense_permutation::<AtomId>(union_count(side.atoms()), seed, 0),
-        dense_permutation::<BondId>(union_count(side.bonds()), seed, 1),
+    MoleculeRemapping::new(
+        GraphRemapping::new(
+            dense_permutation::<NodeId>(union_count(side.atoms()), seed, 0),
+            dense_permutation::<EdgeId>(union_count(side.bonds()), seed, 1),
+        ),
         dense_permutation::<DativeBondId>(union_count(side.dative_bonds()), seed, 2),
         dense_permutation::<AromaticSystemId>(union_count(side.aromatic_systems()), seed, 3),
         dense_permutation::<MulticenterBondId>(union_count(side.multicenter_bonds()), seed, 4),
@@ -402,15 +406,15 @@ fn dense_union_correspondence(span: &ReactionSpan, seed: u64) -> MoleculeCorresp
 #[derive(Debug)]
 pub(super) struct ReactionSpanScenario {
     pub(super) span: ReactionSpan,
-    pub(super) first: MoleculeCorrespondence,
-    pub(super) second: MoleculeCorrespondence,
+    pub(super) first: MoleculeRemapping,
+    pub(super) second: MoleculeRemapping,
 }
 
 pub(super) fn reaction_span_scenario_strategy() -> impl Strategy<Value = ReactionSpanScenario> {
     (reaction_span_strategy(), any::<u64>(), any::<u64>()).prop_map(
         |(span, first_seed, second_seed)| ReactionSpanScenario {
-            first: dense_union_correspondence(&span, first_seed),
-            second: dense_union_correspondence(&span, second_seed),
+            first: dense_union_remapping(&span, first_seed),
+            second: dense_union_remapping(&span, second_seed),
             span,
         },
     )
@@ -526,7 +530,19 @@ proptest! {
             sides.projected_rhs_atoms,
         ).expect("reaction-frame normalization preserves unique entity incidence");
         prop_assert!(projected_to_source.is_total());
-        prop_assert!(projected_rhs.framed_eq_under(&sides.rhs, &projected_to_source));
+        let remapping = MoleculeRemapping::new(
+            GraphRemapping::new(
+            Remapping::new(projected_to_source.atoms().matched_pairs().iter().map(|&(_, right)| NodeId::from(right)).collect()).unwrap(),
+            Remapping::new(projected_to_source.bonds().matched_pairs().iter().map(|&(_, right)| EdgeId::from(right)).collect()).unwrap(),
+        ),
+            Remapping::new(projected_to_source.dative_bonds().matched_pairs().iter().map(|&(_, right)| right).collect()).unwrap(),
+            Remapping::new(projected_to_source.aromatic_systems().matched_pairs().iter().map(|&(_, right)| right).collect()).unwrap(),
+            Remapping::new(projected_to_source.multicenter_bonds().matched_pairs().iter().map(|&(_, right)| right).collect()).unwrap(),
+            Remapping::new(projected_to_source.noncovalent_bonds().matched_pairs().iter().map(|&(_, right)| right).collect()).unwrap(),
+            Remapping::new(projected_to_source.stereo_atoms().matched_pairs().iter().map(|&(_, right)| right).collect()).unwrap(),
+            Remapping::new(projected_to_source.stereo_bonds().matched_pairs().iter().map(|&(_, right)| right).collect()).unwrap(),
+        );
+        prop_assert!(projected_rhs.framed_eq_under(&sides.rhs, &remapping));
     }
 
     /// Independently generated, structurally valid span entries converge through direct
@@ -535,17 +551,14 @@ proptest! {
     fn test_reaction_span_from_entries_roundtrip(
         entries in reaction_span_entries_strategy(),
     ) {
-        let direct = ReactionSpan::try_from_entries(entries).map_err(|error| {
-            TestCaseError::fail(format!("generated entries were invalid: {error}"))
-        })?;
-        let parsed = direct.to_string().parse::<ReactionSpan>().map_err(|error| {
-            TestCaseError::fail(format!("rendered span did not parse: {error}"))
-        })?;
-        let superimposed = ReactionSpan::superimpose(
-            &direct.lhs(),
-            &direct.rhs(),
-            &direct.correspondence(),
-        );
+        let direct = ReactionSpan::try_from_entries(entries)
+            .map_err(|error| TestCaseError::fail(format!("generated entries were invalid: {error}")))?;
+        let parsed = direct
+            .to_string()
+            .parse::<ReactionSpan>()
+            .map_err(|error| TestCaseError::fail(format!("rendered span did not parse: {error}")))?;
+        let superimposed =
+            ReactionSpan::superimpose(&direct.lhs(), &direct.rhs(), &direct.correspondence());
 
         prop_assert_eq!(parsed, direct.clone());
         prop_assert_eq!(superimposed, Some(direct));
@@ -557,9 +570,8 @@ proptest! {
     fn test_reaction_span_to_reaction_roundtrip(
         entries in reaction_span_entries_strategy(),
     ) {
-        let span = ReactionSpan::try_from_entries(entries).map_err(|error| {
-            TestCaseError::fail(format!("generated entries were invalid: {error}"))
-        })?;
+        let span = ReactionSpan::try_from_entries(entries)
+            .map_err(|error| TestCaseError::fail(format!("generated entries were invalid: {error}")))?;
         let normalized = span
             .to_reaction()
             .to_reaction_span()

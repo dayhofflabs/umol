@@ -14,10 +14,10 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
-use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
+use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomForm, AtomId, BondForm, Canonicalize, CanonicalizeContext, Molecule,
-    MoleculeCorrespondence, MoleculeEntries, NoncovalentBondForm, NoncovalentBondKind, Normalize,
+    MoleculeEntries, MoleculeRemapping, NoncovalentBondForm, NoncovalentBondKind, Normalize,
     Reframe, StereoAtomForm, StereoKind, StereoLigand, StereoLigandKind,
 };
 
@@ -39,9 +39,7 @@ fn structural_hash<T: Hash>(value: &T) -> u64 {
     hasher.finish()
 }
 
-fn dense_renumbering_strategy(
-    molecule: Molecule,
-) -> BoxedStrategy<(Molecule, MoleculeCorrespondence)> {
+fn dense_renumbering_strategy(molecule: Molecule) -> BoxedStrategy<(Molecule, MoleculeRemapping)> {
     (
         Just(molecule.clone()),
         Just(molecule.atoms().ids().collect::<Vec<_>>()).prop_shuffle(),
@@ -67,15 +65,19 @@ fn dense_renumbering_strategy(
             )| {
                 (
                     molecule,
-                    MoleculeCorrespondence::new(
-                        Correspondence::from_images(&atoms, atoms.len()),
-                        Correspondence::from_images(&bonds, bonds.len()),
-                        Correspondence::from_images(&dative, dative.len()),
-                        Correspondence::from_images(&aromatic, aromatic.len()),
-                        Correspondence::from_images(&multicenter, multicenter.len()),
-                        Correspondence::from_images(&noncovalent, noncovalent.len()),
-                        Correspondence::from_images(&stereo_atoms, stereo_atoms.len()),
-                        Correspondence::from_images(&stereo_bonds, stereo_bonds.len()),
+                    MoleculeRemapping::new(
+                        GraphRemapping::new(
+                            Remapping::new(atoms.iter().copied().map(NodeId::from).collect())
+                                .unwrap(),
+                            Remapping::new(bonds.iter().copied().map(EdgeId::from).collect())
+                                .unwrap(),
+                        ),
+                        Remapping::new(dative).unwrap(),
+                        Remapping::new(aromatic).unwrap(),
+                        Remapping::new(multicenter).unwrap(),
+                        Remapping::new(noncovalent).unwrap(),
+                        Remapping::new(stereo_atoms).unwrap(),
+                        Remapping::new(stereo_bonds).unwrap(),
                     ),
                 )
             },
@@ -83,7 +85,7 @@ fn dense_renumbering_strategy(
         .boxed()
 }
 
-fn feature_free_dense_renumbering_strategy() -> BoxedStrategy<(Molecule, MoleculeCorrespondence)> {
+fn feature_free_dense_renumbering_strategy() -> BoxedStrategy<(Molecule, MoleculeRemapping)> {
     (2usize..=6)
         .prop_flat_map(|atom_count| {
             (
@@ -105,8 +107,7 @@ fn feature_free_dense_renumbering_strategy() -> BoxedStrategy<(Molecule, Molecul
         .boxed()
 }
 
-fn partially_featured_dense_renumbering_strategy(
-) -> BoxedStrategy<(Molecule, MoleculeCorrespondence)> {
+fn partially_featured_dense_renumbering_strategy() -> BoxedStrategy<(Molecule, MoleculeRemapping)> {
     prop_oneof![
         (prop::collection::vec(element_strategy(), 3..=6), 1u8..=3).prop_map(
             |(elements, bond_order)| {
@@ -146,7 +147,7 @@ fn partially_featured_dense_renumbering_strategy(
 }
 
 fn canonical_eq_description_level_strategy(
-) -> BoxedStrategy<(Molecule, Molecule, MoleculeCorrespondence)> {
+) -> BoxedStrategy<(Molecule, Molecule, MoleculeRemapping)> {
     let atom_forms = || {
         [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
             .into_iter()
@@ -255,7 +256,7 @@ proptest! {
         if let Ok(canonical) = canonical {
             let (with_correspondence, correspondence) = molecule
                 .clone()
-                .canonicalize_with_correspondence(&context)
+                .canonicalize_with_remapping(&context)
                 .expect("successful canonicalization returns its correspondence");
             let reframed = molecule
                 .remap(&correspondence)
@@ -279,13 +280,13 @@ proptest! {
         let renumbered = molecule.remap(&renumbering);
         let (canonical, correspondence) = molecule
             .clone()
-            .canonicalize_with_correspondence(&context)
+            .canonicalize_with_remapping(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!("generated molecule did not canonicalize: {error}"))
             })?;
         let (renumbered_canonical, renumbered_correspondence) = renumbered
             .clone()
-            .canonicalize_with_correspondence(&context)
+            .canonicalize_with_remapping(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!(
                     "renumbered molecule did not canonicalize: {error}"

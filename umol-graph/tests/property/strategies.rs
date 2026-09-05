@@ -133,7 +133,7 @@ pub(crate) fn select_scenario() -> impl Strategy<Value = SelectScenario> {
                         let pool = flexible_atoms
                             .iter()
                             .position(|&flexible| flexible == atom)
-                            .map_or(0, |slot| pool_picks[slot]);
+                            .map_or(0, |idx| pool_picks[idx]);
                         (
                             AtomId(u32::try_from(atom).expect("small skeleton")),
                             completion_pool(pool),

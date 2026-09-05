@@ -3,14 +3,14 @@
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
 //! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
-//! it and produce a [`crate::compaction::GraphCompaction`] for reindexing external data.
+//! it and produce a [`crate::compact::GraphCompaction`] for reindexing external data.
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, Sub};
 use std::sync::Arc;
 
-use crate::compaction::GraphCompaction;
+use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -28,6 +28,12 @@ pub struct Neighbor {
 impl NodeId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl From<NodeId> for usize {
+    fn from(id: NodeId) -> Self {
+        id.0 as usize
     }
 }
 
@@ -57,6 +63,12 @@ impl Sub<usize> for NodeId {
 impl EdgeId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl From<EdgeId> for usize {
+    fn from(id: EdgeId) -> Self {
+        id.0 as usize
     }
 }
 
@@ -262,9 +274,30 @@ impl Graph {
 
     /// SqPO-style removal: delete `nodes` and `edges`, sweeping along every edge incident to a
     /// removed node (deletion in unknown context). Always succeeds; incident edges the caller did
-    /// not list are dropped too. Returns the [`GraphCompaction`] renumbering. For the DPO discipline that
+    /// not list are dropped too. For the DPO discipline that
     /// rejects a stranded edge instead of sweeping it, use [`Graph::try_remove`].
-    pub fn remove_cascading(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> GraphCompaction {
+    /// Use [`Self::tracked_remove_cascading`] to retain the survivor mapping.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied node or edge id is outside the source graph.
+    pub fn remove_cascading(&mut self, nodes: &[NodeId], edges: &[EdgeId]) {
+        self.tracked_remove_cascading(nodes, edges);
+    }
+
+    /// Remove nodes and edges with incident-edge cascades, returning the survivor compaction.
+    ///
+    /// Produces the same graph as [`Self::remove_cascading`]. The compaction maps
+    /// pre-removal node and edge ids to their surviving post-removal ids.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied node or edge id is outside the source graph.
+    pub fn tracked_remove_cascading(
+        &mut self,
+        nodes: &[NodeId],
+        edges: &[EdgeId],
+    ) -> GraphCompaction {
         let mut removed_nodes: Vec<u32> = nodes.iter().map(|n| n.0).collect();
         removed_nodes.sort_unstable();
         removed_nodes.dedup();
@@ -284,6 +317,19 @@ impl Graph {
         removed_edge_set.sort_unstable();
         removed_edge_set.dedup();
 
+        let compaction = GraphCompaction::new(
+            Compaction::new(
+                old.node_count,
+                removed_nodes.iter().copied().map(NodeId).collect(),
+            )
+            .expect("removed nodes belong to the source graph"),
+            Compaction::new(
+                old.edge_count,
+                removed_edge_set.iter().copied().map(EdgeId).collect(),
+            )
+            .expect("removed edges belong to the source graph"),
+        );
+
         let kept_edges: Vec<[u32; 2]> = old
             .endpoints
             .iter()
@@ -301,17 +347,35 @@ impl Graph {
             &kept_edges,
         ));
 
-        GraphCompaction::new(
-            removed_nodes.into_iter().map(NodeId).collect(),
-            removed_edge_set.into_iter().map(EdgeId).collect(),
-        )
+        compaction
     }
 
     /// DPO-style removal: delete exactly `nodes` and `edges`, or `None` when that would strand an
     /// edge — the **dangling condition**: a removed node incident to an edge the caller did not list
     /// for removal. On success the result equals [`Self::remove_cascading`] (the check guarantees
     /// there is nothing extra to sweep), so it is the pushout-complement of a matched deletion.
-    pub fn try_remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Option<GraphCompaction> {
+    /// Use [`Self::try_tracked_remove`] to retain the survivor mapping.
+    ///
+    /// # Panics
+    ///
+    /// Supplied ids must belong to the source graph. Out-of-range ids may panic.
+    pub fn try_remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Option<()> {
+        self.try_tracked_remove(nodes, edges).map(|_| ())
+    }
+
+    /// Remove exactly the supplied nodes and edges, returning the survivor compaction.
+    ///
+    /// Has the same outcome and resulting graph as [`Self::try_remove`]. Returns
+    /// `None` without modifying the graph when the dangling condition fails.
+    ///
+    /// # Panics
+    ///
+    /// Supplied ids must belong to the source graph. Out-of-range ids may panic.
+    pub fn try_tracked_remove(
+        &mut self,
+        nodes: &[NodeId],
+        edges: &[EdgeId],
+    ) -> Option<GraphCompaction> {
         let removed_edges: HashSet<EdgeId> = edges.iter().copied().collect();
         for &node in nodes {
             if self
@@ -322,14 +386,24 @@ impl Graph {
                 return None;
             }
         }
-        Some(self.remove_cascading(nodes, edges))
+        Some(self.tracked_remove_cascading(nodes, edges))
     }
 
-    pub fn remove_node_cascading(&mut self, id: NodeId) -> GraphCompaction {
+    /// Remove one node and its incident edges, as in [`Self::remove_cascading`].
+    ///
+    /// # Panics
+    ///
+    /// Panics when the node id is outside the source graph.
+    pub fn remove_node_cascading(&mut self, id: NodeId) {
         self.remove_cascading(&[id], &[])
     }
 
-    pub fn remove_edge_cascading(&mut self, id: EdgeId) -> GraphCompaction {
+    /// Remove one edge, as in [`Self::remove_cascading`].
+    ///
+    /// # Panics
+    ///
+    /// Panics when the edge id is outside the source graph.
+    pub fn remove_edge_cascading(&mut self, id: EdgeId) {
         self.remove_cascading(&[], &[id])
     }
 
@@ -983,60 +1057,22 @@ mod tests {
         assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
     }
 
-    #[test]
-    fn test_graph_remove_node_cascading() {
-        // 0--1--2, remove node 1
-        let mut g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let compaction = g.remove_node_cascading(NodeId(1));
-
-        assert_eq!(g.node_count(), 2);
-        assert_eq!(g.edge_count(), 0);
-        assert_eq!(compaction.nodes().removed(), [NodeId(1)]);
-        assert_eq!(compaction.edges().removed(), [EdgeId(0), EdgeId(1)]);
-
-        // node 0 stays 0, node 2 becomes 1
-        assert_eq!(compaction.compact_node(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(compaction.compact_node(NodeId(1)), None);
-        assert_eq!(compaction.compact_node(NodeId(2)), Some(NodeId(1)));
+    #[rstest]
+    #[case::middle(1, Graph::new(2, &[]))]
+    #[case::endpoint(0, Graph::new(2, &[[0, 1]]))]
+    fn test_graph_remove_node_cascading(#[case] node: u32, #[case] expected: Graph) {
+        let mut graph = Graph::new(3, &[[0, 1], [1, 2]]);
+        graph.remove_node_cascading(NodeId(node));
+        assert_eq!(graph, expected);
     }
 
-    #[test]
-    fn test_graph_remove_node_cascading_partial() {
-        // triangle 0-1, 1-2, 0-2; remove node 0
-        let mut g = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
-        let compaction = g.remove_node_cascading(NodeId(0));
-
-        assert_eq!(g.node_count(), 2);
-        assert_eq!(g.edge_count(), 1);
-        assert_eq!(compaction.nodes().removed(), [NodeId(0)]);
-        assert_eq!(compaction.edges().removed(), [EdgeId(0), EdgeId(2)]);
-
-        // surviving edge (old 1) maps to new 0
-        assert_eq!(compaction.compact_edge(EdgeId(0)), None);
-        assert_eq!(compaction.compact_edge(EdgeId(1)), Some(EdgeId(0)));
-        assert_eq!(compaction.compact_edge(EdgeId(2)), None);
-
-        // nodes 1,2 become 0,1
-        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
-    }
-
-    #[test]
-    fn test_graph_remove_edge_cascading() {
-        // triangle, remove edge 1 (1-2)
-        let mut g = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
-        let compaction = g.remove_edge_cascading(EdgeId(1));
-
-        assert_eq!(g.node_count(), 3);
-        assert_eq!(g.edge_count(), 2);
-        assert_eq!(compaction.nodes().removed(), []);
-        assert_eq!(compaction.edges().removed(), [EdgeId(1)]);
-
-        assert_eq!(compaction.compact_edge(EdgeId(0)), Some(EdgeId(0)));
-        assert_eq!(compaction.compact_edge(EdgeId(1)), None);
-        assert_eq!(compaction.compact_edge(EdgeId(2)), Some(EdgeId(1)));
-
-        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
-        assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(0), NodeId(2)]);
+    #[rstest]
+    #[case::first(0, Graph::new(3, &[[1, 2], [0, 2]]))]
+    #[case::middle(1, Graph::new(3, &[[0, 1], [0, 2]]))]
+    fn test_graph_remove_edge_cascading(#[case] edge: u32, #[case] expected: Graph) {
+        let mut graph = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
+        graph.remove_edge_cascading(EdgeId(edge));
+        assert_eq!(graph, expected);
     }
 
     #[test]
@@ -1050,61 +1086,141 @@ mod tests {
         assert_eq!(g2.node_count(), 4);
     }
 
-    #[test]
-    fn test_graph_remove_cascading_batch() {
-        // 0-1, 1-2, 2-3, 3-4; remove nodes 1 and 3
-        let mut g = Graph::new(5, &[[0, 1], [1, 2], [2, 3], [3, 4]]);
-        let compaction = g.remove_cascading(&[NodeId(1), NodeId(3)], &[]);
-
-        assert_eq!(g.node_count(), 3);
-        // edges 0(0-1), 1(1-2), 2(2-3), 3(3-4) — all incident to 1 or 3 are removed
-        // only none survive since every edge touches node 1 or 3
-        assert_eq!(g.edge_count(), 0);
-
-        assert_eq!(compaction.compact_node(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(compaction.compact_node(NodeId(1)), None);
-        assert_eq!(compaction.compact_node(NodeId(2)), Some(NodeId(1)));
-        assert_eq!(compaction.compact_node(NodeId(3)), None);
-        assert_eq!(compaction.compact_node(NodeId(4)), Some(NodeId(2)));
-    }
-
-    #[test]
-    fn test_graph_remove_cascading_nodes_and_edges() {
-        // 0-1, 1-2, 2-3, 0-3; remove node 1, edge 3 (0-3)
-        let mut g = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [0, 3]]);
-        let compaction = g.remove_cascading(&[NodeId(1)], &[EdgeId(3)]);
-
-        assert_eq!(g.node_count(), 3);
-        // edge 0(0-1) removed (incident to 1)
-        // edge 1(1-2) removed (incident to 1)
-        // edge 2(2-3) survives → becomes edge 0 (endpoints: 1-2 after shift)
-        // edge 3(0-3) removed (explicitly)
-        assert_eq!(g.edge_count(), 1);
-        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(1), NodeId(2)]);
-
-        assert_eq!(compaction.compact_edge(EdgeId(2)), Some(EdgeId(0)));
+    #[rstest]
+    #[case::identity(vec![], vec![], vec![], Graph::new(4, &[[0, 1], [1, 2], [2, 3], [0, 3]]))]
+    #[case::node(
+        vec![NodeId(1)],
+        vec![],
+        vec![EdgeId(0), EdgeId(1)],
+        Graph::new(3, &[[1, 2], [0, 2]]),
+    )]
+    #[case::nodes(
+        vec![NodeId(1), NodeId(3)],
+        vec![],
+        vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
+        Graph::new(2, &[]),
+    )]
+    #[case::edge(
+        vec![],
+        vec![EdgeId(1)],
+        vec![EdgeId(1)],
+        Graph::new(4, &[[0, 1], [2, 3], [0, 3]]),
+    )]
+    #[case::mixed(
+        vec![NodeId(1)],
+        vec![EdgeId(3)],
+        vec![EdgeId(0), EdgeId(1), EdgeId(3)],
+        Graph::new(3, &[[1, 2]]),
+    )]
+    #[case::duplicates(
+        vec![NodeId(1), NodeId(1)],
+        vec![EdgeId(3), EdgeId(3)],
+        vec![EdgeId(0), EdgeId(1), EdgeId(3)],
+        Graph::new(3, &[[1, 2]]),
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+        vec![],
+        vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
+        Graph::new(0, &[]),
+    )]
+    fn test_graph_tracked_remove_cascading(
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] removed_edges: Vec<EdgeId>,
+        #[case] expected: Graph,
+    ) {
+        let source = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [0, 3]]);
+        let mut plain = source.clone();
+        let mut witnessed = source;
+        plain.remove_cascading(&nodes, &edges);
+        let compaction = witnessed.tracked_remove_cascading(&nodes, &edges);
+        assert_eq!(plain, expected);
+        assert_eq!(witnessed, expected);
+        assert_eq!(
+            compaction,
+            GraphCompaction::new(
+                Compaction::new(4, nodes.clone()).unwrap(),
+                Compaction::new(4, removed_edges.clone()).unwrap(),
+            ),
+        );
+        let surviving_nodes = (0..4)
+            .map(NodeId)
+            .filter(|id| !nodes.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in surviving_nodes.iter().enumerate() {
+            assert_eq!(compaction.compact_node(old), Some(NodeId::from(idx)));
+        }
+        let surviving_edges = (0..4)
+            .map(EdgeId)
+            .filter(|id| !removed_edges.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in surviving_edges.iter().enumerate() {
+            assert_eq!(compaction.compact_edge(old), Some(EdgeId::from(idx)));
+        }
     }
 
     #[rstest]
-    fn test_graph_try_remove_clean() {
-        // path 0-1-2-3; remove node 1 together with both its incident edges (0-1, 1-2).
-        let mut g = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
-        let compaction = g
-            .try_remove(&[NodeId(1)], &[EdgeId(0), EdgeId(1)])
-            .expect("no dangling: every edge on node 1 is listed");
-        assert_eq!(g.node_count(), 3);
-        assert_eq!(g.edge_count(), 1);
-        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(1), NodeId(2)]);
-        assert_eq!(compaction.compact_node(NodeId(2)), Some(NodeId(1)));
+    #[case::identity(vec![], vec![], Some(Graph::new(4, &[[0, 1], [1, 2], [2, 3]])))]
+    #[case::node(vec![NodeId(1)], vec![EdgeId(0), EdgeId(1)], Some(Graph::new(3, &[[1, 2]])))]
+    #[case::edge(vec![], vec![EdgeId(1)], Some(Graph::new(4, &[[0, 1], [2, 3]])))]
+    #[case::dangling(vec![NodeId(1)], vec![], None)]
+    #[case::one_dangling(vec![NodeId(1)], vec![EdgeId(0)], None)]
+    fn test_graph_try_tracked_remove(
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] expected: Option<Graph>,
+    ) {
+        let source = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
+        let mut plain = source.clone();
+        let mut witnessed = source.clone();
+        assert_eq!(
+            plain.try_remove(&nodes, &edges),
+            expected.as_ref().map(|_| ())
+        );
+        let compaction = witnessed.try_tracked_remove(&nodes, &edges);
+        let expected_compaction = expected.as_ref().map(|_| {
+            GraphCompaction::new(
+                Compaction::new(4, nodes).unwrap(),
+                Compaction::new(3, edges).unwrap(),
+            )
+        });
+        assert_eq!(compaction, expected_compaction);
+        let expected_graph = expected.unwrap_or(source);
+        assert_eq!(plain, expected_graph);
+        assert_eq!(witnessed, expected_graph);
+    }
+    #[rstest]
+    #[case::node(vec![NodeId(3)], vec![])]
+    #[case::edge(vec![], vec![EdgeId(2)])]
+    #[should_panic]
+    fn test_graph_remove_cascading_error(
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[values(false, true)] witnessed: bool,
+    ) {
+        let mut graph = Graph::new(3, &[[0, 1], [1, 2]]);
+        if witnessed {
+            graph.tracked_remove_cascading(&nodes, &edges);
+        } else {
+            graph.remove_cascading(&nodes, &edges);
+        }
     }
 
     #[rstest]
-    fn test_graph_try_remove_dangling() {
-        // path 0-1-2-3; removing node 1 without its incident edges strands them → rejected.
-        let mut g = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
-        assert_eq!(g.try_remove(&[NodeId(1)], &[]), None);
-        // graph is left untouched on rejection.
-        assert_eq!(g.node_count(), 4);
-        assert_eq!(g.edge_count(), 3);
+    #[case::node(vec![NodeId(3)], vec![])]
+    #[case::edge(vec![], vec![EdgeId(2)])]
+    #[should_panic]
+    fn test_graph_try_remove_error(
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[values(false, true)] witnessed: bool,
+    ) {
+        let mut graph = Graph::new(3, &[[0, 1], [1, 2]]);
+        if witnessed {
+            graph.try_tracked_remove(&nodes, &edges);
+        } else {
+            graph.try_remove(&nodes, &edges);
+        }
     }
 }

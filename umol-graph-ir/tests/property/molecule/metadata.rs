@@ -122,7 +122,7 @@ proptest! {
         let host_to_sub = sub_to_host.reverse();
         let direct = metadata
             .clone()
-            .remap(&host_to_sub.compose(&sub_to_host));
+            .remap(&host_to_sub.compose(&sub_to_host).unwrap());
         let sequential = metadata
             .clone()
             .remap(&host_to_sub)

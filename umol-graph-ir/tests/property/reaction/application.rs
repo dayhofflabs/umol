@@ -4,10 +4,12 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{
-    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    AutomorphismAlgorithm, Correspondence, RelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{
-    ApplyError, Entity, React, SubstructureMatchAlgorithm, SubstructureMatchConfig,
+    ApplyError, Canonicalize, CanonicalizeContext, Entity, React, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig,
 };
 
 use crate::strategies::*;
@@ -68,7 +70,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -110,7 +111,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -156,7 +156,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -215,7 +214,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -274,7 +272,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -320,7 +317,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -390,7 +386,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -460,7 +455,6 @@ proptest! {
             )
             .unwrap()
             .map(Result::unwrap)
-            .map(|derivation| derivation.rhs().clone())
             .collect();
 
         prop_assert_eq!(products.len(), 1);
@@ -470,7 +464,7 @@ proptest! {
     /// Delta normalization preserves exact application at an explicit occurrence in a generated,
     /// non-identity host.
     #[test]
-    fn test_reaction_apply_at_roundtrip(
+    fn test_reaction_tracked_apply_at_roundtrip(
         (reaction, host, correspondence) in reaction_application_strategy(),
     ) {
         let normalized = reaction
@@ -479,9 +473,33 @@ proptest! {
             .to_reaction();
 
         prop_assert_eq!(
-            normalized.apply_at(&host, &correspondence),
-            reaction.apply_at(&host, &correspondence),
+            normalized.tracked_apply_at(&host, &correspondence),
+            reaction.tracked_apply_at(&host, &correspondence),
         );
+    }
+
+
+    /// All supplied-match result forms agree on applicability and on the represented product;
+    /// the tracked witness relates the host to that product, not the pattern to the host.
+    #[test]
+    fn test_reaction_tracked_apply_at(
+        (reaction, host, occurrence) in reaction_application_strategy(),
+    ) {
+        let (product, witness) = reaction.tracked_apply_at(&host, &occurrence)
+            .unwrap().expect("generated application is applicable");
+        prop_assert_eq!(reaction.apply_at(&host, &occurrence), Ok(Some(product.clone())));
+        prop_assert!(witness.is_compatible(&host, &product));
+        let realized = reaction.apply_at_to_reaction(&host, &occurrence).unwrap().unwrap();
+        let span = reaction.apply_at_to_reaction_span(&host, &occurrence).unwrap().unwrap();
+        prop_assert_eq!(realized.lhs(), &host);
+        prop_assert_eq!(span.lhs(), host.clone());
+        let context = CanonicalizeContext {
+            para_stereo: false,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        };
+        prop_assert!(product.canonical_eq(&span.rhs(), &context));
+        prop_assert!(product.canonical_eq(&realized.to_reaction_span().unwrap().rhs(), &context));
+        prop_assert_eq!(realized.normalize(), span.to_reaction().normalize());
     }
 
     /// Adding one unavailable pattern atom to an otherwise valid explicit correspondence produces
@@ -515,10 +533,14 @@ proptest! {
 
         prop_assert_eq!(reaction.apply_at(&host, &defective), expected.clone());
         prop_assert_eq!(normalized.apply_at(&host, &defective), expected);
+        let error = ApplyError::CorrespondenceMismatch { entity: Entity::Atom(AtomId(0)) };
+        prop_assert_eq!(reaction.tracked_apply_at(&host, &defective), Err(error.clone()));
+        prop_assert_eq!(reaction.apply_at_to_reaction(&host, &defective), Err(error.clone()));
+        prop_assert_eq!(reaction.apply_at_to_reaction_span(&host, &defective), Err(error));
     }
 
-    /// The public owned iterator is exactly explicit match enumeration followed by `apply_at`,
-    /// including skipped match-local failures and termination after the first other failure.
+    /// The tracked iterator is exactly explicit match enumeration followed by `tracked_apply_at`,
+    /// including skipped inapplicable matches and termination after the first execution failure.
     #[test]
     fn test_reaction_apply(
         (reaction, host, _) in reaction_application_strategy(),
@@ -529,9 +551,9 @@ proptest! {
             .substructure_matches(&host, MATCH_CONFIG)
             .expect("generated patterns carry no molecule-scope constraints")
         {
-            match reaction.apply_at(&host, &correspondence) {
-                Ok(derivation) => expected.push(Ok(derivation)),
-                Err(error) if error.is_match_rejection() => {}
+            match reaction.tracked_apply_at(&host, &correspondence) {
+                Ok(Some(result)) => expected.push(Ok(result)),
+                Ok(None) => {}
                 Err(error) => {
                     expected.push(Err(error));
                     break;
@@ -539,11 +561,39 @@ proptest! {
             }
         }
         let actual = reaction
-            .apply(&host, MATCH_CONFIG)
+            .tracked_apply(&host, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
             .collect::<Vec<_>>();
 
-        prop_assert_eq!(actual, expected);
+        prop_assert_eq!(&actual, &expected);
+        let products = reaction.apply(&host, MATCH_CONFIG).unwrap().collect::<Vec<_>>();
+        let expected_products = expected.iter().cloned().map(|result| result.map(|(product, _)| product)).collect::<Vec<_>>();
+        prop_assert_eq!(products, expected_products);
+        let realized = reaction.apply_to_reaction(&host, MATCH_CONFIG).unwrap().collect::<Vec<_>>();
+        let spans = reaction.apply_to_reaction_span(&host, MATCH_CONFIG).unwrap().collect::<Vec<_>>();
+        prop_assert_eq!(realized.len(), expected.len());
+        prop_assert_eq!(spans.len(), expected.len());
+        let context = CanonicalizeContext {
+            para_stereo: false,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        };
+        for ((application, realized), span) in expected.into_iter().zip(realized).zip(spans) {
+            match application {
+                Ok((product, witness)) => {
+                    let realized = realized.unwrap();
+                    let span = span.unwrap();
+                    prop_assert!(witness.is_compatible(&host, &product));
+                    prop_assert_eq!(realized.lhs(), &host);
+                    prop_assert_eq!(span.lhs(), host.clone());
+                    prop_assert!(product.canonical_eq(&span.rhs(), &context));
+                    prop_assert_eq!(realized.normalize(), span.to_reaction().normalize());
+                }
+                Err(error) => {
+                    prop_assert_eq!(realized, Err(error.clone()));
+                    prop_assert_eq!(span, Err(error));
+                }
+            }
+        }
     }
 
     /// `Molecule::react` is exactly reaction application followed by conservative splitting.
@@ -555,14 +605,7 @@ proptest! {
             .apply(&host, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
             .map(|application| {
-                application.map(|derivation| {
-                    derivation
-                        .rhs()
-                        .split()
-                        .into_iter()
-                        .map(|(component, _)| component)
-                        .collect()
-                })
+                application.map(|product| product.split())
             })
             .collect::<Vec<_>>();
         let actual = host
@@ -580,19 +623,12 @@ proptest! {
         extra in molecule_strategy(),
     ) {
         let reactants = vec![reaction.lhs().clone(), extra];
-        let (host, _) = Molecule::combine_all(&reactants);
+        let host = Molecule::combine_all(&reactants);
         let expected = reaction
             .apply(&host, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
             .map(|application| {
-                application.map(|derivation| {
-                    derivation
-                        .rhs()
-                        .split()
-                        .into_iter()
-                        .map(|(component, _)| component)
-                        .collect()
-                })
+                application.map(|product| product.split())
             })
             .collect::<Vec<_>>();
         let actual = reactants
@@ -603,17 +639,15 @@ proptest! {
         prop_assert_eq!(actual, expected);
     }
 
-    /// A concrete application publishes an integral product molecule and a derivation whose
-    /// recovered reaction satisfies reaction integrity.
+    /// A concrete application publishes an integral product and realized reaction.
     #[test]
     fn test_reaction_apply_integrity_preservation(
         (reaction, host, correspondence) in reaction_application_strategy(),
     ) {
-        let derivation = reaction.apply_at(&host, &correspondence).map_err(|error| {
+        let published = reaction.apply_at(&host, &correspondence).map_err(|error| {
             TestCaseError::fail(format!("generated application failed: {error}"))
-        })?;
-        let published = derivation.rhs().clone();
-        let recovered = derivation.to_reaction();
+        })?.expect("generated application is applicable");
+        let recovered = reaction.apply_at_to_reaction(&host, &correspondence).unwrap().unwrap();
 
         prop_assert_eq!(published.edit().try_build(), Ok(published));
         prop_assert_eq!(
@@ -636,7 +670,7 @@ proptest! {
                 MATCH_CONFIG,
             )
             .unwrap()
-            .any(|derivation| derivation.unwrap().rhs() == &right));
+            .any(|product| product.unwrap() == right));
     }
 
     /// Isolation probe: a plain overlay reaction's `apply` at its own `lhs` reproduces its
@@ -653,7 +687,7 @@ proptest! {
                 MATCH_CONFIG,
             )
             .unwrap()
-            .any(|derivation| derivation.unwrap().rhs() == &right));
+            .any(|product| product.unwrap() == right));
     }
 
     #[test]
@@ -720,7 +754,6 @@ proptest! {
                 MATCH_CONFIG,
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
-            .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
             .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
 
@@ -782,7 +815,6 @@ proptest! {
                 MATCH_CONFIG,
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
-            .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
             .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
 
@@ -858,7 +890,6 @@ proptest! {
                 MATCH_CONFIG,
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
-            .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
             .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
 
@@ -925,7 +956,6 @@ proptest! {
                 MATCH_CONFIG,
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
-            .map(|result| result.map(|derivation| derivation.rhs().clone()))
             .collect::<Result<_, _>>()
             .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
 

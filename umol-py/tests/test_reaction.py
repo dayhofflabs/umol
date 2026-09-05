@@ -1,3 +1,4 @@
+from umol import MoleculeRemapping
 import re
 
 import pytest
@@ -31,7 +32,6 @@ from umol import (
     Reaction,
     ReactionCompositionConfig,
     ReactionDefaults,
-    ReactionDerivation,
     ReactionMetadata,
     RelevantCycleEnumerationAlgorithm,
     ResolveConfig,
@@ -209,26 +209,6 @@ def test_reaction_application_config_value(
         "relevant_cycle_algorithm="
         "RelevantCycleEnumerationAlgorithm.Vismara())"
     )
-
-
-@pytest.mark.parametrize(
-    "value_type,message",
-    [
-        pytest.param(
-            MoleculeCorrespondence,
-            "cannot create 'builtins.MoleculeCorrespondence' instances",
-            id="molecule-correspondence",
-        ),
-        pytest.param(
-            ReactionDerivation,
-            "cannot create 'builtins.ReactionDerivation' instances",
-            id="reaction-derivation",
-        ),
-    ],
-)
-def test_return_only_value_constructor_error(value_type, message):
-    with pytest.raises(TypeError, match=f"^{message}$"):
-        value_type()
 
 
 def test_reaction_constructor():
@@ -1159,18 +1139,18 @@ def test_reaction_canonicalize():
     assert source.canonical_eq(expected)
 
 
-def test_reaction_canonicalize_with_correspondence():
+def test_reaction_canonicalize_with_remapping():
     source = Reaction.parse(
         '{:lhs {:atoms ["C#c0" "C#c0"]} '
         ':deltas [{:atom {:modify [0 "#c1"]}}]}'
     )
 
-    canonical, correspondence = source.canonicalize_with_correspondence()
+    canonical, remapping = source.canonicalize_with_remapping()
 
     assert canonical == source.canonicalize()
-    assert isinstance(correspondence, MoleculeCorrespondence)
-    assert correspondence.is_total()
-    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 0)]
+    assert isinstance(remapping, MoleculeRemapping)
+    assert remapping.to_correspondence().is_total()
+    assert remapping.atoms.images == [1, 0]
 
 
 def test_reaction_canonicalize_error():
@@ -1194,7 +1174,7 @@ def test_reaction_canonicalize_error():
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         reaction.canonicalize()
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        reaction.canonicalize_with_correspondence()
+        reaction.canonicalize_with_remapping()
 
 
 def test_reaction_reverse():
@@ -1381,130 +1361,89 @@ def test_reaction_compose_snapshot():
     assert second == second_snapshot
 
 
-def test_reaction_apply():
+@pytest.mark.parametrize(
+    "method",
+    ["apply", "tracked_apply", "apply_to_reaction", "apply_to_reaction_span"],
+)
+def test_reaction_apply(method):
     reaction = Reaction.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
     host = Reaction.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}').lhs
-    reaction_snapshot = Reaction(reaction.lhs, reaction.deltas)
     host_snapshot = Reaction(host).lhs
-    first_product = Reaction.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs
-    second_product = Reaction.parse('{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}').lhs
-
-    application = reaction.apply(host)
-
+    expected_products = [
+        Reaction.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs,
+        Reaction.parse('{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}').lhs,
+    ]
+    expected_reactions = [
+        Reaction.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'),
+        Reaction.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas [{:atom {:modify [1 "#c+"]}}]}'),
+    ]
+    application = getattr(reaction, method)(host)
     assert iter(application) is application
-    assert reaction == reaction_snapshot
-    assert host == host_snapshot
 
     reaction.lhs.atoms[0].charge = 7
     reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("N")))))
     host.atoms[0].charge = 8
+    results = list(application)
 
-    first = next(application)
-    remaining = list(application)
+    if method == "apply":
+        assert results == expected_products
+        results[0].atoms[0].charge = 5
+        assert results[1] == expected_products[1]
+    elif method == "tracked_apply":
+        assert [product for product, _ in results] == expected_products
+        for _, correspondence in results:
+            assert correspondence.atoms == Correspondence([(0, 0), (1, 1)], 2, 2)
+            for entity_map in (
+                correspondence.bonds, correspondence.dative_bonds,
+                correspondence.aromatic_systems, correspondence.multicenter_bonds,
+                correspondence.noncovalent_bonds, correspondence.stereo_atoms,
+                correspondence.stereo_bonds,
+            ):
+                assert entity_map == Correspondence([], 0, 0)
+            assert correspondence.reverse().reverse() == correspondence
+            assert correspondence.compose(correspondence.reverse()) == correspondence
+    elif method == "apply_to_reaction":
+        assert results == expected_reactions
+        results[0].lhs.atoms[0].charge = 5
+        assert results[1] == expected_reactions[1]
+    else:
+        assert [span.lhs() for span in results] == [host_snapshot, host_snapshot]
+        assert [span.rhs() for span in results] == expected_products
+        assert [span.to_reaction() for span in results] == expected_reactions
 
-    assert len(remaining) == 1
-    second = remaining[0]
-    assert first.lhs == host_snapshot
-    assert first.rhs == first_product
-    assert second.lhs == host_snapshot
-    assert second.rhs == second_product
     with pytest.raises(StopIteration):
         next(application)
     with pytest.raises(StopIteration):
         next(application)
 
-    comap = first.comap
-    atom_correspondence = first.atom_correspondence
-
-    assert first.comap == comap
-    assert first.comap is not comap
-    assert first.atom_correspondence == atom_correspondence
-    assert first.atom_correspondence is not atom_correspondence
-    assert atom_correspondence == comap.atoms
-    assert (
-        Reaction.from_sides(first.lhs, first.rhs, atom_correspondence)
-        == first.to_reaction()
-    )
-    assert comap.atoms.matched_pairs == [(0, 0), (1, 1)]
-    assert comap.atoms.left_count == 2
-    assert comap.atoms.right_count == 2
-    assert comap.atoms.left_unmatched == []
-    assert comap.atoms.right_unmatched == []
-    for entity_map in (
-        comap.bonds,
-        comap.dative_bonds,
-        comap.aromatic_systems,
-        comap.multicenter_bonds,
-        comap.noncovalent_bonds,
-        comap.stereo_atoms,
-        comap.stereo_bonds,
-    ):
-        assert entity_map.matched_pairs == []
-        assert entity_map.left_count == 0
-        assert entity_map.right_count == 0
-        assert entity_map.left_unmatched == []
-        assert entity_map.right_unmatched == []
-
-    detached_lhs = first.lhs
-    detached_rhs = first.rhs
-    detached_lhs.atoms[0].charge = 5
-    detached_rhs.atoms[0].charge = 6
-
-    assert first.lhs == host_snapshot
-    assert first.rhs == first_product
-    assert second.lhs == host_snapshot
-    assert second.rhs == second_product
-
-    reversed_first = first.reverse()
-
-    assert reversed_first.lhs == first_product
-    assert reversed_first.rhs == host_snapshot
-    assert reversed_first.reverse() == first
-
-    second_step = Reaction.parse(
-        '{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
-    )
-    config = ReactionApplicationConfig(
-        match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
-    )
-    following = next(second_step.apply(first.rhs, config=config))
-    chained = first.chain(following)
-    chained_product = Reaction.parse(
-        '{:lhs {:atoms ["C#c+2" "C#c0"]} :deltas []}'
-    ).lhs
-
-    assert chained.lhs == host_snapshot
-    assert chained.rhs == chained_product
-    assert first.rhs == first_product
-    assert following.lhs == first_product
-
-    expected_reaction = Reaction.parse(
-        '{:lhs {:atoms ["C#c0" "C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
-    )
-    recovered = chained.to_reaction()
-    independent = chained.to_reaction()
-
-    assert recovered == expected_reaction
-    assert independent == expected_reaction
-    assert recovered.lhs is not independent.lhs
-    assert recovered.deltas is not independent.deltas
-
-    recovered.lhs.atoms[1].charge = 9
-    recovered.deltas.append(Delta.Atom(AtomDelta.Add(id=2, attributes=AtomForm(Element("O")))))
-
-    assert independent == expected_reaction
-    assert chained.lhs == host_snapshot
-    assert chained.rhs == chained_product
-
-    zero = Reaction.parse('{:lhs {:atoms ["N"]} :deltas []}').apply(host_snapshot)
-
+    zero = getattr(Reaction.parse('{:lhs {:atoms ["N"]} :deltas []}'), method)(host_snapshot)
     assert iter(zero) is zero
     assert list(zero) == []
     with pytest.raises(StopIteration):
         next(zero)
+
+
+def test_reaction_tracked_apply_composition():
+    first_step = Reaction.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
+    )
+    second_step = Reaction.parse(
+        '{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
+    )
+    host = Reaction.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}').lhs
+    product, first = next(first_step.tracked_apply(host))
+    final_product, second = next(second_step.tracked_apply(product))
+    combined = first.compose(second)
+    recovered = Reaction.from_sides(host, final_product, combined.atoms)
+    expected = Reaction.parse(
+        '{:lhs {:atoms ["C#c0" "C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
+    )
+
+    assert combined.atoms == Correspondence([(0, 0), (1, 1)], 2, 2)
+    assert recovered == expected
+    assert product == Reaction.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs
 
 
 @pytest.mark.parametrize(
@@ -1541,7 +1480,23 @@ def test_reaction_apply_config(config):
         reaction.apply(host) if config is None else reaction.apply(host, config=config)
     )
 
-    assert [derivation.rhs for derivation in application] == expected
+    assert list(application) == expected
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["apply", "tracked_apply", "apply_to_reaction", "apply_to_reaction_span"],
+)
+def test_reaction_apply_precondition_error(method):
+    reaction = Reaction.parse(
+        '{:lhs {:atoms ["C" "C"] :bonds [[0 1 "1"]]} '
+        ':deltas [{:atom {:remove 0}}]}'
+    )
+    with pytest.raises(
+        InvalidStructureError,
+        match=r"^invalid reaction: deleted atom AtomId\(0\) leaves dangling bond BondId\(0\)$",
+    ):
+        getattr(reaction, method)(Molecule())
 
 
 def test_reaction_apply_config_error():
@@ -1549,7 +1504,11 @@ def test_reaction_apply_config_error():
         Reaction().apply(Molecule(), ReactionApplicationConfig())
 
 
-def test_reaction_apply_rejection():
+@pytest.mark.parametrize(
+    "method",
+    ["apply", "tracked_apply", "apply_to_reaction", "apply_to_reaction_span"],
+)
+def test_reaction_apply_rejection(method):
     reaction = Reaction.parse(
         '{:lhs {:atoms ["C"]} :deltas [{:atom {:remove 0}}]}'
     )
@@ -1565,7 +1524,15 @@ def test_reaction_apply_rejection():
         ).lhs,
     ]
 
-    assert [derivation.rhs for derivation in reaction.apply(host)] == expected
+    results = list(getattr(reaction, method)(host))
+    if method == "tracked_apply":
+        assert [product for product, _ in results] == expected
+    elif method == "apply_to_reaction":
+        assert [result.to_reaction_span().rhs() for result in results] == expected
+    elif method == "apply_to_reaction_span":
+        assert [result.rhs() for result in results] == expected
+    else:
+        assert results == expected
 
 
 @pytest.mark.skip(reason="molecule-scope constraint matching pending doc 195")
@@ -1686,10 +1653,10 @@ def test_molecule_react_all_pipeline():
         Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
         Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
     ]
-    combined, _ = Molecule.combine_all(reactants)
+    combined = Molecule.combine_all(reactants)
     expected = [
-        [component for component, _ in derivation.rhs.split()]
-        for derivation in reaction.apply(combined)
+        product.split()
+        for product in reaction.apply(combined)
     ]
 
     assert list(Molecule.react_all(reactants, reaction)) == expected

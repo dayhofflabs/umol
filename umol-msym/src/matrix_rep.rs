@@ -13,7 +13,7 @@ use crate::point_group::{PointGroup, SymmetryOp};
 /// to a specific coordinate frame produced by libmsym for a particular molecule
 /// or a canonical name-based placement.
 ///
-/// Slot `i` corresponds to `PointGroup::ops()[i]` (same canonical order).
+/// Index `i` corresponds to `PointGroup::ops()[i]` (same canonical order).
 #[derive(Debug, Clone)]
 pub struct MatrixRep {
     group: &'static PointGroup,

@@ -18,6 +18,7 @@ use crate::{
     bond::{BondForm, BondUpdate, BondView, BondViews},
     boolean::BooleanForm,
     canonicalize::CanonicalizeConfig,
+    compact::{Compaction, MoleculeCompaction},
     constraint::{
         aromatic::{
             AromaticSystemConstraintForm, AromaticSystemConstraintKey,
@@ -104,10 +105,9 @@ use crate::{
         NoncovalentBondView, NoncovalentBondViews,
     },
     num::{ArithExpr, MemOp, NumForm, PredExpr, RelOp},
-    reaction::{
-        Reaction, ReactionApplicationConfig, ReactionCompositionConfig, ReactionDerivation,
-    },
+    reaction::{Reaction, ReactionApplicationConfig, ReactionCompositionConfig},
     reaction_span::ReactionSpan,
+    remap::{MoleculeRemapping, Remapping},
     resolve::{
         AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
         AromaticityResolveConfig, AtomCompletions, ResolveConfig, ResolveContradiction,
@@ -140,6 +140,8 @@ mod bond;
 mod boolean;
 #[cfg(feature = "graph")]
 mod canonicalize;
+#[cfg(feature = "graph")]
+mod compact;
 #[cfg(feature = "graph")]
 mod constraint;
 #[cfg(feature = "graph")]
@@ -184,6 +186,7 @@ mod num;
 mod reaction;
 #[cfg(feature = "graph")]
 mod reaction_span;
+mod remap;
 #[cfg(feature = "graph")]
 mod resolve;
 #[cfg(feature = "graph")]
@@ -304,7 +307,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ReactionCompositionConfig>()?;
         module.add_class::<ReactionApplicationConfig>()?;
         module.add_class::<Reaction>()?;
-        module.add_class::<ReactionDerivation>()?;
         module.add_class::<ReactionSpan>()?;
         module.add_class::<RingConfig>()?;
         module.add_class::<SmilesIoConfig>()?;
@@ -325,6 +327,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RoleTaggedHashedFeatureSet>()?;
         module.add_class::<ReactionCombinedFingerprint>()?;
         module.add_class::<Correspondence>()?;
+        module.add_class::<Compaction>()?;
+        module.add_class::<MoleculeCompaction>()?;
+        module.add_class::<Remapping>()?;
+        module.add_class::<MoleculeRemapping>()?;
         module.add_class::<MoleculeCorrespondence>()?;
         module.add_class::<Entity>()?;
         module.add_class::<MoleculeMetadata>()?;

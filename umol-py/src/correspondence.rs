@@ -118,11 +118,16 @@ impl Correspondence {
     }
 
     /// Relational composition with a following correspondence.
-    fn compose(&self, other: &Self) -> Self {
-        Self(self.0.compose(&other.0))
+    /// Raises `ValueError` when intermediate counts disagree; object identity is not checked.
+    fn compose(&self, other: &Self) -> PyResult<Self> {
+        self.0
+            .compose(&other.0)
+            .map(Self)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// Compose an iterable of correspondences in iteration order.
+    /// Returns `None` for empty input; raises `ValueError` at the first count mismatch.
     #[staticmethod]
     fn compose_all(correspondences: &Bound<'_, PyAny>) -> PyResult<Option<Self>> {
         let correspondences = correspondences
@@ -132,7 +137,9 @@ impl Correspondence {
                 Ok(item.borrow().0.clone())
             })
             .collect::<PyResult<Vec<_>>>()?;
-        Ok(GraphCoreCorrespondence::compose_all(correspondences).map(Self))
+        GraphCoreCorrespondence::compose_all(correspondences)
+            .map(|value| value.map(Self))
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     fn __repr__(&self) -> String {
@@ -188,6 +195,37 @@ pub struct MoleculeCorrespondence(GraphIrMoleculeCorrespondence);
 
 #[pymethods]
 impl MoleculeCorrespondence {
+    /// Assemble eight validated correspondences without binding them to molecules.
+    #[new]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        atoms: &Correspondence,
+        bonds: &Correspondence,
+        dative_bonds: &Correspondence,
+        aromatic_systems: &Correspondence,
+        multicenter_bonds: &Correspondence,
+        noncovalent_bonds: &Correspondence,
+        stereo_atoms: &Correspondence,
+        stereo_bonds: &Correspondence,
+    ) -> Self {
+        Self(GraphIrMoleculeCorrespondence::new(
+            atoms.to_rust(),
+            bonds.to_rust(),
+            dative_bonds.to_rust(),
+            aromatic_systems.to_rust(),
+            multicenter_bonds.to_rust(),
+            noncovalent_bonds.to_rust(),
+            stereo_atoms.to_rust(),
+            stereo_bonds.to_rust(),
+        ))
+    }
+
+    /// A correspondence with no pairs and zero left and right counts for every entity kind.
+    #[staticmethod]
+    fn empty() -> Self {
+        Self::from_rust(GraphIrMoleculeCorrespondence::empty())
+    }
+
     /// Atom correspondence.
     #[getter]
     fn atoms(&self) -> Correspondence {
@@ -247,11 +285,16 @@ impl MoleculeCorrespondence {
     }
 
     /// Relational composition with a following molecule correspondence.
-    fn compose(&self, other: &Self) -> Self {
-        Self(self.0.compose(&other.0))
+    /// Raises `ValueError` naming the first entity kind with unequal intermediate counts.
+    fn compose(&self, other: &Self) -> PyResult<Self> {
+        self.0
+            .compose(&other.0)
+            .map(Self)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// Compose an iterable of molecule correspondences in iteration order.
+    /// Returns `None` for empty input; raises `ValueError` at the first count mismatch.
     #[staticmethod]
     fn compose_all(correspondences: &Bound<'_, PyAny>) -> PyResult<Option<Self>> {
         let correspondences = correspondences
@@ -261,7 +304,9 @@ impl MoleculeCorrespondence {
                 Ok(item.borrow().0.clone())
             })
             .collect::<PyResult<Vec<_>>>()?;
-        Ok(GraphIrMoleculeCorrespondence::compose_all(correspondences).map(Self))
+        GraphIrMoleculeCorrespondence::compose_all(correspondences)
+            .map(|value| value.map(Self))
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     fn __repr__(&self) -> String {
@@ -609,21 +654,12 @@ mod tests {
             3,
         ).expect("correspondence producer preserves partial-bijection invariants")),
     )]
-    #[case::mismatched_intermediate(
-        Correspondence(GraphCoreCorrespondence::new(
-            vec![(0, 2), (1, 0)],
-            2,
-            3,
-        ).expect("correspondence producer preserves partial-bijection invariants")),
-        Correspondence(GraphCoreCorrespondence::new(vec![(0, 4)], 1, 5).expect("correspondence producer preserves partial-bijection invariants")),
-        Correspondence(GraphCoreCorrespondence::new(vec![(1, 4)], 2, 5).expect("correspondence producer preserves partial-bijection invariants")),
-    )]
     fn test_correspondence_compose(
         #[case] left: Correspondence,
         #[case] right: Correspondence,
         #[case] expected: Correspondence,
     ) {
-        assert_eq!(left.compose(&right), expected);
+        assert_eq!(left.compose(&right).unwrap(), expected);
     }
 
     #[rstest]
@@ -712,6 +748,35 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_correspondence_new(molecule_correspondence: GraphIrMoleculeCorrespondence) {
+        let atoms = Correspondence::from_rust(molecule_correspondence.atoms());
+        let bonds = Correspondence::from_rust(molecule_correspondence.bonds());
+        let dative_bonds = Correspondence::from_rust(molecule_correspondence.dative_bonds());
+        let aromatic_systems =
+            Correspondence::from_rust(molecule_correspondence.aromatic_systems());
+        let multicenter_bonds =
+            Correspondence::from_rust(molecule_correspondence.multicenter_bonds());
+        let noncovalent_bonds =
+            Correspondence::from_rust(molecule_correspondence.noncovalent_bonds());
+        let stereo_atoms = Correspondence::from_rust(molecule_correspondence.stereo_atoms());
+        let stereo_bonds = Correspondence::from_rust(molecule_correspondence.stereo_bonds());
+
+        assert_eq!(
+            MoleculeCorrespondence::new(
+                &atoms,
+                &bonds,
+                &dative_bonds,
+                &aromatic_systems,
+                &multicenter_bonds,
+                &noncovalent_bonds,
+                &stereo_atoms,
+                &stereo_bonds,
+            ),
+            MoleculeCorrespondence::from_rust(molecule_correspondence)
+        );
+    }
+
+    #[rstest]
     fn test_molecule_correspondence_accessors(
         molecule_correspondence: GraphIrMoleculeCorrespondence,
     ) {
@@ -776,16 +841,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty_spaces(GraphIrMoleculeCorrespondence::new(
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-    ))]
+    #[case::empty_spaces(GraphIrMoleculeCorrespondence::empty())]
     fn test_molecule_correspondence_is_total(
         #[case] correspondence: GraphIrMoleculeCorrespondence,
     ) {
@@ -849,7 +905,7 @@ mod tests {
         let right = left.reverse();
 
         assert_eq!(
-            left.compose(&right),
+            left.compose(&right).unwrap(),
             MoleculeCorrespondence::from_rust(GraphIrMoleculeCorrespondence::new(
                 GraphCoreCorrespondence::new(vec![(AtomId(0), AtomId(0))], 2, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -893,7 +949,7 @@ mod tests {
         Python::attach(|py| {
             let left = MoleculeCorrespondence::from_rust(molecule_correspondence);
             let right = left.reverse();
-            let expected = left.compose(&right);
+            let expected = left.compose(&right).unwrap();
             let correspondences = PyList::new(
                 py,
                 [Py::new(py, left).unwrap(), Py::new(py, right).unwrap()],

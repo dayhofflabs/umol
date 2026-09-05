@@ -2,51 +2,48 @@
 //!
 //! The generated domain contains every entity kind, position-sensitive aromatic and multicenter
 //! data, stereo frames, and constraints that reference every id kind. Both generated
-//! correspondences are complete nonidentity cyclic permutations in every component. The success
+//! remappings are complete nonidentity cyclic permutations in every component. The success
 //! properties use the asserted producer route; independently supplied coverage failures remain in
 //! the exact unit suite for `try_remap`.
 
+use std::fmt::Debug;
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_core::Correspondence;
+use umol_graph_core::{EdgeId, GraphRemapping, NodeId, Remapping};
+use umol_graph_ir::ir::MoleculeRemapping;
 
 use crate::strategies::*;
 
-fn identity<Id>(count: usize) -> Correspondence<Id>
+fn crossing<Id>(count: usize, seed: u64, entity_kind: u32) -> Remapping<Id>
 where
-    Id: Copy + Ord + From<usize>,
-{
-    Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
-}
-
-fn crossing<Id>(count: usize, seed: u64, entity_kind: u32) -> Correspondence<Id>
-where
-    Id: Copy + Ord + From<usize>,
+    Id: Copy + Debug + Into<usize> + From<usize>,
 {
     let shift = 1 + seed.rotate_right(entity_kind * 8) as usize % (count - 1);
     let images = (0..count)
         .map(|left| Id::from((left + shift) % count))
         .collect::<Vec<_>>();
-    Correspondence::from_images(&images, count)
+    Remapping::new(images).unwrap()
 }
 
-fn identity_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
-    MoleculeCorrespondence::new(
-        identity::<AtomId>(molecule.atoms().count()),
-        identity::<BondId>(molecule.bonds().count()),
-        identity::<DativeBondId>(molecule.dative_bonds().count()),
-        identity::<AromaticSystemId>(molecule.aromatic_systems().count()),
-        identity::<MulticenterBondId>(molecule.multicenter_bonds().count()),
-        identity::<NoncovalentBondId>(molecule.noncovalent_bonds().count()),
-        identity::<StereoAtomId>(molecule.stereo_atoms().count()),
-        identity::<StereoBondId>(molecule.stereo_bonds().count()),
+fn identity_remapping(molecule: &Molecule) -> MoleculeRemapping {
+    MoleculeRemapping::new(
+        GraphRemapping::identity(molecule.atoms().count(), molecule.bonds().count()),
+        Remapping::identity(molecule.dative_bonds().count()),
+        Remapping::identity(molecule.aromatic_systems().count()),
+        Remapping::identity(molecule.multicenter_bonds().count()),
+        Remapping::identity(molecule.noncovalent_bonds().count()),
+        Remapping::identity(molecule.stereo_atoms().count()),
+        Remapping::identity(molecule.stereo_bonds().count()),
     )
 }
 
-fn crossing_correspondence(molecule: &Molecule, seed: u64) -> MoleculeCorrespondence {
-    MoleculeCorrespondence::new(
-        crossing::<AtomId>(molecule.atoms().count(), seed, 0),
-        crossing::<BondId>(molecule.bonds().count(), seed, 1),
+fn crossing_remapping(molecule: &Molecule, seed: u64) -> MoleculeRemapping {
+    MoleculeRemapping::new(
+        GraphRemapping::new(
+            crossing::<NodeId>(molecule.atoms().count(), seed, 0),
+            crossing::<EdgeId>(molecule.bonds().count(), seed, 1),
+        ),
         crossing::<DativeBondId>(molecule.dative_bonds().count(), seed, 2),
         crossing::<AromaticSystemId>(molecule.aromatic_systems().count(), seed, 3),
         crossing::<MulticenterBondId>(molecule.multicenter_bonds().count(), seed, 4),
@@ -232,15 +229,35 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
 }
 
 fn remapping_scenario_strategy(
-) -> impl Strategy<Value = (Molecule, MoleculeCorrespondence, MoleculeCorrespondence)> {
+) -> impl Strategy<Value = (Molecule, MoleculeRemapping, MoleculeRemapping)> {
     (-2i64..=2, 0i64..=2, 0i64..=2, any::<u64>(), any::<u64>()).prop_map(
         |(atom_charge, aromatic, multicenter, first_seed, second_seed)| {
             let molecule = remapping_molecule(atom_charge, aromatic, multicenter);
-            let first = crossing_correspondence(&molecule, first_seed);
-            let second = crossing_correspondence(&molecule, second_seed);
+            let first = crossing_remapping(&molecule, first_seed);
+            let second = crossing_remapping(&molecule, second_seed);
             (molecule, first, second)
         },
     )
+}
+
+fn inverse_images<Id: Copy + Into<usize> + From<usize>>(remapping: &Remapping<Id>) -> Vec<Id> {
+    let mut pairs = (0..remapping.len())
+        .map(Id::from)
+        .map(|source| (Into::<usize>::into(remapping.map(source)), source))
+        .collect::<Vec<_>>();
+    pairs.sort_unstable_by_key(|&(target, _)| target);
+    pairs.into_iter().map(|(_, source)| source).collect()
+}
+
+fn composed_images<Id: Copy + Into<usize> + From<usize>>(
+    first: &Remapping<Id>,
+    second: &Remapping<Id>,
+) -> Vec<Id> {
+    assert_eq!(first.len(), second.len());
+    (0..first.len())
+        .map(Id::from)
+        .map(|source| second.map(first.map(source)))
+        .collect()
 }
 
 proptest! {
@@ -253,28 +270,39 @@ proptest! {
 
     #[test]
     fn test_molecule_remap_framed_eq_under(
-        (source, correspondence, _) in remapping_scenario_strategy(),
+        (source, remapping, _) in remapping_scenario_strategy(),
     ) {
-        let remapped = source.remap(&correspondence);
+        let remapped = source.remap(&remapping);
 
-        prop_assert!(source.framed_eq_under(&remapped, &correspondence));
+        prop_assert!(source.framed_eq_under(&remapped, &remapping));
     }
 
     #[test]
     fn test_molecule_remap_identity(
         (source, _, _) in remapping_scenario_strategy(),
     ) {
-        let identity = identity_correspondence(&source);
+        let identity = identity_remapping(&source);
 
         prop_assert_eq!(source.remap(&identity), source);
     }
 
     #[test]
     fn test_molecule_remap_inverse(
-        (source, correspondence, _) in remapping_scenario_strategy(),
+        (source, remapping, _) in remapping_scenario_strategy(),
     ) {
-        let remapped = source.remap(&correspondence);
-        let restored = remapped.remap(&correspondence.reverse());
+        let remapped = source.remap(&remapping);
+        let restored = remapped.remap(&MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(inverse_images(remapping.graph().nodes())).unwrap(),
+                Remapping::new(inverse_images(remapping.graph().edges())).unwrap(),
+            ),
+            Remapping::new(inverse_images(remapping.dative_bonds())).unwrap(),
+            Remapping::new(inverse_images(remapping.aromatic_systems())).unwrap(),
+            Remapping::new(inverse_images(remapping.multicenter_bonds())).unwrap(),
+            Remapping::new(inverse_images(remapping.noncovalent_bonds())).unwrap(),
+            Remapping::new(inverse_images(remapping.stereo_atoms())).unwrap(),
+            Remapping::new(inverse_images(remapping.stereo_bonds())).unwrap(),
+        ));
 
         prop_assert_eq!(restored, source);
     }
@@ -284,7 +312,38 @@ proptest! {
         (source, first, second) in remapping_scenario_strategy(),
     ) {
         let sequential = source.remap(&first).remap(&second);
-        let direct = source.remap(&first.compose(&second));
+        let direct = source.remap(&MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(composed_images(
+                    first.graph().nodes(),
+                    second.graph().nodes(),
+                ))
+                .unwrap(),
+                Remapping::new(composed_images(
+                    first.graph().edges(),
+                    second.graph().edges(),
+                ))
+                .unwrap(),
+            ),
+            Remapping::new(composed_images(first.dative_bonds(), second.dative_bonds())).unwrap(),
+            Remapping::new(composed_images(
+                first.aromatic_systems(),
+                second.aromatic_systems(),
+            ))
+            .unwrap(),
+            Remapping::new(composed_images(
+                first.multicenter_bonds(),
+                second.multicenter_bonds(),
+            ))
+            .unwrap(),
+            Remapping::new(composed_images(
+                first.noncovalent_bonds(),
+                second.noncovalent_bonds(),
+            ))
+            .unwrap(),
+            Remapping::new(composed_images(first.stereo_atoms(), second.stereo_atoms())).unwrap(),
+            Remapping::new(composed_images(first.stereo_bonds(), second.stereo_bonds())).unwrap(),
+        ));
 
         prop_assert_eq!(sequential, direct);
     }

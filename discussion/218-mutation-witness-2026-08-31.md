@@ -1,0 +1,1501 @@
+# 218 — Mutation witnesses for the editing surface
+
+Status: Completed
+Date: 2026-08-31
+Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
+[184](184-deltas-and-edits-2026-08-04.md),
+[199](199-open-container-integrity-2026-08-18.md),
+[204](204-reaction-application-redesign-2026-08-19.md),
+[212](212-remapping-layer-2026-08-26.md),
+[data type contracts guide](../docs/development/data-types.md),
+[nomenclature guide](../docs/development/nomenclature.md)
+
+## Purpose
+
+External consumers key their own data by entity ids — per-atom provenance
+registries, correspondence caches, any structure held outside the `Molecule`.
+Every mutation that moves the entity id space silently invalidates those keys:
+after a removal compacts the survivors, "atom 7" is atom 6, and an external
+record keyed by the old id lies. This is the accepted cost of ordinary
+numerical indices over bound references (docs 114 and 139 record that
+background); the payment is that **every operation that moves the id space
+must be able to surrender the move as a value** — a mutation witness.
+
+The triggering request is a downstream repair/assemble workflow: repair
+(delete a misread atom, fix a bond order, correct a stereocentre — the editor
+path) and assemble (build from several sources, where `combine` has a
+caller-recoverable append layout). The transactional design is not in question;
+what the consumer needs becomes knowable exactly at commit and was not
+previously returned.
+
+## Current state
+
+- Correspondence, remapping, and compaction are distinct carriers with partial
+  bijection, dense bijection, and order-preserving removal semantics. Their
+  graph and molecule aggregates compose component-wise, and remappings widen
+  infallibly to correspondences.
+- Graph-core and graph-IR operations with optional provenance use paired bare
+  and `tracked_` methods. The pairs have identical ordinary outputs, failure
+  behavior, iteration order, and resulting mutable state.
+- `MoleculeEditor` accumulates an initial-to-current correspondence. Tracked
+  snapshot, build, application, transaction, removal, and rollback methods
+  expose the applicable correspondence or compaction without cloning molecular
+  payloads.
+- Canonicalization returns `MoleculeRemapping` from
+  `canonicalize_with_remapping`; correspondence transport handles non-bijective
+  mapping, and `IdRemapping` is retired.
+- Reaction application returns products directly, products paired with
+  host-to-product correspondences, realized reactions, or realized reaction
+  spans. `ReactionDerivation` is retired.
+- Combination remains witness-free under its append law. `split` returns
+  component molecules, while `tracked_split` pairs each component with its
+  source-to-component correspondence.
+- Python mirrors the accepted high-level compaction, correspondence, remapping,
+  editor, transaction, molecule, and reaction surfaces. Graph-core carriers,
+  categorical pushout carriers, and `meet_pushout` remain Rust-only.
+
+## Settled semantic foundation
+
+All operation witnesses are **covariant**: they map ids in an operation's
+source object or objects to ids in its result object or objects. Provenance in
+the reverse direction may be useful, but it is not the operation witness.
+
+The carrier follows the operation's semantics:
+
+- `MoleculeCorrespondence` is the general single-source, single-result case:
+  a partial bijection with explicit left and right counts for all eight entity
+  families.
+- `MoleculeRemapping` is the efficient special case of a total bijection with
+  a dense source. It is appropriate when renumbering is the operation, as in
+  canonicalization.
+- `MoleculeCompaction` is the order-preserving removal case with no unmatched
+  result entities. Each component declares its source count and derives its
+  result count, so the witness is complete without either molecule. It is
+  appropriate when selection or removal is the operation.
+
+The special carriers are used only when their stronger property is part of
+the operation's semantics; correspondence is the default otherwise.
+`Remapping` construction enforces that its dense image vector is a permutation,
+and `MoleculeRemapping` aggregates already-valid component remappings.
+
+### Dense-carrier audit
+
+The pre-migration `GraphRemapping` producers confirmed that the weaker contract
+was in active use rather than merely permitted by its constructor:
+
+- `GraphCorrespondence::to_remapping` requires only totality on the left, so
+  the result may be an injection into a larger right-hand space;
+- molecule combination maps the appended operand into an offset range of the
+  larger combined molecule;
+- reaction-span superimposition maps the right molecule into the larger union
+  frame;
+- pushout transports one operand through its coprojection into the pushout;
+- split maps source atoms to component-local ids, which repeat across
+  components because the component tag is absent; and
+- graph-core relation transport accepts the aggregate as an arbitrary total
+  participant-id map.
+
+Only the complete molecule `remap` path first established totality on both
+sides and therefore used the carrier as a semantic remapping. Tightening the
+pre-migration constructor in place would have broken legitimate injection and
+transport uses. Split's aggregate map also lacked a component tag and was replaced by
+separate source-to-component correspondences rather than forced into a
+remapping. These transport uses were migrated to correspondences with explicit
+source and target counts. `MoleculeRemapping` became canonicalization's
+witness after its bijection contract was enforced.
+
+The constructor-check experiment on 2026-09-04 required every image to be
+in range and unique. Library tests for graph-core, graph-IR, and graph yielded
+8,193 passes and 90 failures: 52 from non-bijective test fixtures and 38 from
+production paths through four constructors. Reaction composition,
+application, and unmapped reaction-SMILES failures traced back to those same
+sites. The temporary assertions were removed after the experiment.
+
+### Migration of non-bijective transport
+
+- **Split:** construct one source-to-component correspondence per component.
+  Use it to transport that component's participants and constraints, and
+  return it from the witness-bearing form. The component collection supplies
+  component identity; local ids need no component tag.
+- **Pushout:** consume the existing input-to-pushout correspondences directly.
+  Remove the conversion of the right correspondence into `GraphRemapping`.
+- **Combination:** construct the appended operand's correspondence into the
+  combined id space from its offsets and the full result counts. Use it
+  internally. The public operation remains witness-free because the append
+  layout determines the mapping.
+- **Superimposition:** construct an RHS-to-union correspondence from the
+  existing union assignment and explicit union counts. Use it to transport
+  RHS entities and references.
+
+Relation participants, stereo ligands, and constraints use
+correspondence-based transport. Every source id referenced by the transported
+value must have an image. An unmatched reference is a transport failure,
+never an instruction to delete the referencing entity or constraint. Each
+of these four producers establishes coverage for the values it transports;
+split transports only the entities selected for the current component.
+
+Retain remapping-based transport for bijective renumbering. Both routes share
+the underlying id-lookup mechanics without duplicating participant and
+constraint traversal. Correspondence-based transport uses `map` and
+`try_map`; bijective transport retains `remap` and `try_remap`. For graph-core
+relation sets the correspondence route has this shape:
+
+```rust
+pub fn map(&self, correspondence: &GraphCorrespondence) -> Self;
+pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>;
+```
+
+`try_map` returns `None` when any referenced participant lacks an image;
+`map` asserts the same coverage condition. Mapping retains relation rows,
+participant order, and payloads while replacing participant ids. Graph-IR
+stereo ligands and entity sets also accept `&GraphCorrespondence`. The
+inherent ligand methods delegate to `RelationParticipant`; they do not add
+a separate atom-correspondence API. Constraints follow the same naming and
+coverage contract with `MoleculeCorrespondence` for their entity references.
+These methods consume a correspondence; they are transport operations, not
+tracked operations that return provenance.
+
+### Remapping construction and consumption
+
+`Remapping<Id>` is an open carrier for a permutation of one dense id space.
+If its image vector has length `n`, every image must lie in `0..n` and occur
+exactly once. Construction therefore rejects an out-of-range or repeated
+image. No separate missing-image case exists: `n` distinct in-range images
+necessarily cover the target space. `Remapping::new` returns
+`Result<Remapping<Id>, RemappingError<Id>>`; `len` and `is_empty` expose the
+shared source and target size.
+
+The image storage is a private `Vec<Id>`. Construction, lookup, and vector
+reordering require `Id: Copy + Into<usize>`; operations that enumerate
+source ids additionally require `From<usize>`. The public lookup still
+accepts and returns `Id`, so different entity-id types cannot be mixed.
+ID newtypes implement `From<Id> for usize`; their existing `From<usize>`
+and inherent `index` methods remain. `index_vec` and its `Idx` implementations
+are removed: typed lookup does not require a typed storage dependency, and
+the trait never prevented integer extraction. This does not change the
+existing narrowing behavior of `usize`-to-ID conversion.
+
+The aggregate constructors receive already-valid components and are
+infallible. `GraphRemapping::new` takes the node and edge `Remapping` values,
+and `MoleculeRemapping::new` takes the graph aggregate and the six overlay
+remappings. Validation remains at the single-id-space boundary rather than
+being repeated with aggregate-specific error types.
+
+`Remapping::remap_vec<T>(&self, values: Vec<T>) -> Vec<T>` consumes a vector
+and places each source value at its image position, without requiring
+`T: Clone`. `try_remap_vec` returns `Option<Vec<T>>`, with `None` exactly when
+the vector length differs from the remapping length. The asserted form
+panics on the same mismatch; both consume the input even on failure.
+This single-space operation owns vector reordering for molecule and span
+renumbering rather than separate private free functions.
+
+Agreement with an independently supplied molecule or reaction span is
+contextual, not intrinsic to the carrier. `Molecule::remap` and
+`ReactionSpan::remap` accept `&MoleculeRemapping`; their checked companions
+verify that all eight component lengths equal the receiver's entity counts,
+while their asserted companions document and panic on the same mismatch.
+The carrier itself already establishes bijectivity, so consumers do not
+recheck it.
+
+There is no correspondence-to-remapping conversion in the public surface.
+The former graph narrowing admitted total-left injections, and the molecule
+narrowing existed only to construct the legacy sparse `IdRemapping`; both were
+removed. Canonicalization constructs `MoleculeRemapping` directly from its
+selected entity orders and uses the infallible remapping-to-correspondence
+conversion when it needs the general carrier. `Molecule::framed_eq_under`
+likewise accepts a
+`&MoleculeRemapping`, because complete framed equality under a supplied id
+relation requires exactly a dense total bijection. A checked narrowing can be
+added later if a concrete consumer requires it; theoretical convertibility is
+not enough to retain a public seam.
+
+For a single-input, single-output edit that returns a correspondence, removed
+entities are left-unmatched and added entities are right-unmatched. Additions
+can therefore be recovered from the correspondence itself:
+
+> **Addition law.** The post-state entities without a pre-image — the
+> correspondence's right-unmatched entities, taken in id order — are the
+> script's surviving additions, in creation order.
+
+This holds for the current `Edits` semantics because additions append,
+compaction preserves order, and an entity added and then removed in the same
+script never materializes. A caller that removed some of its own `New(n)`
+handles knows which additions survived, so `New(n)` resolution is
+caller-computable from the correspondence alone. Tests cover the law,
+including an add-then-remove case.
+
+### Transformation classification
+
+The same classification applies to transformations:
+
+- **Identity class** — id-preserving transformations (`Normalize`, `Reframe`,
+  attribute-only edits, bond and multicenter-bond resolution, and charge
+  delocalization): the witness is the identity, stated as a law rather than
+  returned.
+- **Append class** — additions preserve every existing id and allocate new ids
+  contiguously after the old range. That layout is part of the operation's
+  contract, so pre- and post-state counts determine the mapping and the new
+  ids. Primitive editor methods may still return the entity they create when
+  construction needs it; that return is not a mutation witness.
+- **Compaction class** — pure removals and selections, where the move is
+  order-preserving and dense: the witness is `MoleculeCompaction`, the
+  stronger type whose shape carries that guarantee. `MoleculeEditor::remove`
+  already conforms.
+- **Remapping class** — dense bijective renumbering, where renumbering is the
+  operation: the witness is `MoleculeRemapping`.
+- **Correspondence class** — general additions, removals, and replacements:
+  the witness is `MoleculeCorrespondence`.
+
+Class membership is assigned per operation by its effect on the id space,
+regardless of the owning layer, and the effect is judged per family. The
+chemistry-layer transformers currently move at most one family: the
+`Aromatizer` appends aromatic-system entities and the `Kekulizer` removes all
+of them; their bond-order and constraint changes are attribute changes.
+Neither needs a returned witness. The former has the append law. In the
+latter, the affected family has no survivors to transport and every other
+family is unchanged. Doc 166's hydrogen transformations have the same split:
+unfolding has the append law, while folding selected hydrogens has a
+nontrivial `MoleculeCompaction`.
+
+`BondsResolver` and `MulticenterBondsResolver` only modify attributes and
+preserve every id. `AromaticityResolver` and `StereoResolver` may replace
+overlay entities, and the aggregate `Resolver` runs both structural phases.
+That replacement is real, but resolver results are deliberately excluded from
+the witness-bearing API in this work rather than expanding every successful
+solution with transport data.
+
+### Public operation audit
+
+The audit covers public operations whose input contains one or more existing
+molecule id spaces and whose result changes or materializes a molecule id
+space. It excludes construction from no molecule source (`MoleculeBuilder`,
+parsers, and external-format conversion), read-only selection and planning
+(`induced_subgraph`, `edits`, resolver plans, and perception), and operations
+that transform a `Reaction` or `ReactionSpan` without issuing a molecule
+result. These exclusions have no source molecule ids to transport or belong
+to a different aggregate's witness contract.
+
+| Operation family | Shape and id effect | Final return | Witness conclusion |
+| --- | --- | --- | --- |
+| Direct molecule attribute and constraint mutation; `Normalize`; `Reframe`; `DelocalizeCharge`; bond and multicenter-bond resolution | one to one, every entity id preserved | value or `()` | Identity law; no returned carrier. |
+| Editor `add_*`; `AromaticityPerceiver::add_systems` | one to one, append | new id for individual editor additions; `add_systems` returns `()` | Existing ids and allocation order are contractual, so counts determine all new ids. Keep primitive created-id returns needed for continued construction; do not add witness or created-id returns to higher-level append operations. |
+| `Aromatizer`; `Fragment::finish_open`; hydrogen unfolding | one to one, high-level append transformation | bare result | Append law; no witness-bearing form. |
+| Editor relation-family `remove_*` | one to one, order-preserving removal in a selected relation family | `()`; `tracked_remove_*` returns `MoleculeCompaction` | Plain methods remain witness-free; tracked forms expose the full compaction wherever surviving ids can move. |
+| `Kekulizer` | one to one, removes every aromatic system and preserves every other family | bare result | No returned witness: the affected family has no survivors and every other id is unchanged. |
+| `MoleculeEditor::remove` | one to one, order-preserving removal with cascades | `()`; `tracked_remove` returns `MoleculeCompaction` | Plain removal is witness-free; tracked removal exposes the compaction. |
+| `Molecule::extract` | one to one, selection followed by order-preserving removal | molecule; `tracked_extract` also returns `MoleculeCompaction` | The supplied subgraph correspondence is a sub-to-host selection descriptor, not the result witness. |
+| `Molecule::apply`; editor `apply`, `transact`, `snapshot`, and finalization; transaction rollback | one to one, arbitrary additions, removals, and modifications | primary result; `tracked_` form also returns `MoleculeCorrespondence` | Application returns a source-to-result correspondence; rollback returns its inverse. Tracked snapshot and finalization expose the editor's session correspondence. |
+| Aromaticity, stereo, and aggregate resolution | one to one, replacement-capable in overlay families | successful `Solution` without a witness | No witness-bearing form in this work. |
+| `Transformer::transform` and `generate_all` | one source to one result, or to alternative results; effect depends on transformer | bare molecule values | No blanket witness method. Add an operation-specific form only when a transformer has nontrivial transport that callers need. |
+| `canonicalize_with_remapping`; `Molecule::remap`; `ReactionSpan::remap`; `Molecule::framed_eq_under` | one to one, dense bijective renumbering | canonical value plus `MoleculeRemapping`; remapped value, remapped span, or Boolean from a caller-supplied remapping | Remapping operations return no second witness because the caller supplied it. |
+| `Reaction::apply_at` and `Reaction::apply` | one host to one product per application | product; tracked product and host-to-product correspondence; realized `Reaction` or `ReactionSpan` | The useful application results are exposed directly; no additional result container remains. |
+| `combine`, `combine_all`, and `combine_from` | one or many inputs to one result by disjoint append | molecule or `()` | Append order determines every input mapping; preservation and ordering are contractual. |
+| `meet_pushout` | two inputs to one result with possible identification | molecule; `tracked_meet_pushout` also returns `MoleculePushoutCorrespondence` | The two nontrivial input-to-result correspondences remain explicit. |
+| `split` | one source to several simultaneous component results | components; `tracked_split` pairs each with a source-to-component correspondence | The collection supplies component identity. |
+| `Fragment::attach` and fragment `Add` | two fragment bodies to one result body by append | fragment only; the internal `combine` correspondence is discarded | Append law; no witness-bearing form and no extra created-id return. `finish` alone is identity. |
+| `React` for `Molecule` and `[Molecule]` | one or many reactants to alternative sets of product components | component molecules only | Keep the convenience operation product-only. Callers needing transport compose the explicit combine, reaction-application, and split operations. |
+
+An operation witness explains the source-to-result entity pairing so callers
+can follow atom provenance through a sequence of operations. It is not an
+audit trace and does not promise operational persistence through every
+internal removal and addition. The operation constructs its atom
+correspondence; internal remove/add mechanics alone do not determine the
+pairing. Incidence-based induction of bonds and overlays may pair equivalent
+entities across an internal remove/add sequence. Stereo entities with equal
+kinds remain matchable; two different determined kinds identify different
+entities and must remain unmatched, producing removal plus addition. An
+undetermined kind retains the existing compatibility behavior. That is consistent with this
+contract and is not a defect requiring an action journal.
+
+### Reaction application
+
+This document subsumes doc
+[204](204-reaction-application-redesign-2026-08-19.md). `ReactionDerivation`
+is removed. It stores the same side pair and correspondence already
+representable as a `Reaction` or `ReactionSpan`, while retaining neither the
+originating reaction nor the rule-to-host match needed for a complete
+application record. Its exact rhs frame does not justify another semantic
+reaction type, and its unconstrained `chain` operation does not check that the
+independently supplied intermediate sides agree.
+
+Reaction application instead exposes the useful results directly. A
+successful application may be requested as:
+
+- the product molecule alone;
+- the product and its covariant host-to-product
+  `MoleculeCorrespondence`;
+- the realized `Reaction`; or
+- the realized `ReactionSpan`.
+
+These are methods on `Reaction`, with the following names:
+
+| Primary result | Supplied match | Iterate over matches |
+| --- | --- | --- |
+| Product molecule | `apply_at` | `apply` |
+| Product and correspondence | `tracked_apply_at` | `tracked_apply` |
+| Realized reaction | `apply_at_to_reaction` | `apply_to_reaction` |
+| Realized reaction span | `apply_at_to_reaction_span` | `apply_to_reaction_span` |
+
+All four supplied-match methods return `Result<Option<T>, ApplyError>`,
+where `T` is the selected primary result. `Ok(Some(T))` means applied;
+`Ok(None)` means this match is inapplicable because of dangling incidence
+or a structural conflict; `Err` means execution failed. The correspondence
+form uses `(Molecule, MoleculeCorrespondence)` for `T`. The reaction and
+span forms use their primary objects directly. Rejection diagnostics are
+not retained as errors; application returns `None` at the rejecting branch.
+Iterators skip `None` and yield an execution error once before terminating,
+without inspecting error variants. Iterator items are `Result<T, ApplyError>`
+for the selected primary result, without an `Option` layer or a
+replacement result wrapper for `ReactionDerivation`. Rust and Python expose
+the same names and result shapes. The `React` trait methods remain separate,
+providing the product-component convenience workflow.
+
+The graph-core surface supports the same distinctions rather than supplying
+one universal answer. Graph additions return their new ids; tracked removals
+return `GraphCompaction`; tracked pushout returns both input-to-object
+coprojections; and
+subdivision has an operation-specific result because source edges become
+different result entities. Conversely, the `PushoutComplement::context` arrow
+is context-to-host because that is its categorical meaning. It is not a
+covariant host-to-context mutation witness and should not determine the public
+molecule-operation direction.
+
+### Multiple inputs and outputs
+
+The single-pair aggregate types are insufficient by themselves when an
+operation changes object arity.
+
+The public representation retains the operation's individual
+correspondences rather than flatten every object into one tagged carrier when
+the mappings are nontrivial. `combine`, `combine_all`, and `combine_from` are
+deterministic append layouts, so input counts and ordering recover every
+input-to-result mapping without returning a carrier. `meet_pushout` is
+different: overlapping input entities may be identified, so its
+witness-bearing result retains the distinct left-to-result and right-to-result
+correspondences.
+
+For `split`, each output component can carry its own source-to-component
+correspondence. The result collection identifies the component, so the entity
+ids do not need to contain a component tag. Considering all correspondences together
+distinguishes an entity routed to another component from an entity absent from
+every result.
+
+This leaves no present need for a universal multi-object witness type. A
+future operation requiring a flattened view can add one from demonstrated
+composition requirements rather than making every current operation expose
+tagged ids.
+
+### Composition across carrier types
+
+Composition preserves covariant direction while allowing the strongest
+operational carrier at each step. For example, tracked editor removal returns
+a compact `MoleculeCompaction` even when it is later composed with a general
+edit.
+
+The general composition vocabulary is correspondence. A compaction carries
+its pre-state counts and can therefore be lowered losslessly: enumerate its
+survivors as matched pairs, use removed ids as the unmatched left side, and
+set the right count to the survivor count. A semantic remapping can be lowered
+directly to a total correspondence with equal carrier counts.
+Primitive append information can be lowered from the preservation law and the
+pre- and post-state counts: existing ids map identically and created ids are
+right-unmatched. Composition may then return the general correspondence even
+when its inputs were specialized carriers or did not allocate a witness at
+their direct API boundary.
+
+Multiple-object composition reconstructs append mappings from the input
+layout, then composes the individual correspondences through the shared
+object. A caller that needs end-to-end transport across combination, reaction
+application, and splitting performs those explicit operations and composes
+their mappings. `React` does not expose that richer result. A pushout retains
+its distinct input-to-object correspondences through later composition; it is
+not collapsed into a relation that permits arbitrary many-to-many
+"identity".
+
+Subtype-to-correspondence conversion follows the information carried by each
+type. `MoleculeRemapping` enforces its bijection contract, so lowering it is
+infallible and context-free through `From<&MoleculeRemapping> for
+MoleculeCorrespondence` is the idiomatic baseline. An owned `From` is added
+only if an owned call site needs it.
+
+The inverse narrowing is not exposed. Remapping consumers and canonicalization
+use `MoleculeRemapping` directly.
+
+`Compaction<Id>` is a complete witness between two finite dense id spaces. It
+stores the source count and the sorted, deduplicated removed ids; the result
+count is the source count minus the number removed. Its construction surface
+is:
+
+```rust
+pub enum CompactionError<Id> {
+    RemovedIdOutOfRange { id: Id, source_count: usize },
+}
+
+pub fn new(
+    source_count: usize,
+    removed: Vec<Id>,
+) -> Result<Compaction<Id>, CompactionError<Id>>;
+
+pub fn identity(source_count: usize) -> Compaction<Id>;
+pub fn source_count(&self) -> usize;
+pub fn result_count(&self) -> usize;
+```
+
+`new` rejects a removed id outside `0..source_count`; input order and repeated
+removed ids do not matter. There is no separate asserted public constructor:
+operation producers already know their source counts and handle an impossible
+construction error internally. `identity(source_count)` declares identity on
+a known domain. `empty()` is the distinct zero-source, zero-result compaction,
+not a context-free identity for an arbitrary domain.
+
+Compaction consumers respect these declared bounds. `compact` returns `None`
+for a removed or out-of-source-range id. `uncompact` asserts that its input
+is below `result_count`; `try_uncompact` returns `None` otherwise.
+`compact_vec` requires exactly `source_count` input elements and asserts
+that condition; `try_compact_vec` returns `None` on a length mismatch.
+
+The aggregate constructors accept already-valid components and are
+infallible. `GraphCompaction::new` takes the node and edge `Compaction`
+values, while `MoleculeCompaction::new` takes the graph aggregate and the six
+typed overlay compactions. Validation is not repeated in aggregate-specific
+error types. Graph, relation-set, and molecule-editor removal producers all
+know the pre-removal table sizes required to construct these components.
+
+Lowering is consequently context-free and infallible:
+`From<&Compaction<Id>> for Correspondence<Id>`,
+`From<&GraphCompaction> for GraphCorrespondence`, and
+`From<&MoleculeCompaction> for MoleculeCorrespondence`. Each component
+correspondence uses the stored source count as its left count, the derived
+result count as its right count, and maps every survivor to its compacted id.
+Owned `From` implementations are added only if an owned call site needs them.
+
+No conversion from a list of added entities is needed. `MoleculeCorrespondence`
+is an open carrier, and callers can construct the append correspondence
+directly from the known counts and allocation order.
+
+Composition remains an operation on correspondences rather than accepting a
+generic conversion argument. Specialized witnesses are lowered explicitly,
+then `MoleculeCorrespondence::compose(&self, next: &MoleculeCorrespondence)`
+returns `Result<MoleculeCorrespondence, _>`. It verifies, for every entity
+kind, that `self`'s right count equals `next`'s left count. Equal counts cannot
+prove that the two open carriers refer to the same intermediate molecule;
+that provenance is intentionally not represented.
+
+The generic `Correspondence<Id>::compose` enforces the same intermediate-count
+condition. `compose_all` returns `Result<Option<Self>, _>`: `None` denotes an
+empty input, while `Err` denotes incompatible consecutive carriers. An
+`Into<&MoleculeCorrespondence>` argument cannot represent conversions that
+materialize a new value, while `Into<MoleculeCorrespondence>` would hide the
+allocation performed by lowering. The non-semantic `IdRemapping` consumers
+were replaced by the transport carriers described above; exact composition error
+variants are implementation details within the settled count-agreement
+contract.
+
+### API direction
+
+An operation must not leave id behavior implicit. Identity and append
+operations state their layouts as contracts. General mutations expose a
+witness only when the mapping cannot be recovered from the operation and the
+pre- and post-state shapes.
+
+The bare method returns no optional provenance. Its companion uses the
+`tracked_` prefix regardless of whether the returned carrier is a compaction,
+correspondence, remapping, or categorical mapping. `try_` remains outermost in
+checked companions such as `try_tracked_remove` and `try_tracked_build`. The
+return type identifies the carrier without repeating it in a long suffix.
+
+This rule governs optional operation tracking. It does not rename established
+operation-family forms whose additional result is intrinsic to that form:
+canonicalization remains `canonicalize_with_remapping`, and frame transport
+remains `reframe_with_action`. The normative naming rule is recorded in the
+nomenclature guide.
+
+`split` returns component molecules; `tracked_split` returns each
+component paired with its covariant source-to-component correspondence.
+Transaction `tracked_rollback` returns the inverse witness while
+plain `rollback` retains its ordinary result.
+
+The molecule pushout pair is:
+
+```rust
+meet_pushout(...) -> Option<Molecule>
+tracked_meet_pushout(...)
+    -> Option<(Molecule, MoleculePushoutCorrespondence)>
+```
+
+`MoleculePushoutCorrespondence` contains named `left` and `right`
+`MoleculeCorrespondence` components, each directed from its input to the
+result. Their right counts agree for all eight entity kinds. It contains no
+molecule and replaces the existing `MoleculePushout` result container. The
+two component correspondences can each be composed with a subsequent
+result-to-result correspondence.
+
+The same naming and output/witness separation applies across graph-core and
+graph-IR. Graph pushout uses `GraphPushoutCorrespondence`; relation-set
+pushout uses `RelationPushoutCorrespondence`. Their bare methods return the
+graph or relation set, and `tracked_pushout` returns the output
+paired with the two input-to-result correspondences. Graph pullback uses
+`PullbackCorrespondence`, and graph pushout complement uses
+`PushoutComplementCorrespondence`, through `tracked_pullback` and
+`tracked_pushout_complement`; their bare counterparts return only the object.
+Relation-set pullback uses `RelationPullbackCorrespondence` with the same method pair. Their categorical directions are preserved:
+pullback `left` and `right` map the result to the inputs; complement `context`
+maps context to host and `interface` maps interface to context. These
+categorical correspondences are not reinterpreted as covariant mutation
+witnesses. Graph removals use `tracked_remove_cascading` and `try_tracked_remove`.
+
+Chemistry-layer operation API policy in `umol-graph` is settled separately.
+This work adapts its callers of changed graph-core and graph-IR APIs without
+adding chemistry-operation witness variants. The transformer audit above is
+context for that later work, not an instruction to implement those variants.
+
+Identity operations, append-only operations, caller-supplied remapping,
+resolver operations, and the `React` convenience API have no witness-bearing
+variant. In particular, `combine`, `combine_all`, `combine_from`, fragment
+assembly, aromaticity perception, aromatization, hydrogen unfolding, and
+Kekulization return no transport data beyond primitive ids needed to continue
+construction. Their id behavior is contractual and caller-computable.
+
+A blanket witness method on `Transformer` is not justified. A structural
+transformer may gain an operation-specific pair only when it has nontrivial
+transport that callers need.
+
+**Laws.**
+
+- Output equivalence: for identical inputs, bare and witness-bearing variants
+  have the same success/failure semantics and produce the same ordinary
+  output. Discarding the witness recovers the bare result; mutating variants
+  also leave the same resulting state, and iterators yield corresponding
+  outputs in the same order. The bare implementation need not allocate and
+  discard a witness to satisfy this law.
+- Composition: the witness of a sequence of mutations is the composition of
+  the step witnesses; the editor's session correspondence equals the
+  composition of its piecewise witnesses.
+- Inversion: rollback's witness is the inverse partial bijection; entities
+  created by the rolled-back mutation are absent from it.
+- Identity: an attribute-only mutation yields the identity correspondence,
+  so consumers need no moved-or-not case split.
+
+**Python parity and shape.** Python mirrors the resulting high-level Rust
+surface: `MoleculeCompaction`, correspondence and remapping carriers, and the
+applicable bare/tracked pairs. The
+scikit-learn keyword shape
+(`with_correspondence=True` selecting a richer return) was considered and
+rejected: a flag-dependent return type needs `Literal` overloads to type
+precisely and degrades to a union under a runtime flag, while method pairs
+type exactly — decisive for a surface that maintains a signature inventory.
+Canonicalization uses the remapping-bearing name and return type in both
+languages. Python exposes frozen `Remapping`
+values constructed from image lists, and frozen `MoleculeRemapping` values
+constructed from eight remapping components named `atoms`, `bonds`, and the
+six overlay kinds. It does not expose `GraphRemapping`. Python mirrors the accepted
+high-level method pairs and `(output, witness)` shapes. Graph-core carriers,
+`MoleculePushoutCorrespondence`, and `meet_pushout` remain Rust-only. No
+return-type-changing witness flag is introduced.
+
+## Related work
+
+- Doc [204](204-reaction-application-redesign-2026-08-19.md) is superseded by
+  this document. Its diagnosis of `ReactionDerivation` and reaction
+  application result requirements is incorporated above.
+- Doc [212](212-remapping-layer-2026-08-26.md): the id-transport
+  foundation is complete. It introduced the dense carriers; this document
+  completed their bijection contract, retired `IdRemapping`, and added
+  cross-carrier composition and operation-produced correspondences.
+
+## Boundaries
+
+- No stable ids, bound references, or identity infrastructure.
+- Participant-frame positions are outside the witness: correspondences move
+  entity ids, and frame-action transport remains the reframe and
+  canonicalization machinery's concern.
+- No unconditional witness returns on the plain operations.
+- No witness-bearing variants for operations whose identity behavior is fully
+  expressed by an identity or append-preservation law.
+- No generic id-map carrier selected merely because a consumer needs indexed
+  transport; the producer must establish correspondence, compaction, or
+  remapping semantics.
+- No universal multi-object carrier without a demonstrated operation that
+  cannot be represented clearly by an operation-specific collection of
+  correspondences.
+- No editor API redesign beyond the witness-bearing variants and bindings.
+
+## Implemented scope
+
+- Correspondence composition and consuming right-domain updates support
+  efficient provenance accumulation across remapping, compaction, and general
+  mutation steps.
+- Remappings enforce dense bijections; compactions retain complete source
+  counts; both widen to correspondences without contextual molecule data.
+- Non-bijective transport uses correspondence directly, while canonicalization
+  and explicit renumbering use remapping.
+- Graph-core and graph-IR expose the settled bare/tracked operation pairs;
+  editor sessions and transactions accumulate and return provenance without
+  cloning molecular payloads.
+- Reaction application exposes products, tracked products, realized reactions,
+  and realized spans directly. Rust and Python no longer expose
+  `ReactionDerivation`.
+- Python exposes the accepted high-level carriers and operation pairs, with
+  graph-core and molecule pushout carriers deliberately left Rust-only.
+
+## Implementation plan
+
+All stages begin unchecked. Each subitem includes its focused tests, rustdoc,
+and affected caller updates. An additive item keeps the tree green; a
+breaking item may be red during editing but includes the migrations needed
+to restore it. Every stage ends green. Public names and semantics above are
+the contract; stop if implementation requires a new public abstraction or a
+different failure or construction boundary.
+
+Python compile adaptations accompany the Rust change that requires them;
+the later Python stage completes exposure and behavioral parity. Changes in
+umol-graph and umol-io are limited to adapting consumers. No mutating git
+operations are part of this plan.
+
+The remaining order follows the transport dependencies. First separate edit
+handle resolution from molecular correspondence, then migrate constraint
+transport and its callers together. Do not introduce an adapter between
+`IdRemapping` and correspondence to preserve the old constraint API.
+Strict remapping construction follows the four non-bijective producer fixes;
+it does not depend on compaction. True constraint renumbering uses the
+approved remapping-to-correspondence conversion once that conversion exists.
+Completed S0/S1a/S1b items retain their identifiers. Dependencies below name
+prerequisites, not merely the preceding item in the chosen execution order.
+
+### S0 — Regression cases and measurement baseline
+
+- [x] **S0a — Transport regressions.** Graph-core relation/rewriting tests and
+  graph-IR molecule/reaction-span tests. Additive (green). [dep: none]
+  Retain focused cases for combination offsets, split into multiple
+  components, partial-overlap pushout, and RHS-to-union transport. Check
+  complete output and expected pairings, including stereo participants and
+  constraint references. Distinguish these valid operations from constructor
+  fixtures that currently permit non-bijective remappings. Do not alter the
+  constructor yet.
+  Completed 2026-09-04: full-output and correspondence assertions cover
+  combination offsets, a split with stereo and constraints in the later
+  component, partial-overlap graph/molecule pushout, and reaction-span
+  superimposition. Relation transport uses the injection produced by a
+  partial-overlap pushout, checking participant order and payload retention.
+  Production code and non-bijective constructor fixtures remain unchanged.
+  Verification: `cargo test -p umol-graph-core -p umol-graph-ir --lib --no-fail-fast`
+  passed (756 core, 6,555 IR; 3 ignored); `cargo +nightly fmt --all --check`
+  and `git diff --check` passed.
+- [x] **S0b — Operation benchmarks.** Existing graph-core `algorithms` and
+  graph-IR `reaction`/`canonicalize` benchmark targets. Additive (green).
+  [dep: S0a] Add focused removal, edit-batch, combination, split, and pushout
+  measurements beside the existing reaction application and renumbering
+  measurements. Keep setup outside timing, record input sizes and selected
+  algorithms, and save a Criterion baseline before implementation. Later
+  add witnessed variants on the same cases. These fixtures supply regression
+  evidence, not claims about production scale.
+  Completed 2026-09-04: added 14 operation cases and saved `mutation-s0`
+  across 30 cases, including existing reaction and renumbering measurements.
+  S0 gates passed: core/IR library, integration, and doc tests (7,404 passed,
+  6 ignored); property targets with `PROPTEST_CASES=256` (483 passed,
+  1 ignored); `cargo check --workspace` with Python 3.13.15 activated;
+  `cargo +nightly fmt --all --check`; and `git diff --check`.
+
+#### S0 benchmark fixtures
+
+The new `graph_mutation` and `molecule_mutation` groups use paths of 8 and
+64 nodes/atoms with 7 and 63 bonds. Removal deletes the middle node/atom
+and its two incident bonds. The three-edit batch removes the last carbon,
+adds oxygen, and bonds it to the preceding carbon. Combination concatenates
+two equal-sized paths; pushout identifies one endpoint of each, producing
+15/127 atoms and 14/126 bonds. Split starts with 8/64 atoms in two equal
+paths (6/62 bonds). These inputs have no overlays or constraints.
+
+Fixture construction, edit-batch cloning, and mutable input preparation are
+outside timing. Removal measures the graph/editor mutation and returned
+compaction, without publishing a molecule. `Molecule::apply` includes its
+editor construction, checked application, and publication. The other cases
+measure the complete existing operation, including any witness it currently
+returns. Future bare/witnessed variants must use these same inputs.
+
+The retained `reaction` group uses its existing six-atom/six-bond aromatic
+application case and five-atom reaction-span reversal fixture. Matching
+selects GraphAndOverlays, VF2, and Vismara. New mutation cases expose no
+algorithm choice; molecule splitting uses union-find. The retained
+`canonicalize/remapping` group measures supplied reverse renumberings over
+its thirteen existing cases, including stereo, overlays, and constraints; it does
+not run canonical labeling. Its benchmark ids record all eight entity counts.
+
+Baseline recorded on 2026-09-04, macOS arm64, Rust 1.96.0, optimized bench
+profile with debug information. Criterion used 30 samples, one second of
+warmup, and two seconds of measurement per case. The three targets ran
+sequentially after builds and verification finished. Saved estimates and
+samples are under `/Users/dr/.cargo-target/criterion`, in each case's
+`mutation-s0` directory. This local artifact is not tracked; the commands
+below recreate it. Point estimates in microseconds:
+
+| Operation | 8 atoms/nodes | 64 atoms/nodes |
+| --- | ---: | ---: |
+| Graph removal | 0.220 | 1.083 |
+| Graph pushout | 2.146 | 21.152 |
+| Molecule editor removal | 1.516 | 6.017 |
+| Molecule three-edit application | 2.725 | 12.282 |
+| Molecule combination | 2.711 | 19.330 |
+| Molecule split | 4.646 | 51.909 |
+| Molecule pushout | 7.810 | 67.701 |
+
+The existing reaction case measured 1.695 µs for matching, 4.321 µs for
+matched application, and 13.756 µs for reversal.
+Retained renumbering estimates range from 2.032 to 15.612 µs; the eight-atom
+overlay-heavy case measured 7.849 µs. Individual estimates (µs):
+
+| Renumbering case | Time |
+| --- | ---: |
+| Ordinary naphthalene | 3.369 |
+| Disconnected rings | 3.519 |
+| Overlay-heavy | 7.849 |
+| Tetrahedral stereo | 3.457 |
+| Cis/trans stereo bond | 3.651 |
+| Mixed atom and bond stereo | 5.489 |
+| Frame-relative stereo constraint | 3.625 |
+| Meso dichlorobutane | 4.528 |
+| Para-stereo trichloropentane | 5.538 |
+| Para-stereo cascade | 15.612 |
+| Feature-free connected | 3.247 |
+| Feature-free disconnected | 3.198 |
+| Symmetry-heavy radicals | 2.032 |
+
+```sh
+cargo bench -p umol-graph-core --bench algorithms -- graph_mutation --save-baseline mutation-s0 --warm-up-time 1 --measurement-time 2 --sample-size 30
+cargo bench -p umol-graph-ir --bench reaction -- --save-baseline mutation-s0 --warm-up-time 1 --measurement-time 2 --sample-size 30
+cargo bench -p umol-graph-ir --bench canonicalize -- canonicalize/remapping --save-baseline mutation-s0 --warm-up-time 1 --measurement-time 2 --sample-size 30
+```
+
+For later comparisons, replace `--save-baseline mutation-s0` with
+`--baseline mutation-s0`; do not overwrite the baseline after changing the
+implementation. These are bounded regression measurements, not corpus-scale
+estimates.
+
+### S1 — Correspondence composition and transport
+
+- [x] **S1a — Composition.** Graph-core and graph-IR correspondence modules.
+  Breaking (red→green). [dep: S0a] Make single-space, graph, and molecule
+  composition check intermediate counts. Migrate every caller, including
+  rewriting and reaction composition; retain errors only at public boundaries
+  where independently supplied counts can disagree. Implement the settled
+  `compose_all` empty-input contract. Test exact count mismatches, identity,
+  associativity on compatible carriers, and unmatched entities through a
+  sequence. Preserve the prohibition on object-identity checks.
+  Completed 2026-09-04. All three correspondence layers now return `Result`
+  from `compose`, and `Result<Option<Self>, _>` from `compose_all`.
+  Constructors, conversions, and open-carrier status are unchanged; count
+  agreement is checked at composition, not construction. New public errors:
+  `CorrespondenceComposeError` carries both intermediate counts;
+  `GraphCorrespondenceComposeError` identifies nodes or edges;
+  `MoleculeCorrespondenceComposeError` carries the entity kind and count error.
+  `Graph::pullback` and the temporarily retained `ReactionDerivation::chain`
+  expose these errors. `pushout_complement` retains `Option`, rejecting
+  incompatible intermediate/host counts; reaction composition retains its
+  existing surface because its applications share a producer-established host.
+  Python composition/chaining raises `ValueError` for count mismatches.
+  Identity and associativity properties use compatible carriers; exact tests
+  cover both count directions, empty carriers, every aggregate component,
+  and mismatches after an initially compatible composition.
+  Verification: core/IR unit tests (7,329 passed, 3 ignored), properties with
+  `PROPTEST_CASES=256` (483 passed, 1 ignored), Python-binding Rust tests
+  (1,634 passed, 2 ignored), rebuilt-extension molecule/reaction pytest
+  (178 passed, 2 skipped), workspace all-targets check, core/IR all-targets
+  clippy with `-D warnings`, nightly formatting, and `git diff --check` passed.
+- [x] **S1b — Graph participant transport.** Graph-core relation participants
+  and all five relation-set families. Additive (green). [dep: S1a]
+  Add `map`/`try_map` using `GraphCorrespondence`; share traversal with
+  remapping transport. Test covered subsets, missing images, atom/edge
+  factors, nonidentity mappings, preserved row order, and positional payloads.
+  Completed 2026-09-04. `RelationParticipant` and all five relation-set families
+  expose `map`/`try_map` over `GraphCorrespondence`. Mapping requires images
+  only for referenced ids, preserves rows/frames/payloads, and rebuilds
+  incidence indexes. Mapping and remapping share private participant traversal;
+  constructors and public remapping contracts are unchanged. The existing
+  `StereoLigand` trait implementation was adapted, including virtual anchors;
+  inherent molecular reference transport remains S1d.
+  Exact tests cover partial coverage, missing/out-of-range references in both
+  factors, asserted failures, identity, inverse, composition, and incidence.
+  Generated permutation cases check composition, inverse, and remapping parity
+  for all five families. Verification: core/IR unit tests (7,377 passed,
+  3 ignored), relation properties with `PROPTEST_CASES=256` (10 passed),
+  workspace all-targets check with Python 3.13.15 activated, core/IR all-targets
+  clippy with `-D warnings`, nightly formatting, and `git diff --check` passed.
+- [x] **S1c — Edit handle resolution.** Graph-IR `ConstraintEdit` construction
+  and resolution. Internal rewiring (green). [dep: S0a]
+  Remove this consumer of `IdRemapping` before changing constraint transport.
+  Resolve the existing per-kind handle indices as an edit operation, using the
+  existing edit-local entity traversal rather than manufacturing a molecular
+  witness. Preserve handle interning, kind checks, resolution failures, and
+  nested constraints. Test all entity kinds and repeated handle references.
+  No new public lookup abstraction or witness API is part of this item.
+  Completed: resolution uses the existing edit-local entity traversal and a
+  `HashMap<Entity, Entity>` containing only the distinct references in the
+  constraint. Public signatures and resolution errors are unchanged.
+  Exact tests cover all eight entity kinds, repeated references, nested
+  constraints, subsets, and each resolver's failure. Verification: 32 focused
+  constraint-edit tests and 6,580 graph-IR library tests passed (3 ignored);
+  graph test-target checks with `proptest`, nightly formatting, and
+  `git diff --check` passed.
+- [x] **S1d — Ligand and entity-set transport.** Graph-IR ligand and
+  entity-set methods. Additive (green). [dep: S1b]
+  Add correspondence-based `map`/`try_map` with the accepted coverage
+  contract, using the graph-core participant transport already implemented.
+  Test atom/bond references, virtual ligand anchors, preserved entity rows,
+  payloads, and frames. An unmapped reference must fail rather than disappear.
+  Keep frame transport distinct from id transport.
+  Completed: `StereoLigand` and all twelve ordinary/span entity-set wrappers
+  expose `map`/`try_map` over `GraphCorrespondence`, delegating to existing
+  graph-core transport. Constructors and remapping methods are unchanged.
+  Exact tests cover nonidentity mappings, unmatched unused ids, missing
+  participant images, virtual anchors, atom/bond sites, positional payloads,
+  span attributes, row/frame preservation, and asserted failures.
+  Verification: graph-IR library tests (6,659 passed, 3 ignored), graph-IR
+  all-targets clippy with `-D warnings`, graph/IO all-targets checks, nightly
+  formatting, and `git diff --check` passed.
+- [x] **S1e — Constraint transport and legacy removal.** Graph-IR constraint,
+  molecule, reaction-span, correspondence, and delta modules. Breaking
+  (red→green). [dep: S1c, S1d]
+  Replace sparse `IdRemapping` constraint transport with correspondence-based
+  `map`/`try_map`. Migrate every live caller in this same item: pushout uses
+  its existing correspondence; span union/side assignments use explicit
+  source/result counts; molecule/span renumbering uses its already-supplied
+  correspondence. Check coverage only for references actually transported,
+  including every entity kind, nested constraints, and optional subsets;
+  preserve predicates and frame positions. Do not retain the old constraint
+  signature through a shim or a second traversal.
+  Remove the unused `remap_delta` and its orphaned tests, both
+  correspondence-to-remapping conversions, and `IdRemapping` after its last
+  caller is migrated. Remove value-only no-op transport methods where they
+  exist solely for that legacy traversal. Keep the current public molecule/
+  span renumbering signatures until S2b. Verify live edit, projection,
+  superimposition, pushout, and renumbering tests and absence of retired names.
+  Completed: `Constraint`, `MoleculeConstraint`, and `RelationalConstraint`
+  expose correspondence-based `map`/`try_map`; value-only constraint payloads
+  are preserved directly. Combination and pushout reuse their correspondences;
+  span transport declares the relevant id-space counts. Side projection still
+  assigns absent entities beyond the valid side prefix, preserving integrity
+  diagnostics; that internal assignment permutes the full union-sized domain,
+  not the selected molecule's domain.
+  Removed `IdRemapping`, both narrowing conversions, the unused delta helper
+  and its tests, and orphaned no-op/offset helpers. The composition identity
+  property now checks correspondence images directly without changing its law.
+  Live guides are synchronized. Verification: core/IR library tests (7,471
+  passed, 3 ignored), graph/IO library tests (4,297 passed), core/IR properties
+  with `PROPTEST_CASES=256` (487 passed, 1 ignored), workspace all-targets
+  check with Python 3.13.15, core/IR all-targets clippy with `-D warnings`,
+  nightly formatting, and `git diff --check` passed.
+- [x] **S1f — Four graph transport producer migrations.** Graph-IR molecule combination,
+  split, pushout, and reaction-span superimposition. Breaking internal
+  rewiring (red→green). [dep: S1d, S1e] Replace their non-bijective
+  `GraphRemapping` construction with the correspondences specified above.
+  Reuse the constraint correspondences established in S1e where applicable;
+  do not reconstruct a legacy sparse carrier.
+  Keep existing public return shapes until their dedicated stages. Use
+  actual source/result counts and the existing pushout correspondences;
+  split constructs a separate correspondence for each selected component.
+  Run S0a regressions and downstream composition/application/ingest tests.
+  Completed: combination and RHS-to-union participant transport use counted
+  graph correspondences; pushout passes its existing right correspondence to
+  overlay gluing. Split constructs separate source-to-component atom, bond,
+  graph, and molecule correspondences, using them for participants and
+  constraints. Its public result still reverses the molecule correspondence
+  to the existing component-to-source direction until S5a. Removed the
+  aggregate split remapping and duplicate local bond lookup. The four paths
+  no longer construct `GraphRemapping`; genuine renumbering is unchanged.
+  Added an exact interleaved-id split regression covering three components,
+  repeated component-local ids, constraint routing, and complete outputs.
+  S1 gates passed: core/IR library, integration, and doc tests (7,565 passed,
+  6 ignored); core/IR properties with `PROPTEST_CASES=256` (487 passed,
+  1 ignored), with both split properties rechecked after the final change;
+  graph/IO library tests (4,297 passed); explicit MOL/SDF/SMILES conformance
+  (12,689 passed); workspace all-targets check with Python 3.13.15;
+  core/IR all-targets clippy with `-D warnings`; nightly formatting; and
+  `git diff --check`.
+
+### S2 — Bijective remapping and renumbering
+
+- [x] **S2a — Strict remapping construction.** Graph-core remap and graph-IR
+  remap modules. Breaking (red→green). [dep: S1f]
+  Enforce dense bijective images, assemble graph/molecule aggregates from
+  validated components, and add infallible widening to correspondences.
+  Replace non-bijective lookup fixtures with valid permutations; retain
+  invalid images as exact constructor rejection cases. Migrate all remaining
+  constructors in the same item. The original four production regressions
+  must now pass with the permanent construction checks.
+  Completed 2026-09-04: construction checks images with a temporary typed
+  boolean vector and returns `RemappingError::ImageOutOfRange` or
+  `DuplicateImage`. Storage remains private; `len` and `is_empty` expose its
+  size. Aggregate constructors accept validated components. Borrowed `From`
+  conversions widen single-space, graph, and molecule remappings to
+  correspondences; no owned conversion or inverse narrowing was added.
+  Constructor callers and fixtures are migrated, including the pushout
+  transport test's direct use of its correspondence. Exact rejection and
+  widening cases pass, as does a sorted-reference check of all 701 image
+  vectors of lengths zero through four with images in `0..=length`.
+  Core/IR library tests passed (7,499 passed, 3 ignored), including the four
+  production regressions; core/IR properties with `PROPTEST_CASES=256`
+  (487 passed, 1 ignored); graph/IO library tests (4,297 passed); workspace
+  all-targets check with Python 3.13.15; core/IR all-targets clippy with
+  `-D warnings`; nightly formatting; and `git diff --check`.
+  Molecule/span operation signatures and canonicalization remain for S2b.
+- [x] **S2b — Molecule/span renumbering and canonicalization.** Graph-IR
+  molecule remap, constraints, reaction span, canonicalization, traits, and
+  dependent bindings. Breaking (red→green). [dep: S2a, S1e]
+  Accept `MoleculeRemapping` in renumbering and `framed_eq_under`, and return
+  it from `canonicalize_with_remapping`. Canonicalization constructs it
+  directly. Route genuine constraint renumbering through the approved
+  remapping-to-correspondence conversion and S1e's traversal, not a new lookup
+  adapter. Migrate consumers, benchmarks, and tests together. Check exact
+  identity/inverse/composition, all-family reference transport, framed
+  equivalence, and equality of bare/witnessed canonical outputs.
+  Completed 2026-09-04: molecule/span renumbering and molecule framed
+  comparison accept `MoleculeRemapping`, checking all eight component counts.
+  Molecule, reaction, and span canonicalization construct and return dense
+  remappings directly; constraint transport widens to correspondence.
+  `Remapping::remap_vec` and `try_remap_vec` own vector transport without a
+  `Clone` bound. Python exposes the approved frozen `Remapping` and
+  `MoleculeRemapping` types and `canonicalize_with_remapping` methods.
+  Consumers, benchmarks, and normative documentation are migrated.
+  Inverse test references sort source/target pairs independently of
+  `remap_vec`; composition references apply the two image lookups directly.
+  Existing generated domains and exact assertions are preserved.
+  Core/IR library tests passed (7,527 passed, 3 ignored), as did integration
+  and doc tests. Core/IR properties passed with `PROPTEST_CASES=256`
+  (488 passed, 1 ignored), including the independent vector-remapping reference.
+  The corrected IR property suite and affected canonicalization unit test
+  were rerun successfully. Graph/IO library tests passed (4,297);
+  rebuilt Python tests passed (1,350 passed, 2 skipped, Python 3.13.15).
+  Workspace all-targets check and clippy, core/IR property-enabled clippy
+  with `-D warnings`, nightly formatting, and `git diff --check` passed.
+
+### S3 — Complete compaction carriers
+
+- [x] **S3a — Single-space and graph compaction.** Graph-core compact, graph,
+  and relation modules. Breaking (red→green). [dep: S0a, S1a]
+  Add checked source-count construction, declared-count identity, and count
+  accessors. Build graph aggregates from valid components; remove unbounded
+  empty/default identities. Migrate graph and relation producers, including
+  affected graph-IR construction sites, in this subitem. Add infallible
+  conversions to single-space and graph correspondences. Test out-of-range
+  removals, duplicate/order handling, empty and fully removed domains,
+  survivor ordering, and compact/uncompact roundtrips.
+  Include the dependent molecule component constructor and remove `relations`,
+  `empty`, and raw-vector construction. Migrate editor and transaction
+  producers with all eight pre-removal counts, preserving them through
+  `UndoCompaction`. These construction changes are required for S3a to compile.
+  Completed 2026-09-04: single-space compactions carry source counts, reject
+  out-of-range removals, and expose bounded compact/uncompact and vector
+  operations with the approved checked companions. Graph and molecule
+  aggregates accept validated components; unbounded defaults and molecule
+  `relations`/`empty` constructors are removed. Graph, relation-set, editor,
+  and transaction producers preserve pre-removal counts in every component.
+  Borrowed single-space and graph correspondence conversions preserve the
+  complete survivor pairings and both counts. Rollback checks all eight
+  result counts before inverse transport and reports `RollbackStateMismatch`
+  on disagreement. Tests state the error behavior without historical notes.
+  Core/IR library tests passed (7,572 passed, 3 ignored), plus integration
+  and doc tests. Core/IR properties passed at `PROPTEST_CASES=256`
+  (489 passed, 1 ignored), including independent survivor enumeration.
+  Graph/IO library tests passed (4,297); rebuilt Python tests passed
+  (1,350 passed, 2 skipped, Python 3.13.15). Workspace all-targets check,
+  core/IR property-enabled all-targets clippy with `-D warnings`, nightly
+  formatting, and `git diff --check` passed.
+- [x] **S3b — Molecule compaction.** Graph-IR compact, editor, transaction,
+  and constraint consumers. Breaking (red→green). [dep: S3a]
+  Add infallible molecule-correspondence conversion over the count-bearing
+  components introduced in S3a. Test cascaded removals and exact all-family pairings against
+  the source/result tables, plus existing rollback laws.
+  Completed 2026-09-04: borrowed `From<&MoleculeCompaction>` preserves all
+  eight source/result counts and survivor pairings. Six exact cases cover
+  distinct per-family compactions, cascading removal of either component,
+  empty input, identity, and full removal. Cascade cases compare the full
+  result molecule, including transported stereo references and electron vectors.
+  Core/IR library tests passed (7,578 passed, 3 ignored), plus integration
+  and doc tests. Core/IR properties passed at `PROPTEST_CASES=256`
+  (489 passed, 1 ignored), including existing rollback laws. Workspace
+  all-targets check passed with Python 3.13.15. Core/IR property-enabled
+  all-targets clippy with `-D warnings`, nightly formatting, and
+  `git diff --check` passed.
+
+### S4 — Graph-core output/witness separation
+
+Disposition (2026-09-04): optional witnesses use `tracked_<operation>`, with
+`try_` outermost for checked forms (`try_tracked_<operation>`). The signature
+identifies the witness carrier; this replaces the earlier `*_with_<witness_type>`
+naming. Pushout follows this distinction: `pushout` returns the object and
+`tracked_pushout` also returns its two mappings. Their mathematical role does
+not make them mandatory API output. Pullback and pushout complement follow
+the same object-only/tracked split, preserving their categorical mapping directions.
+
+- [x] **S4a — Removal and relation compaction.** Graph-core graph and relation
+  modules. Breaking (red→green). [dep: S3a]
+  Give graph `remove_cascading` and `try_remove` witness-free forms and
+  `tracked_remove_cascading` / `try_tracked_remove` companions. Give `compact`
+  on all five relation-set types output-only forms and `tracked_compact` companions.
+  Keep `remove_node_cascading` and `remove_edge_cascading` witness-free;
+  omit witnessed convenience variants for now. Callers needing their witness
+  use the general removal method; later convenience additions are non-breaking.
+  Preserve cascading versus dangling-condition behavior. Migrate editor and
+  rewriting callers that need the compaction. Test identical resulting
+  graphs/sets and failures for each pair, plus exact survivor images.
+  Completed 2026-09-04: graph removal and all five relation-set compaction
+  APIs have the specified plain/witnessed forms; single-node/edge conveniences
+  return no witness. Editor, rewriting, and benchmark callers retain the
+  compactions they consume. Tests compare full outputs and exact survivor
+  compactions, including empty/identity/full removal, cascades, dangling
+  rejection, and out-of-range panics. An independent survivor-enumeration
+  property covers multigraph removal and both method pairs.
+  Core/IR library tests passed (7,610 passed, 3 ignored), plus integration
+  and doc tests. Core/IR properties passed at `PROPTEST_CASES=256`
+  (490 passed, 1 ignored). Workspace all-targets check passed with Python
+  3.13.15. Core/IR property-enabled all-targets clippy with `-D warnings`,
+  nightly formatting, and `git diff --check` passed.
+
+- [x] **S4b — Pushout families.** Graph-core rewriting and relation modules.
+  Breaking (red→green). [dep: S1a, S1b]
+  Replace `Pushout` and `RelationPushout<S>` output containers with the
+  accepted graph and relation pushout correspondence types. Graph and all
+  five relation-set `pushout` methods return only the object;
+  `tracked_pushout` returns `(object, correspondence)`. Preserve existing
+  fallibility and identical results between the two forms.
+  Preserve named left/right mappings and their common result counts.
+  Migrate graph-IR gluing/composition callers. Test both input mappings and
+  the resulting object, including coincidences and plain/tracked equivalence.
+  Completed 2026-09-04: graph and all five relation-set tracked pushouts return
+  separate objects and `GraphPushoutCorrespondence` /
+  `RelationPushoutCorrespondence` carriers. Public left/right fields and
+  existing fallibility are preserved; no constructors were added. Object-only
+  glue consumers use `pushout`; consumers of the mappings use `tracked_pushout`.
+  Core exports and graph-IR consumers are migrated; molecule
+  pushout's public return remains for S5b. Exact tests cover both mappings,
+  result objects, explicit/implicit edge coincidences, relation payload
+  meets, and rejection. Core/IR library tests passed (7,612 passed,
+  3 ignored), plus integration and doc tests. Core/IR properties passed at
+  `PROPTEST_CASES=256` (490 passed, 1 ignored). Workspace all-targets check
+  passed with Python 3.13.15. Core/IR property-enabled all-targets clippy
+  with `-D warnings`, nightly formatting, and `git diff --check` passed.
+- Plain/tracked pushout adjustment (2026-09-04): both forms are now exposed;
+  plain methods currently project the tracked result rather than avoiding
+  mapping allocation. The method-pair revision passed core/IR library tests,
+  exact output/failure equivalence checks, workspace all-targets compilation,
+  and core/IR property-enabled all-targets clippy with `-D warnings`.
+- [x] **S4c — Pullback and pushout complement.** Graph-core rewriting and
+  relation modules.
+  Breaking (red→green). [dep: S1a]
+  Introduce the accepted `PullbackCorrespondence` and
+  `PushoutComplementCorrespondence` result separation. Graph `pullback` and
+  `pushout_complement` return only the object; `tracked_pullback` and
+  `tracked_pushout_complement` return `(object, correspondence)` with existing
+  fallibility. Replace `RelationPullback<S>` with `RelationPullbackCorrespondence`
+  and apply the same `pullback` / `tracked_pullback` split to all five
+  relation-set types. Preserve public mapping fields without adding constructors.
+  Preserve categorical directions and existing admissibility conditions.
+  Migrate reaction composition and rewriting tests; check the defining
+  commutative mappings, exact results, and plain/tracked output and failure
+  equivalence. Keep subdivision's distinct
+  graph representation and its cross-entity source accessors intact.
+  Completed 2026-09-04: graph pullback/complement and all five relation-set
+  pullbacks expose object-only and tracked forms. The three mapping carriers
+  retain public fields and add no constructors; old object-containing types
+  and exports are removed. No production callers of these core methods
+  required migration in the current tree. Tests verify exact results and
+  mapping counts/directions, graph composition identities, empty/disjoint
+  pullbacks, payload rejection, dangling rejection, and count mismatches.
+  Core/IR library tests passed (7,621 passed, 3 ignored), plus integration
+  and doc tests. Core/IR properties passed at `PROPTEST_CASES=256`
+  (490 passed, 1 ignored); downstream graph/IO library tests passed (4,297).
+  Workspace all-targets compilation passed with Python 3.13.15.
+  Core/IR property-enabled all-targets clippy with `-D warnings`, nightly
+  formatting, and `git diff --check` passed. Subdivision is unchanged.
+
+### S5 — Graph-IR molecule operation returns
+
+- [x] **S5a — Combination and split.** Graph-IR molecule and fragment callers.
+  Breaking (red→green). [dep: S1f]
+  Make `combine`, `combine_all`, and `combine_from` witness-free and state
+  append order; add no tracked companions because their mappings are
+  caller-computable. Split's component molecules are useful independently
+  of provenance, so its correspondence remains optional. Make split
+  return components, with `tracked_split` returning component/
+  source-to-component pairs. Migrate Rust/Python callers, including `React`
+  implementation plumbing. Test empty inputs, multiple components, all
+  entity families, component ordering, append layout, and exact output
+  equivalence. Keep chemistry-layer public signatures unchanged.
+  Completed: Rust/Python combination is witness-free; `tracked_split`
+  returns source-to-component correspondences with full source counts.
+  Fragment callers use append offsets, and `React` consumes plain results.
+  Exact fixtures cover interleaved components, constraints, stereo, all
+  eight entity families, and plain/tracked equality. Combination properties
+  construct independent offset correspondences to check reconstruction.
+  Core/IR library, integration, and doc tests passed; 490 properties passed
+  at 256 cases (1 ignored). Graph/IO library tests passed (4,297 tests).
+  Workspace all-targets check and core/IR property-enabled all-targets clippy
+  passed. Rebuilt Python extension: 1,350 tests passed, 2 skipped; final
+  molecule checks passed after count assertions were added. Nightly formatting
+  and `git diff --check` passed.
+- [x] **S5b — Molecule pushout.** Graph-IR molecule pushout and composition
+  callers. Breaking (red→green). [dep: S1f, S4b]
+  Replace `MoleculePushout` with object-only `meet_pushout` returning
+  `Option<Molecule>` and `tracked_meet_pushout` returning
+  `Option<(Molecule, MoleculePushoutCorrespondence)>`. As in S4b, mappings
+  are optional API output. Keep left/right correspondence access independent
+  of the molecule and preserve common result counts. Test overlay meets,
+  stereo frames, constraints, inadmissible input, exact mappings, and the
+  resulting molecule, including plain/tracked output equivalence.
+  Implemented: exported `MoleculePushoutCorrespondence` with public left/right
+  fields and no result molecule or constructors. Composition uses
+  `tracked_meet_pushout`; both method forms preserve attribute and constraint
+  behavior. Exact tests cover both forms, including empty and inadmissible
+  input; a disjoint-pushout property checks all eight mappings against append
+  layout. Benchmarks include both forms.
+  Also added the approved Rust/Python `MoleculeCorrespondence::empty()`:
+  all eight components have no pairs and zero left/right counts. Replaced
+  six fully empty constructions; nonzero-count correspondences stay explicit.
+  Verification passed: core/IR library, integration, and doc suites; 491
+  properties at 256 cases (1 ignored); 4,297 graph/IO library tests; 1,634
+  Python-binding Rust tests (2 ignored); and 1,358 Python tests (2 skipped)
+  after rebuilding the extension. Final workspace all-targets check,
+  core/IR/Python property-enabled all-targets clippy with `-D warnings`,
+  nightly formatting, and `git diff --check` passed.
+  Follow-up constructor cleanup: added zero-domain `empty()` to single-space,
+  graph, and molecule remapping/compaction types, plus declared-count identity
+  constructors for single-space and graph remappings. Existing remapping
+  defaults are unchanged; molecule-level identity constructors remain deferred.
+  Python mirrors the supported remapping constructors. Replaced equivalent
+  empty and identity constructions without changing nonzero domain counts.
+  Verification: 7,636 core/IR library tests passed (3 ignored), 491 properties
+  passed at 256 cases (1 ignored), and 1,370 Python tests passed (2 skipped)
+  after rebuilding. Workspace all-targets check, core/IR/Python all-targets
+  property-enabled clippy, nightly formatting, and diff checks passed.
+- [x] **S5c — Removal and extraction.** Graph-IR editor removal families and
+  molecule extraction. Breaking (red→green). [dep: S3b, S4a]
+  Compactions are optional provenance, not the primary result. Add
+  `tracked_remove`, `tracked_extract`, and `tracked_remove_*` for the six
+  existing bulk relation-family removals; make plain methods witness-free.
+  These family removals are not single-entity convenience wrappers: each
+  compacts its own entity table. Add no new single-entity convenience variants.
+  Extraction's supplied sub-to-host correspondence describes the selection,
+  not the actual host-to-result compaction across all eight families.
+  Preserve host order in extraction, cascading behavior, constraints, and
+  transaction use of removal. Test exact all-family compactions and equality
+  of resulting state across each method pair. Adapt callers rather than
+  adding hydrogen or other chemistry transformer variants.
+  Completed 2026-09-04: plain editor removals return unit; tracked topology
+  and six bulk overlay removals return full, count-bearing compactions.
+  `tracked_extract` returns the molecule and host-to-result compaction,
+  preserving host order independently of selection numbering. Edit and
+  transaction callers reuse the returned compactions instead of rebuilding
+  them; constraint snapshots and rollback behavior are preserved.
+  Exact tests cover all eight families, cascades, empty/identity cases,
+  repeated removal ids, invalid ids, and plain/tracked equality. Properties
+  retain the compaction/undo law and compare publication results, including
+  integrity errors for transient invalid stereo frames. Core/IR library
+  tests passed (7,700 passed, 3 ignored), plus integration and doc tests;
+  491 properties passed at 256 cases (1 ignored). Graph/IO library tests
+  passed (4,297 tests). Workspace all-targets check, core/IR property-enabled
+  all-targets clippy with `-D warnings`, nightly formatting, and diff checks
+  passed. Python exposure remains in S8a.
+
+### S6 — Editor and transaction correspondences
+
+- [x] **S6a — Editor session witness.** Graph-IR molecule editor.
+  Additive (green). [dep: S1a, S3b, S5c]
+  Track source-to-current pairings across direct additions, removals,
+  modifications, and restoration. Publication's primary result is a molecule;
+  session provenance is optional. Retain plain `snapshot`, `try_build`, and
+  `build`, and add `tracked_snapshot`, `try_tracked_build`, and
+  `tracked_build` using their existing publication and failure boundaries.
+  Snapshot is reusable; build consumes the editor, so these are distinct
+  publication operations. The correspondence may describe transient editor
+  id spaces; it does not require publication of an intermediate molecule.
+  Test multi-step sessions, all entity families, repeated snapshots, and
+  publication failures. Compare session pairings with composed operation pairings.
+  Accumulation uses the correspondence itself, not a retained source molecule
+  or separate accumulator type. Entity-id-sized storage is accepted; cloning
+  existing entity payloads for witness production is not. Consuming
+  `extend_right`, `compact_right`, and `uncompact_right` preserve the pair-vector
+  allocations. `Correspondence::identity(count)` initializes the single-space
+  carrier; existing constructors assemble aggregates. Graph extension takes
+  node/edge increments, molecule extension an entity kind and increment.
+  Count disagreement uses the existing composition errors. Inverse compaction
+  restores the target positions without recreating discarded pairs. Ordinary
+  `compose` remains borrowed. Atom/bond compaction adaptation copies only the
+  removed-id lists between graph and molecule id types.
+  Completed 2026-09-04: editor initialization, all eight addition families,
+  topology and bulk overlay removal, and undo application maintain the
+  session correspondence. Failed transactions restore the prior correspondence
+  after successful rollback. Plain snapshots avoid copying the witness;
+  tracked snapshots copy its id pairs, while consuming publication transfers
+  the vectors. No molecular payloads are retained or cloned for tracking.
+  Tests cover repeated snapshots, multi-step composition, all entity families,
+  attribute preservation, restoration, failed-transaction recovery, integrity
+  errors, and allocation transfer. Python exposure remains in S8a.
+  Verification: 7,780 core/IR library tests passed (3 ignored), plus integration
+  and doc tests; 369 graph-IR properties passed at 256 cases (1 ignored).
+  The carrier prerequisite also passed all 12 correspondence properties.
+  Exact tests cover each component, count failures, unmatched/restored ids,
+  and pair-vector allocation reuse. Workspace all-targets check, core/IR
+  property-enabled all-targets clippy with `-D warnings`, nightly formatting,
+  and diff checks passed.
+  A single-middle-removal benchmark over identity pair vectors measured
+  consuming compaction at about 0.23/3.2/50 microseconds for 256/4,096/65,536
+  pairs, versus borrowed composition with a prebuilt compaction correspondence
+  at 2.0/41/1,224 microseconds. Accumulator cloning is outside the consuming
+  measurement; these are carrier measurements, not editor timings.
+  The complete editor benchmark (initialize, remove a terminal atom, add its
+  replacement and bond, then tracked publication) measured about 2.5 and
+  11.6 microseconds on 8- and 64-atom paths, including integrity checking.
+- [x] **S6b — Batch application and transactions.** Graph-IR molecule apply,
+  editor transact/apply, and transaction rollback. Additive (green).
+  [dep: S6a] Correspondences are optional provenance. Add
+  `Molecule::tracked_apply`, editor `tracked_apply` and `tracked_transact`,
+  and transaction `tracked_rollback`. Retain the ordinary molecule, editor,
+  transaction, or unit output in the bare methods and preserve existing
+  fallibility. A transaction's undo journal is its primary rollback data,
+  not a substitute for an entity correspondence; `transact` remains naturally
+  transaction-returning without making it correspondence-returning.
+  Forward witnesses cover the particular operation; session witnesses cover
+  the editor's source. Rollback returns the inverse operation correspondence.
+  Preserve transaction append and rollback behavior. Test failures, appended
+  batches, add/remove sequences, atom provenance, inverse direction, and
+  bare/tracked output equivalence. Do not impose operational persistence on
+  induced non-atom pairings.
+
+  Implemented the four tracked methods without changing the bare methods or
+  transaction journal. Editor batches and rollback temporarily accumulate
+  operation-local correspondences, then compose them with the saved session
+  correspondence, including error paths. Accumulation stores ids, not source
+  entity payloads; intermediate editors need not be publishable molecules.
+  Tests cover all eight entity families, distinct batch/session origins,
+  add/remove sequences, publication errors, failed batches, appended rollback
+  inversion, and plain/tracked agreement on incompatible rollback receivers.
+
+  Verification: 7,787 core/IR library tests passed (3 ignored), plus
+  integration and doc tests. Core/IR property targets passed 126/370
+  properties at 256 cases (1 IR property ignored). Workspace all-targets
+  check, core/IR all-targets clippy with properties enabled and warnings
+  denied, nightly formatting, and diff checks passed.
+  The three-edit path batch removes the terminal atom, adds oxygen, and
+  bonds it to the preceding atom. At 8/64 atoms, molecule tracked apply
+  measured about 3.20/13.10 µs including editor initialization and publication;
+  editor tracked transact measured 3.97/11.80 µs excluding editor setup and
+  publication, including journal and witness production. Criterion used
+  10 samples with 1-second warmup and measurement.
+
+### S7 — Reaction application results
+
+- [x] **S7a — Application at a supplied match.** Graph-IR reaction application.
+  Breaking (red→green). [dep: S6b, S5b]
+  Implement the four accepted `apply_at` result forms. Product provenance is
+  optional: `apply_at` returns the product, and `tracked_apply_at` returns
+  product plus correspondence. `apply_at_to_reaction` and
+  `apply_at_to_reaction_span` return those primary objects directly; their
+  intrinsic side relationships are not optional witnesses. Add no tracked
+  companions to these two forms. A supplied rule-to-host match is not the
+  host-to-product witness. Keep host-to-product correspondence direction,
+  existing preconditions, and stereo/frame handling. All four supplied-match
+  forms use `Result<Option<T>, ApplyError>`; return `None` directly for
+  inapplicability and remove rejection classification from `ApplyError`.
+  Preserve same-kind stereo induction while excluding different determined
+  kinds. Migrate direct consumers
+  of the old derivation return. Test identical bare/tracked products and
+  failures, realized reaction/span consistency, and expected atom pairings.
+
+  Implemented the four supplied-match forms with the shared three-outcome
+  application path. Induction retains equal stereo kinds and excludes
+  conflicting determined kinds for both stereo atoms and bonds. Direct
+  composition and test consumers use product/correspondence results;
+  the existing iterator still wraps successful results in
+  `ReactionDerivation` until S7b. No new return-container type was added.
+  Exact tests cover same-kind matching, geometry replacement, undetermined
+  kinds, host-to-product atom provenance, empty successful products,
+  inapplicable matches, and execution errors. Generated tests check result
+  agreement, reaction/span reconstruction, canonicalization, and iterator
+  skip/termination behavior.
+  Verification: 6,827 IR library tests passed (3 ignored), plus integration
+  and doc tests; all 371 IR properties passed at 256 cases (1 ignored).
+  Workspace all-targets check and IR all-targets clippy with properties
+  enabled and warnings denied passed. The 183 reaction-related Rust binding
+  tests passed (2 ignored); no Python-facing API changes are made in S7a.
+  On the six-atom ring fixture with a host-frame aromatic electron-count
+  update, product/tracked product measured 4.44/4.41 µs, realized reaction
+  21.97 µs, and realized span 16.97 µs. Criterion used 10 samples with
+  1-second warmup and measurement; match enumeration is outside these calls.
+
+- [x] **S7b — Iteration and derivation retirement.** Graph-IR reaction
+  iterators and their Rust/Python consumers. Breaking (red→green).
+  [dep: S7a, S5a] Mirror S7a per iterator item: `apply` is product-only,
+  `tracked_apply` returns the product and its correspondence, and `apply_to_reaction` /
+  `apply_to_reaction_span` return the primary objects directly. Add no further
+  tracked variants. Iterator items are `Result<T, ApplyError>`; inapplicable
+  matches are skipped rather than yielded as `None`. Implement these forms, preserving captured-input
+  ownership, match order, lazy result production, and terminal error behavior.
+  Remove `ReactionDerivation`, its exports and bindings, and update all
+  consumers. Keep `React` methods separate and verify their products still
+  match explicit combine/application/split. No new result container duplicates
+  the returned molecule/reaction/span.
+
+  Implemented with the approved `ReactionApplicationIter<T>`; construction is
+  private and the operation selects one of the four output types. No result
+  enum or public conversion trait was added. Python mirrors the four methods
+  through unexported iterator bindings. Retired-type observation tests were
+  removed; product, correspondence, reconstruction, reversal, and composition
+  checks now exercise the surviving APIs. `React` remains combine/apply/split.
+
+  Verification (2026-09-05): core/IR library, integration, and doc tests
+  passed (7,876 tests; 6 ignored). Explicit property targets passed 497 tests
+  at `PROPTEST_CASES=256` (1 ignored). Reaction binding Rust tests passed
+  (126; 2 ignored), and the rebuilt Python extension passed the full pytest
+  suite (1,380; 2 skipped). Workspace all-target checks, core-IR/binding
+  all-target Clippy with IR properties enabled, nightly formatting, and
+  whitespace checks passed. Existing ignored cases remain unchanged.
+
+  The six-atom ring fixture has one successful match, asserted outside the
+  timed loop. Matching plus complete iteration measured approximately 6 µs
+  for product/tracked product, 25 µs for a realized reaction, and 19 µs for a
+  span. Supplied-match product/tracked calls remain about 4.5 µs. Criterion:
+  20 samples, 1-second warmup and measurement. These are fixture timings,
+  not corpus-scale estimates.
+
+### S8 — Python parity and integrated verification
+
+- [x] **S8a — Python exposure.** umol-py correspondence, molecule, edit,
+  reaction, exports, and API inventory. Additive/breaking (red→green).
+  [dep: S2b, S3b, S4c, S5a, S5b, S5c, S6b, S7b]
+  Complete bindings for the accepted witness types, conversions,
+  and operation pairs beyond earlier compile adaptations. Mirror Rust names,
+  construction constraints, errors, and tuple/iterator shapes. Rebuild the
+  native extension before tests. Verify direct calls outside notebooks,
+  composition, bare/witnessed equivalence, and absence of flag-dependent
+  witness returns and retired types.
+  Completed 2026-09-05: Python now exposes checked, frozen `Compaction` and
+  `MoleculeCompaction` carriers, including lossless correspondence conversion,
+  and permits direct construction of the open `MoleculeCorrespondence` carrier
+  from its eight validated components. `Molecule` exposes tracked application
+  and plain/tracked extraction. `MoleculeEditor` exposes plain/tracked consuming
+  application, publication, transactions, topology removal, and all six bulk
+  overlay-removal pairs; `Transaction` exposes tracked rollback. Invalid direct
+  removal ids raise `IndexError` before reaching the Rust methods' asserted
+  boundary. Existing reaction application, splitting, and canonicalization
+  pairs remain aligned and are covered by the public signature inventory.
+  `meet_pushout`, `tracked_meet_pushout`, `MoleculePushoutCorrespondence`, and
+  graph-level carriers are deliberately not exposed in this iteration. No
+  witness-selection flag or retired result carrier is present.
+
+  The native extension was rebuilt against Python 3.13. Binding unit tests
+  passed (1,635; 2 ignored), and the full Python suite passed (1,479; 2
+  skipped). The umol-py all-target Clippy gate passed with warnings denied;
+  nightly formatting and whitespace checks passed.
+- [x] **S8b — End-to-end laws and measurement.** Existing operation property
+  suites and S0 benchmarks. Additive (green). [dep: S8a]
+  Exercise mixed compaction/remapping/correspondence sequences and
+  input-to-pushout-to-split composition. Preserve the existing semantic laws
+  while updating their APIs. Compare final timings with S0 and report both
+  bare-operation regression and witness cost for the measured inputs.
+  Completed 2026-09-05: the molecule property suite now composes a dense
+  renumbering, removal compaction, and general editor correspondence, checking
+  every intermediate pair and the final induced correspondence. A second law
+  composes each input of a disjoint meet-pushout through every split component
+  and checks all eight entity correspondences against atom induction. The
+  256-case property gate passed (499 tests; 1 ignored).
+
+  The S0 fixtures were rerun under the same profile, sample count, warmup, and
+  measurement time. Because the new tracked benchmark ids do not exist in the
+  old Criterion baseline, the complete current matrix was saved separately as
+  `mutation-s8b`; `mutation-s0` was not overwritten. Current bare-operation
+  means in microseconds, with change from the stored S0 mean:
+
+  | Operation | 8 atoms/nodes | 64 atoms/nodes |
+  | --- | ---: | ---: |
+  | Graph removal | 0.263 (+21.1%) | 1.089 (+1.8%) |
+  | Graph pushout | 2.136 (-1.3%) | 20.991 (-0.6%) |
+  | Molecule editor removal | 1.656 (+15.8%) | 6.240 (+10.0%) |
+  | Molecule three-edit application | 2.857 (+7.6%) | 12.305 (+3.5%) |
+  | Molecule combination | 2.632 (-3.7%) | 19.394 (+0.1%) |
+  | Molecule split | 5.197 (+12.6%) | 55.615 (+7.1%) |
+  | Molecule pushout | 7.438 (-4.9%) | 65.000 (-3.6%) |
+
+  Current tracked-operation means, with change from the current bare variant:
+
+  | Operation | 8 atoms/nodes | 64 atoms/nodes |
+  | --- | ---: | ---: |
+  | Graph removal | 0.260 (-1.4%) | 1.083 (-0.5%) |
+  | Graph pushout | 2.153 (+0.8%) | 21.211 (+1.0%) |
+  | Molecule editor removal | 1.676 (+1.3%) | 6.175 (-1.0%) |
+  | Molecule three-edit application | 2.881 (+0.8%) | 12.335 (+0.2%) |
+  | Molecule split | 5.123 (-1.4%) | 55.879 (+0.5%) |
+  | Molecule pushout | 7.400 (-0.5%) | 65.400 (+0.6%) |
+
+  The reaction fixture measured 1.659 µs for matching (-2.2% from S0),
+  4.494 µs for bare matched application (+4.2%), 4.452 µs for tracked matched
+  application (-0.9% from bare), and 15.688 µs for reversal (+14.2% from S0).
+  All-match application measured 5.776 µs bare and 5.701 µs tracked (-1.3%).
+  The tracked/bare differences are within measurement noise. They measure the
+  incremental returned witness, not the entire cost of provenance: several
+  bare routes delegate to or share machinery with the tracked route, and the
+  molecule editor maintains its session correspondence for both variants.
+  The S0 comparison therefore captures the more relevant total regression.
+
+  Renumbering remained between 2.029 and 15.690 µs; the overlay-heavy case was
+  7.961 µs (+1.6%). Criterion classified the mixed atom-and-bond stereo case
+  at 5.781 µs (+5.2%) as regressed, ordinary naphthalene and both feature-free
+  cases as improved by 3.6-4.7%, and the other nine cases as unchanged or
+  within the noise threshold. Benchmark targets compile and run with the new
+  bare/tracked graph and split ids.
+- [x] **S8c — Documentation and closeout.** Normative development guides,
+  public documentation, doc 218, and status index. Documentation (green).
+  [dep: S8b] Reconcile the final exported API against this design, update
+  obsolete normative descriptions, and remove retired names from live
+  examples and inventories. Preserve historical closed discussion records.
+  Run the final gates below; record results before marking the work complete.
+  Completed 2026-09-05: reconciled the final Rust and Python surface with the
+  settled carrier, construction, conversion, and bare/tracked contracts. Added
+  the tracked-operation rule to the nomenclature guide and removed obsolete
+  live descriptions of retired names and return shapes. The only
+  `ReactionDerivation` occurrence outside discussion history is the Python
+  negative-export test. `cargo +nightly fmt --all`, `cargo test --workspace`,
+  and clippy with warnings denied passed. With `PROPTEST_CASES=256`, the
+  graph-core/graph-IR property targets passed 499 properties with one ignored,
+  and the graph target passed all five. Python 3.13.15 built the extension;
+  pytest passed 1,479 tests with two skipped. `git diff --check` passed.
+
+### Verification gates and critical path
+
+Each subitem runs focused tests for its changed behavior. Each stage runs
+library and integration tests for graph-core and graph-IR, their explicitly
+enabled property targets, affected downstream tests, and a workspace compile
+check including bindings. Use `PROPTEST_CASES=256` for the stage property
+runs. Python-related commands run with `umol-py/.venv` activated and Python
+3.13 confirmed; rebuild the extension before any affected pytest suite.
+
+Final gates:
+
+```sh
+cargo +nightly fmt --all
+source umol-py/.venv/bin/activate
+python --version
+cargo test --workspace
+cargo test -p umol-graph-core -p umol-graph-ir --features proptest --test property
+cargo test -p umol-graph --features proptest --test property
+cargo clippy --workspace --all-targets -- -D warnings
+maturin develop --manifest-path umol-py/Cargo.toml
+pytest -q umol-py/tests
+git diff --check
+```
+
+Run these in the activated shell; separate tool invocations must reactivate
+it. Run affected conformance targets explicitly where consumer changes reach
+their code paths. Re-run S0 benchmark commands with the saved baseline and
+include fixture sizes and absolute timings in the closeout.
+
+Transport dependency path: baseline → graph participant transport → edit
+handle separation and molecular reference transport → legacy removal and
+four producer fixes → strict remapping/conversions → renumbering consumers.
+The independent compaction path is baseline/composition → counted compaction
+→ removal/extraction pairs → editor witnesses → reaction results. Output/
+witness separation for pushout, pullback, and complement builds on the
+correspondence foundation. These paths join at Python parity and integrated
+verification; compaction is not a prerequisite for the remapping fix.
+No implementation stage above is optional for this work's completion.
+Chemistry-layer witness API design remains separate and is not a deferred
+stage of this plan.

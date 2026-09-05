@@ -55,43 +55,40 @@ proptest! {
         (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
         let correspondence = molecule.induced_subgraph(&atoms);
-        let identity = correspondence.compose(&correspondence.reverse());
+        let identity = correspondence.compose(&correspondence.reverse()).unwrap();
 
         prop_assert!(identity.is_total());
-        let remapping = identity
-            .to_remapping()
-            .expect("the composed identity is total on the left");
         for index in 0..identity.atoms().left_count() {
             let id = AtomId(index as u32);
-            prop_assert_eq!(remapping.map_atom(id), id);
+            prop_assert_eq!(identity.atoms().right_of(id), Some(id));
         }
         for index in 0..identity.bonds().left_count() {
             let id = BondId(index as u32);
-            prop_assert_eq!(remapping.map_bond(id), id);
+            prop_assert_eq!(identity.bonds().right_of(id), Some(id));
         }
         for index in 0..identity.dative_bonds().left_count() {
             let id = DativeBondId(index as u32);
-            prop_assert_eq!(remapping.map_dative(id), id);
+            prop_assert_eq!(identity.dative_bonds().right_of(id), Some(id));
         }
         for index in 0..identity.aromatic_systems().left_count() {
             let id = AromaticSystemId(index as u32);
-            prop_assert_eq!(remapping.map_aromatic(id), id);
+            prop_assert_eq!(identity.aromatic_systems().right_of(id), Some(id));
         }
         for index in 0..identity.multicenter_bonds().left_count() {
             let id = MulticenterBondId(index as u32);
-            prop_assert_eq!(remapping.map_multicenter(id), id);
+            prop_assert_eq!(identity.multicenter_bonds().right_of(id), Some(id));
         }
         for index in 0..identity.noncovalent_bonds().left_count() {
             let id = NoncovalentBondId(index as u32);
-            prop_assert_eq!(remapping.map_noncovalent(id), id);
+            prop_assert_eq!(identity.noncovalent_bonds().right_of(id), Some(id));
         }
         for index in 0..identity.stereo_atoms().left_count() {
             let id = StereoAtomId(index as u32);
-            prop_assert_eq!(remapping.map_stereo_atom(id), id);
+            prop_assert_eq!(identity.stereo_atoms().right_of(id), Some(id));
         }
         for index in 0..identity.stereo_bonds().left_count() {
             let id = StereoBondId(index as u32);
-            prop_assert_eq!(remapping.map_stereo_bond(id), id);
+            prop_assert_eq!(identity.stereo_bonds().right_of(id), Some(id));
         }
     }
 
@@ -103,8 +100,8 @@ proptest! {
         let reverse = correspondence.reverse();
 
         prop_assert_eq!(
-            correspondence.compose(&reverse).compose(&correspondence),
-            correspondence.compose(&reverse.compose(&correspondence)),
+            correspondence.compose(&reverse).unwrap().compose(&correspondence),
+            correspondence.compose(&reverse.compose(&correspondence).unwrap()),
         );
     }
 
@@ -114,7 +111,7 @@ proptest! {
     ) {
         let correspondence = molecule.induced_subgraph(&atoms);
         let reverse = correspondence.reverse();
-        let expected = correspondence.compose(&reverse).compose(&correspondence);
+        let expected = correspondence.compose(&reverse).unwrap().compose(&correspondence).unwrap();
 
         prop_assert_eq!(
             MoleculeCorrespondence::compose_all([
@@ -122,7 +119,7 @@ proptest! {
                 reverse,
                 correspondence,
             ]),
-            Some(expected),
+            Ok(Some(expected)),
         );
     }
 }

@@ -5,10 +5,10 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::super::boolean::BooleanForm;
+use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::CisTransStereoForm;
 use super::super::traits::{Lattice, Normalize};
 
@@ -57,11 +57,6 @@ impl BondConstraintForm {
     /// Value-only payload: no entity ids to compact, so this never drops.
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
-    }
-
-    /// Value-only payload: no entity ids to remap.
-    pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
-        self
     }
 }
 
@@ -465,7 +460,7 @@ impl From<Vec<BondConstraintForm>> for BondConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::stereo::{StereoCoset, StereoTerm};
@@ -760,15 +755,15 @@ mod tests {
         ]);
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
-                vec![NodeId(0), NodeId(1), NodeId(2)],
-                vec![EdgeId(0), EdgeId(1)],
+                Compaction::new(3, vec![NodeId(0), NodeId(1), NodeId(2)]).unwrap(),
+                Compaction::new(2, vec![EdgeId(0), EdgeId(1)]).unwrap(),
             ),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
         );
         assert_eq!(cs.clone().compact(&compaction), cs);
     }

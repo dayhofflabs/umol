@@ -19,6 +19,8 @@
 //!   `AllAtoms`, `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraintForm` to a
 //!   role position, quantified over the matching participants.
 
+use super::super::compact::MoleculeCompaction;
+use super::super::correspondence::MoleculeCorrespondence;
 use super::super::entity::Entity;
 use super::super::error::Contradiction;
 use super::super::frame::OverlaysFrameAction;
@@ -26,7 +28,6 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::traits::{FrameTransport, Normalize};
 use super::atom::AtomConstraintForm;
 use super::molecule::{ConstraintFrameActionDomain, ConstraintFrameActions};
@@ -415,156 +416,192 @@ impl RelationalConstraint {
         })
     }
 
-    /// Re-anchor every entity ref through a total id remapping. Total — the parallel of
-    /// `compact`, never drops.
-    pub fn remap(self, map: &IdRemapping) -> Self {
-        match self {
+    /// Map every entity reference, preserving predicates and frame positions.
+    ///
+    /// # Panics
+    /// Panics when a referenced entity has no image in `correspondence`.
+    pub fn map(self, correspondence: &MoleculeCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every constraint reference")
+    }
+
+    /// Map every entity reference, or return `None` if any reference has no image.
+    /// Unreferenced entities need not have images. No constraint is dropped.
+    pub fn try_map(self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
+        Some(match self {
             Self::DativeBondDonors { bond, atoms } => Self::DativeBondDonors {
-                bond: map.map_dative(bond),
-                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+                bond: correspondence.dative_bonds().right_of(bond)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| correspondence.atoms().right_of(a))
+                    .collect::<Option<Vec<_>>>()?,
             },
             Self::DativeBondDonor { bond, atom } => Self::DativeBondDonor {
-                bond: map.map_dative(bond),
-                atom: map.map_atom(atom),
+                bond: correspondence.dative_bonds().right_of(bond)?,
+                atom: correspondence.atoms().right_of(atom)?,
             },
             Self::DativeBondContainsAllDonors { bond, atoms } => {
                 Self::DativeBondContainsAllDonors {
-                    bond: map.map_dative(bond),
-                    atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+                    bond: correspondence.dative_bonds().right_of(bond)?,
+                    atoms: atoms
+                        .into_iter()
+                        .map(|a| correspondence.atoms().right_of(a))
+                        .collect::<Option<Vec<_>>>()?,
                 }
             }
             Self::DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
-                bond: map.map_dative(bond),
+                bond: correspondence.dative_bonds().right_of(bond)?,
                 predicate,
             },
             Self::DativeBondAnyDonor { bond, predicate } => Self::DativeBondAnyDonor {
-                bond: map.map_dative(bond),
+                bond: correspondence.dative_bonds().right_of(bond)?,
                 predicate,
             },
             Self::DativeBondAcceptor { bond, atom } => Self::DativeBondAcceptor {
-                bond: map.map_dative(bond),
-                atom: map.map_atom(atom),
+                bond: correspondence.dative_bonds().right_of(bond)?,
+                atom: correspondence.atoms().right_of(atom)?,
             },
             Self::DativeBondAcceptorSatisfies { bond, predicate } => {
                 Self::DativeBondAcceptorSatisfies {
-                    bond: map.map_dative(bond),
+                    bond: correspondence.dative_bonds().right_of(bond)?,
                     predicate,
                 }
             }
             Self::DativeBondParallels { dative, parallel } => Self::DativeBondParallels {
-                dative: map.map_dative(dative),
-                parallel: map.map_bond(parallel),
+                dative: correspondence.dative_bonds().right_of(dative)?,
+                parallel: correspondence.bonds().right_of(parallel)?,
             },
             Self::AromaticSystemAtoms { system, atoms } => Self::AromaticSystemAtoms {
-                system: map.map_aromatic(system),
-                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+                system: correspondence.aromatic_systems().right_of(system)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| correspondence.atoms().right_of(a))
+                    .collect::<Option<Vec<_>>>()?,
             },
             Self::AromaticSystemContains { system, atom } => Self::AromaticSystemContains {
-                system: map.map_aromatic(system),
-                atom: map.map_atom(atom),
+                system: correspondence.aromatic_systems().right_of(system)?,
+                atom: correspondence.atoms().right_of(atom)?,
             },
             Self::AromaticSystemContainsAll { system, atoms } => Self::AromaticSystemContainsAll {
-                system: map.map_aromatic(system),
-                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+                system: correspondence.aromatic_systems().right_of(system)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| correspondence.atoms().right_of(a))
+                    .collect::<Option<Vec<_>>>()?,
             },
             Self::AromaticSystemAllAtoms { system, predicate } => Self::AromaticSystemAllAtoms {
-                system: map.map_aromatic(system),
+                system: correspondence.aromatic_systems().right_of(system)?,
                 predicate,
             },
             Self::AromaticSystemAnyAtom { system, predicate } => Self::AromaticSystemAnyAtom {
-                system: map.map_aromatic(system),
+                system: correspondence.aromatic_systems().right_of(system)?,
                 predicate,
             },
             Self::MulticenterBondAtoms { bond, atoms } => Self::MulticenterBondAtoms {
-                bond: map.map_multicenter(bond),
-                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+                bond: correspondence.multicenter_bonds().right_of(bond)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| correspondence.atoms().right_of(a))
+                    .collect::<Option<Vec<_>>>()?,
             },
             Self::MulticenterBondContains { bond, atom } => Self::MulticenterBondContains {
-                bond: map.map_multicenter(bond),
-                atom: map.map_atom(atom),
+                bond: correspondence.multicenter_bonds().right_of(bond)?,
+                atom: correspondence.atoms().right_of(atom)?,
             },
             Self::MulticenterBondContainsAll { bond, atoms } => Self::MulticenterBondContainsAll {
-                bond: map.map_multicenter(bond),
-                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+                bond: correspondence.multicenter_bonds().right_of(bond)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| correspondence.atoms().right_of(a))
+                    .collect::<Option<Vec<_>>>()?,
             },
             Self::MulticenterBondAllAtoms { bond, predicate } => Self::MulticenterBondAllAtoms {
-                bond: map.map_multicenter(bond),
+                bond: correspondence.multicenter_bonds().right_of(bond)?,
                 predicate,
             },
             Self::MulticenterBondAnyAtom { bond, predicate } => Self::MulticenterBondAnyAtom {
-                bond: map.map_multicenter(bond),
+                bond: correspondence.multicenter_bonds().right_of(bond)?,
                 predicate,
             },
             Self::NoncovalentBondEnds { bond, atoms } => {
                 let [a, b] = atoms;
                 Self::NoncovalentBondEnds {
-                    bond: map.map_noncovalent(bond),
-                    atoms: [map.map_atom(a), map.map_atom(b)],
+                    bond: correspondence.noncovalent_bonds().right_of(bond)?,
+                    atoms: [
+                        correspondence.atoms().right_of(a)?,
+                        correspondence.atoms().right_of(b)?,
+                    ],
                 }
             }
             Self::NoncovalentBondContains { bond, atom } => Self::NoncovalentBondContains {
-                bond: map.map_noncovalent(bond),
-                atom: map.map_atom(atom),
+                bond: correspondence.noncovalent_bonds().right_of(bond)?,
+                atom: correspondence.atoms().right_of(atom)?,
             },
             Self::NoncovalentBondEndsSatisfy { bond, predicates } => {
                 Self::NoncovalentBondEndsSatisfy {
-                    bond: map.map_noncovalent(bond),
+                    bond: correspondence.noncovalent_bonds().right_of(bond)?,
                     predicates,
                 }
             }
             Self::StereoAtomSite { stereo_atom, atom } => Self::StereoAtomSite {
-                stereo_atom: map.map_stereo_atom(stereo_atom),
-                atom: map.map_atom(atom),
+                stereo_atom: correspondence.stereo_atoms().right_of(stereo_atom)?,
+                atom: correspondence.atoms().right_of(atom)?,
             },
             Self::StereoAtomContains { stereo_atom, atom } => Self::StereoAtomContains {
-                stereo_atom: map.map_stereo_atom(stereo_atom),
-                atom: map.map_atom(atom),
+                stereo_atom: correspondence.stereo_atoms().right_of(stereo_atom)?,
+                atom: correspondence.atoms().right_of(atom)?,
             },
             Self::StereoAtomLigands { stereo_atom, atoms } => Self::StereoAtomLigands {
-                stereo_atom: map.map_stereo_atom(stereo_atom),
-                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+                stereo_atom: correspondence.stereo_atoms().right_of(stereo_atom)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| correspondence.atoms().right_of(a))
+                    .collect::<Option<Vec<_>>>()?,
             },
             Self::StereoAtomAllLigands {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAllLigands {
-                stereo_atom: map.map_stereo_atom(stereo_atom),
+                stereo_atom: correspondence.stereo_atoms().right_of(stereo_atom)?,
                 predicate,
             },
             Self::StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAnyLigand {
-                stereo_atom: map.map_stereo_atom(stereo_atom),
+                stereo_atom: correspondence.stereo_atoms().right_of(stereo_atom)?,
                 predicate,
             },
             Self::StereoBondSite { stereo_bond, bond } => Self::StereoBondSite {
-                stereo_bond: map.map_stereo_bond(stereo_bond),
-                bond: map.map_bond(bond),
+                stereo_bond: correspondence.stereo_bonds().right_of(stereo_bond)?,
+                bond: correspondence.bonds().right_of(bond)?,
             },
             Self::StereoBondContains { stereo_bond, atom } => Self::StereoBondContains {
-                stereo_bond: map.map_stereo_bond(stereo_bond),
-                atom: map.map_atom(atom),
+                stereo_bond: correspondence.stereo_bonds().right_of(stereo_bond)?,
+                atom: correspondence.atoms().right_of(atom)?,
             },
             Self::StereoBondLigands { stereo_bond, atoms } => Self::StereoBondLigands {
-                stereo_bond: map.map_stereo_bond(stereo_bond),
-                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+                stereo_bond: correspondence.stereo_bonds().right_of(stereo_bond)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| correspondence.atoms().right_of(a))
+                    .collect::<Option<Vec<_>>>()?,
             },
             Self::StereoBondAllLigands {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAllLigands {
-                stereo_bond: map.map_stereo_bond(stereo_bond),
+                stereo_bond: correspondence.stereo_bonds().right_of(stereo_bond)?,
                 predicate,
             },
             Self::StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAnyLigand {
-                stereo_bond: map.map_stereo_bond(stereo_bond),
+                stereo_bond: correspondence.stereo_bonds().right_of(stereo_bond)?,
                 predicate,
             },
-        }
+        })
     }
 }
 
@@ -792,7 +829,7 @@ impl Normalize for RelationalConstraint {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
     use umol_perm::DynPermutation;
 
     use super::*;
@@ -830,21 +867,41 @@ mod tests {
     ) -> MoleculeCompaction {
         MoleculeCompaction::new(
             GraphCompaction::new(
-                removed_nodes.into_iter().map(NodeId).collect(),
-                removed_edges.into_iter().map(EdgeId).collect(),
+                Compaction::new(4, removed_nodes.into_iter().map(NodeId).collect()).unwrap(),
+                Compaction::new(3, removed_edges.into_iter().map(EdgeId).collect()).unwrap(),
             ),
-            removed_dative.into_iter().map(DativeBondId).collect(),
-            removed_aromatic.into_iter().map(AromaticSystemId).collect(),
-            removed_multicenter
-                .into_iter()
-                .map(MulticenterBondId)
-                .collect(),
-            removed_noncovalent
-                .into_iter()
-                .map(NoncovalentBondId)
-                .collect(),
-            removed_stereo_atom.into_iter().map(StereoAtomId).collect(),
-            removed_stereo_bond.into_iter().map(StereoBondId).collect(),
+            Compaction::new(2, removed_dative.into_iter().map(DativeBondId).collect()).unwrap(),
+            Compaction::new(
+                2,
+                removed_aromatic.into_iter().map(AromaticSystemId).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2,
+                removed_multicenter
+                    .into_iter()
+                    .map(MulticenterBondId)
+                    .collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2,
+                removed_noncovalent
+                    .into_iter()
+                    .map(NoncovalentBondId)
+                    .collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2,
+                removed_stereo_atom.into_iter().map(StereoAtomId).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2,
+                removed_stereo_bond.into_iter().map(StereoBondId).collect(),
+            )
+            .unwrap(),
         )
     }
 

@@ -22,6 +22,7 @@ use umol_utils::solution::Solution as GraphSolution;
 use crate::aromatic::{AromaticSystemForm, AromaticSystemViews};
 use crate::atom::{AtomForm, AtomViews};
 use crate::bond::{BondForm, BondViews};
+use crate::compact::MoleculeCompaction;
 use crate::constraint::molecule::{Constraint, ConstraintsLike, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondForm, DativeBondViews};
@@ -277,31 +278,38 @@ impl Molecule {
             .map_err(molecule_apply_error)
     }
 
-    /// Combine this molecule and `other` by disjoint concatenation without modifying either input.
-    /// The correspondence maps `other` into the combined molecule.
-    fn combine(&self, other: &Self) -> (Self, MoleculeCorrespondence) {
-        let (combined, correspondence) = self.0.combine(&other.0);
-        (
-            Self::from_rust(combined),
-            MoleculeCorrespondence::from_rust(correspondence),
-        )
-    }
-
-    /// Append `other` by disjoint concatenation. Existing ids in this molecule remain stable; the
-    /// returned correspondence maps `other` into this molecule.
-    fn combine_from(slf: Py<Self>, py: Python<'_>, other: Py<Self>) -> MoleculeCorrespondence {
-        let other = other.bind(py).borrow().to_rust().clone();
-        let correspondence = slf.borrow_mut(py).to_rust_mut().combine_from(&other);
-        MoleculeCorrespondence::from_rust(correspondence)
-    }
-
-    /// Combine an iterable of molecules by disjoint concatenation. Returns one correspondence per
-    /// input, in input order, mapping that input into the combined molecule.
-    #[staticmethod]
-    fn combine_all(
+    /// Apply the same checked edit batch and return the source-to-result correspondence.
+    fn tracked_apply(
+        &self,
         py: Python<'_>,
-        molecules: &Bound<'_, PyAny>,
-    ) -> PyResult<(Self, Vec<MoleculeCorrespondence>)> {
+        edits: Py<Edits>,
+    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+        self.0
+            .tracked_apply(edits.bind(py).borrow().to_rust().clone())
+            .map(|(molecule, correspondence)| {
+                (
+                    Self::from_rust(molecule),
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
+            .map_err(molecule_apply_error)
+    }
+
+    /// Combine by disjoint concatenation. For each entity kind, this molecule's ids remain
+    /// the prefix and other follows in its original order.
+    fn combine(&self, other: &Self) -> Self {
+        Self::from_rust(self.0.combine(&other.0))
+    }
+
+    /// Append other in place, preserving existing ids and each entity kind's order.
+    fn combine_from(slf: Py<Self>, py: Python<'_>, other: Py<Self>) {
+        let other = other.bind(py).borrow().to_rust().clone();
+        slf.borrow_mut(py).to_rust_mut().combine_from(&other);
+    }
+
+    /// Combine an iterable by disjoint concatenation, in input order for each entity kind.
+    #[staticmethod]
+    fn combine_all(py: Python<'_>, molecules: &Bound<'_, PyAny>) -> PyResult<Self> {
         let molecules = molecules
             .try_iter()?
             .map(|item| -> PyResult<Py<Molecule>> { Ok(item?.cast_into::<Molecule>()?.unbind()) })
@@ -310,15 +318,9 @@ impl Molecule {
             .iter()
             .map(|molecule| molecule.bind(py).borrow())
             .collect::<Vec<_>>();
-        let (combined, correspondences) =
-            GraphIrMolecule::combine_all(borrowed.iter().map(|molecule| molecule.to_rust()));
-        Ok((
-            Self::from_rust(combined),
-            correspondences
-                .into_iter()
-                .map(MoleculeCorrespondence::from_rust)
-                .collect(),
-        ))
+        Ok(Self::from_rust(GraphIrMolecule::combine_all(
+            borrowed.iter().map(|molecule| molecule.to_rust()),
+        )))
     }
 
     /// Resolve under a chemistry model, returning the three-valued solution.
@@ -419,11 +421,15 @@ impl Molecule {
         Py::new(py, ReactionProductsIter::from_rust(products))
     }
 
-    /// Decompose this molecule into components connected by any relation. Each correspondence maps
-    /// the returned component into this molecule.
-    fn split(&self) -> Vec<(Self, MoleculeCorrespondence)> {
+    /// Decompose into conservatively connected components, ordered by lowest source atom id.
+    fn split(&self) -> Vec<Self> {
+        self.0.split().into_iter().map(Self::from_rust).collect()
+    }
+
+    /// Return the same components as split, paired with source-to-component correspondences.
+    fn tracked_split(&self) -> Vec<(Self, MoleculeCorrespondence)> {
         self.0
-            .split()
+            .tracked_split()
             .into_iter()
             .map(|(component, correspondence)| {
                 (
@@ -432,6 +438,20 @@ impl Molecule {
                 )
             })
             .collect()
+    }
+
+    /// Extract the atoms selected by a sub-to-host correspondence, preserving host order.
+    fn extract(&self, selection: &MoleculeCorrespondence) -> Self {
+        Self::from_rust(self.0.extract(selection.to_rust()))
+    }
+
+    /// Return the same extraction and its host-to-result compaction.
+    fn tracked_extract(&self, selection: &MoleculeCorrespondence) -> (Self, MoleculeCompaction) {
+        let (molecule, compaction) = self.0.tracked_extract(selection.to_rust());
+        (
+            Self::from_rust(molecule),
+            MoleculeCompaction::from_rust(compaction),
+        )
     }
 
     /// Find occurrences of this pattern in `host`.

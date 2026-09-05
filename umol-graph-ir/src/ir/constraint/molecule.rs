@@ -8,6 +8,8 @@ use std::vec::IntoIter;
 
 use umol_perm::{DynPermutation, Permutation};
 
+use super::super::compact::MoleculeCompaction;
+use super::super::correspondence::MoleculeCorrespondence;
 use super::super::edit::{CascadedConstraints, ModifiedConstraint, RemovedConstraint};
 use super::super::entity::{Entity, EntityKind};
 use super::super::error::Contradiction;
@@ -17,7 +19,6 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::num::NumForm;
-use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
 use super::super::traits::{FrameTransport, Lattice, Normalize};
@@ -313,43 +314,59 @@ impl Constraint {
         }
     }
 
-    /// Re-anchor every entity ref through a total id remapping (match-based: lhs → host,
-    /// created → appended). Total — never drops (the parallel of `compact`, which compacts after
-    /// removal). Stays a separate flow from `compact`; the two are not bridged.
-    pub fn remap(self, map: &IdRemapping) -> Self {
-        match self {
+    /// Map every entity reference, preserving predicates and frame positions.
+    ///
+    /// # Panics
+    /// Panics when a referenced entity has no image in `correspondence`.
+    pub fn map(self, correspondence: &MoleculeCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every constraint reference")
+    }
+
+    /// Map every entity reference, or return `None` if any reference has no image.
+    /// Unreferenced entities need not have images. No constraint is dropped.
+    pub fn try_map(self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
+        Some(match self {
             Constraint::Atom(id, c) => {
-                let i = map.map_atom(id);
-                Constraint::Atom(i, c.remap(map))
+                let i = correspondence.atoms().right_of(id)?;
+                Constraint::Atom(i, c)
             }
             Constraint::Bond(id, c) => {
-                let i = map.map_bond(id);
-                Constraint::Bond(i, c.remap(map))
+                let i = correspondence.bonds().right_of(id)?;
+                Constraint::Bond(i, c)
             }
             Constraint::DativeBond(id, c) => {
-                Constraint::DativeBond(map.map_dative(id), c.remap(map))
+                Constraint::DativeBond(correspondence.dative_bonds().right_of(id)?, c)
             }
             Constraint::AromaticSystem(id, c) => {
-                Constraint::AromaticSystem(map.map_aromatic(id), c.remap(map))
+                Constraint::AromaticSystem(correspondence.aromatic_systems().right_of(id)?, c)
             }
             Constraint::MulticenterBond(id, c) => {
-                Constraint::MulticenterBond(map.map_multicenter(id), c.remap(map))
+                Constraint::MulticenterBond(correspondence.multicenter_bonds().right_of(id)?, c)
             }
             Constraint::NoncovalentBond(id, c) => {
-                Constraint::NoncovalentBond(map.map_noncovalent(id), c.remap(map))
+                Constraint::NoncovalentBond(correspondence.noncovalent_bonds().right_of(id)?, c)
             }
             Constraint::StereoAtom(id, kind, c) => {
-                Constraint::StereoAtom(map.map_stereo_atom(id), kind, c.remap(map))
+                Constraint::StereoAtom(correspondence.stereo_atoms().right_of(id)?, kind, c)
             }
             Constraint::StereoBond(id, kind, c) => {
-                Constraint::StereoBond(map.map_stereo_bond(id), kind, c.remap(map))
+                Constraint::StereoBond(correspondence.stereo_bonds().right_of(id)?, kind, c)
             }
-            Constraint::Relational(r) => Constraint::Relational(r.remap(map)),
-            Constraint::Molecule(m) => Constraint::Molecule(m.remap(map)),
-            Constraint::And(xs) => Constraint::And(xs.into_iter().map(|c| c.remap(map)).collect()),
-            Constraint::Or(xs) => Constraint::Or(xs.into_iter().map(|c| c.remap(map)).collect()),
-            Constraint::Not(x) => Constraint::Not(Box::new(x.remap(map))),
-        }
+            Constraint::Relational(r) => Constraint::Relational(r.try_map(correspondence)?),
+            Constraint::Molecule(m) => Constraint::Molecule(m.try_map(correspondence)?),
+            Constraint::And(xs) => Constraint::And(
+                xs.into_iter()
+                    .map(|c| c.try_map(correspondence))
+                    .collect::<Option<Vec<_>>>()?,
+            ),
+            Constraint::Or(xs) => Constraint::Or(
+                xs.into_iter()
+                    .map(|c| c.try_map(correspondence))
+                    .collect::<Option<Vec<_>>>()?,
+            ),
+            Constraint::Not(x) => Constraint::Not(Box::new(x.try_map(correspondence)?)),
+        })
     }
 
     pub(crate) fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
@@ -788,27 +805,38 @@ impl MoleculeConstraint {
         }
     }
 
-    pub fn remap(self, map: &IdRemapping) -> Self {
-        match self {
+    /// Map every entity reference, preserving predicates and frame positions.
+    ///
+    /// # Panics
+    /// Panics when a referenced entity has no image in `correspondence`.
+    pub fn map(self, correspondence: &MoleculeCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every constraint reference")
+    }
+
+    /// Map every entity reference, or return `None` if any reference has no image.
+    /// Unreferenced entities need not have images. No constraint is dropped.
+    pub fn try_map(self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
+        Some(match self {
             MoleculeConstraint::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
-                atoms: remap_atom_subset(atoms, map),
+                atoms: map_atom_subset(atoms, correspondence)?,
                 sum,
             },
             MoleculeConstraint::UnpairedElectronCoupling {
                 atoms,
                 unpaired_electrons,
             } => MoleculeConstraint::UnpairedElectronCoupling {
-                atoms: remap_atom_subset(atoms, map),
+                atoms: map_atom_subset(atoms, correspondence)?,
                 unpaired_electrons,
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
-                bonds: remap_bond_subset(bonds, map),
+                bonds: map_bond_subset(bonds, correspondence)?,
                 sum,
             },
             MoleculeConstraint::Connected { atoms } => MoleculeConstraint::Connected {
-                atoms: remap_atom_subset(atoms, map),
+                atoms: map_atom_subset(atoms, correspondence)?,
             },
-        }
+        })
     }
 }
 
@@ -876,15 +904,32 @@ fn compact_bond_subset(
     }
 }
 
-/// Re-anchor an `Option<Vec<AtomId>>` through a total id remapping (the parallel of
-/// `compact_atom_subset`). `None` (all atoms) passes through; total — never drops.
-fn remap_atom_subset(atoms: Option<Vec<AtomId>>, map: &IdRemapping) -> Option<Vec<AtomId>> {
-    atoms.map(|vec| vec.into_iter().map(|a| map.map_atom(a)).collect())
+fn map_atom_subset(
+    atoms: Option<Vec<AtomId>>,
+    correspondence: &MoleculeCorrespondence,
+) -> Option<Option<Vec<AtomId>>> {
+    match atoms {
+        None => Some(None),
+        Some(ids) => ids
+            .into_iter()
+            .map(|id| correspondence.atoms().right_of(id))
+            .collect::<Option<Vec<_>>>()
+            .map(Some),
+    }
 }
 
-/// Re-anchor an `Option<Vec<BondId>>`. Same semantics as `remap_atom_subset`.
-fn remap_bond_subset(bonds: Option<Vec<BondId>>, map: &IdRemapping) -> Option<Vec<BondId>> {
-    bonds.map(|vec| vec.into_iter().map(|b| map.map_bond(b)).collect())
+fn map_bond_subset(
+    bonds: Option<Vec<BondId>>,
+    correspondence: &MoleculeCorrespondence,
+) -> Option<Option<Vec<BondId>>> {
+    match bonds {
+        None => Some(None),
+        Some(ids) => ids
+            .into_iter()
+            .map(|id| correspondence.bonds().right_of(id))
+            .collect::<Option<Vec<_>>>()
+            .map(Some),
+    }
 }
 
 #[cfg(test)]
@@ -893,7 +938,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, Correspondence, EdgeId, GraphCompaction, NodeId};
     use umol_perm::{DynPermutation, Permutation};
 
     use super::*;
@@ -1001,15 +1046,15 @@ mod tests {
     fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> MoleculeCompaction {
         MoleculeCompaction::new(
             GraphCompaction::new(
-                removed_nodes.into_iter().map(NodeId).collect(),
-                removed_edges.into_iter().map(EdgeId).collect(),
+                Compaction::new(6, removed_nodes.into_iter().map(NodeId).collect()).unwrap(),
+                Compaction::new(6, removed_edges.into_iter().map(EdgeId).collect()).unwrap(),
             ),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            Compaction::identity(6),
+            Compaction::identity(6),
+            Compaction::identity(6),
+            Compaction::identity(6),
+            Compaction::identity(6),
+            Compaction::identity(6),
         )
     }
 
@@ -1022,19 +1067,39 @@ mod tests {
         removed_stereo_bonds: Vec<u32>,
     ) -> MoleculeCompaction {
         MoleculeCompaction::new(
-            GraphCompaction::new(Vec::new(), Vec::new()),
-            removed_dative.into_iter().map(DativeBondId).collect(),
-            removed_aromatic.into_iter().map(AromaticSystemId).collect(),
-            removed_multicenter
-                .into_iter()
-                .map(MulticenterBondId)
-                .collect(),
-            removed_noncovalent
-                .into_iter()
-                .map(NoncovalentBondId)
-                .collect(),
-            removed_stereo_atoms.into_iter().map(StereoAtomId).collect(),
-            removed_stereo_bonds.into_iter().map(StereoBondId).collect(),
+            GraphCompaction::new(Compaction::identity(6), Compaction::identity(6)),
+            Compaction::new(6, removed_dative.into_iter().map(DativeBondId).collect()).unwrap(),
+            Compaction::new(
+                6,
+                removed_aromatic.into_iter().map(AromaticSystemId).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                6,
+                removed_multicenter
+                    .into_iter()
+                    .map(MulticenterBondId)
+                    .collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                6,
+                removed_noncovalent
+                    .into_iter()
+                    .map(NoncovalentBondId)
+                    .collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                6,
+                removed_stereo_atoms.into_iter().map(StereoAtomId).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                6,
+                removed_stereo_bonds.into_iter().map(StereoBondId).collect(),
+            )
+            .unwrap(),
         )
     }
 
@@ -1382,85 +1447,272 @@ mod tests {
         assert_eq!(c.compact(&compaction), expected);
     }
 
-    fn id_remapping(
-        atom: &[(u32, u32)],
-        bond: &[(u32, u32)],
-        dative: &[(u32, u32)],
-    ) -> IdRemapping {
-        IdRemapping::new(
-            atom.iter().map(|&(a, b)| (AtomId(a), AtomId(b))).collect(),
-            bond.iter().map(|&(a, b)| (BondId(a), BondId(b))).collect(),
-            dative
-                .iter()
-                .map(|&(a, b)| (DativeBondId(a), DativeBondId(b)))
-                .collect(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
+    #[fixture]
+    fn constraint_correspondence() -> MoleculeCorrespondence {
+        MoleculeCorrespondence::new(
+            Correspondence::new(vec![(AtomId(0), AtomId(3)), (AtomId(2), AtomId(5))], 4, 7)
+                .unwrap(),
+            Correspondence::new(vec![(BondId(0), BondId(3)), (BondId(2), BondId(5))], 4, 7)
+                .unwrap(),
+            Correspondence::new(
+                vec![
+                    (DativeBondId(0), DativeBondId(3)),
+                    (DativeBondId(2), DativeBondId(5)),
+                ],
+                4,
+                7,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (AromaticSystemId(0), AromaticSystemId(3)),
+                    (AromaticSystemId(2), AromaticSystemId(5)),
+                ],
+                4,
+                7,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (MulticenterBondId(0), MulticenterBondId(3)),
+                    (MulticenterBondId(2), MulticenterBondId(5)),
+                ],
+                4,
+                7,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (NoncovalentBondId(0), NoncovalentBondId(3)),
+                    (NoncovalentBondId(2), NoncovalentBondId(5)),
+                ],
+                4,
+                7,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (StereoAtomId(0), StereoAtomId(3)),
+                    (StereoAtomId(2), StereoAtomId(5)),
+                ],
+                4,
+                7,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (StereoBondId(0), StereoBondId(3)),
+                    (StereoBondId(2), StereoBondId(5)),
+                ],
+                4,
+                7,
+            )
+            .unwrap(),
         )
     }
 
-    #[rustfmt::skip]
     #[rstest]
     #[case::atom(
         Constraint::Atom(AtomId(2), AtomConstraintForm::valence(4)),
-        id_remapping(&[(2, 5)], &[], &[]),
-        Constraint::Atom(AtomId(5), AtomConstraintForm::valence(4)),
+        Constraint::Atom(AtomId(5), AtomConstraintForm::valence(4))
     )]
     #[case::bond(
-        Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
-        id_remapping(&[], &[(0, 3)], &[]),
-        Constraint::Bond(BondId(3), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+        Constraint::Bond(BondId(2), BondConstraintForm::aromatic(true)),
+        Constraint::Bond(BondId(5), BondConstraintForm::aromatic(true))
     )]
-    #[case::dative_leaf(
-        Constraint::DativeBond(DativeBondId(1), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
-        id_remapping(&[], &[], &[(1, 0)]),
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+    #[case::dative(
+        Constraint::DativeBond(DativeBondId(2), DativeBondConstraintForm::aromatic(true)),
+        Constraint::DativeBond(DativeBondId(5), DativeBondConstraintForm::aromatic(true))
     )]
-    #[case::molecule_charge_sum(
-        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(2)]), sum: NumForm::Lit(1) }),
-        id_remapping(&[(0, 3), (2, 4)], &[], &[]),
-        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(3), AtomId(4)]), sum: NumForm::Lit(1) }),
+    #[case::aromatic(
+        Constraint::AromaticSystem(
+            AromaticSystemId(2),
+            AromaticSystemConstraintForm::electron_count(2)
+        ),
+        Constraint::AromaticSystem(
+            AromaticSystemId(5),
+            AromaticSystemConstraintForm::electron_count(2)
+        )
     )]
-    #[case::molecule_unpaired_electron_coupling_subset(
-        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
-        id_remapping(&[(0, 3), (2, 4)], &[], &[]),
-        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(3), AtomId(4)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
+    #[case::multicenter(
+        Constraint::MulticenterBond(
+            MulticenterBondId(2),
+            MulticenterBondConstraintForm::electron_count(2)
+        ),
+        Constraint::MulticenterBond(
+            MulticenterBondId(5),
+            MulticenterBondConstraintForm::electron_count(2)
+        )
     )]
-    #[case::molecule_unpaired_electron_coupling_all_atoms(
-        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
-        id_remapping(&[(0, 3), (2, 4)], &[], &[]),
-        Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: None, unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
+    #[case::noncovalent(
+        Constraint::NoncovalentBond(
+            NoncovalentBondId(2),
+            NoncovalentBondConstraintForm::intramolecular(true)
+        ),
+        Constraint::NoncovalentBond(
+            NoncovalentBondId(5),
+            NoncovalentBondConstraintForm::intramolecular(true)
+        )
     )]
-    #[case::relational_dative_donor(
-        Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) }),
-        id_remapping(&[(2, 5)], &[], &[(1, 0)]),
-        Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(5) }),
+    #[case::stereo_atom(
+        Constraint::StereoAtom(
+            StereoAtomId(2),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)
+        ),
+        Constraint::StereoAtom(
+            StereoAtomId(5),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)
+        )
     )]
-    #[case::and(
-        Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
-            Constraint::Atom(AtomId(2), AtomConstraintForm::valence(2)),
-        ]),
-        id_remapping(&[(0, 1), (2, 3)], &[], &[]),
-        Constraint::And(vec![
-            Constraint::Atom(AtomId(1), AtomConstraintForm::valence(4)),
-            Constraint::Atom(AtomId(3), AtomConstraintForm::valence(2)),
-        ]),
+    #[case::stereo_bond(
+        Constraint::StereoBond(
+            StereoBondId(2),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)
+        ),
+        Constraint::StereoBond(
+            StereoBondId(5),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)
+        )
     )]
-    #[case::not(
-        Constraint::Not(Box::new(Constraint::Atom(AtomId(2), AtomConstraintForm::valence(4)))),
-        id_remapping(&[(2, 0)], &[], &[]),
-        Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)))),
-    )]
-    fn test_constraint_remap(
-        #[case] c: Constraint,
-        #[case] map: IdRemapping,
+    #[case::charge(Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(2), AtomId(0)]), sum: NumForm::Lit(1) }), Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(5), AtomId(3)]), sum: NumForm::Lit(1) }))]
+    #[case::unpaired(Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(2), AtomId(0)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }), Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(5), AtomId(3)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }))]
+    #[case::order(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0)]), sum: NumForm::Lit(2) }), Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(5), BondId(3)]), sum: NumForm::Lit(2) }))]
+    #[case::connected(Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(2), AtomId(0)]) }), Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(5), AtomId(3)]) }))]
+    #[case::relational_dative_donors(Constraint::Relational(RelationalConstraint::DativeBondDonors { bond: DativeBondId(2), atoms: vec![AtomId(2), AtomId(0)] }), Constraint::Relational(RelationalConstraint::DativeBondDonors { bond: DativeBondId(5), atoms: vec![AtomId(5), AtomId(3)] }))]
+    #[case::relational_dative_donor(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(2), atom: AtomId(0) }), Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(5), atom: AtomId(3) }))]
+    #[case::relational_dative_parallel(Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondId(2), parallel: BondId(0) }), Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondId(5), parallel: BondId(3) }))]
+    #[case::relational_aromatic(Constraint::Relational(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(2), atoms: vec![AtomId(2), AtomId(0)] }), Constraint::Relational(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(5), atoms: vec![AtomId(5), AtomId(3)] }))]
+    #[case::relational_multicenter(Constraint::Relational(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(2), atoms: vec![AtomId(2), AtomId(0)] }), Constraint::Relational(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(5), atoms: vec![AtomId(5), AtomId(3)] }))]
+    #[case::relational_noncovalent(Constraint::Relational(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(2), atoms: [AtomId(2), AtomId(0)] }), Constraint::Relational(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(5), atoms: [AtomId(5), AtomId(3)] }))]
+    #[case::relational_stereo_atom_ligands(Constraint::Relational(RelationalConstraint::StereoAtomLigands { stereo_atom: StereoAtomId(2), atoms: vec![AtomId(2), AtomId(0)] }), Constraint::Relational(RelationalConstraint::StereoAtomLigands { stereo_atom: StereoAtomId(5), atoms: vec![AtomId(5), AtomId(3)] }))]
+    #[case::relational_stereo_bond_ligands(Constraint::Relational(RelationalConstraint::StereoBondLigands { stereo_bond: StereoBondId(2), atoms: vec![AtomId(2), AtomId(0)] }), Constraint::Relational(RelationalConstraint::StereoBondLigands { stereo_bond: StereoBondId(5), atoms: vec![AtomId(5), AtomId(3)] }))]
+    #[case::relational_stereo_bond_site(Constraint::Relational(RelationalConstraint::StereoBondSite { stereo_bond: StereoBondId(2), bond: BondId(0) }), Constraint::Relational(RelationalConstraint::StereoBondSite { stereo_bond: StereoBondId(5), bond: BondId(3) }))]
+    #[case::relational_predicate(Constraint::Relational(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(2), predicate: Box::new(AtomConstraintForm::valence(4)) }), Constraint::Relational(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(5), predicate: Box::new(AtomConstraintForm::valence(4)) }))]
+    #[case::nested(Constraint::And(vec![Constraint::Atom(AtomId(2), AtomConstraintForm::valence(4)), Constraint::Or(vec![Constraint::Not(Box::new(Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondId(2), parallel: BondId(0) })))])]), Constraint::And(vec![Constraint::Atom(AtomId(5), AtomConstraintForm::valence(4)), Constraint::Or(vec![Constraint::Not(Box::new(Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondId(5), parallel: BondId(3) })))])]))]
+    fn test_constraint_map(
+        constraint_correspondence: MoleculeCorrespondence,
+        #[case] input: Constraint,
         #[case] expected: Constraint,
     ) {
-        assert_eq!(c.remap(&map), expected);
+        match (input.clone(), expected.clone()) {
+            (Constraint::Molecule(input), Constraint::Molecule(expected)) => {
+                assert_eq!(input.map(&constraint_correspondence), expected);
+            }
+            (Constraint::Relational(input), Constraint::Relational(expected)) => {
+                assert_eq!(input.map(&constraint_correspondence), expected);
+            }
+            _ => {}
+        }
+        assert_eq!(
+            input.clone().try_map(&constraint_correspondence),
+            Some(expected.clone())
+        );
+        assert_eq!(input.clone().map(&constraint_correspondence), expected);
+        assert_eq!(
+            input.try_map(&MoleculeCorrespondence::new(
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty()
+            )),
+            None
+        );
+    }
+
+    #[rstest]
+    #[case::all_atoms(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))]
+    #[case::empty_subset(Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![]) }))]
+    #[case::empty_and(Constraint::And(vec![]))]
+    #[case::empty_or(Constraint::Or(vec![]))]
+    fn test_constraint_map_identity(#[case] input: Constraint) {
+        assert_eq!(
+            input.clone().try_map(&MoleculeCorrespondence::new(
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty()
+            )),
+            Some(input.clone())
+        );
+        assert_eq!(
+            input.clone().map(&MoleculeCorrespondence::new(
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty()
+            )),
+            input
+        );
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every constraint reference")]
+    fn test_constraint_map_error() {
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))
+            .map(&MoleculeCorrespondence::empty());
+    }
+
+    #[rstest]
+    #[case::atom(Constraint::Atom(AtomId(1), AtomConstraintForm::valence(4)))]
+    #[case::bond(Constraint::Bond(BondId(1), BondConstraintForm::aromatic(true)))]
+    #[case::dativebond(Constraint::DativeBond(
+        DativeBondId(1),
+        DativeBondConstraintForm::aromatic(true)
+    ))]
+    #[case::aromaticsystem(Constraint::AromaticSystem(
+        AromaticSystemId(1),
+        AromaticSystemConstraintForm::electron_count(2)
+    ))]
+    #[case::multicenterbond(Constraint::MulticenterBond(
+        MulticenterBondId(1),
+        MulticenterBondConstraintForm::electron_count(2)
+    ))]
+    #[case::noncovalentbond(Constraint::NoncovalentBond(
+        NoncovalentBondId(1),
+        NoncovalentBondConstraintForm::intramolecular(true)
+    ))]
+    #[case::stereoatom(Constraint::StereoAtom(
+        StereoAtomId(1),
+        StereoKind::Tetrahedral,
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)
+    ))]
+    #[case::stereobond(Constraint::StereoBond(
+        StereoBondId(1),
+        StereoKind::CisTrans,
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)
+    ))]
+    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(2), AtomConstraintForm::valence(4)), Constraint::Atom(AtomId(1), AtomConstraintForm::valence(4))]))]
+    #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(2), AtomConstraintForm::valence(4)), Constraint::Atom(AtomId(1), AtomConstraintForm::valence(4))]))]
+    #[case::not(Constraint::Not(Box::new(Constraint::Atom(
+        AtomId(1),
+        AtomConstraintForm::valence(4)
+    ))))]
+    #[case::atom_subset(Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(2), AtomId(1)]) }))]
+    #[case::bond_subset(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(1)]), sum: NumForm::Lit(2) }))]
+    #[case::relational_atoms(Constraint::Relational(RelationalConstraint::StereoAtomLigands { stereo_atom: StereoAtomId(2), atoms: vec![AtomId(2), AtomId(1)] }))]
+    #[case::relational_bond(Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondId(2), parallel: BondId(1) }))]
+    #[case::out_of_range(Constraint::Atom(AtomId(4), AtomConstraintForm::valence(4)))]
+    fn test_constraint_try_map_error(
+        constraint_correspondence: MoleculeCorrespondence,
+        #[case] input: Constraint,
+    ) {
+        assert_eq!(input.try_map(&constraint_correspondence), None);
     }
 
     #[rstest]

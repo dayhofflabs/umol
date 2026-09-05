@@ -22,6 +22,10 @@ macro_rules! define_id {
                 pub fn index(self) -> usize { self.0 as usize }
             }
 
+            impl From<$name> for usize {
+                fn from(id: $name) -> Self { id.0 as usize }
+            }
+
             impl fmt::Display for $name {
                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                     write!(f, "{}", self.0)

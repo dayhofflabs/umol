@@ -1,11 +1,15 @@
 //! Python ownership wrappers for transactional molecule editing.
 
-use pyo3::exceptions::PyRuntimeError;
+use pyo3::exceptions::{PyIndexError, PyRuntimeError};
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
-    MoleculeEditor as GraphIrMoleculeEditor, Transaction as GraphIrTransaction,
+    AromaticSystemId, AtomId, BondId, DativeBondId, MoleculeEditor as GraphIrMoleculeEditor,
+    MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
+    Transaction as GraphIrTransaction,
 };
 
+use crate::compact::MoleculeCompaction;
+use crate::correspondence::MoleculeCorrespondence;
 use crate::edit::Edits;
 use crate::error::{molecule_integrity_error, transaction_error};
 use crate::molecule::Molecule;
@@ -36,6 +40,21 @@ impl MoleculeEditor {
             .map_err(molecule_integrity_error)
     }
 
+    /// Materialize the current state and its initial-to-current correspondence.
+    fn tracked_snapshot(&self) -> PyResult<(Molecule, MoleculeCorrespondence)> {
+        self.inner
+            .as_ref()
+            .ok_or_else(consumed_editor_error)?
+            .tracked_snapshot()
+            .map(|(molecule, correspondence)| {
+                (
+                    Molecule::from_rust(molecule),
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
+            .map_err(molecule_integrity_error)
+    }
+
     /// Finalize the editor and consume its mutable state.
     fn build(&mut self) -> PyResult<Molecule> {
         self.inner
@@ -44,6 +63,50 @@ impl MoleculeEditor {
             .try_build()
             .map(Molecule::from_rust)
             .map_err(molecule_integrity_error)
+    }
+
+    /// Finalize the editor and return its initial-to-result correspondence.
+    fn tracked_build(&mut self) -> PyResult<(Molecule, MoleculeCorrespondence)> {
+        self.inner
+            .take()
+            .ok_or_else(consumed_editor_error)?
+            .try_tracked_build()
+            .map(|(molecule, correspondence)| {
+                (
+                    Molecule::from_rust(molecule),
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
+            .map_err(molecule_integrity_error)
+    }
+
+    /// Consume this editor and apply a checked edit batch without constructing a rollback journal.
+    fn apply(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
+        self.inner
+            .take()
+            .ok_or_else(consumed_editor_error)?
+            .apply(edits.bind(py).borrow().to_rust().clone())
+            .map(Self::from_rust)
+            .map_err(transaction_error)
+    }
+
+    /// Apply the same consuming batch and return its input-to-result correspondence.
+    fn tracked_apply(
+        &mut self,
+        py: Python<'_>,
+        edits: Py<Edits>,
+    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+        self.inner
+            .take()
+            .ok_or_else(consumed_editor_error)?
+            .tracked_apply(edits.bind(py).borrow().to_rust().clone())
+            .map(|(editor, correspondence)| {
+                (
+                    Self::from_rust(editor),
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
+            .map_err(transaction_error)
     }
 
     /// Apply a checked edit batch atomically and return its rollback journal.
@@ -55,6 +118,165 @@ impl MoleculeEditor {
                 inner: Some(transaction),
             })
             .map_err(transaction_error)
+    }
+
+    /// Apply the same atomic batch and return its input-to-result correspondence.
+    fn tracked_transact(
+        &mut self,
+        py: Python<'_>,
+        edits: Py<Edits>,
+    ) -> PyResult<(Transaction, MoleculeCorrespondence)> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        editor
+            .tracked_transact(edits.bind(py).borrow().to_rust().clone())
+            .map(|(transaction, correspondence)| {
+                (
+                    Transaction {
+                        inner: Some(transaction),
+                    },
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
+            .map_err(transaction_error)
+    }
+
+    /// Remove atoms and bonds, cascading dependent entities.
+    fn remove(&mut self, atoms: Vec<u32>, bonds: Vec<u32>) -> PyResult<()> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&atoms, editor.atom_count(), "atom")?;
+        ensure_in_range(&bonds, editor.bond_count(), "bond")?;
+        let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
+        let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
+        editor.remove(&atoms, &bonds);
+        Ok(())
+    }
+
+    /// Remove atoms and bonds, returning the source-to-result compaction.
+    fn tracked_remove(&mut self, atoms: Vec<u32>, bonds: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&atoms, editor.atom_count(), "atom")?;
+        ensure_in_range(&bonds, editor.bond_count(), "bond")?;
+        let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
+        let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove(&atoms, &bonds),
+        ))
+    }
+
+    /// Remove dative bonds and compact that entity space.
+    fn remove_dative_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.dative_bond_count(), "dative bond")?;
+        editor.remove_dative_bonds(&ids.into_iter().map(DativeBondId).collect::<Vec<_>>());
+        Ok(())
+    }
+
+    /// Remove dative bonds and return the source-to-result compaction.
+    fn tracked_remove_dative_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.dative_bond_count(), "dative bond")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_dative_bonds(
+                &ids.into_iter().map(DativeBondId).collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
+    /// Remove aromatic systems and compact that entity space.
+    fn remove_aromatic_systems(&mut self, ids: Vec<u32>) -> PyResult<()> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.aromatic_system_count(), "aromatic system")?;
+        editor.remove_aromatic_systems(&ids.into_iter().map(AromaticSystemId).collect::<Vec<_>>());
+        Ok(())
+    }
+
+    /// Remove aromatic systems and return the source-to-result compaction.
+    fn tracked_remove_aromatic_systems(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.aromatic_system_count(), "aromatic system")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_aromatic_systems(
+                &ids.into_iter().map(AromaticSystemId).collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
+    /// Remove multicenter bonds and compact that entity space.
+    fn remove_multicenter_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.multicenter_bond_count(), "multicenter bond")?;
+        editor
+            .remove_multicenter_bonds(&ids.into_iter().map(MulticenterBondId).collect::<Vec<_>>());
+        Ok(())
+    }
+
+    /// Remove multicenter bonds and return the source-to-result compaction.
+    fn tracked_remove_multicenter_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.multicenter_bond_count(), "multicenter bond")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_multicenter_bonds(
+                &ids.into_iter().map(MulticenterBondId).collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
+    /// Remove noncovalent bonds and compact that entity space.
+    fn remove_noncovalent_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.noncovalent_bond_count(), "noncovalent bond")?;
+        editor
+            .remove_noncovalent_bonds(&ids.into_iter().map(NoncovalentBondId).collect::<Vec<_>>());
+        Ok(())
+    }
+
+    /// Remove noncovalent bonds and return the source-to-result compaction.
+    fn tracked_remove_noncovalent_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.noncovalent_bond_count(), "noncovalent bond")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_noncovalent_bonds(
+                &ids.into_iter().map(NoncovalentBondId).collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
+    /// Remove stereo atoms and compact that entity space.
+    fn remove_stereo_atoms(&mut self, ids: Vec<u32>) -> PyResult<()> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.stereo_atom_count(), "stereo atom")?;
+        editor.remove_stereo_atoms(&ids.into_iter().map(StereoAtomId).collect::<Vec<_>>());
+        Ok(())
+    }
+
+    /// Remove stereo atoms and return the source-to-result compaction.
+    fn tracked_remove_stereo_atoms(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.stereo_atom_count(), "stereo atom")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_stereo_atoms(
+                &ids.into_iter().map(StereoAtomId).collect::<Vec<_>>(),
+            ),
+        ))
+    }
+
+    /// Remove stereo bonds and compact that entity space.
+    fn remove_stereo_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.stereo_bond_count(), "stereo bond")?;
+        editor.remove_stereo_bonds(&ids.into_iter().map(StereoBondId).collect::<Vec<_>>());
+        Ok(())
+    }
+
+    /// Remove stereo bonds and return the source-to-result compaction.
+    fn tracked_remove_stereo_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
+        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        ensure_in_range(&ids, editor.stereo_bond_count(), "stereo bond")?;
+        Ok(MoleculeCompaction::from_rust(
+            editor.tracked_remove_stereo_bonds(
+                &ids.into_iter().map(StereoBondId).collect::<Vec<_>>(),
+            ),
+        ))
     }
 }
 
@@ -78,6 +300,32 @@ impl Transaction {
         let transaction = self.inner.take().ok_or_else(consumed_transaction_error)?;
         transaction.rollback(editor).map_err(transaction_error)
     }
+
+    /// Roll back and return the rollback-input-to-restored-state correspondence.
+    fn tracked_rollback(
+        &mut self,
+        py: Python<'_>,
+        editor: Py<MoleculeEditor>,
+    ) -> PyResult<MoleculeCorrespondence> {
+        if self.inner.is_none() {
+            return Err(consumed_transaction_error());
+        }
+
+        let mut editor = editor.bind(py).try_borrow_mut()?;
+        let editor = editor.inner.as_mut().ok_or_else(consumed_editor_error)?;
+        let transaction = self.inner.take().ok_or_else(consumed_transaction_error)?;
+        transaction
+            .tracked_rollback(editor)
+            .map(MoleculeCorrespondence::from_rust)
+            .map_err(transaction_error)
+    }
+}
+
+fn ensure_in_range(ids: &[u32], count: usize, entity: &str) -> PyResult<()> {
+    if ids.iter().any(|&id| id as usize >= count) {
+        return Err(PyIndexError::new_err(format!("{entity} id out of range")));
+    }
+    Ok(())
 }
 
 fn consumed_editor_error() -> PyErr {

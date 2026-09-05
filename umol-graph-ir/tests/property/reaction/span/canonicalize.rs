@@ -71,7 +71,7 @@ proptest! {
             let (with_correspondence, correspondence) = scenario
                 .span
                 .clone()
-                .canonicalize_with_correspondence(&context)
+                .canonicalize_with_remapping(&context)
                 .expect("successful canonicalization returns its correspondence");
 
             prop_assert!(canonical.to_reaction().to_reaction_span().is_ok());
@@ -106,7 +106,7 @@ proptest! {
         let canonical = source.clone().canonicalize(&context).map_err(|error| {
             TestCaseError::fail(format!("generated reaction span did not canonicalize: {error}"))
         })?;
-        let renumbered = source.remap(&scenario.correspondence);
+        let renumbered = source.remap(&scenario.remapping);
 
         prop_assert_eq!(normalized.clone().normalize(), Ok(normalized.clone()));
         prop_assert_eq!(reframed.clone().reframe(), Ok(reframed.clone()));
@@ -231,7 +231,7 @@ proptest! {
         prop_assert!(second.canonical_eq(&third, &context));
         prop_assert!(first.canonical_eq(&third, &context));
         prop_assert_eq!(
-            first.canonicalize_with_correspondence(&context),
+            first.canonicalize_with_remapping(&context),
             Err(ReactionSpanCanonicalizeError::Contradiction(Contradiction)),
         );
     }

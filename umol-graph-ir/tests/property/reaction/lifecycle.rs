@@ -1,4 +1,4 @@
-//! Reaction construction and derivation properties.
+//! Reaction construction and application properties.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -36,7 +36,7 @@ proptest! {
         .expect("identity atom correspondence induces a molecule correspondence");
         let direct = reaction.apply_at(reaction.lhs(), &correspondence).map_err(|error| {
             TestCaseError::fail(format!("identity application failed: {error}"))
-        })?;
+        })?.expect("identity application is applicable");
         let mut applications = reaction
             .apply(
                 reaction.lhs(),
@@ -52,7 +52,7 @@ proptest! {
             let application = application.map_err(|error| {
                 TestCaseError::fail(format!("matched application failed: {error}"))
             })?;
-            if application.rhs() == direct.rhs() {
+            if application == direct {
                 found = true;
                 break;
             }
@@ -61,7 +61,7 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_derivation_roundtrip(reaction in reaction_strategy()) {
+    fn test_reaction_tracked_apply_roundtrip(reaction in reaction_strategy()) {
         let atom_count = reaction.lhs().atoms().count();
         let atom_images = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();
         let correspondence = MoleculeCorrespondence::induce(
@@ -70,29 +70,25 @@ proptest! {
             Correspondence::from_images(&atom_images, atom_count),
         )
         .expect("identity atom correspondence induces a molecule correspondence");
-        let derivation = reaction.apply_at(reaction.lhs(), &correspondence).map_err(|error| {
-            TestCaseError::fail(format!("identity application failed: {error}"))
-        })?;
+        let (product, witness) = reaction.tracked_apply(reaction.lhs(), SubstructureMatchConfig {
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+        }).unwrap().next().unwrap().unwrap();
 
-        prop_assert_eq!(derivation.reverse().reverse(), derivation.clone());
+        prop_assert_eq!(witness.reverse().reverse(), witness.clone());
+        let recovered = Reaction::new(
+            reaction.lhs().clone(),
+            reaction.lhs().difference_to(&product, &witness).unwrap(),
+        );
+        let recovered_product = recovered.apply_at(reaction.lhs(), &correspondence)
+            .unwrap().expect("recovered reaction is applicable");
+        prop_assert_eq!(&recovered_product, &product);
 
-        let recovered = derivation.to_reaction();
-        let recovered_correspondence = MoleculeCorrespondence::induce(
-            derivation.lhs(),
-            derivation.lhs(),
-            correspondence.atoms().clone(),
-        )
-        .expect("identity atom correspondence induces a molecule correspondence");
-        let recovered_derivation = recovered
-            .apply_at(derivation.lhs(), &recovered_correspondence)
-            .map_err(|error| {
-                TestCaseError::fail(format!("recovered reaction did not apply: {error}"))
-            })?;
-        prop_assert_eq!(recovered_derivation.rhs(), derivation.rhs());
-
-        let identity = derivation.chain(&derivation.reverse());
-        prop_assert_eq!(identity.lhs(), derivation.lhs());
-        prop_assert_eq!(identity.rhs(), derivation.lhs());
-        prop_assert_eq!(identity.comap(), &derivation.comap().compose(&derivation.comap().reverse()));
+        let roundtrip = witness.compose(&witness.reverse()).unwrap();
+        prop_assert!(roundtrip.is_compatible(reaction.lhs(), reaction.lhs()));
+        for &(left, right) in roundtrip.atoms().matched_pairs() {
+            prop_assert_eq!(left, right);
+        }
     }
 }

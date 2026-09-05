@@ -40,7 +40,7 @@ proptest! {
     fn test_molecule_combine_all_integrity_preservation(
         sources in prop::collection::vec(molecule_with_constraints_strategy(), 0..5),
     ) {
-        let (published, _) = Molecule::combine_all(&sources);
+        let published = Molecule::combine_all(&sources);
 
         prop_assert_eq!(published.edit().try_build(), Ok(published));
     }
@@ -49,7 +49,7 @@ proptest! {
     fn test_molecule_split_integrity_preservation(
         source in molecule_with_constraints_strategy(),
     ) {
-        for (published, _) in source.split() {
+        for published in source.split() {
             prop_assert_eq!(published.edit().try_build(), Ok(published));
         }
     }

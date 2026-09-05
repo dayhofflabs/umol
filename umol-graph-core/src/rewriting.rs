@@ -16,33 +16,41 @@
 
 use std::collections::HashMap;
 
-use crate::correspondence::{Correspondence, GraphCorrespondence};
+use crate::correspondence::{Correspondence, GraphCorrespondence, GraphCorrespondenceComposeError};
 use crate::graph::{EdgeId, Graph, NodeId};
 
-/// The glued graph and the two coprojections into it.
+/// The two input-to-result correspondences of a graph pushout.
+///
+/// Operation-produced components have equal target counts and cover their respective
+/// inputs. Public fields may be assembled independently; agreement with a particular
+/// pushout graph is contextual.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pushout {
-    pub object: Graph,
+pub struct GraphPushoutCorrespondence {
     /// `left → object` (the identity inclusion — `object` keeps `left`'s ids).
     pub left: GraphCorrespondence,
     /// `right → object` (overlap ids fold onto their `left` partners; the rest are appended).
     pub right: GraphCorrespondence,
 }
 
-/// The context graph `D` of a matched deletion and its embeddings.
+/// The context-to-host and interface-to-context mappings of a pushout complement.
+///
+/// Operation-produced interface target counts equal the context mapping's source counts.
+/// Public fields may be assembled independently; agreement with the context graph,
+/// host, and interface is contextual.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PushoutComplement {
-    pub object: Graph,
+pub struct PushoutComplementCorrespondence {
     /// `D → host` (each context id back to the host it survived from).
     pub context: GraphCorrespondence,
     /// `K → D` (the preserved interface, embedded in the context).
     pub interface: GraphCorrespondence,
 }
 
-/// The shared-preimage graph and its two projections.
+/// The two result-to-input projections of a graph pullback.
+///
+/// Operation-produced components cover the result and have equal source counts. Public fields may be
+/// assembled independently; agreement with the result and input graphs is contextual.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pullback {
-    pub object: Graph,
+pub struct PullbackCorrespondence {
     /// `object → left`.
     pub left: GraphCorrespondence,
     /// `object → right`.
@@ -66,7 +74,20 @@ impl Graph {
     /// correspondence): the pushout of the span it denotes (Def. 2.16). `self` keeps its ids; `right`'s
     /// unmatched nodes/edges are appended. An appended edge whose endpoints already carry one is
     /// identified with it (simple-graph pushout).
-    pub fn pushout(&self, right: &Graph, overlap: &GraphCorrespondence) -> Pushout {
+    ///
+    /// Returns the glued graph. Use [`Self::tracked_pushout`] for its input mappings.
+    pub fn pushout(&self, right: &Graph, overlap: &GraphCorrespondence) -> Graph {
+        self.tracked_pushout(right, overlap).0
+    }
+
+    /// Glue two graphs and return both input-to-result correspondences with the result.
+    ///
+    /// Produces the same graph as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Graph,
+        overlap: &GraphCorrespondence,
+    ) -> (Graph, GraphPushoutCorrespondence) {
         let n_left = self.node_count();
         let m_left = self.edge_count();
 
@@ -127,21 +148,42 @@ impl Graph {
             Correspondence::from_images(&right_edge_images, object_edge_count),
         );
 
-        Pushout {
+        (
             object,
-            left: left_map,
-            right: right_map,
-        }
+            GraphPushoutCorrespondence {
+                left: left_map,
+                right: right_map,
+            },
+        )
     }
 
     /// Delete `matched`(`L\K`) from `self`, keeping the context — the pushout complement of the left
     /// DPO square (Def. 9.8, Fact 9.9). `matched` is the match `L → self`, `interface` the preserved
-    /// `K → L`. `None` when the gluing (dangling) condition fails.
+    /// `K → L`. `None` when the gluing (dangling) condition fails or consecutive carrier counts disagree.
+    /// Use [`Self::tracked_pushout_complement`] to retain the categorical mappings.
     pub fn pushout_complement(
         &self,
         matched: &GraphCorrespondence,
         interface: &GraphCorrespondence,
-    ) -> Option<PushoutComplement> {
+    ) -> Option<Graph> {
+        self.tracked_pushout_complement(matched, interface)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the result and its categorical mappings.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout_complement`].
+    pub fn tracked_pushout_complement(
+        &self,
+        matched: &GraphCorrespondence,
+        interface: &GraphCorrespondence,
+    ) -> Option<(Graph, PushoutComplementCorrespondence)> {
+        let interface_to_host = interface.compose(matched).ok()?;
+        if matched.nodes().right_count() != self.node_count()
+            || matched.edges().right_count() != self.edge_count()
+        {
+            return None;
+        }
         // The deleted host items: L\K (interface-unmatched on the L side), carried through the match.
         let deleted_nodes: Vec<NodeId> = interface
             .nodes()
@@ -157,7 +199,7 @@ impl Graph {
             .collect();
 
         let mut object = self.clone();
-        let compaction = object.try_remove(&deleted_nodes, &deleted_edges)?;
+        let compaction = object.try_tracked_remove(&deleted_nodes, &deleted_edges)?;
 
         let host_to_d_nodes = Correspondence::new(
             (0..self.node_count())
@@ -184,44 +226,56 @@ impl Graph {
 
         let context =
             GraphCorrespondence::new(host_to_d_nodes.reverse(), host_to_d_edges.reverse());
-        let interface_to_d = GraphCorrespondence::new(
-            interface
-                .nodes()
-                .compose(matched.nodes())
-                .compose(&host_to_d_nodes),
-            interface
-                .edges()
-                .compose(matched.edges())
-                .compose(&host_to_d_edges),
-        );
+        let interface_to_d = interface_to_host
+            .compose(&GraphCorrespondence::new(host_to_d_nodes, host_to_d_edges))
+            .expect("the checked match and compaction share the host counts");
 
-        Some(PushoutComplement {
+        Some((
             object,
-            context,
-            interface: interface_to_d,
-        })
+            PushoutComplementCorrespondence {
+                context,
+                interface: interface_to_d,
+            },
+        ))
     }
 
     /// The shared preimage of `self → E` and `right → E` — the pullback of the cospan (Def. 2.22): the
     /// largest subgraph of both that maps consistently into `E`, with its two projections. Used to
     /// build a composite rule's interface (`K = C₁ ×_E C₂`, Def. 9.25).
+    /// Use [`Self::tracked_pullback`] to retain the projections with the result.
+    ///
+    /// # Errors
+    /// Returns the component whose two target counts disagree.
     pub fn pullback(
         &self,
         right: &Graph,
         left_into: &GraphCorrespondence,
         right_into: &GraphCorrespondence,
-    ) -> Pullback {
+    ) -> Result<Graph, GraphCorrespondenceComposeError> {
+        self.tracked_pullback(right, left_into, right_into)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the result and its categorical mappings.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the component whose two target counts disagree.
+    pub fn tracked_pullback(
+        &self,
+        right: &Graph,
+        left_into: &GraphCorrespondence,
+        right_into: &GraphCorrespondence,
+    ) -> Result<(Graph, PullbackCorrespondence), GraphCorrespondenceComposeError> {
         // self ↔ right over the common E: match a self item to the right item sharing its E-image.
-        let node_matched_pairs = left_into
-            .nodes()
-            .compose(&right_into.nodes().reverse())
-            .matched_pairs()
-            .to_vec();
-        let edge_matched_pairs = left_into
-            .edges()
-            .compose(&right_into.edges().reverse())
-            .matched_pairs()
-            .to_vec();
+        let correspondence = left_into.compose(&GraphCorrespondence::new(
+            right_into.nodes().reverse(),
+            right_into.edges().reverse(),
+        ))?;
+        let node_matched_pairs = correspondence.nodes().matched_pairs().to_vec();
+        let edge_matched_pairs = correspondence.edges().matched_pairs().to_vec();
 
         let left_to_k: HashMap<NodeId, NodeId> = node_matched_pairs
             .iter()
@@ -270,11 +324,13 @@ impl Graph {
             ),
         );
 
-        Pullback {
+        Ok((
             object,
-            left: left_map,
-            right: right_map,
-        }
+            PullbackCorrespondence {
+                left: left_map,
+                right: right_map,
+            },
+        ))
     }
 }
 
@@ -284,56 +340,96 @@ mod tests {
     use rstest::*;
 
     use super::*;
-
-    fn node_overlap(
-        matched_pairs: Vec<(u32, u32)>,
-        left: &Graph,
-        right: &Graph,
-    ) -> GraphCorrespondence {
-        let nodes = Correspondence::new(
-            matched_pairs
-                .iter()
-                .map(|&(l, r)| (NodeId(l), NodeId(r)))
-                .collect(),
-            left.node_count(),
-            right.node_count(),
-        )
-        .expect("correspondence producer preserves partial-bijection invariants");
-        GraphCorrespondence::induce(left, right, nodes)
-            .expect("simple graph overlap induces a unique graph correspondence")
-    }
+    use crate::correspondence::CorrespondenceComposeError;
 
     #[rstest]
-    fn test_pushout_glue_at_node() {
-        // path 0-1 glued to path 0-1 identifying left node 1 with right node 0 → path 0-1-2.
+    fn test_graph_pushout_partial() {
         let left = Graph::new(2, &[[0, 1]]);
         let right = Graph::new(2, &[[0, 1]]);
-        let overlap = node_overlap(vec![(1, 0)], &left, &right);
-        let po = left.pushout(&right, &overlap);
-        assert_eq!(po.object.node_count(), 3);
-        assert_eq!(po.object.edge_count(), 2);
-        assert_eq!(po.object.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
-        assert_eq!(po.right.nodes().right_of(NodeId(0)), Some(NodeId(1)));
-        assert_eq!(po.right.nodes().right_of(NodeId(1)), Some(NodeId(2)));
-        assert_eq!(po.right.edges().right_of(EdgeId(0)), Some(EdgeId(1)));
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(1), NodeId(0))], 2, 2).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+        );
+        let (object, po) = left.tracked_pushout(&right, &overlap);
+        assert_eq!(left.pushout(&right, &overlap), object);
+        assert_eq!(object, Graph::new(3, &[[0, 1], [1, 2]]));
+        assert_eq!(
+            po.left,
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 2).unwrap(),
+            )
+        );
+        assert_eq!(
+            po.right,
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(2))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2).unwrap(),
+            )
+        );
     }
 
     #[rstest]
-    fn test_pushout_keeps_context_edge() {
-        // doc-135 R1: glue R_A = F–Cl (with bond) and L_B = [F, Cl] (no bond) over both atoms.
-        // The overlap omits the bond (L_B lacks it), yet the glue keeps R_A's bond as context.
-        let r_a = Graph::new(2, &[[0, 1]]);
-        let l_b = Graph::new(2, &[]);
-        let overlap = node_overlap(vec![(0, 0), (1, 1)], &r_a, &l_b);
-        let po = r_a.pushout(&l_b, &overlap);
-        assert_eq!(po.object.node_count(), 2);
-        assert_eq!(po.object.edge_count(), 1);
-        assert_eq!(po.object.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
-        assert_eq!(po.right.nodes().right_of(NodeId(1)), Some(NodeId(1)));
+    fn test_graph_pushout_context() {
+        let left = Graph::new(2, &[[0, 1]]);
+        let right = Graph::new(2, &[]);
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                .unwrap(),
+            Correspondence::new(vec![], 1, 0).unwrap(),
+        );
+        let (object, correspondence) = left.tracked_pushout(&right, &overlap);
+        assert_eq!(left.pushout(&right, &overlap), object);
+        assert_eq!(object, left);
+        assert_eq!(
+            correspondence,
+            GraphPushoutCorrespondence {
+                left: GraphCorrespondence::new(
+                    Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                        .unwrap(),
+                    Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1).unwrap(),
+                ),
+                right: GraphCorrespondence::new(
+                    Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                        .unwrap(),
+                    Correspondence::new(vec![], 0, 1).unwrap(),
+                ),
+            }
+        );
     }
 
     #[rstest]
-    fn test_pushout_complement_deletes_matched() {
+    #[case::implicit(vec![])]
+    #[case::explicit(vec![(EdgeId(0), EdgeId(0))])]
+    fn test_graph_pushout_coincidence(#[case] edge_pairs: Vec<(EdgeId, EdgeId)>) {
+        let graph = Graph::new(2, &[[0, 1]]);
+        let nodes = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+            .unwrap();
+        let overlap = GraphCorrespondence::new(
+            nodes.clone(),
+            Correspondence::new(edge_pairs, 1, 1).unwrap(),
+        );
+        let expected = GraphCorrespondence::new(
+            nodes,
+            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1).unwrap(),
+        );
+        assert_eq!(graph.pushout(&graph, &overlap), graph);
+        assert_eq!(
+            graph.tracked_pushout(&graph, &overlap),
+            (
+                graph.clone(),
+                GraphPushoutCorrespondence {
+                    left: expected.clone(),
+                    right: expected,
+                }
+            ),
+        );
+    }
+
+    #[rstest]
+    fn test_graph_tracked_pushout_complement() {
         // host path 0-1-2-3; delete node 1 with its two incident edges, keep endpoints 0 and 2.
         let host = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
         // L = path 0-1-2 matched onto host 0-1-2.
@@ -350,18 +446,49 @@ mod tests {
             Correspondence::new(vec![], 0, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
-        let pc = host
-            .pushout_complement(&matched, &interface)
+        let (object, pc) = host
+            .tracked_pushout_complement(&matched, &interface)
             .expect("no dangling");
-        assert_eq!(pc.object.node_count(), 3);
-        assert_eq!(pc.object.edge_count(), 1);
+        assert_eq!(object, Graph::new(3, &[[1, 2]]));
+        assert_eq!(
+            host.pushout_complement(&matched, &interface),
+            Some(object.clone())
+        );
+        assert_eq!(
+            pc.context,
+            GraphCorrespondence::new(
+                Correspondence::new(
+                    vec![
+                        (NodeId(0), NodeId(0)),
+                        (NodeId(1), NodeId(2)),
+                        (NodeId(2), NodeId(3))
+                    ],
+                    3,
+                    4
+                )
+                .unwrap(),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(2))], 1, 3).unwrap(),
+            )
+        );
+        assert_eq!(
+            pc.interface,
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![], 0, 1).unwrap(),
+            )
+        );
+        assert_eq!(
+            pc.interface.compose(&pc.context),
+            interface.compose(&matched)
+        );
         // host node 3 survives as D node 2; the K endpoint (host node 2) as D node 1.
         assert_eq!(pc.context.nodes().right_of(NodeId(2)), Some(NodeId(3)));
         assert_eq!(pc.interface.nodes().right_of(NodeId(1)), Some(NodeId(1)));
     }
 
     #[rstest]
-    fn test_pushout_complement_dangling() {
+    fn test_graph_tracked_pushout_complement_error() {
         // Same match, but K keeps the edges — deleting node 1 would strand them → None.
         let host = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
         let matched = GraphCorrespondence::induce(
@@ -377,11 +504,12 @@ mod tests {
             Correspondence::new(vec![(EdgeId(0), EdgeId(0)), (EdgeId(1), EdgeId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
+        assert_eq!(host.tracked_pushout_complement(&matched, &interface), None);
         assert_eq!(host.pushout_complement(&matched, &interface), None);
     }
 
     #[rstest]
-    fn test_pullback_shared_subgraph() {
+    fn test_graph_tracked_pullback() {
         // left, right both path 0-1-2; E identifies left {0,1} with right {1,2}, left edge 0-1 with
         // right edge 1-2. Pullback is that shared edge.
         let left = Graph::new(3, &[[0, 1], [1, 2]]);
@@ -399,12 +527,123 @@ mod tests {
             Correspondence::new(vec![(EdgeId(1), EdgeId(0))], 2, 1)
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
-        let pb = left.pullback(&right, &left_into, &right_into);
-        assert_eq!(pb.object.node_count(), 2);
-        assert_eq!(pb.object.edge_count(), 1);
-        assert_eq!(pb.left.nodes().right_of(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(pb.right.nodes().right_of(NodeId(0)), Some(NodeId(1)));
-        assert_eq!(pb.left.edges().right_of(EdgeId(0)), Some(EdgeId(0)));
-        assert_eq!(pb.right.edges().right_of(EdgeId(0)), Some(EdgeId(1)));
+        let (object, pb) = left
+            .tracked_pullback(&right, &left_into, &right_into)
+            .unwrap();
+        assert_eq!(object, Graph::new(2, &[[0, 1]]));
+        assert_eq!(
+            left.pullback(&right, &left_into, &right_into),
+            Ok(object.clone())
+        );
+        assert_eq!(pb.left.compose(&left_into), pb.right.compose(&right_into));
+        assert_eq!(
+            pb.left,
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 2).unwrap(),
+            )
+        );
+        assert_eq!(
+            pb.right,
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(2))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2).unwrap(),
+            )
+        );
+    }
+
+    #[rstest]
+    #[case::nodes(GraphCorrespondence::new(Correspondence::new(vec![], 0, 1).unwrap(), Correspondence::empty()), GraphCorrespondenceComposeError::Nodes(CorrespondenceComposeError {right_count: 1, next_left_count: 0}))]
+    #[case::edges(GraphCorrespondence::new(Correspondence::empty(), Correspondence::new(vec![], 0, 1).unwrap()), GraphCorrespondenceComposeError::Edges(CorrespondenceComposeError {right_count: 1, next_left_count: 0}))]
+    fn test_graph_tracked_pullback_error(
+        #[case] left_into: GraphCorrespondence,
+        #[case] expected: GraphCorrespondenceComposeError,
+    ) {
+        let graph = Graph::new(0, &[]);
+        let right_into = GraphCorrespondence::new(Correspondence::empty(), Correspondence::empty());
+        assert_eq!(
+            graph.pullback(&graph, &left_into, &right_into).unwrap_err(),
+            expected
+        );
+        assert_eq!(
+            graph
+                .tracked_pullback(&graph, &left_into, &right_into)
+                .unwrap_err(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::intermediate(1, 0)]
+    #[case::host(0, 1)]
+    fn test_graph_tracked_pushout_complement_context(
+        #[case] source_count: usize,
+        #[case] target_count: usize,
+    ) {
+        let graph = Graph::new(0, &[]);
+        let interface = GraphCorrespondence::new(Correspondence::empty(), Correspondence::empty());
+        let matched = GraphCorrespondence::new(
+            Correspondence::new(vec![], source_count, target_count).unwrap(),
+            Correspondence::empty(),
+        );
+        assert_eq!(graph.pushout_complement(&matched, &interface), None);
+        assert_eq!(
+            graph
+                .tracked_pushout_complement(&matched, &interface)
+                .map(|(object, _)| object),
+            None
+        );
+    }
+    #[rstest]
+    #[case::empty(0, 0)]
+    #[case::disjoint(2, 3)]
+    fn test_graph_tracked_pullback_empty(#[case] left_count: usize, #[case] right_count: usize) {
+        let left = Graph::new(left_count, &[]);
+        let right = Graph::new(right_count, &[]);
+        let left_into = GraphCorrespondence::new(
+            Correspondence::new(
+                (0..left_count)
+                    .map(|idx| (NodeId::from(idx), NodeId::from(idx)))
+                    .collect(),
+                left_count,
+                left_count + right_count,
+            )
+            .unwrap(),
+            Correspondence::empty(),
+        );
+        let right_into = GraphCorrespondence::new(
+            Correspondence::new(
+                (0..right_count)
+                    .map(|idx| (NodeId::from(idx), NodeId::from(left_count + idx)))
+                    .collect(),
+                right_count,
+                left_count + right_count,
+            )
+            .unwrap(),
+            Correspondence::empty(),
+        );
+        let expected = Graph::new(0, &[]);
+        assert_eq!(
+            left.pullback(&right, &left_into, &right_into),
+            Ok(expected.clone())
+        );
+        assert_eq!(
+            left.tracked_pullback(&right, &left_into, &right_into),
+            Ok((
+                expected,
+                PullbackCorrespondence {
+                    left: GraphCorrespondence::new(
+                        Correspondence::new(vec![], 0, left_count).unwrap(),
+                        Correspondence::empty(),
+                    ),
+                    right: GraphCorrespondence::new(
+                        Correspondence::new(vec![], 0, right_count).unwrap(),
+                        Correspondence::empty(),
+                    ),
+                }
+            )),
+        );
     }
 }

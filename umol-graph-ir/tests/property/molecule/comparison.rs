@@ -7,13 +7,15 @@
 //! intrinsically contradictory inputs have separate relation-law properties because only the
 //! successful domain produces a canonical correspondence witness.
 
+use std::fmt::Debug;
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
+use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomId, BondId, Canonicalize, CanonicalizeContext, Contradiction,
-    DativeBondId, Molecule, MoleculeCanonicalizeError, MoleculeCorrespondence, MoleculeEntries,
-    MulticenterBondId, NoncovalentBondId, Normalize, NumForm, Reframe, StereoAtomId, StereoBondId,
+    AromaticSystemId, AtomId, Canonicalize, CanonicalizeContext, Contradiction, DativeBondId,
+    Molecule, MoleculeCanonicalizeError, MoleculeEntries, MoleculeRemapping, MulticenterBondId,
+    NoncovalentBondId, Normalize, NumForm, Reframe, StereoAtomId, StereoBondId,
 };
 
 use crate::strategies::{
@@ -29,18 +31,20 @@ fn context() -> CanonicalizeContext {
     }
 }
 
-fn identity_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
-    fn identity<Id>(count: usize) -> Correspondence<Id>
+fn identity_remapping(molecule: &Molecule) -> MoleculeRemapping {
+    fn identity<Id>(count: usize) -> Remapping<Id>
     where
-        Id: Copy + Ord + From<usize>,
+        Id: Copy + Debug + Into<usize> + From<usize>,
     {
         let images: Vec<Id> = (0..count).map(Id::from).collect();
-        Correspondence::from_images(&images, count)
+        Remapping::new(images).unwrap()
     }
 
-    MoleculeCorrespondence::new(
-        identity::<AtomId>(molecule.atoms().count()),
-        identity::<BondId>(molecule.bonds().count()),
+    MoleculeRemapping::new(
+        GraphRemapping::new(
+            identity::<NodeId>(molecule.atoms().count()),
+            identity::<EdgeId>(molecule.bonds().count()),
+        ),
         identity::<DativeBondId>(molecule.dative_bonds().count()),
         identity::<AromaticSystemId>(molecule.aromatic_systems().count()),
         identity::<MulticenterBondId>(molecule.multicenter_bonds().count()),
@@ -50,16 +54,18 @@ fn identity_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
     )
 }
 
-fn atom_only_correspondence(images: &[AtomId], count: usize) -> MoleculeCorrespondence {
-    fn empty<Id>() -> Correspondence<Id>
+fn atom_only_remapping(images: &[AtomId], _count: usize) -> MoleculeRemapping {
+    fn empty<Id>() -> Remapping<Id>
     where
-        Id: Copy + Ord + From<usize>,
+        Id: Copy + Debug + Into<usize> + From<usize>,
     {
-        Correspondence::from_images(&[], 0)
+        Remapping::default()
     }
-    MoleculeCorrespondence::new(
-        Correspondence::from_images(images, count),
-        empty(),
+    MoleculeRemapping::new(
+        GraphRemapping::new(
+            Remapping::new((images).iter().copied().map(NodeId::from).collect()).unwrap(),
+            empty(),
+        ),
         empty(),
         empty(),
         empty(),
@@ -67,6 +73,17 @@ fn atom_only_correspondence(images: &[AtomId], count: usize) -> MoleculeCorrespo
         empty(),
         empty(),
     )
+}
+
+fn composed_images<Id: Copy + Into<usize> + From<usize>>(
+    first: &Remapping<Id>,
+    second: &Remapping<Id>,
+) -> Vec<Id> {
+    assert_eq!(first.len(), second.len());
+    (0..first.len())
+        .map(Id::from)
+        .map(|source| second.map(first.map(source)))
+        .collect()
 }
 
 proptest! {
@@ -118,7 +135,7 @@ proptest! {
                     )
                 })
                 .collect::<Vec<_>>();
-            atom_only_correspondence(&images, count)
+            atom_only_remapping(&images, count)
         };
 
         let first = molecule(&first_order);
@@ -129,7 +146,51 @@ proptest! {
 
         prop_assert!(first.framed_eq_under(&second, &first_second));
         prop_assert!(second.framed_eq_under(&third, &second_third));
-        prop_assert!(first.framed_eq_under(&third, &first_second.compose(&second_third)));
+        let composed = MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(composed_images(
+                    first_second.graph().nodes(),
+                    second_third.graph().nodes(),
+                ))
+                .unwrap(),
+                Remapping::new(composed_images(
+                    first_second.graph().edges(),
+                    second_third.graph().edges(),
+                ))
+                .unwrap(),
+            ),
+            Remapping::new(composed_images(
+                first_second.dative_bonds(),
+                second_third.dative_bonds(),
+            ))
+            .unwrap(),
+            Remapping::new(composed_images(
+                first_second.aromatic_systems(),
+                second_third.aromatic_systems(),
+            ))
+            .unwrap(),
+            Remapping::new(composed_images(
+                first_second.multicenter_bonds(),
+                second_third.multicenter_bonds(),
+            ))
+            .unwrap(),
+            Remapping::new(composed_images(
+                first_second.noncovalent_bonds(),
+                second_third.noncovalent_bonds(),
+            ))
+            .unwrap(),
+            Remapping::new(composed_images(
+                first_second.stereo_atoms(),
+                second_third.stereo_atoms(),
+            ))
+            .unwrap(),
+            Remapping::new(composed_images(
+                first_second.stereo_bonds(),
+                second_third.stereo_bonds(),
+            ))
+            .unwrap(),
+        );
+        prop_assert!(first.framed_eq_under(&third, &composed));
     }
 
     #[test]
@@ -144,7 +205,7 @@ proptest! {
     fn test_molecule_framed_eq_under_identity(
         molecule in molecule_with_constraints_strategy(),
     ) {
-        let correspondence = identity_correspondence(&molecule);
+        let correspondence = identity_remapping(&molecule);
         let mut other = molecule.clone();
         if other.atoms().count() > 0 {
             other.atom_mut(AtomId(0)).attributes.charge = NumForm::Lit(99);
@@ -160,7 +221,7 @@ proptest! {
     fn test_molecule_framed_eq_under_participant_frame(
         (left, right) in stereo_reframed_molecule_pair_strategy(),
     ) {
-        let correspondence = identity_correspondence(&left);
+        let correspondence = identity_remapping(&left);
 
         prop_assert_eq!(
             left.framed_eq_under(&right, &correspondence),
@@ -186,19 +247,21 @@ proptest! {
             right.atom_mut(AtomId((count - 1) as u32)).attributes.charge = NumForm::Lit(99);
         }
         let images: Vec<AtomId> = (0..count).rev().map(AtomId::from).collect();
-        let correspondence = MoleculeCorrespondence::new(
-            Correspondence::from_images(&images, count),
-            Correspondence::from_images(&[], 0),
-            Correspondence::from_images(&[], 0),
-            Correspondence::from_images(&[], 0),
-            Correspondence::from_images(&[], 0),
-            Correspondence::from_images(&[], 0),
-            Correspondence::from_images(&[], 0),
-            Correspondence::from_images(&[], 0),
+        let correspondence = MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(images.into_iter().map(NodeId::from).collect()).unwrap(),
+                Remapping::default(),
+            ),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
         );
 
         let forward = left.framed_eq_under(&right, &correspondence);
-        let reverse = right.framed_eq_under(&left, &correspondence.reverse());
+        let reverse = right.framed_eq_under(&left, &correspondence);
         prop_assert_eq!(forward, reverse);
         prop_assert_eq!(forward, !change_mapped_atom || count == 0);
     }
@@ -210,19 +273,22 @@ proptest! {
         let context = context();
         let source = scenario.molecule;
         let identical = source.clone();
-        let normalized = source.clone().normalize().map_err(|_| {
-            TestCaseError::fail("generated molecule is intrinsically contradictory")
-        })?;
-        let normalized_again = normalized.clone().normalize().map_err(|_| {
-            TestCaseError::fail("normalized molecule became contradictory")
-        })?;
-        let reframed = source.clone().reframe().map_err(|_| {
-            TestCaseError::fail("generated molecule is intrinsically contradictory")
-        })?;
+        let normalized = source
+            .clone()
+            .normalize()
+            .map_err(|_| TestCaseError::fail("generated molecule is intrinsically contradictory"))?;
+        let normalized_again = normalized
+            .clone()
+            .normalize()
+            .map_err(|_| TestCaseError::fail("normalized molecule became contradictory"))?;
+        let reframed = source
+            .clone()
+            .reframe()
+            .map_err(|_| TestCaseError::fail("generated molecule is intrinsically contradictory"))?;
         let canonical = source.clone().canonicalize(&context).map_err(|error| {
             TestCaseError::fail(format!("generated molecule did not canonicalize: {error}"))
         })?;
-        let renumbered = source.remap(&scenario.correspondence);
+        let renumbered = source.remap(&scenario.remapping);
 
         prop_assert_eq!(&source, &identical);
         prop_assert!(source.normalized_eq(&identical));
@@ -239,10 +305,7 @@ proptest! {
         prop_assert!(source.framed_eq(&normalized));
         prop_assert!(normalized.framed_eq(&reframed));
         prop_assert!(source.framed_eq(&reframed));
-        prop_assert_eq!(
-            source.framed_eq(&reframed),
-            reframed.framed_eq(&source),
-        );
+        prop_assert_eq!(source.framed_eq(&reframed), reframed.framed_eq(&source),);
 
         prop_assert!(source.canonical_eq(&reframed, &context));
         prop_assert_eq!(
@@ -273,7 +336,7 @@ proptest! {
         prop_assert!(second.canonical_eq(&third, &context));
         prop_assert!(first.canonical_eq(&third, &context));
         prop_assert_eq!(
-            first.canonicalize_with_correspondence(&context),
+            first.canonicalize_with_remapping(&context),
             Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),
         );
     }

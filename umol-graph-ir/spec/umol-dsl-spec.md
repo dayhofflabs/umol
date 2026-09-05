@@ -18,7 +18,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED*
 
 Two contexts use the same surface grammar:
 
-- **Concrete**: fully instantiated molecules. Every numeric slot is a concrete integer; element is a single symbol.
+- **Concrete**: fully instantiated molecules. Every numeric field is a concrete integer; element is a single symbol.
 - **Pattern**: adds wildcards, finite sets, negation, and numeric ranges.
 
 The subgrammars in **§5.1** and **§7** define forms that are syntactically valid in one or both contexts; **§3** identifies the restrictions.
@@ -53,7 +53,7 @@ The same token grammars are used in both contexts; which shapes are legal depend
 
 | Context   | Constraints on strings |
 |-----------|-------------------------|
-| **Concrete** | Wildcards, sets, negation, and ranges are invalid unless this specification explicitly allows them for that slot. |
+| **Concrete** | Wildcards, sets, negation, and ranges are invalid unless this specification explicitly allows them for that field. |
 | **Pattern** | Wildcards, sets, negation, ranges, and constraints per **§5.1** and **§7**. |
 
 **Builder-oriented** use (expecting a unique concrete resolution) and **query-oriented** use (selecting a set of matches) differ only in evaluation policy, not in the grammars.
@@ -125,15 +125,15 @@ stereo-keyword ::= :ccw | :cw | :z | :e
 
 **`:attrs` in entity-definition maps.** Every entity-definition map whose grammar includes **`:attrs`** — the map form of **`bond-entry`** and every **`dative-bond-entry`**, **`aromatic-system-entry`**, **`multicenter-bond-entry`**, **`noncovalent-bond-entry`**, **`stereo-atom-entry`**, and **`stereo-bond-entry`** — **MUST** include that key. Its payload is a subgrammar string (or its EDN-keyword shorthand where defined); such a map without **`:attrs`** is a parse error. The vector form of **`bond-entry`** carries its **`bond-spec`** as the third element, and atom entries carry their **`atom-spec`** directly; neither form has an **`:attrs`** key. Structural reference maps are not entity definitions and **MUST NOT** carry **`:attrs`** (**§7.12**).
 
-An empty string in an **`:attrs`** slot, or as the **`bond-spec`** of a vector **`bond-entry`**, is a **parse error**. Each corresponding subgrammar **MUST** begin with a leading inherent-field token:
+An empty string in an **`:attrs`** field, or as the **`bond-spec`** of a vector **`bond-entry`**, is a **parse error**. Each corresponding subgrammar **MUST** begin with a leading inherent-field token:
 
 - **`aromatic-string`** (**§7.8**) and **`multicenter-string`** (**§7.9**) lead with an **electron counts** specification — **`*`** (undetermined) or a **`[n,n,…]`** vector (the counterpart of the bond-string's order or the atom-string's element). Empty is invalid; use **`"*"`** for undetermined counts.
 - **`bond-string`** (**§7.4**), **`dative-string`** (**§7.7**), and **`noncovalent-string`** (**§7.10**) **MUST** begin with a leading inherent-field token (bond order, dative order, noncovalent kind). Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
 - **`stereo-string`** (**§7.11**) **MUST** begin with a leading **`class`** token (**`Th`** / **`Ct`**) followed by a **`coset`**. Use a literal token (e.g. **`"Th1"`**) or a **`stereo-keyword`** (**`:ccw`** / **`:cw`** / **`:z`** / **`:e`**).
 
-**Dative bond entry.** A dative bond entry directs one donor to one acceptor: **`:donors`** is a one-element vector naming the atom that donates the electron pair, and **`:acceptor`** names the atom that accepts it. The two atoms **MUST** be distinct. The mandatory **`:attrs`** slot carries a **`dative-string`** (**§7.7**) — order plus optional aromatic constraint (**`#a`**) and ring-membership assertion (**`#R`**). The dative-string has no direction token; direction is expressed by the **`:donors`** / **`:acceptor`** assignment.
+**Dative bond entry.** A dative bond entry directs one donor to one acceptor: **`:donors`** is a one-element vector naming the atom that donates the electron pair, and **`:acceptor`** names the atom that accepts it. The two atoms **MUST** be distinct. The mandatory **`:attrs`** field carries a **`dative-string`** (**§7.7**) — order plus optional aromatic constraint (**`#a`**) and ring-membership assertion (**`#R`**). The dative-string has no direction token; direction is expressed by the **`:donors`** / **`:acceptor`** assignment.
 
-**Multicenter entry.** The mandatory **`:attrs`** slot carries a **`multicenter-string`** payload (**§7.9**) — a leading **electron counts** specification then per-system charge, unpaired-electron count and multiplicity, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape.
+**Multicenter entry.** The mandatory **`:attrs`** field carries a **`multicenter-string`** payload (**§7.9**) — a leading **electron counts** specification then per-system charge, unpaired-electron count and multiplicity, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape.
 
 **Per-atom electron counts (aromatic and multicenter entries).** The **per-atom** electron contributions are the **mandatory leading** specification of the **`aromatic-string`** / **`multicenter-string`** (**§7.8** / **§7.9**), not a map key: a leading **`*`** (the whole vector undetermined) **or** a **`[n,n,…]`** vector of concrete integers, one per member atom. A concrete vector **MUST** have the same length as the entry's **`:atoms`** vector — position **`i`** is the contribution of the atom at position **`i`** of **`:atoms`**. The electron counts are independent of the optional **`#e`** total — when both are present, downstream validation **MAY** require their **sum** to equal **`#e`** on concrete inputs.
 
@@ -218,7 +218,7 @@ range      ::= '(' signed-int '..' ')'   (* RangeFrom: bound <= value       *)
              | '(' '..' signed-int ')'    (* RangeTo:   value < bound        *)
 ```
 
-**Top-level integer.** A **`signed-int`** forms a complete top-level **`num-form`** when it is followed by the next predicate or the end of the string. A sign is optional; unsigned slots reject negative values during validation. The common concrete case (**`#h3`**, **`#v0`**, **`#c-2`**) has this shape.
+**Top-level integer.** A **`signed-int`** forms a complete top-level **`num-form`** when it is followed by the next predicate or the end of the string. A sign is optional; unsigned fields reject negative values during validation. The common concrete case (**`#h3`**, **`#v0`**, **`#c-2`**) has this shape.
 
 **Top-level `nat-set`.** A **`nat-set`** denotes a finite numeric disjunction for the one quantity fixed by the enclosing predicate tag. For example, **`#h{1,2,3}`** admits the three listed implicit-hydrogen counts.
 
@@ -274,7 +274,7 @@ element-literal ::= [A-Z][a-z]*
 
 ### 5.3 Isotope
 
-**`#i` isotope subgrammar.** The isotope-mass slot uses its own subgrammar, not **`num-form`**, because isotope mass numbers are tagged enum-like. Empty payload (bare **`#i`**) denotes mass **1** (per §5.1.1 decimal-tail).
+**`#i` isotope subgrammar.** The isotope-mass field uses its own subgrammar, not **`num-form`**, because isotope mass numbers are tagged enum-like. Empty payload (bare **`#i`**) denotes mass **1** (per §5.1.1 decimal-tail).
 
 ```
 isotope-payload ::= '='                           (* Natural — naturally-occurring ratios *)
@@ -425,7 +425,7 @@ glyph     ::= '=' | '\'' | '/'
 
 ### 6.2 Pattern–target match
 
-**Match as solution-set inclusion.** Each attribute slot has a solution set: a literal admits itself, a set admits its members, a negation admits the complement of its named values, a wildcard admits the full domain, and a range admits its half-line. The **`#R`** family uses the same numeric rules. A pattern slot matches a target slot iff `solution-set(pattern)` ⊇ `solution-set(target)`. Match is not symmetric.
+**Match as solution-set inclusion.** Each attribute field has a solution set: a literal admits itself, a set admits its members, a negation admits the complement of its named values, a wildcard admits the full domain, and a range admits its half-line. The **`#R`** family uses the same numeric rules. A pattern field matches a target field iff `solution-set(pattern)` ⊇ `solution-set(target)`. Match is not symmetric.
 
 | pattern kind | target kind | matches iff |
 |--------------|-------------|-------------|
@@ -479,9 +479,9 @@ glyph     ::= '=' | '\'' | '/'
 
 **Isotope mass number.** The numeric value carried by **`#i`** in **Concrete** **MUST** fit an **unsigned 32-bit** integer.
 
-**Unsigned 8-bit numeric slots (0…255).** After parsing, **concrete** values for the following **MUST** fit **`u8`** (atom tags, **§7.3**):
+**Unsigned 8-bit numeric fields (0…255).** After parsing, **concrete** values for the following **MUST** fit **`u8`** (atom tags, **§7.3**):
 
-| Slot | Atom predicate |
+| Field | Atom predicate |
 |------|------------------|
 | Implicit H count | **`#h`** |
 | Lone pairs (nonbonding) | **`#n`** |
@@ -498,7 +498,7 @@ glyph     ::= '=' | '\'' | '/'
 
 **Aromatic-string** **`#c`** / **`#u`** / **`#s`** / **`#e`** use the **aromatic-system** namespace (**§7.8**); **`#e`** denotes the total π-electron count (**`u8`**), other tags parallel the bond namespace.
 
-**Lexical** **`nat`** in the grammar is unbounded; **Concrete** validation **MUST** reject values outside the **u8** (or **i8** / **u32** as above) range for the corresponding slot.
+**Lexical** **`nat`** in the grammar is unbounded; **Concrete** validation **MUST** reject values outside the **u8** (or **i8** / **u32** as above) range for the corresponding field.
 
 **Bond order** (**§7.5**) uses a **discrete** model; **fractional** bond orders **MUST NOT** appear in the **bond-string**. **Aromatic** connectivity **MUST NOT** be encoded as a bond **order**; use the molecule map’s **`:aromatic-systems`** section (**§4**) and ordinary **`:bonds`** entries.
 
@@ -582,7 +582,7 @@ order ::= num-form
 
 **`#c` (bond formal charge).** After **`#c`**, parse **either** a full **`num-form`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. (So e.g. **`#c+2`** is charge **+2** via **`num-form`**, not **`#c+`** followed by junk.)
 
-**`#u`** / **`#s`.** After **`#u`** or **`#s`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **No** extra lookahead is required beyond **`num-form`** termination and the next predicate or end of string.
+**`#u`** / **`#s`.** After **`#u`** or **`#s`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric value **1** (same convention as **§5.1.1** for decimal-only fields). **No** extra lookahead is required beyond **`num-form`** termination and the next predicate or end of string.
 
 **`#R` (bond ring membership).** Same forms as atom-level **`#R`** (**§7.3**): **`#R<count>`** (total ring count) or **`#R(<size>)<count>`** (count of rings of that size); bare means **1**; **`#R*`** means no constraint; **`#R+`** is the range **`RangeFrom(1)`** ("bond lies in at least one ring"); **`#R!`** means count **0**.
 
@@ -698,7 +698,7 @@ aromatic-predicate ::= '#' tag payload
 
 **`#c` (aromatic-system formal charge).** After **`#c`**, parse **either** a full **`num-form`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. (So e.g. **`#c+2`** is charge **+2** via **`num-form`**, not **`#c+`** followed by junk.) Same convention as atom (**§7.3**) and bond (**§7.4**) **`#c`**.
 
-**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **`#e`** omitted means **1** π-electron.
+**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric value **1** (same convention as **§5.1.1** for decimal-only fields). **`#e`** omitted means **1** π-electron.
 
 | Tag | Meaning (aromatic-system namespace) | Storage |
 |-----|---------------------------------------|----------|
@@ -729,7 +729,7 @@ multicenter-predicate ::= '#' tag payload
 
 **`#c` (multicenter-bond formal charge).** After **`#c`**, parse **either** a full **`num-form`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. Same convention as atom (**§7.3**), bond (**§7.4**), and aromatic (**§7.8**) **`#c`**.
 
-**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **`#e`** omitted means **1** bonded electron.
+**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric value **1** (same convention as **§5.1.1** for decimal-only fields). **`#e`** omitted means **1** bonded electron.
 
 | Tag | Meaning (multicenter-bond namespace) | Storage |
 |-----|----------------------------------------|----------|
@@ -1115,7 +1115,7 @@ from **§7.12**, except that every reference into the target molecule is the cor
 handle above. This includes references nested under **`:and`**, **`:or`**, and **`:not`**, relational
 constraints, and subset-valued molecule constraints. Keyword ids and structural refs are not
 accepted in standalone edits because the document
-does not carry the host's metadata or structure. Normalized internal constraint slots never appear in
+does not carry the host's metadata or structure. Normalized internal constraint indices never appear in
 the surface form.
 
 **Ordering and handle allocation.** Edit order and duplicate entries are semantic and **MUST** be
@@ -1291,7 +1291,7 @@ constraint-span ::=
 
 **`atom-value`** is an atom literal or an **`:atom-aliases`** keyword (the value position of a **§4** atom entry); **`bond-value`** is a **`bond-string`** / **`bond-keyword`** (a bond entry's **`:attrs`**); each **`<x>-value`** is the corresponding overlay's **`:attrs`** payload (**`dative-value`** a **`dative-string`**, **`aromatic-value`** an **`aromatic-string`**, and so on, **§7.7–7.11**); **`atom-entry`** / **`bond-entry`** / the overlay entries / **`constraint-entry`** are the **§4** / **§7.12** forms; **`ligand`** is a **§4** stereo ligand.
 
-**Union id space.** Span entries are in the **union id space** (`L ∪ R`): every entity — unchanged, added, removed, or modified — occupies a slot, and positions are the ids (no allocation, unlike the operational form). An atom's optional **`[:id …]`** and a bond's **`:id`** name it; refs (bond endpoints, constraint refs) resolve against this single id space.
+**Union id space.** Span entries are in the **union id space** (`L ∪ R`): every entity — unchanged, added, removed, or modified — occupies an entry, and positions are the ids (no allocation, unlike the operational form). An atom's optional **`[:id …]`** and a bond's **`:id`** name it; refs (bond endpoints, constraint refs) resolve against this single id space.
 
 **`:modify` carries both sides** — `[left right]`, **complete** values (atoms `[left right]`; bonds carry endpoints once, `[a b [left right]]`). This is the one place the span differs from the operational **`:modify`**, which carries only the new value: the span is **self-contained** (it has no **`:lhs`** to recover the old value from).
 

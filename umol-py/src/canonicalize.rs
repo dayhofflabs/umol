@@ -12,12 +12,12 @@ use umol_graph_ir::ir::{
 };
 
 use crate::algorithm::AutomorphismAlgorithm;
-use crate::correspondence::MoleculeCorrespondence;
 use crate::error::ContradictionError;
 use crate::model::stereo::StereoModel;
 use crate::molecule::Molecule;
 use crate::reaction::Reaction;
 use crate::reaction_span::ReactionSpan;
+use crate::remap::MoleculeRemapping;
 
 /// Operational configuration for aggregate canonicalization.
 #[pyclass(eq, frozen, from_py_object)]
@@ -127,24 +127,24 @@ impl Molecule {
             .map_err(molecule_canonicalization_error)
     }
 
-    /// Return the complete canonical form and its source-to-canonical correspondence.
+    /// Return the complete canonical form and its source-to-canonical remapping.
     ///
-    /// The correspondence is total across every entity kind and maps entity ids; participant
+    /// The remapping is total across every entity kind and maps entity ids; participant
     /// frames are selected internally and are not encoded in it. Canonical representatives may
     /// change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         &self,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
-    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+    ) -> PyResult<(Self, MoleculeRemapping)> {
         self.to_rust()
             .clone()
-            .canonicalize_with_correspondence(&canonicalize_context(stereo_model, config))
-            .map(|(canonical, correspondence)| {
+            .canonicalize_with_remapping(&canonicalize_context(stereo_model, config))
+            .map(|(canonical, remapping)| {
                 (
                     Self::from_rust(canonical),
-                    MoleculeCorrespondence::from_rust(correspondence),
+                    MoleculeRemapping::from_rust(remapping),
                 )
             })
             .map_err(molecule_canonicalization_error)
@@ -181,24 +181,24 @@ impl ReactionSpan {
             .map_err(reaction_span_canonicalization_error)
     }
 
-    /// Return the complete canonical form and its source-to-canonical correspondence.
+    /// Return the complete canonical form and its source-to-canonical remapping.
     ///
-    /// The correspondence is total across every union-frame entity kind and maps entity ids;
+    /// The remapping is total across every union-frame entity kind and maps entity ids;
     /// participant frames are selected internally and are not encoded in it. Canonical
     /// representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         &self,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
-    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+    ) -> PyResult<(Self, MoleculeRemapping)> {
         self.to_rust()
             .clone()
-            .canonicalize_with_correspondence(&canonicalize_context(stereo_model, config))
-            .map(|(canonical, correspondence)| {
+            .canonicalize_with_remapping(&canonicalize_context(stereo_model, config))
+            .map(|(canonical, remapping)| {
                 (
                     Self::from_rust(canonical),
-                    MoleculeCorrespondence::from_rust(correspondence),
+                    MoleculeRemapping::from_rust(remapping),
                 )
             })
             .map_err(reaction_span_canonicalization_error)
@@ -236,25 +236,25 @@ impl Reaction {
         Self::from_rust(py, canonical)
     }
 
-    /// Return the complete canonical form and its source-to-canonical correspondence.
+    /// Return the complete canonical form and its source-to-canonical remapping.
     ///
-    /// The correspondence is total across every materialized union-frame entity kind and maps
+    /// The remapping is total across every materialized union-frame entity kind and maps
     /// entity ids; participant frames are selected internally and are not encoded in it. Canonical
     /// representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         &self,
         py: Python<'_>,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
-    ) -> PyResult<(Self, MoleculeCorrespondence)> {
-        let (canonical, correspondence) = self
+    ) -> PyResult<(Self, MoleculeRemapping)> {
+        let (canonical, remapping) = self
             .to_rust(py)?
-            .canonicalize_with_correspondence(&canonicalize_context(stereo_model, config))
+            .canonicalize_with_remapping(&canonicalize_context(stereo_model, config))
             .map_err(reaction_canonicalization_error)?;
         Ok((
             Self::from_rust(py, canonical)?,
-            MoleculeCorrespondence::from_rust(correspondence),
+            MoleculeRemapping::from_rust(remapping),
         ))
     }
 

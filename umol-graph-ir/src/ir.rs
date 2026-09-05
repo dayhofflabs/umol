@@ -6,12 +6,12 @@ pub(crate) mod bond;
 pub(crate) mod boolean;
 pub(crate) mod canonicalize;
 pub(crate) mod coloring;
+pub(crate) mod compact;
 pub(crate) mod compose;
 pub(crate) mod constraint;
 pub(crate) mod correspondence;
 pub(crate) mod dative;
 pub(crate) mod delta;
-pub(crate) mod derivation;
 pub(crate) mod edit;
 pub(crate) mod electrons;
 pub(crate) mod entity;
@@ -46,6 +46,7 @@ pub use canonicalize::{
     ReactionSpanCanonicalizeError,
 };
 pub use coloring::{ConstitutionColoring, MoleculeColoring, MoleculeColoringFeatures};
+pub use compact::{MoleculeCompaction, UndoCompaction};
 pub use constraint::{
     aromatic_covalence, AromaticSystemConstraintForm, AromaticSystemConstraintKey,
     AromaticSystemConstraintsForm, AromaticValence, AromaticValenceForm, AtomConstraintForm,
@@ -61,14 +62,13 @@ pub use constraint::{
     StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
     TopicityRelationForm,
 };
-pub use correspondence::MoleculeCorrespondence;
+pub use correspondence::{MoleculeCorrespondence, MoleculeCorrespondenceComposeError};
 pub use dative::{DativeBondForm, DativeBondUpdate, DativeBonds};
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
     Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
     StereoBondDelta,
 };
-pub use derivation::ReactionDerivation;
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
@@ -99,7 +99,8 @@ pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{
     spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
-    MoleculeIntegrityError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
+    MoleculeIntegrityError, MoleculePushoutCorrespondence, MoleculeSpec, MoleculeSpecTerm, Port,
+    PortArg,
 };
 pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds};
 pub use noncovalent::{
@@ -113,7 +114,7 @@ pub use reaction::{
     ReactionProductsIter,
 };
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
-pub use remap::{IdRemapping, MoleculeCompaction, UndoCompaction};
+pub use remap::MoleculeRemapping;
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
 };

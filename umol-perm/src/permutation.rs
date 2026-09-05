@@ -1,7 +1,7 @@
 //! A single permutation in one-line notation, degree ≤ 6, `Copy`.
 //!
 //! Conventions:
-//! - one-line image: `apply(i)` = σ(i); slots beyond `degree` are identity.
+//! - one-line image: `apply(i)` = σ(i); indices beyond `degree` are identity.
 //! - `act(items)[i] = items[apply(i)]` — reorders a sequence by σ.
 //! - `compose(other)` = σ ∘ τ, i.e. `apply(other.apply(i))`.
 //! - `between(from, to)` = the τ with `act(τ, from) == to`.

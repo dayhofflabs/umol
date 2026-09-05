@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{NodeId, ParticipantPosition, RelationId, Remapping, VarRelationSet};
+use umol_graph_core::{
+    GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition, RelationId, VarRelationSet,
+};
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
@@ -108,7 +110,22 @@ impl MulticenterBonds {
             .map(|(_, _, attributes)| attributes)
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
+    }
+
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
@@ -118,10 +135,10 @@ impl MulticenterBonds {
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding bonds meet,
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0
             .pushout(
-                &right.remap(remapping).0,
+                &right.map(correspondence).0,
                 // Multicenter bonds anchor on their atoms: the node index.
                 |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
                 |(left_atoms, left), (right_atoms, right)| {
@@ -133,7 +150,7 @@ impl MulticenterBonds {
                     right.clone().reframe_by(&action)?.meet(left)
                 },
             )
-            .map(|merged| Self(Arc::new(merged.object)))
+            .map(|object| Self(Arc::new(object)))
     }
 
     /// Whether bond `id` is the one over `atoms` — the known-id sibling of
@@ -271,7 +288,22 @@ impl MulticenterBondSpans {
         self.0.data(RelationId::from(id))
     }
 
-    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        self.0.try_map(correspondence).map(Self)
+    }
+
+    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
 }
@@ -524,10 +556,190 @@ impl FrameTransport for MulticenterBondForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_graph_core::{Correspondence, EdgeId};
 
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+
+    fn test_multicenter_bonds_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = MulticenterBonds::new(vec![
+            (
+                vec![AtomId(4), AtomId(0), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![1, 2, 3]),
+            ),
+            (
+                vec![AtomId(6), AtomId(2), AtomId(0)],
+                MulticenterBondForm::from_electrons(vec![2, 3, 4]),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(MulticenterBonds::new(vec![
+                (
+                    vec![AtomId(7), AtomId(5), AtomId(1)],
+                    MulticenterBondForm::from_electrons(vec![1, 2, 3]),
+                ),
+                (
+                    vec![AtomId(3), AtomId(1), AtomId(5)],
+                    MulticenterBondForm::from_electrons(vec![2, 3, 4]),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_multicenter_bonds_map_error() {
+        let input = MulticenterBonds::new(vec![
+            (
+                vec![AtomId(4), AtomId(0), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![1, 2, 3]),
+            ),
+            (
+                vec![AtomId(6), AtomId(2), AtomId(0)],
+                MulticenterBondForm::from_electrons(vec![2, 3, 4]),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+
+    fn test_multicenter_bond_spans_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = MulticenterBondSpans::new(vec![
+            (
+                vec![AtomId(4), AtomId(0), AtomId(2)],
+                EntitySpan::Modified {
+                    lhs: MulticenterBondForm::from_electrons(vec![1, 2, 3]),
+                    rhs: MulticenterBondForm::from_electrons(vec![2, 3, 4]),
+                },
+            ),
+            (
+                vec![AtomId(6), AtomId(2), AtomId(0)],
+                EntitySpan::Added(MulticenterBondForm::from_electrons(vec![2, 3, 4])),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(MulticenterBondSpans::new(vec![
+                (
+                    vec![AtomId(7), AtomId(5), AtomId(1)],
+                    EntitySpan::Modified {
+                        lhs: MulticenterBondForm::from_electrons(vec![1, 2, 3]),
+                        rhs: MulticenterBondForm::from_electrons(vec![2, 3, 4]),
+                    },
+                ),
+                (
+                    vec![AtomId(3), AtomId(1), AtomId(5)],
+                    EntitySpan::Added(MulticenterBondForm::from_electrons(vec![2, 3, 4])),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_multicenter_bond_spans_map_error() {
+        let input = MulticenterBondSpans::new(vec![
+            (
+                vec![AtomId(4), AtomId(0), AtomId(2)],
+                EntitySpan::Modified {
+                    lhs: MulticenterBondForm::from_electrons(vec![1, 2, 3]),
+                    rhs: MulticenterBondForm::from_electrons(vec![2, 3, 4]),
+                },
+            ),
+            (
+                vec![AtomId(6), AtomId(2), AtomId(0)],
+                EntitySpan::Added(MulticenterBondForm::from_electrons(vec![2, 3, 4])),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
 
     /// Both sides of a `Modified` span are read against one participant list, so one action carries
     /// both. Selection never consults the payload here, so the two sides cannot disagree about it.

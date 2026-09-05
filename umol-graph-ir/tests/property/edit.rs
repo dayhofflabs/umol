@@ -481,7 +481,17 @@ proptest! {
     ) {
         let mut editor = batch.base().edit();
         let before = editor.clone().build();
-
+        let mut tracked = editor.clone();
+        let session = tracked.tracked_snapshot().unwrap();
+        prop_assert_eq!(
+            editor.clone().tracked_apply(batch.edits()).err(),
+            Some(batch.expected_error()),
+        );
+        prop_assert_eq!(
+            tracked.tracked_transact(batch.edits()).unwrap_err(),
+            batch.expected_error(),
+        );
+        prop_assert_eq!(tracked.tracked_snapshot(), Ok(session));
         prop_assert_eq!(
             editor.transact(batch.edits()).unwrap_err(),
             batch.expected_error(),
@@ -726,6 +736,52 @@ proptest! {
         prop_assert_eq!(applied.build(), checked.build());
     }
 
+    /// Consecutive batches agree across plain and tracked paths; rollback reverses the composed
+    /// operation witness. The session also includes edits made before either batch.
+    #[test]
+    fn test_transaction_tracked_rollback(
+        (base, first_edits, second_edits) in consecutive_transaction_strategy(),
+    ) {
+        let mut source = base.edit();
+        let added = source.add_atom(AtomForm::from_element(Element::F));
+        let source = source.build();
+        let mut editor = source.edit();
+        editor.remove(&[added], &[]);
+        let before = editor.tracked_snapshot().unwrap();
+        let mut plain = editor.clone();
+        let plain_first = plain.transact(first_edits.clone()).unwrap();
+        let (mut first, first_witness) = editor.tracked_transact(first_edits.clone()).unwrap();
+        prop_assert_eq!(&first, &plain_first);
+        prop_assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
+
+        let first_result = editor.snapshot().unwrap();
+        let (applied, applied_witness) = editor.clone().tracked_apply(second_edits.clone()).unwrap();
+        let plain_second = plain.transact(second_edits.clone()).unwrap();
+        let (second, second_witness) = editor.tracked_transact(second_edits).unwrap();
+        prop_assert_eq!(&second, &plain_second);
+        prop_assert_eq!(applied_witness, second_witness.clone());
+        prop_assert_eq!(applied.tracked_snapshot(), editor.tracked_snapshot());
+        prop_assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
+        let composed = first_witness.compose(&second_witness).unwrap();
+        prop_assert_eq!(
+            editor.tracked_snapshot().unwrap().1,
+            before.1.compose(&composed).unwrap(),
+        );
+        prop_assert_eq!(
+            before.0.tracked_apply(first_edits).unwrap(),
+            (first_result, first_witness.clone())
+        );
+
+        first.append(second);
+        let mut plain_transaction = plain_first;
+        plain_transaction.append(plain_second);
+        let reverse = first.tracked_rollback(&mut editor).unwrap();
+        plain_transaction.rollback(&mut plain).unwrap();
+        prop_assert_eq!(reverse, composed.reverse());
+        prop_assert_eq!(editor.snapshot(), Ok(before.0));
+        prop_assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
+    }
+
     /// A valid journal applied to an independently generated valid post-transaction state may
     /// succeed or return an error, but every undo path must return normally rather than panic.
     #[test]
@@ -742,11 +798,18 @@ proptest! {
             .transact(editor_edits)
             .map_err(|error| TestCaseError::fail(format!("editor transact failed: {error}")))?;
 
+        let mut tracked = unrelated.clone();
         let outcome = catch_unwind(AssertUnwindSafe(|| {
-            let _ = transaction.rollback(&mut unrelated);
+            transaction.clone().rollback(&mut unrelated)
+        }));
+        let tracked_outcome = catch_unwind(AssertUnwindSafe(|| {
+            transaction.tracked_rollback(&mut tracked).map(|_| ())
         }));
 
         prop_assert!(outcome.is_ok());
+        prop_assert!(tracked_outcome.is_ok());
+        prop_assert_eq!(outcome.unwrap(), tracked_outcome.unwrap());
+        prop_assert_eq!(tracked.try_tracked_build(), unrelated.try_tracked_build());
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow

@@ -22,10 +22,10 @@ use umol_graph_ir::dsl::ReactionDsl as GraphIrReactionDsl;
 #[cfg(test)]
 use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm;
 use umol_graph_ir::ir::{
-    ApplyError as GraphIrApplyError, AtomId, FromIr, IntoIr, Reaction as GraphIrReaction,
+    ApplyError as GraphIrApplyError, AtomId, FromIr, IntoIr, Molecule as GraphIrMolecule,
+    MoleculeCorrespondence as GraphIrMoleculeCorrespondence, Reaction as GraphIrReaction,
     ReactionApplicationIter as GraphIrReactionApplicationIter,
-    ReactionDerivation as GraphIrReactionDerivation,
-    ReactionProductsIter as GraphIrReactionProductsIter,
+    ReactionProductsIter as GraphIrReactionProductsIter, ReactionSpan as GraphIrReactionSpan,
     SubstructureMatchConfig as GraphIrSubstructureMatchConfig,
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
@@ -431,9 +431,9 @@ impl Reaction {
             .collect()
     }
 
-    /// Return one derivation per successful match through a one-shot iterator.
+    /// Return one product per successful match through a one-shot iterator.
     ///
-    /// Matching is eager; derivation construction is lazy. The iterator owns snapshots of the
+    /// Matching is eager; output construction is lazy. The iterator owns snapshots of the
     /// reaction and host, so later mutations do not affect it. Reaction-wide precondition failures
     /// raise `InvalidStructureError` here; failures while realizing a match are raised by
     /// iteration.
@@ -452,6 +452,66 @@ impl Reaction {
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
 
         Py::new(py, ReactionApplicationIter::from_rust(application))
+    }
+
+    /// Iterate over products and their host-to-product correspondences.
+    ///
+    /// Matching, snapshot ownership, and errors follow apply.
+    #[pyo3(signature = (host, *, config=None))]
+    fn tracked_apply(
+        &self,
+        py: Python<'_>,
+        host: Py<Molecule>,
+        config: Option<ReactionApplicationConfig>,
+    ) -> PyResult<Py<TrackedReactionApplicationIter>> {
+        let reaction = self.to_rust(py)?;
+        let host = host.bind(py).borrow().to_rust().clone();
+        let applications = reaction
+            .tracked_apply(&host, config.unwrap_or_default().to_rust())
+            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        Py::new(py, TrackedReactionApplicationIter::from_rust(applications))
+    }
+
+    /// Iterate over realized reactions.
+    ///
+    /// Matching, snapshot ownership, and errors follow apply.
+    #[pyo3(signature = (host, *, config=None))]
+    fn apply_to_reaction(
+        &self,
+        py: Python<'_>,
+        host: Py<Molecule>,
+        config: Option<ReactionApplicationConfig>,
+    ) -> PyResult<Py<ReactionApplicationToReactionIter>> {
+        let reaction = self.to_rust(py)?;
+        let host = host.bind(py).borrow().to_rust().clone();
+        let applications = reaction
+            .apply_to_reaction(&host, config.unwrap_or_default().to_rust())
+            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        Py::new(
+            py,
+            ReactionApplicationToReactionIter::from_rust(applications),
+        )
+    }
+
+    /// Iterate over realized reaction spans.
+    ///
+    /// Matching, snapshot ownership, and errors follow apply.
+    #[pyo3(signature = (host, *, config=None))]
+    fn apply_to_reaction_span(
+        &self,
+        py: Python<'_>,
+        host: Py<Molecule>,
+        config: Option<ReactionApplicationConfig>,
+    ) -> PyResult<Py<ReactionApplicationToReactionSpanIter>> {
+        let reaction = self.to_rust(py)?;
+        let host = host.bind(py).borrow().to_rust().clone();
+        let applications = reaction
+            .apply_to_reaction_span(&host, config.unwrap_or_default().to_rust())
+            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        Py::new(
+            py,
+            ReactionApplicationToReactionSpanIter::from_rust(applications),
+        )
     }
 
     /// Generate a combined fingerprint over the reactant and product sides.
@@ -502,85 +562,14 @@ impl Reaction {
     }
 }
 
-/// One owned firing of a reaction, exposed as an immutable result value.
-#[pyclass(eq, frozen, skip_from_py_object)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReactionDerivation(GraphIrReactionDerivation);
-
-#[pymethods]
-impl ReactionDerivation {
-    /// The molecule matched by the reaction, as a fresh snapshot.
-    #[getter]
-    fn lhs(&self) -> Molecule {
-        Molecule::from_rust(self.0.lhs().clone())
-    }
-
-    /// The molecule produced by the reaction, as a fresh snapshot.
-    #[getter]
-    fn rhs(&self) -> Molecule {
-        Molecule::from_rust(self.0.rhs().clone())
-    }
-
-    /// The correspondence between the two molecule sides, as a fresh snapshot.
-    #[getter]
-    fn comap(&self) -> PyMoleculeCorrespondence {
-        PyMoleculeCorrespondence::from_rust(self.0.comap().clone())
-    }
-
-    /// The atom-level correspondence, as a fresh snapshot.
-    #[getter]
-    fn atom_correspondence(&self) -> PyCorrespondence {
-        PyCorrespondence::from_rust(self.0.atom_correspondence())
-    }
-
-    /// Return the reverse derivation with swapped sides and inverted correspondence.
-    fn reverse(&self) -> Self {
-        Self::from_rust(self.to_rust().reverse())
-    }
-
-    /// Chain this derivation onto a compatible following derivation.
-    fn chain(&self, next: &Self) -> Self {
-        let first = self.to_rust();
-        let next = next.to_rust();
-        Self::from_rust(first.chain(next))
-    }
-
-    /// Recover the reaction rule represented by this concrete firing.
-    fn to_reaction(&self, py: Python<'_>) -> PyResult<Reaction> {
-        Reaction::from_rust(py, self.to_rust().to_reaction())
-    }
-
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let lhs = Py::new(py, self.lhs())?;
-        let rhs = Py::new(py, self.rhs())?;
-        let comap = Py::new(py, self.comap())?;
-        Ok(format!(
-            "ReactionDerivation(lhs={}, rhs={}, comap={})",
-            lhs.bind(py).repr()?.extract::<String>()?,
-            rhs.bind(py).repr()?.extract::<String>()?,
-            comap.bind(py).repr()?.extract::<String>()?,
-        ))
-    }
-}
-
-impl ReactionDerivation {
-    pub(crate) fn from_rust(derivation: GraphIrReactionDerivation) -> Self {
-        Self(derivation)
-    }
-
-    pub(crate) fn to_rust(&self) -> &GraphIrReactionDerivation {
-        &self.0
-    }
-}
-
-/// One-shot application results with eager matching and lazy derivation construction.
+/// One-shot application results with eager matching and lazy output construction.
 #[pyclass(skip_from_py_object)]
 pub(crate) struct ReactionApplicationIter {
-    inner: GraphIrReactionApplicationIter,
+    inner: GraphIrReactionApplicationIter<GraphIrMolecule>,
 }
 
 impl ReactionApplicationIter {
-    pub(crate) fn from_rust(inner: GraphIrReactionApplicationIter) -> Self {
+    pub(crate) fn from_rust(inner: GraphIrReactionApplicationIter<GraphIrMolecule>) -> Self {
         Self { inner }
     }
 }
@@ -591,9 +580,95 @@ impl ReactionApplicationIter {
         slf
     }
 
-    fn __next__(&mut self) -> PyResult<Option<ReactionDerivation>> {
+    fn __next__(&mut self) -> PyResult<Option<Molecule>> {
         match self.inner.next() {
-            Some(Ok(derivation)) => Ok(Some(ReactionDerivation::from_rust(derivation))),
+            Some(Ok(product)) => Ok(Some(Molecule::from_rust(product))),
+            Some(Err(GraphIrApplyError::Transaction(error))) => Err(transaction_error(error)),
+            Some(Err(error)) => Err(PyRuntimeError::new_err(error.to_string())),
+            None => Ok(None),
+        }
+    }
+}
+
+#[pyclass(skip_from_py_object)]
+pub(crate) struct TrackedReactionApplicationIter {
+    inner: GraphIrReactionApplicationIter<(GraphIrMolecule, GraphIrMoleculeCorrespondence)>,
+}
+
+impl TrackedReactionApplicationIter {
+    pub(crate) fn from_rust(
+        inner: GraphIrReactionApplicationIter<(GraphIrMolecule, GraphIrMoleculeCorrespondence)>,
+    ) -> Self {
+        Self { inner }
+    }
+}
+
+#[pymethods]
+impl TrackedReactionApplicationIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> PyResult<Option<(Molecule, PyMoleculeCorrespondence)>> {
+        match self.inner.next() {
+            Some(Ok((product, correspondence))) => Ok(Some((
+                Molecule::from_rust(product),
+                PyMoleculeCorrespondence::from_rust(correspondence),
+            ))),
+            Some(Err(GraphIrApplyError::Transaction(error))) => Err(transaction_error(error)),
+            Some(Err(error)) => Err(PyRuntimeError::new_err(error.to_string())),
+            None => Ok(None),
+        }
+    }
+}
+
+#[pyclass(skip_from_py_object)]
+pub(crate) struct ReactionApplicationToReactionIter {
+    inner: GraphIrReactionApplicationIter<GraphIrReaction>,
+}
+
+impl ReactionApplicationToReactionIter {
+    pub(crate) fn from_rust(inner: GraphIrReactionApplicationIter<GraphIrReaction>) -> Self {
+        Self { inner }
+    }
+}
+
+#[pymethods]
+impl ReactionApplicationToReactionIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<Reaction>> {
+        match self.inner.next() {
+            Some(Ok(reaction)) => Reaction::from_rust(py, reaction).map(Some),
+            Some(Err(GraphIrApplyError::Transaction(error))) => Err(transaction_error(error)),
+            Some(Err(error)) => Err(PyRuntimeError::new_err(error.to_string())),
+            None => Ok(None),
+        }
+    }
+}
+
+#[pyclass(skip_from_py_object)]
+pub(crate) struct ReactionApplicationToReactionSpanIter {
+    inner: GraphIrReactionApplicationIter<GraphIrReactionSpan>,
+}
+
+impl ReactionApplicationToReactionSpanIter {
+    pub(crate) fn from_rust(inner: GraphIrReactionApplicationIter<GraphIrReactionSpan>) -> Self {
+        Self { inner }
+    }
+}
+
+#[pymethods]
+impl ReactionApplicationToReactionSpanIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> PyResult<Option<PyReactionSpan>> {
+        match self.inner.next() {
+            Some(Ok(span)) => Ok(Some(PyReactionSpan::from_rust(span))),
             Some(Err(GraphIrApplyError::Transaction(error))) => Err(transaction_error(error)),
             Some(Err(error)) => Err(PyRuntimeError::new_err(error.to_string())),
             None => Ok(None),
@@ -656,9 +731,7 @@ mod tests {
         DativeBondForm as GraphIrDativeBondForm, DativeBondId as GraphIrDativeBondId,
         Delta as GraphIrDelta, Deltas as GraphIrDeltas, Entity as GraphIrEntity,
         EntitySpan as GraphIrEntitySpan, Molecule as GraphIrMolecule,
-        MoleculeConstraint as GraphIrMoleculeConstraint,
-        MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
-        MoleculeEntries as GraphIrMoleculeEntries,
+        MoleculeConstraint as GraphIrMoleculeConstraint, MoleculeEntries as GraphIrMoleculeEntries,
         MulticenterBondDelta as GraphIrMulticenterBondDelta,
         MulticenterBondForm as GraphIrMulticenterBondForm,
         MulticenterBondId as GraphIrMulticenterBondId,
@@ -666,8 +739,7 @@ mod tests {
         NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondId as GraphIrNoncovalentBondId,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, Normalize, NumForm as GraphIrNumForm,
-        React as GraphIrReact, ReactionSpan as GraphIrReactionSpan,
-        ReactionSpanEntries as GraphIrReactionSpanEntries,
+        React as GraphIrReact, ReactionSpanEntries as GraphIrReactionSpanEntries,
         StereoAtomDelta as GraphIrStereoAtomDelta,
         StereoAtomFieldChange as GraphIrStereoAtomFieldChange,
         StereoAtomForm as GraphIrStereoAtomForm, StereoAtomId as GraphIrStereoAtomId,
@@ -2194,10 +2266,7 @@ mod tests {
             let second = application.borrow_mut(py).__next__().unwrap().unwrap();
             assert_eq!(application.borrow_mut(py).__next__().unwrap(), None);
             assert_eq!(
-                [
-                    first.rhs().to_rust().clone(),
-                    second.rhs().to_rust().clone()
-                ],
+                [first.to_rust().clone(), second.to_rust().clone()],
                 [
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![
@@ -2243,7 +2312,7 @@ mod tests {
                     .borrow_mut(py)
                     .__next__()
                     .unwrap()
-                    .map(|derivation| derivation.rhs().to_rust().clone())
+                    .map(|product| product.to_rust().clone())
             })
             .collect();
             assert_eq!(
@@ -2319,7 +2388,7 @@ mod tests {
                     .borrow_mut(py)
                     .__next__()
                     .unwrap()
-                    .map(|derivation| derivation.rhs().to_rust().clone())
+                    .map(|product| product.to_rust().clone())
             })
             .collect();
             assert_eq!(
@@ -3032,263 +3101,6 @@ mod tests {
     }
 
     #[fixture]
-    fn derivation_and_host() -> (GraphIrReactionDerivation, GraphIrMolecule) {
-        let pattern = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-            atoms: vec![
-                GraphIrAtomForm::from_element(ChemElement::C),
-                GraphIrAtomForm::from_element(ChemElement::C),
-            ],
-            bonds: vec![(
-                GraphIrAtomId(0),
-                GraphIrAtomId(1),
-                GraphIrBondForm::from_order(1),
-            )],
-            ..Default::default()
-        });
-        let host = pattern.clone();
-        let reaction = GraphIrReaction::new(
-            pattern.clone(),
-            GraphIrDeltas::from_iter([GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
-                id: GraphIrBondId(0),
-                change: GraphIrBondFieldChange::Order {
-                    old: GraphIrNumForm::Lit(1),
-                    new: GraphIrNumForm::Lit(2),
-                },
-            })]),
-        );
-        let correspondence = GraphIrMoleculeCorrespondence::induce(
-            &pattern,
-            &host,
-            Correspondence::new(
-                vec![
-                    (GraphIrAtomId(0), GraphIrAtomId(0)),
-                    (GraphIrAtomId(1), GraphIrAtomId(1)),
-                ],
-                2,
-                2,
-            )
-            .expect("correspondence producer preserves partial-bijection invariants"),
-        )
-        .expect("the atom correspondence describes the molecule pair");
-        let derivation = reaction.apply_at(&host, &correspondence).unwrap();
-        (derivation, host)
-    }
-
-    #[rstest]
-    fn test_reaction_derivation_observations(
-        derivation_and_host: (GraphIrReactionDerivation, GraphIrMolecule),
-    ) {
-        let (expected, mut host) = derivation_and_host;
-        let derivation = ReactionDerivation::from_rust(expected.clone());
-
-        assert_eq!(derivation.lhs().to_rust(), expected.lhs());
-        assert_eq!(derivation.rhs().to_rust(), expected.rhs());
-        assert_eq!(
-            derivation.comap(),
-            PyMoleculeCorrespondence::from_rust(expected.comap().clone())
-        );
-        assert_eq!(
-            derivation.atom_correspondence(),
-            PyCorrespondence::from_rust(expected.atom_correspondence())
-        );
-
-        *host.atom_mut(GraphIrAtomId(0)).attributes = GraphIrAtomForm::from_element(ChemElement::F);
-        let mut lhs = derivation.lhs();
-        *lhs.to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
-            GraphIrAtomForm::from_element(ChemElement::N);
-
-        assert_eq!(derivation.to_rust(), &expected);
-        assert_ne!(derivation.lhs().to_rust(), &host);
-        assert_ne!(derivation.lhs().to_rust(), lhs.to_rust());
-    }
-
-    #[rstest]
-    fn test_reaction_derivation_reverse(
-        derivation_and_host: (GraphIrReactionDerivation, GraphIrMolecule),
-    ) {
-        let (expected, _) = derivation_and_host;
-        let derivation = ReactionDerivation::from_rust(expected.clone());
-        let reversed = derivation.reverse();
-        let mut reversed_lhs = reversed.lhs();
-        *reversed_lhs
-            .to_rust_mut()
-            .atom_mut(GraphIrAtomId(0))
-            .attributes = GraphIrAtomForm::from_element(ChemElement::N);
-
-        assert_eq!(reversed.to_rust(), &expected.reverse());
-        assert_eq!(derivation.to_rust(), &expected);
-        assert_ne!(reversed.lhs().to_rust(), reversed_lhs.to_rust());
-    }
-
-    #[rstest]
-    fn test_reaction_derivation_chain(
-        derivation_and_host: (GraphIrReactionDerivation, GraphIrMolecule),
-    ) {
-        let (first, _) = derivation_and_host;
-        let middle = first.rhs().clone();
-        let reaction = GraphIrReaction::new(
-            middle.clone(),
-            GraphIrDeltas::from_iter([GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
-                id: GraphIrBondId(0),
-                change: GraphIrBondFieldChange::Order {
-                    old: GraphIrNumForm::Lit(2),
-                    new: GraphIrNumForm::Lit(3),
-                },
-            })]),
-        );
-        let correspondence = GraphIrMoleculeCorrespondence::induce(
-            &middle,
-            &middle,
-            Correspondence::new(
-                vec![
-                    (GraphIrAtomId(0), GraphIrAtomId(0)),
-                    (GraphIrAtomId(1), GraphIrAtomId(1)),
-                ],
-                2,
-                2,
-            )
-            .expect("correspondence producer preserves partial-bijection invariants"),
-        )
-        .expect("the atom correspondence describes the molecule pair");
-        let second = reaction.apply_at(&middle, &correspondence).unwrap();
-        let first_value = ReactionDerivation::from_rust(first.clone());
-        let second_value = ReactionDerivation::from_rust(second.clone());
-        let chained = first_value.chain(&second_value);
-        let mut chained_rhs = chained.rhs();
-        *chained_rhs
-            .to_rust_mut()
-            .atom_mut(GraphIrAtomId(0))
-            .attributes = GraphIrAtomForm::from_element(ChemElement::N);
-
-        assert_eq!(chained.to_rust(), &first.chain(&second));
-        assert_eq!(first_value.to_rust(), &first);
-        assert_eq!(second_value.to_rust(), &second);
-        assert_ne!(chained.rhs().to_rust(), chained_rhs.to_rust());
-    }
-
-    #[rstest]
-    fn test_reaction_derivation_to_reaction(
-        derivation_and_host: (GraphIrReactionDerivation, GraphIrMolecule),
-    ) {
-        let (expected_derivation, _) = derivation_and_host;
-        let expected_reaction = GraphIrReaction::new(
-            GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                atoms: vec![
-                    GraphIrAtomForm::from_element(ChemElement::C),
-                    GraphIrAtomForm::from_element(ChemElement::C),
-                ],
-                bonds: vec![(
-                    GraphIrAtomId(0),
-                    GraphIrAtomId(1),
-                    GraphIrBondForm::from_order(1),
-                )],
-                ..Default::default()
-            }),
-            GraphIrDeltas::from_iter([GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
-                id: GraphIrBondId(0),
-                change: GraphIrBondFieldChange::Order {
-                    old: GraphIrNumForm::Lit(1),
-                    new: GraphIrNumForm::Lit(2),
-                },
-            })]),
-        );
-        let derivation = ReactionDerivation::from_rust(expected_derivation.clone());
-
-        Python::attach(|py| {
-            let first = derivation.to_reaction(py).unwrap();
-            let second = derivation.to_reaction(py).unwrap();
-
-            assert_eq!(first.to_rust(py).unwrap(), expected_reaction);
-            assert_eq!(second.to_rust(py).unwrap(), expected_reaction);
-            assert_ne!(first.lhs.as_ptr(), second.lhs.as_ptr());
-            assert_ne!(first.deltas.as_ptr(), second.deltas.as_ptr());
-
-            *first.lhs.bind(py).borrow_mut().to_rust_mut() = GraphIrMolecule::new();
-            let delta = into_py_variant(
-                py,
-                Delta::from_rust(
-                    py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                        id: GraphIrAtomId(2),
-                        attributes: GraphIrAtomForm::from_element(ChemElement::O),
-                    }),
-                )
-                .unwrap(),
-            )
-            .unwrap();
-            first
-                .deltas
-                .bind(py)
-                .call_method1("append", (delta,))
-                .unwrap();
-
-            assert_eq!(second.to_rust(py).unwrap(), expected_reaction);
-            assert_eq!(derivation.to_rust(), &expected_derivation);
-        });
-    }
-
-    #[rstest]
-    fn test_reaction_derivation_value(
-        derivation_and_host: (GraphIrReactionDerivation, GraphIrMolecule),
-    ) {
-        let (expected, _) = derivation_and_host;
-        Python::attach(|py| {
-            let derivation = Py::new(py, ReactionDerivation::from_rust(expected.clone())).unwrap();
-            let equal = Py::new(py, ReactionDerivation::from_rust(expected.clone())).unwrap();
-            let unequal = Py::new(py, ReactionDerivation::from_rust(expected.reverse())).unwrap();
-            let first_lhs = derivation.bind(py).getattr("lhs").unwrap();
-            let second_lhs = derivation.bind(py).getattr("lhs").unwrap();
-            let first_comap = derivation.bind(py).getattr("comap").unwrap();
-            let second_comap = derivation.bind(py).getattr("comap").unwrap();
-
-            assert!(derivation
-                .bind(py)
-                .as_any()
-                .eq(equal.bind(py).as_any())
-                .unwrap());
-            assert!(!derivation
-                .bind(py)
-                .as_any()
-                .eq(unequal.bind(py).as_any())
-                .unwrap());
-            assert!(!first_lhs.is(&second_lhs));
-            assert!(!first_comap.is(&second_comap));
-            assert_eq!(
-                derivation
-                    .bind(py)
-                    .repr()
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap(),
-                concat!(
-                    "ReactionDerivation(lhs=Molecule(atoms=2, bonds=1), ",
-                    "rhs=Molecule(atoms=2, bonds=1), ",
-                    "comap=MoleculeCorrespondence(",
-                    "atoms=Correspondence(matched_pairs=[(0, 0), (1, 1)], left_count=2, right_count=2), ",
-                    "bonds=Correspondence(matched_pairs=[(0, 0)], left_count=1, right_count=1), ",
-                    "dative_bonds=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
-                    "aromatic_systems=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
-                    "multicenter_bonds=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
-                    "noncovalent_bonds=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
-                    "stereo_atoms=Correspondence(matched_pairs=[], left_count=0, right_count=0), ",
-                    "stereo_bonds=Correspondence(matched_pairs=[], left_count=0, right_count=0)))"
-                )
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_reaction_derivation_roundtrip(
-        derivation_and_host: (GraphIrReactionDerivation, GraphIrMolecule),
-    ) {
-        let (expected, _) = derivation_and_host;
-        assert_eq!(
-            ReactionDerivation::from_rust(expected.clone()).to_rust(),
-            &expected
-        );
-    }
-
-    #[fixture]
     fn reaction_application() -> (GraphIrReaction, GraphIrMolecule) {
         let reaction = GraphIrReaction::new(
             GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -3346,10 +3158,7 @@ mod tests {
         let first = application.__next__().unwrap().unwrap();
         let second = application.__next__().unwrap().unwrap();
         assert_eq!(
-            [
-                first.rhs().to_rust().clone(),
-                second.rhs().to_rust().clone()
-            ],
+            [first.to_rust().clone(), second.to_rust().clone()],
             [
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
@@ -3372,7 +3181,7 @@ mod tests {
 
         let expected_first = first.to_rust();
         let expected_second = second.to_rust();
-        let mut detached = first.rhs();
+        let mut detached = first.clone();
         *detached.to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
             GraphIrAtomForm::from_element(ChemElement::F);
         assert_eq!(first.to_rust(), expected_first);

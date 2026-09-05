@@ -88,7 +88,7 @@ approximate.
 | `*Level` | closed enum selecting one of several nested named layers | 2 | graph-ir |
 | `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
 | `*Constraints` | the container holding an entity's constraints | 9 | graph-ir, py — as `*ConstraintsForm`, because the container is lattice-shaped |
-| `*Key` | identifies a constraint slot within a container | 13 | graph-ir, perm, py |
+| `*Key` | identifies a constraint entry within a container | 13 | graph-ir, perm, py |
 | `*View` / `*Views` / `*ViewMut` | borrowed accessor into a molecule; plural is the collection; `Mut` is the editing form | 37 / 15 / 16 | graph-ir, io, py |
 | `*Delta` | an encoded change belonging to a reaction side | 18 | graph-ir, py |
 | `*Update` | a field-level change applied to one entity | 10 | graph-ir |
@@ -122,7 +122,7 @@ a different question:
 - **role** — `Constraint`, `Update`, `Delta`, `Editor`, `Defaults`, `Overrides`;
 - **plurality** — a trailing `s` on the role marks the container, not "several of these";
 - **representation** — `Form` (implements `Lattice`), `Dsl` (boundary surface), `View` (borrowed
-  accessor), `Key` (identifies a slot);
+  accessor), `Key` (identifies an entry);
 - **mutability** — `Mut`, last, only on views.
 
 `AtomConstraintsForm` is therefore correct in every position: one atom's constraint *container*, which
@@ -234,25 +234,15 @@ spelling.
 | --- | --- | --- |
 | `projection` for a stored constraint or the incidence category | `constraint`, `incidence constraint` | `projection` names an actual mapping between representations |
 | `predicate` or `representation` for the stored object | `constraint` | the repository term for a possibly non-ground assertion |
-| `EntityConstraint` for the non-ring subset | `incidence constraint` | entity constraints include ring constraints |
-| `relational constraint` for an incidence constraint | `incidence constraint` | `RelationalConstraint` already means a molecule-scope, reference-bearing constraint |
 | `undetermined` for an operation outcome | `underdetermined` | stored state versus outcome |
 | `underdetermined` for stored lattice state | `undetermined` | as above |
-| `reset` for removing or replacing an entity | `remove`, `replace` | reset clears a constraint to its undetermined form |
 | `config` for semantic acceptance choices | `model` | config is operational |
 | `policy` for chemical acceptance | `model` | policy acts after acceptance is established |
 | `validate_integrity` | `check_integrity` | tier-1 integrity is a graph-IR construction check, not semantic validation |
 | `*Validator` in `umol-graph-ir` | `check_integrity` for tier 1, or move the validator to `umol-graph` for tiers 2 and 3 | validators are chemistry-layer semantic operations |
 | `*Selection` for nested structural layers | `*Level` | selection does not state that the alternatives form an ordered, nested hierarchy |
 | `*Features` for mutually exclusive nested presets | `*Level` | features are independently combinable switches |
-| `iterative` for visitor delivery | visitor delivery, `visit_*` | the implementation may remain recursive while visiting results |
-| a bare plural method name for an eager collection-returning operation | `enumerate_*` | delivery must be legible at the call site; the bare plural is reserved for single-value operations |
-| `*Ast` for graph-IR values | `*Form` for a `Lattice` type; bare aggregate name otherwise | the suffix records lattice semantics, not syntax-tree shape |
-| `ast` as the graph-IR module or entity payload member | `ir` for the module; `attributes` for the payload | the graph model is an IR, and the payload is the entity's complete attribute form |
-| `:type` for an entity payload in the DSL | `:attrs` | the payload contains attributes, not the entity kind |
-| `Ctx` in a public identifier | `Context` | public identifiers use complete words |
-| `apply_remapping`, `try_apply_remapping` | `remap`, `try_remap` | the receiver is transported through the supplied remapping |
-| `apply_compaction` | `compact` | the receiver is transported through the supplied compaction |
+| `try_*` solely because an operation returns `Option` or `Result` | the ordinary operation name | fallibility is part of the signature; `try_*` distinguishes a checked counterpart or restricted dispatch |
 | agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
 | operation-noun composites for run artifacts (`KekulizationConfig`) | verb stem (`KekulizeConfig`) | the operation noun names a completed act, not a run's parameters |
 | `CanonicalizeLevel`, `CanonicalizationLevel` | private `DescriptionLevel` | the internal hierarchy describes represented prefixes; public canonicalization is complete-only |
@@ -291,12 +281,13 @@ higher layers follow the same suffix.
 
 **Application** realizes an operation against a concrete host. Edit application executes a complete
 edit plan and publishes the result only when edit execution and the result's publication checks
-succeed. Reaction
-application matches a reaction rule against a host and emits one `ReactionDerivation` per successful
-match.
+succeed. Reaction application applies a rule at a supplied or enumerated match.
+The supplied-match methods distinguish a result, ordinary non-applicability, and execution
+failure through `Result<Option<T>, ApplyError>`. Non-applicability is not an error category.
+The application iterator skips inapplicable matches and emits one selected output per successful
+match: a product, product with correspondence, realized reaction, or reaction span.
 
-**Not:** plan (which is derived without mutating), `react` (which intentionally discards the
-derivation and emits only product components).
+**Not:** plan (which is derived without mutating), `react` (which emits product components).
 **In code:** `apply`, `apply_at`, `ReactionApplicationIter`.
 
 ### Attributes
@@ -319,7 +310,7 @@ defines the selected frame; backend canonical labels may guide and prune the sea
 define that order.
 
 **Canonical equality** compares the complete canonical forms produced under the same context. It is
-the search-based counterpart of `framed_eq_under`: the caller does not supply a correspondence because
+the search-based counterpart of `framed_eq_under`: the caller does not supply a remapping because
 canonicalization selects the frame.
 
 The public operation is complete-only: topology, constitution, and structure are private search
@@ -336,7 +327,7 @@ from the cells or equivalence classes of a refined partition and from a stereo c
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
 labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
 whereas aggregate canonicalization constructs the complete remapped graph IR.
-**In code:** `Canonicalize`, `canonicalize`, `canonicalize_with_correspondence`, `canonical_eq`.
+**In code:** `Canonicalize`, `canonicalize`, `canonicalize_with_remapping`, `canonical_eq`.
 
 ### Class
 
@@ -365,6 +356,10 @@ to gain analogues, so it is recorded rather than generative.
 
 A **compaction** is the partial old-to-new id mapping produced by removal. A surviving id maps to
 its position in the closed-up post-removal table; a removed id has no image.
+
+Each component declares its finite source count and derives its result count from the removed ids.
+Identity requires a declared source count. `compact_vec` applies that operation to a source-sized
+value column while preserving survivor order.
 
 It is layered on both axes, matching correspondence: `Compaction<Id>` over one id space,
 `GraphCompaction` pairing the node and edge spaces, and `MoleculeCompaction` carrying a typed
@@ -503,17 +498,15 @@ own pairings.
 A correspondence is **valueless** — it records pairing and nothing else. Adding values and a
 direction is what lifts it to a reaction span.
 
-Correspondences compose and reverse, which is what lets a chain of operations be followed end to end,
-and `to_remapping` converts one into a total-on-source remapping when it is total on the left. The
-result may map into a larger target id space. End-to-end remapping of a standalone `Molecule`
-requires the stronger condition that every entity-kind correspondence is total on both sides, so
-the target tables are dense and contain exactly the mapped entities.
+Correspondences compose and reverse, which is what lets a chain of operations be followed end to
+end. Reference transport consumes a correspondence directly; no correspondence-to-remapping
+conversion is exposed.
 
 **Not:** a compaction, because being unmatched does not mean that an entity was removed; not a
 remapping, because a correspondence may be partial and records a relation rather than performing
 transport.
 **In code:** `MoleculeCorrespondence`, `Correspondence<T>`, `GraphCorrespondence`, `induce`,
-`compose`, `reverse`, `left_of`, `right_of`, `is_total`, `to_remapping`.
+`compose`, `reverse`, `left_of`, `right_of`, `is_total`, `map`, `try_map`.
 
 ### Coset
 
@@ -585,14 +578,14 @@ coined sense collides with the established one.
 - **Reaction derivation** — one firing of a reaction: the two concrete molecule sides plus the
   correspondence between them. This is the standard sense in algebraic graph transformation, where a
   derivation is the result of applying a production, and it is the sense the whitepaper glossary
-  uses. `ReactionDerivation` is `apply`'s codomain; a rule is to a derivation as a function is to one
-  evaluation.
+  uses. It describes an application, not a separate API result type; a realized application can be
+  returned as a `Reaction` or `ReactionSpan`.
 - **Perception derivation** — the policy-free result of perception, including candidates and exact
   inconsistencies.
 
 **Not:** resolution (which applies policy), validation. The two senses are not related; the second
 would be the one to rename if either were.
-**In code:** `ReactionDerivation`, `apply`, `to_reaction`.
+**In code:** `apply_to_reaction`, `apply_to_reaction_span`.
 
 ### Derived and asserted
 
@@ -757,13 +750,13 @@ level.
 - **`normalized_eq`** — equality of normal forms in the current entity-id and participant frame.
 - **`framed_eq`** — equality after normalization and participant-frame selection.
   **`Molecule::framed_eq_under`** first remaps entity ids through an explicitly supplied
-  `MoleculeCorrespondence`, then performs framed equality.
+  `MoleculeRemapping`, then performs framed equality.
 - **`canonical_eq`** — equality of complete aggregate canonical forms under a shared context. The
   implementation selects participant frames and entity ids rather than receiving an id witness
   from the caller.
 
 For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
-when an admissible total dense correspondence exists under which `framed_eq_under` holds. Equality
+when a remapping exists under which `framed_eq_under` holds. Equality
 totalization for two intrinsic contradictions does not require such a witness.
 
 Structural canonical labeling initially establishes automorphism orbits from inherent fields and
@@ -999,8 +992,8 @@ model-independent derived value is also an invariant.
 ### Key and kind
 
 A **kind** is a unit-variant discriminant enum naming an alternative without parameters; a
-**key** is a discriminant that carries parameters. `AtomFieldKind` mirrors `AtomFieldChange`'s
-variants; `AtomConstraintKey` is a key because `RingMembership(RingScope)` carries its scope.
+**key** is a discriminant that carries parameters. `AtomFieldKind` enumerates atom field keys;
+`AtomConstraintKey` is a key because `RingMembership(RingScope)` carries its scope.
 Peer entity forms gain `*FieldKind` enums as consumers arrive.
 
 **Not:** interchangeable — a parameterless discriminant enum is a kind, not a key.
@@ -1366,11 +1359,10 @@ may be used descriptively when explaining that an entity relation induces partic
 **React** is the product-oriented convenience operation over reaction application. For one molecule
 it applies the reaction and splits each successful right-hand side. For several molecules it first
 combines them by disjoint union in input order, then performs the same apply-and-split operation. It
-emits one product-component collection per successful match and discards the derivation and split
+emits one product-component collection per successful match without application or split
 correspondences.
 
-**Not:** `apply`, which returns complete `ReactionDerivation` values; reaction construction or
-composition.
+**Not:** `apply`, which returns unsplit products; reaction construction or composition.
 **In code:** `React`, `react`, `react_all`, `ReactionProductsIter`.
 
 ### Reaction
@@ -1383,8 +1375,7 @@ The type is homoiconic in the sense the whitepaper claims: a molecule is the emp
 rule is a pattern left-hand side plus deltas, and applying a rule yields a concrete reaction of the
 same type.
 
-**Not:** a derivation, which is one firing of a reaction against a concrete host. A reaction is the
-rule; a derivation is an evaluation of it.
+A reaction can represent either a reusable rule or its realized application to a concrete host.
 **In code:** `Reaction`, `lhs`, `Deltas`.
 
 ### Reaction span
@@ -1523,24 +1514,23 @@ relation.
 
 ### Remapping
 
-A **remapping** is a total old-to-new relabeling: every source id has an image and no entity is
-dropped. Totality is directional. A remapping may inject a source into a larger ambient id space,
-such as an lhs-anchored reaction union, so it is not necessarily surjective, bijective, or
-reversible.
+A **remapping** is a total bijective old-to-new relabeling with a dense source id space. Every
+source id has exactly one image, every target id has exactly one preimage, and no entity is added or
+dropped. It is semantics-preserving alpha-renaming rather than a structural edit.
 
-`umol_graph_core::Remapping` transports graph nodes, edges, and relation participants.
-`IdRemapping` transports typed references across all eight molecule entity kinds. A remapping
-relabels participants and preserves their stored sequence, so a positional payload stays aligned
-without being touched.
+`umol_graph_core::Remapping<Id>` checks that its image vector is a permutation of its dense
+source space. `GraphRemapping` aggregates validated node and edge remappings, and
+`MoleculeRemapping` aggregates validated remappings for all eight molecule entity kinds.
+Borrowed conversions to correspondences preserve all pairings and both counts. Agreement with
+an independently supplied object's id-space sizes remains a contextual consumer requirement.
 
-A correspondence that is total on the left can produce a remapping. Applying a remapping to a
-complete standalone molecule requires a bijection onto dense target tables, which corresponds to
-totality on both sides. In that case remapping is semantics-preserving alpha-renaming rather than a
-structural edit.
+A correspondence describes a semantic remapping only when it is total on both sides and both id
+spaces are dense. Relabeling relation participants preserves their stored sequence, so a positional
+payload stays aligned without being touched.
 
 **Not:** a correspondence, which may be partial and only records pairing; not a compaction, which
 expresses removal by leaving removed source ids without images.
-**In code:** `umol_graph_core::Remapping`, `IdRemapping`, `remap`, `to_remapping`.
+**In code:** `Remapping`, `GraphRemapping`, `MoleculeRemapping`, `remap`.
 
 ### Reset
 
@@ -1574,10 +1564,12 @@ says how results arrive.
 
 An operation returning a single value — one output struct, one set, one coloring, a count, an
 `Option` — takes none of these prefixes and has no visitor form; plural-sounding names for
-single-value operations, such as `automorphisms`, are not delivery prefixes. `try_*` and
-`*_fallback` mark input-domain dispatch (simple graph against subdivision fallback) and compose
-with the delivery prefix. The execution contract behind the prefixes — streamability, visitor
-payload, and emission order — is defined in the algorithm execution guide.
+single-value operations, such as `automorphisms`, are not delivery prefixes. In this family,
+`try_*` marks restricted input-domain dispatch (simple graph against subdivision fallback), while
+`*_fallback` marks the corresponding fallback route. Both compose with the delivery prefix. The
+general meaning of `try_*` is defined under *Try prefix*. The execution contract behind the
+prefixes — streamability, visitor payload, and emission order — is defined in the algorithm
+execution guide.
 
 **Not:** *iterative* for visitor delivery — an implementation may remain recursive while visiting
 results. Not a bare plural name for an eager collection-returning operation.
@@ -1689,6 +1681,30 @@ including the inherent values carried by those entities. It does not include ove
 algorithmic representation constructed from selected structure; constraints.
 **In code:** private `DescriptionLevel::Topology`; public `IncidenceLevel::Topology`.
 
+### Tracked operation
+
+A **tracked operation** returns optional id-space provenance together with the same primary result
+as its bare counterpart. The bare name returns only the primary result; `tracked_<operation>`
+returns that result together with the operation's compaction, remapping, correspondence, or
+categorical mappings. Discarding the tracked value must preserve the ordinary output, failure or
+absence behavior, result ordering, and final mutable state.
+
+Use `try_tracked_<operation>` when `try_` distinguishes a checked counterpart; `try_` remains the
+outermost prefix. The return type identifies the particular witness, so do not repeat it in names
+such as `_with_correspondence` or `_with_compaction`. This rule does not replace an established
+operation-family name such as `canonicalize_with_remapping` or `reframe_with_action`, where the
+additional result is intrinsic to that named form rather than optional mutation tracking.
+
+Do not add a tracked form when ids are preserved or an append layout makes the mapping directly
+recoverable. `tracked_` names returned provenance, not an audit journal or a promise to preserve an
+internal action history. For categorical operations, the returned mappings retain their categorical
+direction; the prefix does not imply a covariant mutation witness.
+
+**Not:** a transaction, which records undo actions; a result-delivery prefix; a general marker for
+any method returning more than one value.
+**In code:** `tracked_remove`, `tracked_apply`, `tracked_split`, `tracked_pushout`,
+`tracked_rollback`; `try_tracked_remove`, `try_tracked_build`.
+
 ### Transaction
 
 A **transaction** is the journal of realized undos for one batch of edits. `transact` applies a batch
@@ -1715,6 +1731,23 @@ representation rather than fill undetermined state.
 
 **Not:** a resolver policy; not resolution.
 **In code:** `umol-graph/src/ops/transform`.
+
+### Try prefix
+
+The **`try_*` prefix** distinguishes a checked operation from an unprefixed asserted or panicking
+counterpart, or marks an attempt at a restricted input-domain dispatch for which the caller may use
+a fallback. It does not merely announce that a method returns `Option` or `Result`. An operation
+whose ordinary contract is fallible keeps its ordinary verb and expresses failure in its return
+type, as `apply`, `parse`, `rollback`, `reverse`, and `to_reaction_span` do. Standard trait names
+such as `TryFrom` and `TryInto` are unaffected.
+
+Use checked/asserted pairs only when both public routes are useful. An internal producer that knows
+a checked operation cannot fail handles that result explicitly rather than requiring a second
+public method solely to avoid it.
+
+**Not:** a general marker for fallibility.
+**In code:** `map`/`try_map`, `remap`/`try_remap`, `from_entries`/`try_from_entries`, and
+`try_visit_relevant_cycles` for restricted dispatch.
 
 ### Underdetermined
 
@@ -1765,7 +1798,7 @@ but is enforced by graph-IR construction rather than by a validator.
 ## Maintaining this guide
 
 Add a term when it has a durable meaning that future code or documentation must preserve. Every
-entry carries three slots:
+entry carries three fields:
 
 - the definition, in one sentence where possible;
 - `Not:` — the nearby terms it must not be used to mean, spelled out so a search for the wrong word

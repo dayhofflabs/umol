@@ -32,11 +32,6 @@ the statuses recorded here remain authoritative.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
   first OIDC-authenticated release, CI runtime, published Rust and Python
   documentation, and the eventual arXiv link.
-- [216 — Canonicalization performance](216-canonicalization-performance-2026-08-30.md)
-  records the integrated dense setup, modal compact carrier, and size-selected refinement paths;
-  interaction and backend gates precede the 0.7.0 release and post-release network rerun.
-- [212 - The remapping id-transport layer](212-remapping-layer-2026-08-26.md)
-  records the missing single-id-space remapping layer and its open representation decision.
 - [213 - Collapsing the editor's overlay storage](213-editor-overlay-storage-2026-08-27.md)
   records the proposed entity-set abstraction for editor overlays.
 
@@ -244,7 +239,7 @@ the statuses recorded here remain authoritative.
 | [201-molecular-data-first-steps-2026-08-19.md](201-molecular-data-first-steps-2026-08-19.md)                     | Completed     | 2026-09-02   |                                                                                                            |
 | [202-release-followups-2026-08-19.md](202-release-followups-2026-08-19.md)                                       | Proposed      | 2026-08-19   | Validate crates.io OIDC live, review CI runtime and docs.rs, publish Python docs, and update the arXiv link. |
 | [203-atom-mapping-2026-08-19.md](203-atom-mapping-2026-08-19.md)                                                 | Completed     | 2026-08-20   |                                                                                                            |
-| [204-reaction-application-redesign-2026-08-19.md](204-reaction-application-redesign-2026-08-19.md)               | Proposed      | 2026-08-19   | Redesign the application result and decide whether `ReactionDerivation` remains, changes, or is removed.   |
+| [204-reaction-application-redesign-2026-08-19.md](204-reaction-application-redesign-2026-08-19.md)               | Superseded    | 2026-09-04   | Scope absorbed by doc 218; `ReactionDerivation` removal and direct application results are decided there.  |
 | [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | In Progress   | 2026-09-02   | Population, algorithm work, and the annotation application remain.                                        |
 | [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Completed     | 2026-08-31   | Both review cycles implemented; the OpenSMILES arrangement verification moved to doc 153 T9.               |
 | [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | Completed     | 2026-08-31   |                                                                                                            |
@@ -252,10 +247,12 @@ the statuses recorded here remain authoritative.
 | [209-normalization-canonical-semantics-2026-08-25.md](209-normalization-canonical-semantics-2026-08-25.md)       | Completed     | 2026-08-31   |                                                                                                            |
 | [210-relation-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                             | Superseded    | 2026-08-26   | Superseded by doc 211; the storage migration could not be separated from the relation API change.          |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
-| [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Proposed      | 2026-08-29   | Findings on the missing remapping id-transport layer; representation decision open, out of doc 211's scope. |
+| [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   | Witness semantics and `IdRemapping` retirement continue in doc 218.                                         |
 | [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md)                             | Proposed      | 2026-08-29   | Generic entity-set abstraction, name, visibility, and construction surface require design review before implementation. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
-| [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | In Progress   | 2026-08-30   | S4b rejected backend sessions and deferred BSGS with measured ceilings; S4c prepares the 0.7.0 release.       |
+| [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |
+| [217-rhea-participant-failures-2026-08-30.md](217-rhea-participant-failures-2026-08-30.md)                       | Proposed      | 2026-08-30   | Preserve wedge focus, replace a parser panic, improve resolver diagnostics, and resolve 13 stereo cases.    |
+| [218-mutation-witness-2026-08-31.md](218-mutation-witness-2026-08-31.md)                                         | Completed     | 2026-09-05   |                                                                                                            |
 | [220-readable-depiction-2026-09-02.md](220-readable-depiction-2026-09-02.md)                                     | Completed     | 2026-09-03   |                                                                                                               |
-| [221-depiction-api-2026-09-03.md](221-depiction-api-2026-09-03.md)                                             | Completed     | 2026-09-03   | Final Rust/Python depiction API, feature boundary, release notes, and verification are complete.               |
+| [221-depiction-api-2026-09-03.md](221-depiction-api-2026-09-03.md)                                               | Completed     | 2026-09-03   | Final Rust/Python depiction API, feature boundary, release notes, and verification are complete.               |

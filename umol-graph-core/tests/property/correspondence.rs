@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use proptest::prelude::*;
-use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
+use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
 
 use super::strategy;
 
@@ -47,6 +47,17 @@ fn graph_context_strategy() -> impl Strategy<Value = (Graph, Graph, Corresponden
         let correspondence =
             correspondence_with_counts_strategy(left.node_count(), right.node_count());
         (Just(left), Just(right), correspondence)
+    })
+}
+
+fn correspondence_chain_strategy(
+    length: usize,
+) -> impl Strategy<Value = Vec<Correspondence<NodeId>>> {
+    prop::collection::vec(0usize..8, length + 1).prop_flat_map(|counts| {
+        counts
+            .windows(2)
+            .map(|pair| correspondence_with_counts_strategy::<NodeId>(pair[0], pair[1]).boxed())
+            .collect::<Vec<_>>()
     })
 }
 
@@ -107,6 +118,54 @@ fn correspondence_images_strategy() -> impl Strategy<Value = (Vec<NodeId>, usize
 }
 
 proptest! {
+
+    #[test]
+    fn test_correspondence_extend_right(
+        correspondence in correspondence_strategy::<NodeId>(),
+        added in 0usize..8,
+    ) {
+        let right_count = correspondence.right_count();
+        let step = Correspondence::new(
+            (0..right_count).map(|idx| (NodeId::from(idx), NodeId::from(idx))).collect(),
+            right_count, right_count + added,
+        ).unwrap();
+        prop_assert_eq!(correspondence.clone().extend_right(added), correspondence.compose(&step).unwrap());
+    }
+
+    #[test]
+    fn test_correspondence_compact_right(
+        correspondence in correspondence_strategy::<NodeId>(),
+        removals in prop::collection::vec(any::<bool>(), 8),
+    ) {
+        let removed = removals.into_iter().take(correspondence.right_count()).enumerate()
+            .filter_map(|(idx, remove)| remove.then_some(NodeId::from(idx))).collect();
+        let compaction = Compaction::new(correspondence.right_count(), removed).unwrap();
+        let step = Correspondence::from(&compaction);
+        prop_assert_eq!(
+            correspondence.clone().compact_right(&compaction).unwrap(),
+            correspondence.compose(&step).unwrap(),
+        );
+        prop_assert_eq!(
+            correspondence.clone().compact_right(&compaction).unwrap().uncompact_right(&compaction).unwrap(),
+            correspondence.compose(&step).unwrap().compose(&step.reverse()).unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_correspondence_uncompact_right(
+        (correspondence, compaction) in (0usize..8, 0usize..8, prop::collection::vec(any::<bool>(), 8))
+            .prop_flat_map(|(left_count, source_count, removals)| {
+                let removed = removals.into_iter().take(source_count).enumerate()
+                    .filter_map(|(idx, remove)| remove.then_some(NodeId::from(idx))).collect();
+                let compaction = Compaction::new(source_count, removed).unwrap();
+                (correspondence_with_counts_strategy::<NodeId>(left_count, compaction.result_count()), Just(compaction))
+            }),
+    ) {
+        let step = Correspondence::from(&compaction).reverse();
+        let expanded = correspondence.clone().uncompact_right(&compaction).unwrap();
+        prop_assert_eq!(&expanded, &correspondence.compose(&step).unwrap());
+        prop_assert_eq!(expanded.compact_right(&compaction).unwrap(), correspondence);
+    }
     #[test]
     fn test_correspondence_from_images(
         (images, right_count) in correspondence_images_strategy(),
@@ -174,13 +233,12 @@ proptest! {
 
     #[test]
     fn test_correspondence_compose_associativity(
-        first in correspondence_strategy::<NodeId>(),
-        second in correspondence_strategy::<NodeId>(),
-        third in correspondence_strategy::<NodeId>(),
+        chain in correspondence_chain_strategy(3),
     ) {
+        let [first, second, third] = chain.as_slice() else { unreachable!() };
         prop_assert_eq!(
-            first.compose(&second).compose(&third),
-            first.compose(&second.compose(&third)),
+            first.compose(second).unwrap().compose(third),
+            first.compose(&second.compose(third).unwrap()),
         );
     }
 
@@ -199,41 +257,39 @@ proptest! {
         let right_identity =
             Correspondence::from_images(&right_images, correspondence.right_count());
 
-        prop_assert_eq!(left_identity.compose(&correspondence), correspondence.clone());
-        prop_assert_eq!(correspondence.compose(&right_identity), correspondence);
+        prop_assert_eq!(left_identity.compose(&correspondence), Ok(correspondence.clone()));
+        prop_assert_eq!(correspondence.compose(&right_identity), Ok(correspondence));
     }
 
     #[test]
     fn test_correspondence_compose_all(
-        first in correspondence_strategy::<NodeId>(),
-        second in correspondence_strategy::<NodeId>(),
-        third in correspondence_strategy::<NodeId>(),
+        chain in correspondence_chain_strategy(3),
     ) {
-        let expected = first.compose(&second).compose(&third);
+        let expected = chain[0].compose(&chain[1]).unwrap().compose(&chain[2]).unwrap();
 
         prop_assert_eq!(
-            Correspondence::compose_all([first, second, third]),
-            Some(expected),
+            Correspondence::compose_all(chain),
+            Ok(Some(expected)),
         );
     }
 
     #[test]
     fn test_correspondence_compose_all_concatenation(
-        correspondences in prop::collection::vec(correspondence_strategy::<NodeId>(), 0..8),
+        correspondences in (0usize..8).prop_flat_map(correspondence_chain_strategy),
         split in any::<usize>(),
     ) {
         let split = split.min(correspondences.len());
-        let left = Correspondence::compose_all(correspondences[..split].iter().cloned());
-        let right = Correspondence::compose_all(correspondences[split..].iter().cloned());
+        let left = Correspondence::compose_all(correspondences[..split].iter().cloned()).unwrap();
+        let right = Correspondence::compose_all(correspondences[split..].iter().cloned()).unwrap();
         let expected = match (left, right) {
-            (Some(left), Some(right)) => Some(left.compose(&right)),
+            (Some(left), Some(right)) => Some(left.compose(&right).unwrap()),
             (Some(correspondence), None) | (None, Some(correspondence)) => Some(correspondence),
             (None, None) => None,
         };
 
         prop_assert_eq!(
             Correspondence::compose_all(correspondences),
-            expected,
+            Ok(expected),
         );
     }
 
@@ -286,29 +342,4 @@ proptest! {
         prop_assert_eq!(correspondence.is_total(), total_on_left && total_on_right);
     }
 
-    #[test]
-    fn test_graph_correspondence_to_remapping(
-        correspondence in graph_correspondence_strategy(),
-    ) {
-        let remapping = correspondence.to_remapping();
-        if correspondence.is_total_on_left() {
-            let remapping = remapping.expect("total-left correspondence defines a remapping");
-            for left in 0..correspondence.nodes().left_count() {
-                let left = NodeId::from(left);
-                prop_assert_eq!(
-                    Some(remapping.map_node(left)),
-                    correspondence.nodes().right_of(left),
-                );
-            }
-            for left in 0..correspondence.edges().left_count() {
-                let left = EdgeId::from(left);
-                prop_assert_eq!(
-                    Some(remapping.map_edge(left)),
-                    correspondence.edges().right_of(left),
-                );
-            }
-        } else {
-            prop_assert_eq!(remapping, None);
-        }
-    }
 }

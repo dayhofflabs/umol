@@ -6,6 +6,8 @@
 
 #[path = "property/common_subgraph.rs"]
 mod common_subgraph;
+#[path = "property/compact.rs"]
+mod compact;
 #[path = "property/corpus.rs"]
 mod corpus;
 #[path = "property/correspondence.rs"]
@@ -16,6 +18,8 @@ mod cycles;
 mod graph;
 #[path = "property/relation.rs"]
 mod relation;
+#[path = "property/remap.rs"]
+mod remap;
 #[path = "property/strategy.rs"]
 mod strategy;
 #[path = "property/subgraph_isomorphism.rs"]

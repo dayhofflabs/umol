@@ -13,10 +13,10 @@
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, Sub};
 
-use crate::compaction::{Compaction, GraphCompaction};
-use crate::correspondence::Correspondence;
+use crate::compact::{Compaction, GraphCompaction};
+use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::graph::{EdgeId, NodeId};
-use crate::remapping::Remapping;
+use crate::remap::GraphRemapping;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
@@ -24,6 +24,12 @@ pub struct RelationId(pub u32);
 impl RelationId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl From<RelationId> for usize {
+    fn from(id: RelationId) -> Self {
+        id.0 as usize
     }
 }
 
@@ -49,11 +55,13 @@ impl Sub<usize> for RelationId {
     }
 }
 
-/// The glued relation set and its two relation-level coprojections — the result of a same-space
-/// relation-set [`pushout`](FixedRelationSet::pushout).
+/// The two input-to-result correspondences of a same-space relation-set pushout.
+///
+/// Operation-produced components have equal target counts and cover their respective
+/// inputs. Public fields may be assembled independently; agreement with a particular
+/// resulting relation set is contextual.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationPushout<S> {
-    pub object: S,
+pub struct RelationPushoutCorrespondence {
     /// `self` relation → object relation (identity — the object keeps `self`'s relation ids).
     pub left: Correspondence<RelationId>,
     /// `right` relation → object relation (a coincidence folds onto its `self` partner; the rest are
@@ -68,20 +76,23 @@ fn relation_pushout<S>(
     self_count: usize,
     object_count: usize,
     right_map: Vec<RelationId>,
-) -> RelationPushout<S> {
+) -> (S, RelationPushoutCorrespondence) {
     let left: Vec<RelationId> = (0..self_count).map(RelationId::from).collect();
-    RelationPushout {
+    (
         object,
-        left: Correspondence::from_images(&left, object_count),
-        right: Correspondence::from_images(&right_map, object_count),
-    }
+        RelationPushoutCorrespondence {
+            left: Correspondence::from_images(&left, object_count),
+            right: Correspondence::from_images(&right_map, object_count),
+        },
+    )
 }
 
-/// The shared-relation intersection and its two projections — the result of a same-space relation
-/// [`pullback`](FixedRelationSet::pullback).
+/// The two result-to-input projections of a same-space relation-set pullback.
+///
+/// Operation-produced components cover the result and have equal source counts. Public fields may be
+/// assembled independently; agreement with the result and input sets is contextual.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationPullback<S> {
-    pub object: S,
+pub struct RelationPullbackCorrespondence {
     /// object relation → `self` relation.
     pub left: Correspondence<RelationId>,
     /// object relation → `right` relation.
@@ -95,12 +106,14 @@ fn relation_pullback<S>(
     right_images: Vec<RelationId>,
     self_count: usize,
     right_count: usize,
-) -> RelationPullback<S> {
-    RelationPullback {
+) -> (S, RelationPullbackCorrespondence) {
+    (
         object,
-        left: Correspondence::from_images(&left_images, self_count),
-        right: Correspondence::from_images(&right_images, right_count),
-    }
+        RelationPullbackCorrespondence {
+            left: Correspondence::from_images(&left_images, self_count),
+            right: Correspondence::from_images(&right_images, right_count),
+        },
+    )
 }
 
 /// Position of a participant within a single relation's tuple — local to the
@@ -151,25 +164,41 @@ pub struct ParticipantRefs {
     pub node: Option<NodeId>,
     pub edge: Option<EdgeId>,
 }
-/// A value that can occupy a relation factor: routes through a `GraphCompaction`
-/// (removal/compaction, both directions) and a `Remapping` (general relabel,
-/// forward), and exposes its node/edge refs for incidence. One impl per concrete
+/// A value that can occupy a relation factor: supports compaction, remapping, and
+/// correspondence-based id transport, and exposes its node/edge refs for incidence. One impl per concrete
 /// id type — dispatch is static, since a factor is homogeneous.
 pub trait RelationParticipant: Copy + Ord + Hash {
     fn compact(self, compaction: &GraphCompaction) -> Option<Self>;
     fn uncompact(self, compaction: &GraphCompaction) -> Self;
 
+    /// Relabel every referenced id through a correspondence, preserving other participant data.
+    ///
+    /// # Panics
+    /// Panics when a referenced node or edge has no image.
+    fn map(self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel every referenced id, or return `None` if any reference has no image.
+    /// Unused correspondence entries need not be matched. Every id looked up must be
+    /// reported by [`refs`](Self::refs); all other participant data must be preserved.
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self>;
+
     /// Relabel this participant through `remapping`.
     ///
     /// Every node or edge id read from `remapping` must be reported by [`refs`](Self::refs), so
     /// checked relation-set remapping can establish coverage before calling this method.
-    fn remap(self, remapping: &Remapping) -> Self;
+    fn remap(self, remapping: &GraphRemapping) -> Self;
 
     /// Return every graph id used to represent this participant.
     fn refs(self) -> ParticipantRefs;
 }
 
 impl RelationParticipant for NodeId {
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        correspondence.nodes().right_of(self)
+    }
     fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
         compaction.compact_node(self)
     }
@@ -178,7 +207,7 @@ impl RelationParticipant for NodeId {
         compaction.uncompact_node(self)
     }
 
-    fn remap(self, remapping: &Remapping) -> Self {
+    fn remap(self, remapping: &GraphRemapping) -> Self {
         remapping.map_node(self)
     }
 
@@ -191,6 +220,9 @@ impl RelationParticipant for NodeId {
 }
 
 impl RelationParticipant for EdgeId {
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        correspondence.edges().right_of(self)
+    }
     fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
         compaction.compact_edge(self)
     }
@@ -199,7 +231,7 @@ impl RelationParticipant for EdgeId {
         compaction.uncompact_edge(self)
     }
 
-    fn remap(self, remapping: &Remapping) -> Self {
+    fn remap(self, remapping: &GraphRemapping) -> Self {
         remapping.map_edge(self)
     }
 
@@ -312,18 +344,9 @@ impl<P: Hash, D: Hash, const N: usize> Hash for FixedRelationSet<P, D, N> {
     }
 }
 
-/// Relabel a factor's participants through a general `Remapping`, preserving their stored order.
-/// The owning relation-set constructor canonicalizes the result and transports positional data.
-fn remap_factor<P>(participants: &[P], remapping: &Remapping) -> Vec<P>
-where
-    P: RelationParticipant,
-{
-    participants.iter().map(|&p| p.remap(remapping)).collect()
-}
-
 /// Whether every graph id these participants reference has an image under `remapping` — the
 /// precondition [`FixedRelationSet::try_remap`] and its peers check before relabelling.
-fn remappable_under<P>(participants: &[P], remapping: &Remapping) -> bool
+fn remappable_under<P>(participants: &[P], remapping: &GraphRemapping) -> bool
 where
     P: RelationParticipant,
 {
@@ -490,12 +513,23 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -514,10 +548,14 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
                 None => removed.push(rid),
             }
         }
-        (Self::new(entries), Compaction::new(removed))
+        (
+            Self::new(entries),
+            Compaction::new(self.count(), removed)
+                .expect("removed relations belong to the source set"),
+        )
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -526,24 +564,63 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
-        let entries: Vec<([P; N], D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                let parts: [P; N] = remap_factor(self.participants(rid), remapping)
+        self.map_participants(|participant| Some(participant.remap(remapping)))
+            .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(|participant| participant.try_map(correspondence))
+    }
+
+    fn map_participants(&self, mut map_1: impl FnMut(P) -> Option<P>) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: [P; N] = self
+                    .participants(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                (parts, self.data(rid).clone())
+                Some((parts_1, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover the set.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -557,13 +634,29 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// the data of a coincidence (`None` = ⊥ ⇒ the whole glue is inadmissible ⇒ `None`); every other
     /// relation is carried. `self`'s ids are the identity prefix of the object, `right`'s
     /// non-coinciding relations are appended. The caller brings both sides, including positional
-    /// data, into the common space with [`remap`](Self::remap) first.
+    /// data, into the common space with [`map`](Self::map) or [`remap`](Self::remap) first.
     pub fn pushout(
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -606,8 +699,24 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -851,12 +960,23 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -874,10 +994,14 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
                 None => removed.push(rid),
             }
         }
-        (Self::new(entries), Compaction::new(removed))
+        (
+            Self::new(entries),
+            Compaction::new(self.count(), removed)
+                .expect("removed relations belong to the source set"),
+        )
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -886,24 +1010,61 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
-        let entries: Vec<(Vec<P>, D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                (
-                    remap_factor(self.participants(rid), remapping),
-                    self.data(rid).clone(),
-                )
+        self.map_participants(|participant| Some(participant.remap(remapping)))
+            .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(|participant| participant.try_map(correspondence))
+    }
+
+    fn map_participants(&self, mut map_1: impl FnMut(P) -> Option<P>) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: Vec<P> = self
+                    .participants(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?;
+                Some((parts_1, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover the set.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -917,8 +1078,24 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -958,8 +1135,24 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -1224,12 +1417,23 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -1254,10 +1458,14 @@ where
                 _ => removed.push(rid),
             }
         }
-        (Self::new(entries), Compaction::new(removed))
+        (
+            Self::new(entries),
+            Compaction::new(self.count(), removed)
+                .expect("removed relations belong to the source set"),
+        )
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -1267,27 +1475,81 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
-        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                let f1: [L1; N1] = remap_factor(self.participants_1(rid), remapping)
+        self.map_participants(
+            |participant| Some(participant.remap(remapping)),
+            |participant| Some(participant.remap(remapping)),
+        )
+        .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(
+            |participant| participant.try_map(correspondence),
+            |participant| participant.try_map(correspondence),
+        )
+    }
+
+    fn map_participants(
+        &self,
+        mut map_1: impl FnMut(L1) -> Option<L1>,
+        mut map_2: impl FnMut(L2) -> Option<L2>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: [L1; N1] = self
+                    .participants_1(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                let f2: [L2; N2] = remap_factor(self.participants_2(rid), remapping)
+                let parts_2: [L2; N2] = self
+                    .participants_2(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_2)
+                    .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                (f1, f2, self.data(rid).clone())
+                Some((parts_1, parts_2, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -1305,8 +1567,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -1364,8 +1642,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -1677,12 +1971,23 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -1706,10 +2011,14 @@ where
                 _ => removed.push(rid),
             }
         }
-        (Self::new(entries), Compaction::new(removed))
+        (
+            Self::new(entries),
+            Compaction::new(self.count(), removed)
+                .expect("removed relations belong to the source set"),
+        )
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -1719,28 +2028,79 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
-        let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                let f1: [L1; N1] = remap_factor(self.participants_1(rid), remapping)
+        self.map_participants(
+            |participant| Some(participant.remap(remapping)),
+            |participant| Some(participant.remap(remapping)),
+        )
+        .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(
+            |participant| participant.try_map(correspondence),
+            |participant| participant.try_map(correspondence),
+        )
+    }
+
+    fn map_participants(
+        &self,
+        mut map_1: impl FnMut(L1) -> Option<L1>,
+        mut map_2: impl FnMut(L2) -> Option<L2>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: [L1; N1] = self
+                    .participants_1(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("factor arity preserved"));
-                (
-                    f1,
-                    remap_factor(self.participants_2(rid), remapping),
-                    self.data(rid).clone(),
-                )
+                let parts_2: Vec<L2> = self
+                    .participants_2(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_2)
+                    .collect::<Option<Vec<_>>>()?;
+                Some((parts_1, parts_2, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -1758,8 +2118,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -1817,8 +2193,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -2136,12 +2528,23 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -2164,10 +2567,14 @@ where
                 _ => removed.push(rid),
             }
         }
-        (Self::new(entries), Compaction::new(removed))
+        (
+            Self::new(entries),
+            Compaction::new(self.count(), removed)
+                .expect("removed relations belong to the source set"),
+        )
     }
 
-    /// Relabel every participant and transport positional data into canonical participant order.
+    /// Relabel every participant, preserving rows, participant order, and payloads.
     ///
     /// # Semantic properties
     ///
@@ -2177,25 +2584,77 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
     where
         D: Clone,
     {
-        let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.count())
-            .map(|i| {
-                let rid = RelationId(i as u32);
-                (
-                    remap_factor(self.participants_1(rid), remapping),
-                    remap_factor(self.participants_2(rid), remapping),
-                    self.data(rid).clone(),
-                )
+        self.map_participants(
+            |participant| Some(participant.remap(remapping)),
+            |participant| Some(participant.remap(remapping)),
+        )
+        .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
+    ///
+    /// # Panics
+    /// Panics when any referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participant ids, returning `None` when any reference has no image.
+    ///
+    /// Only referenced ids require images; unrelated source entries may be unmatched.
+    ///
+    /// # Semantic properties
+    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
+    /// sequential covered mappings agree with their correspondence composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(
+            |participant| participant.try_map(correspondence),
+            |participant| participant.try_map(correspondence),
+        )
+    }
+
+    fn map_participants(
+        &self,
+        mut map_1: impl FnMut(L1) -> Option<L1>,
+        mut map_2: impl FnMut(L2) -> Option<L2>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: Vec<L1> = self
+                    .participants_1(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?;
+                let parts_2: Vec<L2> = self
+                    .participants_2(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_2)
+                    .collect::<Option<Vec<_>>>()?;
+                Some((parts_1, parts_2, self.data(id).clone()))
             })
-            .collect();
-        Self::new(entries)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
     where
         D: Clone,
     {
@@ -2213,8 +2672,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -2272,8 +2747,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -2335,6 +2826,43 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::correspondence::GraphCorrespondence;
+    use crate::graph::Graph;
+    use crate::remap::Remapping;
+
+    #[fixture]
+    fn participant_correspondence() -> GraphCorrespondence {
+        GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(0), NodeId(5)), (NodeId(2), NodeId(1))], 4, 6)
+                .unwrap(),
+            Correspondence::new(vec![(EdgeId(0), EdgeId(6)), (EdgeId(2), EdgeId(3))], 4, 7)
+                .unwrap(),
+        )
+    }
+
+    #[rstest]
+    #[case::mapped(NodeId(2), Some(NodeId(1)))]
+    #[case::unmatched(NodeId(1), None)]
+    #[case::outside(NodeId(4), None)]
+    fn test_node_id_try_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] id: NodeId,
+        #[case] expected: Option<NodeId>,
+    ) {
+        assert_eq!(id.try_map(&participant_correspondence), expected);
+    }
+
+    #[rstest]
+    #[case::mapped(EdgeId(2), Some(EdgeId(3)))]
+    #[case::unmatched(EdgeId(1), None)]
+    #[case::outside(EdgeId(4), None)]
+    fn test_edge_id_try_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] id: EdgeId,
+        #[case] expected: Option<EdgeId>,
+    ) {
+        assert_eq!(id.try_map(&participant_correspondence), expected);
+    }
 
     fn hash<T: Hash>(value: &T) -> u64 {
         let mut hasher = DefaultHasher::new();
@@ -2378,15 +2906,21 @@ mod tests {
     #[case::removed(NodeId(1), None)]
     #[case::after_removed(NodeId(2), Some(NodeId(1)))]
     fn test_node_id_compact(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
-        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
+        let compaction = GraphCompaction::new(
+            Compaction::new(3, vec![NodeId(1)]).unwrap(),
+            Compaction::empty(),
+        );
         assert_eq!(id.compact(&compaction), expected);
     }
 
     #[rstest]
     #[case::before_gap(NodeId(0), NodeId(0))]
     #[case::after_gap(NodeId(1), NodeId(2))]
-    fn test_node_id_unmap(#[case] id: NodeId, #[case] expected: NodeId) {
-        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
+    fn test_node_id_uncompact(#[case] id: NodeId, #[case] expected: NodeId) {
+        let compaction = GraphCompaction::new(
+            Compaction::new(3, vec![NodeId(1)]).unwrap(),
+            Compaction::empty(),
+        );
         assert_eq!(id.uncompact(&compaction), expected);
     }
 
@@ -2405,15 +2939,21 @@ mod tests {
     #[case::removed(EdgeId(0), None)]
     #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
     fn test_edge_id_compact(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
-        let compaction = GraphCompaction::new(vec![], vec![EdgeId(0)]);
+        let compaction = GraphCompaction::new(
+            Compaction::empty(),
+            Compaction::new(3, vec![EdgeId(0)]).unwrap(),
+        );
         assert_eq!(id.compact(&compaction), expected);
     }
 
     #[rstest]
     #[case::before_gap(EdgeId(0), EdgeId(0))]
     #[case::after_gap(EdgeId(1), EdgeId(2))]
-    fn test_edge_id_unmap(#[case] id: EdgeId, #[case] expected: EdgeId) {
-        let compaction = GraphCompaction::new(vec![], vec![EdgeId(1)]);
+    fn test_edge_id_uncompact(#[case] id: EdgeId, #[case] expected: EdgeId) {
+        let compaction = GraphCompaction::new(
+            Compaction::empty(),
+            Compaction::new(3, vec![EdgeId(1)]).unwrap(),
+        );
         assert_eq!(id.uncompact(&compaction), expected);
     }
 
@@ -2480,7 +3020,7 @@ mod tests {
         PositionLabels(vec![70, 30]),
         PositionLabels(vec![30, 70]),
     )]
-    fn test_var_relation_set_pushout_coincidence_frame(
+    fn test_var_relation_set_tracked_pushout_coincidence_frame(
         #[case] left: VarRelationSet<NodeId, PositionLabels>,
         #[case] right: VarRelationSet<NodeId, PositionLabels>,
         #[case] expected_frame: [NodeId; 2],
@@ -2488,8 +3028,8 @@ mod tests {
         #[case] expected_right_seen: PositionLabels,
     ) {
         let mut seen = None;
-        let merged = left
-            .pushout(
+        let (object, correspondence) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
                 |(_, a), (_, b)| {
@@ -2498,7 +3038,13 @@ mod tests {
                 },
             )
             .expect("combine never rejects here");
-        let object = merged.object;
+        assert_eq!(
+            correspondence,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 1).unwrap(),
+                right: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 1).unwrap(),
+            }
+        );
 
         assert_eq!(object.count(), 1, "the two entries coincide");
         assert_eq!(
@@ -2515,12 +3061,12 @@ mod tests {
     /// Two right entries coinciding with one left entry is rejected, not merged: the right
     /// coprojection must be injective, and `Correspondence` asserts that.
     ///
-    /// This is why `pushout` may read the left payload out of its own output buffer — the slot can
+    /// This is why `pushout` may read the left payload out of its own output buffer — the entry can
     /// never be merged into twice. `pullback` reads the same payload from the source instead, and
     /// the two agree because the case that would separate them cannot be constructed.
     #[rstest]
     #[should_panic(expected = "correspondence images must be unique")]
-    fn test_var_relation_set_pushout_repeated_coincidence() {
+    fn test_var_relation_set_tracked_pushout_repeated_coincidence() {
         let left: VarRelationSet<NodeId, PositionLabels> =
             VarRelationSet::new(vec![(vec![n(0), n(1)], PositionLabels(vec![1, 1]))]);
         let right: VarRelationSet<NodeId, PositionLabels> = VarRelationSet::new(vec![
@@ -2528,7 +3074,7 @@ mod tests {
             (vec![n(0), n(1)], PositionLabels(vec![4, 4])),
         ]);
 
-        left.pushout(
+        left.tracked_pushout(
             &right,
             |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
             |(_, a), (_, b)| {
@@ -2675,27 +3221,138 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
-    #[rstest]
-    fn test_fixed_relation_set_compact() {
-        let rs: FixedRelationSet<NodeId, &str, 2> =
-            FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
-        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+    #[fixture]
+    fn fixed_relation_set_compaction_input() -> FixedRelationSet<NodeId, &'static str, 2> {
+        FixedRelationSet::new(vec![
+            ([NodeId(0), NodeId(2)], "keep"),
+            ([NodeId(1), NodeId(3)], "drop"),
+        ])
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::partial(
+        vec![NodeId(1)],
+        FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        FixedRelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_fixed_relation_set_tracked_compact(
+        fixed_relation_set_compaction_input: FixedRelationSet<NodeId, &'static str, 2>,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: FixedRelationSet<NodeId, &'static str, 2>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = fixed_relation_set_compaction_input;
+        let compaction = GraphCompaction::new(
+            Compaction::new(4, removed_nodes).unwrap(),
+            Compaction::empty(),
+        );
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(FixedRelationSet::default())]
+    #[case::rows(
+        FixedRelationSet::new(vec![([NodeId(0), NodeId(2)], "keep"), ([NodeId(1), NodeId(3)], "drop")]),
+    )]
+    fn test_fixed_relation_set_compact_identity(
+        #[case] input: FixedRelationSet<NodeId, &'static str, 2>,
+    ) {
+        let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::empty());
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
+    }
+
+    #[rstest]
+    #[case::rows(FixedRelationSet::new(vec![([NodeId(2), NodeId(0)], vec![7, 11]), ([NodeId(2), NodeId(0)], vec![13, 17])]),
+        FixedRelationSet::new(vec![([NodeId(1), NodeId(5)], vec![7, 11]), ([NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_fixed_relation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: FixedRelationSet<NodeId, Vec<u32>, 2>,
+        #[case] expected: FixedRelationSet<NodeId, Vec<u32>, 2>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+    }
+
+    #[rstest]
+    #[case::empty(FixedRelationSet::new(vec![]))]
+    #[case::rows(FixedRelationSet::new(vec![([NodeId(2), NodeId(0)], vec![7, 11]), ([NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_fixed_relation_set_map_identity(#[case] input: FixedRelationSet<NodeId, Vec<u32>, 2>) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1)]
+    #[case::outside_node(4)]
+    fn test_fixed_relation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+    ) {
+        let input: FixedRelationSet<NodeId, Vec<u32>, 2> = FixedRelationSet::new(vec![
+            ([NodeId(2), NodeId(0)], vec![7, 11]),
+            ([NodeId(node), NodeId(0)], vec![13, 17]),
+        ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_fixed_relation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+
+        let input: FixedRelationSet<NodeId, Vec<u32>, 2> =
+            FixedRelationSet::new(vec![([NodeId(node), NodeId(0)], vec![7, 11])]);
+        input.map(&participant_correspondence);
     }
 
     #[rstest]
     fn test_fixed_relation_set_remap() {
         let rs: FixedRelationSet<NodeId, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
-        let remapping = Remapping::new(vec![n(1), n(0)], vec![]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![n(1), n(0)]).expect("permutation images"),
+            Remapping::empty(),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(out.data(RelationId(0)), &PositionLabels(vec![10, 11]));
@@ -2707,7 +3364,10 @@ mod tests {
     fn test_fixed_relation_set_try_remap(#[case] nodes: Vec<NodeId>, #[case] covered: bool) {
         let rs: FixedRelationSet<NodeId, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
-        let remapping = Remapping::new(nodes, vec![]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).expect("permutation images"),
+            Remapping::empty(),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -2932,22 +3592,126 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
-    #[rstest]
-    fn test_var_relation_set_compact() {
-        let rs: VarRelationSet<NodeId, &str> = VarRelationSet::new(vec![
-            (vec![n(0), n(2), n(4)], "keep"),
-            (vec![n(1), n(3)], "drop"),
-        ]);
-        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+    #[fixture]
+    fn var_relation_set_compaction_input() -> VarRelationSet<NodeId, &'static str> {
+        VarRelationSet::new(vec![
+            (vec![NodeId(0), NodeId(2), NodeId(4)], "keep"),
+            (vec![NodeId(1), NodeId(3)], "drop"),
+        ])
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::partial(
+        vec![NodeId(1)],
+        VarRelationSet::new(vec![(vec![NodeId(0), NodeId(1), NodeId(3)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        VarRelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_var_relation_set_tracked_compact(
+        var_relation_set_compaction_input: VarRelationSet<NodeId, &'static str>,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: VarRelationSet<NodeId, &'static str>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = var_relation_set_compaction_input;
+        let compaction = GraphCompaction::new(
+            Compaction::new(5, removed_nodes).unwrap(),
+            Compaction::empty(),
+        );
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(VarRelationSet::default())]
+    #[case::rows(
+        VarRelationSet::new(vec![(vec![NodeId(0), NodeId(2), NodeId(4)], "keep"), (vec![NodeId(1), NodeId(3)], "drop")]),
+    )]
+    fn test_var_relation_set_compact_identity(#[case] input: VarRelationSet<NodeId, &'static str>) {
+        let compaction = GraphCompaction::new(Compaction::identity(5), Compaction::empty());
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
+    }
+
+    #[rstest]
+    #[case::rows(VarRelationSet::new(vec![(vec![NodeId(2), NodeId(0)], vec![7, 11]), (vec![NodeId(2), NodeId(0)], vec![13, 17])]),
+        VarRelationSet::new(vec![(vec![NodeId(1), NodeId(5)], vec![7, 11]), (vec![NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_var_relation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: VarRelationSet<NodeId, Vec<u32>>,
+        #[case] expected: VarRelationSet<NodeId, Vec<u32>>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+    }
+
+    #[rstest]
+    #[case::empty(VarRelationSet::new(vec![]))]
+    #[case::rows(VarRelationSet::new(vec![(vec![NodeId(2), NodeId(0)], vec![7, 11]), (vec![NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_var_relation_set_map_identity(#[case] input: VarRelationSet<NodeId, Vec<u32>>) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1)]
+    #[case::outside_node(4)]
+    fn test_var_relation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+    ) {
+        let input: VarRelationSet<NodeId, Vec<u32>> = VarRelationSet::new(vec![
+            (vec![NodeId(2), NodeId(0)], vec![7, 11]),
+            (vec![NodeId(node), NodeId(0)], vec![13, 17]),
+        ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_var_relation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+
+        let input: VarRelationSet<NodeId, Vec<u32>> =
+            VarRelationSet::new(vec![(vec![NodeId(node), NodeId(0)], vec![7, 11])]);
+        input.map(&participant_correspondence);
     }
 
     #[rstest]
@@ -2956,7 +3720,10 @@ mod tests {
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             PositionLabels(vec![20, 21, 22]),
         )]);
-        let remapping = Remapping::new(vec![], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
+        let remapping = GraphRemapping::new(
+            Remapping::empty(),
+            Remapping::new(vec![EdgeId(2), EdgeId(0), EdgeId(1)]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(
             out.participants(RelationId(0)),
@@ -2967,13 +3734,16 @@ mod tests {
 
     #[rstest]
     #[case::covered(vec![EdgeId(2), EdgeId(0), EdgeId(1)], true)]
-    #[case::uncovered_edge(vec![EdgeId(2), EdgeId(0)], false)]
+    #[case::uncovered_edge(vec![EdgeId(1), EdgeId(0)], false)]
     fn test_var_relation_set_try_remap(#[case] edges: Vec<EdgeId>, #[case] covered: bool) {
         let rs: VarRelationSet<EdgeId, PositionLabels> = VarRelationSet::new(vec![(
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             PositionLabels(vec![20, 21, 22]),
         )]);
-        let remapping = Remapping::new(vec![], edges);
+        let remapping = GraphRemapping::new(
+            Remapping::empty(),
+            Remapping::new(edges).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3111,25 +3881,153 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_compact() {
-        // dropped relation loses a factor-1 participant
-        let rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &str> =
-            FixedFixedBirelationSet::new(vec![
-                ([n(0)], [n(2), n(4)], "keep"),
-                ([n(1)], [n(5), n(6)], "drop"),
-            ]);
-        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+    #[fixture]
+    fn fixed_fixed_birelation_set_compaction_input(
+    ) -> FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str> {
+        FixedFixedBirelationSet::new(vec![
+            ([NodeId(0)], [NodeId(2), NodeId(4)], "keep"),
+            ([NodeId(1)], [NodeId(5), NodeId(6)], "drop"),
+        ])
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::partial(
+        vec![NodeId(1)],
+        FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1), NodeId(3)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        FixedFixedBirelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_fixed_fixed_birelation_set_tracked_compact(
+        fixed_fixed_birelation_set_compaction_input: FixedFixedBirelationSet<
+            NodeId,
+            1,
+            NodeId,
+            2,
+            &'static str,
+        >,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = fixed_fixed_birelation_set_compaction_input;
+        let compaction = GraphCompaction::new(
+            Compaction::new(7, removed_nodes).unwrap(),
+            Compaction::empty(),
+        );
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(FixedFixedBirelationSet::default())]
+    #[case::rows(
+        FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(2), NodeId(4)], "keep"), ([NodeId(1)], [NodeId(5), NodeId(6)], "drop")]),
+    )]
+    fn test_fixed_fixed_birelation_set_compact_identity(
+        #[case] input: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
+    ) {
+        let compaction = GraphCompaction::new(Compaction::identity(7), Compaction::empty());
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
+    }
+
+    #[rstest]
+    #[case::rows(FixedFixedBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![13, 17])]),
+        FixedFixedBirelationSet::new(vec![([EdgeId(3), EdgeId(6)], [NodeId(1), NodeId(5)], vec![7, 11]), ([EdgeId(3), EdgeId(6)], [NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_fixed_fixed_birelation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+        #[case] expected: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+        assert_eq!(
+            expected.incident_edge(EdgeId(3)),
+            expected.incident(NodeId(1))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(FixedFixedBirelationSet::new(vec![]))]
+    #[case::rows(FixedFixedBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_fixed_fixed_birelation_set_map_identity(
+        #[case] input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+    ) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1, 2)]
+    #[case::outside_node(4, 2)]
+    #[case::missing_edge(2, 1)]
+    #[case::outside_edge(2, 4)]
+    fn test_fixed_fixed_birelation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+        #[case] edge: u32,
+    ) {
+        let input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>> =
+            FixedFixedBirelationSet::new(vec![
+                ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]),
+                (
+                    [EdgeId(edge), EdgeId(0)],
+                    [NodeId(node), NodeId(0)],
+                    vec![13, 17],
+                ),
+            ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_fixed_fixed_birelation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+        let edge = 2;
+        let input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>> =
+            FixedFixedBirelationSet::new(vec![(
+                [EdgeId(edge), EdgeId(0)],
+                [NodeId(node), NodeId(0)],
+                vec![7, 11],
+            )]);
+        input.map(&participant_correspondence);
     }
 
     #[rstest]
@@ -3143,7 +4041,10 @@ mod tests {
                     factor_2: vec![20, 21],
                 },
             )]);
-        let remapping = Remapping::new(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![n(1), n(0)]).expect("permutation images"),
+            Remapping::new(vec![EdgeId(1), EdgeId(0)]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[EdgeId(1), EdgeId(0)]);
@@ -3159,7 +4060,7 @@ mod tests {
     #[rstest]
     #[case::covered(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)], true)]
     #[case::uncovered_node(vec![n(0)], vec![EdgeId(1), EdgeId(0)], false)]
-    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(1)], false)]
+    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(0)], false)]
     fn test_fixed_fixed_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
@@ -3174,7 +4075,10 @@ mod tests {
                     factor_2: vec![20, 21],
                 },
             )]);
-        let remapping = Remapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).expect("permutation images"),
+            Remapping::new(edges).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3384,23 +4288,156 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
-    #[rstest]
-    fn test_fixed_var_birelation_set_compact() {
-        let rs: FixedVarBirelationSet<NodeId, 1, NodeId, &str> = FixedVarBirelationSet::new(vec![
-            ([n(0)], vec![n(2), n(4)], "keep"),
-            ([n(5)], vec![n(1), n(3)], "drop"),
-        ]);
-        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+    #[fixture]
+    fn fixed_var_birelation_set_compaction_input(
+    ) -> FixedVarBirelationSet<NodeId, 1, NodeId, &'static str> {
+        FixedVarBirelationSet::new(vec![
+            ([NodeId(0)], vec![NodeId(2), NodeId(4)], "keep"),
+            ([NodeId(5)], vec![NodeId(1), NodeId(3)], "drop"),
+        ])
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::partial(
+        vec![NodeId(1)],
+        FixedVarBirelationSet::new(vec![([NodeId(0)], vec![NodeId(1), NodeId(3)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        FixedVarBirelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_fixed_var_birelation_set_tracked_compact(
+        fixed_var_birelation_set_compaction_input: FixedVarBirelationSet<
+            NodeId,
+            1,
+            NodeId,
+            &'static str,
+        >,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: FixedVarBirelationSet<NodeId, 1, NodeId, &'static str>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = fixed_var_birelation_set_compaction_input;
+        let compaction = GraphCompaction::new(
+            Compaction::new(6, removed_nodes).unwrap(),
+            Compaction::empty(),
+        );
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(FixedVarBirelationSet::default())]
+    #[case::rows(
+        FixedVarBirelationSet::new(vec![([NodeId(0)], vec![NodeId(2), NodeId(4)], "keep"), ([NodeId(5)], vec![NodeId(1), NodeId(3)], "drop")]),
+    )]
+    fn test_fixed_var_birelation_set_compact_identity(
+        #[case] input: FixedVarBirelationSet<NodeId, 1, NodeId, &'static str>,
+    ) {
+        let compaction = GraphCompaction::new(Compaction::identity(6), Compaction::empty());
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
+    }
+
+    #[rstest]
+    #[case::rows(FixedVarBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![13, 17])]),
+        FixedVarBirelationSet::new(vec![([EdgeId(3), EdgeId(6)], vec![NodeId(1), NodeId(5)], vec![7, 11]), ([EdgeId(3), EdgeId(6)], vec![NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_fixed_var_birelation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>>,
+        #[case] expected: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+        assert_eq!(
+            expected.incident_edge(EdgeId(3)),
+            expected.incident(NodeId(1))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(FixedVarBirelationSet::new(vec![]))]
+    #[case::rows(FixedVarBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_fixed_var_birelation_set_map_identity(
+        #[case] input: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>>,
+    ) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1, 2)]
+    #[case::outside_node(4, 2)]
+    #[case::missing_edge(2, 1)]
+    #[case::outside_edge(2, 4)]
+    fn test_fixed_var_birelation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+        #[case] edge: u32,
+    ) {
+        let input: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>> =
+            FixedVarBirelationSet::new(vec![
+                (
+                    [EdgeId(2), EdgeId(0)],
+                    vec![NodeId(2), NodeId(0)],
+                    vec![7, 11],
+                ),
+                (
+                    [EdgeId(edge), EdgeId(0)],
+                    vec![NodeId(node), NodeId(0)],
+                    vec![13, 17],
+                ),
+            ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_fixed_var_birelation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+        let edge = 2;
+        let input: FixedVarBirelationSet<EdgeId, 2, NodeId, Vec<u32>> =
+            FixedVarBirelationSet::new(vec![(
+                [EdgeId(edge), EdgeId(0)],
+                vec![NodeId(node), NodeId(0)],
+                vec![7, 11],
+            )]);
+        input.map(&participant_correspondence);
     }
 
     #[rstest]
@@ -3414,7 +4451,10 @@ mod tests {
                     factor_2: vec![40, 41, 42],
                 },
             )]);
-        let remapping = Remapping::new(vec![n(2), n(0), n(1)], vec![EdgeId(2), EdgeId(0)]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![n(2), n(0), n(1)]).expect("permutation images"),
+            Remapping::new(vec![EdgeId(2), EdgeId(0), EdgeId(1)]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[EdgeId(2), EdgeId(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(2), n(0), n(1)]);
@@ -3428,13 +4468,35 @@ mod tests {
     }
 
     #[rstest]
+    #[case::forward(vec![NodeId(0), NodeId(1)], vec![NodeId(1), NodeId(2)])]
+    #[case::reversed(vec![NodeId(1), NodeId(0)], vec![NodeId(2), NodeId(1)])]
+    fn test_fixed_var_birelation_set_map_tracked_pushout(
+        #[case] participants: Vec<NodeId>,
+        #[case] expected_participants: Vec<NodeId>,
+    ) {
+        let left = Graph::new(2, &[[0, 1]]);
+        let right = Graph::new(2, &[[0, 1]]);
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(1), NodeId(0))], 2, 2).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+        );
+        let (_, pushout) = left.tracked_pushout(&right, &overlap);
+
+        let relations: FixedVarBirelationSet<EdgeId, 1, NodeId, Vec<u32>> =
+            FixedVarBirelationSet::new(vec![([EdgeId(0)], participants, vec![7, 11])]);
+        let expected =
+            FixedVarBirelationSet::new(vec![([EdgeId(1)], expected_participants, vec![7, 11])]);
+        assert_eq!(relations.map(&pushout.right), expected);
+    }
+
+    #[rstest]
     #[case::covered(
         vec![n(2), n(0), n(1)],
-        vec![EdgeId(2), EdgeId(0)],
+        vec![EdgeId(2), EdgeId(0), EdgeId(1)],
         true,
     )]
-    #[case::uncovered_node(vec![n(2), n(0)], vec![EdgeId(2), EdgeId(0)], false)]
-    #[case::uncovered_edge(vec![n(2), n(0), n(1)], vec![EdgeId(2)], false)]
+    #[case::uncovered_node(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)], false)]
+    #[case::uncovered_edge(vec![n(2), n(0), n(1)], vec![EdgeId(0)], false)]
     fn test_fixed_var_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
@@ -3449,7 +4511,10 @@ mod tests {
                     factor_2: vec![40, 41, 42],
                 },
             )]);
-        let remapping = Remapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).expect("permutation images"),
+            Remapping::new(edges).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3608,24 +4673,150 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
-    #[rstest]
-    fn test_var_var_birelation_set_compact() {
-        // dropped relation loses a factor-2 participant
-        let rs: VarVarBirelationSet<NodeId, NodeId, &str> = VarVarBirelationSet::new(vec![
-            (vec![n(0), n(2)], vec![n(4)], "keep"),
-            (vec![n(5)], vec![n(1)], "drop"),
-        ]);
-        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+    #[fixture]
+    fn var_var_birelation_set_compaction_input() -> VarVarBirelationSet<NodeId, NodeId, &'static str>
+    {
+        VarVarBirelationSet::new(vec![
+            (vec![NodeId(0), NodeId(2)], vec![NodeId(4)], "keep"),
+            (vec![NodeId(5)], vec![NodeId(1)], "drop"),
+        ])
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::partial(
+        vec![NodeId(1)],
+        VarVarBirelationSet::new(vec![(vec![NodeId(0), NodeId(1)], vec![NodeId(3)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        VarVarBirelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_var_var_birelation_set_tracked_compact(
+        var_var_birelation_set_compaction_input: VarVarBirelationSet<NodeId, NodeId, &'static str>,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: VarVarBirelationSet<NodeId, NodeId, &'static str>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = var_var_birelation_set_compaction_input;
+        let compaction = GraphCompaction::new(
+            Compaction::new(6, removed_nodes).unwrap(),
+            Compaction::empty(),
+        );
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(VarVarBirelationSet::default())]
+    #[case::rows(
+        VarVarBirelationSet::new(vec![(vec![NodeId(0), NodeId(2)], vec![NodeId(4)], "keep"), (vec![NodeId(5)], vec![NodeId(1)], "drop")]),
+    )]
+    fn test_var_var_birelation_set_compact_identity(
+        #[case] input: VarVarBirelationSet<NodeId, NodeId, &'static str>,
+    ) {
+        let compaction = GraphCompaction::new(Compaction::identity(6), Compaction::empty());
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
+    }
+
+    #[rstest]
+    #[case::rows(VarVarBirelationSet::new(vec![(vec![EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![7, 11]), (vec![EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![13, 17])]),
+        VarVarBirelationSet::new(vec![(vec![EdgeId(3), EdgeId(6)], vec![NodeId(1), NodeId(5)], vec![7, 11]), (vec![EdgeId(3), EdgeId(6)], vec![NodeId(1), NodeId(5)], vec![13, 17])]))]
+    fn test_var_var_birelation_set_map(
+        participant_correspondence: GraphCorrespondence,
+        #[case] input: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>>,
+        #[case] expected: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>>,
+    ) {
+        assert_eq!(input.map(&participant_correspondence), expected);
+        assert_eq!(
+            input.try_map(&participant_correspondence),
+            Some(expected.clone())
+        );
+        let reverse = GraphCorrespondence::new(
+            participant_correspondence.nodes().reverse(),
+            participant_correspondence.edges().reverse(),
+        );
+        assert_eq!(expected.map(&reverse), input);
+        let composed = participant_correspondence.compose(&reverse).unwrap();
+        assert_eq!(input.map(&composed), input);
+        assert_eq!(
+            expected.incident(NodeId(1)),
+            &[RelationId(0), RelationId(1)]
+        );
+        assert_eq!(
+            expected.incident_edge(EdgeId(3)),
+            expected.incident(NodeId(1))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(VarVarBirelationSet::new(vec![]))]
+    #[case::rows(VarVarBirelationSet::new(vec![(vec![EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![7, 11]), (vec![EdgeId(2), EdgeId(0)], vec![NodeId(2), NodeId(0)], vec![13, 17])]))]
+    fn test_var_var_birelation_set_map_identity(
+        #[case] input: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>>,
+    ) {
+        let identity = GraphCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+            Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+        );
+        assert_eq!(input.try_map(&identity), Some(input.clone()));
+        assert_eq!(input.map(&identity), input);
+    }
+
+    #[rstest]
+    #[case::missing_node(1, 2)]
+    #[case::outside_node(4, 2)]
+    #[case::missing_edge(2, 1)]
+    #[case::outside_edge(2, 4)]
+    fn test_var_var_birelation_set_try_map_error(
+        participant_correspondence: GraphCorrespondence,
+        #[case] node: u32,
+        #[case] edge: u32,
+    ) {
+        let input: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>> = VarVarBirelationSet::new(vec![
+            (
+                vec![EdgeId(2), EdgeId(0)],
+                vec![NodeId(2), NodeId(0)],
+                vec![7, 11],
+            ),
+            (
+                vec![EdgeId(edge), EdgeId(0)],
+                vec![NodeId(node), NodeId(0)],
+                vec![13, 17],
+            ),
+        ]);
+        assert_eq!(input.try_map(&participant_correspondence), None);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_var_var_birelation_set_map_error(participant_correspondence: GraphCorrespondence) {
+        let node = 1;
+        let edge = 2;
+        let input: VarVarBirelationSet<EdgeId, NodeId, Vec<u32>> =
+            VarVarBirelationSet::new(vec![(
+                vec![EdgeId(edge), EdgeId(0)],
+                vec![NodeId(node), NodeId(0)],
+                vec![7, 11],
+            )]);
+        input.map(&participant_correspondence);
     }
 
     #[rstest]
@@ -3639,7 +4830,10 @@ mod tests {
                     factor_2: vec![60, 61, 62],
                 },
             )]);
-        let remapping = Remapping::new(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![n(1), n(0)]).expect("permutation images"),
+            Remapping::new(vec![EdgeId(2), EdgeId(0), EdgeId(1)]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(
@@ -3661,8 +4855,8 @@ mod tests {
         vec![EdgeId(2), EdgeId(0), EdgeId(1)],
         true,
     )]
-    #[case::uncovered_node(vec![n(1)], vec![EdgeId(2), EdgeId(0), EdgeId(1)], false)]
-    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0)], false)]
+    #[case::uncovered_node(vec![n(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)], false)]
+    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)], false)]
     fn test_var_var_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
@@ -3677,7 +4871,10 @@ mod tests {
                     factor_2: vec![60, 61, 62],
                 },
             )]);
-        let remapping = Remapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).expect("permutation images"),
+            Remapping::new(edges).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3817,38 +5014,77 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_relation_set_pushout() {
+    fn test_fixed_relation_set_tracked_pushout() {
         // same-space glue: self {01}=10 {23}=20 ; right {01}=5 (coincides) {45}=30 (new); combine=sum.
-        let left =
-            FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 10), ([n(2), n(3)], 20)]);
-        let right =
-            FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 5), ([n(4), n(5)], 30)]);
-        let glue = left
-            .pushout(
+        let left = FixedRelationSet::<NodeId, i32, 2>::new(vec![
+            ([NodeId(0), NodeId(1)], 10),
+            ([NodeId(2), NodeId(3)], 20),
+        ]);
+        let right = FixedRelationSet::<NodeId, i32, 2>::new(vec![
+            ([NodeId(0), NodeId(1)], 5),
+            ([NodeId(4), NodeId(5)], 30),
+        ]);
+        let (object, glue) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
                 |(_, a), (_, b)| Some(a + b),
             )
             .expect("no ⊥");
-        assert_eq!(glue.object.count(), 3);
-        let value = |q: [NodeId; 2]| {
-            glue.object
-                .coincident(q[0], &q)
-                .map(|id| *glue.object.data(id))
-        };
-        assert_eq!(value([n(0), n(1)]), Some(15)); // coincidence combined
-        assert_eq!(value([n(2), n(3)]), Some(20)); // self-only carried
-        assert_eq!(value([n(4), n(5)]), Some(30)); // right-only appended
-        assert_eq!(glue.left.right_of(RelationId(0)), Some(RelationId(0))); // self identity
-        assert_eq!(glue.right.right_of(RelationId(0)), Some(RelationId(0))); // right {01} folds onto self
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(2))); // right {45} appended
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |(_, a), (_, b)| Some(a + b),
+            ),
+            Some(object.clone()),
+        );
+        assert_eq!(
+            object,
+            FixedRelationSet::new(vec![
+                ([NodeId(0), NodeId(1)], 15),
+                ([NodeId(2), NodeId(3)], 20),
+                ([NodeId(4), NodeId(5)], 30)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    3,
+                )
+                .unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(2))
+                    ],
+                    2,
+                    3,
+                )
+                .unwrap(),
+            },
+        );
     }
 
     #[rstest]
-    fn test_fixed_relation_set_pushout_bottom() {
+    fn test_fixed_relation_set_tracked_pushout_error() {
         // combine returns ⊥ on the coincidence → the whole glue is inadmissible.
-        let left = FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 10)]);
-        let right = FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 5)]);
+        let left = FixedRelationSet::<NodeId, i32, 2>::new(vec![([NodeId(0), NodeId(1)], 10)]);
+        let right = FixedRelationSet::<NodeId, i32, 2>::new(vec![([NodeId(0), NodeId(1)], 5)]);
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |_, _| None
+            ),
+            None
+        );
         assert_eq!(
             left.pushout(
                 &right,
@@ -3860,167 +5096,82 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_relation_set_pushout() {
-        let left = VarRelationSet::<NodeId, i32>::new(vec![(vec![n(0), n(1), n(2)], 10)]);
-        let right = VarRelationSet::<NodeId, i32>::new(vec![
-            (vec![n(0), n(1), n(2)], 5),
-            (vec![n(3), n(4)], 20),
-        ]);
-        let glue = left
-            .pushout(
-                &right,
-                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
-                |(_, a), (_, b)| Some(a + b),
-            )
-            .expect("no ⊥");
-        assert_eq!(glue.object.count(), 2);
-        assert_eq!(
-            glue.object
-                .coincident(n(0), &[n(0), n(1), n(2)])
-                .map(|id| *glue.object.data(id)),
-            Some(15),
-        );
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1))); // {34} appended
-    }
-
-    #[rstest]
-    fn test_fixed_var_birelation_set_pushout() {
-        // coincidence requires *both* factors equal (site + members).
-        let left = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![(
-            [n(0)],
-            vec![n(1), n(2)],
-            10,
-        )]);
-        let right = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![
-            ([n(0)], vec![n(1), n(2)], 5),
-            ([n(3)], vec![n(4), n(5)], 20),
-        ]);
-        let glue = left
-            .pushout(
-                &right,
-                |set: &_, q1: &[NodeId], q2: &_| {
-                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
-                },
-                |(_, _, a), (_, _, b)| Some(a + b),
-            )
-            .expect("no ⊥");
-        assert_eq!(glue.object.count(), 2);
-        assert_eq!(
-            glue.object
-                .coincident(n(0), &[n(0)], &[n(1), n(2)])
-                .map(|id| *glue.object.data(id)),
-            Some(15),
-        );
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1))); // appended
-    }
-
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_pushout() {
-        let left = FixedFixedBirelationSet::<NodeId, 1, NodeId, 2, i32>::new(vec![(
-            [n(0)],
-            [n(1), n(2)],
-            10,
-        )]);
-        let right = FixedFixedBirelationSet::<NodeId, 1, NodeId, 2, i32>::new(vec![
-            ([n(0)], [n(1), n(2)], 5),
-            ([n(3)], [n(4), n(5)], 20),
-        ]);
-        let glue = left
-            .pushout(
-                &right,
-                |set: &_, q1: &[NodeId], q2: &_| {
-                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
-                },
-                |(_, _, a), (_, _, b)| Some(a + b),
-            )
-            .expect("no ⊥");
-        assert_eq!(glue.object.count(), 2);
-        assert_eq!(
-            glue.object
-                .coincident(n(0), &[n(0)], &[n(1), n(2)])
-                .map(|id| *glue.object.data(id)),
-            Some(15),
-        );
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1)));
-    }
-
-    #[rstest]
-    fn test_var_var_birelation_set_pushout() {
-        let left = VarVarBirelationSet::<NodeId, NodeId, i32>::new(vec![(
-            vec![n(0), n(1)],
-            vec![n(2), n(3)],
-            10,
-        )]);
-        let right = VarVarBirelationSet::<NodeId, NodeId, i32>::new(vec![
-            (vec![n(0), n(1)], vec![n(2), n(3)], 5),
-            (vec![n(4)], vec![n(5)], 20),
-        ]);
-        let glue = left
-            .pushout(
-                &right,
-                |set: &_, q1: &[NodeId], q2: &_| {
-                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
-                },
-                |(_, _, a), (_, _, b)| Some(a + b),
-            )
-            .expect("no ⊥");
-        assert_eq!(glue.object.count(), 2);
-        assert_eq!(
-            glue.object
-                .coincident(n(0), &[n(0), n(1)], &[n(2), n(3)])
-                .map(|id| *glue.object.data(id)),
-            Some(15),
-        );
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1)));
-    }
-
-    #[rstest]
-    fn test_fixed_relation_set_pullback() {
-        // intersection: self {01}=10 {23}=20 ; right {01}=5 {45}=30 — only {01} is shared.
+    fn test_var_relation_set_tracked_pushout() {
         let left =
-            FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 10), ([n(2), n(3)], 20)]);
-        let right =
-            FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 5), ([n(4), n(5)], 30)]);
-        let pb = left
-            .pullback(
+            VarRelationSet::<NodeId, i32>::new(vec![(vec![NodeId(0), NodeId(1), NodeId(2)], 10)]);
+        let right = VarRelationSet::<NodeId, i32>::new(vec![
+            (vec![NodeId(0), NodeId(1), NodeId(2)], 5),
+            (vec![NodeId(3), NodeId(4)], 20),
+        ]);
+        let (object, glue) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
                 |(_, a), (_, b)| Some(a + b),
             )
             .expect("no ⊥");
-        assert_eq!(pb.object.count(), 1); // self-only and right-only dropped
-        assert_eq!(*pb.object.data(RelationId(0)), 15);
-        assert_eq!(pb.left.right_of(RelationId(0)), Some(RelationId(0))); // → self {01}
-        assert_eq!(pb.right.right_of(RelationId(0)), Some(RelationId(0))); // → right {01}
-    }
-
-    #[rstest]
-    fn test_fixed_relation_set_pullback_bottom() {
-        let left = FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 10)]);
-        let right = FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 5)]);
         assert_eq!(
-            left.pullback(
+            left.pushout(
                 &right,
                 |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
-                |_, _| None
+                |(_, a), (_, b)| Some(a + b),
+            ),
+            Some(object.clone()),
+        );
+        assert_eq!(
+            object,
+            VarRelationSet::new(vec![
+                (vec![NodeId(0), NodeId(1), NodeId(2)], 15),
+                (vec![NodeId(3), NodeId(4)], 20)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2,).unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    2,
+                )
+                .unwrap(),
+            },
+        );
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |_, _| None,
+            ),
+            None
+        );
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |_, _| None,
             ),
             None
         );
     }
 
     #[rstest]
-    fn test_fixed_var_birelation_set_pullback() {
-        let left = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![
-            ([n(0)], vec![n(1), n(2)], 10),
-            ([n(3)], vec![n(4)], 20),
-        ]);
-        let right = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![(
-            [n(0)],
-            vec![n(1), n(2)],
-            5,
+    fn test_fixed_var_birelation_set_tracked_pushout() {
+        // coincidence requires *both* factors equal (site + members).
+        let left = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![(
+            [NodeId(0)],
+            vec![NodeId(1), NodeId(2)],
+            10,
         )]);
-        let pb = left
-            .pullback(
+        let right = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![
+            ([NodeId(0)], vec![NodeId(1), NodeId(2)], 5),
+            ([NodeId(3)], vec![NodeId(4), NodeId(5)], 20),
+        ]);
+        let (object, glue) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q1: &[NodeId], q2: &_| {
                     q1.first().and_then(|&n| set.coincident(n, q1, q2))
@@ -4028,7 +5179,407 @@ mod tests {
                 |(_, _, a), (_, _, b)| Some(a + b),
             )
             .expect("no ⊥");
-        assert_eq!(pb.object.count(), 1); // only the shared ([0],[1,2])
-        assert_eq!(*pb.object.data(RelationId(0)), 15);
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            ),
+            Some(object.clone()),
+        );
+        assert_eq!(
+            object,
+            FixedVarBirelationSet::new(vec![
+                ([NodeId(0)], vec![NodeId(1), NodeId(2)], 15),
+                ([NodeId(3)], vec![NodeId(4), NodeId(5)], 20)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2,).unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    2,
+                )
+                .unwrap(),
+            },
+        );
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_tracked_pushout() {
+        let left = FixedFixedBirelationSet::<NodeId, 1, NodeId, 2, i32>::new(vec![(
+            [NodeId(0)],
+            [NodeId(1), NodeId(2)],
+            10,
+        )]);
+        let right = FixedFixedBirelationSet::<NodeId, 1, NodeId, 2, i32>::new(vec![
+            ([NodeId(0)], [NodeId(1), NodeId(2)], 5),
+            ([NodeId(3)], [NodeId(4), NodeId(5)], 20),
+        ]);
+        let (object, glue) = left
+            .tracked_pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            )
+            .expect("no ⊥");
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            ),
+            Some(object.clone()),
+        );
+        assert_eq!(
+            object,
+            FixedFixedBirelationSet::new(vec![
+                ([NodeId(0)], [NodeId(1), NodeId(2)], 15),
+                ([NodeId(3)], [NodeId(4), NodeId(5)], 20)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2,).unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    2,
+                )
+                .unwrap(),
+            },
+        );
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+    }
+
+    #[rstest]
+    fn test_var_var_birelation_set_tracked_pushout() {
+        let left = VarVarBirelationSet::<NodeId, NodeId, i32>::new(vec![(
+            vec![NodeId(0), NodeId(1)],
+            vec![NodeId(2), NodeId(3)],
+            10,
+        )]);
+        let right = VarVarBirelationSet::<NodeId, NodeId, i32>::new(vec![
+            (vec![NodeId(0), NodeId(1)], vec![NodeId(2), NodeId(3)], 5),
+            (vec![NodeId(4)], vec![NodeId(5)], 20),
+        ]);
+        let (object, glue) = left
+            .tracked_pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            )
+            .expect("no ⊥");
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            ),
+            Some(object.clone()),
+        );
+        assert_eq!(
+            object,
+            VarVarBirelationSet::new(vec![
+                (vec![NodeId(0), NodeId(1)], vec![NodeId(2), NodeId(3)], 15),
+                (vec![NodeId(4)], vec![NodeId(5)], 20)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2,).unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    2,
+                )
+                .unwrap(),
+            },
+        );
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_fixed_relation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: FixedRelationSet<NodeId, i32, 2> = FixedRelationSet::new(vec![
+            ([NodeId(0), NodeId(1)], 10),
+            ([NodeId(2), NodeId(3)], 20),
+        ]);
+        let right: FixedRelationSet<NodeId, i32, 2> = FixedRelationSet::new(vec![
+            ([NodeId(4), NodeId(5)], 30),
+            ([NodeId(0), NodeId(1)], 5),
+        ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, parts: &[NodeId]| parts.first().and_then(|&id| set.coincident(id, parts)),
+            |(_, a), (_, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, parts: &[NodeId]| parts.first().and_then(|&id| set.coincident(id, parts)),
+            |(_, a), (_, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_var_relation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: VarRelationSet<NodeId, i32> = VarRelationSet::new(vec![
+            (vec![NodeId(0), NodeId(1)], 10),
+            (vec![NodeId(2), NodeId(3)], 20),
+        ]);
+        let right: VarRelationSet<NodeId, i32> = VarRelationSet::new(vec![
+            (vec![NodeId(4), NodeId(5)], 30),
+            (vec![NodeId(0), NodeId(1)], 5),
+        ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, parts: &[NodeId]| parts.first().and_then(|&id| set.coincident(id, parts)),
+            |(_, a), (_, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, parts: &[NodeId]| parts.first().and_then(|&id| set.coincident(id, parts)),
+            |(_, a), (_, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                VarRelationSet::new(vec![(vec![NodeId(0), NodeId(1)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_fixed_fixed_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, i32> =
+            FixedFixedBirelationSet::new(vec![
+                ([NodeId(0)], [NodeId(1)], 10),
+                ([NodeId(2)], [NodeId(3)], 20),
+            ]);
+        let right: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, i32> =
+            FixedFixedBirelationSet::new(vec![
+                ([NodeId(4)], [NodeId(5)], 30),
+                ([NodeId(0)], [NodeId(1)], 5),
+            ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_fixed_var_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: FixedVarBirelationSet<NodeId, 1, NodeId, i32> = FixedVarBirelationSet::new(vec![
+            ([NodeId(0)], vec![NodeId(1), NodeId(2)], 10),
+            ([NodeId(2)], vec![NodeId(3)], 20),
+        ]);
+        let right: FixedVarBirelationSet<NodeId, 1, NodeId, i32> =
+            FixedVarBirelationSet::new(vec![
+                ([NodeId(4)], vec![NodeId(5)], 30),
+                ([NodeId(0)], vec![NodeId(1), NodeId(2)], 5),
+            ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                FixedVarBirelationSet::new(vec![([NodeId(0)], vec![NodeId(1), NodeId(2)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_var_var_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: VarVarBirelationSet<NodeId, NodeId, i32> = VarVarBirelationSet::new(vec![
+            (vec![NodeId(0)], vec![NodeId(1)], 10),
+            (vec![NodeId(2)], vec![NodeId(3)], 20),
+        ]);
+        let right: VarVarBirelationSet<NodeId, NodeId, i32> = VarVarBirelationSet::new(vec![
+            (vec![NodeId(4)], vec![NodeId(5)], 30),
+            (vec![NodeId(0)], vec![NodeId(1)], 5),
+        ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                VarVarBirelationSet::new(vec![(vec![NodeId(0)], vec![NodeId(1)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
     }
 }
