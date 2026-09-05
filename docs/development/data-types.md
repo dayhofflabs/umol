@@ -725,8 +725,8 @@ preserves them.
 `compact` returns `None` for removed or out-of-source-range ids. `uncompact` asserts result-domain
 membership; `try_uncompact` returns `None` outside that domain. `compact_vec` requires exactly the
 source count of values, and `try_compact_vec` returns `None` on a length mismatch. Survivor order
-is preserved. Borrowed conversions to single-space and graph correspondences preserve both counts
-and every survivor pairing. Molecule-correspondence conversion is not yet implemented.
+is preserved. Borrowed conversions to single-space, graph, and molecule correspondences preserve
+both counts and every survivor pairing in each entity kind.
 
 Rollback checks result counts against the current editor before applying an inverse compaction.
 A mismatch remains `TransactionError::RollbackStateMismatch`, not an indexing panic.

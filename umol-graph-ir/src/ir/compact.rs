@@ -172,9 +172,10 @@ mod tests {
     use std::fmt::Debug;
 
     use rstest::*;
-    use umol_graph_core::GraphCompaction;
+    use umol_graph_core::{Correspondence, GraphCompaction};
 
     use super::*;
+    use crate::ir::correspondence::MoleculeCorrespondence;
 
     #[fixture]
     fn compaction() -> MoleculeCompaction {
@@ -190,6 +191,73 @@ mod tests {
             Compaction::new(3, vec![StereoAtomId(1)]).unwrap(),
             Compaction::new(4, vec![StereoBondId(2)]).unwrap(),
         )
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_from_compaction(compaction: MoleculeCompaction) {
+        let expected = MoleculeCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (AtomId(0), AtomId(0)),
+                    (AtomId(2), AtomId(1)),
+                    (AtomId(4), AtomId(2)),
+                ],
+                5,
+                3,
+            )
+            .unwrap(),
+            Correspondence::new(vec![(BondId(1), BondId(0)), (BondId(3), BondId(1))], 4, 2)
+                .unwrap(),
+            Correspondence::new(vec![(DativeBondId(1), DativeBondId(0))], 3, 1).unwrap(),
+            Correspondence::new(
+                vec![
+                    (AromaticSystemId(0), AromaticSystemId(0)),
+                    (AromaticSystemId(2), AromaticSystemId(1)),
+                ],
+                3,
+                2,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (MulticenterBondId(1), MulticenterBondId(0)),
+                    (MulticenterBondId(2), MulticenterBondId(1)),
+                ],
+                4,
+                2,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (NoncovalentBondId(0), NoncovalentBondId(0)),
+                    (NoncovalentBondId(1), NoncovalentBondId(1)),
+                    (NoncovalentBondId(3), NoncovalentBondId(2)),
+                ],
+                4,
+                3,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (StereoAtomId(0), StereoAtomId(0)),
+                    (StereoAtomId(2), StereoAtomId(1)),
+                ],
+                3,
+                2,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (StereoBondId(0), StereoBondId(0)),
+                    (StereoBondId(1), StereoBondId(1)),
+                    (StereoBondId(3), StereoBondId(2)),
+                ],
+                4,
+                3,
+            )
+            .unwrap(),
+        );
+        assert_eq!(MoleculeCorrespondence::from(&compaction), expected);
     }
 
     #[rstest]

@@ -10,6 +10,7 @@ use std::fmt::{self, Display, Formatter};
 
 use umol_graph_core::{Correspondence, CorrespondenceComposeError};
 
+use super::compact::MoleculeCompaction;
 use super::entity::{Entity, EntityKind};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -78,6 +79,44 @@ impl From<&MoleculeRemapping> for MoleculeCorrespondence {
             remapping.noncovalent_bonds().into(),
             remapping.stereo_atoms().into(),
             remapping.stereo_bonds().into(),
+        )
+    }
+}
+
+impl From<&MoleculeCompaction> for MoleculeCorrespondence {
+    /// Preserve all eight source/result counts and order-preserving survivor pairs.
+    fn from(compaction: &MoleculeCompaction) -> Self {
+        let nodes = compaction.graph().nodes();
+        let edges = compaction.graph().edges();
+        Self::new(
+            Correspondence::new(
+                (0..nodes.source_count())
+                    .filter_map(|idx| {
+                        let id = AtomId::from(idx);
+                        compaction.compact_atom(id).map(|image| (id, image))
+                    })
+                    .collect(),
+                nodes.source_count(),
+                nodes.result_count(),
+            )
+            .expect("compaction preserves an injective survivor mapping"),
+            Correspondence::new(
+                (0..edges.source_count())
+                    .filter_map(|idx| {
+                        let id = BondId::from(idx);
+                        compaction.compact_bond(id).map(|image| (id, image))
+                    })
+                    .collect(),
+                edges.source_count(),
+                edges.result_count(),
+            )
+            .expect("compaction preserves an injective survivor mapping"),
+            compaction.dative_bonds().into(),
+            compaction.aromatic_systems().into(),
+            compaction.multicenter_bonds().into(),
+            compaction.noncovalent_bonds().into(),
+            compaction.stereo_atoms().into(),
+            compaction.stereo_bonds().into(),
         )
     }
 }
@@ -782,9 +821,265 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
+    use crate::ir::constraint::Constraints;
     use crate::ir::dative::DativeBondForm;
+    use crate::ir::ligand::StereoLigandKind;
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::NoncovalentBondForm;
+    use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoKind};
+
+    #[fixture]
+    fn cascade_molecule() -> Molecule {
+        let mut editor = Molecule::default().edit();
+        for _ in 0..12 {
+            editor.add_atom(AtomForm::from_element(Element::C));
+        }
+        for base in [0, 6] {
+            for (a, b) in [(0, 1), (0, 2), (0, 3), (1, 4), (1, 5), (0, 4)] {
+                editor.add_bond(AtomId(base + a), AtomId(base + b), BondForm::from_order(1));
+            }
+            editor.add_dative_bond(
+                vec![AtomId(base)],
+                AtomId(base + 1),
+                DativeBondForm::from_order(1),
+            );
+            editor.add_aromatic_system(
+                vec![AtomId(base), AtomId(base + 1), AtomId(base + 2)],
+                AromaticSystemForm::from_electrons(vec![1, 2, 1]),
+            );
+            editor.add_multicenter_bond(
+                vec![AtomId(base), AtomId(base + 1), AtomId(base + 3)],
+                MulticenterBondForm::from_electrons(vec![1, 0, 1]),
+            );
+            editor.add_noncovalent_bond(
+                [AtomId(base), AtomId(base + 5)],
+                NoncovalentBondForm::default(),
+            );
+            editor.add_stereo_atom(
+                AtomId(base),
+                [1, 2, 3, 4]
+                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom))
+                    .to_vec(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            );
+            editor.add_stereo_bond(
+                BondId(base),
+                [2, 3, 4, 5]
+                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom))
+                    .to_vec(),
+                StereoBondForm::default(),
+            );
+        }
+        editor.build()
+    }
+
+    #[rstest]
+    #[case::first_component(0, 6, 1)]
+    #[case::last_component(6, 0, 0)]
+    fn test_molecule_correspondence_from_compaction_cascade(
+        cascade_molecule: Molecule,
+        #[case] removed_start: u32,
+        #[case] survivor_start: u32,
+        #[case] surviving_overlay: u32,
+    ) {
+        let source = cascade_molecule;
+        let mut editor = source.clone().edit();
+        let removed = (removed_start..removed_start + 6)
+            .map(AtomId)
+            .collect::<Vec<_>>();
+        let compaction = editor.remove(&removed, &[]);
+        let result = editor.build();
+        let correspondence = MoleculeCorrespondence::from(&compaction);
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: [(0, 1), (0, 2), (0, 3), (1, 4), (1, 5), (0, 4)]
+                .map(|(a, b)| (AtomId(a), AtomId(b), BondForm::from_order(1)))
+                .to_vec(),
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 2, 1]),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(3)],
+                MulticenterBondForm::from_electrons(vec![1, 0, 1]),
+            )],
+            noncovalent: vec![([AtomId(0), AtomId(5)], NoncovalentBondForm::default())],
+            stereo_atoms: vec![(
+                AtomId(0),
+                [1, 2, 3, 4]
+                    .map(|idx| StereoLigand::new(AtomId(idx), StereoLigandKind::Atom))
+                    .to_vec(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                [2, 3, 4, 5]
+                    .map(|idx| StereoLigand::new(AtomId(idx), StereoLigandKind::Atom))
+                    .to_vec(),
+                StereoBondForm::default(),
+            )],
+            constraints: Constraints::default(),
+        });
+        assert_eq!(result, expected);
+        let expected_correspondence = MoleculeCorrespondence::new(
+            Correspondence::new(
+                (0..6)
+                    .map(|idx| (AtomId(survivor_start + idx), AtomId(idx)))
+                    .collect(),
+                source.atoms().count(),
+                result.atoms().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                (0..6)
+                    .map(|idx| (BondId(survivor_start + idx), BondId(idx)))
+                    .collect(),
+                source.bonds().count(),
+                result.bonds().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(DativeBondId(surviving_overlay), DativeBondId(0))],
+                source.dative_bonds().count(),
+                result.dative_bonds().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(AromaticSystemId(surviving_overlay), AromaticSystemId(0))],
+                source.aromatic_systems().count(),
+                result.aromatic_systems().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(MulticenterBondId(surviving_overlay), MulticenterBondId(0))],
+                source.multicenter_bonds().count(),
+                result.multicenter_bonds().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(NoncovalentBondId(surviving_overlay), NoncovalentBondId(0))],
+                source.noncovalent_bonds().count(),
+                result.noncovalent_bonds().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(StereoAtomId(surviving_overlay), StereoAtomId(0))],
+                source.stereo_atoms().count(),
+                result.stereo_atoms().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(StereoBondId(surviving_overlay), StereoBondId(0))],
+                source.stereo_bonds().count(),
+                result.stereo_bonds().count(),
+            )
+            .unwrap(),
+        );
+        assert_eq!(correspondence, expected_correspondence);
+    }
+
+    #[rstest]
+    #[case::empty(false, true)]
+    #[case::identity(true, false)]
+    #[case::full_removal(true, true)]
+    fn test_molecule_correspondence_from_compaction_boundary(
+        cascade_molecule: Molecule,
+        #[case] populated: bool,
+        #[case] remove_all: bool,
+    ) {
+        let source = if populated {
+            cascade_molecule
+        } else {
+            Molecule::default()
+        };
+        let mut editor = source.clone().edit();
+        let removed = if remove_all {
+            (0..source.atoms().count()).map(AtomId::from).collect()
+        } else {
+            Vec::new()
+        };
+        let compaction = editor.remove(&removed, &[]);
+        let result = editor.build();
+        assert_eq!(
+            result,
+            if remove_all {
+                Molecule::default()
+            } else {
+                source.clone()
+            }
+        );
+        let expected = MoleculeCorrespondence::new(
+            Correspondence::new(
+                (0..result.atoms().count())
+                    .map(|idx| (AtomId::from(idx), AtomId::from(idx)))
+                    .collect(),
+                source.atoms().count(),
+                result.atoms().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                (0..result.bonds().count())
+                    .map(|idx| (BondId::from(idx), BondId::from(idx)))
+                    .collect(),
+                source.bonds().count(),
+                result.bonds().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                (0..result.dative_bonds().count())
+                    .map(|idx| (DativeBondId::from(idx), DativeBondId::from(idx)))
+                    .collect(),
+                source.dative_bonds().count(),
+                result.dative_bonds().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                (0..result.aromatic_systems().count())
+                    .map(|idx| (AromaticSystemId::from(idx), AromaticSystemId::from(idx)))
+                    .collect(),
+                source.aromatic_systems().count(),
+                result.aromatic_systems().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                (0..result.multicenter_bonds().count())
+                    .map(|idx| (MulticenterBondId::from(idx), MulticenterBondId::from(idx)))
+                    .collect(),
+                source.multicenter_bonds().count(),
+                result.multicenter_bonds().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                (0..result.noncovalent_bonds().count())
+                    .map(|idx| (NoncovalentBondId::from(idx), NoncovalentBondId::from(idx)))
+                    .collect(),
+                source.noncovalent_bonds().count(),
+                result.noncovalent_bonds().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                (0..result.stereo_atoms().count())
+                    .map(|idx| (StereoAtomId::from(idx), StereoAtomId::from(idx)))
+                    .collect(),
+                source.stereo_atoms().count(),
+                result.stereo_atoms().count(),
+            )
+            .unwrap(),
+            Correspondence::new(
+                (0..result.stereo_bonds().count())
+                    .map(|idx| (StereoBondId::from(idx), StereoBondId::from(idx)))
+                    .collect(),
+                source.stereo_bonds().count(),
+                result.stereo_bonds().count(),
+            )
+            .unwrap(),
+        );
+        assert_eq!(MoleculeCorrespondence::from(&compaction), expected);
+    }
 
     #[fixture]
     fn correspondence() -> MoleculeCorrespondence {

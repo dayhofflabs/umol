@@ -1007,11 +1007,22 @@ estimates.
   (1,350 passed, 2 skipped, Python 3.13.15). Workspace all-targets check,
   core/IR property-enabled all-targets clippy with `-D warnings`, nightly
   formatting, and `git diff --check` passed.
-- [ ] **S3b — Molecule compaction.** Graph-IR compact, editor, transaction,
+- [x] **S3b — Molecule compaction.** Graph-IR compact, editor, transaction,
   and constraint consumers. Breaking (red→green). [dep: S3a]
   Add infallible molecule-correspondence conversion over the count-bearing
   components introduced in S3a. Test cascaded removals and exact all-family pairings against
   the source/result tables, plus existing rollback laws.
+  Completed 2026-09-04: borrowed `From<&MoleculeCompaction>` preserves all
+  eight source/result counts and survivor pairings. Six exact cases cover
+  distinct per-family compactions, cascading removal of either component,
+  empty input, identity, and full removal. Cascade cases compare the full
+  result molecule, including transported stereo references and electron vectors.
+  Core/IR library tests passed (7,578 passed, 3 ignored), plus integration
+  and doc tests. Core/IR properties passed at `PROPTEST_CASES=256`
+  (489 passed, 1 ignored), including existing rollback laws. Workspace
+  all-targets check passed with Python 3.13.15. Core/IR property-enabled
+  all-targets clippy with `-D warnings`, nightly formatting, and
+  `git diff --check` passed.
 
 ### S4 — Graph-core output/witness separation
 
