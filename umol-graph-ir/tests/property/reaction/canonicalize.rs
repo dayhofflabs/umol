@@ -208,7 +208,7 @@ proptest! {
         })?;
         let (with_correspondence, correspondence) = reaction
             .clone()
-            .canonicalize_with_remapping(&context)
+            .tracked_canonicalize(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!(
                     "generated reaction did not canonicalize with a correspondence: {error}"
@@ -360,7 +360,7 @@ proptest! {
             .expect("generated reaction materializes");
         let (canonical, union) = reaction
             .clone()
-            .canonicalize_with_remapping(&context)
+            .tracked_canonicalize(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!("generated reaction did not canonicalize: {error}"))
             })?;
@@ -500,7 +500,7 @@ proptest! {
         prop_assert!(second.canonical_eq(&third, &context));
         prop_assert!(first.canonical_eq(&third, &context));
         prop_assert_eq!(
-            first.canonicalize_with_remapping(&context),
+            first.tracked_canonicalize(&context),
             Err(ReactionCanonicalizeError::Contradiction(Contradiction)),
         );
     }

@@ -764,7 +764,7 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("canonicalize/scaling/canonicalize_with_remapping");
+    let mut group = c.benchmark_group("canonicalize/scaling/tracked_canonicalize");
     for (case, _, _) in &cases {
         group.bench_function(case.name, |b| {
             b.iter_batched(
@@ -772,7 +772,7 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
                 |molecule| {
                     black_box(
                         molecule
-                            .canonicalize_with_remapping(&context)
+                            .tracked_canonicalize(&context)
                             .expect("retained scaling case canonicalizes"),
                     )
                 },
@@ -854,7 +854,7 @@ fn bench_reframe(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("reframe/reframe_with_action");
+    let mut group = c.benchmark_group("reframe/tracked_reframe");
     for case in &corpus {
         group.bench_function(case.name, |b| {
             b.iter_batched(
@@ -862,7 +862,7 @@ fn bench_reframe(c: &mut Criterion) {
                 |molecule| {
                     black_box(
                         molecule
-                            .reframe_with_action()
+                            .tracked_reframe()
                             .expect("benchmark corpus reframes"),
                     )
                 },

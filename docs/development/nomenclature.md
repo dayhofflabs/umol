@@ -327,7 +327,7 @@ from the cells or equivalence classes of a refined partition and from a stereo c
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
 labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
 whereas aggregate canonicalization constructs the complete remapped graph IR.
-**In code:** `Canonicalize`, `canonicalize`, `canonicalize_with_remapping`, `canonical_eq`.
+**In code:** `Canonicalize`, `canonicalize`, `tracked_canonicalize`, `canonical_eq`.
 
 ### Class
 
@@ -1469,7 +1469,7 @@ defined only for equal domains. Consumption is receiver-relative: a frame-relati
 coverage only for the values it contains and ignores irrelevant action entries. A missing action,
 wrong degree, or inadmissible entity-kind subgroup returns `None`.
 
-`representative_action` and `reframe_with_action` materialize the complete input-domain witness for
+`representative_action` and `tracked_reframe` materialize the complete input-domain witness for
 a downstream consumer. Plain aggregate `reframe` fuses local action derivation and transport and
 does not allocate that complete witness merely to discard it. `OverlaysFrameAction` covers
 `Molecule`, `Reaction`, and `ReactionSpan` roots and their frame-relative constraints; a bare
@@ -1477,7 +1477,7 @@ does not allocate that complete witness merely to discard it. `OverlaysFrameActi
 
 **Not:** a remapping, which relabels ids across id spaces and does not touch order; not
 canonicalization, which also selects ids.
-**In code:** `Reframe`, `FrameTransport`, `representative_action`, `reframe_with_action`, `reframe`,
+**In code:** `Reframe`, `FrameTransport`, `representative_action`, `tracked_reframe`, `reframe`,
 `reframe_by`, `framed_eq`, `OverlaysFrameAction`.
 
 ### Relation set
@@ -1683,27 +1683,26 @@ algorithmic representation constructed from selected structure; constraints.
 
 ### Tracked operation
 
-A **tracked operation** returns optional id-space provenance together with the same primary result
-as its bare counterpart. The bare name returns only the primary result; `tracked_<operation>`
-returns that result together with the operation's compaction, remapping, correspondence, or
-categorical mappings. Discarding the tracked value must preserve the ordinary output, failure or
-absence behavior, result ordering, and final mutable state.
+A **tracked operation** returns optional entity-id or participant-frame provenance together with
+the same primary result as its bare counterpart. The bare name returns only the primary result;
+`tracked_<operation>` returns that result together with the operation's compaction, remapping,
+correspondence, frame action, or categorical mappings. Discarding the tracked value must preserve
+the ordinary output, failure or absence behavior, result ordering, and final mutable state.
 
 Use `try_tracked_<operation>` when `try_` distinguishes a checked counterpart; `try_` remains the
-outermost prefix. The return type identifies the particular witness, so do not repeat it in names
-such as `_with_correspondence` or `_with_compaction`. This rule does not replace an established
-operation-family name such as `canonicalize_with_remapping` or `reframe_with_action`, where the
-additional result is intrinsic to that named form rather than optional mutation tracking.
+outermost prefix. The return type identifies the returned provenance, so do not repeat it in names
+such as `_with_correspondence` or `_with_compaction`. Canonicalization and reframing follow the same
+rule: `tracked_canonicalize` returns a remapping; `tracked_reframe` returns a frame action.
 
-Do not add a tracked form when ids are preserved or an append layout makes the mapping directly
-recoverable. `tracked_` names returned provenance, not an audit journal or a promise to preserve an
-internal action history. For categorical operations, the returned mappings retain their categorical
-direction; the prefix does not imply a covariant mutation witness.
+Do not add a tracked form when both ids and participant frames are preserved, or when the
+transformation is directly recoverable from an append layout. `tracked_` names returned provenance,
+not an audit journal or a promise to preserve an internal action history. For categorical operations,
+the returned mappings retain their categorical direction; the prefix does not imply covariance.
 
 **Not:** a transaction, which records undo actions; a result-delivery prefix; a general marker for
 any method returning more than one value.
 **In code:** `tracked_remove`, `tracked_apply`, `tracked_split`, `tracked_pushout`,
-`tracked_rollback`; `try_tracked_remove`, `try_tracked_build`.
+`tracked_rollback`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`, `try_tracked_build`.
 
 ### Transaction
 

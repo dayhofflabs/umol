@@ -1139,13 +1139,13 @@ def test_reaction_canonicalize():
     assert source.canonical_eq(expected)
 
 
-def test_reaction_canonicalize_with_remapping():
+def test_reaction_tracked_canonicalize():
     source = Reaction.parse(
         '{:lhs {:atoms ["C#c0" "C#c0"]} '
         ':deltas [{:atom {:modify [0 "#c1"]}}]}'
     )
 
-    canonical, remapping = source.canonicalize_with_remapping()
+    canonical, remapping = source.tracked_canonicalize()
 
     assert canonical == source.canonicalize()
     assert isinstance(remapping, MoleculeRemapping)
@@ -1174,7 +1174,7 @@ def test_reaction_canonicalize_error():
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         reaction.canonicalize()
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        reaction.canonicalize_with_remapping()
+        reaction.tracked_canonicalize()
 
 
 def test_reaction_reverse():

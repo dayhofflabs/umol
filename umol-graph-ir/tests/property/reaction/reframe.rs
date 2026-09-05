@@ -411,7 +411,7 @@ proptest! {
         let normalized = scenario.reaction.clone().normalize().map_err(|_| {
             TestCaseError::fail("generated reaction is intrinsically contradictory")
         })?;
-        let (reframed, action) = scenario.reaction.reframe_with_action().map_err(|_| {
+        let (reframed, action) = scenario.reaction.tracked_reframe().map_err(|_| {
             TestCaseError::fail("generated reaction is intrinsically contradictory")
         })?;
         let transported = normalized
@@ -446,11 +446,11 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_reframe_with_action(reaction in comprehensive_reaction_strategy()) {
+    fn test_reaction_tracked_reframe(reaction in comprehensive_reaction_strategy()) {
         let fused = reaction.clone().reframe().map_err(|_| {
             TestCaseError::fail("generated reaction is intrinsically contradictory")
         })?;
-        let (witnessed, action) = reaction.clone().reframe_with_action().map_err(|_| {
+        let (witnessed, action) = reaction.clone().tracked_reframe().map_err(|_| {
             TestCaseError::fail("generated reaction is intrinsically contradictory")
         })?;
         let transported = reaction

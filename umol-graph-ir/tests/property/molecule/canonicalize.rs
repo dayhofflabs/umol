@@ -256,7 +256,7 @@ proptest! {
         if let Ok(canonical) = canonical {
             let (with_correspondence, correspondence) = molecule
                 .clone()
-                .canonicalize_with_remapping(&context)
+                .tracked_canonicalize(&context)
                 .expect("successful canonicalization returns its correspondence");
             let reframed = molecule
                 .remap(&correspondence)
@@ -280,13 +280,13 @@ proptest! {
         let renumbered = molecule.remap(&renumbering);
         let (canonical, correspondence) = molecule
             .clone()
-            .canonicalize_with_remapping(&context)
+            .tracked_canonicalize(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!("generated molecule did not canonicalize: {error}"))
             })?;
         let (renumbered_canonical, renumbered_correspondence) = renumbered
             .clone()
-            .canonicalize_with_remapping(&context)
+            .tracked_canonicalize(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!(
                     "renumbered molecule did not canonicalize: {error}"

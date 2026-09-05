@@ -57,11 +57,11 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_span_reframe_with_action(span in reaction_span_strategy()) {
+    fn test_reaction_span_tracked_reframe(span in reaction_span_strategy()) {
         let fused = span.clone().reframe().map_err(|_| {
             TestCaseError::fail("generated reaction span is intrinsically contradictory")
         })?;
-        let (witnessed, action) = span.clone().reframe_with_action().map_err(|_| {
+        let (witnessed, action) = span.clone().tracked_reframe().map_err(|_| {
             TestCaseError::fail("generated reaction span is intrinsically contradictory")
         })?;
         let transported = span

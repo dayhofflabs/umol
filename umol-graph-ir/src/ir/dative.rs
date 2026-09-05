@@ -767,7 +767,7 @@ mod tests {
         );
 
         let source = spans.clone();
-        let (reframed, actions) = spans.reframe_with_action().expect("the forms are satisfiable");
+        let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
 
         assert_eq!(
             reframed.donors(DativeBondId(0)).collect::<Vec<_>>(),
@@ -864,10 +864,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bonds_reframe_with_action(unsorted_bond: DativeBonds) {
+    fn test_dative_bonds_tracked_reframe(unsorted_bond: DativeBonds) {
         let source = unsorted_bond.clone();
         let (reframed, actions) = unsorted_bond
-            .reframe_with_action()
+            .tracked_reframe()
             .expect("the form is satisfiable");
         assert_eq!(
             actions.action(DativeBondId(0)),

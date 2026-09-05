@@ -195,13 +195,13 @@ a second public data model.
 ## Aggregate canonicalization
 
 `Molecule`, `Reaction`, and `ReactionSpan` expose complete-only `canonicalize`,
-`canonicalize_with_remapping`, and `canonical_eq`. Each accepts the same optional
+`tracked_canonicalize`, and `canonical_eq`. Each accepts the same optional
 `StereoModel` and `CanonicalizeConfig`; canonicalization of an intrinsically contradictory value
 raises `ContradictionError`. Python does not expose `DescriptionLevel`, a molecule
 `description_level` query, or level-parameterized `*_by` operations. Topology, constitution, and
 structure remain private search prefixes rather than reduced public comparison surfaces.
 
-`canonicalize_with_remapping` returns exactly the same canonical aggregate as `canonicalize`
+`tracked_canonicalize` returns exactly the same canonical aggregate as `canonicalize`
 plus a `MoleculeRemapping` containing the source-to-canonical entity-id permutations. The
 participant-frame action is the separate witness consumed internally by Rust reframing. Python does not expose frame-action classes
 until a supported Python operation has an independent action consumer; the remapping does not

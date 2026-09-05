@@ -397,7 +397,7 @@ The properties exercise:
 - composition of remapping-aware equivalence on generated atom reorderings;
 - exact idempotence and dense-remapping invariance of complete molecule canonicalization;
 - reflexivity, symmetry, and dense-remapping invariance of complete `canonical_eq`; and
-- agreement of `canonicalize_with_remapping` with `canonicalize`, including that remapping and
+- agreement of `tracked_canonicalize` with `canonicalize`, including that remapping and
   reframing the input under its operation-issued witnesses produces the returned canonical form.
 
 This example shows why the comparison relation must appear in every public
@@ -441,7 +441,7 @@ local frame.
 
 For every integrity-valid frame owner, `representative_action` is total on the input domain, even
 when normalization later erases an entry or reports an intrinsic contradiction. On satisfiable
-inputs, `reframe_with_action` must agree exactly with plain `reframe`, and transporting the
+inputs, `tracked_reframe` must agree exactly with plain `reframe`, and transporting the
 normalized input by the returned action then normalizing again must reproduce the representative.
 Reframing is idempotent and the representative action of a reframed value is identity. This also
 checks that the fused aggregate `reframe` path and the witness-producing path implement the same

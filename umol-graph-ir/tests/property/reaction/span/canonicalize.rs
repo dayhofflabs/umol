@@ -71,7 +71,7 @@ proptest! {
             let (with_correspondence, correspondence) = scenario
                 .span
                 .clone()
-                .canonicalize_with_remapping(&context)
+                .tracked_canonicalize(&context)
                 .expect("successful canonicalization returns its correspondence");
 
             prop_assert!(canonical.to_reaction().to_reaction_span().is_ok());
@@ -231,7 +231,7 @@ proptest! {
         prop_assert!(second.canonical_eq(&third, &context));
         prop_assert!(first.canonical_eq(&third, &context));
         prop_assert_eq!(
-            first.canonicalize_with_remapping(&context),
+            first.tracked_canonicalize(&context),
             Err(ReactionSpanCanonicalizeError::Contradiction(Contradiction)),
         );
     }

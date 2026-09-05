@@ -408,7 +408,7 @@ pub trait Canonicalize: Reframe {
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
-    fn canonicalize_with_remapping(
+    fn tracked_canonicalize(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error>;
@@ -426,7 +426,7 @@ pub trait Canonicalize: Reframe {
 }
 ```
 
-`canonicalize_with_remapping` returns the entity-id-renumbering witness, not the participant
+`tracked_canonicalize` returns the entity-id-renumbering witness, not the participant
 frame action. Applying that remapping and then `reframe` reconstructs the canonical value;
 remapping alone need not do so.
 
@@ -949,7 +949,7 @@ is not bound to one object identity.
 
 `representative_action` is derived from the input's frame owners before normalization and remains
 total when later normalization finds an intrinsic contradiction or erases an entry.
-`reframe_with_action` returns that input-domain witness with the result. Plain aggregate `reframe`
+`tracked_reframe` returns that input-domain witness with the result. Plain aggregate `reframe`
 derives and immediately consumes local actions as it visits entries; it does not pre-emptively
 allocate the complete aggregate witness merely to discard it. Sparse action storage used for
 frame-relative constraints allocates no backing map for an empty domain.

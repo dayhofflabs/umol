@@ -3856,7 +3856,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_reframe_with_action_erased_entity() {
+    fn test_reaction_tracked_reframe_erased_entity() {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -3887,7 +3887,7 @@ mod tests {
         );
 
         let (reframed, action) = reaction
-            .reframe_with_action()
+            .tracked_reframe()
             .expect("the created-then-removed entity is satisfiable");
 
         assert_eq!(
@@ -4059,7 +4059,7 @@ mod tests {
         // constraints; the comprehensive reaction strategy does not generate these delta arms.
         let expected = reaction
             .clone()
-            .reframe_with_action()
+            .tracked_reframe()
             .map(|(reframed, _)| reframed);
 
         assert_eq!(reaction.reframe(), expected);

@@ -828,9 +828,7 @@ mod tests {
         );
 
         let source = spans.clone();
-        let (reframed, actions) = spans
-            .reframe_with_action()
-            .expect("the forms are satisfiable");
+        let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
 
         assert_eq!(
             reframed.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
@@ -972,10 +970,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_systems_reframe_with_action(unsorted_system: AromaticSystems) {
+    fn test_aromatic_systems_tracked_reframe(unsorted_system: AromaticSystems) {
         let (reframed, actions) = unsorted_system
             .clone()
-            .reframe_with_action()
+            .tracked_reframe()
             .expect("the form is satisfiable");
 
         let action = actions

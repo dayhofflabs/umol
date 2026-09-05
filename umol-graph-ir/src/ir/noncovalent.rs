@@ -782,7 +782,7 @@ mod tests {
             .permute_with(RelationId(0), &[ParticipantPosition(1), ParticipantPosition(0)]);
 
         let source = spans.clone();
-        let (reframed, actions) = spans.reframe_with_action().expect("the forms are satisfiable");
+        let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
 
         assert_eq!(reframed.atoms(NoncovalentBondId(0)), [AtomId(2), AtomId(5)]);
         assert_eq!(reframed.attributes(NoncovalentBondId(0)), &span);
@@ -865,10 +865,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bonds_reframe_with_action(unsorted_bond: NoncovalentBonds) {
+    fn test_noncovalent_bonds_tracked_reframe(unsorted_bond: NoncovalentBonds) {
         let source = unsorted_bond.clone();
         let (reframed, actions) = unsorted_bond
-            .reframe_with_action()
+            .tracked_reframe()
             .expect("the form is satisfiable");
         assert_eq!(
             actions.action(NoncovalentBondId(0)),
