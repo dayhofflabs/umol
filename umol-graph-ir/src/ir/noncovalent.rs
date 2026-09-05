@@ -133,7 +133,7 @@ impl NoncovalentBonds {
                     right.clone().meet(left)
                 },
             )
-            .map(|merged| Self(Arc::new(merged.object)))
+            .map(|object| Self(Arc::new(object)))
     }
 
     /// Whether bond `id` is the one between `first` and `second` — the known-id sibling of

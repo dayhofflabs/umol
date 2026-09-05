@@ -1366,7 +1366,7 @@ fn mutation(c: &mut Criterion) {
             )
         });
         group.bench_function(BenchmarkId::new("pushout/path_pair", size), |b| {
-            b.iter(|| black_box(&graph).pushout(black_box(&graph), black_box(&overlap)))
+            b.iter(|| black_box(&graph).tracked_pushout(black_box(&graph), black_box(&overlap)))
         });
     }
     group.finish();

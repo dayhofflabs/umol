@@ -38,10 +38,10 @@ impl Molecule {
         other: &Molecule,
         overlap: &GraphCorrespondence,
     ) -> Option<MoleculePushout> {
-        let po = self.raw_graph().pushout(other.raw_graph(), overlap);
+        let (graph, po) = self.raw_graph().tracked_pushout(other.raw_graph(), overlap);
 
-        let mut atoms: Vec<AtomForm> = Vec::with_capacity(po.object.node_count());
-        for node in 0..po.object.node_count() as u32 {
+        let mut atoms: Vec<AtomForm> = Vec::with_capacity(graph.node_count());
+        for node in 0..graph.node_count() as u32 {
             let object = NodeId(node);
             let atom = match (
                 po.left.nodes().left_of(object),
@@ -58,10 +58,10 @@ impl Molecule {
             atoms.push(atom);
         }
 
-        let mut bonds: Vec<(AtomId, AtomId, BondForm)> = Vec::with_capacity(po.object.edge_count());
-        for edge in 0..po.object.edge_count() as u32 {
+        let mut bonds: Vec<(AtomId, AtomId, BondForm)> = Vec::with_capacity(graph.edge_count());
+        for edge in 0..graph.edge_count() as u32 {
             let object = EdgeId(edge);
-            let [u, v] = po.object.edge_endpoints(object);
+            let [u, v] = graph.edge_endpoints(object);
             let bond = match (
                 po.left.edges().left_of(object),
                 po.right.edges().left_of(object),

@@ -168,7 +168,7 @@ impl DativeBonds {
                     right.clone().meet(left)
                 },
             )
-            .map(|merged| Self(Arc::new(merged.object)))
+            .map(|object| Self(Arc::new(object)))
     }
 
     /// Whether bond `id` is the one from `donors` to `acceptor` — the known-id sibling of

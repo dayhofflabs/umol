@@ -157,7 +157,7 @@ impl StereoAtoms {
                     right.clone().reframe_by(&action)?.meet(left)
                 },
             )
-            .map(|merged| Self(Arc::new(merged.object)))
+            .map(|object| Self(Arc::new(object)))
     }
 
     /// Whether stereo atom `id` is the one on `site` over `ligands` — the known-id sibling of
@@ -400,7 +400,7 @@ impl StereoBonds {
                     right.clone().reframe_by(&action)?.meet(left)
                 },
             )
-            .map(|merged| Self(Arc::new(merged.object)))
+            .map(|object| Self(Arc::new(object)))
     }
 
     /// Whether stereo bond `id` is the one on `site` over `ligands` — the known-id sibling of

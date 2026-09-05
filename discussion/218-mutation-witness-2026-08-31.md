@@ -517,7 +517,7 @@ The molecule pushout pair is:
 
 ```rust
 meet_pushout(...) -> Option<Molecule>
-meet_pushout_with_correspondence(...)
+tracked_meet_pushout(...)
     -> Option<(Molecule, MoleculePushoutCorrespondence)>
 ```
 
@@ -531,7 +531,7 @@ result-to-result correspondence.
 The same naming and output/witness separation applies across graph-core and
 graph-IR. Graph pushout uses `GraphPushoutCorrespondence`; relation-set
 pushout uses `RelationPushoutCorrespondence`. Their bare methods return the
-graph or relation set, and `pushout_with_correspondence` returns the output
+graph or relation set, and `tracked_pushout` returns the output
 paired with the two input-to-result correspondences. Graph pullback uses
 `PullbackCorrespondence`, and graph pushout complement uses
 `PushoutComplementCorrespondence`, through the corresponding
@@ -1029,13 +1029,11 @@ estimates.
 Disposition (2026-09-04): optional witnesses use `tracked_<operation>`, with
 `try_` outermost for checked forms (`try_tracked_<operation>`). The signature
 identifies the witness carrier; this replaces the earlier `*_with_<witness_type>`
-naming. This naming update is implemented for S4a; other existing APIs have not
-been renamed by this subitem. Mappings intrinsic to pushout, pullback, and
-pushout complement retain the bare operation name. These constructions return
-`(object, correspondence)` with existing fallibility, without output-only
-companions. This supersedes
-the earlier blanket naming rule for these constructions, including molecule
-pushout.
+naming. Pushout follows this distinction: `pushout` returns the object and
+`tracked_pushout` also returns its two mappings. Their mathematical role does
+not make them mandatory API output. Pullback and pushout complement retain
+their separately settled bare mapping-bearing forms; this pushout decision
+does not change S4c.
 
 - [x] **S4a — Removal and relation compaction.** Graph-core graph and relation
   modules. Breaking (red→green). [dep: S3a]
@@ -1061,16 +1059,34 @@ pushout.
   3.13.15. Core/IR property-enabled all-targets clippy with `-D warnings`,
   nightly formatting, and `git diff --check` passed.
 
-- [ ] **S4b — Pushout families.** Graph-core rewriting and relation modules.
+- [x] **S4b — Pushout families.** Graph-core rewriting and relation modules.
   Breaking (red→green). [dep: S1a, S1b]
   Replace `Pushout` and `RelationPushout<S>` output containers with the
   accepted graph and relation pushout correspondence types. Graph and all
-  five relation-set `pushout` methods remain naturally mapping-bearing:
-  retain their bare names and return `(object, correspondence)`, preserving
-  existing fallibility. Add neither `tracked_` nor output-only variants.
+  five relation-set `pushout` methods return only the object;
+  `tracked_pushout` returns `(object, correspondence)`. Preserve existing
+  fallibility and identical results between the two forms.
   Preserve named left/right mappings and their common result counts.
   Migrate graph-IR gluing/composition callers. Test both input mappings and
-  the resulting object, including coincidences.
+  the resulting object, including coincidences and plain/tracked equivalence.
+  Completed 2026-09-04: graph and all five relation-set tracked pushouts return
+  separate objects and `GraphPushoutCorrespondence` /
+  `RelationPushoutCorrespondence` carriers. Public left/right fields and
+  existing fallibility are preserved; no constructors were added. Object-only
+  glue consumers use `pushout`; consumers of the mappings use `tracked_pushout`.
+  Core exports and graph-IR consumers are migrated; molecule
+  pushout's public return remains for S5b. Exact tests cover both mappings,
+  result objects, explicit/implicit edge coincidences, relation payload
+  meets, and rejection. Core/IR library tests passed (7,612 passed,
+  3 ignored), plus integration and doc tests. Core/IR properties passed at
+  `PROPTEST_CASES=256` (490 passed, 1 ignored). Workspace all-targets check
+  passed with Python 3.13.15. Core/IR property-enabled all-targets clippy
+  with `-D warnings`, nightly formatting, and `git diff --check` passed.
+- Plain/tracked pushout adjustment (2026-09-04): both forms are now exposed;
+  plain methods currently project the tracked result rather than avoiding
+  mapping allocation. The method-pair revision passed core/IR library tests,
+  exact output/failure equivalence checks, workspace all-targets compilation,
+  and core/IR property-enabled all-targets clippy with `-D warnings`.
 - [ ] **S4c — Pullback and pushout complement.** Graph-core rewriting and
   relation modules.
   Breaking (red→green). [dep: S1a]
@@ -1101,13 +1117,13 @@ pushout.
   equivalence. Keep chemistry-layer public signatures unchanged.
 - [ ] **S5b — Molecule pushout.** Graph-IR molecule pushout and composition
   callers. Breaking (red→green). [dep: S1f, S4b]
-  Replace `MoleculePushout` with `(Molecule, MoleculePushoutCorrespondence)`
-  inside the existing `Option`. As in S4b, this is naturally mapping-bearing:
-  retain `meet_pushout`, with neither an output-only companion nor a
-  `tracked_` prefix. Keep left/right correspondence access independent
+  Replace `MoleculePushout` with object-only `meet_pushout` returning
+  `Option<Molecule>` and `tracked_meet_pushout` returning
+  `Option<(Molecule, MoleculePushoutCorrespondence)>`. As in S4b, mappings
+  are optional API output. Keep left/right correspondence access independent
   of the molecule and preserve common result counts. Test overlay meets,
   stereo frames, constraints, inadmissible input, exact mappings, and the
-  resulting molecule.
+  resulting molecule, including plain/tracked output equivalence.
 - [ ] **S5c — Removal and extraction.** Graph-IR editor removal families and
   molecule extraction. Breaking (red→green). [dep: S3b, S4a]
   Compactions are optional provenance, not the primary result. Add

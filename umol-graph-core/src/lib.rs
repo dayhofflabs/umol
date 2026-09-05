@@ -55,9 +55,9 @@ pub use digraph::DiGraph;
 pub use graph::{EdgeId, Graph, Neighbor, NodeId, SubdividedGraph, SubdivisionNodeSource};
 pub use relation::{
     FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, ParticipantPosition,
-    ParticipantRefs, RelationId, RelationParticipant, RelationPullback, RelationPushout,
-    VarRelationSet, VarVarBirelationSet,
+    ParticipantRefs, RelationId, RelationParticipant, RelationPullback,
+    RelationPushoutCorrespondence, VarRelationSet, VarVarBirelationSet,
 };
 pub use remap::{GraphRemapping, Remapping, RemappingError};
-pub use rewriting::{Pullback, Pushout, PushoutComplement};
+pub use rewriting::{GraphPushoutCorrespondence, Pullback, PushoutComplement};
 pub use union_find::UnionFind;

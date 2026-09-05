@@ -713,6 +713,19 @@ It does not make correspondence construction, composition, reversal, or unrelate
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
+## Pushout results
+
+Graph and relation-set `pushout` methods return only the resulting object.
+Their `tracked_pushout` companions return that object and its two input-to-result
+mappings: `(Graph, GraphPushoutCorrespondence)` and
+`Option<(Self, RelationPushoutCorrespondence)>`, respectively. Each pair has identical
+outputs and failure behavior; mapping carriers are optional API output.
+The carriers contain public `left` and `right` fields, not the result object; no constructors
+are added.
+Each operation produces components with equal target counts covering their respective
+inputs. Independently assembled fields do not establish agreement with a result object.
+Relation payload-combination failure still returns `None`.
+
 ## Compaction
 
 `Compaction<Id>` declares a finite source count and stores sorted, distinct removed ids.

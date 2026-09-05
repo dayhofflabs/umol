@@ -150,7 +150,7 @@ impl MulticenterBonds {
                     right.clone().reframe_by(&action)?.meet(left)
                 },
             )
-            .map(|merged| Self(Arc::new(merged.object)))
+            .map(|object| Self(Arc::new(object)))
     }
 
     /// Whether bond `id` is the one over `atoms` — the known-id sibling of

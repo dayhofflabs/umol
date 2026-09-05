@@ -55,11 +55,13 @@ impl Sub<usize> for RelationId {
     }
 }
 
-/// The glued relation set and its two relation-level coprojections — the result of a same-space
-/// relation-set [`pushout`](FixedRelationSet::pushout).
+/// The two input-to-result correspondences of a same-space relation-set pushout.
+///
+/// Operation-produced components have equal target counts and cover their respective
+/// inputs. Public fields may be assembled independently; agreement with a particular
+/// resulting relation set is contextual.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationPushout<S> {
-    pub object: S,
+pub struct RelationPushoutCorrespondence {
     /// `self` relation → object relation (identity — the object keeps `self`'s relation ids).
     pub left: Correspondence<RelationId>,
     /// `right` relation → object relation (a coincidence folds onto its `self` partner; the rest are
@@ -74,13 +76,15 @@ fn relation_pushout<S>(
     self_count: usize,
     object_count: usize,
     right_map: Vec<RelationId>,
-) -> RelationPushout<S> {
+) -> (S, RelationPushoutCorrespondence) {
     let left: Vec<RelationId> = (0..self_count).map(RelationId::from).collect();
-    RelationPushout {
+    (
         object,
-        left: Correspondence::from_images(&left, object_count),
-        right: Correspondence::from_images(&right_map, object_count),
-    }
+        RelationPushoutCorrespondence {
+            left: Correspondence::from_images(&left, object_count),
+            right: Correspondence::from_images(&right_map, object_count),
+        },
+    )
 }
 
 /// The shared-relation intersection and its two projections — the result of a same-space relation
@@ -632,8 +636,24 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -1039,8 +1059,24 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -1496,8 +1532,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -2015,8 +2067,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -2537,8 +2605,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pushout(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue relation sets and return both input-to-result mappings with the result.
+    ///
+    /// Has the same result and failure behavior as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPushout<Self>>
+    ) -> Option<(Self, RelationPushoutCorrespondence)>
     where
         D: Clone,
     {
@@ -2853,7 +2937,7 @@ mod tests {
         PositionLabels(vec![70, 30]),
         PositionLabels(vec![30, 70]),
     )]
-    fn test_var_relation_set_pushout_coincidence_frame(
+    fn test_var_relation_set_tracked_pushout_coincidence_frame(
         #[case] left: VarRelationSet<NodeId, PositionLabels>,
         #[case] right: VarRelationSet<NodeId, PositionLabels>,
         #[case] expected_frame: [NodeId; 2],
@@ -2861,8 +2945,8 @@ mod tests {
         #[case] expected_right_seen: PositionLabels,
     ) {
         let mut seen = None;
-        let merged = left
-            .pushout(
+        let (object, correspondence) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
                 |(_, a), (_, b)| {
@@ -2871,7 +2955,13 @@ mod tests {
                 },
             )
             .expect("combine never rejects here");
-        let object = merged.object;
+        assert_eq!(
+            correspondence,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 1).unwrap(),
+                right: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 1).unwrap(),
+            }
+        );
 
         assert_eq!(object.count(), 1, "the two entries coincide");
         assert_eq!(
@@ -2893,7 +2983,7 @@ mod tests {
     /// the two agree because the case that would separate them cannot be constructed.
     #[rstest]
     #[should_panic(expected = "correspondence images must be unique")]
-    fn test_var_relation_set_pushout_repeated_coincidence() {
+    fn test_var_relation_set_tracked_pushout_repeated_coincidence() {
         let left: VarRelationSet<NodeId, PositionLabels> =
             VarRelationSet::new(vec![(vec![n(0), n(1)], PositionLabels(vec![1, 1]))]);
         let right: VarRelationSet<NodeId, PositionLabels> = VarRelationSet::new(vec![
@@ -2901,7 +2991,7 @@ mod tests {
             (vec![n(0), n(1)], PositionLabels(vec![4, 4])),
         ]);
 
-        left.pushout(
+        left.tracked_pushout(
             &right,
             |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
             |(_, a), (_, b)| {
@@ -4297,7 +4387,7 @@ mod tests {
     #[rstest]
     #[case::forward(vec![NodeId(0), NodeId(1)], vec![NodeId(1), NodeId(2)])]
     #[case::reversed(vec![NodeId(1), NodeId(0)], vec![NodeId(2), NodeId(1)])]
-    fn test_fixed_var_birelation_set_map_pushout(
+    fn test_fixed_var_birelation_set_map_tracked_pushout(
         #[case] participants: Vec<NodeId>,
         #[case] expected_participants: Vec<NodeId>,
     ) {
@@ -4307,7 +4397,7 @@ mod tests {
             Correspondence::new(vec![(NodeId(1), NodeId(0))], 2, 2).unwrap(),
             Correspondence::new(vec![], 1, 1).unwrap(),
         );
-        let pushout = left.pushout(&right, &overlap);
+        let (_, pushout) = left.tracked_pushout(&right, &overlap);
 
         let relations: FixedVarBirelationSet<EdgeId, 1, NodeId, Vec<u32>> =
             FixedVarBirelationSet::new(vec![([EdgeId(0)], participants, vec![7, 11])]);
@@ -4841,38 +4931,77 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_relation_set_pushout() {
+    fn test_fixed_relation_set_tracked_pushout() {
         // same-space glue: self {01}=10 {23}=20 ; right {01}=5 (coincides) {45}=30 (new); combine=sum.
-        let left =
-            FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 10), ([n(2), n(3)], 20)]);
-        let right =
-            FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 5), ([n(4), n(5)], 30)]);
-        let glue = left
-            .pushout(
+        let left = FixedRelationSet::<NodeId, i32, 2>::new(vec![
+            ([NodeId(0), NodeId(1)], 10),
+            ([NodeId(2), NodeId(3)], 20),
+        ]);
+        let right = FixedRelationSet::<NodeId, i32, 2>::new(vec![
+            ([NodeId(0), NodeId(1)], 5),
+            ([NodeId(4), NodeId(5)], 30),
+        ]);
+        let (object, glue) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
                 |(_, a), (_, b)| Some(a + b),
             )
             .expect("no ⊥");
-        assert_eq!(glue.object.count(), 3);
-        let value = |q: [NodeId; 2]| {
-            glue.object
-                .coincident(q[0], &q)
-                .map(|id| *glue.object.data(id))
-        };
-        assert_eq!(value([n(0), n(1)]), Some(15)); // coincidence combined
-        assert_eq!(value([n(2), n(3)]), Some(20)); // self-only carried
-        assert_eq!(value([n(4), n(5)]), Some(30)); // right-only appended
-        assert_eq!(glue.left.right_of(RelationId(0)), Some(RelationId(0))); // self identity
-        assert_eq!(glue.right.right_of(RelationId(0)), Some(RelationId(0))); // right {01} folds onto self
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(2))); // right {45} appended
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |(_, a), (_, b)| Some(a + b),
+            ),
+            Some(object.clone()),
+        );
+        assert_eq!(
+            object,
+            FixedRelationSet::new(vec![
+                ([NodeId(0), NodeId(1)], 15),
+                ([NodeId(2), NodeId(3)], 20),
+                ([NodeId(4), NodeId(5)], 30)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    3,
+                )
+                .unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(2))
+                    ],
+                    2,
+                    3,
+                )
+                .unwrap(),
+            },
+        );
     }
 
     #[rstest]
-    fn test_fixed_relation_set_pushout_bottom() {
+    fn test_fixed_relation_set_tracked_pushout_error() {
         // combine returns ⊥ on the coincidence → the whole glue is inadmissible.
-        let left = FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 10)]);
-        let right = FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 5)]);
+        let left = FixedRelationSet::<NodeId, i32, 2>::new(vec![([NodeId(0), NodeId(1)], 10)]);
+        let right = FixedRelationSet::<NodeId, i32, 2>::new(vec![([NodeId(0), NodeId(1)], 5)]);
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |_, _| None
+            ),
+            None
+        );
         assert_eq!(
             left.pushout(
                 &right,
@@ -4884,43 +5013,82 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_relation_set_pushout() {
-        let left = VarRelationSet::<NodeId, i32>::new(vec![(vec![n(0), n(1), n(2)], 10)]);
+    fn test_var_relation_set_tracked_pushout() {
+        let left =
+            VarRelationSet::<NodeId, i32>::new(vec![(vec![NodeId(0), NodeId(1), NodeId(2)], 10)]);
         let right = VarRelationSet::<NodeId, i32>::new(vec![
-            (vec![n(0), n(1), n(2)], 5),
-            (vec![n(3), n(4)], 20),
+            (vec![NodeId(0), NodeId(1), NodeId(2)], 5),
+            (vec![NodeId(3), NodeId(4)], 20),
         ]);
-        let glue = left
-            .pushout(
+        let (object, glue) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
                 |(_, a), (_, b)| Some(a + b),
             )
             .expect("no ⊥");
-        assert_eq!(glue.object.count(), 2);
         assert_eq!(
-            glue.object
-                .coincident(n(0), &[n(0), n(1), n(2)])
-                .map(|id| *glue.object.data(id)),
-            Some(15),
+            left.pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |(_, a), (_, b)| Some(a + b),
+            ),
+            Some(object.clone()),
         );
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1))); // {34} appended
+        assert_eq!(
+            object,
+            VarRelationSet::new(vec![
+                (vec![NodeId(0), NodeId(1), NodeId(2)], 15),
+                (vec![NodeId(3), NodeId(4)], 20)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2,).unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    2,
+                )
+                .unwrap(),
+            },
+        );
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |_, _| None,
+            ),
+            None
+        );
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |_, _| None,
+            ),
+            None
+        );
     }
 
     #[rstest]
-    fn test_fixed_var_birelation_set_pushout() {
+    fn test_fixed_var_birelation_set_tracked_pushout() {
         // coincidence requires *both* factors equal (site + members).
         let left = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![(
-            [n(0)],
-            vec![n(1), n(2)],
+            [NodeId(0)],
+            vec![NodeId(1), NodeId(2)],
             10,
         )]);
         let right = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![
-            ([n(0)], vec![n(1), n(2)], 5),
-            ([n(3)], vec![n(4), n(5)], 20),
+            ([NodeId(0)], vec![NodeId(1), NodeId(2)], 5),
+            ([NodeId(3)], vec![NodeId(4), NodeId(5)], 20),
         ]);
-        let glue = left
-            .pushout(
+        let (object, glue) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q1: &[NodeId], q2: &_| {
                     q1.first().and_then(|&n| set.coincident(n, q1, q2))
@@ -4928,29 +5096,73 @@ mod tests {
                 |(_, _, a), (_, _, b)| Some(a + b),
             )
             .expect("no ⊥");
-        assert_eq!(glue.object.count(), 2);
         assert_eq!(
-            glue.object
-                .coincident(n(0), &[n(0)], &[n(1), n(2)])
-                .map(|id| *glue.object.data(id)),
-            Some(15),
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            ),
+            Some(object.clone()),
         );
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1))); // appended
+        assert_eq!(
+            object,
+            FixedVarBirelationSet::new(vec![
+                ([NodeId(0)], vec![NodeId(1), NodeId(2)], 15),
+                ([NodeId(3)], vec![NodeId(4), NodeId(5)], 20)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2,).unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    2,
+                )
+                .unwrap(),
+            },
+        );
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
     }
 
     #[rstest]
-    fn test_fixed_fixed_birelation_set_pushout() {
+    fn test_fixed_fixed_birelation_set_tracked_pushout() {
         let left = FixedFixedBirelationSet::<NodeId, 1, NodeId, 2, i32>::new(vec![(
-            [n(0)],
-            [n(1), n(2)],
+            [NodeId(0)],
+            [NodeId(1), NodeId(2)],
             10,
         )]);
         let right = FixedFixedBirelationSet::<NodeId, 1, NodeId, 2, i32>::new(vec![
-            ([n(0)], [n(1), n(2)], 5),
-            ([n(3)], [n(4), n(5)], 20),
+            ([NodeId(0)], [NodeId(1), NodeId(2)], 5),
+            ([NodeId(3)], [NodeId(4), NodeId(5)], 20),
         ]);
-        let glue = left
-            .pushout(
+        let (object, glue) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q1: &[NodeId], q2: &_| {
                     q1.first().and_then(|&n| set.coincident(n, q1, q2))
@@ -4958,29 +5170,73 @@ mod tests {
                 |(_, _, a), (_, _, b)| Some(a + b),
             )
             .expect("no ⊥");
-        assert_eq!(glue.object.count(), 2);
         assert_eq!(
-            glue.object
-                .coincident(n(0), &[n(0)], &[n(1), n(2)])
-                .map(|id| *glue.object.data(id)),
-            Some(15),
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            ),
+            Some(object.clone()),
         );
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1)));
+        assert_eq!(
+            object,
+            FixedFixedBirelationSet::new(vec![
+                ([NodeId(0)], [NodeId(1), NodeId(2)], 15),
+                ([NodeId(3)], [NodeId(4), NodeId(5)], 20)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2,).unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    2,
+                )
+                .unwrap(),
+            },
+        );
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
     }
 
     #[rstest]
-    fn test_var_var_birelation_set_pushout() {
+    fn test_var_var_birelation_set_tracked_pushout() {
         let left = VarVarBirelationSet::<NodeId, NodeId, i32>::new(vec![(
-            vec![n(0), n(1)],
-            vec![n(2), n(3)],
+            vec![NodeId(0), NodeId(1)],
+            vec![NodeId(2), NodeId(3)],
             10,
         )]);
         let right = VarVarBirelationSet::<NodeId, NodeId, i32>::new(vec![
-            (vec![n(0), n(1)], vec![n(2), n(3)], 5),
-            (vec![n(4)], vec![n(5)], 20),
+            (vec![NodeId(0), NodeId(1)], vec![NodeId(2), NodeId(3)], 5),
+            (vec![NodeId(4)], vec![NodeId(5)], 20),
         ]);
-        let glue = left
-            .pushout(
+        let (object, glue) = left
+            .tracked_pushout(
                 &right,
                 |set: &_, q1: &[NodeId], q2: &_| {
                     q1.first().and_then(|&n| set.coincident(n, q1, q2))
@@ -4988,14 +5244,58 @@ mod tests {
                 |(_, _, a), (_, _, b)| Some(a + b),
             )
             .expect("no ⊥");
-        assert_eq!(glue.object.count(), 2);
         assert_eq!(
-            glue.object
-                .coincident(n(0), &[n(0), n(1)], &[n(2), n(3)])
-                .map(|id| *glue.object.data(id)),
-            Some(15),
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            ),
+            Some(object.clone()),
         );
-        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1)));
+        assert_eq!(
+            object,
+            VarVarBirelationSet::new(vec![
+                (vec![NodeId(0), NodeId(1)], vec![NodeId(2), NodeId(3)], 15),
+                (vec![NodeId(4)], vec![NodeId(5)], 20)
+            ])
+        );
+        assert_eq!(
+            glue,
+            RelationPushoutCorrespondence {
+                left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2,).unwrap(),
+                right: Correspondence::new(
+                    vec![
+                        (RelationId(0), RelationId(0)),
+                        (RelationId(1), RelationId(1))
+                    ],
+                    2,
+                    2,
+                )
+                .unwrap(),
+            },
+        );
+        assert_eq!(
+            left.tracked_pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |_, _| None,
+            ),
+            None
+        );
     }
 
     #[rstest]

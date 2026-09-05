@@ -19,10 +19,13 @@ use std::collections::HashMap;
 use crate::correspondence::{Correspondence, GraphCorrespondence, GraphCorrespondenceComposeError};
 use crate::graph::{EdgeId, Graph, NodeId};
 
-/// The glued graph and the two coprojections into it.
+/// The two input-to-result correspondences of a graph pushout.
+///
+/// Operation-produced components have equal target counts and cover their respective
+/// inputs. Public fields may be assembled independently; agreement with a particular
+/// pushout graph is contextual.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pushout {
-    pub object: Graph,
+pub struct GraphPushoutCorrespondence {
     /// `left → object` (the identity inclusion — `object` keeps `left`'s ids).
     pub left: GraphCorrespondence,
     /// `right → object` (overlap ids fold onto their `left` partners; the rest are appended).
@@ -66,7 +69,20 @@ impl Graph {
     /// correspondence): the pushout of the span it denotes (Def. 2.16). `self` keeps its ids; `right`'s
     /// unmatched nodes/edges are appended. An appended edge whose endpoints already carry one is
     /// identified with it (simple-graph pushout).
-    pub fn pushout(&self, right: &Graph, overlap: &GraphCorrespondence) -> Pushout {
+    ///
+    /// Returns the glued graph. Use [`Self::tracked_pushout`] for its input mappings.
+    pub fn pushout(&self, right: &Graph, overlap: &GraphCorrespondence) -> Graph {
+        self.tracked_pushout(right, overlap).0
+    }
+
+    /// Glue two graphs and return both input-to-result correspondences with the result.
+    ///
+    /// Produces the same graph as [`Self::pushout`].
+    pub fn tracked_pushout(
+        &self,
+        right: &Graph,
+        overlap: &GraphCorrespondence,
+    ) -> (Graph, GraphPushoutCorrespondence) {
         let n_left = self.node_count();
         let m_left = self.edge_count();
 
@@ -127,11 +143,13 @@ impl Graph {
             Correspondence::from_images(&right_edge_images, object_edge_count),
         );
 
-        Pushout {
+        (
             object,
-            left: left_map,
-            right: right_map,
-        }
+            GraphPushoutCorrespondence {
+                left: left_map,
+                right: right_map,
+            },
+        )
     }
 
     /// Delete `matched`(`L\K`) from `self`, keeping the context — the pushout complement of the left
@@ -284,24 +302,6 @@ mod tests {
     use super::*;
     use crate::correspondence::CorrespondenceComposeError;
 
-    fn node_overlap(
-        matched_pairs: Vec<(u32, u32)>,
-        left: &Graph,
-        right: &Graph,
-    ) -> GraphCorrespondence {
-        let nodes = Correspondence::new(
-            matched_pairs
-                .iter()
-                .map(|&(l, r)| (NodeId(l), NodeId(r)))
-                .collect(),
-            left.node_count(),
-            right.node_count(),
-        )
-        .expect("correspondence producer preserves partial-bijection invariants");
-        GraphCorrespondence::induce(left, right, nodes)
-            .expect("simple graph overlap induces a unique graph correspondence")
-    }
-
     #[rstest]
     fn test_graph_pushout_partial() {
         let left = Graph::new(2, &[[0, 1]]);
@@ -310,8 +310,9 @@ mod tests {
             Correspondence::new(vec![(NodeId(1), NodeId(0))], 2, 2).unwrap(),
             Correspondence::new(vec![], 1, 1).unwrap(),
         );
-        let po = left.pushout(&right, &overlap);
-        assert_eq!(po.object, Graph::new(3, &[[0, 1], [1, 2]]));
+        let (object, po) = left.tracked_pushout(&right, &overlap);
+        assert_eq!(left.pushout(&right, &overlap), object);
+        assert_eq!(object, Graph::new(3, &[[0, 1], [1, 2]]));
         assert_eq!(
             po.left,
             GraphCorrespondence::new(
@@ -331,17 +332,60 @@ mod tests {
     }
 
     #[rstest]
-    fn test_pushout_keeps_context_edge() {
-        // doc-135 R1: glue R_A = F–Cl (with bond) and L_B = [F, Cl] (no bond) over both atoms.
-        // The overlap omits the bond (L_B lacks it), yet the glue keeps R_A's bond as context.
-        let r_a = Graph::new(2, &[[0, 1]]);
-        let l_b = Graph::new(2, &[]);
-        let overlap = node_overlap(vec![(0, 0), (1, 1)], &r_a, &l_b);
-        let po = r_a.pushout(&l_b, &overlap);
-        assert_eq!(po.object.node_count(), 2);
-        assert_eq!(po.object.edge_count(), 1);
-        assert_eq!(po.object.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
-        assert_eq!(po.right.nodes().right_of(NodeId(1)), Some(NodeId(1)));
+    fn test_graph_pushout_context() {
+        let left = Graph::new(2, &[[0, 1]]);
+        let right = Graph::new(2, &[]);
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                .unwrap(),
+            Correspondence::new(vec![], 1, 0).unwrap(),
+        );
+        let (object, correspondence) = left.tracked_pushout(&right, &overlap);
+        assert_eq!(left.pushout(&right, &overlap), object);
+        assert_eq!(object, left);
+        assert_eq!(
+            correspondence,
+            GraphPushoutCorrespondence {
+                left: GraphCorrespondence::new(
+                    Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                        .unwrap(),
+                    Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1).unwrap(),
+                ),
+                right: GraphCorrespondence::new(
+                    Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+                        .unwrap(),
+                    Correspondence::new(vec![], 0, 1).unwrap(),
+                ),
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::implicit(vec![])]
+    #[case::explicit(vec![(EdgeId(0), EdgeId(0))])]
+    fn test_graph_pushout_coincidence(#[case] edge_pairs: Vec<(EdgeId, EdgeId)>) {
+        let graph = Graph::new(2, &[[0, 1]]);
+        let nodes = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2)
+            .unwrap();
+        let overlap = GraphCorrespondence::new(
+            nodes.clone(),
+            Correspondence::new(edge_pairs, 1, 1).unwrap(),
+        );
+        let expected = GraphCorrespondence::new(
+            nodes,
+            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1).unwrap(),
+        );
+        assert_eq!(graph.pushout(&graph, &overlap), graph);
+        assert_eq!(
+            graph.tracked_pushout(&graph, &overlap),
+            (
+                graph.clone(),
+                GraphPushoutCorrespondence {
+                    left: expected.clone(),
+                    right: expected,
+                }
+            ),
+        );
     }
 
     #[rstest]
