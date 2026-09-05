@@ -1687,9 +1687,9 @@ def test_molecule_react_all_pipeline():
         Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
         Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
     ]
-    combined, _ = Molecule.combine_all(reactants)
+    combined = Molecule.combine_all(reactants)
     expected = [
-        [component for component, _ in derivation.rhs.split()]
+        derivation.rhs.split()
         for derivation in reaction.apply(combined)
     ]
 

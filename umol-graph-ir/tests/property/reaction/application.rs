@@ -555,14 +555,7 @@ proptest! {
             .apply(&host, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
             .map(|application| {
-                application.map(|derivation| {
-                    derivation
-                        .rhs()
-                        .split()
-                        .into_iter()
-                        .map(|(component, _)| component)
-                        .collect()
-                })
+                application.map(|derivation| derivation.rhs().split())
             })
             .collect::<Vec<_>>();
         let actual = host
@@ -580,19 +573,12 @@ proptest! {
         extra in molecule_strategy(),
     ) {
         let reactants = vec![reaction.lhs().clone(), extra];
-        let (host, _) = Molecule::combine_all(&reactants);
+        let host = Molecule::combine_all(&reactants);
         let expected = reaction
             .apply(&host, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
             .map(|application| {
-                application.map(|derivation| {
-                    derivation
-                        .rhs()
-                        .split()
-                        .into_iter()
-                        .map(|(component, _)| component)
-                        .collect()
-                })
+                application.map(|derivation| derivation.rhs().split())
             })
             .collect::<Vec<_>>();
         let actual = reactants

@@ -65,9 +65,11 @@ def test_molecule_metadata_remap():
         [AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(2))],
     )
-    _, correspondence = Molecule.from_entries(
+    combined = Molecule.from_entries(
         [AtomForm(Element("C"))]
     ).combine(source)
+    _, source_to_component = combined.tracked_split()[1]
+    correspondence = source_to_component.reverse()
     metadata = MoleculeMetadata()
     metadata.set_keyword(Entity.Atom(0), "oxygen")
     metadata.set_keyword(Entity.Atom(1), "nitrogen")

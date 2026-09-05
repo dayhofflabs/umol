@@ -2,6 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
+use umol_graph_core::Correspondence;
 use umol_perm::MAX_DEGREE;
 
 use crate::strategies::*;
@@ -64,10 +65,139 @@ proptest! {
             0..5,
         ),
     ) {
-        let (combined, correspondences) = Molecule::combine_all(&molecules);
-        prop_assert_eq!(correspondences.len(), molecules.len());
-        for (molecule, correspondence) in molecules.iter().zip(&correspondences) {
-            prop_assert_eq!(&combined.extract(correspondence), molecule);
+        let combined = Molecule::combine_all(&molecules);
+        prop_assert_eq!(
+            combined.atoms().count(),
+            molecules.iter().map(|input| input.atoms().count()).sum::<usize>(),
+        );
+        prop_assert_eq!(
+            combined.bonds().count(),
+            molecules.iter().map(|input| input.bonds().count()).sum::<usize>(),
+        );
+        prop_assert_eq!(
+            combined.dative_bonds().count(),
+            molecules.iter().map(|input| input.dative_bonds().count()).sum::<usize>(),
+        );
+        prop_assert_eq!(
+            combined.aromatic_systems().count(),
+            molecules.iter().map(|input| input.aromatic_systems().count()).sum::<usize>(),
+        );
+        prop_assert_eq!(
+            combined.multicenter_bonds().count(),
+            molecules.iter().map(|input| input.multicenter_bonds().count()).sum::<usize>(),
+        );
+        prop_assert_eq!(
+            combined.noncovalent_bonds().count(),
+            molecules.iter().map(|input| input.noncovalent_bonds().count()).sum::<usize>(),
+        );
+        prop_assert_eq!(
+            combined.stereo_atoms().count(),
+            molecules.iter().map(|input| input.stereo_atoms().count()).sum::<usize>(),
+        );
+        prop_assert_eq!(
+            combined.stereo_bonds().count(),
+            molecules.iter().map(|input| input.stereo_bonds().count()).sum::<usize>(),
+        );
+        for (source_idx, molecule) in molecules.iter().enumerate() {
+            let correspondence = MoleculeCorrespondence::new(
+                Correspondence::from_images(
+                    &(0..molecule.atoms().count())
+                        .map(|idx| {
+                            let offset = molecules[..source_idx]
+                                .iter()
+                                .map(|input| input.atoms().count())
+                                .sum::<usize>();
+                            AtomId::from(idx + offset)
+                        })
+                        .collect::<Vec<_>>(),
+                    combined.atoms().count(),
+                ),
+                Correspondence::from_images(
+                    &(0..molecule.bonds().count())
+                        .map(|idx| {
+                            let offset = molecules[..source_idx]
+                                .iter()
+                                .map(|input| input.bonds().count())
+                                .sum::<usize>();
+                            BondId::from(idx + offset)
+                        })
+                        .collect::<Vec<_>>(),
+                    combined.bonds().count(),
+                ),
+                Correspondence::from_images(
+                    &(0..molecule.dative_bonds().count())
+                        .map(|idx| {
+                            let offset = molecules[..source_idx]
+                                .iter()
+                                .map(|input| input.dative_bonds().count())
+                                .sum::<usize>();
+                            DativeBondId::from(idx + offset)
+                        })
+                        .collect::<Vec<_>>(),
+                    combined.dative_bonds().count(),
+                ),
+                Correspondence::from_images(
+                    &(0..molecule.aromatic_systems().count())
+                        .map(|idx| {
+                            let offset = molecules[..source_idx]
+                                .iter()
+                                .map(|input| input.aromatic_systems().count())
+                                .sum::<usize>();
+                            AromaticSystemId::from(idx + offset)
+                        })
+                        .collect::<Vec<_>>(),
+                    combined.aromatic_systems().count(),
+                ),
+                Correspondence::from_images(
+                    &(0..molecule.multicenter_bonds().count())
+                        .map(|idx| {
+                            let offset = molecules[..source_idx]
+                                .iter()
+                                .map(|input| input.multicenter_bonds().count())
+                                .sum::<usize>();
+                            MulticenterBondId::from(idx + offset)
+                        })
+                        .collect::<Vec<_>>(),
+                    combined.multicenter_bonds().count(),
+                ),
+                Correspondence::from_images(
+                    &(0..molecule.noncovalent_bonds().count())
+                        .map(|idx| {
+                            let offset = molecules[..source_idx]
+                                .iter()
+                                .map(|input| input.noncovalent_bonds().count())
+                                .sum::<usize>();
+                            NoncovalentBondId::from(idx + offset)
+                        })
+                        .collect::<Vec<_>>(),
+                    combined.noncovalent_bonds().count(),
+                ),
+                Correspondence::from_images(
+                    &(0..molecule.stereo_atoms().count())
+                        .map(|idx| {
+                            let offset = molecules[..source_idx]
+                                .iter()
+                                .map(|input| input.stereo_atoms().count())
+                                .sum::<usize>();
+                            StereoAtomId::from(idx + offset)
+                        })
+                        .collect::<Vec<_>>(),
+                    combined.stereo_atoms().count(),
+                ),
+                Correspondence::from_images(
+                    &(0..molecule.stereo_bonds().count())
+                        .map(|idx| {
+                            let offset = molecules[..source_idx]
+                                .iter()
+                                .map(|input| input.stereo_bonds().count())
+                                .sum::<usize>();
+                            StereoBondId::from(idx + offset)
+                        })
+                        .collect::<Vec<_>>(),
+                    combined.stereo_bonds().count(),
+                ),
+            );
+            prop_assert_eq!(&combined.extract(&correspondence), molecule);
         }
     }
 
@@ -76,7 +206,57 @@ proptest! {
         left in molecule_structurally_unambiguous_strategy(),
         right in molecule_structurally_unambiguous_strategy(),
     ) {
-        let (combined, correspondence) = left.combine(&right);
+        let combined = left.combine(&right);
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::from_images(
+                &(0..right.atoms().count())
+                    .map(|idx| AtomId::from(idx + left.atoms().count()))
+                    .collect::<Vec<_>>(),
+                combined.atoms().count(),
+            ),
+            Correspondence::from_images(
+                &(0..right.bonds().count())
+                    .map(|idx| BondId::from(idx + left.bonds().count()))
+                    .collect::<Vec<_>>(),
+                combined.bonds().count(),
+            ),
+            Correspondence::from_images(
+                &(0..right.dative_bonds().count())
+                    .map(|idx| DativeBondId::from(idx + left.dative_bonds().count()))
+                    .collect::<Vec<_>>(),
+                combined.dative_bonds().count(),
+            ),
+            Correspondence::from_images(
+                &(0..right.aromatic_systems().count())
+                    .map(|idx| AromaticSystemId::from(idx + left.aromatic_systems().count()))
+                    .collect::<Vec<_>>(),
+                combined.aromatic_systems().count(),
+            ),
+            Correspondence::from_images(
+                &(0..right.multicenter_bonds().count())
+                    .map(|idx| MulticenterBondId::from(idx + left.multicenter_bonds().count()))
+                    .collect::<Vec<_>>(),
+                combined.multicenter_bonds().count(),
+            ),
+            Correspondence::from_images(
+                &(0..right.noncovalent_bonds().count())
+                    .map(|idx| NoncovalentBondId::from(idx + left.noncovalent_bonds().count()))
+                    .collect::<Vec<_>>(),
+                combined.noncovalent_bonds().count(),
+            ),
+            Correspondence::from_images(
+                &(0..right.stereo_atoms().count())
+                    .map(|idx| StereoAtomId::from(idx + left.stereo_atoms().count()))
+                    .collect::<Vec<_>>(),
+                combined.stereo_atoms().count(),
+            ),
+            Correspondence::from_images(
+                &(0..right.stereo_bonds().count())
+                    .map(|idx| StereoBondId::from(idx + left.stereo_bonds().count()))
+                    .collect::<Vec<_>>(),
+                combined.stereo_bonds().count(),
+            ),
+        );
         prop_assert_eq!(combined.extract(&correspondence), right);
     }
 
@@ -85,27 +265,30 @@ proptest! {
         left in molecule_structurally_unambiguous_strategy(),
         right in molecule_structurally_unambiguous_strategy(),
     ) {
-        let (expected, expected_correspondence) = left.combine(&right);
+        let expected = left.combine(&right);
         let mut combined = left;
-        let correspondence = combined.combine_from(&right);
+        combined.combine_from(&right);
 
         prop_assert_eq!(combined, expected);
-        prop_assert_eq!(correspondence, expected_correspondence);
     }
 
     #[test]
     fn test_molecule_split(molecule in molecule_structurally_unambiguous_strategy()) {
-        let components = molecule.split();
+        let components = molecule.tracked_split();
+        prop_assert_eq!(
+            molecule.split(),
+            components.iter().map(|(component, _)| component.clone()).collect::<Vec<_>>(),
+        );
         let mut covered_atoms = Vec::new();
 
         for (component, correspondence) in &components {
-            prop_assert_eq!(&molecule.extract(correspondence), component);
+            prop_assert_eq!(&molecule.extract(&correspondence.reverse()), component);
             covered_atoms.extend(
                 correspondence
                     .atoms()
                     .matched_pairs()
                     .iter()
-                    .map(|&(_, host)| host),
+                    .map(|&(source, _)| source),
             );
         }
 

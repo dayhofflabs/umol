@@ -7,7 +7,6 @@ use std::ops::Add;
 
 use super::super::atom::{AtomForm, ElementForm};
 use super::super::bond::BondForm;
-use super::super::correspondence::MoleculeCorrespondence;
 use super::super::id::AtomId;
 use super::super::traits::Lattice;
 use super::Molecule;
@@ -160,11 +159,9 @@ impl Fragment {
                 )
             });
 
-        let (body, correspondence) = self.body.combine(&other.body);
-        let other_atom = correspondence
-            .atoms()
-            .right_of(other_port_atom)
-            .expect("combine maps every atom of `other`");
+        let atom_offset = self.body.atoms().count() as u32;
+        let body = self.body.combine(&other.body);
+        let other_atom = AtomId(other_port_atom.0 + atom_offset);
         let mut editor = body.edit();
         editor.add_bond(self_atom, other_atom, bond);
         let body = editor.build();
@@ -182,37 +179,29 @@ impl Fragment {
                 .into_iter()
                 .enumerate()
                 .filter(|(index, _)| *index != other_index)
-                .map(|(_, port)| remap_port(port, &correspondence)),
+                .map(|(_, port)| Port {
+                    atom: AtomId(port.atom.0 + atom_offset),
+                    ..port
+                }),
         );
         Fragment { body, ports }
     }
 }
 
 /// Juxtapose two fragments — the monoidal product. Combines the bodies (no bond formed) and
-/// concatenates the ports, `other`'s remapped through the combination correspondence.
+/// concatenates the ports, offsetting `other`'s atom ids by the first body's atom count.
 impl Add<Fragment> for Fragment {
     type Output = Fragment;
     fn add(self, other: Fragment) -> Fragment {
-        let (body, correspondence) = self.body.combine(&other.body);
+        let atom_offset = self.body.atoms().count() as u32;
+        let body = self.body.combine(&other.body);
         let mut ports = self.ports;
-        ports.extend(
-            other
-                .ports
-                .into_iter()
-                .map(|port| remap_port(port, &correspondence)),
-        );
+        ports.extend(other.ports.into_iter().map(|port| Port {
+            atom: AtomId(port.atom.0 + atom_offset),
+            ..port
+        }));
         Fragment { body, ports }
     }
-}
-
-/// Move a port's atom from `other`'s id space into the combined body's, through the `other → union`
-/// correspondence a `combine` returns (`self` is the prefix, so its ports are unchanged).
-fn remap_port(port: Port, correspondence: &MoleculeCorrespondence) -> Port {
-    let atom = correspondence
-        .atoms()
-        .right_of(port.atom)
-        .expect("combine maps every atom of `other`");
-    Port { atom, ..port }
 }
 
 /// Resolve a `PortArg` to an index into `ports`. Panics if the index is out of range, or a name is

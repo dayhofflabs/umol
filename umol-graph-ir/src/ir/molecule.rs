@@ -1363,11 +1363,9 @@ impl Molecule {
     }
 
     /// Combine molecules by disjoint concatenation. Input order determines each entity kind's
-    /// id ranges in the result. Returns one correspondence per input, in input order, mapping that
-    /// molecule's ids into the combined molecule. Pure renumbering — no gluing, no chemistry.
-    pub fn combine_all<'a>(
-        molecules: impl IntoIterator<Item = &'a Molecule>,
-    ) -> (Molecule, Vec<MoleculeCorrespondence>) {
+    /// id ranges in the result: each input's entities follow all preceding inputs' entities of
+    /// the same kind, preserving their order. No entities are identified or removed.
+    pub fn combine_all<'a>(molecules: impl IntoIterator<Item = &'a Molecule>) -> Molecule {
         let molecules: Vec<&Molecule> = molecules.into_iter().collect();
         let atom_count = molecules.iter().map(|m| m.atoms().count()).sum();
         let bond_count = molecules.iter().map(|m| m.bonds().count()).sum();
@@ -1395,7 +1393,6 @@ impl Molecule {
             stereo_bonds: Vec::with_capacity(stereo_bond_count),
             constraints: Constraints::new(),
         };
-        let mut correspondences = Vec::with_capacity(molecules.len());
         let mut atom_offset = 0;
         let mut bond_offset = 0;
         let mut dative_offset = 0;
@@ -1521,7 +1518,6 @@ impl Molecule {
                     .constraints
                     .push(constraint.clone().map(&correspondence));
             }
-            correspondences.push(correspondence);
 
             atom_offset += molecule_atom_count;
             bond_offset += molecule_bond_count;
@@ -1533,22 +1529,18 @@ impl Molecule {
             stereo_bond_offset += molecule_stereo_bond_count;
         }
 
-        (Molecule::from_entries(entries), correspondences)
+        Molecule::from_entries(entries)
     }
 
-    /// Combine `self` and `other` as a fresh molecule by disjoint concatenation. Returns the
-    /// correspondence mapping `other` into the combined molecule.
-    pub fn combine(&self, other: &Molecule) -> (Molecule, MoleculeCorrespondence) {
-        let (combined, mut correspondences) = Self::combine_all([self, other]);
-        let correspondence = correspondences
-            .pop()
-            .expect("two inputs produce two correspondences");
-        (combined, correspondence)
+    /// Combine `self` and `other` by disjoint concatenation. For every entity kind,
+    /// `self` keeps its ids as the prefix and `other` follows in its original order.
+    pub fn combine(&self, other: &Molecule) -> Molecule {
+        Self::combine_all([self, other])
     }
 
-    /// Append `other` by disjoint concatenation. `self` keeps its ids as the prefix; `other`'s
-    /// entities follow. Returns the correspondence mapping `other` into the combined molecule.
-    pub fn combine_from(&mut self, other: &Molecule) -> MoleculeCorrespondence {
+    /// Append `other` by disjoint concatenation. For every entity kind, existing ids remain
+    /// unchanged and `other` follows in its original order.
+    pub fn combine_from(&mut self, other: &Molecule) {
         let atom_offset = self.atoms().count();
         let bond_offset = self.bonds().count();
         let dative_offset = self.dative_bonds().count();
@@ -1703,15 +1695,24 @@ impl Molecule {
                 .push(constraint.clone().map(&correspondence));
         }
         *self = editor.build();
-        correspondence
     }
 
     /// Decompose into connected components — a conservative partition where every relation keeps its
     /// atoms in one component (a spanning overlay prevents the split rather than being dropped). Each
-    /// component is a fresh, compactly-renumbered `Molecule` paired with the
-    /// `MoleculeCorrespondence` mapping its ids back to `self`. Components are ordered by their lowest
-    /// original atom.
-    pub fn split(&self) -> Vec<(Molecule, MoleculeCorrespondence)> {
+    /// component is a fresh, compactly-renumbered molecule. Components are ordered by their lowest
+    /// original atom; each entity kind retains source order within its component.
+    pub fn split(&self) -> Vec<Molecule> {
+        self.tracked_split()
+            .into_iter()
+            .map(|(component, _)| component)
+            .collect()
+    }
+
+    /// Split into conservatively connected components, paired with correspondences from
+    /// this molecule to each component. Ordering and components are identical to [`Self::split`].
+    /// Each entity correspondence has this molecule's full source count and the component's
+    /// result count. Every result entity is matched; source entities in other components are unmatched.
+    pub fn tracked_split(&self) -> Vec<(Molecule, MoleculeCorrespondence)> {
         let atom_count = self.atoms().count();
         let mut uf = UnionFind::new(atom_count);
         for bond in self.bonds().iter() {
@@ -1960,7 +1961,7 @@ impl Molecule {
                     }
                 }
                 let entities = editor.build();
-                (entities, correspondence.reverse())
+                (entities, correspondence)
             })
             .collect()
     }

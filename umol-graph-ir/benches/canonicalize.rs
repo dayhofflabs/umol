@@ -323,7 +323,7 @@ fn cis_trans_stereo_bond() -> Molecule {
 fn mixed_atom_and_bond_stereo() -> Molecule {
     let stereo_atom = tetrahedral_stereo();
     let stereo_bond = cis_trans_stereo_bond();
-    Molecule::combine_all([&stereo_atom, &stereo_bond]).0
+    Molecule::combine_all([&stereo_atom, &stereo_bond])
 }
 
 fn frame_relative_stereo_constraint() -> Molecule {
@@ -739,7 +739,7 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
                 atoms: vec![AtomForm::from_element(Element::O)],
                 ..Default::default()
             });
-            let (unequal, _) = Molecule::combine_all([&case.molecule, &additional_atom]);
+            let unequal = Molecule::combine_all([&case.molecule, &additional_atom]);
             assert!(case.molecule.canonical_eq(&renumbered, &context));
             assert!(!case.molecule.canonical_eq(&unequal, &context));
             (case, renumbered, unequal)

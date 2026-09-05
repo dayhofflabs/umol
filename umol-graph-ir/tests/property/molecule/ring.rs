@@ -114,7 +114,7 @@ proptest! {
         expected.sort_unstable();
 
         let mut actual = Vec::new();
-        for (component, correspondence) in molecule.split() {
+        for (component, correspondence) in molecule.tracked_split() {
             for ring in component.rings(model, config).iter() {
                 let mut atoms = ring
                     .atoms()
@@ -122,7 +122,7 @@ proptest! {
                     .map(|&atom| {
                         correspondence
                             .atoms()
-                            .right_of(atom)
+                            .left_of(atom)
                             .ok_or_else(|| {
                                 TestCaseError::fail(format!(
                                     "component atom {atom:?} has no source atom"
@@ -134,7 +134,7 @@ proptest! {
                     .bonds()
                     .iter()
                     .map(|&bond| {
-                        correspondence.bonds().right_of(bond).ok_or_else(|| {
+                        correspondence.bonds().left_of(bond).ok_or_else(|| {
                             TestCaseError::fail(format!(
                                 "component bond {bond:?} has no source bond"
                             ))

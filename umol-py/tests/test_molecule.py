@@ -959,7 +959,7 @@ def test_molecule_combine():
         bonds=[(0, 1, BondForm(2))],
     )
 
-    combined, correspondence = left.combine(right)
+    combined = left.combine(right)
 
     assert combined == Molecule.from_entries(
         [
@@ -969,9 +969,6 @@ def test_molecule_combine():
         ],
         bonds=[(1, 2, BondForm(2))],
     )
-    assert isinstance(correspondence, MoleculeCorrespondence)
-    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 2)]
-    assert correspondence.bonds.matched_pairs == [(0, 0)]
     assert left == left_before
     assert right == right_before
 
@@ -987,7 +984,7 @@ def test_molecule_combine_from():
         bonds=[(0, 1, BondForm(2))],
     )
 
-    correspondence = recipient.combine_from(other)
+    result = recipient.combine_from(other)
 
     assert recipient == Molecule.from_entries(
         [
@@ -997,8 +994,7 @@ def test_molecule_combine_from():
         ],
         bonds=[(1, 2, BondForm(2))],
     )
-    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 2)]
-    assert correspondence.bonds.matched_pairs == [(0, 0)]
+    assert result is None
     assert other == other_before
 
 
@@ -1008,8 +1004,9 @@ def test_molecule_combine_from_alias():
         bonds=[(0, 1, BondForm(1))],
     )
 
-    correspondence = molecule.combine_from(molecule)
+    result = molecule.combine_from(molecule)
 
+    assert result is None
     assert molecule == Molecule.from_entries(
         [
             AtomForm(Element("C")),
@@ -1019,8 +1016,6 @@ def test_molecule_combine_from_alias():
         ],
         bonds=[(0, 1, BondForm(1)), (2, 3, BondForm(1))],
     )
-    assert correspondence.atoms.matched_pairs == [(0, 2), (1, 3)]
-    assert correspondence.bonds.matched_pairs == [(0, 1)]
 
 
 def test_molecule_combine_all():
@@ -1041,7 +1036,7 @@ def test_molecule_combine_all():
         Molecule.from_entries([AtomForm(Element("F"))]),
     ]
 
-    combined, correspondences = Molecule.combine_all(
+    combined = Molecule.combine_all(
         molecule for molecule in molecules
     )
 
@@ -1054,21 +1049,11 @@ def test_molecule_combine_all():
         ],
         bonds=[(1, 2, BondForm(2))],
     )
-    assert [correspondence.atoms.matched_pairs for correspondence in correspondences] == [
-        [(0, 0)],
-        [(0, 1), (1, 2)],
-        [(0, 3)],
-    ]
-    assert [correspondence.bonds.matched_pairs for correspondence in correspondences] == [
-        [],
-        [(0, 0)],
-        [],
-    ]
     assert molecules == snapshots
 
 
 def test_molecule_combine_all_empty():
-    assert Molecule.combine_all([]) == (Molecule(), [])
+    assert Molecule.combine_all([]) == Molecule()
 
 
 def test_correspondence_constructor():
@@ -1126,7 +1111,7 @@ def test_correspondence_constructor_error(
 
 
 def test_correspondence_value():
-    _, molecule_correspondence = Molecule.from_entries(
+    combined = Molecule.from_entries(
         [AtomForm(Element("C"))]
     ).combine(
         Molecule.from_entries(
@@ -1134,7 +1119,8 @@ def test_correspondence_value():
             bonds=[(0, 1, BondForm(2))],
         )
     )
-    correspondence = molecule_correspondence.atoms
+    _, source_to_component = combined.tracked_split()[1]
+    correspondence = source_to_component.reverse().atoms
 
     assert isinstance(correspondence, Correspondence)
     assert len(correspondence) == 2
@@ -1176,7 +1162,9 @@ def test_correspondence_compose_error(right_count, next_left_count):
 
 def test_molecule_correspondence_compose_error():
     molecule = Molecule.from_entries([AtomForm(Element("C"))])
-    _, correspondence = molecule.combine(molecule)
+    combined = molecule.combine(molecule)
+    _, source_to_component = combined.tracked_split()[1]
+    correspondence = source_to_component.reverse()
     with pytest.raises(ValueError, match="atom: intermediate counts differ: 2 and 1"):
         correspondence.compose(correspondence)
     with pytest.raises(ValueError, match="atom: intermediate counts differ: 2 and 1"):
@@ -1184,7 +1172,7 @@ def test_molecule_correspondence_compose_error():
 
 
 def test_molecule_correspondence_value():
-    _, correspondence = Molecule.from_entries(
+    combined = Molecule.from_entries(
         [AtomForm(Element("C"))]
     ).combine(
         Molecule.from_entries(
@@ -1193,6 +1181,8 @@ def test_molecule_correspondence_value():
         )
     )
 
+    _, source_to_component = combined.tracked_split()[1]
+    correspondence = source_to_component.reverse()
     assert not correspondence.is_total()
 
     reverse = correspondence.reverse()
@@ -1220,7 +1210,8 @@ def test_molecule_split():
         bonds=[(1, 2, BondForm(2))],
     )
 
-    components = molecule.split()
+    components = molecule.tracked_split()
+    assert molecule.split() == [component for component, _ in components]
 
     assert [component for component, _ in components] == [
         Molecule.from_entries([AtomForm(Element("C"))]),
@@ -1231,14 +1222,23 @@ def test_molecule_split():
     ]
     assert [
         correspondence.atoms.matched_pairs for _, correspondence in components
-    ] == [[(0, 0)], [(0, 1), (1, 2)]]
+    ] == [[(0, 0)], [(1, 0), (2, 1)]]
     assert [
         correspondence.bonds.matched_pairs for _, correspondence in components
     ] == [[], [(0, 0)]]
+    assert [
+        (correspondence.atoms.left_count, correspondence.atoms.right_count)
+        for _, correspondence in components
+    ] == [(3, 1), (3, 2)]
+    assert [
+        (correspondence.bonds.left_count, correspondence.bonds.right_count)
+        for _, correspondence in components
+    ] == [(1, 0), (1, 1)]
 
 
 def test_molecule_split_empty():
     assert Molecule().split() == []
+    assert Molecule().tracked_split() == []
 
 
 def test_molecule_bonds_error():

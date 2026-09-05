@@ -139,8 +139,8 @@ impl Iterator for ReactionApplicationIter {
 /// constructor. It owns the underlying [`ReactionApplicationIter`] and therefore the reaction and
 /// reactant snapshots. Each successful application is replaced lazily by the conservative
 /// connected-component split of its right-hand side. Component order is inherited from
-/// [`Molecule::split`]. The split correspondences and the rest of the derivation are intentionally
-/// discarded. Application errors pass through unchanged.
+/// [`Molecule::split`]. The rest of the derivation is intentionally discarded.
+/// Application errors pass through unchanged.
 #[derive(Debug)]
 pub struct ReactionProductsIter {
     applications: ReactionApplicationIter,
@@ -156,16 +156,9 @@ impl Iterator for ReactionProductsIter {
     type Item = Result<Vec<Molecule>, ApplyError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.applications.next().map(|application| {
-            application.map(|derivation| {
-                derivation
-                    .rhs()
-                    .split()
-                    .into_iter()
-                    .map(|(component, _)| component)
-                    .collect()
-            })
-        })
+        self.applications
+            .next()
+            .map(|application| application.map(|derivation| derivation.rhs().split()))
     }
 }
 
@@ -245,7 +238,7 @@ impl React for [Molecule] {
         reaction: &Reaction,
         match_config: SubstructureMatchConfig,
     ) -> Result<ReactionProductsIter, ApplyPreconditionError> {
-        let (host, _) = Molecule::combine_all(self);
+        let host = Molecule::combine_all(self);
         ReactionApplicationIter::new(reaction.clone(), host, match_config)
             .map(ReactionProductsIter::new)
     }

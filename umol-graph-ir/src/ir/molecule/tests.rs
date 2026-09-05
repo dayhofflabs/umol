@@ -4919,7 +4919,7 @@ fn test_molecule_lift_then_inline_roundtrips_inline_state(
 }
 
 #[rstest]
-#[case::empty(Vec::new(), Molecule::new(), Vec::new())]
+#[case::empty(Vec::new(), Molecule::new())]
 #[case::singleton(
     vec![Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
@@ -4929,7 +4929,6 @@ fn test_molecule_lift_then_inline_roundtrips_inline_state(
         atoms: vec![AtomForm::from_element(Element::C)],
         ..Default::default()
     }),
-    vec![vec![(AtomId(0), AtomId(0))]],
 )]
 #[case::multiple(
     vec![
@@ -4956,62 +4955,11 @@ fn test_molecule_lift_then_inline_roundtrips_inline_state(
         bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(2))],
         ..Default::default()
     }),
-    vec![
-        vec![(AtomId(0), AtomId(0))],
-        vec![],
-        vec![(AtomId(0), AtomId(1)), (AtomId(1), AtomId(2))],
-    ],
 )]
-fn test_molecule_combine_all(
-    #[case] molecules: Vec<Molecule>,
-    #[case] expected: Molecule,
-    #[case] expected_atom_matched_pairs: Vec<Vec<(AtomId, AtomId)>>,
-) {
-    let (combined, correspondences) = Molecule::combine_all(&molecules);
+fn test_molecule_combine_all(#[case] molecules: Vec<Molecule>, #[case] expected: Molecule) {
+    let combined = Molecule::combine_all(&molecules);
 
     assert_eq!(combined, expected);
-    assert_eq!(
-        correspondences
-            .iter()
-            .map(|correspondence| correspondence.atoms().matched_pairs().to_vec())
-            .collect::<Vec<_>>(),
-        expected_atom_matched_pairs,
-    );
-    for (molecule, correspondence) in molecules.iter().zip(&correspondences) {
-        assert_eq!(combined.extract(correspondence), *molecule);
-        assert_eq!(
-            correspondence.atoms().right_count(),
-            combined.atoms().count()
-        );
-        assert_eq!(
-            correspondence.bonds().right_count(),
-            combined.bonds().count()
-        );
-        assert_eq!(
-            correspondence.dative_bonds().right_count(),
-            combined.dative_bonds().count()
-        );
-        assert_eq!(
-            correspondence.aromatic_systems().right_count(),
-            combined.aromatic_systems().count()
-        );
-        assert_eq!(
-            correspondence.multicenter_bonds().right_count(),
-            combined.multicenter_bonds().count()
-        );
-        assert_eq!(
-            correspondence.noncovalent_bonds().right_count(),
-            combined.noncovalent_bonds().count()
-        );
-        assert_eq!(
-            correspondence.stereo_atoms().right_count(),
-            combined.stereo_atoms().count()
-        );
-        assert_eq!(
-            correspondence.stereo_bonds().right_count(),
-            combined.stereo_bonds().count()
-        );
-    }
 }
 
 #[rstest]
@@ -5032,17 +4980,13 @@ fn test_molecule_combine() {
         bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
         ..Default::default()
     });
-    let (union, correspondence) = left.combine(&right);
+    let union = left.combine(&right);
 
     assert_eq!(union.atoms().count(), 4);
     assert_eq!(union.bonds().count(), 2);
     assert_eq!(union.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     assert_eq!(union.bond(BondId(1)).atom_ids(), [AtomId(2), AtomId(3)]);
     assert_eq!(union.bond(BondId(1)).attributes, &BondForm::from_order(2));
-    // right's ids map to their offset union ids; left's are the prefix (unchanged)
-    assert_eq!(correspondence.atoms().right_of(AtomId(0)), Some(AtomId(2)));
-    assert_eq!(correspondence.atoms().right_of(AtomId(1)), Some(AtomId(3)));
-    assert_eq!(correspondence.bonds().right_of(BondId(0)), Some(BondId(1)));
 }
 
 #[rstest]
@@ -5059,12 +5003,10 @@ fn test_molecule_combine_from() {
         bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
         ..Default::default()
     });
-    let correspondence = left.combine_from(&right);
+    left.combine_from(&right);
 
     assert_eq!(left.atoms().count(), 3);
     assert_eq!(left.bond(BondId(0)).atom_ids(), [AtomId(1), AtomId(2)]);
-    assert_eq!(correspondence.atoms().right_of(AtomId(0)), Some(AtomId(1)));
-    assert_eq!(correspondence.atoms().right_of(AtomId(1)), Some(AtomId(2)));
 }
 
 #[rstest]
@@ -5114,7 +5056,7 @@ fn test_molecule_combine_overlay() {
         )],
         ..Default::default()
     });
-    let (union, correspondence) = left.combine(&right);
+    let union = left.combine(&right);
 
     assert_eq!(union.aromatic_systems().count(), 1);
     // right's overlay over its atoms [0, 1] shifts by left's one atom
@@ -5124,12 +5066,6 @@ fn test_molecule_combine_overlay() {
             .atom_ids()
             .collect::<Vec<_>>(),
         vec![AtomId(1), AtomId(2)]
-    );
-    assert_eq!(
-        correspondence
-            .aromatic_systems()
-            .right_of(AromaticSystemId(0)),
-        Some(AromaticSystemId(0))
     );
 }
 
@@ -5162,7 +5098,7 @@ fn test_molecule_combine_from_stereo() {
         ..Default::default()
     });
     let mut union = left;
-    let correspondence = union.combine_from(&right);
+    union.combine_from(&right);
     let expected = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C); 6],
         bonds: vec![
@@ -5189,40 +5125,6 @@ fn test_molecule_combine_from_stereo() {
         ..Default::default()
     });
     assert_eq!(union, expected);
-    assert_eq!(
-        correspondence,
-        MoleculeCorrespondence::new(
-            Correspondence::new(
-                vec![
-                    (AtomId(0), AtomId(1)),
-                    (AtomId(1), AtomId(2)),
-                    (AtomId(2), AtomId(3)),
-                    (AtomId(3), AtomId(4)),
-                    (AtomId(4), AtomId(5))
-                ],
-                5,
-                6
-            )
-            .unwrap(),
-            Correspondence::new(
-                vec![
-                    (BondId(0), BondId(0)),
-                    (BondId(1), BondId(1)),
-                    (BondId(2), BondId(2)),
-                    (BondId(3), BondId(3))
-                ],
-                4,
-                4
-            )
-            .unwrap(),
-            Correspondence::empty(),
-            Correspondence::empty(),
-            Correspondence::empty(),
-            Correspondence::empty(),
-            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1).unwrap(),
-            Correspondence::empty(),
-        )
-    );
 }
 
 #[rstest]
@@ -5244,7 +5146,7 @@ fn test_molecule_combine_constraint() {
         )),
         ..Default::default()
     });
-    let (union, _) = left.combine(&right);
+    let union = left.combine(&right);
 
     // right's constraint over atoms [0, 1] is remapped to [1, 2] in the union
     let expected = Constraint::Molecule(MoleculeConstraint::ChargeSum {
@@ -5255,6 +5157,14 @@ fn test_molecule_combine_constraint() {
         union.constraints.iter().collect::<Vec<_>>(),
         vec![&expected]
     );
+}
+
+#[rstest]
+fn test_molecule_split_empty() {
+    let molecule = Molecule::new();
+
+    assert!(molecule.split().is_empty());
+    assert!(molecule.tracked_split().is_empty());
 }
 
 #[rstest]
@@ -5273,18 +5183,25 @@ fn test_molecule_split() {
         ],
         ..Default::default()
     });
-    let components = mol.split();
+    let components = mol.tracked_split();
+    assert_eq!(
+        mol.split(),
+        components
+            .iter()
+            .map(|(component, _)| component.clone())
+            .collect::<Vec<_>>()
+    );
 
     assert_eq!(components.len(), 2);
     let (first, first_corr) = &components[0];
     assert_eq!(first.atoms().count(), 2);
     assert_eq!(first.bond(BondId(0)).attributes, &BondForm::from_order(1));
-    assert_eq!(first_corr.atoms().right_of(AtomId(0)), Some(AtomId(0)));
-    assert_eq!(first_corr.atoms().right_of(AtomId(1)), Some(AtomId(1)));
+    assert_eq!(first_corr.atoms().left_of(AtomId(0)), Some(AtomId(0)));
+    assert_eq!(first_corr.atoms().left_of(AtomId(1)), Some(AtomId(1)));
     let (second, second_corr) = &components[1];
     assert_eq!(second.bond(BondId(0)).attributes, &BondForm::from_order(2));
-    assert_eq!(second_corr.atoms().right_of(AtomId(0)), Some(AtomId(2)));
-    assert_eq!(second_corr.atoms().right_of(AtomId(1)), Some(AtomId(3)));
+    assert_eq!(second_corr.atoms().left_of(AtomId(0)), Some(AtomId(2)));
+    assert_eq!(second_corr.atoms().left_of(AtomId(1)), Some(AtomId(3)));
 }
 
 #[rstest]
@@ -5363,10 +5280,14 @@ fn test_molecule_split_interleaved() {
     );
     assert_eq!(
         input.split(),
+        vec![first.clone(), second.clone(), third.clone()]
+    );
+    assert_eq!(
+        input.tracked_split(),
         vec![
-            (first, first_correspondence),
-            (second, second_correspondence),
-            (third, third_correspondence),
+            (first, first_correspondence.reverse()),
+            (second, second_correspondence.reverse()),
+            (third, third_correspondence.reverse()),
         ]
     );
 }
@@ -5391,7 +5312,14 @@ fn test_molecule_split_overlay_binds() {
         )],
         ..Default::default()
     });
-    let components = mol.split();
+    let components = mol.tracked_split();
+    assert_eq!(
+        mol.split(),
+        components
+            .iter()
+            .map(|(component, _)| component.clone())
+            .collect::<Vec<_>>()
+    );
 
     assert_eq!(components.len(), 1);
     assert_eq!(components[0].0.atoms().count(), 4);
@@ -5415,8 +5343,15 @@ fn test_molecule_combine_split_roundtrip() {
         bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
         ..Default::default()
     });
-    let (union, _) = left.combine(&right);
-    let components = union.split();
+    let union = left.combine(&right);
+    let components = union.tracked_split();
+    assert_eq!(
+        union.split(),
+        components
+            .iter()
+            .map(|(component, _)| component.clone())
+            .collect::<Vec<_>>()
+    );
 
     assert_eq!(components.len(), 2);
     assert_eq!(components[0].0, left);
@@ -5447,7 +5382,14 @@ fn test_molecule_split_stereo() {
         )]),
         ..Default::default()
     });
-    let components = mol.split();
+    let components = mol.tracked_split();
+    assert_eq!(
+        mol.split(),
+        components
+            .iter()
+            .map(|(component, _)| component.clone())
+            .collect::<Vec<_>>()
+    );
     let lone = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C); 2],
         bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
@@ -5521,7 +5463,10 @@ fn test_molecule_split_stereo() {
     );
     assert_eq!(
         components,
-        vec![(lone, lone_correspondence), (bound, bound_correspondence)]
+        vec![
+            (lone, lone_correspondence.reverse()),
+            (bound, bound_correspondence.reverse())
+        ]
     );
 }
 
@@ -5542,7 +5487,14 @@ fn test_molecule_split_constraint_binds() {
         )),
         ..Default::default()
     });
-    let components = mol.split();
+    let components = mol.tracked_split();
+    assert_eq!(
+        mol.split(),
+        components
+            .iter()
+            .map(|(component, _)| component.clone())
+            .collect::<Vec<_>>()
+    );
 
     assert_eq!(components.len(), 1);
     assert_eq!(
@@ -5576,7 +5528,14 @@ fn test_molecule_split_constraint_routed() {
         )),
         ..Default::default()
     });
-    let components = mol.split();
+    let components = mol.tracked_split();
+    assert_eq!(
+        mol.split(),
+        components
+            .iter()
+            .map(|(component, _)| component.clone())
+            .collect::<Vec<_>>()
+    );
 
     assert_eq!(components.len(), 2);
     assert!(components[0].0.constraints.is_empty());
@@ -5640,8 +5599,15 @@ fn test_molecule_split_constraint_entity_kinds(
     .into();
     let right = Molecule::from_entries(right_entries);
 
-    let (combined, _) = left.combine(&right);
-    let components = combined.split();
+    let combined = left.combine(&right);
+    let components = combined.tracked_split();
+    assert_eq!(
+        combined.split(),
+        components
+            .iter()
+            .map(|(component, _)| component.clone())
+            .collect::<Vec<_>>()
+    );
     let expected_left = MoleculeCorrespondence::new(
         Correspondence::from_images(&[AtomId(0), AtomId(1), AtomId(2), AtomId(3)], 8),
         Correspondence::from_images(&[BondId(0), BondId(1), BondId(2)], 6),
@@ -5665,6 +5631,9 @@ fn test_molecule_split_constraint_entity_kinds(
 
     assert_eq!(
         components,
-        vec![(left, expected_left), (right, expected_right)]
+        vec![
+            (left, expected_left.reverse()),
+            (right, expected_right.reverse())
+        ]
     );
 }

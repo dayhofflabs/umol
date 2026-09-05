@@ -45,12 +45,11 @@ returned.
 - Reaction application returns `ReactionDerivation`, which duplicates the two
   sides and correspondence already representable by `Reaction` and
   `ReactionSpan` without being a complete application record.
-- `combine_all` returns one input-to-combined correspondence per input.
-  `combine` and `combine_from` return only the correspondence from `other`
-  into the result. These mappings restate a deterministic append layout and
-  are not nontrivial operation witnesses.
-- `split` returns one component-to-source correspondence per component. This
-  is the reverse of a covariant source-to-result operation witness.
+- S5a makes combination witness-free: `combine` and `combine_all` return
+  the molecule; `combine_from` mutates in place and returns unit. Per-kind
+  append order determines the caller-computable mappings.
+- `split` returns component molecules; `tracked_split` returns those same
+  components paired with source-to-component correspondences.
 - `MoleculeRemapping`, added by doc 212, currently has no production
   consumers. Constraint transport now consumes `MoleculeCorrespondence`;
   S1e removed `IdRemapping` and migrated its live consumers.
@@ -508,7 +507,7 @@ correspondence-bearing companions while retaining their existing primary
 results in the plain forms. The witness-bearing canonicalization method is
 `canonicalize_with_remapping`, not `canonicalize_with_correspondence`.
 
-`split` returns component molecules; `split_with_correspondence` returns each
+`split` returns component molecules; `tracked_split` returns each
 component paired with its covariant source-to-component correspondence.
 Transaction `rollback_with_correspondence` returns the inverse witness while
 plain `rollback` retains its ordinary result.
@@ -1118,7 +1117,7 @@ the same object-only/tracked split, preserving their categorical mapping directi
 
 ### S5 — Graph-IR molecule operation returns
 
-- [ ] **S5a — Combination and split.** Graph-IR molecule and fragment callers.
+- [x] **S5a — Combination and split.** Graph-IR molecule and fragment callers.
   Breaking (red→green). [dep: S1f]
   Make `combine`, `combine_all`, and `combine_from` witness-free and state
   append order; add no tracked companions because their mappings are
@@ -1129,6 +1128,18 @@ the same object-only/tracked split, preserving their categorical mapping directi
   implementation plumbing. Test empty inputs, multiple components, all
   entity families, component ordering, append layout, and exact output
   equivalence. Keep chemistry-layer public signatures unchanged.
+  Completed: Rust/Python combination is witness-free; `tracked_split`
+  returns source-to-component correspondences with full source counts.
+  Fragment callers use append offsets, and `React` consumes plain results.
+  Exact fixtures cover interleaved components, constraints, stereo, all
+  eight entity families, and plain/tracked equality. Combination properties
+  construct independent offset correspondences to check reconstruction.
+  Core/IR library, integration, and doc tests passed; 490 properties passed
+  at 256 cases (1 ignored). Graph/IO library tests passed (4,297 tests).
+  Workspace all-targets check and core/IR property-enabled all-targets clippy
+  passed. Rebuilt Python extension: 1,350 tests passed, 2 skipped; final
+  molecule checks passed after count assertions were added. Nightly formatting
+  and `git diff --check` passed.
 - [ ] **S5b — Molecule pushout.** Graph-IR molecule pushout and composition
   callers. Breaking (red→green). [dep: S1f, S4b]
   Replace `MoleculePushout` with object-only `meet_pushout` returning

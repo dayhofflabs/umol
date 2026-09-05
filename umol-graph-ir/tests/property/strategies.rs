@@ -4751,11 +4751,57 @@ pub(crate) fn materializable_reaction_strategy() -> BoxedStrategy<Reaction> {
 pub(crate) fn reaction_application_strategy(
 ) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
     (materializable_reaction_strategy(), molecule_strategy()).prop_map(|(reaction, extra)| {
-        let (host, correspondences) = Molecule::combine_all([reaction.lhs(), &extra]);
-        let correspondence = correspondences
-            .into_iter()
-            .next()
-            .expect("two input molecules produce two correspondences");
+        let host = Molecule::combine_all([reaction.lhs(), &extra]);
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::from_images(
+                &(0..reaction.lhs().atoms().count())
+                    .map(AtomId::from)
+                    .collect::<Vec<_>>(),
+                host.atoms().count(),
+            ),
+            Correspondence::from_images(
+                &(0..reaction.lhs().bonds().count())
+                    .map(BondId::from)
+                    .collect::<Vec<_>>(),
+                host.bonds().count(),
+            ),
+            Correspondence::from_images(
+                &(0..reaction.lhs().dative_bonds().count())
+                    .map(DativeBondId::from)
+                    .collect::<Vec<_>>(),
+                host.dative_bonds().count(),
+            ),
+            Correspondence::from_images(
+                &(0..reaction.lhs().aromatic_systems().count())
+                    .map(AromaticSystemId::from)
+                    .collect::<Vec<_>>(),
+                host.aromatic_systems().count(),
+            ),
+            Correspondence::from_images(
+                &(0..reaction.lhs().multicenter_bonds().count())
+                    .map(MulticenterBondId::from)
+                    .collect::<Vec<_>>(),
+                host.multicenter_bonds().count(),
+            ),
+            Correspondence::from_images(
+                &(0..reaction.lhs().noncovalent_bonds().count())
+                    .map(NoncovalentBondId::from)
+                    .collect::<Vec<_>>(),
+                host.noncovalent_bonds().count(),
+            ),
+            Correspondence::from_images(
+                &(0..reaction.lhs().stereo_atoms().count())
+                    .map(StereoAtomId::from)
+                    .collect::<Vec<_>>(),
+                host.stereo_atoms().count(),
+            ),
+            Correspondence::from_images(
+                &(0..reaction.lhs().stereo_bonds().count())
+                    .map(StereoBondId::from)
+                    .collect::<Vec<_>>(),
+                host.stereo_bonds().count(),
+            ),
+        );
         (reaction, host, correspondence)
     })
 }
