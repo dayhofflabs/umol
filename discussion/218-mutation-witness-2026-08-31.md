@@ -1252,7 +1252,7 @@ the same object-only/tracked split, preserving their categorical mapping directi
   The complete editor benchmark (initialize, remove a terminal atom, add its
   replacement and bond, then tracked publication) measured about 2.5 and
   11.6 microseconds on 8- and 64-atom paths, including integrity checking.
-- [ ] **S6b — Batch application and transactions.** Graph-IR molecule apply,
+- [x] **S6b — Batch application and transactions.** Graph-IR molecule apply,
   editor transact/apply, and transaction rollback. Additive (green).
   [dep: S6a] Correspondences are optional provenance. Add
   `Molecule::tracked_apply`, editor `tracked_apply` and `tracked_transact`,
@@ -1267,6 +1267,27 @@ the same object-only/tracked split, preserving their categorical mapping directi
   batches, add/remove sequences, atom provenance, inverse direction, and
   bare/tracked output equivalence. Do not impose operational persistence on
   induced non-atom pairings.
+
+  Implemented the four tracked methods without changing the bare methods or
+  transaction journal. Editor batches and rollback temporarily accumulate
+  operation-local correspondences, then compose them with the saved session
+  correspondence, including error paths. Accumulation stores ids, not source
+  entity payloads; intermediate editors need not be publishable molecules.
+  Tests cover all eight entity families, distinct batch/session origins,
+  add/remove sequences, publication errors, failed batches, appended rollback
+  inversion, and plain/tracked agreement on incompatible rollback receivers.
+
+  Verification: 7,787 core/IR library tests passed (3 ignored), plus
+  integration and doc tests. Core/IR property targets passed 126/370
+  properties at 256 cases (1 IR property ignored). Workspace all-targets
+  check, core/IR all-targets clippy with properties enabled and warnings
+  denied, nightly formatting, and diff checks passed.
+  The three-edit path batch removes the terminal atom, adds oxygen, and
+  bonds it to the preceding atom. At 8/64 atoms, molecule tracked apply
+  measured about 3.20/13.10 µs including editor initialization and publication;
+  editor tracked transact measured 3.97/11.80 µs excluding editor setup and
+  publication, including journal and witness production. Criterion used
+  10 samples with 1-second warmup and measurement.
 
 ### S7 — Reaction application results
 

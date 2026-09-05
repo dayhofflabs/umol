@@ -17,7 +17,7 @@ use std::hash::Hash;
 use std::mem;
 
 use thiserror::Error;
-use umol_graph_core::{Compaction, GraphCompaction};
+use umol_graph_core::{Compaction, Correspondence, GraphCompaction};
 
 use super::super::compact::{MoleculeCompaction, UndoCompaction};
 use super::super::constraint::{
@@ -121,6 +121,44 @@ impl Transaction {
     /// guaranteed when a different editor happens to satisfy the journal's structural requirements.
     pub fn rollback(self, editor: &mut MoleculeEditor) -> Result<(), TransactionError> {
         rollback_journal(editor, self.undo)
+    }
+
+    /// Roll back and return the correspondence from the rollback input to the restored state.
+    ///
+    /// The returned witness covers this rollback, not the editor's entire session. No intermediate
+    /// molecule is published. Restored entities without a rollback-input partner remain unmatched.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same error and leaves the same editor state as [`Self::rollback`].
+    ///
+    /// # Semantic properties
+    ///
+    /// On the transaction's exact post-state, the witness is the inverse of its forward
+    /// correspondence. For appended transactions it is the inverse of their composed witness.
+    pub fn tracked_rollback(
+        self,
+        editor: &mut MoleculeEditor,
+    ) -> Result<MoleculeCorrespondence, TransactionError> {
+        let identity = MoleculeCorrespondence::new(
+            Correspondence::identity(editor.atom_count()),
+            Correspondence::identity(editor.bond_count()),
+            Correspondence::identity(editor.dative_bond_count()),
+            Correspondence::identity(editor.aromatic_system_count()),
+            Correspondence::identity(editor.multicenter_bond_count()),
+            Correspondence::identity(editor.noncovalent_bond_count()),
+            Correspondence::identity(editor.stereo_atom_count()),
+            Correspondence::identity(editor.stereo_bond_count()),
+        );
+        let session = mem::replace(&mut editor.correspondence, identity);
+        let result = self.rollback(editor);
+        let correspondence =
+            mem::replace(&mut editor.correspondence, MoleculeCorrespondence::empty());
+        editor.correspondence = session
+            .compose(&correspondence)
+            .expect("rollback correspondence starts in the current editor id spaces");
+        result?;
+        Ok(correspondence)
     }
 }
 
@@ -410,6 +448,43 @@ impl MoleculeEditor {
         Ok(Transaction { undo: journal })
     }
 
+    /// Apply a batch atomically, returning its transaction and input-to-result correspondence.
+    ///
+    /// The witness starts at this batch's input, independently of the editor's session origin.
+    /// The transaction retains its ordinary undo journal. No molecule is published.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same error and leaves the same editor state as [`Self::transact`].
+    ///
+    /// # Semantic properties
+    ///
+    /// Discarding the witness gives the same transaction and editor state as the plain operation.
+    /// Composing the previous session correspondence with this witness gives the new session.
+    pub fn tracked_transact(
+        &mut self,
+        edits: Edits,
+    ) -> Result<(Transaction, MoleculeCorrespondence), TransactionError> {
+        let identity = MoleculeCorrespondence::new(
+            Correspondence::identity(self.atom_count()),
+            Correspondence::identity(self.bond_count()),
+            Correspondence::identity(self.dative_bond_count()),
+            Correspondence::identity(self.aromatic_system_count()),
+            Correspondence::identity(self.multicenter_bond_count()),
+            Correspondence::identity(self.noncovalent_bond_count()),
+            Correspondence::identity(self.stereo_atom_count()),
+            Correspondence::identity(self.stereo_bond_count()),
+        );
+        let session = mem::replace(&mut self.correspondence, identity);
+        let result = self.transact(edits);
+        let correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty());
+        self.correspondence = session
+            .compose(&correspondence)
+            .expect("batch correspondence starts in the current editor id spaces");
+        Ok((result?, correspondence))
+    }
+
     /// Apply an ordered [`Edits`] batch without constructing an undo journal.
     ///
     /// The editor is consumed so that a failed batch cannot expose partially applied state. On
@@ -432,6 +507,43 @@ impl MoleculeEditor {
             self.apply_edit(edit, &mut state)?;
         }
         Ok(self)
+    }
+
+    /// Consume the editor and apply a batch, returning the resulting editor and batch correspondence.
+    ///
+    /// The witness starts at this batch's input, not the editor's session origin. The resulting
+    /// editor remains transient; publication performs the integrity check.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same transaction error as [`Self::apply`], consuming the editor on failure.
+    ///
+    /// # Semantic properties
+    ///
+    /// Discarding the witness gives the same editor as the plain operation. Composing the previous
+    /// session correspondence with this witness gives the resulting session correspondence.
+    pub fn tracked_apply(
+        mut self,
+        edits: Edits,
+    ) -> Result<(Self, MoleculeCorrespondence), TransactionError> {
+        let identity = MoleculeCorrespondence::new(
+            Correspondence::identity(self.atom_count()),
+            Correspondence::identity(self.bond_count()),
+            Correspondence::identity(self.dative_bond_count()),
+            Correspondence::identity(self.aromatic_system_count()),
+            Correspondence::identity(self.multicenter_bond_count()),
+            Correspondence::identity(self.noncovalent_bond_count()),
+            Correspondence::identity(self.stereo_atom_count()),
+            Correspondence::identity(self.stereo_bond_count()),
+        );
+        let session = mem::replace(&mut self.correspondence, identity);
+        let mut editor = self.apply(edits)?;
+        let correspondence =
+            mem::replace(&mut editor.correspondence, MoleculeCorrespondence::empty());
+        editor.correspondence = session
+            .compose(&correspondence)
+            .expect("batch correspondence starts in the current editor id spaces");
+        Ok((editor, correspondence))
     }
 
     fn apply_edit(

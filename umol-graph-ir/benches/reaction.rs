@@ -234,6 +234,36 @@ fn benchmark_mutation(c: &mut Criterion) {
                 BatchSize::SmallInput,
             )
         });
+
+        group.bench_function(
+            BenchmarkId::new("tracked_apply/path_three_edits", size),
+            |b| {
+                b.iter_batched(
+                    || edits.clone(),
+                    |edits| {
+                        black_box(&molecule)
+                            .tracked_apply(edits)
+                            .expect("benchmark edit batch succeeds")
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+        group.bench_function(
+            BenchmarkId::new("tracked_transact/path_three_edits", size),
+            |b| {
+                b.iter_batched(
+                    || (molecule.edit(), edits.clone()),
+                    |(mut editor, edits)| {
+                        let result = editor
+                            .tracked_transact(edits)
+                            .expect("benchmark edit batch succeeds");
+                        black_box((editor, result))
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
         group.bench_function(BenchmarkId::new("combine/path_pair", size), |b| {
             b.iter(|| black_box(&molecule).combine(black_box(&molecule)))
         });

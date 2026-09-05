@@ -3418,8 +3418,56 @@ fn test_molecule_apply_error(
 ) {
     let original = molecule.clone();
 
+    assert_eq!(molecule.tracked_apply(edits.clone()), Err(expected.clone()));
     assert_eq!(molecule.apply(edits), Err(expected));
     assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::identity(false)]
+#[case::remove_all(true)]
+fn test_molecule_tracked_apply(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] remove_all: bool,
+) {
+    let source = Molecule::from_entries(entries);
+    let mut edits = Edits::new();
+    if remove_all {
+        edits.remove_topology(
+            (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
+            vec![],
+        );
+    }
+    let expected = if remove_all {
+        Molecule::new()
+    } else {
+        source.clone()
+    };
+    let witness = if remove_all {
+        MoleculeCorrespondence::new(
+            Correspondence::new(vec![], 4, 0).unwrap(),
+            Correspondence::new(vec![], 3, 0).unwrap(),
+            Correspondence::new(vec![], 1, 0).unwrap(),
+            Correspondence::new(vec![], 1, 0).unwrap(),
+            Correspondence::new(vec![], 1, 0).unwrap(),
+            Correspondence::new(vec![], 1, 0).unwrap(),
+            Correspondence::new(vec![], 1, 0).unwrap(),
+            Correspondence::new(vec![], 1, 0).unwrap(),
+        )
+    } else {
+        MoleculeCorrespondence::new(
+            Correspondence::identity(4),
+            Correspondence::identity(3),
+            Correspondence::identity(1),
+            Correspondence::identity(1),
+            Correspondence::identity(1),
+            Correspondence::identity(1),
+            Correspondence::identity(1),
+            Correspondence::identity(1),
+        )
+    };
+    assert_eq!(source.apply(edits.clone()), Ok(expected.clone()));
+    assert_eq!(source.tracked_apply(edits), Ok((expected, witness)));
 }
 
 #[rstest]
@@ -3503,6 +3551,175 @@ fn test_molecule_extract(#[from(rich_molecule)] molecule: Molecule) {
     let sub = molecule.induced_subgraph(&[AtomId(0), AtomId(1)]);
     let extracted = molecule.extract(&sub);
     assert_eq!(extracted.atoms().count(), 2);
+}
+
+#[rstest]
+fn test_transaction_tracked_rollback_error() {
+    let source = mol_dsl!(r#"{:atoms ["C"]}"#);
+    let mut editor = source.edit();
+    let mut edits = Edits::new();
+    edits.add_atom(AtomForm::from_element(Element::N));
+    let (transaction, _) = editor.tracked_transact(edits).unwrap();
+    editor.remove(&[AtomId(1)], &[]);
+    let before = editor.tracked_snapshot().unwrap();
+    let mut plain = editor.clone();
+    assert_eq!(
+        transaction.clone().rollback(&mut plain),
+        Err(TransactionError::RollbackStateMismatch)
+    );
+    assert_eq!(
+        transaction.tracked_rollback(&mut editor),
+        Err(TransactionError::RollbackStateMismatch)
+    );
+    assert_eq!(plain.tracked_snapshot(), Ok(before.clone()));
+    assert_eq!(editor.tracked_snapshot(), Ok(before));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_transact(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+    let source = Molecule::from_entries(entries);
+    let mut editor = source.edit();
+    editor.add_atom(AtomForm::from_element(Element::F));
+    let before = editor.tracked_snapshot().unwrap();
+    let mut plain = editor.clone();
+    let mut edits = Edits::new();
+    edits.remove_topology(
+        (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
+        vec![],
+    );
+    let added = edits.add_atom(AtomForm::from_element(Element::Cl));
+    edits.remove_atom(added);
+    edits.add_atom(AtomForm::from_element(Element::N));
+    let expected = mol_dsl!(r#"{:atoms ["F" "N"]}"#);
+    let expected_witness = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(4), AtomId(0))], 5, 2).unwrap(),
+        Correspondence::new(vec![], 3, 0).unwrap(),
+        Correspondence::new(vec![], 1, 0).unwrap(),
+        Correspondence::new(vec![], 1, 0).unwrap(),
+        Correspondence::new(vec![], 1, 0).unwrap(),
+        Correspondence::new(vec![], 1, 0).unwrap(),
+        Correspondence::new(vec![], 1, 0).unwrap(),
+        Correspondence::new(vec![], 1, 0).unwrap(),
+    );
+    let transaction = plain.transact(edits.clone()).unwrap();
+    let (tracked_transaction, witness) = editor.tracked_transact(edits).unwrap();
+    assert_eq!(tracked_transaction, transaction);
+    assert_eq!(witness, expected_witness);
+    assert_eq!(editor.snapshot(), Ok(expected));
+    assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
+    assert_eq!(
+        editor.tracked_snapshot().unwrap().1,
+        before.1.compose(&witness).unwrap()
+    );
+
+    let reverse = tracked_transaction.tracked_rollback(&mut editor).unwrap();
+    transaction.rollback(&mut plain).unwrap();
+    assert_eq!(reverse, witness.reverse());
+    assert_eq!(editor.snapshot(), Ok(before.0));
+    assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_transact_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries);
+    let mut editor = source.edit();
+    editor.add_atom(AtomForm::from_element(Element::F));
+    let before = editor.tracked_snapshot().unwrap();
+    let mut plain = editor.clone();
+    let mut edits = Edits::new();
+    edits.remove_topology(
+        (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
+        vec![],
+    );
+    edits.remove_atom(AtomHandle::Id(AtomId(5)));
+    let expected = TransactionError::HandleOutOfRange {
+        kind: EntityKind::Atom,
+        index: 5,
+        count: 5,
+    };
+    assert_eq!(
+        editor.clone().tracked_apply(edits.clone()).err(),
+        Some(expected.clone())
+    );
+    assert_eq!(plain.transact(edits.clone()), Err(expected.clone()));
+    assert_eq!(editor.tracked_transact(edits), Err(expected));
+    assert_eq!(plain.tracked_snapshot(), Ok(before.clone()));
+    assert_eq!(editor.tracked_snapshot(), Ok(before));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_apply() {
+    let source = mol_dsl!(r#"{:atoms ["C" "N" "O"]}"#);
+    let mut editor = source.edit();
+    editor.remove(&[AtomId(0)], &[]);
+    editor.add_atom(AtomForm::from_element(Element::F));
+    let mut edits = Edits::new();
+    edits.remove_atom(AtomHandle::Id(AtomId(0)));
+    let added = edits.add_atom(AtomForm::from_element(Element::Cl));
+    edits.remove_atom(added);
+    edits.add_atom(AtomForm::from_element(Element::N));
+    let plain = editor.clone().apply(edits.clone()).unwrap();
+    let (tracked, witness) = editor.tracked_apply(edits).unwrap();
+    let expected = mol_dsl!(r#"{:atoms ["O" "F" "N"]}"#);
+    let local = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(1), AtomId(0)), (AtomId(2), AtomId(1))], 3, 3).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    let session = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(2), AtomId(0))], 3, 3).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    assert_eq!(witness, local);
+    assert_eq!(plain.tracked_build(), (expected.clone(), session.clone()));
+    assert_eq!(tracked.tracked_build(), (expected, session));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_apply_transient() {
+    let source = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+    let mut editor = source.edit();
+    editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+    let mut plain = editor.clone();
+    let (editor, applied) = editor.tracked_apply(Edits::new()).unwrap();
+    let mut editor = editor;
+    let (transaction, transacted) = editor.tracked_transact(Edits::new()).unwrap();
+    let rolled_back = transaction.tracked_rollback(&mut editor).unwrap();
+    let expected = MoleculeCorrespondence::new(
+        Correspondence::identity(2),
+        Correspondence::identity(2),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    assert_eq!(applied, expected);
+    assert_eq!(transacted, expected);
+    assert_eq!(rolled_back, expected);
+    assert_eq!(
+        editor.snapshot(),
+        Err(MoleculeIntegrityError::BondsParallel {
+            atoms: [AtomId(0), AtomId(1)]
+        })
+    );
+    plain.remove(&[], &[BondId(1)]);
+    editor.remove(&[], &[BondId(1)]);
+    assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
 }
 
 #[rstest]

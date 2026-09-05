@@ -1373,6 +1373,23 @@ impl Molecule {
         Ok(editor.try_build()?)
     }
 
+    /// Apply a batch and return the resulting molecule with its source-to-result correspondence.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same transaction or integrity error as [`Self::apply`]. The source is unchanged.
+    ///
+    /// # Semantic properties
+    ///
+    /// Discarding the correspondence gives the same molecule as the plain operation.
+    pub fn tracked_apply(
+        &self,
+        edits: Edits,
+    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeApplyError> {
+        let editor = self.edit().apply(edits)?;
+        Ok(editor.try_tracked_build()?)
+    }
+
     /// Combine molecules by disjoint concatenation. Input order determines each entity kind's
     /// id ranges in the result: each input's entities follow all preceding inputs' entities of
     /// the same kind, preserving their order. No entities are identified or removed.
