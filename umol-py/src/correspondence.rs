@@ -195,6 +195,31 @@ pub struct MoleculeCorrespondence(GraphIrMoleculeCorrespondence);
 
 #[pymethods]
 impl MoleculeCorrespondence {
+    /// Assemble eight validated correspondences without binding them to molecules.
+    #[new]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        atoms: &Correspondence,
+        bonds: &Correspondence,
+        dative_bonds: &Correspondence,
+        aromatic_systems: &Correspondence,
+        multicenter_bonds: &Correspondence,
+        noncovalent_bonds: &Correspondence,
+        stereo_atoms: &Correspondence,
+        stereo_bonds: &Correspondence,
+    ) -> Self {
+        Self(GraphIrMoleculeCorrespondence::new(
+            atoms.to_rust(),
+            bonds.to_rust(),
+            dative_bonds.to_rust(),
+            aromatic_systems.to_rust(),
+            multicenter_bonds.to_rust(),
+            noncovalent_bonds.to_rust(),
+            stereo_atoms.to_rust(),
+            stereo_bonds.to_rust(),
+        ))
+    }
+
     /// A correspondence with no pairs and zero left and right counts for every entity kind.
     #[staticmethod]
     fn empty() -> Self {
@@ -719,6 +744,35 @@ mod tests {
                 &GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 4,)
                     .expect("correspondence producer preserves partial-bijection invariants")
             )
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_new(molecule_correspondence: GraphIrMoleculeCorrespondence) {
+        let atoms = Correspondence::from_rust(molecule_correspondence.atoms());
+        let bonds = Correspondence::from_rust(molecule_correspondence.bonds());
+        let dative_bonds = Correspondence::from_rust(molecule_correspondence.dative_bonds());
+        let aromatic_systems =
+            Correspondence::from_rust(molecule_correspondence.aromatic_systems());
+        let multicenter_bonds =
+            Correspondence::from_rust(molecule_correspondence.multicenter_bonds());
+        let noncovalent_bonds =
+            Correspondence::from_rust(molecule_correspondence.noncovalent_bonds());
+        let stereo_atoms = Correspondence::from_rust(molecule_correspondence.stereo_atoms());
+        let stereo_bonds = Correspondence::from_rust(molecule_correspondence.stereo_bonds());
+
+        assert_eq!(
+            MoleculeCorrespondence::new(
+                &atoms,
+                &bonds,
+                &dative_bonds,
+                &aromatic_systems,
+                &multicenter_bonds,
+                &noncovalent_bonds,
+                &stereo_atoms,
+                &stereo_bonds,
+            ),
+            MoleculeCorrespondence::from_rust(molecule_correspondence)
         );
     }
 

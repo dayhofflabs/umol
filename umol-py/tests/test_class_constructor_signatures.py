@@ -7,7 +7,18 @@ import umol
 @pytest.mark.parametrize(
     ("constructor", "expected"),
     [
+        (umol.Compaction, "(source_count, removed)"),
         (umol.Remapping, "(images)"),
+        (
+            umol.MoleculeCompaction,
+            "(atoms, bonds, dative_bonds, aromatic_systems, multicenter_bonds, "
+            "noncovalent_bonds, stereo_atoms, stereo_bonds)",
+        ),
+        (
+            umol.MoleculeCorrespondence,
+            "(atoms, bonds, dative_bonds, aromatic_systems, multicenter_bonds, "
+            "noncovalent_bonds, stereo_atoms, stereo_bonds)",
+        ),
         (
             umol.MoleculeRemapping,
             "(atoms, bonds, dative_bonds, aromatic_systems, multicenter_bonds, "

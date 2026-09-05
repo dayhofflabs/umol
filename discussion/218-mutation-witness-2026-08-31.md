@@ -1376,7 +1376,7 @@ the same object-only/tracked split, preserving their categorical mapping directi
 
 ### S8 — Python parity and integrated verification
 
-- [ ] **S8a — Python exposure.** umol-py correspondence, molecule, edit,
+- [x] **S8a — Python exposure.** umol-py correspondence, molecule, edit,
   reaction, exports, and API inventory. Additive/breaking (red→green).
   [dep: S2b, S3b, S4c, S5a, S5b, S5c, S6b, S7b]
   Complete bindings for the accepted witness types, conversions,
@@ -1385,6 +1385,24 @@ the same object-only/tracked split, preserving their categorical mapping directi
   native extension before tests. Verify direct calls outside notebooks,
   composition, bare/witnessed equivalence, and absence of flag-dependent
   witness returns and retired types.
+  Completed 2026-09-05: Python now exposes checked, frozen `Compaction` and
+  `MoleculeCompaction` carriers, including lossless correspondence conversion,
+  and permits direct construction of the open `MoleculeCorrespondence` carrier
+  from its eight validated components. `Molecule` exposes tracked application
+  and plain/tracked extraction. `MoleculeEditor` exposes plain/tracked consuming
+  application, publication, transactions, topology removal, and all six bulk
+  overlay-removal pairs; `Transaction` exposes tracked rollback. Invalid direct
+  removal ids raise `IndexError` before reaching the Rust methods' asserted
+  boundary. Existing reaction application, splitting, and canonicalization
+  pairs remain aligned and are covered by the public signature inventory.
+  `meet_pushout`, `tracked_meet_pushout`, `MoleculePushoutCorrespondence`, and
+  graph-level carriers are deliberately not exposed in this iteration. No
+  witness-selection flag or retired result carrier is present.
+
+  The native extension was rebuilt against Python 3.13. Binding unit tests
+  passed (1,635; 2 ignored), and the full Python suite passed (1,479; 2
+  skipped). The umol-py all-target Clippy gate passed with warnings denied;
+  nightly formatting and whitespace checks passed.
 - [ ] **S8b — End-to-end laws and measurement.** Existing operation property
   suites and S0 benchmarks. Additive (green). [dep: S8a]
   Exercise mixed compaction/remapping/correspondence sequences and

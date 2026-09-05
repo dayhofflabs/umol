@@ -22,6 +22,7 @@ from umol import (
     ContradictionError,
     Correspondence,
     DativeBondForm,
+    Edits,
     ElectronCountsForm,
     Element,
     ElementForm,
@@ -32,6 +33,7 @@ from umol import (
     MetadataError,
     ModelConversionError,
     Molecule,
+    MoleculeCompaction,
     MoleculeConstraint,
     MoleculeCorrespondence,
     MoleculeDefaults,
@@ -1211,6 +1213,56 @@ def test_molecule_correspondence_value():
         item for item in [correspondence, reverse]
     ) == composite
     assert MoleculeCorrespondence.compose_all(iter(())) is None
+
+
+def test_molecule_correspondence_constructor():
+    component = Correspondence([(0, 1)], 2, 3)
+    empty = Correspondence([], 0, 0)
+    correspondence = MoleculeCorrespondence(
+        component, empty, empty, empty, empty, empty, empty, empty
+    )
+
+    assert correspondence.atoms == component
+    assert correspondence.bonds == empty
+
+
+def test_molecule_tracked_apply():
+    molecule = Molecule.parse('{:atoms ["N#h3"]}')
+    edits = Edits.parse('[{:atom {:add "C#h4"}}]')
+
+    product, correspondence = molecule.tracked_apply(edits)
+
+    assert product == molecule.apply(edits)
+    assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
+    assert correspondence.bonds == Correspondence([], 0, 0)
+
+
+def test_molecule_tracked_extract():
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C")), AtomForm(Element("O")), AtomForm(Element("N"))],
+        bonds=[(0, 1, BondForm(1)), (1, 2, BondForm(1))],
+    )
+    empty = Correspondence([], 0, 0)
+    selection = MoleculeCorrespondence(
+        Correspondence([(0, 2), (1, 0)], 2, 3),
+        Correspondence([], 0, 2),
+        empty,
+        empty,
+        empty,
+        empty,
+        empty,
+        empty,
+    )
+
+    extracted, compaction = molecule.tracked_extract(selection)
+
+    assert isinstance(compaction, MoleculeCompaction)
+    assert extracted == molecule.extract(selection)
+    assert extracted == Molecule.from_entries(
+        [AtomForm(Element("C")), AtomForm(Element("N"))]
+    )
+    assert compaction.atoms.removed == [1]
+    assert compaction.bonds.removed == [0, 1]
 
 
 def test_molecule_split():

@@ -18,6 +18,7 @@ use crate::{
     bond::{BondForm, BondUpdate, BondView, BondViews},
     boolean::BooleanForm,
     canonicalize::CanonicalizeConfig,
+    compact::{Compaction, MoleculeCompaction},
     constraint::{
         aromatic::{
             AromaticSystemConstraintForm, AromaticSystemConstraintKey,
@@ -139,6 +140,8 @@ mod bond;
 mod boolean;
 #[cfg(feature = "graph")]
 mod canonicalize;
+#[cfg(feature = "graph")]
+mod compact;
 #[cfg(feature = "graph")]
 mod constraint;
 #[cfg(feature = "graph")]
@@ -324,6 +327,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RoleTaggedHashedFeatureSet>()?;
         module.add_class::<ReactionCombinedFingerprint>()?;
         module.add_class::<Correspondence>()?;
+        module.add_class::<Compaction>()?;
+        module.add_class::<MoleculeCompaction>()?;
         module.add_class::<Remapping>()?;
         module.add_class::<MoleculeRemapping>()?;
         module.add_class::<MoleculeCorrespondence>()?;

@@ -22,6 +22,7 @@ use umol_utils::solution::Solution as GraphSolution;
 use crate::aromatic::{AromaticSystemForm, AromaticSystemViews};
 use crate::atom::{AtomForm, AtomViews};
 use crate::bond::{BondForm, BondViews};
+use crate::compact::MoleculeCompaction;
 use crate::constraint::molecule::{Constraint, ConstraintsLike, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondForm, DativeBondViews};
@@ -277,6 +278,23 @@ impl Molecule {
             .map_err(molecule_apply_error)
     }
 
+    /// Apply the same checked edit batch and return the source-to-result correspondence.
+    fn tracked_apply(
+        &self,
+        py: Python<'_>,
+        edits: Py<Edits>,
+    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+        self.0
+            .tracked_apply(edits.bind(py).borrow().to_rust().clone())
+            .map(|(molecule, correspondence)| {
+                (
+                    Self::from_rust(molecule),
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
+            .map_err(molecule_apply_error)
+    }
+
     /// Combine by disjoint concatenation. For each entity kind, this molecule's ids remain
     /// the prefix and other follows in its original order.
     fn combine(&self, other: &Self) -> Self {
@@ -420,6 +438,20 @@ impl Molecule {
                 )
             })
             .collect()
+    }
+
+    /// Extract the atoms selected by a sub-to-host correspondence, preserving host order.
+    fn extract(&self, selection: &MoleculeCorrespondence) -> Self {
+        Self::from_rust(self.0.extract(selection.to_rust()))
+    }
+
+    /// Return the same extraction and its host-to-result compaction.
+    fn tracked_extract(&self, selection: &MoleculeCorrespondence) -> (Self, MoleculeCompaction) {
+        let (molecule, compaction) = self.0.tracked_extract(selection.to_rust());
+        (
+            Self::from_rust(molecule),
+            MoleculeCompaction::from_rust(compaction),
+        )
     }
 
     /// Find occurrences of this pattern in `host`.

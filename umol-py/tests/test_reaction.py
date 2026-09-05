@@ -211,21 +211,6 @@ def test_reaction_application_config_value(
     )
 
 
-@pytest.mark.parametrize(
-    "value_type,message",
-    [
-        pytest.param(
-            MoleculeCorrespondence,
-            "cannot create 'builtins.MoleculeCorrespondence' instances",
-            id="molecule-correspondence",
-        ),
-    ],
-)
-def test_return_only_value_constructor_error(value_type, message):
-    with pytest.raises(TypeError, match=f"^{message}$"):
-        value_type()
-
-
 def test_reaction_constructor():
     empty = Reaction()
     populated = Reaction(
