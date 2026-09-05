@@ -790,12 +790,12 @@ mod tests {
                 Compaction::new(2, vec![NodeId(1)]).unwrap(),
                 Compaction::new(2, vec![EdgeId(1)]).unwrap(),
             ),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
         );
         assert_eq!(cs.clone().compact(&compaction), cs);
     }

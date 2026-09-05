@@ -165,7 +165,7 @@ mod tests {
         // node 1 removed ⇒ surviving node 3 densifies to 2; the kind is carried
         let compaction = GraphCompaction::new(
             Compaction::new(4, vec![NodeId(1)]).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
         assert_eq!(
@@ -181,7 +181,7 @@ mod tests {
     fn test_stereo_ligand_compact_removed() {
         let compaction = GraphCompaction::new(
             Compaction::new(4, vec![NodeId(3)]).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
         assert_eq!(ligand.compact(&compaction), None);
@@ -191,7 +191,7 @@ mod tests {
     fn test_stereo_ligand_uncompact() {
         let compaction = GraphCompaction::new(
             Compaction::new(4, vec![NodeId(1)]).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
         assert_eq!(

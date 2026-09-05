@@ -40,6 +40,16 @@ pub struct Compaction<Id> {
     removed: Vec<Id>,
 }
 
+impl<Id> Compaction<Id> {
+    /// No removals from an empty source domain; the result domain is also empty.
+    pub const fn empty() -> Self {
+        Self {
+            source_count: 0,
+            removed: Vec::new(),
+        }
+    }
+}
+
 impl<Id> Compaction<Id>
 where
     Id: Copy + Ord + Into<usize> + Add<usize, Output = Id> + Sub<usize, Output = Id>,
@@ -156,6 +166,14 @@ pub struct GraphCompaction {
 }
 
 impl GraphCompaction {
+    /// Compaction between empty node and edge domains.
+    pub const fn empty() -> Self {
+        Self {
+            nodes: Compaction::empty(),
+            edges: Compaction::empty(),
+        }
+    }
+
     /// Assemble validated node and edge compactions.
     pub fn new(nodes: Compaction<NodeId>, edges: Compaction<EdgeId>) -> Self {
         Self { nodes, edges }
@@ -192,10 +210,22 @@ impl GraphCompaction {
 
 #[cfg(test)]
 mod tests {
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
+
+    #[rstest]
+    fn test_compaction_empty() {
+        assert_eq!(
+            Compaction::<NodeId>::empty(),
+            Compaction {
+                source_count: 0,
+                removed: vec![]
+            }
+        );
+    }
 
     #[rstest]
     #[case(CompactionError::RemovedIdOutOfRange { id: NodeId(2), source_count: 2 }, "removed id NodeId(2) is out of range for 2 entries")]
@@ -417,6 +447,24 @@ mod tests {
     fn test_compaction_removed(#[case] removed: Vec<NodeId>, #[case] expected: Vec<NodeId>) {
         assert_eq!(Compaction::new(10, removed).unwrap().removed(), expected);
     }
+
+    #[rstest]
+    fn test_graph_compaction_empty() {
+        assert_eq!(
+            GraphCompaction::empty(),
+            GraphCompaction {
+                nodes: Compaction {
+                    source_count: 0,
+                    removed: vec![]
+                },
+                edges: Compaction {
+                    source_count: 0,
+                    removed: vec![]
+                },
+            }
+        );
+    }
+
     #[rstest]
     #[case::empty(NodeId(0), vec![], Some(NodeId(0)))]
     #[case::before_removed(NodeId(0), vec![NodeId(2)], Some(NodeId(0)))]
@@ -428,10 +476,8 @@ mod tests {
         #[case] removed: Vec<NodeId>,
         #[case] expected: Option<NodeId>,
     ) {
-        let compaction = GraphCompaction::new(
-            Compaction::new(6, removed).unwrap(),
-            Compaction::identity(0),
-        );
+        let compaction =
+            GraphCompaction::new(Compaction::new(6, removed).unwrap(), Compaction::empty());
         assert_eq!(compaction.compact_node(old), expected);
     }
 
@@ -446,10 +492,8 @@ mod tests {
         #[case] removed: Vec<NodeId>,
         #[case] expected: NodeId,
     ) {
-        let compaction = GraphCompaction::new(
-            Compaction::new(6, removed).unwrap(),
-            Compaction::identity(0),
-        );
+        let compaction =
+            GraphCompaction::new(Compaction::new(6, removed).unwrap(), Compaction::empty());
         assert_eq!(compaction.uncompact_node(post), expected);
     }
 }

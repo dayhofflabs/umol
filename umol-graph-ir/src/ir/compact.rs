@@ -32,6 +32,19 @@ pub struct UndoCompaction {
 }
 
 impl MoleculeCompaction {
+    /// Empty source and result domains for all eight entity kinds.
+    pub const fn empty() -> Self {
+        Self {
+            graph: GraphCompaction::empty(),
+            dative_bonds: Compaction::empty(),
+            aromatic_systems: Compaction::empty(),
+            multicenter_bonds: Compaction::empty(),
+            noncovalent_bonds: Compaction::empty(),
+            stereo_atoms: Compaction::empty(),
+            stereo_bonds: Compaction::empty(),
+        }
+    }
+
     /// Assemble count-bearing compactions for all eight entity kinds.
     ///
     /// Components are already validated; agreement with a molecule is contextual.
@@ -175,6 +188,18 @@ mod tests {
     use umol_graph_core::{Correspondence, GraphCompaction};
 
     use super::*;
+
+    #[rstest]
+    fn test_molecule_compaction_empty() {
+        let actual = MoleculeCompaction::empty();
+        assert_eq!(actual.graph(), &GraphCompaction::empty());
+        assert_eq!(actual.dative_bonds(), &Compaction::empty());
+        assert_eq!(actual.aromatic_systems(), &Compaction::empty());
+        assert_eq!(actual.multicenter_bonds(), &Compaction::empty());
+        assert_eq!(actual.noncovalent_bonds(), &Compaction::empty());
+        assert_eq!(actual.stereo_atoms(), &Compaction::empty());
+        assert_eq!(actual.stereo_bonds(), &Compaction::empty());
+    }
     use crate::ir::correspondence::MoleculeCorrespondence;
 
     #[fixture]

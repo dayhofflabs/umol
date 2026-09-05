@@ -3,6 +3,24 @@ import pytest
 from umol import MoleculeRemapping, Remapping
 
 
+def test_remapping_empty():
+    assert Remapping.empty() == Remapping([])
+
+
+@pytest.mark.parametrize("count", [0, 1, 4])
+def test_remapping_identity(count):
+    assert Remapping.identity(count) == Remapping(list(range(count)))
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["atoms", "bonds", "dative_bonds", "aromatic_systems", "multicenter_bonds",
+     "noncovalent_bonds", "stereo_atoms", "stereo_bonds"],
+)
+def test_molecule_remapping_empty(field):
+    assert getattr(MoleculeRemapping.empty(), field) == Remapping([])
+
+
 @pytest.mark.parametrize("images", [[], [0], [2, 0, 1]])
 def test_remapping_constructor(images):
     remapping = Remapping(images)
@@ -52,8 +70,8 @@ def test_remapping_frozen():
 @pytest.fixture
 def molecule_remapping():
     return MoleculeRemapping(
-        Remapping([2, 0, 1]), Remapping([1, 0]), Remapping([0]), Remapping([]),
-        Remapping([1, 0]), Remapping([0]), Remapping([0, 1]), Remapping([]),
+        Remapping([2, 0, 1]), Remapping([1, 0]), Remapping.identity(1), Remapping.empty(),
+        Remapping([1, 0]), Remapping.identity(1), Remapping.identity(2), Remapping.empty(),
     )
 
 

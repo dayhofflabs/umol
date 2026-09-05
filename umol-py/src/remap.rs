@@ -19,6 +19,18 @@ pub struct Remapping(GraphCoreRemapping<NodeId>);
 
 #[pymethods]
 impl Remapping {
+    /// The permutation of the empty id space.
+    #[staticmethod]
+    fn empty() -> Self {
+        Self(GraphCoreRemapping::empty())
+    }
+
+    /// The identity permutation of range(count).
+    #[staticmethod]
+    fn identity(count: usize) -> Self {
+        Self(GraphCoreRemapping::identity(count))
+    }
+
     /// Construct from images in source-id order.
     /// Raises ValueError for an out-of-range or repeated image.
     #[new]
@@ -99,6 +111,12 @@ pub struct MoleculeRemapping(GraphIrMoleculeRemapping);
 
 #[pymethods]
 impl MoleculeRemapping {
+    /// Empty permutations for all eight entity kinds.
+    #[staticmethod]
+    fn empty() -> Self {
+        Self(GraphIrMoleculeRemapping::empty())
+    }
+
     /// Assemble eight validated permutations without binding them to a molecule.
     #[new]
     #[allow(clippy::too_many_arguments)]

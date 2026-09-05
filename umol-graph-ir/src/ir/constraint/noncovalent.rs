@@ -416,7 +416,6 @@ impl From<Vec<NoncovalentBondConstraintForm>> for NoncovalentBondConstraintsForm
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{Compaction, GraphCompaction};
 
     use super::*;
 
@@ -718,15 +717,7 @@ mod tests {
         let cs = NoncovalentBondConstraintsForm::from(
             NoncovalentBondConstraintForm::intramolecular(true),
         );
-        let compaction = MoleculeCompaction::new(
-            GraphCompaction::new(Compaction::identity(0), Compaction::identity(0)),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-        );
+        let compaction = MoleculeCompaction::empty();
         assert_eq!(cs.clone().compact(&compaction), cs);
     }
 

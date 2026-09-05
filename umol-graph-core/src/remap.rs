@@ -37,7 +37,23 @@ pub struct Remapping<Id> {
 
 impl<Id> Default for Remapping<Id> {
     fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl<Id> Remapping<Id> {
+    /// The permutation of the empty id space.
+    pub const fn empty() -> Self {
         Self { images: Vec::new() }
+    }
+}
+
+impl<Id: From<usize>> Remapping<Id> {
+    /// The identity permutation of `0..count`.
+    pub fn identity(count: usize) -> Self {
+        Self {
+            images: (0..count).map(Id::from).collect(),
+        }
     }
 }
 
@@ -134,6 +150,22 @@ pub struct GraphRemapping {
 }
 
 impl GraphRemapping {
+    /// Empty node and edge permutations.
+    pub const fn empty() -> Self {
+        Self {
+            nodes: Remapping::empty(),
+            edges: Remapping::empty(),
+        }
+    }
+
+    /// Identity permutations for the declared node and edge counts.
+    pub fn identity(node_count: usize, edge_count: usize) -> Self {
+        Self {
+            nodes: Remapping::identity(node_count),
+            edges: Remapping::identity(edge_count),
+        }
+    }
+
     /// Assemble already-valid node and edge permutations.
     pub fn new(nodes: Remapping<NodeId>, edges: Remapping<EdgeId>) -> Self {
         Self { nodes, edges }
@@ -199,6 +231,19 @@ mod tests {
     #[case(RemappingError::DuplicateImage { id: NodeId(1) }, "image NodeId(1) occurs more than once")]
     fn test_remapping_error_display(#[case] error: RemappingError<NodeId>, #[case] expected: &str) {
         assert_eq!(error.to_string(), expected);
+    }
+
+    #[rstest]
+    fn test_remapping_empty() {
+        assert_eq!(Remapping::<NodeId>::empty(), Remapping { images: vec![] });
+    }
+
+    #[rstest]
+    #[case::empty(0, vec![])]
+    #[case::singleton(1, vec![NodeId(0)])]
+    #[case::multiple(3, vec![NodeId(0), NodeId(1), NodeId(2)])]
+    fn test_remapping_identity(#[case] count: usize, #[case] images: Vec<NodeId>) {
+        assert_eq!(Remapping::identity(count), Remapping { images });
     }
 
     #[rstest]
@@ -303,7 +348,7 @@ mod tests {
     #[rstest]
     #[should_panic(expected = "id outside remapping source domain")]
     fn test_remapping_map_error() {
-        Remapping::<NodeId>::new(vec![]).unwrap().map(NodeId(0));
+        Remapping::empty().map(NodeId(0));
     }
 
     #[rstest]
@@ -321,7 +366,7 @@ mod tests {
     #[case::singleton(vec![10])]
     #[case::multiple(vec![10, 20, 30])]
     fn test_remapping_remap_vec_identity(#[case] values: Vec<u32>) {
-        let remapping = Remapping::new((0..values.len()).map(NodeId::from).collect()).unwrap();
+        let remapping = Remapping::<NodeId>::identity(values.len());
         assert_eq!(remapping.remap_vec(values.clone()), values);
     }
 
@@ -387,10 +432,7 @@ mod tests {
 
     #[rstest]
     fn test_remapping_default() {
-        assert_eq!(
-            Remapping::<NodeId>::default(),
-            Remapping::new(vec![]).unwrap()
-        );
+        assert_eq!(Remapping::<NodeId>::default(), Remapping::empty());
     }
 
     #[fixture]
@@ -399,6 +441,31 @@ mod tests {
             Remapping::new(vec![NodeId(2), NodeId(0), NodeId(1)]).unwrap(),
             Remapping::new(vec![EdgeId(1), EdgeId(0)]).unwrap(),
         )
+    }
+
+    #[rstest]
+    fn test_graph_remapping_empty() {
+        assert_eq!(
+            GraphRemapping::empty(),
+            GraphRemapping {
+                nodes: Remapping { images: vec![] },
+                edges: Remapping { images: vec![] },
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![])]
+    #[case::isolated(vec![NodeId(0), NodeId(1)], vec![])]
+    #[case::unequal(vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0), EdgeId(1)])]
+    fn test_graph_remapping_identity(#[case] nodes: Vec<NodeId>, #[case] edges: Vec<EdgeId>) {
+        assert_eq!(
+            GraphRemapping::identity(nodes.len(), edges.len()),
+            GraphRemapping {
+                nodes: Remapping { images: nodes },
+                edges: Remapping { images: edges },
+            }
+        );
     }
 
     #[rstest]

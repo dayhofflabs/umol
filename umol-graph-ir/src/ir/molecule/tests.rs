@@ -1265,44 +1265,14 @@ fn framed_eq_under_molecules(
     let correspondence = MoleculeRemapping::new(
         GraphRemapping::new(
             Remapping::new(atom_images.iter().copied().map(NodeId::from).collect()).unwrap(),
-            Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap(),
+            Remapping::identity(left.bonds().count()),
         ),
-        Remapping::new(
-            (0..left.dative_bonds().count())
-                .map(DativeBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.aromatic_systems().count())
-                .map(AromaticSystemId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.multicenter_bonds().count())
-                .map(MulticenterBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.noncovalent_bonds().count())
-                .map(NoncovalentBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_atoms().count())
-                .map(StereoAtomId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_bonds().count())
-                .map(StereoBondId::from)
-                .collect(),
-        )
-        .unwrap(),
+        Remapping::identity(left.dative_bonds().count()),
+        Remapping::identity(left.aromatic_systems().count()),
+        Remapping::identity(left.multicenter_bonds().count()),
+        Remapping::identity(left.noncovalent_bonds().count()),
+        Remapping::identity(left.stereo_atoms().count()),
+        Remapping::identity(left.stereo_bonds().count()),
     );
 
     (left, right, correspondence)
@@ -1859,46 +1829,13 @@ fn test_molecule_framed_eq_under_aromatic_system_frame() {
         ..Default::default()
     });
     let correspondence = MoleculeRemapping::new(
-        GraphRemapping::new(
-            Remapping::new((0..left.atoms().count()).map(NodeId::from).collect()).unwrap(),
-            Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap(),
-        ),
-        Remapping::new(
-            (0..left.dative_bonds().count())
-                .map(DativeBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.aromatic_systems().count())
-                .map(AromaticSystemId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.multicenter_bonds().count())
-                .map(MulticenterBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.noncovalent_bonds().count())
-                .map(NoncovalentBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_atoms().count())
-                .map(StereoAtomId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_bonds().count())
-                .map(StereoBondId::from)
-                .collect(),
-        )
-        .unwrap(),
+        GraphRemapping::identity(left.atoms().count(), left.bonds().count()),
+        Remapping::identity(left.dative_bonds().count()),
+        Remapping::identity(left.aromatic_systems().count()),
+        Remapping::identity(left.multicenter_bonds().count()),
+        Remapping::identity(left.noncovalent_bonds().count()),
+        Remapping::identity(left.stereo_atoms().count()),
+        Remapping::identity(left.stereo_bonds().count()),
     );
 
     assert!(!left.normalized_eq(&right));
@@ -1947,46 +1884,13 @@ fn test_molecule_framed_eq_under_stereo_atom_constraint() {
         ..Default::default()
     });
     let correspondence = MoleculeRemapping::new(
-        GraphRemapping::new(
-            Remapping::new((0..left.atoms().count()).map(NodeId::from).collect()).unwrap(),
-            Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap(),
-        ),
-        Remapping::new(
-            (0..left.dative_bonds().count())
-                .map(DativeBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.aromatic_systems().count())
-                .map(AromaticSystemId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.multicenter_bonds().count())
-                .map(MulticenterBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.noncovalent_bonds().count())
-                .map(NoncovalentBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_atoms().count())
-                .map(StereoAtomId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_bonds().count())
-                .map(StereoBondId::from)
-                .collect(),
-        )
-        .unwrap(),
+        GraphRemapping::identity(left.atoms().count(), left.bonds().count()),
+        Remapping::identity(left.dative_bonds().count()),
+        Remapping::identity(left.aromatic_systems().count()),
+        Remapping::identity(left.multicenter_bonds().count()),
+        Remapping::identity(left.noncovalent_bonds().count()),
+        Remapping::identity(left.stereo_atoms().count()),
+        Remapping::identity(left.stereo_bonds().count()),
     );
 
     assert!(left.framed_eq_under(&right, &correspondence));
@@ -2041,46 +1945,13 @@ fn test_molecule_framed_eq_under_stereo_bond_block() {
         ..Default::default()
     });
     let correspondence = MoleculeRemapping::new(
-        GraphRemapping::new(
-            Remapping::new((0..left.atoms().count()).map(NodeId::from).collect()).unwrap(),
-            Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap(),
-        ),
-        Remapping::new(
-            (0..left.dative_bonds().count())
-                .map(DativeBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.aromatic_systems().count())
-                .map(AromaticSystemId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.multicenter_bonds().count())
-                .map(MulticenterBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.noncovalent_bonds().count())
-                .map(NoncovalentBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_atoms().count())
-                .map(StereoAtomId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_bonds().count())
-                .map(StereoBondId::from)
-                .collect(),
-        )
-        .unwrap(),
+        GraphRemapping::identity(left.atoms().count(), left.bonds().count()),
+        Remapping::identity(left.dative_bonds().count()),
+        Remapping::identity(left.aromatic_systems().count()),
+        Remapping::identity(left.multicenter_bonds().count()),
+        Remapping::identity(left.noncovalent_bonds().count()),
+        Remapping::identity(left.stereo_atoms().count()),
+        Remapping::identity(left.stereo_bonds().count()),
     );
 
     assert!(!left.normalized_eq(&right));
@@ -2178,7 +2049,7 @@ fn test_molecule_framed_eq_under_participant_mismatch_error(#[case] entity: Enti
     };
     assert_ne!(left, right, "{entity}: the shift must actually move a participant");
 
-    let correspondence = MoleculeRemapping::new(GraphRemapping::new(Remapping::new((0..left.atoms().count()).map(NodeId::from).collect()).unwrap(), Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap()), Remapping::new((0..left.dative_bonds().count()).map(DativeBondId::from).collect()).unwrap(), Remapping::new((0..left.aromatic_systems().count()).map(AromaticSystemId::from).collect()).unwrap(), Remapping::new((0..left.multicenter_bonds().count()).map(MulticenterBondId::from).collect()).unwrap(), Remapping::new((0..left.noncovalent_bonds().count()).map(NoncovalentBondId::from).collect()).unwrap(), Remapping::new((0..left.stereo_atoms().count()).map(StereoAtomId::from).collect()).unwrap(), Remapping::new((0..left.stereo_bonds().count()).map(StereoBondId::from).collect()).unwrap());
+    let correspondence = MoleculeRemapping::new(GraphRemapping::identity(left.atoms().count(), left.bonds().count()), Remapping::identity(left.dative_bonds().count()), Remapping::identity(left.aromatic_systems().count()), Remapping::identity(left.multicenter_bonds().count()), Remapping::identity(left.noncovalent_bonds().count()), Remapping::identity(left.stereo_atoms().count()), Remapping::identity(left.stereo_bonds().count()));
 
     assert!(
         !left.framed_eq_under(&right, &correspondence),
@@ -2204,42 +2075,12 @@ fn test_molecule_framed_eq_under_entity_id_mismatch_error(
             Remapping::new(vec![NodeId(2), NodeId(3), NodeId(0), NodeId(1)]).unwrap(),
             Remapping::new(vec![EdgeId(1), EdgeId(0), EdgeId(2)]).unwrap(),
         ),
-        Remapping::new(
-            (0..left.dative_bonds().count())
-                .map(DativeBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.aromatic_systems().count())
-                .map(AromaticSystemId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.multicenter_bonds().count())
-                .map(MulticenterBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.noncovalent_bonds().count())
-                .map(NoncovalentBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_atoms().count())
-                .map(StereoAtomId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_bonds().count())
-                .map(StereoBondId::from)
-                .collect(),
-        )
-        .unwrap(),
+        Remapping::identity(left.dative_bonds().count()),
+        Remapping::identity(left.aromatic_systems().count()),
+        Remapping::identity(left.multicenter_bonds().count()),
+        Remapping::identity(left.noncovalent_bonds().count()),
+        Remapping::identity(left.stereo_atoms().count()),
+        Remapping::identity(left.stereo_bonds().count()),
     );
     assert!(!left.framed_eq_under(&right, &inconsistent));
 }
@@ -2268,55 +2109,15 @@ fn test_molecule_try_remap_error(
     let (left, _, _) = case;
     let remapping = MoleculeRemapping::new(
         GraphRemapping::new(
-            Remapping::new(
-                (0..left.atoms().count() + usize::from(kind == 0))
-                    .map(NodeId::from)
-                    .collect(),
-            )
-            .unwrap(),
-            Remapping::new(
-                (0..left.bonds().count() + usize::from(kind == 1))
-                    .map(EdgeId::from)
-                    .collect(),
-            )
-            .unwrap(),
+            Remapping::identity(left.atoms().count() + usize::from(kind == 0)),
+            Remapping::identity(left.bonds().count() + usize::from(kind == 1)),
         ),
-        Remapping::new(
-            (0..left.dative_bonds().count() + usize::from(kind == 2))
-                .map(DativeBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.aromatic_systems().count() + usize::from(kind == 3))
-                .map(AromaticSystemId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.multicenter_bonds().count() + usize::from(kind == 4))
-                .map(MulticenterBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.noncovalent_bonds().count() + usize::from(kind == 5))
-                .map(NoncovalentBondId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_atoms().count() + usize::from(kind == 6))
-                .map(StereoAtomId::from)
-                .collect(),
-        )
-        .unwrap(),
-        Remapping::new(
-            (0..left.stereo_bonds().count() + usize::from(kind == 7))
-                .map(StereoBondId::from)
-                .collect(),
-        )
-        .unwrap(),
+        Remapping::identity(left.dative_bonds().count() + usize::from(kind == 2)),
+        Remapping::identity(left.aromatic_systems().count() + usize::from(kind == 3)),
+        Remapping::identity(left.multicenter_bonds().count() + usize::from(kind == 4)),
+        Remapping::identity(left.noncovalent_bonds().count() + usize::from(kind == 5)),
+        Remapping::identity(left.stereo_atoms().count() + usize::from(kind == 6)),
+        Remapping::identity(left.stereo_bonds().count() + usize::from(kind == 7)),
     );
     assert_eq!(left.try_remap(&remapping), None);
 }

@@ -1164,6 +1164,16 @@ the same object-only/tracked split, preserving their categorical mapping directi
   after rebuilding the extension. Final workspace all-targets check,
   core/IR/Python property-enabled all-targets clippy with `-D warnings`,
   nightly formatting, and `git diff --check` passed.
+  Follow-up constructor cleanup: added zero-domain `empty()` to single-space,
+  graph, and molecule remapping/compaction types, plus declared-count identity
+  constructors for single-space and graph remappings. Existing remapping
+  defaults are unchanged; molecule-level identity constructors remain deferred.
+  Python mirrors the supported remapping constructors. Replaced equivalent
+  empty and identity constructions without changing nonzero domain counts.
+  Verification: 7,636 core/IR library tests passed (3 ignored), 491 properties
+  passed at 256 cases (1 ignored), and 1,370 Python tests passed (2 skipped)
+  after rebuilding. Workspace all-targets check, core/IR/Python all-targets
+  property-enabled clippy, nightly formatting, and diff checks passed.
 - [ ] **S5c — Removal and extraction.** Graph-IR editor removal families and
   molecule extraction. Breaking (red→green). [dep: S3b, S4a]
   Compactions are optional provenance, not the primary result. Add

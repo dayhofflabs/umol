@@ -24,6 +24,19 @@ pub struct MoleculeRemapping {
 }
 
 impl MoleculeRemapping {
+    /// Empty source and result domains for all eight entity kinds.
+    pub const fn empty() -> Self {
+        Self {
+            graph: GraphRemapping::empty(),
+            dative_bonds: Remapping::empty(),
+            aromatic_systems: Remapping::empty(),
+            multicenter_bonds: Remapping::empty(),
+            noncovalent_bonds: Remapping::empty(),
+            stereo_atoms: Remapping::empty(),
+            stereo_bonds: Remapping::empty(),
+        }
+    }
+
     /// Assemble already-valid graph and overlay permutations.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -204,15 +217,7 @@ impl MoleculeRemapping {
 
 impl Default for MoleculeRemapping {
     fn default() -> Self {
-        Self::new(
-            GraphRemapping::new(Remapping::default(), Remapping::default()),
-            Remapping::default(),
-            Remapping::default(),
-            Remapping::default(),
-            Remapping::default(),
-            Remapping::default(),
-            Remapping::default(),
-        )
+        Self::empty()
     }
 }
 
@@ -223,6 +228,18 @@ mod tests {
     use umol_graph_core::Correspondence;
 
     use super::*;
+
+    #[rstest]
+    fn test_molecule_remapping_empty() {
+        let actual = MoleculeRemapping::empty();
+        assert_eq!(actual.graph(), &GraphRemapping::empty());
+        assert_eq!(actual.dative_bonds(), &Remapping::empty());
+        assert_eq!(actual.aromatic_systems(), &Remapping::empty());
+        assert_eq!(actual.multicenter_bonds(), &Remapping::empty());
+        assert_eq!(actual.noncovalent_bonds(), &Remapping::empty());
+        assert_eq!(actual.stereo_atoms(), &Remapping::empty());
+        assert_eq!(actual.stereo_bonds(), &Remapping::empty());
+    }
     use crate::ir::MoleculeCorrespondence;
 
     #[fixture]
@@ -456,20 +473,6 @@ mod tests {
 
     #[rstest]
     fn test_molecule_remapping_default() {
-        assert_eq!(
-            MoleculeRemapping::default(),
-            MoleculeRemapping::new(
-                GraphRemapping::new(
-                    Remapping::new(vec![]).unwrap(),
-                    Remapping::new(vec![]).unwrap()
-                ),
-                Remapping::new(vec![]).unwrap(),
-                Remapping::new(vec![]).unwrap(),
-                Remapping::new(vec![]).unwrap(),
-                Remapping::new(vec![]).unwrap(),
-                Remapping::new(vec![]).unwrap(),
-                Remapping::new(vec![]).unwrap()
-            )
-        );
+        assert_eq!(MoleculeRemapping::default(), MoleculeRemapping::empty());
     }
 }

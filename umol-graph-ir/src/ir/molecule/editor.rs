@@ -2123,14 +2123,14 @@ mod tests {
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
         let undo = MoleculeCompaction::new(
-            GraphCompaction::new(Compaction::identity(2), Compaction::identity(0)),
+            GraphCompaction::new(Compaction::identity(2), Compaction::empty()),
             Compaction::new(2, vec![removed.id])
                 .expect("removed entities belong to the source table"),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
+            Compaction::empty(),
         )
         .undo_compaction();
         b.restore_dative_bonds(vec![removed], &undo);

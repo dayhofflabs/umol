@@ -3437,47 +3437,13 @@ mod tests {
             ..Default::default()
         });
         let correspondence = MoleculeRemapping::new(
-            GraphRemapping::new(
-                Remapping::new((0..1 + usize::from(kind == 0)).map(NodeId::from).collect())
-                    .unwrap(),
-                Remapping::new((0..usize::from(kind == 1)).map(EdgeId::from).collect()).unwrap(),
-            ),
-            Remapping::new(
-                (0..usize::from(kind == 2))
-                    .map(DativeBondId::from)
-                    .collect(),
-            )
-            .unwrap(),
-            Remapping::new(
-                (0..usize::from(kind == 3))
-                    .map(AromaticSystemId::from)
-                    .collect(),
-            )
-            .unwrap(),
-            Remapping::new(
-                (0..usize::from(kind == 4))
-                    .map(MulticenterBondId::from)
-                    .collect(),
-            )
-            .unwrap(),
-            Remapping::new(
-                (0..usize::from(kind == 5))
-                    .map(NoncovalentBondId::from)
-                    .collect(),
-            )
-            .unwrap(),
-            Remapping::new(
-                (0..usize::from(kind == 6))
-                    .map(StereoAtomId::from)
-                    .collect(),
-            )
-            .unwrap(),
-            Remapping::new(
-                (0..usize::from(kind == 7))
-                    .map(StereoBondId::from)
-                    .collect(),
-            )
-            .unwrap(),
+            GraphRemapping::identity(1 + usize::from(kind == 0), usize::from(kind == 1)),
+            Remapping::identity(usize::from(kind == 2)),
+            Remapping::identity(usize::from(kind == 3)),
+            Remapping::identity(usize::from(kind == 4)),
+            Remapping::identity(usize::from(kind == 5)),
+            Remapping::identity(usize::from(kind == 6)),
+            Remapping::identity(usize::from(kind == 7)),
         );
 
         assert_eq!(span.try_remap(&correspondence), None);

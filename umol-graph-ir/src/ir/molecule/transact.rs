@@ -5295,16 +5295,7 @@ mod tests {
                     atoms: Vec::new(),
                     attributes: AromaticSystemForm::default(),
                 }],
-                undo_compaction: MoleculeCompaction::new(
-                    GraphCompaction::new(Compaction::identity(0), Compaction::identity(0)),
-                    Compaction::identity(0),
-                    Compaction::identity(0),
-                    Compaction::identity(0),
-                    Compaction::identity(0),
-                    Compaction::identity(0),
-                    Compaction::identity(0),
-                )
-                .undo_compaction(),
+                undo_compaction: MoleculeCompaction::empty().undo_compaction(),
                 cascade: CascadedConstraints::default(),
             }],
         };
@@ -5361,15 +5352,7 @@ mod tests {
 
     #[rstest]
     fn test_transaction_rollback_compaction_dimension(mut one_atom: MoleculeEditor) {
-        let compaction = MoleculeCompaction::new(
-            GraphCompaction::new(Compaction::identity(0), Compaction::identity(0)),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-            Compaction::identity(0),
-        );
+        let compaction = MoleculeCompaction::empty();
         let transaction = Transaction {
             undo: vec![Undo::RestoreRemovedTopology {
                 atoms: vec![RemovedAtom {

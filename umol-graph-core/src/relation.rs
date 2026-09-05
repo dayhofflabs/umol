@@ -2908,7 +2908,7 @@ mod tests {
     fn test_node_id_compact(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
         let compaction = GraphCompaction::new(
             Compaction::new(3, vec![NodeId(1)]).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         assert_eq!(id.compact(&compaction), expected);
     }
@@ -2919,7 +2919,7 @@ mod tests {
     fn test_node_id_uncompact(#[case] id: NodeId, #[case] expected: NodeId) {
         let compaction = GraphCompaction::new(
             Compaction::new(3, vec![NodeId(1)]).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         assert_eq!(id.uncompact(&compaction), expected);
     }
@@ -2940,7 +2940,7 @@ mod tests {
     #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
     fn test_edge_id_compact(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
         let compaction = GraphCompaction::new(
-            Compaction::identity(0),
+            Compaction::empty(),
             Compaction::new(3, vec![EdgeId(0)]).unwrap(),
         );
         assert_eq!(id.compact(&compaction), expected);
@@ -2951,7 +2951,7 @@ mod tests {
     #[case::after_gap(EdgeId(1), EdgeId(2))]
     fn test_edge_id_uncompact(#[case] id: EdgeId, #[case] expected: EdgeId) {
         let compaction = GraphCompaction::new(
-            Compaction::identity(0),
+            Compaction::empty(),
             Compaction::new(3, vec![EdgeId(1)]).unwrap(),
         );
         assert_eq!(id.uncompact(&compaction), expected);
@@ -3249,7 +3249,7 @@ mod tests {
         let input = fixed_relation_set_compaction_input;
         let compaction = GraphCompaction::new(
             Compaction::new(4, removed_nodes).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         let (output, witness) = input.tracked_compact(&compaction);
         assert_eq!(input.compact(&compaction), expected);
@@ -3275,7 +3275,7 @@ mod tests {
     fn test_fixed_relation_set_compact_identity(
         #[case] input: FixedRelationSet<NodeId, &'static str, 2>,
     ) {
-        let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::identity(0));
+        let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::empty());
         assert_eq!(input.compact(&compaction), input);
         assert_eq!(
             input.tracked_compact(&compaction),
@@ -3351,7 +3351,7 @@ mod tests {
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
         let remapping = GraphRemapping::new(
             Remapping::new(vec![n(1), n(0)]).expect("permutation images"),
-            Remapping::new(vec![]).expect("permutation images"),
+            Remapping::empty(),
         );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants(RelationId(0)), &[n(1), n(0)]);
@@ -3366,7 +3366,7 @@ mod tests {
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
         let remapping = GraphRemapping::new(
             Remapping::new(nodes).expect("permutation images"),
-            Remapping::new(vec![]).expect("permutation images"),
+            Remapping::empty(),
         );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
@@ -3620,7 +3620,7 @@ mod tests {
         let input = var_relation_set_compaction_input;
         let compaction = GraphCompaction::new(
             Compaction::new(5, removed_nodes).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         let (output, witness) = input.tracked_compact(&compaction);
         assert_eq!(input.compact(&compaction), expected);
@@ -3644,7 +3644,7 @@ mod tests {
         VarRelationSet::new(vec![(vec![NodeId(0), NodeId(2), NodeId(4)], "keep"), (vec![NodeId(1), NodeId(3)], "drop")]),
     )]
     fn test_var_relation_set_compact_identity(#[case] input: VarRelationSet<NodeId, &'static str>) {
-        let compaction = GraphCompaction::new(Compaction::identity(5), Compaction::identity(0));
+        let compaction = GraphCompaction::new(Compaction::identity(5), Compaction::empty());
         assert_eq!(input.compact(&compaction), input);
         assert_eq!(
             input.tracked_compact(&compaction),
@@ -3721,7 +3721,7 @@ mod tests {
             PositionLabels(vec![20, 21, 22]),
         )]);
         let remapping = GraphRemapping::new(
-            Remapping::new(vec![]).expect("permutation images"),
+            Remapping::empty(),
             Remapping::new(vec![EdgeId(2), EdgeId(0), EdgeId(1)]).expect("permutation images"),
         );
         let out = rs.remap(&remapping);
@@ -3741,7 +3741,7 @@ mod tests {
             PositionLabels(vec![20, 21, 22]),
         )]);
         let remapping = GraphRemapping::new(
-            Remapping::new(vec![]).expect("permutation images"),
+            Remapping::empty(),
             Remapping::new(edges).expect("permutation images"),
         );
         let expected = covered.then(|| rs.remap(&remapping));
@@ -3916,7 +3916,7 @@ mod tests {
         let input = fixed_fixed_birelation_set_compaction_input;
         let compaction = GraphCompaction::new(
             Compaction::new(7, removed_nodes).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         let (output, witness) = input.tracked_compact(&compaction);
         assert_eq!(input.compact(&compaction), expected);
@@ -3942,7 +3942,7 @@ mod tests {
     fn test_fixed_fixed_birelation_set_compact_identity(
         #[case] input: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
     ) {
-        let compaction = GraphCompaction::new(Compaction::identity(7), Compaction::identity(0));
+        let compaction = GraphCompaction::new(Compaction::identity(7), Compaction::empty());
         assert_eq!(input.compact(&compaction), input);
         assert_eq!(
             input.tracked_compact(&compaction),
@@ -4322,7 +4322,7 @@ mod tests {
         let input = fixed_var_birelation_set_compaction_input;
         let compaction = GraphCompaction::new(
             Compaction::new(6, removed_nodes).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         let (output, witness) = input.tracked_compact(&compaction);
         assert_eq!(input.compact(&compaction), expected);
@@ -4348,7 +4348,7 @@ mod tests {
     fn test_fixed_var_birelation_set_compact_identity(
         #[case] input: FixedVarBirelationSet<NodeId, 1, NodeId, &'static str>,
     ) {
-        let compaction = GraphCompaction::new(Compaction::identity(6), Compaction::identity(0));
+        let compaction = GraphCompaction::new(Compaction::identity(6), Compaction::empty());
         assert_eq!(input.compact(&compaction), input);
         assert_eq!(
             input.tracked_compact(&compaction),
@@ -4702,7 +4702,7 @@ mod tests {
         let input = var_var_birelation_set_compaction_input;
         let compaction = GraphCompaction::new(
             Compaction::new(6, removed_nodes).unwrap(),
-            Compaction::identity(0),
+            Compaction::empty(),
         );
         let (output, witness) = input.tracked_compact(&compaction);
         assert_eq!(input.compact(&compaction), expected);
@@ -4728,7 +4728,7 @@ mod tests {
     fn test_var_var_birelation_set_compact_identity(
         #[case] input: VarVarBirelationSet<NodeId, NodeId, &'static str>,
     ) {
-        let compaction = GraphCompaction::new(Compaction::identity(6), Compaction::identity(0));
+        let compaction = GraphCompaction::new(Compaction::identity(6), Compaction::empty());
         assert_eq!(input.compact(&compaction), input);
         assert_eq!(
             input.tracked_compact(&compaction),

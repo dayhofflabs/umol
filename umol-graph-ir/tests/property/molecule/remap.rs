@@ -15,13 +15,6 @@ use umol_graph_ir::ir::MoleculeRemapping;
 
 use crate::strategies::*;
 
-fn identity<Id>(count: usize) -> Remapping<Id>
-where
-    Id: Copy + Debug + Into<usize> + From<usize>,
-{
-    Remapping::new((0..count).map(Id::from).collect()).unwrap()
-}
-
 fn crossing<Id>(count: usize, seed: u64, entity_kind: u32) -> Remapping<Id>
 where
     Id: Copy + Debug + Into<usize> + From<usize>,
@@ -35,16 +28,13 @@ where
 
 fn identity_remapping(molecule: &Molecule) -> MoleculeRemapping {
     MoleculeRemapping::new(
-        GraphRemapping::new(
-            identity::<NodeId>(molecule.atoms().count()),
-            identity::<EdgeId>(molecule.bonds().count()),
-        ),
-        identity::<DativeBondId>(molecule.dative_bonds().count()),
-        identity::<AromaticSystemId>(molecule.aromatic_systems().count()),
-        identity::<MulticenterBondId>(molecule.multicenter_bonds().count()),
-        identity::<NoncovalentBondId>(molecule.noncovalent_bonds().count()),
-        identity::<StereoAtomId>(molecule.stereo_atoms().count()),
-        identity::<StereoBondId>(molecule.stereo_bonds().count()),
+        GraphRemapping::identity(molecule.atoms().count(), molecule.bonds().count()),
+        Remapping::identity(molecule.dative_bonds().count()),
+        Remapping::identity(molecule.aromatic_systems().count()),
+        Remapping::identity(molecule.multicenter_bonds().count()),
+        Remapping::identity(molecule.noncovalent_bonds().count()),
+        Remapping::identity(molecule.stereo_atoms().count()),
+        Remapping::identity(molecule.stereo_bonds().count()),
     )
 }
 

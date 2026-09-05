@@ -753,6 +753,9 @@ agreement of independently supplied fields with their graphs remains contextual.
 `Compaction<Id>` declares a finite source count and stores sorted, distinct removed ids.
 Construction rejects out-of-range removals with `CompactionError`; the result count is the
 source count minus the number removed. Identity requires an explicit source count, not `Default`.
+`empty()` on compaction or remapping types means zero source and result counts in every component;
+it is not a domain-independent identity. `Remapping::identity(count)` and
+`GraphRemapping::identity(node_count, edge_count)` construct declared-domain identities. Existing remapping defaults remain zero-domain values.
 Graph and molecule aggregates accept validated component compactions, including count-bearing
 identities for untouched entity kinds. Producers capture counts before removal; `UndoCompaction`
 preserves them.
