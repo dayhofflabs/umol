@@ -87,11 +87,12 @@ fn relation_pushout<S>(
     )
 }
 
-/// The shared-relation intersection and its two projections — the result of a same-space relation
-/// [`pullback`](FixedRelationSet::pullback).
+/// The two result-to-input projections of a same-space relation-set pullback.
+///
+/// Operation-produced components cover the result and have equal source counts. Public fields may be
+/// assembled independently; agreement with the result and input sets is contextual.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationPullback<S> {
-    pub object: S,
+pub struct RelationPullbackCorrespondence {
     /// object relation → `self` relation.
     pub left: Correspondence<RelationId>,
     /// object relation → `right` relation.
@@ -105,12 +106,14 @@ fn relation_pullback<S>(
     right_images: Vec<RelationId>,
     self_count: usize,
     right_count: usize,
-) -> RelationPullback<S> {
-    RelationPullback {
+) -> (S, RelationPullbackCorrespondence) {
+    (
         object,
-        left: Correspondence::from_images(&left_images, self_count),
-        right: Correspondence::from_images(&right_images, right_count),
-    }
+        RelationPullbackCorrespondence {
+            left: Correspondence::from_images(&left_images, self_count),
+            right: Correspondence::from_images(&right_images, right_count),
+        },
+    )
 }
 
 /// Position of a participant within a single relation's tuple — local to the
@@ -696,8 +699,24 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -1116,8 +1135,24 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -1607,8 +1642,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -2142,8 +2193,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -2680,8 +2747,24 @@ where
         &self,
         right: &Self,
         coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
+        combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
+    ) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.tracked_pullback(right, coincident, combine)
+            .map(|(object, _)| object)
+    }
+
+    /// Return the shared relation set and its two result-to-input projections.
+    ///
+    /// Has the same result and failure behavior as [`Self::pullback`].
+    pub fn tracked_pullback(
+        &self,
+        right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
-    ) -> Option<RelationPullback<Self>>
+    ) -> Option<(Self, RelationPullbackCorrespondence)>
     where
         D: Clone,
     {
@@ -5299,60 +5382,204 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_relation_set_pullback() {
-        // intersection: self {01}=10 {23}=20 ; right {01}=5 {45}=30 — only {01} is shared.
-        let left =
-            FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 10), ([n(2), n(3)], 20)]);
-        let right =
-            FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 5), ([n(4), n(5)], 30)]);
-        let pb = left
-            .pullback(
-                &right,
-                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
-                |(_, a), (_, b)| Some(a + b),
-            )
-            .expect("no ⊥");
-        assert_eq!(pb.object.count(), 1); // self-only and right-only dropped
-        assert_eq!(*pb.object.data(RelationId(0)), 15);
-        assert_eq!(pb.left.right_of(RelationId(0)), Some(RelationId(0))); // → self {01}
-        assert_eq!(pb.right.right_of(RelationId(0)), Some(RelationId(0))); // → right {01}
-    }
-
-    #[rstest]
-    fn test_fixed_relation_set_pullback_bottom() {
-        let left = FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 10)]);
-        let right = FixedRelationSet::<NodeId, i32, 2>::new(vec![([n(0), n(1)], 5)]);
-        assert_eq!(
-            left.pullback(
-                &right,
-                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
-                |_, _| None
-            ),
-            None
-        );
-    }
-
-    #[rstest]
-    fn test_fixed_var_birelation_set_pullback() {
-        let left = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![
-            ([n(0)], vec![n(1), n(2)], 10),
-            ([n(3)], vec![n(4)], 20),
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_fixed_relation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: FixedRelationSet<NodeId, i32, 2> = FixedRelationSet::new(vec![
+            ([NodeId(0), NodeId(1)], 10),
+            ([NodeId(2), NodeId(3)], 20),
         ]);
-        let right = FixedVarBirelationSet::<NodeId, 1, NodeId, i32>::new(vec![(
-            [n(0)],
-            vec![n(1), n(2)],
-            5,
-        )]);
-        let pb = left
-            .pullback(
-                &right,
-                |set: &_, q1: &[NodeId], q2: &_| {
-                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+        let right: FixedRelationSet<NodeId, i32, 2> = FixedRelationSet::new(vec![
+            ([NodeId(4), NodeId(5)], 30),
+            ([NodeId(0), NodeId(1)], 5),
+        ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, parts: &[NodeId]| parts.first().and_then(|&id| set.coincident(id, parts)),
+            |(_, a), (_, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, parts: &[NodeId]| parts.first().and_then(|&id| set.coincident(id, parts)),
+            |(_, a), (_, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
                 },
-                |(_, _, a), (_, _, b)| Some(a + b),
             )
-            .expect("no ⊥");
-        assert_eq!(pb.object.count(), 1); // only the shared ([0],[1,2])
-        assert_eq!(*pb.object.data(RelationId(0)), 15);
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_var_relation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: VarRelationSet<NodeId, i32> = VarRelationSet::new(vec![
+            (vec![NodeId(0), NodeId(1)], 10),
+            (vec![NodeId(2), NodeId(3)], 20),
+        ]);
+        let right: VarRelationSet<NodeId, i32> = VarRelationSet::new(vec![
+            (vec![NodeId(4), NodeId(5)], 30),
+            (vec![NodeId(0), NodeId(1)], 5),
+        ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, parts: &[NodeId]| parts.first().and_then(|&id| set.coincident(id, parts)),
+            |(_, a), (_, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, parts: &[NodeId]| parts.first().and_then(|&id| set.coincident(id, parts)),
+            |(_, a), (_, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                VarRelationSet::new(vec![(vec![NodeId(0), NodeId(1)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_fixed_fixed_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, i32> =
+            FixedFixedBirelationSet::new(vec![
+                ([NodeId(0)], [NodeId(1)], 10),
+                ([NodeId(2)], [NodeId(3)], 20),
+            ]);
+        let right: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, i32> =
+            FixedFixedBirelationSet::new(vec![
+                ([NodeId(4)], [NodeId(5)], 30),
+                ([NodeId(0)], [NodeId(1)], 5),
+            ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_fixed_var_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: FixedVarBirelationSet<NodeId, 1, NodeId, i32> = FixedVarBirelationSet::new(vec![
+            ([NodeId(0)], vec![NodeId(1), NodeId(2)], 10),
+            ([NodeId(2)], vec![NodeId(3)], 20),
+        ]);
+        let right: FixedVarBirelationSet<NodeId, 1, NodeId, i32> =
+            FixedVarBirelationSet::new(vec![
+                ([NodeId(4)], vec![NodeId(5)], 30),
+                ([NodeId(0)], vec![NodeId(1), NodeId(2)], 5),
+            ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                FixedVarBirelationSet::new(vec![([NodeId(0)], vec![NodeId(1), NodeId(2)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::combined(Some(15))]
+    #[case::incompatible(None)]
+    fn test_var_var_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
+        let left: VarVarBirelationSet<NodeId, NodeId, i32> = VarVarBirelationSet::new(vec![
+            (vec![NodeId(0)], vec![NodeId(1)], 10),
+            (vec![NodeId(2)], vec![NodeId(3)], 20),
+        ]);
+        let right: VarVarBirelationSet<NodeId, NodeId, i32> = VarVarBirelationSet::new(vec![
+            (vec![NodeId(4)], vec![NodeId(5)], 30),
+            (vec![NodeId(0)], vec![NodeId(1)], 5),
+        ]);
+        let result = left.tracked_pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let plain = left.pullback(
+            &right,
+            |set, first: &[NodeId], second: &[NodeId]| {
+                first
+                    .first()
+                    .and_then(|&id| set.coincident(id, first, second))
+            },
+            |(_, _, a), (_, _, b)| combined.map(|_| a + b),
+        );
+        let expected = combined.map(|value| {
+            (
+                VarVarBirelationSet::new(vec![(vec![NodeId(0)], vec![NodeId(1)], value)]),
+                RelationPullbackCorrespondence {
+                    left: Correspondence::new(vec![(RelationId(0), RelationId(0))], 1, 2).unwrap(),
+                    right: Correspondence::new(vec![(RelationId(0), RelationId(1))], 1, 2).unwrap(),
+                },
+            )
+        });
+        assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
+        assert_eq!(result, expected);
     }
 }

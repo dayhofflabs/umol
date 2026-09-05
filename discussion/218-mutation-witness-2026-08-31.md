@@ -534,12 +534,13 @@ pushout uses `RelationPushoutCorrespondence`. Their bare methods return the
 graph or relation set, and `tracked_pushout` returns the output
 paired with the two input-to-result correspondences. Graph pullback uses
 `PullbackCorrespondence`, and graph pushout complement uses
-`PushoutComplementCorrespondence`, through the corresponding
-`*_with_correspondence` methods. Their categorical directions are preserved:
+`PushoutComplementCorrespondence`, through `tracked_pullback` and
+`tracked_pushout_complement`; their bare counterparts return only the object.
+Relation-set pullback uses `RelationPullbackCorrespondence` with the same method pair. Their categorical directions are preserved:
 pullback `left` and `right` map the result to the inputs; complement `context`
 maps context to host and `interface` maps interface to context. These
 categorical correspondences are not reinterpreted as covariant mutation
-witnesses. Graph removals use `*_with_compaction` companions.
+witnesses. Graph removals use `tracked_remove_cascading` and `try_tracked_remove`.
 
 Chemistry-layer operation API policy in `umol-graph` is settled separately.
 This work adapts its callers of changed graph-core and graph-IR APIs without
@@ -1031,9 +1032,8 @@ Disposition (2026-09-04): optional witnesses use `tracked_<operation>`, with
 identifies the witness carrier; this replaces the earlier `*_with_<witness_type>`
 naming. Pushout follows this distinction: `pushout` returns the object and
 `tracked_pushout` also returns its two mappings. Their mathematical role does
-not make them mandatory API output. Pullback and pushout complement retain
-their separately settled bare mapping-bearing forms; this pushout decision
-does not change S4c.
+not make them mandatory API output. Pullback and pushout complement follow
+the same object-only/tracked split, preserving their categorical mapping directions.
 
 - [x] **S4a — Removal and relation compaction.** Graph-core graph and relation
   modules. Breaking (red→green). [dep: S3a]
@@ -1087,20 +1087,34 @@ does not change S4c.
   mapping allocation. The method-pair revision passed core/IR library tests,
   exact output/failure equivalence checks, workspace all-targets compilation,
   and core/IR property-enabled all-targets clippy with `-D warnings`.
-- [ ] **S4c — Pullback and pushout complement.** Graph-core rewriting and
+- [x] **S4c — Pullback and pushout complement.** Graph-core rewriting and
   relation modules.
   Breaking (red→green). [dep: S1a]
   Introduce the accepted `PullbackCorrespondence` and
   `PushoutComplementCorrespondence` result separation. Graph `pullback` and
-  `pushout_complement` retain their bare names and return
-  `(object, correspondence)` with existing fallibility. Apply the same
-  separation to `RelationPullback<S>` and `pullback` on all five relation-set
-  types. These are naturally mapping-bearing constructions: add neither
-  `tracked_` nor output-only variants.
+  `pushout_complement` return only the object; `tracked_pullback` and
+  `tracked_pushout_complement` return `(object, correspondence)` with existing
+  fallibility. Replace `RelationPullback<S>` with `RelationPullbackCorrespondence`
+  and apply the same `pullback` / `tracked_pullback` split to all five
+  relation-set types. Preserve public mapping fields without adding constructors.
   Preserve categorical directions and existing admissibility conditions.
   Migrate reaction composition and rewriting tests; check the defining
-  commutative mappings and resulting objects. Keep subdivision's distinct
+  commutative mappings, exact results, and plain/tracked output and failure
+  equivalence. Keep subdivision's distinct
   graph representation and its cross-entity source accessors intact.
+  Completed 2026-09-04: graph pullback/complement and all five relation-set
+  pullbacks expose object-only and tracked forms. The three mapping carriers
+  retain public fields and add no constructors; old object-containing types
+  and exports are removed. No production callers of these core methods
+  required migration in the current tree. Tests verify exact results and
+  mapping counts/directions, graph composition identities, empty/disjoint
+  pullbacks, payload rejection, dangling rejection, and count mismatches.
+  Core/IR library tests passed (7,621 passed, 3 ignored), plus integration
+  and doc tests. Core/IR properties passed at `PROPTEST_CASES=256`
+  (490 passed, 1 ignored); downstream graph/IO library tests passed (4,297).
+  Workspace all-targets compilation passed with Python 3.13.15.
+  Core/IR property-enabled all-targets clippy with `-D warnings`, nightly
+  formatting, and `git diff --check` passed. Subdivision is unchanged.
 
 ### S5 — Graph-IR molecule operation returns
 

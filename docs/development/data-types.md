@@ -726,6 +726,22 @@ Each operation produces components with equal target counts covering their respe
 inputs. Independently assembled fields do not establish agreement with a result object.
 Relation payload-combination failure still returns `None`.
 
+## Pullback and pushout-complement results
+
+Graph and relation-set `pullback` methods return the object; `tracked_pullback`
+also returns `PullbackCorrespondence` or `RelationPullbackCorrespondence`.
+Their public `left` and `right` components map the result into each input and
+have equal source counts when produced by the operation. Graph pullback retains
+its count-mismatch `Result`; relation-set pullback retains `Option` for rejected
+payload combinations.
+
+Graph `pushout_complement` returns the context graph; `tracked_pushout_complement`
+also returns `PushoutComplementCorrespondence`. Its public `context` maps context
+to host, and `interface` maps interface to context. Both forms retain `None` for
+dangling or count disagreement. Each plain/tracked pair has identical results
+and failure behavior. These carriers contain no result object or new constructors;
+agreement of independently supplied fields with their graphs remains contextual.
+
 ## Compaction
 
 `Compaction<Id>` declares a finite source count and stores sorted, distinct removed ids.
