@@ -2,17 +2,17 @@ use std::hint::black_box;
 use std::iter;
 use std::ops::ControlFlow;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
-    CommonSubgraphEnumerationAlgorithm, ConnectedComponentsAlgorithm, EdgeId, EmbeddingKind,
-    GeneralMaximumMatchingAlgorithm, Graph, MaximumIndependentSetAlgorithm,
-    MinimumCycleBasisAlgorithm, NodeId, RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm,
-    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm,
-    ARCMATCH_DEFAULT_PATH_LENGTH,
+    CommonSubgraphEnumerationAlgorithm, ConnectedComponentsAlgorithm, Correspondence, EdgeId,
+    EmbeddingKind, GeneralMaximumMatchingAlgorithm, Graph, GraphCorrespondence,
+    MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NodeId,
+    RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -1346,8 +1346,35 @@ mod matching {
     }
 }
 
+fn mutation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("graph_mutation");
+    for size in [8, 64] {
+        let graph = path(size);
+        let removed = [NodeId((size / 2) as u32)];
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId((size - 1) as u32), NodeId(0))], size, size).unwrap(),
+            Correspondence::new(vec![], size - 1, size - 1).unwrap(),
+        );
+        group.bench_function(BenchmarkId::new("remove_cascading/path", size), |b| {
+            b.iter_batched(
+                || graph.clone(),
+                |mut graph| {
+                    let compaction = graph.remove_cascading(black_box(&removed), &[]);
+                    black_box((graph, compaction))
+                },
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(BenchmarkId::new("pushout/path_pair", size), |b| {
+            b.iter(|| black_box(&graph).pushout(black_box(&graph), black_box(&overlap)))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
+    mutation,
     relevant_cycle_enumeration,
     simple_cycle_enumeration,
     minimum_cycle_basis,

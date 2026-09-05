@@ -649,7 +649,7 @@ operations are part of this plan.
   Verification: `cargo test -p umol-graph-core -p umol-graph-ir --lib --no-fail-fast`
   passed (756 core, 6,555 IR; 3 ignored); `cargo +nightly fmt --all --check`
   and `git diff --check` passed.
-- [ ] **S0b — Operation benchmarks.** Existing graph-core `algorithms` and
+- [x] **S0b — Operation benchmarks.** Existing graph-core `algorithms` and
   graph-IR `reaction`/`canonicalize` benchmark targets. Additive (green).
   [dep: S0a] Add focused removal, edit-batch, combination, split, and pushout
   measurements beside the existing reaction application and renumbering
@@ -657,6 +657,87 @@ operations are part of this plan.
   algorithms, and save a Criterion baseline before implementation. Later
   add witnessed variants on the same cases. These fixtures supply regression
   evidence, not claims about production scale.
+  Completed 2026-09-04: added 14 operation cases and saved `mutation-s0`
+  across 30 cases, including existing reaction and renumbering measurements.
+  S0 gates passed: core/IR library, integration, and doc tests (7,404 passed,
+  6 ignored); property targets with `PROPTEST_CASES=256` (483 passed,
+  1 ignored); `cargo check --workspace` with Python 3.13.15 activated;
+  `cargo +nightly fmt --all --check`; and `git diff --check`.
+
+#### S0 benchmark fixtures
+
+The new `graph_mutation` and `molecule_mutation` groups use paths of 8 and
+64 nodes/atoms with 7 and 63 bonds. Removal deletes the middle node/atom
+and its two incident bonds. The three-edit batch removes the last carbon,
+adds oxygen, and bonds it to the preceding carbon. Combination concatenates
+two equal-sized paths; pushout identifies one endpoint of each, producing
+15/127 atoms and 14/126 bonds. Split starts with 8/64 atoms in two equal
+paths (6/62 bonds). These inputs have no overlays or constraints.
+
+Fixture construction, edit-batch cloning, and mutable input preparation are
+outside timing. Removal measures the graph/editor mutation and returned
+compaction, without publishing a molecule. `Molecule::apply` includes its
+editor construction, checked application, and publication. The other cases
+measure the complete existing operation, including any witness it currently
+returns. Future bare/witnessed variants must use these same inputs.
+
+The retained `reaction` group uses its existing six-atom/six-bond aromatic
+application case and five-atom reaction-span reversal fixture. Matching
+selects GraphAndOverlays, VF2, and Vismara. New mutation cases expose no
+algorithm choice; molecule splitting uses union-find. The retained
+`canonicalize/remapping` group measures supplied reverse renumberings over
+its thirteen existing cases, including stereo, overlays, and constraints; it does
+not run canonical labeling. Its benchmark ids record all eight entity counts.
+
+Baseline recorded on 2026-09-04, macOS arm64, Rust 1.96.0, optimized bench
+profile with debug information. Criterion used 30 samples, one second of
+warmup, and two seconds of measurement per case. The three targets ran
+sequentially after builds and verification finished. Saved estimates and
+samples are under `/Users/dr/.cargo-target/criterion`, in each case's
+`mutation-s0` directory. This local artifact is not tracked; the commands
+below recreate it. Point estimates in microseconds:
+
+| Operation | 8 atoms/nodes | 64 atoms/nodes |
+| --- | ---: | ---: |
+| Graph removal | 0.220 | 1.083 |
+| Graph pushout | 2.146 | 21.152 |
+| Molecule editor removal | 1.516 | 6.017 |
+| Molecule three-edit application | 2.725 | 12.282 |
+| Molecule combination | 2.711 | 19.330 |
+| Molecule split | 4.646 | 51.909 |
+| Molecule pushout | 7.810 | 67.701 |
+
+The existing reaction case measured 1.695 µs for matching, 4.321 µs for
+matched application, and 13.756 µs for reversal.
+Retained renumbering estimates range from 2.032 to 15.612 µs; the eight-atom
+overlay-heavy case measured 7.849 µs. Individual estimates (µs):
+
+| Renumbering case | Time |
+| --- | ---: |
+| Ordinary naphthalene | 3.369 |
+| Disconnected rings | 3.519 |
+| Overlay-heavy | 7.849 |
+| Tetrahedral stereo | 3.457 |
+| Cis/trans stereo bond | 3.651 |
+| Mixed atom and bond stereo | 5.489 |
+| Frame-relative stereo constraint | 3.625 |
+| Meso dichlorobutane | 4.528 |
+| Para-stereo trichloropentane | 5.538 |
+| Para-stereo cascade | 15.612 |
+| Feature-free connected | 3.247 |
+| Feature-free disconnected | 3.198 |
+| Symmetry-heavy radicals | 2.032 |
+
+```sh
+cargo bench -p umol-graph-core --bench algorithms -- graph_mutation --save-baseline mutation-s0 --warm-up-time 1 --measurement-time 2 --sample-size 30
+cargo bench -p umol-graph-ir --bench reaction -- --save-baseline mutation-s0 --warm-up-time 1 --measurement-time 2 --sample-size 30
+cargo bench -p umol-graph-ir --bench canonicalize -- canonicalize/remapping --save-baseline mutation-s0 --warm-up-time 1 --measurement-time 2 --sample-size 30
+```
+
+For later comparisons, replace `--save-baseline mutation-s0` with
+`--baseline mutation-s0`; do not overwrite the baseline after changing the
+implementation. These are bounded regression measurements, not corpus-scale
+estimates.
 
 ### S1 — Correspondence composition and transport
 

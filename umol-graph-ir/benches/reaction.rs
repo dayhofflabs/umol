@@ -1,17 +1,19 @@
-//! Reaction matching and matched-application benchmarks.
+//! Molecule mutation, reaction matching, and matched-application benchmarks.
 
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_chem::element::Element;
 use umol_graph_core::{
-    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    Correspondence, GraphCorrespondence, NodeId, RelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
-    AtomConstraintForm, AtomForm, AtomId, BondForm, Constraint, ConstraintSpan, Delta, Deltas,
-    ElectronCountsForm, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, Reaction,
-    ReactionSpan, ReactionSpanEntries, SubstructureMatchAlgorithm, SubstructureMatchConfig,
+    AtomConstraintForm, AtomForm, AtomHandle, AtomId, BondForm, Constraint, ConstraintSpan, Delta,
+    Deltas, Edits, ElectronCountsForm, EntitySpan, Molecule, MoleculeCorrespondence,
+    MoleculeEntries, Reaction, ReactionSpan, ReactionSpanEntries, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig,
 };
 
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
@@ -154,5 +156,77 @@ fn benchmark_reaction(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_reaction);
+fn benchmark_mutation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("molecule_mutation");
+    for size in [8usize, 64] {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); size],
+            bonds: (0..size as u32 - 1)
+                .map(|id| (AtomId(id), AtomId(id + 1), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        });
+        let removed = [AtomId((size / 2) as u32)];
+        let disconnected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); size],
+            bonds: (0..size as u32 - 1)
+                .filter(|&id| id != size as u32 / 2 - 1)
+                .map(|id| (AtomId(id), AtomId(id + 1), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        });
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId((size - 1) as u32), NodeId(0))], size, size).unwrap(),
+            Correspondence::new(vec![], size - 1, size - 1).unwrap(),
+        );
+        let mut edits = Edits::new();
+        edits.remove_atom(AtomHandle::Id(AtomId((size - 1) as u32)));
+        let added = edits.add_atom(AtomForm::from_element(Element::O));
+        edits.add_bond(
+            AtomHandle::Id(AtomId((size - 2) as u32)),
+            added,
+            BondForm::from_order(1),
+        );
+        molecule
+            .apply(edits.clone())
+            .expect("benchmark edit batch succeeds");
+        molecule
+            .meet_pushout(&molecule, &overlap)
+            .expect("benchmark overlap is admissible");
+
+        group.bench_function(BenchmarkId::new("remove/path", size), |b| {
+            b.iter_batched(
+                || molecule.edit(),
+                |mut editor| {
+                    let compaction = editor.remove(black_box(&removed), &[]);
+                    black_box((editor, compaction))
+                },
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(BenchmarkId::new("apply/path_three_edits", size), |b| {
+            b.iter_batched(
+                || edits.clone(),
+                |edits| {
+                    black_box(&molecule)
+                        .apply(edits)
+                        .expect("benchmark edit batch succeeds")
+                },
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(BenchmarkId::new("combine/path_pair", size), |b| {
+            b.iter(|| black_box(&molecule).combine(black_box(&molecule)))
+        });
+        group.bench_function(BenchmarkId::new("split/two_paths", size), |b| {
+            b.iter(|| black_box(&disconnected).split())
+        });
+        group.bench_function(BenchmarkId::new("meet_pushout/path_pair", size), |b| {
+            b.iter(|| black_box(&molecule).meet_pushout(black_box(&molecule), black_box(&overlap)))
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, benchmark_reaction, benchmark_mutation);
 criterion_main!(benches);
