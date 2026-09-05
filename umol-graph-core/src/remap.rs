@@ -74,42 +74,6 @@ impl<Id: Copy + Into<usize>> Remapping<Id> {
         self.images.is_empty()
     }
 
-    /// Move each source value to its image position without cloning values.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `values.len()` differs from the remapping length.
-    ///
-    /// # Semantic properties
-    ///
-    /// For every source index `i`, `output[self.map(i)]` is the original `values[i]`.
-    /// Identity leaves the vector unchanged; successive reorders apply the corresponding
-    /// composition of permutations.
-    pub fn reorder<T>(&self, values: Vec<T>) -> Vec<T> {
-        self.try_reorder(values)
-            .expect("value count differs from remapping length")
-    }
-
-    /// Checked form of [`Self::reorder`].
-    ///
-    /// Returns `None` when the value count differs from the remapping length.
-    /// The input vector is consumed in either case.
-    pub fn try_reorder<T>(&self, values: Vec<T>) -> Option<Vec<T>> {
-        if values.len() != self.len() {
-            return None;
-        }
-        let mut target: Vec<Option<T>> = (0..self.len()).map(|_| None).collect();
-        for (&image, value) in self.images.iter().zip(values) {
-            target[image.into()] = Some(value);
-        }
-        Some(
-            target
-                .into_iter()
-                .map(|value| value.expect("permutation covers every target"))
-                .collect(),
-        )
-    }
-
     /// Return the image of `old`, or `None` when it lies outside the source domain.
     pub fn try_map(&self, old: Id) -> Option<Id> {
         self.images.get(old.into()).copied()
@@ -123,6 +87,42 @@ impl<Id: Copy + Into<usize>> Remapping<Id> {
     pub fn map(&self, old: Id) -> Id {
         self.try_map(old)
             .expect("id outside remapping source domain")
+    }
+
+    /// Move each source value to its image position without cloning values.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `values.len()` differs from the remapping length.
+    ///
+    /// # Semantic properties
+    ///
+    /// For every source index `i`, `output[self.map(i)]` is the original `values[i]`.
+    /// Identity leaves the vector unchanged; successive vector remappings apply the corresponding
+    /// composition of permutations.
+    pub fn remap_vec<T>(&self, values: Vec<T>) -> Vec<T> {
+        self.try_remap_vec(values)
+            .expect("value count differs from remapping length")
+    }
+
+    /// Checked form of [`Self::remap_vec`].
+    ///
+    /// Returns `None` when the value count differs from the remapping length.
+    /// The input vector is consumed in either case.
+    pub fn try_remap_vec<T>(&self, values: Vec<T>) -> Option<Vec<T>> {
+        if values.len() != self.len() {
+            return None;
+        }
+        let mut target: Vec<Option<T>> = (0..self.len()).map(|_| None).collect();
+        for (&image, value) in self.images.iter().zip(values) {
+            target[image.into()] = Some(value);
+        }
+        Some(
+            target
+                .into_iter()
+                .map(|value| value.expect("permutation covers every target"))
+                .collect(),
+        )
     }
 }
 
@@ -268,85 +268,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::crossing(vec![NodeId(2), NodeId(0), NodeId(1)], vec![20, 30, 10])]
-    #[case::reverse(vec![NodeId(2), NodeId(1), NodeId(0)], vec![30, 20, 10])]
-    fn test_remapping_reorder(#[case] images: Vec<NodeId>, #[case] expected: Vec<u32>) {
-        assert_eq!(
-            Remapping::new(images).unwrap().reorder(vec![10, 20, 30]),
-            expected,
-        );
-    }
-
-    #[rstest]
-    #[case::empty(vec![])]
-    #[case::singleton(vec![10])]
-    #[case::multiple(vec![10, 20, 30])]
-    fn test_remapping_reorder_identity(#[case] values: Vec<u32>) {
-        let remapping = Remapping::new((0..values.len()).map(NodeId::from).collect()).unwrap();
-        assert_eq!(remapping.reorder(values.clone()), values);
-    }
-
-    #[rstest]
-    fn test_remapping_reorder_inverse() {
-        let forward = Remapping::new(vec![NodeId(2), NodeId(0), NodeId(1)]).unwrap();
-        let inverse = Remapping::new(vec![NodeId(1), NodeId(2), NodeId(0)]).unwrap();
-        assert_eq!(
-            inverse.reorder(forward.reorder(vec![10, 20, 30])),
-            vec![10, 20, 30]
-        );
-    }
-
-    #[rstest]
-    fn test_remapping_reorder_composition() {
-        let first = Remapping::new(vec![NodeId(2), NodeId(0), NodeId(1)]).unwrap();
-        let second = Remapping::new(vec![NodeId(1), NodeId(0), NodeId(2)]).unwrap();
-        let composed = Remapping::new(vec![NodeId(2), NodeId(1), NodeId(0)]).unwrap();
-        assert_eq!(
-            second.reorder(first.reorder(vec![10, 20, 30])),
-            composed.reorder(vec![10, 20, 30]),
-        );
-    }
-
-    #[rstest]
-    #[case::short(vec![10])]
-    #[case::long(vec![10, 20, 30])]
-    #[should_panic(expected = "value count differs from remapping length")]
-    fn test_remapping_reorder_error(#[case] values: Vec<u32>) {
-        Remapping::new(vec![NodeId(1), NodeId(0)])
-            .unwrap()
-            .reorder(values);
-    }
-
-    #[rstest]
-    #[case::empty(vec![], vec![], Some(vec![]))]
-    #[case::crossing(vec![NodeId(2), NodeId(0), NodeId(1)], vec![10, 20, 30], Some(vec![20, 30, 10]))]
-    #[case::short(vec![NodeId(1), NodeId(0)], vec![10], None)]
-    #[case::long(vec![NodeId(1), NodeId(0)], vec![10, 20, 30], None)]
-    #[case::empty_domain(vec![], vec![10], None)]
-    fn test_remapping_try_reorder(
-        #[case] images: Vec<NodeId>,
-        #[case] values: Vec<u32>,
-        #[case] expected: Option<Vec<u32>>,
-    ) {
-        assert_eq!(
-            Remapping::new(images).unwrap().try_reorder(values),
-            expected
-        );
-    }
-
-    #[derive(Debug, PartialEq, Eq)]
-    struct TestValue(u32);
-
-    #[rstest]
-    fn test_remapping_try_reorder_owned() {
-        let remapping = Remapping::new(vec![NodeId(1), NodeId(0)]).unwrap();
-        assert_eq!(
-            remapping.try_reorder(vec![TestValue(10), TestValue(20)]),
-            Some(vec![TestValue(20), TestValue(10)]),
-        );
-    }
-
-    #[rstest]
     #[case::first(vec![NodeId(1), NodeId(0)], NodeId(0), Some(NodeId(1)))]
     #[case::last(vec![NodeId(1), NodeId(0)], NodeId(1), Some(NodeId(0)))]
     #[case::empty(vec![], NodeId(0), None)]
@@ -383,6 +304,85 @@ mod tests {
     #[should_panic(expected = "id outside remapping source domain")]
     fn test_remapping_map_error() {
         Remapping::<NodeId>::new(vec![]).unwrap().map(NodeId(0));
+    }
+
+    #[rstest]
+    #[case::crossing(vec![NodeId(2), NodeId(0), NodeId(1)], vec![20, 30, 10])]
+    #[case::reverse(vec![NodeId(2), NodeId(1), NodeId(0)], vec![30, 20, 10])]
+    fn test_remapping_remap_vec(#[case] images: Vec<NodeId>, #[case] expected: Vec<u32>) {
+        assert_eq!(
+            Remapping::new(images).unwrap().remap_vec(vec![10, 20, 30]),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![])]
+    #[case::singleton(vec![10])]
+    #[case::multiple(vec![10, 20, 30])]
+    fn test_remapping_remap_vec_identity(#[case] values: Vec<u32>) {
+        let remapping = Remapping::new((0..values.len()).map(NodeId::from).collect()).unwrap();
+        assert_eq!(remapping.remap_vec(values.clone()), values);
+    }
+
+    #[rstest]
+    fn test_remapping_remap_vec_inverse() {
+        let forward = Remapping::new(vec![NodeId(2), NodeId(0), NodeId(1)]).unwrap();
+        let inverse = Remapping::new(vec![NodeId(1), NodeId(2), NodeId(0)]).unwrap();
+        assert_eq!(
+            inverse.remap_vec(forward.remap_vec(vec![10, 20, 30])),
+            vec![10, 20, 30]
+        );
+    }
+
+    #[rstest]
+    fn test_remapping_remap_vec_composition() {
+        let first = Remapping::new(vec![NodeId(2), NodeId(0), NodeId(1)]).unwrap();
+        let second = Remapping::new(vec![NodeId(1), NodeId(0), NodeId(2)]).unwrap();
+        let composed = Remapping::new(vec![NodeId(2), NodeId(1), NodeId(0)]).unwrap();
+        assert_eq!(
+            second.remap_vec(first.remap_vec(vec![10, 20, 30])),
+            composed.remap_vec(vec![10, 20, 30]),
+        );
+    }
+
+    #[rstest]
+    #[case::short(vec![10])]
+    #[case::long(vec![10, 20, 30])]
+    #[should_panic(expected = "value count differs from remapping length")]
+    fn test_remapping_remap_vec_error(#[case] values: Vec<u32>) {
+        Remapping::new(vec![NodeId(1), NodeId(0)])
+            .unwrap()
+            .remap_vec(values);
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![], Some(vec![]))]
+    #[case::crossing(vec![NodeId(2), NodeId(0), NodeId(1)], vec![10, 20, 30], Some(vec![20, 30, 10]))]
+    #[case::short(vec![NodeId(1), NodeId(0)], vec![10], None)]
+    #[case::long(vec![NodeId(1), NodeId(0)], vec![10, 20, 30], None)]
+    #[case::empty_domain(vec![], vec![10], None)]
+    fn test_remapping_try_remap_vec(
+        #[case] images: Vec<NodeId>,
+        #[case] values: Vec<u32>,
+        #[case] expected: Option<Vec<u32>>,
+    ) {
+        assert_eq!(
+            Remapping::new(images).unwrap().try_remap_vec(values),
+            expected
+        );
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct TestValue(u32);
+
+    #[rstest]
+    fn test_remapping_try_remap_vec_owned() {
+        let remapping = Remapping::new(vec![NodeId(1), NodeId(0)]).unwrap();
+        assert_eq!(
+            remapping.try_remap_vec(vec![TestValue(10), TestValue(20)]),
+            Some(vec![TestValue(20), TestValue(10)]),
+        );
     }
 
     #[rstest]

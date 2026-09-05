@@ -183,9 +183,9 @@ and `MoleculeRemapping::new` takes the graph aggregate and the six overlay
 remappings. Validation remains at the single-id-space boundary rather than
 being repeated with aggregate-specific error types.
 
-`Remapping::reorder<T>(&self, values: Vec<T>) -> Vec<T>` consumes a vector
+`Remapping::remap_vec<T>(&self, values: Vec<T>) -> Vec<T>` consumes a vector
 and places each source value at its image position, without requiring
-`T: Clone`. `try_reorder` returns `Option<Vec<T>>`, with `None` exactly when
+`T: Clone`. `try_remap_vec` returns `Option<Vec<T>>`, with `None` exactly when
 the vector length differs from the remapping length. The asserted form
 panics on the same mismatch; both consume the input even on failure.
 This single-space operation owns vector reordering for molecule and span
@@ -441,6 +441,12 @@ operation producers already know their source counts and handle an impossible
 construction error internally. A context-free `Default` or `empty` cannot
 mean identity over an undeclared id space and is removed; callers use
 `identity(source_count)`.
+
+Compaction consumers respect these declared bounds. `compact` returns `None`
+for a removed or out-of-source-range id. `uncompact` asserts that its input
+is below `result_count`; `try_uncompact` returns `None` otherwise.
+`compact_vec` requires exactly `source_count` input elements and asserts
+that condition; `try_compact_vec` returns `None` on a length mismatch.
 
 The aggregate constructors accept already-valid components and are
 infallible. `GraphCompaction::new` takes the node and edge `Compaction`
@@ -953,16 +959,16 @@ estimates.
   comparison accept `MoleculeRemapping`, checking all eight component counts.
   Molecule, reaction, and span canonicalization construct and return dense
   remappings directly; constraint transport widens to correspondence.
-  `Remapping::reorder` and `try_reorder` own vector transport without a
+  `Remapping::remap_vec` and `try_remap_vec` own vector transport without a
   `Clone` bound. Python exposes the approved frozen `Remapping` and
   `MoleculeRemapping` types and `canonicalize_with_remapping` methods.
   Consumers, benchmarks, and normative documentation are migrated.
   Inverse test references sort source/target pairs independently of
-  `reorder`; composition references apply the two image lookups directly.
+  `remap_vec`; composition references apply the two image lookups directly.
   Existing generated domains and exact assertions are preserved.
   Core/IR library tests passed (7,527 passed, 3 ignored), as did integration
   and doc tests. Core/IR properties passed with `PROPTEST_CASES=256`
-  (488 passed, 1 ignored), including the independent reorder reference.
+  (488 passed, 1 ignored), including the independent vector-remapping reference.
   The corrected IR property suite and affected canonicalization unit test
   were rerun successfully. Graph/IO library tests passed (4,297);
   rebuilt Python tests passed (1,350 passed, 2 skipped, Python 3.13.15).

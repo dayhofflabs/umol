@@ -68,12 +68,12 @@ impl Molecule {
         let atoms = remapping
             .graph()
             .nodes()
-            .reorder(self.atoms.as_ref().clone());
+            .remap_vec(self.atoms.as_ref().clone());
         let bonds = remapping
             .graph()
             .edges()
-            .reorder(self.bonds.as_ref().clone());
-        let edges = remapping.graph().edges().reorder(
+            .remap_vec(self.bonds.as_ref().clone());
+        let edges = remapping.graph().edges().remap_vec(
             self.graph
                 .edge_ids()
                 .map(|edge| {
@@ -90,32 +90,32 @@ impl Molecule {
         let dative_bonds = DativeBonds::new(
             remapping
                 .dative_bonds()
-                .reorder(self.dative_bonds.remap(graph_remapping).into_entries()),
+                .remap_vec(self.dative_bonds.remap(graph_remapping).into_entries()),
         );
         let aromatic_systems = AromaticSystems::new(
             remapping
                 .aromatic_systems()
-                .reorder(self.aromatic_systems.remap(graph_remapping).into_entries()),
+                .remap_vec(self.aromatic_systems.remap(graph_remapping).into_entries()),
         );
         let multicenter_bonds = MulticenterBonds::new(
             remapping
                 .multicenter_bonds()
-                .reorder(self.multicenter_bonds.remap(graph_remapping).into_entries()),
+                .remap_vec(self.multicenter_bonds.remap(graph_remapping).into_entries()),
         );
         let noncovalent_bonds = NoncovalentBonds::new(
             remapping
                 .noncovalent_bonds()
-                .reorder(self.noncovalent_bonds.remap(graph_remapping).into_entries()),
+                .remap_vec(self.noncovalent_bonds.remap(graph_remapping).into_entries()),
         );
         let stereo_atoms = StereoAtoms::new(
             remapping
                 .stereo_atoms()
-                .reorder(self.stereo_atoms.remap(graph_remapping).into_entries()),
+                .remap_vec(self.stereo_atoms.remap(graph_remapping).into_entries()),
         );
         let stereo_bonds = StereoBonds::new(
             remapping
                 .stereo_bonds()
-                .reorder(self.stereo_bonds.remap(graph_remapping).into_entries()),
+                .remap_vec(self.stereo_bonds.remap(graph_remapping).into_entries()),
         );
         let correspondence = MoleculeCorrespondence::from(remapping);
         let constraints: Constraints = self

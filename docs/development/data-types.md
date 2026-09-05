@@ -879,7 +879,7 @@ therefore related operations with different codomains.
 A public end-to-end remapping operation on `Molecule` accepts a `MoleculeRemapping`.
 Each component length must equal the corresponding molecule entity count; bijectivity is already
 established by construction. The checked operation returns `None` on a count mismatch, and the
-asserted route panics under the same condition. Component `reorder` operations move table values;
+asserted route panics under the same condition. Component `remap_vec` operations move table values;
 constraint transport widens the remapping to a correspondence and uses the existing traversal.
 
 On success, it transports topology, every relation participant, position-sensitive relation data,
