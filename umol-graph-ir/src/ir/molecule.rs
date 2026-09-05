@@ -9,6 +9,7 @@ pub use build::MoleculeBuilder;
 pub use editor::MoleculeEditor;
 pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
+pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId, UnionFind};
 

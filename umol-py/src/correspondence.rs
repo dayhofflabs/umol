@@ -195,6 +195,12 @@ pub struct MoleculeCorrespondence(GraphIrMoleculeCorrespondence);
 
 #[pymethods]
 impl MoleculeCorrespondence {
+    /// A correspondence with no pairs and zero left and right counts for every entity kind.
+    #[staticmethod]
+    fn empty() -> Self {
+        Self::from_rust(GraphIrMoleculeCorrespondence::empty())
+    }
+
     /// Atom correspondence.
     #[getter]
     fn atoms(&self) -> Correspondence {
@@ -781,16 +787,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty_spaces(GraphIrMoleculeCorrespondence::new(
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-        GraphCoreCorrespondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),
-    ))]
+    #[case::empty_spaces(GraphIrMoleculeCorrespondence::empty())]
     fn test_molecule_correspondence_is_total(
         #[case] correspondence: GraphIrMoleculeCorrespondence,
     ) {

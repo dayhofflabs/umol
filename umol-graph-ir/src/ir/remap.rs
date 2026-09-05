@@ -286,16 +286,7 @@ mod tests {
     fn test_molecule_correspondence_from_remapping_empty() {
         assert_eq!(
             MoleculeCorrespondence::from(&MoleculeRemapping::default()),
-            MoleculeCorrespondence::new(
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-            )
+            MoleculeCorrespondence::empty()
         );
     }
 

@@ -5664,16 +5664,7 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         }),
-        MoleculeCorrespondence::new(
-            Correspondence::new(vec![], 0, 0).unwrap(),
-            Correspondence::new(vec![], 0, 0).unwrap(),
-            Correspondence::new(vec![], 0, 0).unwrap(),
-            Correspondence::new(vec![], 0, 0).unwrap(),
-            Correspondence::new(vec![], 0, 0).unwrap(),
-            Correspondence::new(vec![], 0, 0).unwrap(),
-            Correspondence::new(vec![], 0, 0).unwrap(),
-            Correspondence::new(vec![], 0, 0).unwrap(),
-        ),
+        MoleculeCorrespondence::empty(),
     )]
     #[case::bond(
         Molecule::from_entries(MoleculeEntries {

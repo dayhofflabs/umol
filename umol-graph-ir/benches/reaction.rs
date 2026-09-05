@@ -224,6 +224,15 @@ fn benchmark_mutation(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("meet_pushout/path_pair", size), |b| {
             b.iter(|| black_box(&molecule).meet_pushout(black_box(&molecule), black_box(&overlap)))
         });
+        group.bench_function(
+            BenchmarkId::new("tracked_meet_pushout/path_pair", size),
+            |b| {
+                b.iter(|| {
+                    black_box(&molecule)
+                        .tracked_meet_pushout(black_box(&molecule), black_box(&overlap))
+                })
+            },
+        );
     }
     group.finish();
 }

@@ -1664,18 +1664,8 @@ mod tests {
     #[rstest]
     #[should_panic(expected = "correspondence must cover every constraint reference")]
     fn test_constraint_map_error() {
-        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)).map(
-            &MoleculeCorrespondence::new(
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-                Correspondence::empty(),
-            ),
-        );
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))
+            .map(&MoleculeCorrespondence::empty());
     }
 
     #[rstest]

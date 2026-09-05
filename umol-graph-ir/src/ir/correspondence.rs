@@ -146,6 +146,21 @@ impl MoleculeCorrespondence {
         }
     }
 
+    /// A correspondence between empty molecules: no pairs and zero counts on both sides
+    /// for every entity kind.
+    pub const fn empty() -> Self {
+        Self {
+            atoms: Correspondence::empty(),
+            bonds: Correspondence::empty(),
+            dative_bonds: Correspondence::empty(),
+            aromatic_systems: Correspondence::empty(),
+            multicenter_bonds: Correspondence::empty(),
+            noncovalent_bonds: Correspondence::empty(),
+            stereo_atoms: Correspondence::empty(),
+            stereo_bonds: Correspondence::empty(),
+        }
+    }
+
     /// Derive the full per-entity correspondence between `lhs` and `rhs` from their atom
     /// correspondence. Bonds are the induced edge correspondence; each overlay's lhs entities are
     /// matched to an rhs entity by their atom constituents mapped through `atoms`. An entity whose
@@ -1162,6 +1177,22 @@ mod tests {
                     .expect("correspondence producer preserves partial-bijection invariants"),
             ),
         ]
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_empty() {
+        let expected = MoleculeCorrespondence {
+            atoms: Correspondence::empty(),
+            bonds: Correspondence::empty(),
+            dative_bonds: Correspondence::empty(),
+            aromatic_systems: Correspondence::empty(),
+            multicenter_bonds: Correspondence::empty(),
+            noncovalent_bonds: Correspondence::empty(),
+            stereo_atoms: Correspondence::empty(),
+            stereo_bonds: Correspondence::empty(),
+        };
+
+        assert_eq!(MoleculeCorrespondence::empty(), expected);
     }
 
     #[rstest]

@@ -1160,6 +1160,19 @@ def test_correspondence_compose_error(right_count, next_left_count):
         Correspondence.compose_all([left.reverse(), left, right])
 
 
+@pytest.mark.parametrize(
+    "entity_kind",
+    [
+        "atoms", "bonds", "dative_bonds", "aromatic_systems",
+        "multicenter_bonds", "noncovalent_bonds", "stereo_atoms", "stereo_bonds",
+    ],
+)
+def test_molecule_correspondence_empty(entity_kind):
+    correspondence = MoleculeCorrespondence.empty()
+
+    assert getattr(correspondence, entity_kind) == Correspondence([], 0, 0)
+
+
 def test_molecule_correspondence_compose_error():
     molecule = Molecule.from_entries([AtomForm(Element("C"))])
     combined = molecule.combine(molecule)

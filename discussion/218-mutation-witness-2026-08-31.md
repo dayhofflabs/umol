@@ -1140,7 +1140,7 @@ the same object-only/tracked split, preserving their categorical mapping directi
   passed. Rebuilt Python extension: 1,350 tests passed, 2 skipped; final
   molecule checks passed after count assertions were added. Nightly formatting
   and `git diff --check` passed.
-- [ ] **S5b — Molecule pushout.** Graph-IR molecule pushout and composition
+- [x] **S5b — Molecule pushout.** Graph-IR molecule pushout and composition
   callers. Breaking (red→green). [dep: S1f, S4b]
   Replace `MoleculePushout` with object-only `meet_pushout` returning
   `Option<Molecule>` and `tracked_meet_pushout` returning
@@ -1149,6 +1149,21 @@ the same object-only/tracked split, preserving their categorical mapping directi
   of the molecule and preserve common result counts. Test overlay meets,
   stereo frames, constraints, inadmissible input, exact mappings, and the
   resulting molecule, including plain/tracked output equivalence.
+  Implemented: exported `MoleculePushoutCorrespondence` with public left/right
+  fields and no result molecule or constructors. Composition uses
+  `tracked_meet_pushout`; both method forms preserve attribute and constraint
+  behavior. Exact tests cover both forms, including empty and inadmissible
+  input; a disjoint-pushout property checks all eight mappings against append
+  layout. Benchmarks include both forms.
+  Also added the approved Rust/Python `MoleculeCorrespondence::empty()`:
+  all eight components have no pairs and zero left/right counts. Replaced
+  six fully empty constructions; nonzero-count correspondences stay explicit.
+  Verification passed: core/IR library, integration, and doc suites; 491
+  properties at 256 cases (1 ignored); 4,297 graph/IO library tests; 1,634
+  Python-binding Rust tests (2 ignored); and 1,358 Python tests (2 skipped)
+  after rebuilding the extension. Final workspace all-targets check,
+  core/IR/Python property-enabled all-targets clippy with `-D warnings`,
+  nightly formatting, and `git diff --check` passed.
 - [ ] **S5c — Removal and extraction.** Graph-IR editor removal families and
   molecule extraction. Breaking (red→green). [dep: S3b, S4a]
   Compactions are optional provenance, not the primary result. Add

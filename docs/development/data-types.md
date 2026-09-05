@@ -726,6 +726,12 @@ Each operation produces components with equal target counts covering their respe
 inputs. Independently assembled fields do not establish agreement with a result object.
 Relation payload-combination failure still returns `None`.
 
+Molecule `meet_pushout` returns `Option<Molecule>`; `tracked_meet_pushout` returns
+`Option<(Molecule, MoleculePushoutCorrespondence)>`. Its carrier likewise contains only public
+`left` and `right` correspondences, with no constructor. Operation-produced components map each
+input into the result and share its target counts for all eight entity kinds. Both forms preserve
+the same attribute meets, constraint transport, and inadmissibility behavior.
+
 ## Pullback and pushout-complement results
 
 Graph and relation-set `pullback` methods return the object; `tracked_pullback`

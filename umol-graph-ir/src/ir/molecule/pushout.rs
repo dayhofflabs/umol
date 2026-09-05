@@ -16,12 +16,16 @@ use super::super::ligand::StereoLigand;
 use super::super::traits::Lattice;
 use super::{ConstraintFrameActionMap, Molecule, MoleculeEntries};
 
-/// The attributed pushout of two molecules over a graph `overlap`: `self` and `other` glued on their
-/// shared subgraph, with atom / bond data `meet`-combined where they coincide. `object` keeps `self`'s
-/// ids; `left` / `right` embed each side into it.
-pub struct MoleculePushout {
-    pub object: Molecule,
+/// The two input-to-result correspondences of a molecule pushout.
+///
+/// Operation-produced components cover their respective inputs and have equal target counts
+/// for all eight entity kinds. Public fields may be assembled independently; agreement with
+/// a particular result molecule is contextual.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MoleculePushoutCorrespondence {
+    /// Maps the left input into the result, retaining its entity ids.
     pub left: MoleculeCorrespondence,
+    /// Maps the right input into the result, identifying coincident entities and appending others.
     pub right: MoleculeCorrespondence,
 }
 
@@ -33,11 +37,27 @@ impl Molecule {
     /// complete inline assertion to it before the meet; right-only overlays preserve their
     /// remapped right frame. Frame-relative right constraints are transported by the same unique
     /// alignment before their entity ids are remapped into the pushout.
+    /// Returns `None` also when overlays or their frame alignment cannot form an integral result.
+    /// The overlap must describe the supplied atom-bond graphs.
+    /// Use [`Self::tracked_meet_pushout`] to obtain the input mappings.
     pub fn meet_pushout(
         &self,
         other: &Molecule,
         overlap: &GraphCorrespondence,
-    ) -> Option<MoleculePushout> {
+    ) -> Option<Molecule> {
+        self.tracked_meet_pushout(other, overlap)
+            .map(|(object, _)| object)
+    }
+
+    /// Glue two molecules and return the result with both input-to-result correspondences.
+    ///
+    /// Produces the same molecule and has the same absence conditions as [`Self::meet_pushout`].
+    /// Both mappings use the result's full entity counts, independently of the other mapping.
+    pub fn tracked_meet_pushout(
+        &self,
+        other: &Molecule,
+        overlap: &GraphCorrespondence,
+    ) -> Option<(Molecule, MoleculePushoutCorrespondence)> {
         let (graph, po) = self.raw_graph().tracked_pushout(other.raw_graph(), overlap);
 
         let mut atoms: Vec<AtomForm> = Vec::with_capacity(graph.node_count());
@@ -290,11 +310,7 @@ impl Molecule {
         }
         object.constraints = constraints;
 
-        Some(MoleculePushout {
-            object,
-            left,
-            right,
-        })
+        Some((object, MoleculePushoutCorrespondence { left, right }))
     }
 }
 
@@ -331,6 +347,25 @@ mod tests {
         )
     }
 
+    #[rstest]
+    fn test_molecule_tracked_meet_pushout_empty() {
+        let molecule = Molecule::new();
+        let overlap = GraphCorrespondence::new(Correspondence::empty(), Correspondence::empty());
+        let expected = MoleculePushoutCorrespondence {
+            left: MoleculeCorrespondence::empty(),
+            right: MoleculeCorrespondence::empty(),
+        };
+
+        assert_eq!(
+            molecule.meet_pushout(&molecule, &overlap),
+            Some(Molecule::new())
+        );
+        assert_eq!(
+            molecule.tracked_meet_pushout(&molecule, &overlap),
+            Some((Molecule::new(), expected)),
+        );
+    }
+
     // meet_pushout glues over the shared atom: `object` keeps left's ids, appends right's unmatched
     // atom, and the shared atom carries the two sides' meet (either order → the more specific).
     #[rstest]
@@ -364,8 +399,9 @@ mod tests {
             ],
             ..Default::default()
         });
-        let result = left.meet_pushout(&right, &overlap).unwrap();
-        assert_eq!(result.object, expected);
+        let (object, result) = left.tracked_meet_pushout(&right, &overlap).unwrap();
+        assert_eq!(object, expected);
+        assert_eq!(left.meet_pushout(&right, &overlap), Some(expected));
         assert_eq!(
             result.left,
             MoleculeCorrespondence::new(
@@ -446,7 +482,8 @@ mod tests {
         #[case] left: Molecule,
         #[case] right: Molecule,
     ) {
-        assert!(left.meet_pushout(&right, &overlap).is_none());
+        assert_eq!(left.meet_pushout(&right, &overlap), None);
+        assert_eq!(left.tracked_meet_pushout(&right, &overlap), None);
     }
 
     // The crossing node correspondence reverses each right-side participant pair. Coincident
@@ -533,10 +570,13 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(
-            left.meet_pushout(&right, &full_overlap)
-                .expect("admissible")
-                .object,
-            expected,
+            left.meet_pushout(&right, &full_overlap),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            left.tracked_meet_pushout(&right, &full_overlap)
+                .map(|(object, _)| object),
+            Some(expected),
         );
     }
 
@@ -589,11 +629,11 @@ mod tests {
             ]),
             ..Default::default()
         });
+        assert_eq!(left.meet_pushout(&right, &overlap), Some(expected.clone()));
         assert_eq!(
-            left.meet_pushout(&right, &overlap)
-                .expect("admissible")
-                .object,
-            expected,
+            left.tracked_meet_pushout(&right, &overlap)
+                .map(|(object, _)| object),
+            Some(expected),
         );
     }
 
@@ -743,11 +783,12 @@ mod tests {
         let mut expected_entries = left_entries;
         expected_entries.constraints = expected_constraint.into();
 
+        let expected = Molecule::from_entries(expected_entries);
+        assert_eq!(left.meet_pushout(&right, &overlap), Some(expected.clone()));
         assert_eq!(
-            left.meet_pushout(&right, &overlap)
-                .expect("the complete overlap is admissible")
-                .object,
-            Molecule::from_entries(expected_entries),
+            left.tracked_meet_pushout(&right, &overlap)
+                .map(|(object, _)| object),
+            Some(expected),
         );
     }
 
@@ -814,10 +855,11 @@ mod tests {
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let expected = admissible.then(|| self_mol.clone());
+        assert_eq!(self_mol.meet_pushout(&other_mol, &overlap), expected);
         assert_eq!(
             self_mol
-                .meet_pushout(&other_mol, &overlap)
-                .map(|po| po.object),
+                .tracked_meet_pushout(&other_mol, &overlap)
+                .map(|(object, _)| object),
             expected,
         );
     }
@@ -903,10 +945,11 @@ mod tests {
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
         let expected = admissible.then(|| self_mol.clone());
+        assert_eq!(self_mol.meet_pushout(&other_mol, &overlap), expected);
         assert_eq!(
             self_mol
-                .meet_pushout(&other_mol, &overlap)
-                .map(|po| po.object),
+                .tracked_meet_pushout(&other_mol, &overlap)
+                .map(|(object, _)| object),
             expected,
         );
     }
@@ -987,9 +1030,13 @@ mod tests {
         );
         let expected = admissible.then(|| self_mol.clone());
         assert_eq!(
+            self_mol.meet_pushout(&molecule(other_ligands.to_vec(), other_coset), &overlap),
+            expected
+        );
+        assert_eq!(
             self_mol
-                .meet_pushout(&molecule(other_ligands.to_vec(), other_coset), &overlap)
-                .map(|po| po.object),
+                .tracked_meet_pushout(&molecule(other_ligands.to_vec(), other_coset), &overlap)
+                .map(|(object, _)| object),
             expected,
         );
     }
@@ -1075,9 +1122,13 @@ mod tests {
         );
         let expected = admissible.then(|| self_mol.clone());
         assert_eq!(
+            self_mol.meet_pushout(&molecule(other_ligands.to_vec(), other_coset), &overlap),
+            expected
+        );
+        assert_eq!(
             self_mol
-                .meet_pushout(&molecule(other_ligands.to_vec(), other_coset), &overlap)
-                .map(|po| po.object),
+                .tracked_meet_pushout(&molecule(other_ligands.to_vec(), other_coset), &overlap)
+                .map(|(object, _)| object),
             expected,
         );
     }
