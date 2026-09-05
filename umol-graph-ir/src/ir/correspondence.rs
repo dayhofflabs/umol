@@ -5,10 +5,12 @@
 //! lifts it to a reaction span.
 
 use std::collections::BTreeMap;
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
 
-use umol_graph_core::Correspondence;
+use umol_graph_core::{Correspondence, CorrespondenceComposeError};
 
-use super::entity::Entity;
+use super::entity::{Entity, EntityKind};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -18,6 +20,25 @@ use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
 use super::remap::IdRemapping;
+
+/// A molecule correspondence component has incompatible intermediate counts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MoleculeCorrespondenceComposeError {
+    pub kind: EntityKind,
+    pub source: CorrespondenceComposeError,
+}
+
+impl Display for MoleculeCorrespondenceComposeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.kind, self.source)
+    }
+}
+
+impl Error for MoleculeCorrespondenceComposeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.source)
+    }
+}
 
 /// A per-entity partial bijection between two molecules: atoms, bonds, and the six overlay kinds.
 /// The matched/unmatched reads of each component are those of its `Correspondence`.
@@ -131,25 +152,81 @@ impl MoleculeCorrespondence {
 
     /// Relational composition, per entity kind: `self` (lhs↔middle) followed by `other`
     /// (middle↔rhs), yielding a lhs↔rhs correspondence.
-    pub fn compose(&self, other: &MoleculeCorrespondence) -> MoleculeCorrespondence {
-        MoleculeCorrespondence::new(
-            self.atoms.compose(&other.atoms),
-            self.bonds.compose(&other.bonds),
-            self.dative_bonds.compose(&other.dative_bonds),
-            self.aromatic_systems.compose(&other.aromatic_systems),
-            self.multicenter_bonds.compose(&other.multicenter_bonds),
-            self.noncovalent_bonds.compose(&other.noncovalent_bonds),
-            self.stereo_atoms.compose(&other.stereo_atoms),
-            self.stereo_bonds.compose(&other.stereo_bonds),
-        )
+    ///
+    /// # Errors
+    /// Returns the first entity kind with incompatible intermediate counts, in constructor order.
+    /// Equal counts do not establish intermediate molecule identity.
+    pub fn compose(
+        &self,
+        other: &MoleculeCorrespondence,
+    ) -> Result<MoleculeCorrespondence, MoleculeCorrespondenceComposeError> {
+        Ok(MoleculeCorrespondence::new(
+            self.atoms.compose(&other.atoms).map_err(|source| {
+                MoleculeCorrespondenceComposeError {
+                    kind: EntityKind::Atom,
+                    source,
+                }
+            })?,
+            self.bonds.compose(&other.bonds).map_err(|source| {
+                MoleculeCorrespondenceComposeError {
+                    kind: EntityKind::Bond,
+                    source,
+                }
+            })?,
+            self.dative_bonds
+                .compose(&other.dative_bonds)
+                .map_err(|source| MoleculeCorrespondenceComposeError {
+                    kind: EntityKind::DativeBond,
+                    source,
+                })?,
+            self.aromatic_systems
+                .compose(&other.aromatic_systems)
+                .map_err(|source| MoleculeCorrespondenceComposeError {
+                    kind: EntityKind::AromaticSystem,
+                    source,
+                })?,
+            self.multicenter_bonds
+                .compose(&other.multicenter_bonds)
+                .map_err(|source| MoleculeCorrespondenceComposeError {
+                    kind: EntityKind::MulticenterBond,
+                    source,
+                })?,
+            self.noncovalent_bonds
+                .compose(&other.noncovalent_bonds)
+                .map_err(|source| MoleculeCorrespondenceComposeError {
+                    kind: EntityKind::NoncovalentBond,
+                    source,
+                })?,
+            self.stereo_atoms
+                .compose(&other.stereo_atoms)
+                .map_err(|source| MoleculeCorrespondenceComposeError {
+                    kind: EntityKind::StereoAtom,
+                    source,
+                })?,
+            self.stereo_bonds
+                .compose(&other.stereo_bonds)
+                .map_err(|source| MoleculeCorrespondenceComposeError {
+                    kind: EntityKind::StereoBond,
+                    source,
+                })?,
+        ))
     }
 
-    /// Compose molecule correspondences in iteration order. Returns `None` for an empty input and
-    /// the value itself for a singleton.
-    pub fn compose_all(correspondences: impl IntoIterator<Item = Self>) -> Option<Self> {
+    /// Compose molecule correspondences in iteration order. Returns `Ok(None)` for an empty input
+    /// and `Ok(Some(value))` for a singleton.
+    ///
+    /// # Errors
+    /// Returns the first composition error in iteration order.
+    pub fn compose_all(
+        correspondences: impl IntoIterator<Item = Self>,
+    ) -> Result<Option<Self>, MoleculeCorrespondenceComposeError> {
+        let mut correspondences = correspondences.into_iter();
+        let Some(first) = correspondences.next() else {
+            return Ok(None);
+        };
         correspondences
-            .into_iter()
-            .reduce(|left, right| left.compose(&right))
+            .try_fold(first, |left, right| left.compose(&right))
+            .map(Some)
     }
 
     /// The inverse correspondence (rhs↔lhs), per entity kind: each component's `reverse`.
@@ -914,7 +991,7 @@ mod tests {
         let [left, right, _] = composition_chain;
 
         assert_eq!(
-            left.compose(&right),
+            left.compose(&right).unwrap(),
             MoleculeCorrespondence::new(
                 Correspondence::new(vec![(AtomId(0), AtomId(2))], 1, 3)
                     .expect("correspondence producer preserves partial-bijection invariants"),
@@ -933,6 +1010,56 @@ mod tests {
                 Correspondence::new(vec![(StereoBondId(0), StereoBondId(2))], 1, 3)
                     .expect("correspondence producer preserves partial-bijection invariants"),
             ),
+        );
+    }
+
+    #[rstest]
+    #[case::atom(EntityKind::Atom)]
+    #[case::bond(EntityKind::Bond)]
+    #[case::dative(EntityKind::DativeBond)]
+    #[case::aromatic(EntityKind::AromaticSystem)]
+    #[case::multicenter(EntityKind::MulticenterBond)]
+    #[case::noncovalent(EntityKind::NoncovalentBond)]
+    #[case::stereo_atom(EntityKind::StereoAtom)]
+    #[case::stereo_bond(EntityKind::StereoBond)]
+    fn test_molecule_correspondence_compose_error(
+        composition_chain: [MoleculeCorrespondence; 3],
+        #[case] kind: EntityKind,
+    ) {
+        let [left, mut right, _] = composition_chain;
+        match kind {
+            EntityKind::Atom => right.atoms = Correspondence::new(vec![], 5, 3).unwrap(),
+            EntityKind::Bond => right.bonds = Correspondence::new(vec![], 5, 3).unwrap(),
+            EntityKind::DativeBond => {
+                right.dative_bonds = Correspondence::new(vec![], 5, 3).unwrap()
+            }
+            EntityKind::AromaticSystem => {
+                right.aromatic_systems = Correspondence::new(vec![], 5, 3).unwrap()
+            }
+            EntityKind::MulticenterBond => {
+                right.multicenter_bonds = Correspondence::new(vec![], 5, 3).unwrap()
+            }
+            EntityKind::NoncovalentBond => {
+                right.noncovalent_bonds = Correspondence::new(vec![], 5, 3).unwrap()
+            }
+            EntityKind::StereoAtom => {
+                right.stereo_atoms = Correspondence::new(vec![], 5, 3).unwrap()
+            }
+            EntityKind::StereoBond => {
+                right.stereo_bonds = Correspondence::new(vec![], 5, 3).unwrap()
+            }
+        }
+        let expected = MoleculeCorrespondenceComposeError {
+            kind,
+            source: CorrespondenceComposeError {
+                right_count: 2,
+                next_left_count: 5,
+            },
+        };
+        assert_eq!(left.compose(&right), Err(expected.clone()));
+        assert_eq!(
+            MoleculeCorrespondence::compose_all([left, right]),
+            Err(expected)
         );
     }
 
@@ -969,7 +1096,7 @@ mod tests {
         };
 
         assert_eq!(
-            MoleculeCorrespondence::compose_all(composition_chain.into_iter().take(count)),
+            MoleculeCorrespondence::compose_all(composition_chain.into_iter().take(count)).unwrap(),
             expected,
         );
     }

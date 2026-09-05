@@ -364,7 +364,7 @@ proptest! {
         let lhs_action =
             MoleculeCorrespondence::induce(reaction.lhs(), canonical.lhs(), lhs_atoms)
                 .expect("canonical union action induces its lhs action");
-        let canonical_match = lhs_action.reverse().compose(&correspondence);
+        let canonical_match = lhs_action.reverse().compose(&correspondence).unwrap();
         let source_application = reaction.apply_at(&host, &correspondence);
         let canonical_application = canonical.apply_at(&host, &canonical_match);
 

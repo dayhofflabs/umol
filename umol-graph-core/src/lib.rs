@@ -47,7 +47,10 @@ pub use algorithms::subgraph_isomorphism::{
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
 pub use compact::{Compaction, GraphCompaction};
-pub use correspondence::{Correspondence, CorrespondenceError, GraphCorrespondence};
+pub use correspondence::{
+    Correspondence, CorrespondenceComposeError, CorrespondenceError, GraphCorrespondence,
+    GraphCorrespondenceComposeError,
+};
 pub use digraph::DiGraph;
 pub use graph::{EdgeId, Graph, Neighbor, NodeId, SubdividedGraph, SubdivisionNodeSource};
 pub use relation::{

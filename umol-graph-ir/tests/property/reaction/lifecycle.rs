@@ -90,9 +90,9 @@ proptest! {
             })?;
         prop_assert_eq!(recovered_derivation.rhs(), derivation.rhs());
 
-        let identity = derivation.chain(&derivation.reverse());
+        let identity = derivation.chain(&derivation.reverse()).unwrap();
         prop_assert_eq!(identity.lhs(), derivation.lhs());
         prop_assert_eq!(identity.rhs(), derivation.lhs());
-        prop_assert_eq!(identity.comap(), &derivation.comap().compose(&derivation.comap().reverse()));
+        prop_assert_eq!(identity.comap(), &derivation.comap().compose(&derivation.comap().reverse()).unwrap());
     }
 }

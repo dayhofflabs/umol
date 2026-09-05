@@ -42,7 +42,8 @@ fn compose_overlap(
     let correspondence = derivation_a
         .atom_correspondence()
         .reverse()
-        .compose(derivation_b.atom_correspondence());
+        .compose(derivation_b.atom_correspondence())
+        .expect("both applications share the pushout host");
     let composite = Reaction::from_sides(
         derivation_a.rhs().clone(),
         derivation_b.rhs().clone(),

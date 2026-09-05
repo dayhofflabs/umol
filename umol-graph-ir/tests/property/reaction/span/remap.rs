@@ -90,7 +90,7 @@ proptest! {
     fn test_reaction_span_remap_identity(
         scenario in reaction_span_scenario_strategy(),
     ) {
-        let identity = scenario.first.compose(&scenario.first.reverse());
+        let identity = scenario.first.compose(&scenario.first.reverse()).unwrap();
 
         prop_assert_eq!(scenario.span.remap(&identity), scenario.span);
     }
@@ -110,7 +110,7 @@ proptest! {
         scenario in reaction_span_scenario_strategy(),
     ) {
         let sequential = scenario.span.remap(&scenario.first).remap(&scenario.second);
-        let direct = scenario.span.remap(&scenario.first.compose(&scenario.second));
+        let direct = scenario.span.remap(&scenario.first.compose(&scenario.second).unwrap());
 
         prop_assert_eq!(sequential, direct);
     }

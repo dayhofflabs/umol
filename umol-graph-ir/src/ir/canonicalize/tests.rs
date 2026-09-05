@@ -5074,7 +5074,7 @@ fn test_canonicalize_constitution_properties(
         },
     )
     .unwrap();
-    let composed = renumbering.compose(&renumbered_correspondence);
+    let composed = renumbering.compose(&renumbered_correspondence).unwrap();
     let composed_action = initial_color_molecule.remap(&composed).reframe().unwrap();
     let canonical_renumbered_incidence =
         canonical_renumbered.incidence_graph(IncidenceLevel::Constitution);

@@ -63,7 +63,7 @@ pub use constraint::{
     StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
     TopicityRelationForm,
 };
-pub use correspondence::MoleculeCorrespondence;
+pub use correspondence::{MoleculeCorrespondence, MoleculeCorrespondenceComposeError};
 pub use dative::{DativeBondForm, DativeBondUpdate, DativeBonds};
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,

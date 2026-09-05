@@ -129,7 +129,7 @@ proptest! {
 
         prop_assert!(first.framed_eq_under(&second, &first_second));
         prop_assert!(second.framed_eq_under(&third, &second_third));
-        prop_assert!(first.framed_eq_under(&third, &first_second.compose(&second_third)));
+        prop_assert!(first.framed_eq_under(&third, &first_second.compose(&second_third).unwrap()));
     }
 
     #[test]

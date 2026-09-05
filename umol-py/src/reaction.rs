@@ -539,10 +539,14 @@ impl ReactionDerivation {
     }
 
     /// Chain this derivation onto a compatible following derivation.
-    fn chain(&self, next: &Self) -> Self {
+    /// Raises `ValueError` when intermediate entity counts disagree; molecule identity is not checked.
+    fn chain(&self, next: &Self) -> PyResult<Self> {
         let first = self.to_rust();
         let next = next.to_rust();
-        Self::from_rust(first.chain(next))
+        first
+            .chain(next)
+            .map(Self::from_rust)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// Recover the reaction rule represented by this concrete firing.
@@ -3153,14 +3157,14 @@ mod tests {
         let second = reaction.apply_at(&middle, &correspondence).unwrap();
         let first_value = ReactionDerivation::from_rust(first.clone());
         let second_value = ReactionDerivation::from_rust(second.clone());
-        let chained = first_value.chain(&second_value);
+        let chained = first_value.chain(&second_value).unwrap();
         let mut chained_rhs = chained.rhs();
         *chained_rhs
             .to_rust_mut()
             .atom_mut(GraphIrAtomId(0))
             .attributes = GraphIrAtomForm::from_element(ChemElement::N);
 
-        assert_eq!(chained.to_rust(), &first.chain(&second));
+        assert_eq!(chained.to_rust(), &first.chain(&second).unwrap());
         assert_eq!(first_value.to_rust(), &first);
         assert_eq!(second_value.to_rust(), &second);
         assert_ne!(chained.rhs().to_rust(), chained_rhs.to_rust());

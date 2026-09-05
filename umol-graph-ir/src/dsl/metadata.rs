@@ -923,7 +923,7 @@ mod tests {
             atom_aliases: BiBTreeMap::new(),
         };
         let sequential = input.clone().remap(&first).remap(&second);
-        let composed = input.remap(&first.compose(&second));
+        let composed = input.remap(&first.compose(&second).unwrap());
 
         assert_eq!(sequential, composed);
         assert_eq!(composed, expected);

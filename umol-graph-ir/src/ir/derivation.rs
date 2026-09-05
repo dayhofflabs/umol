@@ -10,7 +10,7 @@
 
 use umol_graph_core::Correspondence;
 
-use super::correspondence::MoleculeCorrespondence;
+use super::correspondence::{MoleculeCorrespondence, MoleculeCorrespondenceComposeError};
 use super::id::AtomId;
 use super::molecule::Molecule;
 #[cfg(test)]
@@ -74,12 +74,18 @@ impl ReactionDerivation {
 
     /// Chain onto a following derivation `next` (which fires on this one's `rhs`): the composite
     /// `lhs ⇒ next.rhs`, with the comaps composed (pathway atom-correspondence propagation).
-    pub fn chain(&self, next: &ReactionDerivation) -> ReactionDerivation {
-        ReactionDerivation {
+    ///
+    /// # Errors
+    /// Returns unequal intermediate entity counts. Equal counts do not establish molecule identity.
+    pub fn chain(
+        &self,
+        next: &ReactionDerivation,
+    ) -> Result<ReactionDerivation, MoleculeCorrespondenceComposeError> {
+        Ok(ReactionDerivation {
             lhs: self.lhs.clone(),
             rhs: next.rhs.clone(),
-            comap: self.comap.compose(&next.comap),
-        }
+            comap: self.comap.compose(&next.comap)?,
+        })
     }
 }
 
@@ -87,11 +93,13 @@ impl ReactionDerivation {
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_core::CorrespondenceComposeError;
 
     use super::super::atom::AtomForm;
     use super::super::bond::BondForm;
     use super::super::delta::{BondDelta, Delta, Deltas};
     use super::super::edit::BondFieldChange;
+    use super::super::entity::EntityKind;
     use super::super::id::{AtomId, BondId};
     use super::super::num::NumForm;
     use super::*;
@@ -269,12 +277,47 @@ mod tests {
         let first = ReactionDerivation::new(lhs.clone(), mid.clone(), first_comap.clone());
         let second = ReactionDerivation::new(mid, rhs.clone(), second_comap.clone());
         assert_eq!(
-            first.chain(&second),
+            first.chain(&second).unwrap(),
             ReactionDerivation {
                 lhs,
                 rhs,
-                comap: first_comap.compose(&second_comap),
+                comap: first_comap.compose(&second_comap).unwrap(),
             }
+        );
+    }
+
+    #[rstest]
+    #[case::smaller(1)]
+    #[case::larger(3)]
+    fn test_reaction_derivation_chain_error(
+        derivation_parts: (Molecule, Molecule, MoleculeCorrespondence),
+        #[case] count: usize,
+    ) {
+        let (lhs, rhs, comap) = derivation_parts;
+        let first = ReactionDerivation::new(lhs, rhs, comap);
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); count],
+            ..Default::default()
+        });
+        let atoms = Correspondence::new(
+            (0..count)
+                .map(|id| (AtomId::from(id), AtomId::from(id)))
+                .collect(),
+            count,
+            count,
+        )
+        .unwrap();
+        let correspondence = MoleculeCorrespondence::induce(&molecule, &molecule, atoms).unwrap();
+        let next = ReactionDerivation::new(molecule.clone(), molecule, correspondence);
+        assert_eq!(
+            first.chain(&next),
+            Err(MoleculeCorrespondenceComposeError {
+                kind: EntityKind::Atom,
+                source: CorrespondenceComposeError {
+                    right_count: 2,
+                    next_left_count: count
+                },
+            })
         );
     }
 }

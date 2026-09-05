@@ -1162,6 +1162,26 @@ def test_correspondence_value():
     assert Correspondence.compose_all(iter(())) is None
 
 
+@pytest.mark.parametrize("right_count,next_left_count", [(3, 1), (1, 3), (0, 1)])
+def test_correspondence_compose_error(right_count, next_left_count):
+    left = Correspondence([], 2, right_count)
+    right = Correspondence([], next_left_count, 2)
+    message = f"intermediate counts differ: {right_count} and {next_left_count}"
+    with pytest.raises(ValueError, match=message):
+        left.compose(right)
+    with pytest.raises(ValueError, match=message):
+        Correspondence.compose_all([left.reverse(), left, right])
+
+
+def test_molecule_correspondence_compose_error():
+    molecule = Molecule.from_entries([AtomForm(Element("C"))])
+    _, correspondence = molecule.combine(molecule)
+    with pytest.raises(ValueError, match="atom: intermediate counts differ: 2 and 1"):
+        correspondence.compose(correspondence)
+    with pytest.raises(ValueError, match="atom: intermediate counts differ: 2 and 1"):
+        MoleculeCorrespondence.compose_all([correspondence, correspondence])
+
+
 def test_molecule_correspondence_value():
     _, correspondence = Molecule.from_entries(
         [AtomForm(Element("C"))]

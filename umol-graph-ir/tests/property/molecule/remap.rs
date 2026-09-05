@@ -284,7 +284,7 @@ proptest! {
         (source, first, second) in remapping_scenario_strategy(),
     ) {
         let sequential = source.remap(&first).remap(&second);
-        let direct = source.remap(&first.compose(&second));
+        let direct = source.remap(&first.compose(&second).unwrap());
 
         prop_assert_eq!(sequential, direct);
     }

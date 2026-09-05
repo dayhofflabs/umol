@@ -40,6 +40,49 @@ impl<Id: Debug> Display for CorrespondenceError<Id> {
 
 impl<Id: Debug> Error for CorrespondenceError<Id> {}
 
+/// The consecutive correspondences declare different intermediate sizes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CorrespondenceComposeError {
+    pub right_count: usize,
+    pub next_left_count: usize,
+}
+
+impl Display for CorrespondenceComposeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "intermediate counts differ: {} and {}",
+            self.right_count, self.next_left_count
+        )
+    }
+}
+
+impl Error for CorrespondenceComposeError {}
+
+/// A graph correspondence component has incompatible intermediate counts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GraphCorrespondenceComposeError {
+    Nodes(CorrespondenceComposeError),
+    Edges(CorrespondenceComposeError),
+}
+
+impl Display for GraphCorrespondenceComposeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Nodes(error) => write!(f, "nodes: {error}"),
+            Self::Edges(error) => write!(f, "edges: {error}"),
+        }
+    }
+}
+
+impl Error for GraphCorrespondenceComposeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Nodes(error) | Self::Edges(error) => Some(error),
+        }
+    }
+}
+
 /// A partial bijection between two `Id` spaces: the matched `(left, right)` pairs; every unmatched
 /// id is reported on its side. Only the matched pairs are stored — unmatched ids are derived on
 /// demand, so the carrier stays cheap to produce on the hot enumeration path.
@@ -206,24 +249,49 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
     /// left↔right correspondence. A left id matched to a middle id that `other` leaves unmatched
     /// becomes unmatched.
     ///
-    /// Composition matches numerical middle ids even when the declared intermediate counts differ.
-    /// Ids outside the shorter space have no pair and therefore behave as absent or unmatched.
-    pub fn compose(&self, other: &Correspondence<Id>) -> Correspondence<Id> {
+    /// # Errors
+    /// Returns the two intermediate counts when they disagree. Equal counts do not establish
+    /// that the correspondences describe the same intermediate object.
+    ///
+    /// # Semantic properties
+    /// Composition is associative for compatible carriers and preserves the outer counts.
+    pub fn compose(
+        &self,
+        other: &Correspondence<Id>,
+    ) -> Result<Correspondence<Id>, CorrespondenceComposeError> {
+        if self.right_count != other.left_count {
+            return Err(CorrespondenceComposeError {
+                right_count: self.right_count,
+                next_left_count: other.left_count,
+            });
+        }
         let matched_pairs = self
             .matched_pairs
             .iter()
             .filter_map(|&(left, middle)| other.right_of(middle).map(|right| (left, right)))
             .collect();
-        Correspondence::new(matched_pairs, self.left_count, other.right_count)
-            .unwrap_or_else(|_| panic!("composition of valid correspondences is valid"))
+        Ok(Self {
+            matched_pairs,
+            left_count: self.left_count,
+            right_count: other.right_count,
+        })
     }
 
-    /// Compose correspondences in iteration order. Returns `None` for an empty input and the value
-    /// itself for a singleton.
-    pub fn compose_all(correspondences: impl IntoIterator<Item = Self>) -> Option<Self> {
+    /// Compose correspondences in iteration order. Returns `Ok(None)` for an empty input and
+    /// `Ok(Some(value))` for a singleton.
+    ///
+    /// # Errors
+    /// Returns the first incompatible pair of intermediate counts.
+    pub fn compose_all(
+        correspondences: impl IntoIterator<Item = Self>,
+    ) -> Result<Option<Self>, CorrespondenceComposeError> {
+        let mut correspondences = correspondences.into_iter();
+        let Some(first) = correspondences.next() else {
+            return Ok(None);
+        };
         correspondences
-            .into_iter()
-            .reduce(|left, right| left.compose(&right))
+            .try_fold(first, |left, right| left.compose(&right))
+            .map(Some)
     }
 
     /// The inverse correspondence (right↔left): each matched pair swapped and the two id-space sizes
@@ -330,19 +398,39 @@ impl GraphCorrespondence {
     }
 
     /// Relational composition of the node and edge correspondences.
-    pub fn compose(&self, other: &GraphCorrespondence) -> GraphCorrespondence {
-        GraphCorrespondence::new(
-            self.nodes.compose(&other.nodes),
-            self.edges.compose(&other.edges),
-        )
+    ///
+    /// # Errors
+    /// Returns the first component with unequal intermediate counts, nodes before edges.
+    /// Equal counts do not establish intermediate graph identity.
+    pub fn compose(
+        &self,
+        other: &GraphCorrespondence,
+    ) -> Result<GraphCorrespondence, GraphCorrespondenceComposeError> {
+        Ok(GraphCorrespondence::new(
+            self.nodes
+                .compose(&other.nodes)
+                .map_err(GraphCorrespondenceComposeError::Nodes)?,
+            self.edges
+                .compose(&other.edges)
+                .map_err(GraphCorrespondenceComposeError::Edges)?,
+        ))
     }
 
-    /// Compose graph correspondences in iteration order. Returns `None` for an empty input and the
-    /// value itself for a singleton.
-    pub fn compose_all(correspondences: impl IntoIterator<Item = Self>) -> Option<Self> {
+    /// Compose graph correspondences in iteration order. Returns `Ok(None)` for an empty input and
+    /// `Ok(Some(value))` for a singleton.
+    ///
+    /// # Errors
+    /// Returns the first composition error in iteration order.
+    pub fn compose_all(
+        correspondences: impl IntoIterator<Item = Self>,
+    ) -> Result<Option<Self>, GraphCorrespondenceComposeError> {
+        let mut correspondences = correspondences.into_iter();
+        let Some(first) = correspondences.next() else {
+            return Ok(None);
+        };
         correspondences
-            .into_iter()
-            .reduce(|left, right| left.compose(&right))
+            .try_fold(first, |left, right| left.compose(&right))
+            .map(Some)
     }
 
     /// Whether every node and edge on the left is matched.
@@ -665,13 +753,28 @@ mod tests {
         let [left, right, _] = graph_correspondences;
 
         assert_eq!(
-            left.compose(&right),
+            left.compose(&right).unwrap(),
             GraphCorrespondence::new(
                 Correspondence::new(vec![(NodeId(0), NodeId(2))], 1, 3)
                     .expect("correspondence producer preserves partial-bijection invariants"),
                 Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
             ),
+        );
+    }
+
+    #[rstest]
+    #[case::nodes(GraphCorrespondence::new(Correspondence::new(vec![], 1, 2).unwrap(), Correspondence::empty()), GraphCorrespondenceComposeError::Nodes(CorrespondenceComposeError {right_count: 2, next_left_count: 0}))]
+    #[case::edges(GraphCorrespondence::new(Correspondence::empty(), Correspondence::new(vec![], 1, 2).unwrap()), GraphCorrespondenceComposeError::Edges(CorrespondenceComposeError {right_count: 2, next_left_count: 0}))]
+    fn test_graph_correspondence_compose_error(
+        #[case] left: GraphCorrespondence,
+        #[case] expected: GraphCorrespondenceComposeError,
+    ) {
+        let right = GraphCorrespondence::new(Correspondence::empty(), Correspondence::empty());
+        assert_eq!(left.compose(&right), Err(expected.clone()));
+        assert_eq!(
+            GraphCorrespondence::compose_all([left, right]),
+            Err(expected)
         );
     }
 
@@ -696,7 +799,8 @@ mod tests {
         };
 
         assert_eq!(
-            GraphCorrespondence::compose_all(graph_correspondences.into_iter().take(count)),
+            GraphCorrespondence::compose_all(graph_correspondences.into_iter().take(count))
+                .unwrap(),
             expected,
         );
     }
@@ -931,26 +1035,6 @@ mod tests {
             102,
         ).expect("correspondence producer preserves partial-bijection invariants"),
     )]
-    #[case::mismatched_intermediate(
-        Correspondence::new(
-            vec![
-                (NodeId(0), NodeId(0)),
-                (NodeId(1), NodeId(2)),
-            ],
-            2,
-            3,
-        ).expect("correspondence producer preserves partial-bijection invariants"),
-        Correspondence::new(
-            vec![(NodeId(0), NodeId(1))],
-            1,
-            2,
-        ).expect("correspondence producer preserves partial-bijection invariants"),
-        Correspondence::new(
-            vec![(NodeId(0), NodeId(1))],
-            2,
-            2,
-        ).expect("correspondence producer preserves partial-bijection invariants"),
-    )]
     #[case::deletion_then_addition(
         Correspondence::new(vec![], 1, 0).expect("correspondence producer preserves partial-bijection invariants"),
         Correspondence::new(vec![], 0, 1).expect("correspondence producer preserves partial-bijection invariants"),
@@ -961,7 +1045,28 @@ mod tests {
         #[case] right: Correspondence<NodeId>,
         #[case] expected: Correspondence<NodeId>,
     ) {
-        assert_eq!(left.compose(&right), expected);
+        assert_eq!(left.compose(&right), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::shorter(3, 1)]
+    #[case::longer(1, 3)]
+    #[case::empty(0, 1)]
+    fn test_correspondence_compose_error(
+        #[case] right_count: usize,
+        #[case] next_left_count: usize,
+    ) {
+        let left = Correspondence::<NodeId>::new(vec![], 2, right_count).unwrap();
+        let right = Correspondence::new(vec![], next_left_count, 2).unwrap();
+        let expected = CorrespondenceComposeError {
+            right_count,
+            next_left_count,
+        };
+        assert_eq!(left.compose(&right), Err(expected.clone()));
+        assert_eq!(
+            Correspondence::compose_all([left.reverse(), left, right]),
+            Err(expected)
+        );
     }
 
     #[rstest]
@@ -998,7 +1103,7 @@ mod tests {
             ).expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(
                 vec![(NodeId(0), NodeId(2))],
-                1,
+                2,
                 3,
             ).expect("correspondence producer preserves partial-bijection invariants"),
         ],
@@ -1012,7 +1117,7 @@ mod tests {
         #[case] correspondences: Vec<Correspondence<NodeId>>,
         #[case] expected: Option<Correspondence<NodeId>>,
     ) {
-        assert_eq!(Correspondence::compose_all(correspondences), expected);
+        assert_eq!(Correspondence::compose_all(correspondences), Ok(expected));
     }
 
     #[rstest]

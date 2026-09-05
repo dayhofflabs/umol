@@ -741,7 +741,7 @@ estimates.
 
 ### S1 — Correspondence composition and transport
 
-- [ ] **S1a — Composition.** Graph-core and graph-IR correspondence modules.
+- [x] **S1a — Composition.** Graph-core and graph-IR correspondence modules.
   Breaking (red→green). [dep: S0a] Make single-space, graph, and molecule
   composition check intermediate counts. Migrate every caller, including
   rewriting and reaction composition; retain errors only at public boundaries
@@ -749,6 +749,26 @@ estimates.
   `compose_all` empty-input contract. Test exact count mismatches, identity,
   associativity on compatible carriers, and unmatched entities through a
   sequence. Preserve the prohibition on object-identity checks.
+  Completed 2026-09-04. All three correspondence layers now return `Result`
+  from `compose`, and `Result<Option<Self>, _>` from `compose_all`.
+  Constructors, conversions, and open-carrier status are unchanged; count
+  agreement is checked at composition, not construction. New public errors:
+  `CorrespondenceComposeError` carries both intermediate counts;
+  `GraphCorrespondenceComposeError` identifies nodes or edges;
+  `MoleculeCorrespondenceComposeError` carries the entity kind and count error.
+  `Graph::pullback` and the temporarily retained `ReactionDerivation::chain`
+  expose these errors. `pushout_complement` retains `Option`, rejecting
+  incompatible intermediate/host counts; reaction composition retains its
+  existing surface because its applications share a producer-established host.
+  Python composition/chaining raises `ValueError` for count mismatches.
+  Identity and associativity properties use compatible carriers; exact tests
+  cover both count directions, empty carriers, every aggregate component,
+  and mismatches after an initially compatible composition.
+  Verification: core/IR unit tests (7,329 passed, 3 ignored), properties with
+  `PROPTEST_CASES=256` (483 passed, 1 ignored), Python-binding Rust tests
+  (1,634 passed, 2 ignored), rebuilt-extension molecule/reaction pytest
+  (178 passed, 2 skipped), workspace all-targets check, core/IR all-targets
+  clippy with `-D warnings`, nightly formatting, and `git diff --check` passed.
 - [ ] **S1b — Graph participant transport.** Graph-core relation participants
   and all five relation-set families. Additive (green). [dep: S1a]
   Add `map`/`try_map` using `GraphCorrespondence`; share traversal with

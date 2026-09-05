@@ -55,7 +55,7 @@ proptest! {
         (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
         let correspondence = molecule.induced_subgraph(&atoms);
-        let identity = correspondence.compose(&correspondence.reverse());
+        let identity = correspondence.compose(&correspondence.reverse()).unwrap();
 
         prop_assert!(identity.is_total());
         let remapping = identity
@@ -103,8 +103,8 @@ proptest! {
         let reverse = correspondence.reverse();
 
         prop_assert_eq!(
-            correspondence.compose(&reverse).compose(&correspondence),
-            correspondence.compose(&reverse.compose(&correspondence)),
+            correspondence.compose(&reverse).unwrap().compose(&correspondence),
+            correspondence.compose(&reverse.compose(&correspondence).unwrap()),
         );
     }
 
@@ -114,7 +114,7 @@ proptest! {
     ) {
         let correspondence = molecule.induced_subgraph(&atoms);
         let reverse = correspondence.reverse();
-        let expected = correspondence.compose(&reverse).compose(&correspondence);
+        let expected = correspondence.compose(&reverse).unwrap().compose(&correspondence).unwrap();
 
         prop_assert_eq!(
             MoleculeCorrespondence::compose_all([
@@ -122,7 +122,7 @@ proptest! {
                 reverse,
                 correspondence,
             ]),
-            Some(expected),
+            Ok(Some(expected)),
         );
     }
 }

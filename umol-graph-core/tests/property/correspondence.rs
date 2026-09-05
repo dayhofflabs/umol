@@ -50,6 +50,17 @@ fn graph_context_strategy() -> impl Strategy<Value = (Graph, Graph, Corresponden
     })
 }
 
+fn correspondence_chain_strategy(
+    length: usize,
+) -> impl Strategy<Value = Vec<Correspondence<NodeId>>> {
+    prop::collection::vec(0usize..8, length + 1).prop_flat_map(|counts| {
+        counts
+            .windows(2)
+            .map(|pair| correspondence_with_counts_strategy::<NodeId>(pair[0], pair[1]).boxed())
+            .collect::<Vec<_>>()
+    })
+}
+
 fn graph_correspondence_strategy() -> impl Strategy<Value = GraphCorrespondence> {
     (
         correspondence_strategy::<NodeId>(),
@@ -174,13 +185,12 @@ proptest! {
 
     #[test]
     fn test_correspondence_compose_associativity(
-        first in correspondence_strategy::<NodeId>(),
-        second in correspondence_strategy::<NodeId>(),
-        third in correspondence_strategy::<NodeId>(),
+        chain in correspondence_chain_strategy(3),
     ) {
+        let [first, second, third] = chain.as_slice() else { unreachable!() };
         prop_assert_eq!(
-            first.compose(&second).compose(&third),
-            first.compose(&second.compose(&third)),
+            first.compose(second).unwrap().compose(third),
+            first.compose(&second.compose(third).unwrap()),
         );
     }
 
@@ -199,41 +209,39 @@ proptest! {
         let right_identity =
             Correspondence::from_images(&right_images, correspondence.right_count());
 
-        prop_assert_eq!(left_identity.compose(&correspondence), correspondence.clone());
-        prop_assert_eq!(correspondence.compose(&right_identity), correspondence);
+        prop_assert_eq!(left_identity.compose(&correspondence), Ok(correspondence.clone()));
+        prop_assert_eq!(correspondence.compose(&right_identity), Ok(correspondence));
     }
 
     #[test]
     fn test_correspondence_compose_all(
-        first in correspondence_strategy::<NodeId>(),
-        second in correspondence_strategy::<NodeId>(),
-        third in correspondence_strategy::<NodeId>(),
+        chain in correspondence_chain_strategy(3),
     ) {
-        let expected = first.compose(&second).compose(&third);
+        let expected = chain[0].compose(&chain[1]).unwrap().compose(&chain[2]).unwrap();
 
         prop_assert_eq!(
-            Correspondence::compose_all([first, second, third]),
-            Some(expected),
+            Correspondence::compose_all(chain),
+            Ok(Some(expected)),
         );
     }
 
     #[test]
     fn test_correspondence_compose_all_concatenation(
-        correspondences in prop::collection::vec(correspondence_strategy::<NodeId>(), 0..8),
+        correspondences in (0usize..8).prop_flat_map(correspondence_chain_strategy),
         split in any::<usize>(),
     ) {
         let split = split.min(correspondences.len());
-        let left = Correspondence::compose_all(correspondences[..split].iter().cloned());
-        let right = Correspondence::compose_all(correspondences[split..].iter().cloned());
+        let left = Correspondence::compose_all(correspondences[..split].iter().cloned()).unwrap();
+        let right = Correspondence::compose_all(correspondences[split..].iter().cloned()).unwrap();
         let expected = match (left, right) {
-            (Some(left), Some(right)) => Some(left.compose(&right)),
+            (Some(left), Some(right)) => Some(left.compose(&right).unwrap()),
             (Some(correspondence), None) | (None, Some(correspondence)) => Some(correspondence),
             (None, None) => None,
         };
 
         prop_assert_eq!(
             Correspondence::compose_all(correspondences),
-            expected,
+            Ok(expected),
         );
     }
 
