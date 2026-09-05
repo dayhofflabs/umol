@@ -864,7 +864,7 @@ estimates.
   with `PROPTEST_CASES=256` (487 passed, 1 ignored), workspace all-targets
   check with Python 3.13.15, core/IR all-targets clippy with `-D warnings`,
   nightly formatting, and `git diff --check` passed.
-- [ ] **S1f — Four graph transport producer migrations.** Graph-IR molecule combination,
+- [x] **S1f — Four graph transport producer migrations.** Graph-IR molecule combination,
   split, pushout, and reaction-span superimposition. Breaking internal
   rewiring (red→green). [dep: S1d, S1e] Replace their non-bijective
   `GraphRemapping` construction with the correspondences specified above.
@@ -874,6 +874,23 @@ estimates.
   actual source/result counts and the existing pushout correspondences;
   split constructs a separate correspondence for each selected component.
   Run S0a regressions and downstream composition/application/ingest tests.
+  Completed: combination and RHS-to-union participant transport use counted
+  graph correspondences; pushout passes its existing right correspondence to
+  overlay gluing. Split constructs separate source-to-component atom, bond,
+  graph, and molecule correspondences, using them for participants and
+  constraints. Its public result still reverses the molecule correspondence
+  to the existing component-to-source direction until S5a. Removed the
+  aggregate split remapping and duplicate local bond lookup. The four paths
+  no longer construct `GraphRemapping`; genuine renumbering is unchanged.
+  Added an exact interleaved-id split regression covering three components,
+  repeated component-local ids, constraint routing, and complete outputs.
+  S1 gates passed: core/IR library, integration, and doc tests (7,565 passed,
+  6 ignored); core/IR properties with `PROPTEST_CASES=256` (487 passed,
+  1 ignored), with both split properties rechecked after the final change;
+  graph/IO library tests (4,297 passed); explicit MOL/SDF/SMILES conformance
+  (12,689 passed); workspace all-targets check with Python 3.13.15;
+  core/IR all-targets clippy with `-D warnings`; nightly formatting; and
+  `git diff --check`.
 
 ### S2 — Bijective remapping and renumbering
 

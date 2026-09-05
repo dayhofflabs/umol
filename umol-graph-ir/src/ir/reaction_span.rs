@@ -12,8 +12,8 @@ use std::mem;
 
 use thiserror::Error;
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphRemapping, NodeId,
-    RelationId, VarRelationSet,
+    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphCorrespondence,
+    GraphRemapping, NodeId, RelationId, VarRelationSet,
 };
 use umol_perm::{DynPermutation, Permutation};
 
@@ -665,13 +665,25 @@ impl ReactionSpan {
         // R id → union id per entity kind.
         let atom_union: HashMap<AtomId, AtomId> = union_map(atoms_corr, lhs_atom_count);
         let bond_union: HashMap<BondId, BondId> = union_map(bonds_corr, lhs_bond_count);
-        let participant_remapping = GraphRemapping::new(
-            (0..rhs.atoms().count())
-                .map(|index| NodeId::from(atom_union[&AtomId::from(index)]))
-                .collect(),
-            (0..rhs.bonds().count())
-                .map(|index| EdgeId::from(bond_union[&BondId::from(index)]))
-                .collect(),
+        let participant_correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                atom_union
+                    .iter()
+                    .map(|(&source, &target)| (NodeId::from(source), NodeId::from(target)))
+                    .collect(),
+                rhs.atoms().count(),
+                lhs_atom_count + atoms_corr.right_unmatched().len(),
+            )
+            .expect("union assignment covers the right-side nodes injectively"),
+            Correspondence::new(
+                bond_union
+                    .iter()
+                    .map(|(&source, &target)| (EdgeId::from(source), EdgeId::from(target)))
+                    .collect(),
+                rhs.bonds().count(),
+                lhs_bond_count + bonds_corr.right_unmatched().len(),
+            )
+            .expect("union assignment covers the right-side edges injectively"),
         );
 
         let remapped_rhs_dative: FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm> =
@@ -687,7 +699,7 @@ impl ReactionSpan {
                     })
                     .collect(),
             )
-            .remap(&participant_remapping);
+            .map(&participant_correspondence);
         let remapped_rhs_aromatic: VarRelationSet<NodeId, AromaticSystemForm> =
             VarRelationSet::new(
                 rhs.aromatic_systems()
@@ -700,7 +712,7 @@ impl ReactionSpan {
                     })
                     .collect(),
             )
-            .remap(&participant_remapping);
+            .map(&participant_correspondence);
         let remapped_rhs_multicenter: VarRelationSet<NodeId, MulticenterBondForm> =
             VarRelationSet::new(
                 rhs.multicenter_bonds()
@@ -713,7 +725,7 @@ impl ReactionSpan {
                     })
                     .collect(),
             )
-            .remap(&participant_remapping);
+            .map(&participant_correspondence);
         let remapped_rhs_noncovalent: FixedRelationSet<NodeId, NoncovalentBondForm, 2> =
             FixedRelationSet::new(
                 rhs.noncovalent_bonds()
@@ -727,7 +739,7 @@ impl ReactionSpan {
                     })
                     .collect(),
             )
-            .remap(&participant_remapping);
+            .map(&participant_correspondence);
         let remapped_rhs_stereo_atoms: FixedVarBirelationSet<
             NodeId,
             1,
@@ -745,7 +757,7 @@ impl ReactionSpan {
                 })
                 .collect(),
         )
-        .remap(&participant_remapping);
+        .map(&participant_correspondence);
         let remapped_rhs_stereo_bonds: FixedVarBirelationSet<
             EdgeId,
             1,
@@ -763,7 +775,7 @@ impl ReactionSpan {
                 })
                 .collect(),
         )
-        .remap(&participant_remapping);
+        .map(&participant_correspondence);
 
         // Atoms
         let mut atoms: Vec<EntitySpan<AtomForm>> = Vec::new();

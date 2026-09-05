@@ -3,7 +3,7 @@
 //! attribute layer over graph-core's structural `pushout`. A child of `molecule` so it reaches the
 //! private overlay relation-sets directly, without exposing raw accessors.
 
-use umol_graph_core::{Correspondence, EdgeId, GraphCorrespondence, GraphRemapping, NodeId};
+use umol_graph_core::{Correspondence, EdgeId, GraphCorrespondence, NodeId};
 use umol_perm::{DynPermutation, Permutation};
 
 use super::super::atom::AtomForm;
@@ -80,42 +80,24 @@ impl Molecule {
         // Overlays glue over the same pushout: relabel `other`'s participants into the glue space
         // (`self` already keeps its ids), then merge coinciding overlays by `meet`; non-coinciding
         // ones are appended (context). `⊥` on any coincident meet makes the whole glue inadmissible.
-        let participant_remapping = GraphRemapping::new(
-            (0..other.raw_graph().node_count())
-                .map(|index| {
-                    po.right
-                        .nodes()
-                        .right_of(NodeId(index as u32))
-                        .expect("right total on other nodes")
-                })
-                .collect(),
-            (0..other.raw_graph().edge_count())
-                .map(|index| {
-                    po.right
-                        .edges()
-                        .right_of(EdgeId(index as u32))
-                        .expect("right total on other edges")
-                })
-                .collect(),
-        );
 
         let aromatic = self
             .aromatic_systems
-            .glue(&other.aromatic_systems, &participant_remapping)?
+            .glue(&other.aromatic_systems, &po.right)?
             .into_entries();
         let multicenter = self
             .multicenter_bonds
-            .glue(&other.multicenter_bonds, &participant_remapping)?
+            .glue(&other.multicenter_bonds, &po.right)?
             .into_entries();
 
         let dative = self
             .dative_bonds
-            .glue(&other.dative_bonds, &participant_remapping)?
+            .glue(&other.dative_bonds, &po.right)?
             .into_entries();
 
         let noncovalent = self
             .noncovalent_bonds
-            .glue(&other.noncovalent_bonds, &participant_remapping)?
+            .glue(&other.noncovalent_bonds, &po.right)?
             .into_entries();
 
         // Stereo overlays differ: ligand order is meaningful (the coset is frame-relative), but a
@@ -126,11 +108,11 @@ impl Molecule {
         // checked molecule publication rejects.
         let stereo_atoms = self
             .stereo_atoms
-            .glue(&other.stereo_atoms, &participant_remapping)?
+            .glue(&other.stereo_atoms, &po.right)?
             .into_entries();
         let stereo_bonds = self
             .stereo_bonds
-            .glue(&other.stereo_bonds, &participant_remapping)?
+            .glue(&other.stereo_bonds, &po.right)?
             .into_entries();
 
         let mut object = Molecule::try_from_entries(MoleculeEntries {

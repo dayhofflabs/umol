@@ -5142,6 +5142,90 @@ fn test_molecule_split() {
 }
 
 #[rstest]
+fn test_molecule_split_interleaved() {
+    let input = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 5],
+        bonds: vec![
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(2)),
+        ],
+        constraints: Constraints::from_iter([
+            Constraint::Molecule(MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(3), AtomId(0)]),
+            }),
+            Constraint::Molecule(MoleculeConstraint::BondOrderSum {
+                bonds: Some(vec![BondId(1)]),
+                sum: NumForm::Lit(2),
+            }),
+        ]),
+        ..Default::default()
+    });
+    let first = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        constraints: Constraints::from_iter([Constraint::Molecule(
+            MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(1), AtomId(0)]),
+            },
+        )]),
+        ..Default::default()
+    });
+    let second = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+        constraints: Constraints::from_iter([Constraint::Molecule(
+            MoleculeConstraint::BondOrderSum {
+                bonds: Some(vec![BondId(0)]),
+                sum: NumForm::Lit(2),
+            },
+        )]),
+        ..Default::default()
+    });
+    let third = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C)],
+        ..Default::default()
+    });
+    let first_correspondence = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(3))], 2, 5).unwrap(),
+        Correspondence::new(vec![(BondId(0), BondId(0))], 1, 2).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    let second_correspondence = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(0), AtomId(1)), (AtomId(1), AtomId(4))], 2, 5).unwrap(),
+        Correspondence::new(vec![(BondId(0), BondId(1))], 1, 2).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    let third_correspondence = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(0), AtomId(2))], 1, 5).unwrap(),
+        Correspondence::new(vec![], 0, 2).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    assert_eq!(
+        input.split(),
+        vec![
+            (first, first_correspondence),
+            (second, second_correspondence),
+            (third, third_correspondence),
+        ]
+    );
+}
+
+#[rstest]
 fn test_molecule_split_overlay_binds() {
     // two disconnected bonds, but an aromatic system over {1, 2} keeps all four atoms in one component
     let mol = Molecule::from_entries(MoleculeEntries {

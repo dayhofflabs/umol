@@ -122,10 +122,10 @@ impl NoncovalentBonds {
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding bonds meet,
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0
             .pushout(
-                &right.remap(remapping).0,
+                &right.map(correspondence).0,
                 // Either endpoint anchors a noncovalent bond: the node index.
                 |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
                 |(_, left), (_, right)| {

@@ -143,10 +143,10 @@ impl StereoAtoms {
     /// its configuration reframed into the retained `self` ligand frame and then meets, a
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
     /// a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0
             .pushout(
-                &right.remap(remapping).0,
+                &right.map(correspondence).0,
                 // A stereo atom's site is an atom, unique by integrity: the sharpest node anchor.
                 |set, site, ligands| {
                     site.first()
@@ -386,10 +386,10 @@ impl StereoBonds {
     /// its configuration reframed into the retained `self` ligand frame and then meets, a
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
     /// a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0
             .pushout(
-                &right.remap(remapping).0,
+                &right.map(correspondence).0,
                 // A stereo bond's site is a bond: the one entity kind scanning the edge index.
                 |set, site, ligands| {
                     site.first()

@@ -134,10 +134,10 @@ impl AromaticSystems {
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding systems meet,
     /// non-coinciding systems are carried. `None` when a coincident meet is bottom.
-    pub(crate) fn glue(&self, right: &Self, remapping: &GraphRemapping) -> Option<Self> {
+    pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0
             .pushout(
-                &right.remap(remapping).0,
+                &right.map(correspondence).0,
                 // Aromatic systems anchor on their atoms: the node index.
                 |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
                 |(left_atoms, left), (right_atoms, right)| {
@@ -789,7 +789,10 @@ mod tests {
         let glued = left
             .glue(
                 &right,
-                &GraphRemapping::new((0..8).map(NodeId).collect(), vec![]),
+                &GraphCorrespondence::new(
+                    Correspondence::from_images(&(0..8).map(NodeId).collect::<Vec<_>>(), 8),
+                    Correspondence::empty(),
+                ),
             )
             .expect("the sides agree once the right vector is carried into the left frame");
 
