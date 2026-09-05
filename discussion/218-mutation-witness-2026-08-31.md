@@ -150,8 +150,10 @@ pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>;
 `try_map` returns `None` when any referenced participant lacks an image;
 `map` asserts the same coverage condition. Mapping retains relation rows,
 participant order, and payloads while replacing participant ids. Graph-IR
-stereo ligands and constraints follow the same naming and coverage contract
-with the correspondence appropriate to their referenced entity kinds.
+stereo ligands and entity sets also accept `&GraphCorrespondence`. The
+inherent ligand methods delegate to `RelationParticipant`; they do not add
+a separate atom-correspondence API. Constraints follow the same naming and
+coverage contract with `MoleculeCorrespondence` for their entity references.
 These methods consume a correspondence; the `with_correspondence` suffix is
 reserved for operations that return a witness.
 
@@ -798,7 +800,7 @@ estimates.
   3 ignored), relation properties with `PROPTEST_CASES=256` (10 passed),
   workspace all-targets check with Python 3.13.15 activated, core/IR all-targets
   clippy with `-D warnings`, nightly formatting, and `git diff --check` passed.
-- [ ] **S1c — Edit handle resolution.** Graph-IR `ConstraintEdit` construction
+- [x] **S1c — Edit handle resolution.** Graph-IR `ConstraintEdit` construction
   and resolution. Internal rewiring (green). [dep: S0a]
   Remove this consumer of `IdRemapping` before changing constraint transport.
   Resolve the existing per-kind handle indices as an edit operation, using the
@@ -806,13 +808,30 @@ estimates.
   witness. Preserve handle interning, kind checks, resolution failures, and
   nested constraints. Test all entity kinds and repeated handle references.
   No new public lookup abstraction or witness API is part of this item.
-- [ ] **S1d — Ligand and entity-set transport.** Graph-IR ligand and
+  Completed: resolution uses the existing edit-local entity traversal and a
+  `HashMap<Entity, Entity>` containing only the distinct references in the
+  constraint. Public signatures and resolution errors are unchanged.
+  Exact tests cover all eight entity kinds, repeated references, nested
+  constraints, subsets, and each resolver's failure. Verification: 32 focused
+  constraint-edit tests and 6,580 graph-IR library tests passed (3 ignored);
+  graph test-target checks with `proptest`, nightly formatting, and
+  `git diff --check` passed.
+- [x] **S1d — Ligand and entity-set transport.** Graph-IR ligand and
   entity-set methods. Additive (green). [dep: S1b]
   Add correspondence-based `map`/`try_map` with the accepted coverage
   contract, using the graph-core participant transport already implemented.
   Test atom/bond references, virtual ligand anchors, preserved entity rows,
   payloads, and frames. An unmapped reference must fail rather than disappear.
   Keep frame transport distinct from id transport.
+  Completed: `StereoLigand` and all twelve ordinary/span entity-set wrappers
+  expose `map`/`try_map` over `GraphCorrespondence`, delegating to existing
+  graph-core transport. Constructors and remapping methods are unchanged.
+  Exact tests cover nonidentity mappings, unmatched unused ids, missing
+  participant images, virtual anchors, atom/bond sites, positional payloads,
+  span attributes, row/frame preservation, and asserted failures.
+  Verification: graph-IR library tests (6,659 passed, 3 ignored), graph-IR
+  all-targets clippy with `-D warnings`, graph/IO all-targets checks, nightly
+  formatting, and `git diff --check` passed.
 - [ ] **S1e — Constraint transport and legacy removal.** Graph-IR constraint,
   molecule, reaction-span, correspondence, and delta modules. Breaking
   (red→green). [dep: S1c, S1d]

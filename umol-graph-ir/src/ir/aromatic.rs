@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{GraphRemapping, NodeId, ParticipantPosition, RelationId, VarRelationSet};
+use umol_graph_core::{
+    GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition, RelationId, VarRelationSet,
+};
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
@@ -105,6 +107,21 @@ impl AromaticSystems {
         Arc::make_mut(&mut self.0)
             .iter_mut()
             .map(|(_, _, attributes)| attributes)
+    }
+
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
@@ -270,6 +287,21 @@ impl AromaticSystemSpans {
 
     pub fn attributes(&self, id: AromaticSystemId) -> &EntitySpan<AromaticSystemForm> {
         self.0.data(RelationId::from(id))
+    }
+
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        self.0.try_map(correspondence).map(Self)
     }
 
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
@@ -525,10 +557,190 @@ impl FrameTransport for AromaticSystemForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_graph_core::{Correspondence, EdgeId};
 
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+
+    fn test_aromatic_systems_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = AromaticSystems::new(vec![
+            (
+                vec![AtomId(4), AtomId(0), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+            ),
+            (
+                vec![AtomId(6), AtomId(2), AtomId(0)],
+                AromaticSystemForm::from_electrons(vec![2, 3, 4]),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(AromaticSystems::new(vec![
+                (
+                    vec![AtomId(7), AtomId(5), AtomId(1)],
+                    AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+                ),
+                (
+                    vec![AtomId(3), AtomId(1), AtomId(5)],
+                    AromaticSystemForm::from_electrons(vec![2, 3, 4]),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_aromatic_systems_map_error() {
+        let input = AromaticSystems::new(vec![
+            (
+                vec![AtomId(4), AtomId(0), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+            ),
+            (
+                vec![AtomId(6), AtomId(2), AtomId(0)],
+                AromaticSystemForm::from_electrons(vec![2, 3, 4]),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+
+    fn test_aromatic_system_spans_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = AromaticSystemSpans::new(vec![
+            (
+                vec![AtomId(4), AtomId(0), AtomId(2)],
+                EntitySpan::Modified {
+                    lhs: AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+                    rhs: AromaticSystemForm::from_electrons(vec![2, 3, 4]),
+                },
+            ),
+            (
+                vec![AtomId(6), AtomId(2), AtomId(0)],
+                EntitySpan::Added(AromaticSystemForm::from_electrons(vec![2, 3, 4])),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(AromaticSystemSpans::new(vec![
+                (
+                    vec![AtomId(7), AtomId(5), AtomId(1)],
+                    EntitySpan::Modified {
+                        lhs: AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+                        rhs: AromaticSystemForm::from_electrons(vec![2, 3, 4]),
+                    },
+                ),
+                (
+                    vec![AtomId(3), AtomId(1), AtomId(5)],
+                    EntitySpan::Added(AromaticSystemForm::from_electrons(vec![2, 3, 4])),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_aromatic_system_spans_map_error() {
+        let input = AromaticSystemSpans::new(vec![
+            (
+                vec![AtomId(4), AtomId(0), AtomId(2)],
+                EntitySpan::Modified {
+                    lhs: AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+                    rhs: AromaticSystemForm::from_electrons(vec![2, 3, 4]),
+                },
+            ),
+            (
+                vec![AtomId(6), AtomId(2), AtomId(0)],
+                EntitySpan::Added(AromaticSystemForm::from_electrons(vec![2, 3, 4])),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
 
     /// A coincidence whose two sides hold the same atoms in different frames, with nonuniform
     /// electron counts stating the same per-atom fact. The glue must carry the right vector into

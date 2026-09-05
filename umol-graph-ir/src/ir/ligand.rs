@@ -26,6 +26,20 @@ impl StereoLigand {
     pub fn new(atom_id: AtomId, kind: StereoLigandKind) -> Self {
         Self { atom_id, kind }
     }
+
+    /// Map the atom reference, preserving the ligand kind, including virtual ligands.
+    ///
+    /// # Panics
+    /// Panics if the atom reference has no image in `correspondence`.
+    pub fn map(self, correspondence: &GraphCorrespondence) -> Self {
+        RelationParticipant::map(self, correspondence)
+    }
+
+    /// Map the atom reference, or return `None` if it has no image.
+    /// Unreferenced nodes and edges need not have images.
+    pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        RelationParticipant::try_map(self, correspondence)
+    }
 }
 
 impl RelationParticipant for StereoLigand {
@@ -92,6 +106,8 @@ mod tests {
             Some(expected)
         );
         assert_eq!(RelationParticipant::map(ligand, &correspondence), expected);
+        assert_eq!(ligand.try_map(&correspondence), Some(expected));
+        assert_eq!(ligand.map(&correspondence), expected);
     }
 
     #[rstest]
@@ -107,6 +123,22 @@ mod tests {
             RelationParticipant::try_map(StereoLigand::new(AtomId(2), kind), &correspondence),
             None
         );
+        assert_eq!(
+            StereoLigand::new(AtomId(2), kind).try_map(&correspondence),
+            None
+        );
+    }
+
+    #[rstest]
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_stereo_ligand_map_error(#[case] kind: StereoLigandKind) {
+        StereoLigand::new(AtomId(2), kind).map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
     }
 
     #[rstest]

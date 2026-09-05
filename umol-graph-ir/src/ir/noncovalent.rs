@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use umol_graph_core::{FixedRelationSet, GraphRemapping, NodeId, ParticipantPosition, RelationId};
+use umol_graph_core::{
+    FixedRelationSet, GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition, RelationId,
+};
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
@@ -93,6 +95,21 @@ impl NoncovalentBonds {
         Arc::make_mut(&mut self.0)
             .iter_mut()
             .map(|(_, _, attributes)| attributes)
+    }
+
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
@@ -246,6 +263,21 @@ impl NoncovalentBondSpans {
 
     pub fn attributes(&self, id: NoncovalentBondId) -> &EntitySpan<NoncovalentBondForm> {
         self.0.data(RelationId::from(id))
+    }
+
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        self.0.try_map(correspondence).map(Self)
     }
 
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
@@ -544,9 +576,195 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_graph_core::{Correspondence, EdgeId};
 
     use super::*;
     use crate::ir::boolean::BooleanForm;
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+
+    fn test_noncovalent_bonds_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = NoncovalentBonds::new(vec![
+            (
+                [AtomId(0), AtomId(2)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            (
+                [AtomId(4), AtomId(6)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(NoncovalentBonds::new(vec![
+                (
+                    [AtomId(5), AtomId(1)],
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                ),
+                (
+                    [AtomId(7), AtomId(3)],
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_noncovalent_bonds_map_error() {
+        let input = NoncovalentBonds::new(vec![
+            (
+                [AtomId(0), AtomId(2)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            (
+                [AtomId(4), AtomId(6)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+
+    fn test_noncovalent_bond_spans_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = NoncovalentBondSpans::new(vec![
+            (
+                [AtomId(0), AtomId(2)],
+                EntitySpan::Modified {
+                    lhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    rhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+                },
+            ),
+            (
+                [AtomId(4), AtomId(6)],
+                EntitySpan::Added(NoncovalentBondForm::from_kind(
+                    NoncovalentBondKind::HalogenBond,
+                )),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(NoncovalentBondSpans::new(vec![
+                (
+                    [AtomId(5), AtomId(1)],
+                    EntitySpan::Modified {
+                        lhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                        rhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+                    },
+                ),
+                (
+                    [AtomId(7), AtomId(3)],
+                    EntitySpan::Added(NoncovalentBondForm::from_kind(
+                        NoncovalentBondKind::HalogenBond,
+                    )),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_noncovalent_bond_spans_map_error() {
+        let input = NoncovalentBondSpans::new(vec![
+            (
+                [AtomId(0), AtomId(2)],
+                EntitySpan::Modified {
+                    lhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    rhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+                },
+            ),
+            (
+                [AtomId(4), AtomId(6)],
+                EntitySpan::Added(NoncovalentBondForm::from_kind(
+                    NoncovalentBondKind::HalogenBond,
+                )),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
 
     #[rustfmt::skip]
     /// The payload is frame-invariant, so a `Modified` span's two sides carry unchanged through the

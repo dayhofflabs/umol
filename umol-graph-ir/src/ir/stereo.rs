@@ -12,7 +12,8 @@ use std::sync::Arc;
 
 use strum::VariantArray;
 use umol_graph_core::{
-    EdgeId, FixedVarBirelationSet, GraphRemapping, NodeId, ParticipantPosition, RelationId,
+    EdgeId, FixedVarBirelationSet, GraphCorrespondence, GraphRemapping, NodeId,
+    ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation};
@@ -111,6 +112,21 @@ impl StereoAtoms {
         Arc::make_mut(&mut self.0)
             .iter_mut()
             .map(|(_, _, _, attributes)| attributes)
+    }
+
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
@@ -341,6 +357,21 @@ impl StereoBonds {
             .map(|(_, _, _, attributes)| attributes)
     }
 
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self(Arc::new(self.0.try_map(correspondence)?)))
+    }
+
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
@@ -509,6 +540,21 @@ impl StereoAtomSpans {
         self.0.data(RelationId::from(id))
     }
 
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        self.0.try_map(correspondence).map(Self)
+    }
+
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
@@ -631,6 +677,21 @@ impl StereoBondSpans {
 
     pub fn attributes(&self, id: StereoBondId) -> &EntitySpan<StereoBondForm> {
         self.0.data(RelationId::from(id))
+    }
+
+    /// Map participant references, preserving entity ids, row order, attributes, and frames.
+    ///
+    /// # Panics
+    /// Panics if a referenced node or edge has no image in `correspondence`.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Map participant references, or return `None` if any reference has no image.
+    /// Unreferenced nodes and edges need not have images. No entity is dropped.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        self.0.try_map(correspondence).map(Self)
     }
 
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
@@ -1836,6 +1897,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_graph_core::Correspondence;
     use umol_perm::Orientation;
 
     use super::super::boolean::BooleanForm;
@@ -1843,6 +1905,510 @@ mod tests {
     use super::super::id::{AtomId, StereoLigandPosition};
     use super::super::ligand::StereoLigandKind;
     use super::*;
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+
+    fn test_stereo_atoms_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = StereoAtoms::new(vec![
+            (
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+            ),
+            (
+                AtomId(6),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(StereoAtoms::new(vec![
+                (
+                    AtomId(5),
+                    vec![
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::LonePair),
+                    ],
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+                ),
+                (
+                    AtomId(3),
+                    vec![
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_stereo_atoms_map_error() {
+        let input = StereoAtoms::new(vec![
+            (
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+            ),
+            (
+                AtomId(6),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+
+    fn test_stereo_atom_spans_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = StereoAtomSpans::new(vec![
+            (
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32),
+                },
+            ),
+            (
+                AtomId(6),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Added(StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32)),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(StereoAtomSpans::new(vec![
+                (
+                    AtomId(5),
+                    vec![
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::LonePair),
+                    ],
+                    EntitySpan::Modified {
+                        lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+                        rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32),
+                    },
+                ),
+                (
+                    AtomId(3),
+                    vec![
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    EntitySpan::Added(StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32)),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_stereo_atom_spans_map_error() {
+        let input = StereoAtomSpans::new(vec![
+            (
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32),
+                },
+            ),
+            (
+                AtomId(6),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Added(StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32)),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+    #[case::missing_bond_0(None, Some(EdgeId(0)))]
+    #[case::missing_bond_2(None, Some(EdgeId(2)))]
+    fn test_stereo_bonds_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = StereoBonds::new(vec![
+            (
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            ),
+            (
+                BondId(2),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 2_u32),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(StereoBonds::new(vec![
+                (
+                    BondId(4),
+                    vec![
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+                ),
+                (
+                    BondId(1),
+                    vec![
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    StereoBondForm::new(StereoKind::CisTrans, 2_u32),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_stereo_bonds_map_error() {
+        let input = StereoBonds::new(vec![
+            (
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            ),
+            (
+                BondId(2),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 2_u32),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
+
+    #[rstest]
+    #[case::covered(None, None)]
+    #[case::missing_atom_0(Some(NodeId(0)), None)]
+    #[case::missing_atom_2(Some(NodeId(2)), None)]
+    #[case::missing_atom_4(Some(NodeId(4)), None)]
+    #[case::missing_atom_6(Some(NodeId(6)), None)]
+    #[case::missing_bond_0(None, Some(EdgeId(0)))]
+    #[case::missing_bond_2(None, Some(EdgeId(2)))]
+    fn test_stereo_bond_spans_try_map(
+        #[case] missing_node: Option<NodeId>,
+        #[case] missing_edge: Option<EdgeId>,
+    ) {
+        let input = StereoBondSpans::new(vec![
+            (
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Modified {
+                    lhs: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+                    rhs: StereoBondForm::new(StereoKind::CisTrans, 2_u32),
+                },
+            ),
+            (
+                BondId(2),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Added(StereoBondForm::new(StereoKind::CisTrans, 2_u32)),
+            ),
+        ]);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (NodeId(0), NodeId(5)),
+                    (NodeId(2), NodeId(1)),
+                    (NodeId(4), NodeId(7)),
+                    (NodeId(6), NodeId(3)),
+                ]
+                .into_iter()
+                .filter(|(id, _)| Some(*id) != missing_node)
+                .collect(),
+                8,
+                9,
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![(EdgeId(0), EdgeId(4)), (EdgeId(2), EdgeId(1))]
+                    .into_iter()
+                    .filter(|(id, _)| Some(*id) != missing_edge)
+                    .collect(),
+                4,
+                6,
+            )
+            .unwrap(),
+        );
+        let expected = if missing_node.is_none() && missing_edge.is_none() {
+            Some(StereoBondSpans::new(vec![
+                (
+                    BondId(4),
+                    vec![
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    EntitySpan::Modified {
+                        lhs: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+                        rhs: StereoBondForm::new(StereoKind::CisTrans, 2_u32),
+                    },
+                ),
+                (
+                    BondId(1),
+                    vec![
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    EntitySpan::Added(StereoBondForm::new(StereoKind::CisTrans, 2_u32)),
+                ),
+            ]))
+        } else {
+            None
+        };
+        assert_eq!(input.try_map(&correspondence), expected);
+        if let Some(expected) = expected {
+            assert_eq!(input.map(&correspondence), expected);
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "correspondence must cover every participant reference")]
+    fn test_stereo_bond_spans_map_error() {
+        let input = StereoBondSpans::new(vec![
+            (
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Modified {
+                    lhs: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+                    rhs: StereoBondForm::new(StereoKind::CisTrans, 2_u32),
+                },
+            ),
+            (
+                BondId(2),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Added(StereoBondForm::new(StereoKind::CisTrans, 2_u32)),
+            ),
+        ]);
+        input.map(&GraphCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+        ));
+    }
 
     #[rstest]
     #[case::tetrahedral(StereoKind::Tetrahedral, ClassKey::Tetrahedral)]
