@@ -83,7 +83,7 @@ drawing = adenine.depict()
 Path("adenine.svg").write_text(drawing.render_svg(), encoding="utf-8")
 ```
 
-![9H-adenine in Kekulé form](docs/images/adenine.svg)
+<img src="docs/images/adenine.svg" alt="9H-adenine in Kekulé form" width="240">
 
 The black-and-white renderer includes atom annotations, tetrahedral wedges and
 hashes, cis/trans geometry, and aromatic-system contours. Reactions provide the
