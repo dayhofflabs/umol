@@ -1359,13 +1359,29 @@ fn mutation(c: &mut Criterion) {
             b.iter_batched(
                 || graph.clone(),
                 |mut graph| {
-                    let compaction = graph.tracked_remove_cascading(black_box(&removed), &[]);
-                    black_box((graph, compaction))
+                    graph.remove_cascading(black_box(&removed), &[]);
+                    black_box(graph)
                 },
                 BatchSize::SmallInput,
             )
         });
+        group.bench_function(
+            BenchmarkId::new("tracked_remove_cascading/path", size),
+            |b| {
+                b.iter_batched(
+                    || graph.clone(),
+                    |mut graph| {
+                        let compaction = graph.tracked_remove_cascading(black_box(&removed), &[]);
+                        black_box((graph, compaction))
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
         group.bench_function(BenchmarkId::new("pushout/path_pair", size), |b| {
+            b.iter(|| black_box(&graph).pushout(black_box(&graph), black_box(&overlap)))
+        });
+        group.bench_function(BenchmarkId::new("tracked_pushout/path_pair", size), |b| {
             b.iter(|| black_box(&graph).tracked_pushout(black_box(&graph), black_box(&overlap)))
         });
     }

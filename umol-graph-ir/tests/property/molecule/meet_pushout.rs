@@ -1,4 +1,8 @@
 //! Molecule meet-pushout properties.
+//!
+//! Besides the operation laws, disjoint generated inputs exercise composition from each input
+//! through the pushout to every split component. The composed witnesses must induce all entity
+//! correspondences from their atom components.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -134,6 +138,47 @@ proptest! {
                 right: expected_right,
             })),
         );
+    }
+
+    #[test]
+    fn test_molecule_tracked_meet_pushout_split_composition(
+        left in molecule_structurally_unambiguous_strategy(),
+        right in molecule_structurally_unambiguous_strategy(),
+    ) {
+        prop_assume!(left.atoms().count() + right.atoms().count() > 0);
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![], left.atoms().count(), right.atoms().count()).unwrap(),
+            Correspondence::new(vec![], left.bonds().count(), right.bonds().count()).unwrap(),
+        );
+        let (pushout, witness) = left
+            .tracked_meet_pushout(&right, &overlap)
+            .expect("disjoint molecule gluing is admissible");
+
+        for (component, split) in pushout.tracked_split() {
+            let left_to_component = witness.left.compose(&split).unwrap();
+            let right_to_component = witness.right.compose(&split).unwrap();
+
+            prop_assert!(left_to_component.is_compatible(&left, &component));
+            prop_assert!(right_to_component.is_compatible(&right, &component));
+            prop_assert_eq!(
+                &left_to_component,
+                &MoleculeCorrespondence::induce(
+                    &left,
+                    &component,
+                    left_to_component.atoms().clone(),
+                )
+                .expect("disjoint input incidence remains unique in each split component"),
+            );
+            prop_assert_eq!(
+                &right_to_component,
+                &MoleculeCorrespondence::induce(
+                    &right,
+                    &component,
+                    right_to_component.atoms().clone(),
+                )
+                .expect("disjoint input incidence remains unique in each split component"),
+            );
+        }
     }
 
     #[test]

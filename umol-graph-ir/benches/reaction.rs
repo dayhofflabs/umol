@@ -333,6 +333,9 @@ fn benchmark_mutation(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("split/two_paths", size), |b| {
             b.iter(|| black_box(&disconnected).split())
         });
+        group.bench_function(BenchmarkId::new("tracked_split/two_paths", size), |b| {
+            b.iter(|| black_box(&disconnected).tracked_split())
+        });
         group.bench_function(BenchmarkId::new("meet_pushout/path_pair", size), |b| {
             b.iter(|| black_box(&molecule).meet_pushout(black_box(&molecule), black_box(&overlap)))
         });

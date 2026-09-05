@@ -1403,12 +1403,62 @@ the same object-only/tracked split, preserving their categorical mapping directi
   passed (1,635; 2 ignored), and the full Python suite passed (1,479; 2
   skipped). The umol-py all-target Clippy gate passed with warnings denied;
   nightly formatting and whitespace checks passed.
-- [ ] **S8b — End-to-end laws and measurement.** Existing operation property
+- [x] **S8b — End-to-end laws and measurement.** Existing operation property
   suites and S0 benchmarks. Additive (green). [dep: S8a]
   Exercise mixed compaction/remapping/correspondence sequences and
   input-to-pushout-to-split composition. Preserve the existing semantic laws
   while updating their APIs. Compare final timings with S0 and report both
   bare-operation regression and witness cost for the measured inputs.
+  Completed 2026-09-05: the molecule property suite now composes a dense
+  renumbering, removal compaction, and general editor correspondence, checking
+  every intermediate pair and the final induced correspondence. A second law
+  composes each input of a disjoint meet-pushout through every split component
+  and checks all eight entity correspondences against atom induction. The
+  256-case property gate passed (499 tests; 1 ignored).
+
+  The S0 fixtures were rerun under the same profile, sample count, warmup, and
+  measurement time. Because the new tracked benchmark ids do not exist in the
+  old Criterion baseline, the complete current matrix was saved separately as
+  `mutation-s8b`; `mutation-s0` was not overwritten. Current bare-operation
+  means in microseconds, with change from the stored S0 mean:
+
+  | Operation | 8 atoms/nodes | 64 atoms/nodes |
+  | --- | ---: | ---: |
+  | Graph removal | 0.263 (+21.1%) | 1.089 (+1.8%) |
+  | Graph pushout | 2.136 (-1.3%) | 20.991 (-0.6%) |
+  | Molecule editor removal | 1.656 (+15.8%) | 6.240 (+10.0%) |
+  | Molecule three-edit application | 2.857 (+7.6%) | 12.305 (+3.5%) |
+  | Molecule combination | 2.632 (-3.7%) | 19.394 (+0.1%) |
+  | Molecule split | 5.197 (+12.6%) | 55.615 (+7.1%) |
+  | Molecule pushout | 7.438 (-4.9%) | 65.000 (-3.6%) |
+
+  Current tracked-operation means, with change from the current bare variant:
+
+  | Operation | 8 atoms/nodes | 64 atoms/nodes |
+  | --- | ---: | ---: |
+  | Graph removal | 0.260 (-1.4%) | 1.083 (-0.5%) |
+  | Graph pushout | 2.153 (+0.8%) | 21.211 (+1.0%) |
+  | Molecule editor removal | 1.676 (+1.3%) | 6.175 (-1.0%) |
+  | Molecule three-edit application | 2.881 (+0.8%) | 12.335 (+0.2%) |
+  | Molecule split | 5.123 (-1.4%) | 55.879 (+0.5%) |
+  | Molecule pushout | 7.400 (-0.5%) | 65.400 (+0.6%) |
+
+  The reaction fixture measured 1.659 µs for matching (-2.2% from S0),
+  4.494 µs for bare matched application (+4.2%), 4.452 µs for tracked matched
+  application (-0.9% from bare), and 15.688 µs for reversal (+14.2% from S0).
+  All-match application measured 5.776 µs bare and 5.701 µs tracked (-1.3%).
+  The tracked/bare differences are within measurement noise. They measure the
+  incremental returned witness, not the entire cost of provenance: several
+  bare routes delegate to or share machinery with the tracked route, and the
+  molecule editor maintains its session correspondence for both variants.
+  The S0 comparison therefore captures the more relevant total regression.
+
+  Renumbering remained between 2.029 and 15.690 µs; the overlay-heavy case was
+  7.961 µs (+1.6%). Criterion classified the mixed atom-and-bond stereo case
+  at 5.781 µs (+5.2%) as regressed, ordinary naphthalene and both feature-free
+  cases as improved by 3.6-4.7%, and the other nine cases as unchanged or
+  within the noise threshold. Benchmark targets compile and run with the new
+  bare/tracked graph and split ids.
 - [ ] **S8c — Documentation and closeout.** Normative development guides,
   public documentation, doc 218, and status index. Documentation (green).
   [dep: S8b] Reconcile the final exported API against this design, update
