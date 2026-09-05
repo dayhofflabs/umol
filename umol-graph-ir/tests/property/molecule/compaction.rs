@@ -31,7 +31,9 @@ proptest! {
         let compaction = editor.tracked_remove(&atoms, &bonds);
         let mut plain = molecule.edit();
         plain.remove(&atoms, &bonds);
-        prop_assert_eq!(plain.try_build(), editor.try_build());
+        let publication = editor.try_tracked_build();
+        let expected = plain.try_build().map(|molecule| (molecule, MoleculeCorrespondence::from(&compaction)));
+        prop_assert_eq!(publication, expected);
         let undo = compaction.undo_compaction();
 
         for index in 0..counts.0 {
@@ -83,4 +85,19 @@ proptest! {
             }
         }
     }
+    #[test]
+    fn test_molecule_editor_tracked_build_composition(
+        (molecule, atoms, bonds) in molecule_with_removals_strategy(),
+    ) {
+        let mut editor = molecule.edit();
+        let first = editor.tracked_remove(&atoms, &bonds);
+        editor.add_atom(AtomForm::from_element(Element::F));
+        let second = editor.tracked_remove(&[AtomId(0)], &[]);
+        let expected = MoleculeCorrespondence::from(&first)
+            .extend_right(EntityKind::Atom, 1)
+            .compose(&MoleculeCorrespondence::from(&second)).unwrap();
+        let plain = editor.clone().try_build();
+        prop_assert_eq!(editor.try_tracked_build(), plain.map(|molecule| (molecule, expected)));
+    }
+
 }

@@ -31,9 +31,12 @@ use super::super::constraint::{
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondForm;
-use super::super::edit::{AddBond, AtomFieldChange, AtomHandle, BondHandle, Edit, Edits};
+use super::super::edit::{
+    AddBond, AromaticSystemHandle, AtomFieldChange, AtomHandle, BondHandle, DativeBondHandle, Edit,
+    Edits, MulticenterBondHandle, NoncovalentBondHandle, StereoAtomHandle, StereoBondHandle,
+};
 use super::super::electrons::ElectronCountsForm;
-use super::super::entity::Entity;
+use super::super::entity::{Entity, EntityKind};
 use super::super::error::Contradiction;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -3503,6 +3506,512 @@ fn test_molecule_extract(#[from(rich_molecule)] molecule: Molecule) {
 }
 
 #[rstest]
+fn test_molecule_editor_tracked_snapshot_identity(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries);
+    let editor = source.edit();
+    let witness = MoleculeCorrespondence::new(
+        Correspondence::new(
+            vec![
+                (AtomId(0), AtomId(0)),
+                (AtomId(1), AtomId(1)),
+                (AtomId(2), AtomId(2)),
+                (AtomId(3), AtomId(3)),
+            ],
+            4,
+            4,
+        )
+        .unwrap(),
+        Correspondence::new(
+            vec![
+                (BondId(0), BondId(0)),
+                (BondId(1), BondId(1)),
+                (BondId(2), BondId(2)),
+            ],
+            3,
+            3,
+        )
+        .unwrap(),
+        Correspondence::new(vec![(DativeBondId(0), DativeBondId(0))], 1, 1).unwrap(),
+        Correspondence::new(vec![(AromaticSystemId(0), AromaticSystemId(0))], 1, 1).unwrap(),
+        Correspondence::new(vec![(MulticenterBondId(0), MulticenterBondId(0))], 1, 1).unwrap(),
+        Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(0))], 1, 1).unwrap(),
+        Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1).unwrap(),
+        Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1).unwrap(),
+    );
+    assert_eq!(
+        editor.tracked_snapshot(),
+        Ok((source.clone(), witness.clone()))
+    );
+    assert_eq!(
+        editor.tracked_snapshot(),
+        Ok((source.clone(), witness.clone()))
+    );
+    assert_eq!(
+        editor.clone().try_tracked_build(),
+        Ok((source.clone(), witness.clone()))
+    );
+    assert_eq!(editor.tracked_build(), (source, witness));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_additions(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let expected = Molecule::from_entries(entries.clone());
+    let mut editor = Molecule::new().edit();
+    for atom in entries.atoms {
+        editor.add_atom(atom);
+    }
+    for (a, b, bond) in entries.bonds {
+        editor.add_bond(a, b, bond);
+    }
+    for (donors, acceptor, data) in entries.dative {
+        editor.add_dative_bond(donors, acceptor, data);
+    }
+    for (atoms, data) in entries.aromatic {
+        editor.add_aromatic_system(atoms, data);
+    }
+    for (atoms, data) in entries.multicenter {
+        editor.add_multicenter_bond(atoms, data);
+    }
+    for (atoms, data) in entries.noncovalent {
+        editor.add_noncovalent_bond(atoms, data);
+    }
+    for (site, ligands, data) in entries.stereo_atoms {
+        editor.add_stereo_atom(site, ligands, data);
+    }
+    for (site, ligands, data) in entries.stereo_bonds {
+        editor.add_stereo_bond(site, ligands, data);
+    }
+    for constraint in entries.constraints.as_slice() {
+        editor.push_constraint(constraint.clone());
+    }
+    let witness = MoleculeCorrespondence::new(
+        Correspondence::new(vec![], 0, 4).unwrap(),
+        Correspondence::new(vec![], 0, 3).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+    );
+    assert_eq!(editor.snapshot(), Ok(expected.clone()));
+    assert_eq!(
+        editor.tracked_snapshot(),
+        Ok((expected.clone(), witness.clone()))
+    );
+    assert_eq!(editor.tracked_build(), (expected, witness));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_session() {
+    let source = mol_dsl!(r#"{:atoms ["C" "N" "O" "F"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]}"#);
+    let mut editor = source.edit();
+    let first = editor.tracked_remove(&[AtomId(1)], &[]);
+    let snapshot = editor.tracked_snapshot().unwrap();
+    let added = editor.add_atom(AtomForm::from_element(Element::Cl));
+    editor.add_bond(AtomId(2), added, BondForm::from_order(1));
+    let second = editor.tracked_remove(&[AtomId(0)], &[]);
+    let expected = mol_dsl!(r#"{:atoms ["O" "F" "Cl"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
+    let witness = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(2), AtomId(0)), (AtomId(3), AtomId(1))], 4, 3).unwrap(),
+        Correspondence::new(vec![(BondId(2), BondId(0))], 3, 2).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    let composed = MoleculeCorrespondence::from(&first)
+        .extend_right(EntityKind::Atom, 1)
+        .extend_right(EntityKind::Bond, 1)
+        .compose(&MoleculeCorrespondence::from(&second))
+        .unwrap();
+    assert_eq!(composed, witness);
+    assert_eq!(
+        snapshot,
+        (
+            mol_dsl!(r#"{:atoms ["C" "O" "F"] :bonds [[1 2 "1"]]}"#),
+            MoleculeCorrespondence::from(&first),
+        )
+    );
+    assert_eq!(
+        editor.tracked_snapshot(),
+        Ok((expected.clone(), witness.clone()))
+    );
+    assert_eq!(editor.tracked_build(), (expected, witness));
+}
+
+#[rstest]
+#[case::parallel_bond(MoleculeIntegrityError::BondsParallel { atoms: [AtomId(0), AtomId(1)] })]
+fn test_molecule_editor_tracked_snapshot_error(#[case] expected: MoleculeIntegrityError) {
+    let source = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+    let mut editor = source.edit();
+    let added = editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+    assert_eq!(editor.snapshot(), Err(expected.clone()));
+    assert_eq!(editor.tracked_snapshot(), Err(expected.clone()));
+    assert_eq!(editor.clone().try_build(), Err(expected.clone()));
+    assert_eq!(editor.clone().try_tracked_build(), Err(expected));
+    editor.remove(&[], &[added]);
+    let witness = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2).unwrap(),
+        Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+    );
+    assert_eq!(editor.tracked_snapshot(), Ok((source, witness)));
+}
+
+#[rstest]
+#[should_panic(expected = "invalid molecule editor state")]
+fn test_molecule_editor_tracked_build_error() {
+    let source = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+    let mut editor = source.edit();
+    editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+    editor.tracked_build();
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_restoration(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries);
+    let mut editor = source.edit();
+    let mut edits = Edits::new();
+    edits.remove_topology(
+        (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
+        vec![],
+    );
+    let transaction = editor.transact(edits).unwrap();
+    transaction.rollback(&mut editor).unwrap();
+    let witness = MoleculeCorrespondence::new(
+        Correspondence::new(vec![], 4, 4).unwrap(),
+        Correspondence::new(vec![], 3, 3).unwrap(),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+    );
+    assert_eq!(editor.tracked_build(), (source, witness));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_snapshot_transaction_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries);
+    let mut editor = source.edit();
+    editor.add_atom(AtomForm::from_element(Element::F));
+    let before = editor.tracked_snapshot().unwrap();
+    let mut edits = Edits::new();
+    edits.remove_topology(
+        (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
+        vec![],
+    );
+    edits.remove_atom(AtomHandle::Id(AtomId(5)));
+    let result = editor.transact(edits);
+    assert_eq!(
+        result,
+        Err(TransactionError::HandleOutOfRange {
+            kind: EntityKind::Atom,
+            index: 5,
+            count: 5
+        })
+    );
+    assert_eq!(editor.tracked_snapshot(), Ok(before));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_dative_bonds_restoration(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = source.edit();
+    let mut edits = Edits::new();
+    let (donors, acceptor, data) = &entries.dative[0];
+    edits.remove_dative_bonds(vec![(
+        DativeBondHandle::Id(DativeBondId(0)),
+        donors
+            .iter()
+            .copied()
+            .chain([*acceptor])
+            .map(AtomHandle::Id)
+            .collect(),
+        data.clone(),
+    )]);
+    let transaction = editor.transact(edits).unwrap();
+    transaction.rollback(&mut editor).unwrap();
+    let expected = MoleculeCorrespondence::new(
+        Correspondence::identity(4),
+        Correspondence::identity(3),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+    );
+    assert_eq!(editor.tracked_build(), (source, expected));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_aromatic_systems_restoration(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = source.edit();
+    let mut edits = Edits::new();
+    let (atoms, data) = &entries.aromatic[0];
+    edits.remove_aromatic_systems(vec![(
+        AromaticSystemHandle::Id(AromaticSystemId(0)),
+        atoms.iter().copied().map(AtomHandle::Id).collect(),
+        data.clone(),
+    )]);
+    let transaction = editor.transact(edits).unwrap();
+    transaction.rollback(&mut editor).unwrap();
+    let expected = MoleculeCorrespondence::new(
+        Correspondence::identity(4),
+        Correspondence::identity(3),
+        Correspondence::identity(1),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+    );
+    assert_eq!(editor.tracked_build(), (source, expected));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_multicenter_bonds_restoration(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = source.edit();
+    let mut edits = Edits::new();
+    let (atoms, data) = &entries.multicenter[0];
+    edits.remove_multicenter_bonds(vec![(
+        MulticenterBondHandle::Id(MulticenterBondId(0)),
+        atoms.iter().copied().map(AtomHandle::Id).collect(),
+        data.clone(),
+    )]);
+    let transaction = editor.transact(edits).unwrap();
+    transaction.rollback(&mut editor).unwrap();
+    let expected = MoleculeCorrespondence::new(
+        Correspondence::identity(4),
+        Correspondence::identity(3),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+    );
+    assert_eq!(editor.tracked_build(), (source, expected));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_noncovalent_bonds_restoration(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = source.edit();
+    let mut edits = Edits::new();
+    let (atoms, data) = &entries.noncovalent[0];
+    edits.remove_noncovalent_bonds(vec![(
+        NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+        atoms.map(AtomHandle::Id),
+        data.clone(),
+    )]);
+    let transaction = editor.transact(edits).unwrap();
+    transaction.rollback(&mut editor).unwrap();
+    let expected = MoleculeCorrespondence::new(
+        Correspondence::identity(4),
+        Correspondence::identity(3),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+    );
+    assert_eq!(editor.tracked_build(), (source, expected));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_stereo_atoms_restoration(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = source.edit();
+    let mut edits = Edits::new();
+    let (site, ligands, data) = &entries.stereo_atoms[0];
+    edits.remove_stereo_atoms(vec![(
+        StereoAtomHandle::Id(StereoAtomId(0)),
+        AtomHandle::Id(*site),
+        ligands
+            .iter()
+            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+            .collect(),
+        data.clone(),
+    )]);
+    let transaction = editor.transact(edits).unwrap();
+    transaction.rollback(&mut editor).unwrap();
+    let expected = MoleculeCorrespondence::new(
+        Correspondence::identity(4),
+        Correspondence::identity(3),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+        Correspondence::identity(1),
+    );
+    assert_eq!(editor.tracked_build(), (source, expected));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_stereo_bonds_restoration(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = source.edit();
+    let mut edits = Edits::new();
+    let (site, ligands, data) = &entries.stereo_bonds[0];
+    edits.remove_stereo_bonds(vec![(
+        StereoBondHandle::Id(StereoBondId(0)),
+        BondHandle::Id(*site),
+        ligands
+            .iter()
+            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+            .collect(),
+        data.clone(),
+    )]);
+    let transaction = editor.transact(edits).unwrap();
+    transaction.rollback(&mut editor).unwrap();
+    let expected = MoleculeCorrespondence::new(
+        Correspondence::identity(4),
+        Correspondence::identity(3),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::identity(1),
+        Correspondence::new(vec![], 1, 1).unwrap(),
+    );
+    assert_eq!(editor.tracked_build(), (source, expected));
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_build_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries.clone());
+    let mut editor = source.edit();
+    let witness = editor.tracked_snapshot().unwrap().1;
+    entries.atoms[0] = AtomForm::from_element(Element::S);
+    entries.bonds[0].2 = BondForm::from_order(2);
+    entries.dative[0].2 = DativeBondForm::from_order(2);
+    entries.aromatic[0].1 = AromaticSystemForm::from_electrons(vec![0, 1, 2]);
+    entries.multicenter[0].1 = MulticenterBondForm::from_electrons(vec![0, 1, 2]);
+    entries.noncovalent[0].1 = NoncovalentBondForm::default();
+    entries.stereo_atoms[0].2 = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
+    entries.stereo_bonds[0].2 = StereoBondForm::new(StereoKind::CisTrans, 0u32);
+    *editor.atom_mut(AtomId(0)).attributes = entries.atoms[0].clone();
+    *editor.bond_mut(BondId(0)).attributes = entries.bonds[0].2.clone();
+    *editor.dative_bond_mut(DativeBondId(0)).attributes = entries.dative[0].2.clone();
+    *editor.aromatic_system_mut(AromaticSystemId(0)).attributes = entries.aromatic[0].1.clone();
+    *editor.multicenter_bond_mut(MulticenterBondId(0)).attributes =
+        entries.multicenter[0].1.clone();
+    *editor.noncovalent_bond_mut(NoncovalentBondId(0)).attributes =
+        entries.noncovalent[0].1.clone();
+    *editor.stereo_atom_mut(StereoAtomId(0)).attributes = entries.stereo_atoms[0].2.clone();
+    *editor.stereo_bond_mut(StereoBondId(0)).attributes = entries.stereo_bonds[0].2.clone();
+    assert_eq!(
+        editor.tracked_build(),
+        (Molecule::from_entries(entries), witness)
+    );
+}
+
+#[rstest]
+fn test_molecule_editor_try_tracked_build_allocation(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries);
+    let editor = source.edit();
+    let atoms_ptr = editor.correspondence.atoms().matched_pairs().as_ptr();
+    let bonds_ptr = editor.correspondence.bonds().matched_pairs().as_ptr();
+    let dative_bonds_ptr = editor
+        .correspondence
+        .dative_bonds()
+        .matched_pairs()
+        .as_ptr();
+    let aromatic_systems_ptr = editor
+        .correspondence
+        .aromatic_systems()
+        .matched_pairs()
+        .as_ptr();
+    let multicenter_bonds_ptr = editor
+        .correspondence
+        .multicenter_bonds()
+        .matched_pairs()
+        .as_ptr();
+    let noncovalent_bonds_ptr = editor
+        .correspondence
+        .noncovalent_bonds()
+        .matched_pairs()
+        .as_ptr();
+    let stereo_atoms_ptr = editor
+        .correspondence
+        .stereo_atoms()
+        .matched_pairs()
+        .as_ptr();
+    let stereo_bonds_ptr = editor
+        .correspondence
+        .stereo_bonds()
+        .matched_pairs()
+        .as_ptr();
+    let (result, witness) = editor.try_tracked_build().unwrap();
+    assert_eq!(result, source);
+    assert_eq!(witness.atoms().matched_pairs().as_ptr(), atoms_ptr);
+    assert_eq!(witness.bonds().matched_pairs().as_ptr(), bonds_ptr);
+    assert_eq!(
+        witness.dative_bonds().matched_pairs().as_ptr(),
+        dative_bonds_ptr
+    );
+    assert_eq!(
+        witness.aromatic_systems().matched_pairs().as_ptr(),
+        aromatic_systems_ptr
+    );
+    assert_eq!(
+        witness.multicenter_bonds().matched_pairs().as_ptr(),
+        multicenter_bonds_ptr
+    );
+    assert_eq!(
+        witness.noncovalent_bonds().matched_pairs().as_ptr(),
+        noncovalent_bonds_ptr
+    );
+    assert_eq!(
+        witness.stereo_atoms().matched_pairs().as_ptr(),
+        stereo_atoms_ptr
+    );
+    assert_eq!(
+        witness.stereo_bonds().matched_pairs().as_ptr(),
+        stereo_bonds_ptr
+    );
+}
+
+#[rstest]
 fn test_molecule_editor_tracked_remove_dative_bonds_empty() {
     let mut plain = Molecule::new().edit();
     let mut tracked = Molecule::new().edit();
@@ -3645,7 +4154,10 @@ fn test_molecule_editor_tracked_remove_dative_bonds(
 
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.build(), expected);
-    assert_eq!(tracked.build(), expected);
+    assert_eq!(
+        tracked.tracked_build(),
+        (expected, MoleculeCorrespondence::from(&expected_compaction))
+    );
 }
 
 #[rstest]
@@ -3710,7 +4222,10 @@ fn test_molecule_editor_tracked_remove_aromatic_systems(
 
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.build(), expected);
-    assert_eq!(tracked.build(), expected);
+    assert_eq!(
+        tracked.tracked_build(),
+        (expected, MoleculeCorrespondence::from(&expected_compaction))
+    );
 }
 
 #[rstest]
@@ -3775,7 +4290,10 @@ fn test_molecule_editor_tracked_remove_multicenter_bonds(
 
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.build(), expected);
-    assert_eq!(tracked.build(), expected);
+    assert_eq!(
+        tracked.tracked_build(),
+        (expected, MoleculeCorrespondence::from(&expected_compaction))
+    );
 }
 
 #[rstest]
@@ -3840,7 +4358,10 @@ fn test_molecule_editor_tracked_remove_noncovalent_bonds(
 
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.build(), expected);
-    assert_eq!(tracked.build(), expected);
+    assert_eq!(
+        tracked.tracked_build(),
+        (expected, MoleculeCorrespondence::from(&expected_compaction))
+    );
 }
 
 #[rstest]
@@ -3906,7 +4427,10 @@ fn test_molecule_editor_tracked_remove_stereo_atoms(
 
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.build(), expected);
-    assert_eq!(tracked.build(), expected);
+    assert_eq!(
+        tracked.tracked_build(),
+        (expected, MoleculeCorrespondence::from(&expected_compaction))
+    );
 }
 
 #[rstest]
@@ -3972,7 +4496,10 @@ fn test_molecule_editor_tracked_remove_stereo_bonds(
 
     assert_eq!(compaction, expected_compaction);
     assert_eq!(plain.build(), expected);
-    assert_eq!(tracked.build(), expected);
+    assert_eq!(
+        tracked.tracked_build(),
+        (expected, MoleculeCorrespondence::from(&expected_compaction))
+    );
 }
 
 #[rstest]

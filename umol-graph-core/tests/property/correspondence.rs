@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use proptest::prelude::*;
-use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
+use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
 
 use super::strategy;
 
@@ -118,6 +118,54 @@ fn correspondence_images_strategy() -> impl Strategy<Value = (Vec<NodeId>, usize
 }
 
 proptest! {
+
+    #[test]
+    fn test_correspondence_extend_right(
+        correspondence in correspondence_strategy::<NodeId>(),
+        added in 0usize..8,
+    ) {
+        let right_count = correspondence.right_count();
+        let step = Correspondence::new(
+            (0..right_count).map(|idx| (NodeId::from(idx), NodeId::from(idx))).collect(),
+            right_count, right_count + added,
+        ).unwrap();
+        prop_assert_eq!(correspondence.clone().extend_right(added), correspondence.compose(&step).unwrap());
+    }
+
+    #[test]
+    fn test_correspondence_compact_right(
+        correspondence in correspondence_strategy::<NodeId>(),
+        removals in prop::collection::vec(any::<bool>(), 8),
+    ) {
+        let removed = removals.into_iter().take(correspondence.right_count()).enumerate()
+            .filter_map(|(idx, remove)| remove.then_some(NodeId::from(idx))).collect();
+        let compaction = Compaction::new(correspondence.right_count(), removed).unwrap();
+        let step = Correspondence::from(&compaction);
+        prop_assert_eq!(
+            correspondence.clone().compact_right(&compaction).unwrap(),
+            correspondence.compose(&step).unwrap(),
+        );
+        prop_assert_eq!(
+            correspondence.clone().compact_right(&compaction).unwrap().uncompact_right(&compaction).unwrap(),
+            correspondence.compose(&step).unwrap().compose(&step.reverse()).unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_correspondence_uncompact_right(
+        (correspondence, compaction) in (0usize..8, 0usize..8, prop::collection::vec(any::<bool>(), 8))
+            .prop_flat_map(|(left_count, source_count, removals)| {
+                let removed = removals.into_iter().take(source_count).enumerate()
+                    .filter_map(|(idx, remove)| remove.then_some(NodeId::from(idx))).collect();
+                let compaction = Compaction::new(source_count, removed).unwrap();
+                (correspondence_with_counts_strategy::<NodeId>(left_count, compaction.result_count()), Just(compaction))
+            }),
+    ) {
+        let step = Correspondence::from(&compaction).reverse();
+        let expanded = correspondence.clone().uncompact_right(&compaction).unwrap();
+        prop_assert_eq!(&expanded, &correspondence.compose(&step).unwrap());
+        prop_assert_eq!(expanded.compact_right(&compaction).unwrap(), correspondence);
+    }
     #[test]
     fn test_correspondence_from_images(
         (images, right_count) in correspondence_images_strategy(),

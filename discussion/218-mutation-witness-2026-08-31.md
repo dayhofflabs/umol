@@ -31,12 +31,12 @@ returned.
 
 - The editor returns piecewise information in Rust: additions return their
   new ids, and `MoleculeEditor::tracked_remove` returns a pre-to-post
-  `MoleculeCompaction`; plain `remove` returns unit. Finalization returns only
-  the molecule, so an editing session has no aggregate witness.
-- `Molecule::apply(edits)` returns only the new molecule. Contrary to the
-  first version of this document, it does not construct and discard a
-  `MoleculeCorrespondence`; the edit machinery has operation-local handles
-  and compactions but no session-level correspondence to reuse.
+  `MoleculeCompaction`; plain `remove` returns unit. Tracked snapshot and
+  finalization now expose the accumulated initial-to-current correspondence;
+  plain publication returns only the molecule.
+- `Molecule::apply(edits)` returns only the new molecule. Its editor now
+  accumulates a session correspondence, but operation-level application
+  witnesses remain for S6b.
 - Transactions retain undo payloads but expose no forward or rollback
   witness.
 - `canonicalize_with_correspondence` returns a source-to-canonical
@@ -1205,7 +1205,7 @@ the same object-only/tracked split, preserving their categorical mapping directi
 
 ### S6 — Editor and transaction correspondences
 
-- [ ] **S6a — Editor session witness.** Graph-IR molecule editor.
+- [x] **S6a — Editor session witness.** Graph-IR molecule editor.
   Additive (green). [dep: S1a, S3b, S5c]
   Track source-to-current pairings across direct additions, removals,
   modifications, and restoration. Publication's primary result is a molecule;
@@ -1217,6 +1217,41 @@ the same object-only/tracked split, preserving their categorical mapping directi
   id spaces; it does not require publication of an intermediate molecule.
   Test multi-step sessions, all entity families, repeated snapshots, and
   publication failures. Compare session pairings with composed operation pairings.
+  Accumulation uses the correspondence itself, not a retained source molecule
+  or separate accumulator type. Entity-id-sized storage is accepted; cloning
+  existing entity payloads for witness production is not. Consuming
+  `extend_right`, `compact_right`, and `uncompact_right` preserve the pair-vector
+  allocations. `Correspondence::identity(count)` initializes the single-space
+  carrier; existing constructors assemble aggregates. Graph extension takes
+  node/edge increments, molecule extension an entity kind and increment.
+  Count disagreement uses the existing composition errors. Inverse compaction
+  restores the target positions without recreating discarded pairs. Ordinary
+  `compose` remains borrowed. Atom/bond compaction adaptation copies only the
+  removed-id lists between graph and molecule id types.
+  Completed 2026-09-04: editor initialization, all eight addition families,
+  topology and bulk overlay removal, and undo application maintain the
+  session correspondence. Failed transactions restore the prior correspondence
+  after successful rollback. Plain snapshots avoid copying the witness;
+  tracked snapshots copy its id pairs, while consuming publication transfers
+  the vectors. No molecular payloads are retained or cloned for tracking.
+  Tests cover repeated snapshots, multi-step composition, all entity families,
+  attribute preservation, restoration, failed-transaction recovery, integrity
+  errors, and allocation transfer. Python exposure remains in S8a.
+  Verification: 7,780 core/IR library tests passed (3 ignored), plus integration
+  and doc tests; 369 graph-IR properties passed at 256 cases (1 ignored).
+  The carrier prerequisite also passed all 12 correspondence properties.
+  Exact tests cover each component, count failures, unmatched/restored ids,
+  and pair-vector allocation reuse. Workspace all-targets check, core/IR
+  property-enabled all-targets clippy with `-D warnings`, nightly formatting,
+  and diff checks passed.
+  A single-middle-removal benchmark over identity pair vectors measured
+  consuming compaction at about 0.23/3.2/50 microseconds for 256/4,096/65,536
+  pairs, versus borrowed composition with a prebuilt compaction correspondence
+  at 2.0/41/1,224 microseconds. Accumulator cloning is outside the consuming
+  measurement; these are carrier measurements, not editor timings.
+  The complete editor benchmark (initialize, remove a terminal atom, add its
+  replacement and bond, then tracked publication) measured about 2.5 and
+  11.6 microseconds on 8- and 64-atom paths, including integrity checking.
 - [ ] **S6b — Batch application and transactions.** Graph-IR molecule apply,
   editor transact/apply, and transaction rollback. Additive (green).
   [dep: S6a] Correspondences are optional provenance. Add

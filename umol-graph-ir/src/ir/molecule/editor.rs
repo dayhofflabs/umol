@@ -11,8 +11,8 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    Compaction, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphCompaction, NodeId,
-    RelationId, RelationParticipant, VarRelationSet,
+    Compaction, Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph,
+    GraphCompaction, NodeId, RelationId, RelationParticipant, VarRelationSet,
 };
 use umol_perm::{DynPermutation, Permutation};
 
@@ -21,6 +21,7 @@ use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::compact::{MoleculeCompaction, UndoCompaction};
 use super::super::constraint::{Constraint, Constraints};
+use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::{DativeBondForm, DativeBonds};
 use super::super::edit::{
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
@@ -28,6 +29,7 @@ use super::super::edit::{
     RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
     RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
 };
+use super::super::entity::EntityKind;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -566,7 +568,19 @@ fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
 /// Mutable editor for a `Molecule`. Accumulates atoms, bonds, and
 /// relations (dative, aromatic, multicenter, noncovalent), then finalizes
 /// into an immutable `Molecule`. Supports incremental removal with
-/// index remapping via `remove`.
+/// compaction via `remove`.
+///
+/// The session correspondence maps the editor's initial id spaces to its current ones.
+/// Tracking stores only id pairs and counts, not a source molecule. Additions are right-unmatched;
+/// removals discard pairs. Restoration expands the id spaces without recreating discarded pairs.
+/// Attribute-only changes preserve the pairings.
+///
+/// # Semantic properties
+///
+/// The session correspondence composes the id changes since editor creation. Discarding the
+/// correspondence from a tracked publication gives the same molecule or integrity error as its
+/// plain counterpart. Repeated snapshots without intervening edits are equal; later edits do not
+/// change an earlier snapshot or its correspondence.
 #[derive(Clone)]
 pub struct MoleculeEditor {
     graph: Graph,
@@ -579,6 +593,7 @@ pub struct MoleculeEditor {
     stereo_atoms: FixedVarSetStorage<NodeId, 1, StereoLigand, StereoAtomForm>,
     stereo_bonds: FixedVarSetStorage<EdgeId, 1, StereoLigand, StereoBondForm>,
     constraints: Constraints,
+    pub(super) correspondence: MoleculeCorrespondence,
 }
 
 impl MoleculeEditor {
@@ -595,7 +610,18 @@ impl MoleculeEditor {
         stereo_bonds: StereoBonds,
         constraints: Constraints,
     ) -> Self {
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::identity(atoms.len()),
+            Correspondence::identity(bonds.len()),
+            Correspondence::identity(dative_bonds.count()),
+            Correspondence::identity(aromatic_systems.count()),
+            Correspondence::identity(multicenter_bonds.count()),
+            Correspondence::identity(noncovalent_bonds.count()),
+            Correspondence::identity(stereo_atoms.count()),
+            Correspondence::identity(stereo_bonds.count()),
+        );
         Self {
+            correspondence,
             graph,
             atoms,
             bonds,
@@ -616,6 +642,9 @@ impl MoleculeEditor {
     pub fn add_atom(&mut self, atom: AtomForm) -> AtomId {
         let id = self.graph.add_node();
         Arc::make_mut(&mut self.atoms).push(atom);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::Atom, 1);
         AtomId::from(id)
     }
 
@@ -628,6 +657,9 @@ impl MoleculeEditor {
             .graph
             .add_edge(NodeId::from(first), NodeId::from(second));
         Arc::make_mut(&mut self.bonds).push(bond);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::Bond, 1);
         BondId::from(id)
     }
 
@@ -641,10 +673,14 @@ impl MoleculeEditor {
         bond: DativeBondForm,
     ) -> DativeBondId {
         let donors: Vec<NodeId> = donors.into_iter().map(NodeId::from).collect();
-        DativeBondId(
+        let id = DativeBondId(
             self.dative_bonds
                 .push([NodeId::from(acceptor)], donors, bond),
-        )
+        );
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::DativeBond, 1);
+        id
     }
 
     /// Append an aromatic-system overlay directly to the editor.
@@ -655,6 +691,9 @@ impl MoleculeEditor {
     ) -> AromaticSystemId {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         let i = self.aromatic_systems.push(nodes, data);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::AromaticSystem, 1);
         AromaticSystemId(i)
     }
 
@@ -666,6 +705,9 @@ impl MoleculeEditor {
     ) -> MulticenterBondId {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         let i = self.multicenter_bonds.push(nodes, data);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::MulticenterBond, 1);
         MulticenterBondId(i)
     }
 
@@ -678,6 +720,9 @@ impl MoleculeEditor {
         let i = self
             .noncovalent_bonds
             .push([NodeId::from(ends[0]), NodeId::from(ends[1])], bond);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::NoncovalentBond, 1);
         NoncovalentBondId(i)
     }
 
@@ -688,10 +733,14 @@ impl MoleculeEditor {
         ligands: Vec<StereoLigand>,
         attributes: StereoAtomForm,
     ) -> StereoAtomId {
-        StereoAtomId(
+        let id = StereoAtomId(
             self.stereo_atoms
                 .push([NodeId::from(site)], ligands, attributes),
-        )
+        );
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::StereoAtom, 1);
+        id
     }
 
     /// Append a stereo-bond overlay directly to the editor.
@@ -701,10 +750,14 @@ impl MoleculeEditor {
         ligands: Vec<StereoLigand>,
         attributes: StereoBondForm,
     ) -> StereoBondId {
-        StereoBondId(
+        let id = StereoBondId(
             self.stereo_bonds
                 .push([EdgeId::from(site)], ligands, attributes),
-        )
+        );
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .extend_right(EntityKind::StereoBond, 1);
+        id
     }
 
     /// Add a molecule-level constraint (molecule-scope predicate or
@@ -1140,6 +1193,10 @@ impl MoleculeEditor {
         );
         self.dative_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -1182,6 +1239,10 @@ impl MoleculeEditor {
         );
         self.aromatic_systems.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -1224,6 +1285,10 @@ impl MoleculeEditor {
         );
         self.multicenter_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -1266,6 +1331,10 @@ impl MoleculeEditor {
         );
         self.noncovalent_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -1301,6 +1370,10 @@ impl MoleculeEditor {
         );
         self.stereo_atoms.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -1336,6 +1409,10 @@ impl MoleculeEditor {
         );
         self.stereo_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&compaction)
+                .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -1470,6 +1547,10 @@ impl MoleculeEditor {
             .expect("relation compaction preserves its source count"),
         );
         self.constraints.compact(&id_compaction);
+        self.correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
+                .compact_right(&id_compaction)
+                .expect("removal compaction describes the editor's current id spaces");
         id_compaction
     }
 
@@ -1507,6 +1588,7 @@ impl MoleculeEditor {
 
     // -- Undo of removals -----------------------------------------------------
 
+    // Undo application updates the session correspondence after all affected tables are restored.
     pub(super) fn restore_topology(
         &mut self,
         atoms: Vec<RemovedAtom>,
@@ -1716,7 +1798,31 @@ impl MoleculeEditor {
     /// Returns [`MoleculeIntegrityError`] when the transient editor state cannot be published as a
     /// molecule.
     pub fn snapshot(&self) -> Result<Molecule, MoleculeIntegrityError> {
-        self.clone().try_build()
+        Molecule::try_from_arcs(
+            self.graph.clone(),
+            Arc::clone(&self.atoms),
+            Arc::clone(&self.bonds),
+            DativeBonds::from_arc(self.dative_bonds.clone().into_arc()),
+            AromaticSystems::from_arc(self.aromatic_systems.clone().into_arc()),
+            MulticenterBonds::from_arc(self.multicenter_bonds.clone().into_arc()),
+            NoncovalentBonds::from_arc(self.noncovalent_bonds.clone().into_arc()),
+            StereoAtoms::from_arc(self.stereo_atoms.clone().into_arc()),
+            StereoBonds::from_arc(self.stereo_bonds.clone().into_arc()),
+            self.constraints.clone(),
+        )
+    }
+
+    /// Publish a reusable snapshot and the initial-to-current session correspondence.
+    ///
+    /// Subsequent edits do not change either returned value.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same integrity error as [`Self::snapshot`].
+    pub fn tracked_snapshot(
+        &self,
+    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeIntegrityError> {
+        Ok((self.snapshot()?, self.correspondence.clone()))
     }
 
     /// Publish the editor's current state after checking molecule integrity.
@@ -1735,6 +1841,21 @@ impl MoleculeEditor {
         )
     }
 
+    /// Consume the editor, publishing its molecule and initial-to-current session correspondence.
+    ///
+    /// Moves the accumulated id-pair vectors into the result without copying them.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same integrity error as [`Self::try_build`]. The editor is consumed on failure.
+    pub fn try_tracked_build(
+        mut self,
+    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeIntegrityError> {
+        let correspondence =
+            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty());
+        Ok((self.try_build()?, correspondence))
+    }
+
     /// Publish editor state whose molecule integrity is established by the producer.
     ///
     /// # Panics
@@ -1743,6 +1864,17 @@ impl MoleculeEditor {
     /// [`Self::try_build`] for independently assembled or potentially conflicting edits.
     pub fn build(self) -> Molecule {
         self.try_build()
+            .unwrap_or_else(|error| panic!("invalid molecule editor state: {error}"))
+    }
+
+    /// Consume an integrity-established editor, returning its molecule and session correspondence.
+    ///
+    /// # Panics
+    ///
+    /// Panics on the same integrity failure as [`Self::build`]. Use [`Self::try_tracked_build`]
+    /// when the edits do not establish molecule integrity.
+    pub fn tracked_build(self) -> (Molecule, MoleculeCorrespondence) {
+        self.try_tracked_build()
             .unwrap_or_else(|error| panic!("invalid molecule editor state: {error}"))
     }
 }

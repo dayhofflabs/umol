@@ -194,6 +194,15 @@ fn benchmark_mutation(c: &mut Criterion) {
             .meet_pushout(&molecule, &overlap)
             .expect("benchmark overlap is admissible");
 
+        group.bench_function(BenchmarkId::new("editor_session/path", size), |b| {
+            b.iter(|| {
+                let mut editor = molecule.edit();
+                editor.remove(&[AtomId((size - 1) as u32)], &[]);
+                let added = editor.add_atom(AtomForm::from_element(Element::O));
+                editor.add_bond(AtomId((size - 2) as u32), added, BondForm::from_order(1));
+                black_box(editor.tracked_build())
+            })
+        });
         group.bench_function(BenchmarkId::new("remove/path", size), |b| {
             b.iter_batched(
                 || molecule.edit(),

@@ -8,8 +8,8 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
 };
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
-    CommonSubgraphEnumerationAlgorithm, ConnectedComponentsAlgorithm, Correspondence, EdgeId,
-    EmbeddingKind, GeneralMaximumMatchingAlgorithm, Graph, GraphCorrespondence,
+    CommonSubgraphEnumerationAlgorithm, Compaction, ConnectedComponentsAlgorithm, Correspondence,
+    EdgeId, EmbeddingKind, GeneralMaximumMatchingAlgorithm, Graph, GraphCorrespondence,
     MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NodeId,
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
@@ -1372,8 +1372,29 @@ fn mutation(c: &mut Criterion) {
     group.finish();
 }
 
+fn correspondence_updates(c: &mut Criterion) {
+    let mut group = c.benchmark_group("correspondence_updates");
+    for size in [256usize, 4096, 65536] {
+        let correspondence = Correspondence::<NodeId>::identity(size);
+        let compaction = Compaction::new(size, vec![NodeId::from(size / 2)]).unwrap();
+        let step = Correspondence::from(&compaction);
+        group.bench_function(BenchmarkId::new("compact_right", size), |b| {
+            b.iter_batched(
+                || correspondence.clone(),
+                |value| black_box(value.compact_right(black_box(&compaction)).unwrap()),
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(BenchmarkId::new("compose", size), |b| {
+            b.iter(|| black_box(correspondence.compose(black_box(&step)).unwrap()))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
+    correspondence_updates,
     mutation,
     relevant_cycle_enumeration,
     simple_cycle_enumeration,

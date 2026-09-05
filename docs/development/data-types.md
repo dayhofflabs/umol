@@ -713,6 +713,35 @@ It does not make correspondence construction, composition, reversal, or unrelate
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
+### Consuming correspondence updates
+
+`Correspondence::identity(count)` initializes a declared identity without temporary images.
+`extend_right` consumes the correspondence and adds unmatched right-domain ids by increasing
+its right count. `compact_right` discards affected pairs and compacts surviving right ids;
+`uncompact_right` expands those ids through the inverse compaction, leaving restored positions
+unmatched. Both check the applicable intermediate count using the existing composition errors.
+They preserve the left count and reuse the pair-vector allocation, including when all pairs
+are removed. Compaction followed by expansion does not recreate discarded pairings.
+
+Graph and molecule correspondences expose component-wise versions. Graph extension takes node
+and edge increments; molecule extension selects an `EntityKind`. Molecule compaction adapts only
+the removed atom/bond id lists from graph ids, not the vectors of matched pairs. These operations
+do not clone molecular payloads or require intermediate molecules. Ordinary `compose` remains
+borrowed and returns a separate correspondence.
+
+### Editor session correspondence
+
+`MoleculeEditor` accumulates an initial-to-current correspondence over all eight entity kinds.
+Tracking retains only id pairs and counts. Additions extend the right domains, removals compact
+them, and undo restoration applies inverse compaction without recreating discarded pairs.
+Attribute changes preserve pairings. A failed transaction whose rollback succeeds restores the
+pre-transaction session correspondence, alongside the molecular state.
+
+`tracked_snapshot` returns the same integrity-checked molecule as `snapshot`, plus an independent
+copy of the session correspondence. `try_tracked_build` and `tracked_build` transfer the accumulated
+vectors into the result and share the ordinary checked/asserted publication boundary. Plain
+publication returns only the molecule; plain snapshots do not copy the correspondence.
+
 ## Pushout results
 
 Graph and relation-set `pushout` methods return only the resulting object.
