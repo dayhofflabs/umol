@@ -17,7 +17,41 @@ The first release after 0.6.0 should exercise the crates.io OIDC path now config
 `dayhofflabs/umol`, workflow `release.yml`, and environment `crates-io`; the bootstrap token has
 been revoked and the `CARGO_REGISTRY_TOKEN` was removed from the `crates-io` environment.
 
+## 0.8.0 release preparation
+
+The workspace's nineteen packages and internal dependency requirements are set to 0.8.0.
+RELEASE_NOTES.md replaces the previous notes with changes since 0.7.0, including breaking
+API migrations. The README adds a verified primer and file-based SVG output.
+
+The new umol-coordgen-sys package includes its MIT/Apache license texts alongside the vendored
+CoordGen BSD license. Native tests pass (17 tests), and `cargo package --locked --offline
+-p umol-coordgen-sys --features native --allow-dirty` successfully builds the extracted package.
+The archive contains 50 files, approximately 132 KiB compressed. The local Python extension
+build and its suite pass (1,479 tests, two skipped); workspace checking also passed.
+
+### First CoordGen publication remains manual
+
+crates.io trusted publishing cannot perform a crate's first publication; see the
+[crates.io development update](https://blog.rust-lang.org/2025/07/11/crates-io-development-update-2025-07/).
+After reviewing and committing the prepared tree, run locally with normal Cargo credentials:
+
+```sh
+cargo publish --locked -p umol-coordgen-sys --features native --dry-run
+cargo publish --locked -p umol-coordgen-sys --features native
+```
+
+Then configure that crate's trusted publisher for repository `dayhofflabs/umol`, workflow
+`release.yml`, environment `crates-io`. The release workflow already lists umol-coordgen-sys
+before its consumers and skips versions already published. No workflow change is needed for
+this bootstrap. The normal release dispatch requires the reviewed `v0.8.0` tag to exist.
+
+No crate was uploaded, no publisher settings were changed, and no commit or tag was created
+during this preparation. The dirty-tree allowance above was for local package verification only.
+
 ## Whitepaper link
+
+The Python primer and Rust appendix have been updated for 0.8.0. The README contains the
+adapted tour; the paper source remains author-maintained.
 
 The README currently links the bundled `docs/umol-whitepaper.pdf`. Replace that target with the
 permanent arXiv page once the paper is published; keep the bundled PDF available until then.

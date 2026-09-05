@@ -31,15 +31,15 @@ indexmap = "2.11.1"
 smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
-umol-graph-ir-macros = { path = "../umol-graph-ir-macros", version = "0.7.0" }
-umol-edn = { path = "../umol-edn", version = "0.7.0", features = [
+umol-graph-ir-macros = { path = "../umol-graph-ir-macros", version = "0.8.0" }
+umol-edn = { path = "../umol-edn", version = "0.8.0", features = [
     "macros",
     "indexmap",
 ] }
-umol-graph-core = { path = "../umol-graph-core", version = "0.7.0" }
-umol-perm = { path = "../umol-perm", version = "0.7.0" }
-umol-chem = { path = "../umol-chem", version = "0.7.0" }
-umol-utils = { path = "../umol-utils", version = "0.7.0" }
+umol-graph-core = { path = "../umol-graph-core", version = "0.8.0" }
+umol-perm = { path = "../umol-perm", version = "0.8.0" }
+umol-chem = { path = "../umol-chem", version = "0.8.0" }
+umol-utils = { path = "../umol-utils", version = "0.8.0" }
 winnow = "1.0"
 
 [dev-dependencies]
