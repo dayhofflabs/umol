@@ -938,7 +938,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{Correspondence, EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, Correspondence, EdgeId, GraphCompaction, NodeId};
     use umol_perm::{DynPermutation, Permutation};
 
     use super::*;
@@ -1046,15 +1046,15 @@ mod tests {
     fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> MoleculeCompaction {
         MoleculeCompaction::new(
             GraphCompaction::new(
-                removed_nodes.into_iter().map(NodeId).collect(),
-                removed_edges.into_iter().map(EdgeId).collect(),
+                Compaction::new(6, removed_nodes.into_iter().map(NodeId).collect()).unwrap(),
+                Compaction::new(6, removed_edges.into_iter().map(EdgeId).collect()).unwrap(),
             ),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            Compaction::identity(6),
+            Compaction::identity(6),
+            Compaction::identity(6),
+            Compaction::identity(6),
+            Compaction::identity(6),
+            Compaction::identity(6),
         )
     }
 
@@ -1067,19 +1067,39 @@ mod tests {
         removed_stereo_bonds: Vec<u32>,
     ) -> MoleculeCompaction {
         MoleculeCompaction::new(
-            GraphCompaction::new(Vec::new(), Vec::new()),
-            removed_dative.into_iter().map(DativeBondId).collect(),
-            removed_aromatic.into_iter().map(AromaticSystemId).collect(),
-            removed_multicenter
-                .into_iter()
-                .map(MulticenterBondId)
-                .collect(),
-            removed_noncovalent
-                .into_iter()
-                .map(NoncovalentBondId)
-                .collect(),
-            removed_stereo_atoms.into_iter().map(StereoAtomId).collect(),
-            removed_stereo_bonds.into_iter().map(StereoBondId).collect(),
+            GraphCompaction::new(Compaction::identity(6), Compaction::identity(6)),
+            Compaction::new(6, removed_dative.into_iter().map(DativeBondId).collect()).unwrap(),
+            Compaction::new(
+                6,
+                removed_aromatic.into_iter().map(AromaticSystemId).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                6,
+                removed_multicenter
+                    .into_iter()
+                    .map(MulticenterBondId)
+                    .collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                6,
+                removed_noncovalent
+                    .into_iter()
+                    .map(NoncovalentBondId)
+                    .collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                6,
+                removed_stereo_atoms.into_iter().map(StereoAtomId).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                6,
+                removed_stereo_bonds.into_iter().map(StereoBondId).collect(),
+            )
+            .unwrap(),
         )
     }
 

@@ -9,7 +9,9 @@
 use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::ops::{Add, Sub};
 
+use crate::compact::{Compaction, GraphCompaction};
 use crate::graph::{EdgeId, Graph, NodeId};
 use crate::remap::{GraphRemapping, Remapping};
 
@@ -95,6 +97,30 @@ pub struct Correspondence<Id> {
     matched_pairs: Vec<(Id, Id)>,
     left_count: usize,
     right_count: usize,
+}
+
+impl<Id> From<&Compaction<Id>> for Correspondence<Id>
+where
+    Id: Copy + Ord + Into<usize> + From<usize> + Add<usize, Output = Id> + Sub<usize, Output = Id>,
+{
+    /// Preserve the declared counts and every surviving source-to-result pairing.
+    fn from(compaction: &Compaction<Id>) -> Self {
+        Self {
+            matched_pairs: (0..compaction.source_count())
+                .map(Id::from)
+                .filter_map(|left| compaction.compact(left).map(|right| (left, right)))
+                .collect(),
+            left_count: compaction.source_count(),
+            right_count: compaction.result_count(),
+        }
+    }
+}
+
+impl From<&GraphCompaction> for GraphCorrespondence {
+    /// Preserve the node and edge compaction witnesses.
+    fn from(compaction: &GraphCompaction) -> Self {
+        Self::new(compaction.nodes().into(), compaction.edges().into())
+    }
 }
 
 impl<Id: Copy + Into<usize> + From<usize>> From<&Remapping<Id>> for Correspondence<Id> {
@@ -505,6 +531,44 @@ mod tests {
 
     fn e(i: u32) -> EdgeId {
         EdgeId(i)
+    }
+
+    #[rstest]
+    #[case::empty(0, vec![], vec![], 0)]
+    #[case::identity(2, vec![], vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2)]
+    #[case::partial(4, vec![NodeId(1), NodeId(3)], vec![(NodeId(0), NodeId(0)), (NodeId(2), NodeId(1))], 2)]
+    #[case::full(2, vec![NodeId(1), NodeId(0)], vec![], 0)]
+    fn test_correspondence_from_compaction(
+        #[case] source_count: usize,
+        #[case] removed: Vec<NodeId>,
+        #[case] pairs: Vec<(NodeId, NodeId)>,
+        #[case] result_count: usize,
+    ) {
+        let compaction = Compaction::new(source_count, removed).unwrap();
+        assert_eq!(
+            Correspondence::from(&compaction),
+            Correspondence {
+                matched_pairs: pairs,
+                left_count: source_count,
+                right_count: result_count,
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_graph_correspondence_from_compaction() {
+        let compaction = GraphCompaction::new(
+            Compaction::new(3, vec![NodeId(1)]).unwrap(),
+            Compaction::new(2, vec![EdgeId(0), EdgeId(1)]).unwrap(),
+        );
+        assert_eq!(
+            GraphCorrespondence::from(&compaction),
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(2), NodeId(1))], 3, 2)
+                    .unwrap(),
+                Correspondence::new(vec![], 2, 0).unwrap(),
+            )
+        );
     }
 
     #[rstest]

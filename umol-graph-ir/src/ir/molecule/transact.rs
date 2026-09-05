@@ -16,6 +16,7 @@ use std::collections::HashSet;
 use std::hash::Hash;
 
 use thiserror::Error;
+use umol_graph_core::{Compaction, GraphCompaction};
 
 use super::super::compact::{MoleculeCompaction, UndoCompaction};
 use super::super::constraint::{
@@ -524,13 +525,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::DativeBond)?;
-                let forward = MoleculeCompaction::relations(
-                    ids.clone(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::new(self.dative_bond_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 self.remove_dative_bonds(&ids);
                 state.compact(&forward);
@@ -563,13 +569,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    ids.clone(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::new(self.aromatic_system_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 self.remove_aromatic_systems(&ids);
                 state.compact(&forward);
@@ -602,13 +613,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    Vec::new(),
-                    ids.clone(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::new(self.multicenter_bond_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 self.remove_multicenter_bonds(&ids);
                 state.compact(&forward);
@@ -637,13 +653,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    ids.clone(),
-                    Vec::new(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::new(self.noncovalent_bond_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 self.remove_noncovalent_bonds(&ids);
                 state.compact(&forward);
@@ -676,13 +697,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    ids.clone(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::new(self.stereo_atom_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 self.remove_stereo_atoms(&ids);
                 state.compact(&forward);
@@ -715,13 +741,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoBond)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    ids.clone(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::new(self.stereo_bond_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
                 );
                 self.remove_stereo_bonds(&ids);
                 state.compact(&forward);
@@ -860,7 +891,18 @@ impl MoleculeEditor {
                 let compaction = if !atoms.is_empty() || !bonds.is_empty() {
                     self.remove(&atoms, &bonds)
                 } else {
-                    MoleculeCompaction::empty()
+                    MoleculeCompaction::new(
+                        GraphCompaction::new(
+                            Compaction::identity(self.atom_count()),
+                            Compaction::identity(self.bond_count()),
+                        ),
+                        Compaction::identity(self.dative_bond_count()),
+                        Compaction::identity(self.aromatic_system_count()),
+                        Compaction::identity(self.multicenter_bond_count()),
+                        Compaction::identity(self.noncovalent_bond_count()),
+                        Compaction::identity(self.stereo_atom_count()),
+                        Compaction::identity(self.stereo_bond_count()),
+                    )
                 };
                 state.compact(&compaction);
                 let mut constraints = pre_constraints;
@@ -941,13 +983,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::DativeBond)?;
-                let forward = MoleculeCompaction::relations(
-                    ids.clone(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::new(self.dative_bond_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 let mut pre_constraints = self.constraints().clone();
                 self.remove_dative_bonds(&ids);
@@ -1004,13 +1051,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    ids.clone(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::new(self.aromatic_system_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 let mut pre_constraints = self.constraints().clone();
                 self.remove_aromatic_systems(&ids);
@@ -1067,13 +1119,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    Vec::new(),
-                    ids.clone(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::new(self.multicenter_bond_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 let mut pre_constraints = self.constraints().clone();
                 self.remove_multicenter_bonds(&ids);
@@ -1125,13 +1182,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    ids.clone(),
-                    Vec::new(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::new(self.noncovalent_bond_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 let mut pre_constraints = self.constraints().clone();
                 self.remove_noncovalent_bonds(&ids);
@@ -1188,13 +1250,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    ids.clone(),
-                    Vec::new(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::new(self.stereo_atom_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
+                    Compaction::identity(self.stereo_bond_count()),
                 );
                 let mut pre_constraints = self.constraints().clone();
                 self.remove_stereo_atoms(&ids);
@@ -1251,13 +1318,18 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoBond)?;
-                let forward = MoleculeCompaction::relations(
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    ids.clone(),
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atom_count()),
+                        Compaction::identity(self.bond_count()),
+                    ),
+                    Compaction::identity(self.dative_bond_count()),
+                    Compaction::identity(self.aromatic_system_count()),
+                    Compaction::identity(self.multicenter_bond_count()),
+                    Compaction::identity(self.noncovalent_bond_count()),
+                    Compaction::identity(self.stereo_atom_count()),
+                    Compaction::new(self.stereo_bond_count(), ids.clone())
+                        .expect("removed entities belong to the source table"),
                 );
                 let mut pre_constraints = self.constraints().clone();
                 self.remove_stereo_bonds(&ids);
@@ -2064,6 +2136,65 @@ fn rollback_mismatch() -> TransactionError {
 
 impl MoleculeEditor {
     fn validate_undo(&self, undo: &Undo) -> Result<(), TransactionError> {
+        let compaction = match undo {
+            Undo::RestoreRemovedTopology {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedDativeBonds {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedAromaticSystems {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedMulticenterBonds {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedNoncovalentBonds {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedStereoAtoms {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedStereoBonds {
+                undo_compaction, ..
+            } => Some(undo_compaction.forward()),
+            _ => None,
+        };
+        if let Some(compaction) = compaction {
+            let counts_match = [
+                (self.atom_count(), compaction.graph().nodes().result_count()),
+                (self.bond_count(), compaction.graph().edges().result_count()),
+                (
+                    self.dative_bond_count(),
+                    compaction.dative_bonds().result_count(),
+                ),
+                (
+                    self.aromatic_system_count(),
+                    compaction.aromatic_systems().result_count(),
+                ),
+                (
+                    self.multicenter_bond_count(),
+                    compaction.multicenter_bonds().result_count(),
+                ),
+                (
+                    self.noncovalent_bond_count(),
+                    compaction.noncovalent_bonds().result_count(),
+                ),
+                (
+                    self.stereo_atom_count(),
+                    compaction.stereo_atoms().result_count(),
+                ),
+                (
+                    self.stereo_bond_count(),
+                    compaction.stereo_bonds().result_count(),
+                ),
+            ]
+            .into_iter()
+            .all(|(actual, expected)| actual == expected);
+            if !counts_match {
+                return Err(rollback_mismatch());
+            }
+        }
         let fits = match undo {
             Undo::RemoveAddedTopology { atoms, bonds } => {
                 ids_fit(
@@ -5164,7 +5295,16 @@ mod tests {
                     atoms: Vec::new(),
                     attributes: AromaticSystemForm::default(),
                 }],
-                undo_compaction: MoleculeCompaction::empty().undo_compaction(),
+                undo_compaction: MoleculeCompaction::new(
+                    GraphCompaction::new(Compaction::identity(0), Compaction::identity(0)),
+                    Compaction::identity(0),
+                    Compaction::identity(0),
+                    Compaction::identity(0),
+                    Compaction::identity(0),
+                    Compaction::identity(0),
+                    Compaction::identity(0),
+                )
+                .undo_compaction(),
                 cascade: CascadedConstraints::default(),
             }],
         };
@@ -5176,8 +5316,60 @@ mod tests {
     }
 
     #[rstest]
+    #[case::atoms_short([0, 0, 0, 0, 0, 0, 0, 0])]
+    #[case::atoms_long([2, 0, 0, 0, 0, 0, 0, 0])]
+    #[case::bonds([1, 1, 0, 0, 0, 0, 0, 0])]
+    #[case::dative([1, 0, 1, 0, 0, 0, 0, 0])]
+    #[case::aromatic([1, 0, 0, 1, 0, 0, 0, 0])]
+    #[case::multicenter([1, 0, 0, 0, 1, 0, 0, 0])]
+    #[case::noncovalent([1, 0, 0, 0, 0, 1, 0, 0])]
+    #[case::stereo_atoms([1, 0, 0, 0, 0, 0, 1, 0])]
+    #[case::stereo_bonds([1, 0, 0, 0, 0, 0, 0, 1])]
+    fn test_transaction_rollback_compaction_counts(
+        mut one_atom: MoleculeEditor,
+        #[case] counts: [usize; 8],
+    ) {
+        let before = one_atom.clone().build();
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(counts[0]),
+                Compaction::identity(counts[1]),
+            ),
+            Compaction::identity(counts[2]),
+            Compaction::identity(counts[3]),
+            Compaction::identity(counts[4]),
+            Compaction::identity(counts[5]),
+            Compaction::identity(counts[6]),
+            Compaction::identity(counts[7]),
+        );
+        let transaction = Transaction {
+            undo: vec![Undo::RestoreRemovedTopology {
+                atoms: Vec::new(),
+                bonds: Vec::new(),
+                overlays: RemovedOverlays::default(),
+                undo_compaction: compaction.undo_compaction(),
+                compaction,
+                cascade: CascadedConstraints::default(),
+            }],
+        };
+        assert_eq!(
+            transaction.rollback(&mut one_atom),
+            Err(TransactionError::RollbackStateMismatch)
+        );
+        assert_eq!(one_atom.build(), before);
+    }
+
+    #[rstest]
     fn test_transaction_rollback_compaction_dimension(mut one_atom: MoleculeEditor) {
-        let compaction = MoleculeCompaction::empty();
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(Compaction::identity(0), Compaction::identity(0)),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+        );
         let transaction = Transaction {
             undo: vec![Undo::RestoreRemovedTopology {
                 atoms: vec![RemovedAtom {

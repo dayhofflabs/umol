@@ -12,7 +12,7 @@ use super::id::{
 ///
 /// Holds one [`GraphCompaction`] for atoms and bonds and one [`Compaction`] per relation set, so
 /// every entity kind is renumbered by the same operation over its own id type.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeCompaction {
     graph: GraphCompaction,
     dative_bonds: Compaction<DativeBondId>,
@@ -32,49 +32,27 @@ pub struct UndoCompaction {
 }
 
 impl MoleculeCompaction {
-    pub fn empty() -> Self {
-        Self::default()
-    }
-
-    /// A compaction that removes only relation entities, leaving atoms and bonds in place.
+    /// Assemble count-bearing compactions for all eight entity kinds.
+    ///
+    /// Components are already validated; agreement with a molecule is contextual.
     #[allow(clippy::too_many_arguments)]
-    pub fn relations(
-        dative_bonds: Vec<DativeBondId>,
-        aromatic_systems: Vec<AromaticSystemId>,
-        multicenter_bonds: Vec<MulticenterBondId>,
-        noncovalent_bonds: Vec<NoncovalentBondId>,
-        stereo_atoms: Vec<StereoAtomId>,
-        stereo_bonds: Vec<StereoBondId>,
+    pub fn new(
+        graph: GraphCompaction,
+        dative_bonds: Compaction<DativeBondId>,
+        aromatic_systems: Compaction<AromaticSystemId>,
+        multicenter_bonds: Compaction<MulticenterBondId>,
+        noncovalent_bonds: Compaction<NoncovalentBondId>,
+        stereo_atoms: Compaction<StereoAtomId>,
+        stereo_bonds: Compaction<StereoBondId>,
     ) -> Self {
-        Self::new(
-            GraphCompaction::default(),
+        Self {
+            graph,
             dative_bonds,
             aromatic_systems,
             multicenter_bonds,
             noncovalent_bonds,
             stereo_atoms,
             stereo_bonds,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        graph: GraphCompaction,
-        dative_bonds: Vec<DativeBondId>,
-        aromatic_systems: Vec<AromaticSystemId>,
-        multicenter_bonds: Vec<MulticenterBondId>,
-        noncovalent_bonds: Vec<NoncovalentBondId>,
-        stereo_atoms: Vec<StereoAtomId>,
-        stereo_bonds: Vec<StereoBondId>,
-    ) -> Self {
-        Self {
-            graph,
-            dative_bonds: Compaction::new(dative_bonds),
-            aromatic_systems: Compaction::new(aromatic_systems),
-            multicenter_bonds: Compaction::new(multicenter_bonds),
-            noncovalent_bonds: Compaction::new(noncovalent_bonds),
-            stereo_atoms: Compaction::new(stereo_atoms),
-            stereo_bonds: Compaction::new(stereo_bonds),
         }
     }
 
@@ -201,14 +179,69 @@ mod tests {
     #[fixture]
     fn compaction() -> MoleculeCompaction {
         MoleculeCompaction::new(
-            GraphCompaction::new(vec![NodeId(1), NodeId(3)], vec![EdgeId(0), EdgeId(2)]),
-            vec![DativeBondId(2), DativeBondId(0), DativeBondId(2)],
-            vec![AromaticSystemId(1)],
-            vec![MulticenterBondId(3), MulticenterBondId(0)],
-            vec![NoncovalentBondId(2)],
-            vec![StereoAtomId(1)],
-            vec![StereoBondId(2)],
+            GraphCompaction::new(
+                Compaction::new(5, vec![NodeId(1), NodeId(3)]).unwrap(),
+                Compaction::new(4, vec![EdgeId(0), EdgeId(2)]).unwrap(),
+            ),
+            Compaction::new(3, vec![DativeBondId(2), DativeBondId(0), DativeBondId(2)]).unwrap(),
+            Compaction::new(3, vec![AromaticSystemId(1)]).unwrap(),
+            Compaction::new(4, vec![MulticenterBondId(3), MulticenterBondId(0)]).unwrap(),
+            Compaction::new(4, vec![NoncovalentBondId(2)]).unwrap(),
+            Compaction::new(3, vec![StereoAtomId(1)]).unwrap(),
+            Compaction::new(4, vec![StereoBondId(2)]).unwrap(),
         )
+    }
+
+    #[rstest]
+    fn test_undo_compaction_from(compaction: MoleculeCompaction) {
+        let undo = UndoCompaction::from(&compaction);
+        assert_eq!(undo.forward(), &compaction);
+        assert_eq!(
+            [
+                (
+                    undo.forward().graph().nodes().source_count(),
+                    undo.forward().graph().nodes().result_count()
+                ),
+                (
+                    undo.forward().graph().edges().source_count(),
+                    undo.forward().graph().edges().result_count()
+                ),
+                (
+                    undo.forward().dative_bonds().source_count(),
+                    undo.forward().dative_bonds().result_count()
+                ),
+                (
+                    undo.forward().aromatic_systems().source_count(),
+                    undo.forward().aromatic_systems().result_count()
+                ),
+                (
+                    undo.forward().multicenter_bonds().source_count(),
+                    undo.forward().multicenter_bonds().result_count()
+                ),
+                (
+                    undo.forward().noncovalent_bonds().source_count(),
+                    undo.forward().noncovalent_bonds().result_count()
+                ),
+                (
+                    undo.forward().stereo_atoms().source_count(),
+                    undo.forward().stereo_atoms().result_count()
+                ),
+                (
+                    undo.forward().stereo_bonds().source_count(),
+                    undo.forward().stereo_bonds().result_count()
+                ),
+            ],
+            [
+                (5, 3),
+                (4, 2),
+                (3, 1),
+                (3, 2),
+                (4, 2),
+                (4, 3),
+                (3, 2),
+                (4, 3)
+            ],
+        );
     }
 
     #[rstest]

@@ -977,7 +977,7 @@ estimates.
 
 ### S3 — Complete compaction carriers
 
-- [ ] **S3a — Single-space and graph compaction.** Graph-core compact, graph,
+- [x] **S3a — Single-space and graph compaction.** Graph-core compact, graph,
   and relation modules. Breaking (red→green). [dep: S0a, S1a]
   Add checked source-count construction, declared-count identity, and count
   accessors. Build graph aggregates from valid components; remove unbounded
@@ -986,13 +986,31 @@ estimates.
   conversions to single-space and graph correspondences. Test out-of-range
   removals, duplicate/order handling, empty and fully removed domains,
   survivor ordering, and compact/uncompact roundtrips.
+  Include the dependent molecule component constructor and remove `relations`,
+  `empty`, and raw-vector construction. Migrate editor and transaction
+  producers with all eight pre-removal counts, preserving them through
+  `UndoCompaction`. These construction changes are required for S3a to compile.
+  Completed 2026-09-04: single-space compactions carry source counts, reject
+  out-of-range removals, and expose bounded compact/uncompact and vector
+  operations with the approved checked companions. Graph and molecule
+  aggregates accept validated components; unbounded defaults and molecule
+  `relations`/`empty` constructors are removed. Graph, relation-set, editor,
+  and transaction producers preserve pre-removal counts in every component.
+  Borrowed single-space and graph correspondence conversions preserve the
+  complete survivor pairings and both counts. Rollback checks all eight
+  result counts before inverse transport and reports `RollbackStateMismatch`
+  on disagreement. Tests state the error behavior without historical notes.
+  Core/IR library tests passed (7,572 passed, 3 ignored), plus integration
+  and doc tests. Core/IR properties passed at `PROPTEST_CASES=256`
+  (489 passed, 1 ignored), including independent survivor enumeration.
+  Graph/IO library tests passed (4,297); rebuilt Python tests passed
+  (1,350 passed, 2 skipped, Python 3.13.15). Workspace all-targets check,
+  core/IR property-enabled all-targets clippy with `-D warnings`, nightly
+  formatting, and `git diff --check` passed.
 - [ ] **S3b — Molecule compaction.** Graph-IR compact, editor, transaction,
   and constraint consumers. Breaking (red→green). [dep: S3a]
-  Assemble all eight count-bearing components, including identity components
-  for untouched families. Migrate `relations`, `empty`, and raw-vector
-  construction sites to the settled component-based construction. Preserve
-  counts through `UndoCompaction`; add infallible molecule-correspondence
-  conversion. Test cascaded removals and exact all-family pairings against
+  Add infallible molecule-correspondence conversion over the count-bearing
+  components introduced in S3a. Test cascaded removals and exact all-family pairings against
   the source/result tables, plus existing rollback laws.
 
 ### S4 — Graph-core output/witness separation

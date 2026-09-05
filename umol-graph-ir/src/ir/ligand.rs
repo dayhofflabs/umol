@@ -86,7 +86,7 @@ impl RelationParticipant for StereoLigand {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Correspondence;
+    use umol_graph_core::{Compaction, Correspondence};
 
     use super::*;
 
@@ -163,7 +163,10 @@ mod tests {
     #[rstest]
     fn test_stereo_ligand_compact() {
         // node 1 removed ⇒ surviving node 3 densifies to 2; the kind is carried
-        let compaction = GraphCompaction::new(vec![NodeId(1)], Vec::new());
+        let compaction = GraphCompaction::new(
+            Compaction::new(4, vec![NodeId(1)]).unwrap(),
+            Compaction::identity(0),
+        );
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
         assert_eq!(
             ligand.compact(&compaction),
@@ -176,14 +179,20 @@ mod tests {
 
     #[rstest]
     fn test_stereo_ligand_compact_removed() {
-        let compaction = GraphCompaction::new(vec![NodeId(3)], Vec::new());
+        let compaction = GraphCompaction::new(
+            Compaction::new(4, vec![NodeId(3)]).unwrap(),
+            Compaction::identity(0),
+        );
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
         assert_eq!(ligand.compact(&compaction), None);
     }
 
     #[rstest]
     fn test_stereo_ligand_uncompact() {
-        let compaction = GraphCompaction::new(vec![NodeId(1)], Vec::new());
+        let compaction = GraphCompaction::new(
+            Compaction::new(4, vec![NodeId(1)]).unwrap(),
+            Compaction::identity(0),
+        );
         let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
         assert_eq!(
             ligand.uncompact(&compaction),

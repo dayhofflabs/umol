@@ -829,7 +829,7 @@ impl Normalize for RelationalConstraint {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
     use umol_perm::DynPermutation;
 
     use super::*;
@@ -867,21 +867,41 @@ mod tests {
     ) -> MoleculeCompaction {
         MoleculeCompaction::new(
             GraphCompaction::new(
-                removed_nodes.into_iter().map(NodeId).collect(),
-                removed_edges.into_iter().map(EdgeId).collect(),
+                Compaction::new(4, removed_nodes.into_iter().map(NodeId).collect()).unwrap(),
+                Compaction::new(3, removed_edges.into_iter().map(EdgeId).collect()).unwrap(),
             ),
-            removed_dative.into_iter().map(DativeBondId).collect(),
-            removed_aromatic.into_iter().map(AromaticSystemId).collect(),
-            removed_multicenter
-                .into_iter()
-                .map(MulticenterBondId)
-                .collect(),
-            removed_noncovalent
-                .into_iter()
-                .map(NoncovalentBondId)
-                .collect(),
-            removed_stereo_atom.into_iter().map(StereoAtomId).collect(),
-            removed_stereo_bond.into_iter().map(StereoBondId).collect(),
+            Compaction::new(2, removed_dative.into_iter().map(DativeBondId).collect()).unwrap(),
+            Compaction::new(
+                2,
+                removed_aromatic.into_iter().map(AromaticSystemId).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2,
+                removed_multicenter
+                    .into_iter()
+                    .map(MulticenterBondId)
+                    .collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2,
+                removed_noncovalent
+                    .into_iter()
+                    .map(NoncovalentBondId)
+                    .collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2,
+                removed_stereo_atom.into_iter().map(StereoAtomId).collect(),
+            )
+            .unwrap(),
+            Compaction::new(
+                2,
+                removed_stereo_bond.into_iter().map(StereoBondId).collect(),
+            )
+            .unwrap(),
         )
     }
 

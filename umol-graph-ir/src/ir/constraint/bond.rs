@@ -460,7 +460,7 @@ impl From<Vec<BondConstraintForm>> for BondConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::stereo::{StereoCoset, StereoTerm};
@@ -755,15 +755,15 @@ mod tests {
         ]);
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
-                vec![NodeId(0), NodeId(1), NodeId(2)],
-                vec![EdgeId(0), EdgeId(1)],
+                Compaction::new(3, vec![NodeId(0), NodeId(1), NodeId(2)]).unwrap(),
+                Compaction::new(2, vec![EdgeId(0), EdgeId(1)]).unwrap(),
             ),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
         );
         assert_eq!(cs.clone().compact(&compaction), cs);
     }

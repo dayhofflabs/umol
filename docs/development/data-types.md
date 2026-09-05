@@ -713,6 +713,24 @@ It does not make correspondence construction, composition, reversal, or unrelate
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
+## Compaction
+
+`Compaction<Id>` declares a finite source count and stores sorted, distinct removed ids.
+Construction rejects out-of-range removals with `CompactionError`; the result count is the
+source count minus the number removed. Identity requires an explicit source count, not `Default`.
+Graph and molecule aggregates accept validated component compactions, including count-bearing
+identities for untouched entity kinds. Producers capture counts before removal; `UndoCompaction`
+preserves them.
+
+`compact` returns `None` for removed or out-of-source-range ids. `uncompact` asserts result-domain
+membership; `try_uncompact` returns `None` outside that domain. `compact_vec` requires exactly the
+source count of values, and `try_compact_vec` returns `None` on a length mismatch. Survivor order
+is preserved. Borrowed conversions to single-space and graph correspondences preserve both counts
+and every survivor pairing. Molecule-correspondence conversion is not yet implemented.
+
+Rollback checks result counts against the current editor before applying an inverse compaction.
+A mismatch remains `TransactionError::RollbackStateMismatch`, not an indexing panic.
+
 ## Remapping
 
 Remapping is an explicit total bijection between dense id spaces. It transports represented values

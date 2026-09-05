@@ -356,6 +356,10 @@ to gain analogues, so it is recorded rather than generative.
 A **compaction** is the partial old-to-new id mapping produced by removal. A surviving id maps to
 its position in the closed-up post-removal table; a removed id has no image.
 
+Each component declares its finite source count and derives its result count from the removed ids.
+Identity requires a declared source count. `compact_vec` applies that operation to a source-sized
+value column while preserving survivor order.
+
 It is layered on both axes, matching correspondence: `Compaction<Id>` over one id space,
 `GraphCompaction` pairing the node and edge spaces, and `MoleculeCompaction` carrying a typed
 compaction per entity kind so every stale reference can be updated or discarded consistently.

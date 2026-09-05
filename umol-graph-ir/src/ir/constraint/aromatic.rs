@@ -412,7 +412,7 @@ impl From<Vec<AromaticSystemConstraintForm>> for AromaticSystemConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
 
     use super::*;
 
@@ -704,13 +704,16 @@ mod tests {
         let cs =
             AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         let compaction = MoleculeCompaction::new(
-            GraphCompaction::new(vec![NodeId(0), NodeId(1)], vec![EdgeId(0)]),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            GraphCompaction::new(
+                Compaction::new(2, vec![NodeId(0), NodeId(1)]).unwrap(),
+                Compaction::new(1, vec![EdgeId(0)]).unwrap(),
+            ),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
         );
         assert_eq!(cs.clone().compact(&compaction), cs);
     }

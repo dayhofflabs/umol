@@ -10,7 +10,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Add, Sub};
 use std::sync::Arc;
 
-use crate::compact::GraphCompaction;
+use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -276,6 +276,10 @@ impl Graph {
     /// removed node (deletion in unknown context). Always succeeds; incident edges the caller did
     /// not list are dropped too. Returns the [`GraphCompaction`] renumbering. For the DPO discipline that
     /// rejects a stranded edge instead of sweeping it, use [`Graph::try_remove`].
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied node or edge id is outside the source graph.
     pub fn remove_cascading(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> GraphCompaction {
         let mut removed_nodes: Vec<u32> = nodes.iter().map(|n| n.0).collect();
         removed_nodes.sort_unstable();
@@ -296,6 +300,19 @@ impl Graph {
         removed_edge_set.sort_unstable();
         removed_edge_set.dedup();
 
+        let compaction = GraphCompaction::new(
+            Compaction::new(
+                old.node_count,
+                removed_nodes.iter().copied().map(NodeId).collect(),
+            )
+            .expect("removed nodes belong to the source graph"),
+            Compaction::new(
+                old.edge_count,
+                removed_edge_set.iter().copied().map(EdgeId).collect(),
+            )
+            .expect("removed edges belong to the source graph"),
+        );
+
         let kept_edges: Vec<[u32; 2]> = old
             .endpoints
             .iter()
@@ -313,10 +330,7 @@ impl Graph {
             &kept_edges,
         ));
 
-        GraphCompaction::new(
-            removed_nodes.into_iter().map(NodeId).collect(),
-            removed_edge_set.into_iter().map(EdgeId).collect(),
-        )
+        compaction
     }
 
     /// DPO-style removal: delete exactly `nodes` and `edges`, or `None` when that would strand an

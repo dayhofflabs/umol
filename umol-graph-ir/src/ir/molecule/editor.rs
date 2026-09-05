@@ -137,6 +137,7 @@ where
                 (FixedSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedSetStorage::Mutable(vec) => {
+                let source_count = vec.len();
                 let mut removed = Vec::new();
                 let mut compacted: Vec<([P; N], D)> = Vec::with_capacity(vec.len());
                 for (index, (mut participants, d)) in vec.into_iter().enumerate() {
@@ -157,7 +158,8 @@ where
                 }
                 (
                     FixedSetStorage::Mutable(compacted),
-                    Compaction::new(removed),
+                    Compaction::new(source_count, removed)
+                        .expect("removed relations belong to the source set"),
                 )
             }
         }
@@ -285,6 +287,7 @@ where
                 (VarSetStorage::Shared(Arc::new(compacted)), removed)
             }
             VarSetStorage::Mutable(vec) => {
+                let source_count = vec.len();
                 let mut removed = Vec::new();
                 let mut compacted: Vec<(Vec<P>, D)> = Vec::with_capacity(vec.len());
                 for (index, (participants, d)) in vec.into_iter().enumerate() {
@@ -297,7 +300,11 @@ where
                         None => removed.push(RelationId(index as u32)),
                     }
                 }
-                (VarSetStorage::Mutable(compacted), Compaction::new(removed))
+                (
+                    VarSetStorage::Mutable(compacted),
+                    Compaction::new(source_count, removed)
+                        .expect("removed relations belong to the source set"),
+                )
             }
         }
     }
@@ -438,6 +445,7 @@ where
                 (FixedVarSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedVarSetStorage::Mutable(vec) => {
+                let source_count = vec.len();
                 let mut removed = Vec::new();
                 let mut compacted: Vec<([L1; N1], Vec<L2>, D)> = Vec::with_capacity(vec.len());
                 for (index, (mut participants_1, participants_2, d)) in vec.into_iter().enumerate()
@@ -464,7 +472,8 @@ where
                 }
                 (
                     FixedVarSetStorage::Mutable(compacted),
-                    Compaction::new(removed),
+                    Compaction::new(source_count, removed)
+                        .expect("removed relations belong to the source set"),
                 )
             }
         }
@@ -1099,17 +1108,26 @@ impl MoleculeEditor {
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
     pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.dative_bonds.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            ids.to_vec(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::new(self.dative_bond_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.dative_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
     }
 
@@ -1117,17 +1135,26 @@ impl MoleculeEditor {
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
     pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.aromatic_systems.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            ids.to_vec(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::new(self.aromatic_system_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.aromatic_systems.remove_relations(&raw);
         self.constraints.compact(&compaction);
     }
 
@@ -1135,17 +1162,26 @@ impl MoleculeEditor {
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
     pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.multicenter_bonds.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            Vec::new(),
-            ids.to_vec(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::new(self.multicenter_bond_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.multicenter_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
     }
 
@@ -1153,17 +1189,26 @@ impl MoleculeEditor {
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
     pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.noncovalent_bonds.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            ids.to_vec(),
-            Vec::new(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::new(self.noncovalent_bond_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.noncovalent_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
     }
 
@@ -1173,15 +1218,20 @@ impl MoleculeEditor {
     /// does not build rollback data.
     pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.stereo_atoms.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            ids.to_vec(),
-            Vec::new(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::new(self.stereo_atom_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(self.stereo_bond_count()),
         );
+        self.stereo_atoms.remove_relations(&raw);
         self.constraints.compact(&compaction);
     }
 
@@ -1191,15 +1241,20 @@ impl MoleculeEditor {
     /// does not build rollback data.
     pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
-        self.stereo_bonds.remove_relations(&raw);
-        let compaction = MoleculeCompaction::relations(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            ids.to_vec(),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::identity(self.atom_count()),
+                Compaction::identity(self.bond_count()),
+            ),
+            Compaction::identity(self.dative_bond_count()),
+            Compaction::identity(self.aromatic_system_count()),
+            Compaction::identity(self.multicenter_bond_count()),
+            Compaction::identity(self.noncovalent_bond_count()),
+            Compaction::identity(self.stereo_atom_count()),
+            Compaction::new(self.stereo_bond_count(), ids.to_vec())
+                .expect("removed entities belong to the source table"),
         );
+        self.stereo_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
     }
 
@@ -1271,36 +1326,60 @@ impl MoleculeEditor {
 
         let id_compaction = MoleculeCompaction::new(
             compaction,
-            removed_dative
-                .removed()
-                .iter()
-                .map(|&id| DativeBondId::from(id))
-                .collect(),
-            removed_aromatic
-                .removed()
-                .iter()
-                .map(|&id| AromaticSystemId::from(id))
-                .collect(),
-            removed_multicenter
-                .removed()
-                .iter()
-                .map(|&id| MulticenterBondId::from(id))
-                .collect(),
-            removed_noncovalent
-                .removed()
-                .iter()
-                .map(|&id| NoncovalentBondId::from(id))
-                .collect(),
-            removed_stereo_atoms
-                .removed()
-                .iter()
-                .map(|&id| StereoAtomId::from(id))
-                .collect(),
-            removed_stereo_bonds
-                .removed()
-                .iter()
-                .map(|&id| StereoBondId::from(id))
-                .collect(),
+            Compaction::new(
+                removed_dative.source_count(),
+                removed_dative
+                    .removed()
+                    .iter()
+                    .map(|&id| DativeBondId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_aromatic.source_count(),
+                removed_aromatic
+                    .removed()
+                    .iter()
+                    .map(|&id| AromaticSystemId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_multicenter.source_count(),
+                removed_multicenter
+                    .removed()
+                    .iter()
+                    .map(|&id| MulticenterBondId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_noncovalent.source_count(),
+                removed_noncovalent
+                    .removed()
+                    .iter()
+                    .map(|&id| NoncovalentBondId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_stereo_atoms.source_count(),
+                removed_stereo_atoms
+                    .removed()
+                    .iter()
+                    .map(|&id| StereoAtomId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
+            Compaction::new(
+                removed_stereo_bonds.source_count(),
+                removed_stereo_bonds
+                    .removed()
+                    .iter()
+                    .map(|&id| StereoBondId::from(id))
+                    .collect(),
+            )
+            .expect("relation compaction preserves its source count"),
         );
         self.constraints.compact(&id_compaction);
         id_compaction
@@ -2043,13 +2122,15 @@ mod tests {
         };
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
-        let undo = MoleculeCompaction::relations(
-            vec![removed.id],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let undo = MoleculeCompaction::new(
+            GraphCompaction::new(Compaction::identity(2), Compaction::identity(0)),
+            Compaction::new(2, vec![removed.id])
+                .expect("removed entities belong to the source table"),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
+            Compaction::identity(0),
         )
         .undo_compaction();
         b.restore_dative_bonds(vec![removed], &undo);
