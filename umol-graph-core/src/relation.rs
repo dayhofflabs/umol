@@ -506,12 +506,23 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -910,12 +921,23 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -1324,12 +1346,23 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -1835,12 +1868,23 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -2349,12 +2393,23 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
+    /// Compact participant ids and drop relations containing a removed participant.
+    ///
+    /// Produces the same set as [`Self::tracked_compact`], without returning
+    /// the relation-id compaction.
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    where
+        D: Clone,
+    {
+        self.tracked_compact(compaction).0
+    }
+
     /// Compact participant ids, dropping every relation that contains a removed participant, and
     /// report which relation ids the drop consumed.
     ///
     /// The returned compaction moves this set's own ids, so a caller holding relation ids can
     /// carry them across the removal without a second traversal.
-    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
+    pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
     {
@@ -2993,26 +3048,66 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
+    #[fixture]
+    fn fixed_relation_set_compaction_input() -> FixedRelationSet<NodeId, &'static str, 2> {
+        FixedRelationSet::new(vec![
+            ([NodeId(0), NodeId(2)], "keep"),
+            ([NodeId(1), NodeId(3)], "drop"),
+        ])
+    }
+
     #[rstest]
-    fn test_fixed_relation_set_compact() {
-        let rs: FixedRelationSet<NodeId, &str, 2> =
-            FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
+    #[case::partial(
+        vec![NodeId(1)],
+        FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        FixedRelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_fixed_relation_set_tracked_compact(
+        fixed_relation_set_compaction_input: FixedRelationSet<NodeId, &'static str, 2>,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: FixedRelationSet<NodeId, &'static str, 2>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = fixed_relation_set_compaction_input;
         let compaction = GraphCompaction::new(
-            Compaction::new(4, vec![NodeId(1)]).unwrap(),
+            Compaction::new(4, removed_nodes).unwrap(),
             Compaction::identity(0),
         );
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(
-            Compaction::identity(4),
-            Compaction::identity(0),
-        ));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::empty(FixedRelationSet::default())]
+    #[case::rows(
+        FixedRelationSet::new(vec![([NodeId(0), NodeId(2)], "keep"), ([NodeId(1), NodeId(3)], "drop")]),
+    )]
+    fn test_fixed_relation_set_compact_identity(
+        #[case] input: FixedRelationSet<NodeId, &'static str, 2>,
+    ) {
+        let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::identity(0));
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
     }
 
     #[rstest]
@@ -3324,28 +3419,64 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
+    #[fixture]
+    fn var_relation_set_compaction_input() -> VarRelationSet<NodeId, &'static str> {
+        VarRelationSet::new(vec![
+            (vec![NodeId(0), NodeId(2), NodeId(4)], "keep"),
+            (vec![NodeId(1), NodeId(3)], "drop"),
+        ])
+    }
+
     #[rstest]
-    fn test_var_relation_set_compact() {
-        let rs: VarRelationSet<NodeId, &str> = VarRelationSet::new(vec![
-            (vec![n(0), n(2), n(4)], "keep"),
-            (vec![n(1), n(3)], "drop"),
-        ]);
+    #[case::partial(
+        vec![NodeId(1)],
+        VarRelationSet::new(vec![(vec![NodeId(0), NodeId(1), NodeId(3)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        VarRelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_var_relation_set_tracked_compact(
+        var_relation_set_compaction_input: VarRelationSet<NodeId, &'static str>,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: VarRelationSet<NodeId, &'static str>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = var_relation_set_compaction_input;
         let compaction = GraphCompaction::new(
-            Compaction::new(5, vec![NodeId(1)]).unwrap(),
+            Compaction::new(5, removed_nodes).unwrap(),
             Compaction::identity(0),
         );
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(
-            Compaction::identity(5),
-            Compaction::identity(0),
-        ));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::empty(VarRelationSet::default())]
+    #[case::rows(
+        VarRelationSet::new(vec![(vec![NodeId(0), NodeId(2), NodeId(4)], "keep"), (vec![NodeId(1), NodeId(3)], "drop")]),
+    )]
+    fn test_var_relation_set_compact_identity(#[case] input: VarRelationSet<NodeId, &'static str>) {
+        let compaction = GraphCompaction::new(Compaction::identity(5), Compaction::identity(0));
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
     }
 
     #[rstest]
@@ -3577,31 +3708,73 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
+    #[fixture]
+    fn fixed_fixed_birelation_set_compaction_input(
+    ) -> FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str> {
+        FixedFixedBirelationSet::new(vec![
+            ([NodeId(0)], [NodeId(2), NodeId(4)], "keep"),
+            ([NodeId(1)], [NodeId(5), NodeId(6)], "drop"),
+        ])
+    }
+
     #[rstest]
-    fn test_fixed_fixed_birelation_set_compact() {
-        // dropped relation loses a factor-1 participant
-        let rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &str> =
-            FixedFixedBirelationSet::new(vec![
-                ([n(0)], [n(2), n(4)], "keep"),
-                ([n(1)], [n(5), n(6)], "drop"),
-            ]);
+    #[case::partial(
+        vec![NodeId(1)],
+        FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1), NodeId(3)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        FixedFixedBirelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_fixed_fixed_birelation_set_tracked_compact(
+        fixed_fixed_birelation_set_compaction_input: FixedFixedBirelationSet<
+            NodeId,
+            1,
+            NodeId,
+            2,
+            &'static str,
+        >,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = fixed_fixed_birelation_set_compaction_input;
         let compaction = GraphCompaction::new(
-            Compaction::new(7, vec![NodeId(1)]).unwrap(),
+            Compaction::new(7, removed_nodes).unwrap(),
             Compaction::identity(0),
         );
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(
-            Compaction::identity(7),
-            Compaction::identity(0),
-        ));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::empty(FixedFixedBirelationSet::default())]
+    #[case::rows(
+        FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(2), NodeId(4)], "keep"), ([NodeId(1)], [NodeId(5), NodeId(6)], "drop")]),
+    )]
+    fn test_fixed_fixed_birelation_set_compact_identity(
+        #[case] input: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
+    ) {
+        let compaction = GraphCompaction::new(Compaction::identity(7), Compaction::identity(0));
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
     }
 
     #[rstest]
@@ -3942,29 +4115,72 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
+    #[fixture]
+    fn fixed_var_birelation_set_compaction_input(
+    ) -> FixedVarBirelationSet<NodeId, 1, NodeId, &'static str> {
+        FixedVarBirelationSet::new(vec![
+            ([NodeId(0)], vec![NodeId(2), NodeId(4)], "keep"),
+            ([NodeId(5)], vec![NodeId(1), NodeId(3)], "drop"),
+        ])
+    }
+
     #[rstest]
-    fn test_fixed_var_birelation_set_compact() {
-        let rs: FixedVarBirelationSet<NodeId, 1, NodeId, &str> = FixedVarBirelationSet::new(vec![
-            ([n(0)], vec![n(2), n(4)], "keep"),
-            ([n(5)], vec![n(1), n(3)], "drop"),
-        ]);
+    #[case::partial(
+        vec![NodeId(1)],
+        FixedVarBirelationSet::new(vec![([NodeId(0)], vec![NodeId(1), NodeId(3)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        FixedVarBirelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_fixed_var_birelation_set_tracked_compact(
+        fixed_var_birelation_set_compaction_input: FixedVarBirelationSet<
+            NodeId,
+            1,
+            NodeId,
+            &'static str,
+        >,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: FixedVarBirelationSet<NodeId, 1, NodeId, &'static str>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = fixed_var_birelation_set_compaction_input;
         let compaction = GraphCompaction::new(
-            Compaction::new(6, vec![NodeId(1)]).unwrap(),
+            Compaction::new(6, removed_nodes).unwrap(),
             Compaction::identity(0),
         );
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(
-            Compaction::identity(6),
-            Compaction::identity(0),
-        ));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::empty(FixedVarBirelationSet::default())]
+    #[case::rows(
+        FixedVarBirelationSet::new(vec![([NodeId(0)], vec![NodeId(2), NodeId(4)], "keep"), ([NodeId(5)], vec![NodeId(1), NodeId(3)], "drop")]),
+    )]
+    fn test_fixed_var_birelation_set_compact_identity(
+        #[case] input: FixedVarBirelationSet<NodeId, 1, NodeId, &'static str>,
+    ) {
+        let compaction = GraphCompaction::new(Compaction::identity(6), Compaction::identity(0));
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
     }
 
     #[rstest]
@@ -4284,30 +4500,67 @@ mod tests {
         assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
+    #[fixture]
+    fn var_var_birelation_set_compaction_input() -> VarVarBirelationSet<NodeId, NodeId, &'static str>
+    {
+        VarVarBirelationSet::new(vec![
+            (vec![NodeId(0), NodeId(2)], vec![NodeId(4)], "keep"),
+            (vec![NodeId(5)], vec![NodeId(1)], "drop"),
+        ])
+    }
+
     #[rstest]
-    fn test_var_var_birelation_set_compact() {
-        // dropped relation loses a factor-2 participant
-        let rs: VarVarBirelationSet<NodeId, NodeId, &str> = VarVarBirelationSet::new(vec![
-            (vec![n(0), n(2)], vec![n(4)], "keep"),
-            (vec![n(5)], vec![n(1)], "drop"),
-        ]);
+    #[case::partial(
+        vec![NodeId(1)],
+        VarVarBirelationSet::new(vec![(vec![NodeId(0), NodeId(1)], vec![NodeId(3)], "keep")]),
+        vec![RelationId(1)],
+    )]
+    #[case::all(
+        vec![NodeId(0), NodeId(1)],
+        VarVarBirelationSet::default(),
+        vec![RelationId(0), RelationId(1)],
+    )]
+    fn test_var_var_birelation_set_tracked_compact(
+        var_var_birelation_set_compaction_input: VarVarBirelationSet<NodeId, NodeId, &'static str>,
+        #[case] removed_nodes: Vec<NodeId>,
+        #[case] expected: VarVarBirelationSet<NodeId, NodeId, &'static str>,
+        #[case] removed_relations: Vec<RelationId>,
+    ) {
+        let input = var_var_birelation_set_compaction_input;
         let compaction = GraphCompaction::new(
-            Compaction::new(6, vec![NodeId(1)]).unwrap(),
+            Compaction::new(6, removed_nodes).unwrap(),
             Compaction::identity(0),
         );
-        let (out, removed) = rs.compact(&compaction);
-        assert_eq!(out.count(), 1);
-        assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-        assert_eq!(removed.removed(), &[RelationId(1)]);
+        let (output, witness) = input.tracked_compact(&compaction);
+        assert_eq!(input.compact(&compaction), expected);
+        assert_eq!(output, expected);
+        assert_eq!(
+            witness,
+            Compaction::new(2, removed_relations.clone()).unwrap()
+        );
+        let survivors = (0..2)
+            .map(RelationId)
+            .filter(|id| !removed_relations.contains(id))
+            .collect::<Vec<_>>();
+        for (idx, &old) in survivors.iter().enumerate() {
+            assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+        }
+    }
 
-        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(
-            Compaction::identity(6),
-            Compaction::identity(0),
-        ));
-        assert_eq!(unchanged, rs);
-        assert_eq!(none_removed.removed(), &[]);
+    #[rstest]
+    #[case::empty(VarVarBirelationSet::default())]
+    #[case::rows(
+        VarVarBirelationSet::new(vec![(vec![NodeId(0), NodeId(2)], vec![NodeId(4)], "keep"), (vec![NodeId(5)], vec![NodeId(1)], "drop")]),
+    )]
+    fn test_var_var_birelation_set_compact_identity(
+        #[case] input: VarVarBirelationSet<NodeId, NodeId, &'static str>,
+    ) {
+        let compaction = GraphCompaction::new(Compaction::identity(6), Compaction::identity(0));
+        assert_eq!(input.compact(&compaction), input);
+        assert_eq!(
+            input.tracked_compact(&compaction),
+            (input.clone(), Compaction::identity(input.count())),
+        );
     }
 
     #[rstest]

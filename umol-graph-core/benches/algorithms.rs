@@ -1359,7 +1359,7 @@ fn mutation(c: &mut Criterion) {
             b.iter_batched(
                 || graph.clone(),
                 |mut graph| {
-                    let compaction = graph.remove_cascading(black_box(&removed), &[]);
+                    let compaction = graph.tracked_remove_cascading(black_box(&removed), &[]);
                     black_box((graph, compaction))
                 },
                 BatchSize::SmallInput,

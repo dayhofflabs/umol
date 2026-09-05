@@ -728,6 +728,13 @@ source count of values, and `try_compact_vec` returns `None` on a length mismatc
 is preserved. Borrowed conversions to single-space, graph, and molecule correspondences preserve
 both counts and every survivor pairing in each entity kind.
 
+Graph `remove_cascading` returns `()`, and `try_remove` returns `Option<()>`;
+`tracked_remove_cascading` and `try_tracked_remove` return the graph compaction instead.
+The checked removal leaves the graph unchanged when the dangling condition fails.
+Single-node/edge cascading-removal conveniences return no witness. Relation-set
+`compact` returns the resulting set; `tracked_compact` returns that set
+and its relation-id compaction. Each pair preserves the same output and failure behavior.
+
 Rollback checks result counts against the current editor before applying an inverse compaction.
 A mismatch remains `TransactionError::RollbackStateMismatch`, not an indexing panic.
 

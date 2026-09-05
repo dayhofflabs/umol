@@ -163,7 +163,7 @@ impl Graph {
             .collect();
 
         let mut object = self.clone();
-        let compaction = object.try_remove(&deleted_nodes, &deleted_edges)?;
+        let compaction = object.try_tracked_remove(&deleted_nodes, &deleted_edges)?;
 
         let host_to_d_nodes = Correspondence::new(
             (0..self.node_count())

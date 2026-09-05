@@ -1026,92 +1026,157 @@ estimates.
 
 ### S4 — Graph-core output/witness separation
 
-- [ ] **S4a — Removal and relation compaction.** Graph-core graph and relation
+Disposition (2026-09-04): optional witnesses use `tracked_<operation>`, with
+`try_` outermost for checked forms (`try_tracked_<operation>`). The signature
+identifies the witness carrier; this replaces the earlier `*_with_<witness_type>`
+naming. This naming update is implemented for S4a; other existing APIs have not
+been renamed by this subitem. Mappings intrinsic to pushout, pullback, and
+pushout complement retain the bare operation name. These constructions return
+`(object, correspondence)` with existing fallibility, without output-only
+companions. This supersedes
+the earlier blanket naming rule for these constructions, including molecule
+pushout.
+
+- [x] **S4a — Removal and relation compaction.** Graph-core graph and relation
   modules. Breaking (red→green). [dep: S3a]
-  Give graph removal methods and relation-set compaction plain output-only
-  forms and `*_with_compaction` companions. Preserve cascading versus
-  dangling-condition behavior. Migrate editor and rewriting callers that
-  need the compaction. Test identical resulting graphs/sets and failures for
-  each pair, plus the witness's expected survivor images.
+  Give graph `remove_cascading` and `try_remove` witness-free forms and
+  `tracked_remove_cascading` / `try_tracked_remove` companions. Give `compact`
+  on all five relation-set types output-only forms and `tracked_compact` companions.
+  Keep `remove_node_cascading` and `remove_edge_cascading` witness-free;
+  omit witnessed convenience variants for now. Callers needing their witness
+  use the general removal method; later convenience additions are non-breaking.
+  Preserve cascading versus dangling-condition behavior. Migrate editor and
+  rewriting callers that need the compaction. Test identical resulting
+  graphs/sets and failures for each pair, plus exact survivor images.
+  Completed 2026-09-04: graph removal and all five relation-set compaction
+  APIs have the specified plain/witnessed forms; single-node/edge conveniences
+  return no witness. Editor, rewriting, and benchmark callers retain the
+  compactions they consume. Tests compare full outputs and exact survivor
+  compactions, including empty/identity/full removal, cascades, dangling
+  rejection, and out-of-range panics. An independent survivor-enumeration
+  property covers multigraph removal and both method pairs.
+  Core/IR library tests passed (7,610 passed, 3 ignored), plus integration
+  and doc tests. Core/IR properties passed at `PROPTEST_CASES=256`
+  (490 passed, 1 ignored). Workspace all-targets check passed with Python
+  3.13.15. Core/IR property-enabled all-targets clippy with `-D warnings`,
+  nightly formatting, and `git diff --check` passed.
+
 - [ ] **S4b — Pushout families.** Graph-core rewriting and relation modules.
   Breaking (red→green). [dep: S1a, S1b]
   Replace `Pushout` and `RelationPushout<S>` output containers with the
-  accepted graph and relation pushout correspondence types. Bare methods
-  return the object; witnessed methods return `(object, correspondence)`.
+  accepted graph and relation pushout correspondence types. Graph and all
+  five relation-set `pushout` methods remain naturally mapping-bearing:
+  retain their bare names and return `(object, correspondence)`, preserving
+  existing fallibility. Add neither `tracked_` nor output-only variants.
   Preserve named left/right mappings and their common result counts.
   Migrate graph-IR gluing/composition callers. Test both input mappings and
-  bare/witnessed output equivalence, including coincidences.
-- [ ] **S4c — Pullback and pushout complement.** Graph-core rewriting.
+  the resulting object, including coincidences.
+- [ ] **S4c — Pullback and pushout complement.** Graph-core rewriting and
+  relation modules.
   Breaking (red→green). [dep: S1a]
   Introduce the accepted `PullbackCorrespondence` and
-  `PushoutComplementCorrespondence` result separation and method pairs.
+  `PushoutComplementCorrespondence` result separation. Graph `pullback` and
+  `pushout_complement` retain their bare names and return
+  `(object, correspondence)` with existing fallibility. Apply the same
+  separation to `RelationPullback<S>` and `pullback` on all five relation-set
+  types. These are naturally mapping-bearing constructions: add neither
+  `tracked_` nor output-only variants.
   Preserve categorical directions and existing admissibility conditions.
   Migrate reaction composition and rewriting tests; check the defining
-  commutative mappings and output equivalence. Keep subdivision's distinct
+  commutative mappings and resulting objects. Keep subdivision's distinct
   graph representation and its cross-entity source accessors intact.
 
 ### S5 — Graph-IR molecule operation returns
 
 - [ ] **S5a — Combination and split.** Graph-IR molecule and fragment callers.
   Breaking (red→green). [dep: S1f]
-  Make combination methods witness-free and state append order. Make split
-  return components, with `split_with_correspondence` returning component/
+  Make `combine`, `combine_all`, and `combine_from` witness-free and state
+  append order; add no tracked companions because their mappings are
+  caller-computable. Split's component molecules are useful independently
+  of provenance, so its correspondence remains optional. Make split
+  return components, with `tracked_split` returning component/
   source-to-component pairs. Migrate Rust/Python callers, including `React`
   implementation plumbing. Test empty inputs, multiple components, all
   entity families, component ordering, append layout, and exact output
   equivalence. Keep chemistry-layer public signatures unchanged.
 - [ ] **S5b — Molecule pushout.** Graph-IR molecule pushout and composition
   callers. Breaking (red→green). [dep: S1f, S4b]
-  Replace `MoleculePushout` with `MoleculePushoutCorrespondence` and the
-  accepted method pair. Keep left/right correspondence access independent
+  Replace `MoleculePushout` with `(Molecule, MoleculePushoutCorrespondence)`
+  inside the existing `Option`. As in S4b, this is naturally mapping-bearing:
+  retain `meet_pushout`, with neither an output-only companion nor a
+  `tracked_` prefix. Keep left/right correspondence access independent
   of the molecule and preserve common result counts. Test overlay meets,
-  stereo frames, constraints, inadmissible input, and output equivalence.
+  stereo frames, constraints, inadmissible input, exact mappings, and the
+  resulting molecule.
 - [ ] **S5c — Removal and extraction.** Graph-IR editor removal families and
   molecule extraction. Breaking (red→green). [dep: S3b, S4a]
-  Add the `with_compaction` variants and make plain methods witness-free.
-  Preserve selection order, cascading behavior, constraints, and transaction
-  use of removal. Test exact all-family compactions and equality of resulting
-  state across each method pair. Adapt callers rather than adding hydrogen
-  or other chemistry transformer variants.
+  Compactions are optional provenance, not the primary result. Add
+  `tracked_remove`, `tracked_extract`, and `tracked_remove_*` for the six
+  existing bulk relation-family removals; make plain methods witness-free.
+  These family removals are not single-entity convenience wrappers: each
+  compacts its own entity table. Add no new single-entity convenience variants.
+  Extraction's supplied sub-to-host correspondence describes the selection,
+  not the actual host-to-result compaction across all eight families.
+  Preserve host order in extraction, cascading behavior, constraints, and
+  transaction use of removal. Test exact all-family compactions and equality
+  of resulting state across each method pair. Adapt callers rather than
+  adding hydrogen or other chemistry transformer variants.
 
 ### S6 — Editor and transaction correspondences
 
 - [ ] **S6a — Editor session witness.** Graph-IR molecule editor.
   Additive (green). [dep: S1a, S3b, S5c]
   Track source-to-current pairings across direct additions, removals,
-  modifications, and restoration. Expose witnessed snapshot and checked/
-  asserted build companions using existing publication boundaries. The
-  correspondence may describe transient editor id spaces; it does not
-  require publication of an intermediate molecule. Test multi-step sessions,
-  all entity families, repeated snapshots, and publication failures. Compare
-  session pairings with composed operation pairings.
+  modifications, and restoration. Publication's primary result is a molecule;
+  session provenance is optional. Retain plain `snapshot`, `try_build`, and
+  `build`, and add `tracked_snapshot`, `try_tracked_build`, and
+  `tracked_build` using their existing publication and failure boundaries.
+  Snapshot is reusable; build consumes the editor, so these are distinct
+  publication operations. The correspondence may describe transient editor
+  id spaces; it does not require publication of an intermediate molecule.
+  Test multi-step sessions, all entity families, repeated snapshots, and
+  publication failures. Compare session pairings with composed operation pairings.
 - [ ] **S6b — Batch application and transactions.** Graph-IR molecule apply,
   editor transact/apply, and transaction rollback. Additive (green).
-  [dep: S6a] Add correspondence companions retaining the ordinary molecule,
-  editor, transaction, or unit output. Forward witnesses cover the particular
-  operation; session witnesses cover the editor's source. Rollback returns
-  the inverse operation correspondence. Preserve transaction append and
-  rollback behavior. Test failures, appended batches, add/remove sequences,
-  atom provenance, inverse direction, and bare/witnessed output equivalence.
-  Do not impose operational persistence on induced non-atom pairings.
+  [dep: S6a] Correspondences are optional provenance. Add
+  `Molecule::tracked_apply`, editor `tracked_apply` and `tracked_transact`,
+  and transaction `tracked_rollback`. Retain the ordinary molecule, editor,
+  transaction, or unit output in the bare methods and preserve existing
+  fallibility. A transaction's undo journal is its primary rollback data,
+  not a substitute for an entity correspondence; `transact` remains naturally
+  transaction-returning without making it correspondence-returning.
+  Forward witnesses cover the particular operation; session witnesses cover
+  the editor's source. Rollback returns the inverse operation correspondence.
+  Preserve transaction append and rollback behavior. Test failures, appended
+  batches, add/remove sequences, atom provenance, inverse direction, and
+  bare/tracked output equivalence. Do not impose operational persistence on
+  induced non-atom pairings.
 
 ### S7 — Reaction application results
 
 - [ ] **S7a — Application at a supplied match.** Graph-IR reaction application.
   Breaking (red→green). [dep: S6b, S5b]
-  Implement the four accepted `apply_at` result forms. Keep host-to-product
-  correspondence direction, existing preconditions, and stereo/frame
-  handling. Migrate direct consumers of the old derivation return. Test
-  identical bare/witnessed products and failures, realized reaction/span
-  consistency, and expected atom pairings.
+  Implement the four accepted `apply_at` result forms. Product provenance is
+  optional: `apply_at` returns the product, and `tracked_apply_at` returns
+  product plus correspondence. `apply_at_to_reaction` and
+  `apply_at_to_reaction_span` return those primary objects directly; their
+  intrinsic side relationships are not optional witnesses. Add no tracked
+  companions to these two forms. A supplied rule-to-host match is not the
+  host-to-product witness. Keep host-to-product correspondence direction,
+  existing preconditions, and stereo/frame handling. Migrate direct consumers
+  of the old derivation return. Test identical bare/tracked products and
+  failures, realized reaction/span consistency, and expected atom pairings.
 - [ ] **S7b — Iteration and derivation retirement.** Graph-IR reaction
   iterators and their Rust/Python consumers. Breaking (red→green).
-  [dep: S7a, S5a] Implement the four accepted iterative method forms, preserving
-  captured-input ownership, match order, lazy result production, and terminal
-  error behavior. Remove `ReactionDerivation`, its exports and bindings, and
-  update all consumers. Keep `React` methods separate and verify their
-  products still match explicit combine/application/split. No new result
-  container duplicates the returned molecule/reaction/span.
+  [dep: S7a, S5a] Mirror S7a per iterator item: `apply` is product-only,
+  `tracked_apply` adds optional provenance, and `apply_to_reaction` /
+  `apply_to_reaction_span` return the primary objects directly. Add no further
+  tracked variants. Implement these forms, preserving captured-input
+  ownership, match order, lazy result production, and terminal error behavior.
+  Remove `ReactionDerivation`, its exports and bindings, and update all
+  consumers. Keep `React` methods separate and verify their products still
+  match explicit combine/application/split. No new result container duplicates
+  the returned molecule/reaction/span.
 
 ### S8 — Python parity and integrated verification
 

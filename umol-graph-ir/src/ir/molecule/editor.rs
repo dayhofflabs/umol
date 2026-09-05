@@ -133,7 +133,7 @@ where
     fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             FixedSetStorage::Shared(arc) => {
-                let (compacted, removed) = arc.compact(compaction);
+                let (compacted, removed) = arc.tracked_compact(compaction);
                 (FixedSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedSetStorage::Mutable(vec) => {
@@ -283,7 +283,7 @@ where
     fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             VarSetStorage::Shared(arc) => {
-                let (compacted, removed) = arc.compact(compaction);
+                let (compacted, removed) = arc.tracked_compact(compaction);
                 (VarSetStorage::Shared(Arc::new(compacted)), removed)
             }
             VarSetStorage::Mutable(vec) => {
@@ -441,7 +441,7 @@ where
     fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             FixedVarSetStorage::Shared(arc) => {
-                let (compacted, removed) = arc.compact(compaction);
+                let (compacted, removed) = arc.tracked_compact(compaction);
                 (FixedVarSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedVarSetStorage::Mutable(vec) => {
@@ -1271,7 +1271,7 @@ impl MoleculeEditor {
     pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> MoleculeCompaction {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
-        let compaction = self.graph.remove_cascading(&nodes, &edges);
+        let compaction = self.graph.tracked_remove_cascading(&nodes, &edges);
 
         let new_atoms = compaction.nodes().compact_vec(&self.atoms);
         let new_bonds = compaction.edges().compact_vec(&self.bonds);
