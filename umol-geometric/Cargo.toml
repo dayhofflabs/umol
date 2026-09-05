@@ -23,9 +23,9 @@ bench = false
 nalgebra = "0.34.0"
 num = "0.4.3"
 num-traits = "0.2.19"
-umol-chem = { path = "../umol-chem", version = "0.7.0" }
-umol-msym = { path = "../umol-msym", version = "0.7.0" }
-umol-params = { path = "../umol-params", version = "0.7.0" }
+umol-chem = { path = "../umol-chem", version = "0.8.0" }
+umol-msym = { path = "../umol-msym", version = "0.8.0" }
+umol-params = { path = "../umol-params", version = "0.8.0" }
 
 [dev-dependencies]
 criterion = "0.8.1"

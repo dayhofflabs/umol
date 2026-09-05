@@ -1780,7 +1780,7 @@ checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
 name = "umol-chem"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bitvec",
  "criterion",
@@ -1798,7 +1798,7 @@ dependencies = [
 
 [[package]]
 name = "umol-coordgen-sys"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "cc",
  "rstest",
@@ -1806,7 +1806,7 @@ dependencies = [
 
 [[package]]
 name = "umol-edn"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -1830,7 +1830,7 @@ dependencies = [
 
 [[package]]
 name = "umol-edn-macros"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1840,7 +1840,7 @@ dependencies = [
 
 [[package]]
 name = "umol-geometric"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "criterion",
  "float-cmp",
@@ -1858,7 +1858,7 @@ dependencies = [
 
 [[package]]
 name = "umol-geometric-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "pretty_assertions",
  "rstest",
@@ -1866,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "umol-geometric-graph"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "pretty_assertions",
  "rstest",
@@ -1878,7 +1878,7 @@ dependencies = [
 
 [[package]]
 name = "umol-graph"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bitvec",
  "clap",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "umol-graph-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bitvec",
  "criterion",
@@ -1929,7 +1929,7 @@ dependencies = [
 
 [[package]]
 name = "umol-graph-ir"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bimap",
  "bitflags",
@@ -1953,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "umol-graph-ir-macros"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1963,7 +1963,7 @@ dependencies = [
 
 [[package]]
 name = "umol-io"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "atoi",
  "bitflags",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "umol-msym"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "nalgebra",
  "rand 0.9.2",
@@ -2008,14 +2008,14 @@ dependencies = [
 
 [[package]]
 name = "umol-msym-sys"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "cc",
 ]
 
 [[package]]
 name = "umol-nauty-sys"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "cc",
  "rstest",
@@ -2023,7 +2023,7 @@ dependencies = [
 
 [[package]]
 name = "umol-params"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "rstest",
  "umol-chem",
@@ -2031,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "umol-perm"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "pretty_assertions",
  "proptest",
@@ -2040,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "umol-py"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "pyo3",
  "rstest",
@@ -2055,7 +2055,7 @@ dependencies = [
 
 [[package]]
 name = "umol-utils"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "pretty_assertions",
  "rstest",

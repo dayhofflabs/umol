@@ -20,7 +20,7 @@ description = "Chemistry vocabulary types (elements, isotopes, spin, occupation,
 bench = false
 
 [dependencies]
-umol-utils = { path = "../umol-utils", version = "0.7.0" }
+umol-utils = { path = "../umol-utils", version = "0.8.0" }
 bitvec = { version = "1.0.1", features = ["serde"] }
 map-macro = "0.3.0"
 phf = { version = "0.14.0", features = ["macros"] }

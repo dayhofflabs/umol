@@ -33,13 +33,13 @@ regex = "1.11.2"
 smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
-umol-graph-core = { path = "../umol-graph-core", version = "0.7.0" }
-umol-graph-ir = { path = "../umol-graph-ir", version = "0.7.0" }
-umol-geometric-core = { path = "../umol-geometric-core", version = "0.7.0" }
-umol-perm = { path = "../umol-perm", version = "0.7.0" }
-umol-chem = { path = "../umol-chem", version = "0.7.0" }
-umol-coordgen-sys = { path = "../umol-coordgen-sys", version = "0.7.0", optional = true }
-umol-utils = { path = "../umol-utils", version = "0.7.0" }
+umol-graph-core = { path = "../umol-graph-core", version = "0.8.0" }
+umol-graph-ir = { path = "../umol-graph-ir", version = "0.8.0" }
+umol-geometric-core = { path = "../umol-geometric-core", version = "0.8.0" }
+umol-perm = { path = "../umol-perm", version = "0.8.0" }
+umol-chem = { path = "../umol-chem", version = "0.8.0" }
+umol-coordgen-sys = { path = "../umol-coordgen-sys", version = "0.8.0", optional = true }
+umol-utils = { path = "../umol-utils", version = "0.8.0" }
 winnow = "1.0"
 
 [dev-dependencies]
