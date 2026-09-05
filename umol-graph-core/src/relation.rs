@@ -2592,6 +2592,7 @@ mod tests {
     use super::*;
     use crate::correspondence::GraphCorrespondence;
     use crate::graph::Graph;
+    use crate::remap::Remapping;
 
     #[fixture]
     fn participant_correspondence() -> GraphCorrespondence {
@@ -3048,7 +3049,10 @@ mod tests {
     fn test_fixed_relation_set_remap() {
         let rs: FixedRelationSet<NodeId, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
-        let remapping = GraphRemapping::new(vec![n(1), n(0)], vec![]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![n(1), n(0)]).expect("permutation images"),
+            Remapping::new(vec![]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(out.data(RelationId(0)), &PositionLabels(vec![10, 11]));
@@ -3060,7 +3064,10 @@ mod tests {
     fn test_fixed_relation_set_try_remap(#[case] nodes: Vec<NodeId>, #[case] covered: bool) {
         let rs: FixedRelationSet<NodeId, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
-        let remapping = GraphRemapping::new(nodes, vec![]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).expect("permutation images"),
+            Remapping::new(vec![]).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3371,7 +3378,10 @@ mod tests {
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             PositionLabels(vec![20, 21, 22]),
         )]);
-        let remapping = GraphRemapping::new(vec![], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![]).expect("permutation images"),
+            Remapping::new(vec![EdgeId(2), EdgeId(0), EdgeId(1)]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(
             out.participants(RelationId(0)),
@@ -3382,13 +3392,16 @@ mod tests {
 
     #[rstest]
     #[case::covered(vec![EdgeId(2), EdgeId(0), EdgeId(1)], true)]
-    #[case::uncovered_edge(vec![EdgeId(2), EdgeId(0)], false)]
+    #[case::uncovered_edge(vec![EdgeId(1), EdgeId(0)], false)]
     fn test_var_relation_set_try_remap(#[case] edges: Vec<EdgeId>, #[case] covered: bool) {
         let rs: VarRelationSet<EdgeId, PositionLabels> = VarRelationSet::new(vec![(
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             PositionLabels(vec![20, 21, 22]),
         )]);
-        let remapping = GraphRemapping::new(vec![], edges);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![]).expect("permutation images"),
+            Remapping::new(edges).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3638,7 +3651,10 @@ mod tests {
                     factor_2: vec![20, 21],
                 },
             )]);
-        let remapping = GraphRemapping::new(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![n(1), n(0)]).expect("permutation images"),
+            Remapping::new(vec![EdgeId(1), EdgeId(0)]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[EdgeId(1), EdgeId(0)]);
@@ -3654,7 +3670,7 @@ mod tests {
     #[rstest]
     #[case::covered(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)], true)]
     #[case::uncovered_node(vec![n(0)], vec![EdgeId(1), EdgeId(0)], false)]
-    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(1)], false)]
+    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(0)], false)]
     fn test_fixed_fixed_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
@@ -3669,7 +3685,10 @@ mod tests {
                     factor_2: vec![20, 21],
                 },
             )]);
-        let remapping = GraphRemapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).expect("permutation images"),
+            Remapping::new(edges).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -3993,7 +4012,10 @@ mod tests {
                     factor_2: vec![40, 41, 42],
                 },
             )]);
-        let remapping = GraphRemapping::new(vec![n(2), n(0), n(1)], vec![EdgeId(2), EdgeId(0)]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![n(2), n(0), n(1)]).expect("permutation images"),
+            Remapping::new(vec![EdgeId(2), EdgeId(0), EdgeId(1)]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[EdgeId(2), EdgeId(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(2), n(0), n(1)]);
@@ -4009,7 +4031,7 @@ mod tests {
     #[rstest]
     #[case::forward(vec![NodeId(0), NodeId(1)], vec![NodeId(1), NodeId(2)])]
     #[case::reversed(vec![NodeId(1), NodeId(0)], vec![NodeId(2), NodeId(1)])]
-    fn test_fixed_var_birelation_set_remap_pushout(
+    fn test_fixed_var_birelation_set_map_pushout(
         #[case] participants: Vec<NodeId>,
         #[case] expected_participants: Vec<NodeId>,
     ) {
@@ -4020,28 +4042,22 @@ mod tests {
             Correspondence::new(vec![], 1, 1).unwrap(),
         );
         let pushout = left.pushout(&right, &overlap);
-        let remapping = GraphRemapping::new(
-            vec![
-                pushout.right.nodes().right_of(NodeId(0)).unwrap(),
-                pushout.right.nodes().right_of(NodeId(1)).unwrap(),
-            ],
-            vec![pushout.right.edges().right_of(EdgeId(0)).unwrap()],
-        );
+
         let relations: FixedVarBirelationSet<EdgeId, 1, NodeId, Vec<u32>> =
             FixedVarBirelationSet::new(vec![([EdgeId(0)], participants, vec![7, 11])]);
         let expected =
             FixedVarBirelationSet::new(vec![([EdgeId(1)], expected_participants, vec![7, 11])]);
-        assert_eq!(relations.remap(&remapping), expected);
+        assert_eq!(relations.map(&pushout.right), expected);
     }
 
     #[rstest]
     #[case::covered(
         vec![n(2), n(0), n(1)],
-        vec![EdgeId(2), EdgeId(0)],
+        vec![EdgeId(2), EdgeId(0), EdgeId(1)],
         true,
     )]
-    #[case::uncovered_node(vec![n(2), n(0)], vec![EdgeId(2), EdgeId(0)], false)]
-    #[case::uncovered_edge(vec![n(2), n(0), n(1)], vec![EdgeId(2)], false)]
+    #[case::uncovered_node(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)], false)]
+    #[case::uncovered_edge(vec![n(2), n(0), n(1)], vec![EdgeId(0)], false)]
     fn test_fixed_var_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
@@ -4056,7 +4072,10 @@ mod tests {
                     factor_2: vec![40, 41, 42],
                 },
             )]);
-        let remapping = GraphRemapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).expect("permutation images"),
+            Remapping::new(edges).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }
@@ -4329,8 +4348,10 @@ mod tests {
                     factor_2: vec![60, 61, 62],
                 },
             )]);
-        let remapping =
-            GraphRemapping::new(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
+        let remapping = GraphRemapping::new(
+            Remapping::new(vec![n(1), n(0)]).expect("permutation images"),
+            Remapping::new(vec![EdgeId(2), EdgeId(0), EdgeId(1)]).expect("permutation images"),
+        );
         let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(1), n(0)]);
         assert_eq!(
@@ -4352,8 +4373,8 @@ mod tests {
         vec![EdgeId(2), EdgeId(0), EdgeId(1)],
         true,
     )]
-    #[case::uncovered_node(vec![n(1)], vec![EdgeId(2), EdgeId(0), EdgeId(1)], false)]
-    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0)], false)]
+    #[case::uncovered_node(vec![n(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)], false)]
+    #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)], false)]
     fn test_var_var_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
@@ -4368,7 +4389,10 @@ mod tests {
                     factor_2: vec![60, 61, 62],
                 },
             )]);
-        let remapping = GraphRemapping::new(nodes, edges);
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).expect("permutation images"),
+            Remapping::new(edges).expect("permutation images"),
+        );
         let expected = covered.then(|| rs.remap(&remapping));
         assert_eq!(rs.try_remap(&remapping), expected);
     }

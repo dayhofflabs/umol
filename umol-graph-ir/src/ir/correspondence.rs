@@ -19,6 +19,7 @@ use super::ligand::StereoLigand;
 use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
+use super::remap::MoleculeRemapping;
 
 /// A molecule correspondence component has incompatible intermediate counts.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,6 +52,34 @@ pub struct MoleculeCorrespondence {
     noncovalent_bonds: Correspondence<NoncovalentBondId>,
     stereo_atoms: Correspondence<StereoAtomId>,
     stereo_bonds: Correspondence<StereoBondId>,
+}
+
+impl From<&MoleculeRemapping> for MoleculeCorrespondence {
+    /// Preserve all eight permutations and their source and target counts.
+    fn from(remapping: &MoleculeRemapping) -> Self {
+        let nodes = remapping.graph().nodes();
+        let edges = remapping.graph().edges();
+        Self::new(
+            Correspondence::from_images(
+                &(0..nodes.len())
+                    .map(|idx| remapping.map_atom(AtomId::from(idx)))
+                    .collect::<Vec<_>>(),
+                nodes.len(),
+            ),
+            Correspondence::from_images(
+                &(0..edges.len())
+                    .map(|idx| remapping.map_bond(BondId::from(idx)))
+                    .collect::<Vec<_>>(),
+                edges.len(),
+            ),
+            remapping.dative_bonds().into(),
+            remapping.aromatic_systems().into(),
+            remapping.multicenter_bonds().into(),
+            remapping.noncovalent_bonds().into(),
+            remapping.stereo_atoms().into(),
+            remapping.stereo_bonds().into(),
+        )
+    }
 }
 
 impl MoleculeCorrespondence {

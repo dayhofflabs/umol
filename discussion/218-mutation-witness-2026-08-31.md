@@ -894,7 +894,7 @@ estimates.
 
 ### S2 — Bijective remapping and renumbering
 
-- [ ] **S2a — Strict remapping construction.** Graph-core remap and graph-IR
+- [x] **S2a — Strict remapping construction.** Graph-core remap and graph-IR
   remap modules. Breaking (red→green). [dep: S1f]
   Enforce dense bijective images, assemble graph/molecule aggregates from
   validated components, and add infallible widening to correspondences.
@@ -902,6 +902,22 @@ estimates.
   invalid images as exact constructor rejection cases. Migrate all remaining
   constructors in the same item. The original four production regressions
   must now pass with the permanent construction checks.
+  Completed 2026-09-04: construction checks images with a temporary typed
+  boolean vector and returns `RemappingError::ImageOutOfRange` or
+  `DuplicateImage`. Storage remains private; `len` and `is_empty` expose its
+  size. Aggregate constructors accept validated components. Borrowed `From`
+  conversions widen single-space, graph, and molecule remappings to
+  correspondences; no owned conversion or inverse narrowing was added.
+  Constructor callers and fixtures are migrated, including the pushout
+  transport test's direct use of its correspondence. Exact rejection and
+  widening cases pass, as does a sorted-reference check of all 701 image
+  vectors of lengths zero through four with images in `0..=length`.
+  Core/IR library tests passed (7,499 passed, 3 ignored), including the four
+  production regressions; core/IR properties with `PROPTEST_CASES=256`
+  (487 passed, 1 ignored); graph/IO library tests (4,297 passed); workspace
+  all-targets check with Python 3.13.15; core/IR all-targets clippy with
+  `-D warnings`; nightly formatting; and `git diff --check`.
+  Molecule/span operation signatures and canonicalization remain for S2b.
 - [ ] **S2b — Molecule/span renumbering and canonicalization.** Graph-IR
   molecule remap, constraints, reaction span, canonicalization, traits, and
   dependent bindings. Breaking (red→green). [dep: S2a, S1e]

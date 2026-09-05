@@ -1,6 +1,6 @@
 //! Graph-IR id remappings between `Molecule` id spaces.
 //!
-//! [`MoleculeRemapping`] is the dense total relabeling over all eight molecule entity id spaces.
+//! [`MoleculeRemapping`] is the bijective renumbering over all eight molecule entity id spaces.
 
 use umol_graph_core::{EdgeId, GraphRemapping, NodeId, Remapping};
 
@@ -9,11 +9,9 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 
-/// Total relabeling of all eight `Molecule` entity id spaces.
-///
-/// Each component's image vector defines its dense source domain. Every id in that domain has an
-/// image, while images may repeat or occupy only part of a larger target id space. Consumers that
-/// require injective, surjective, or dense-target mappings establish those contextual properties.
+/// Independent bijective renumberings of all eight molecule entity id spaces.
+/// Each component declares equal source and target counts. Agreement with a particular molecule
+/// is a contextual requirement of the operation consuming this carrier.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeRemapping {
     graph: GraphRemapping,
@@ -26,25 +24,25 @@ pub struct MoleculeRemapping {
 }
 
 impl MoleculeRemapping {
-    /// Construct a remapping from the complete image vector for each source id space.
+    /// Assemble already-valid graph and overlay permutations.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         graph: GraphRemapping,
-        dative_bonds: Vec<DativeBondId>,
-        aromatic_systems: Vec<AromaticSystemId>,
-        multicenter_bonds: Vec<MulticenterBondId>,
-        noncovalent_bonds: Vec<NoncovalentBondId>,
-        stereo_atoms: Vec<StereoAtomId>,
-        stereo_bonds: Vec<StereoBondId>,
+        dative_bonds: Remapping<DativeBondId>,
+        aromatic_systems: Remapping<AromaticSystemId>,
+        multicenter_bonds: Remapping<MulticenterBondId>,
+        noncovalent_bonds: Remapping<NoncovalentBondId>,
+        stereo_atoms: Remapping<StereoAtomId>,
+        stereo_bonds: Remapping<StereoBondId>,
     ) -> Self {
         Self {
             graph,
-            dative_bonds: Remapping::new(dative_bonds),
-            aromatic_systems: Remapping::new(aromatic_systems),
-            multicenter_bonds: Remapping::new(multicenter_bonds),
-            noncovalent_bonds: Remapping::new(noncovalent_bonds),
-            stereo_atoms: Remapping::new(stereo_atoms),
-            stereo_bonds: Remapping::new(stereo_bonds),
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
         }
     }
 
@@ -207,71 +205,138 @@ impl MoleculeRemapping {
 impl Default for MoleculeRemapping {
     fn default() -> Self {
         Self::new(
-            GraphRemapping::new(Vec::new(), Vec::new()),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            GraphRemapping::new(Remapping::default(), Remapping::default()),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
         )
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_graph_core::Correspondence;
 
     use super::*;
+    use crate::ir::MoleculeCorrespondence;
 
     #[fixture]
     fn molecule_remapping() -> MoleculeRemapping {
         MoleculeRemapping::new(
-            GraphRemapping::new(vec![NodeId(4), NodeId(1)], vec![EdgeId(5), EdgeId(5)]),
-            vec![DativeBondId(2), DativeBondId(0)],
-            vec![AromaticSystemId(8)],
-            vec![MulticenterBondId(1), MulticenterBondId(4)],
-            vec![NoncovalentBondId(0)],
-            vec![StereoAtomId(3), StereoAtomId(3)],
-            vec![StereoBondId(6)],
+            GraphRemapping::new(
+                Remapping::new(vec![NodeId(1), NodeId(0)]).unwrap(),
+                Remapping::new(vec![EdgeId(1), EdgeId(0)]).unwrap(),
+            ),
+            Remapping::new(vec![DativeBondId(1), DativeBondId(0)]).unwrap(),
+            Remapping::new(vec![AromaticSystemId(0)]).unwrap(),
+            Remapping::new(vec![MulticenterBondId(1), MulticenterBondId(0)]).unwrap(),
+            Remapping::new(vec![NoncovalentBondId(0)]).unwrap(),
+            Remapping::new(vec![StereoAtomId(1), StereoAtomId(0)]).unwrap(),
+            Remapping::new(vec![StereoBondId(0)]).unwrap(),
         )
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_from_remapping(molecule_remapping: MoleculeRemapping) {
+        let expected = MoleculeCorrespondence::new(
+            Correspondence::new(vec![(AtomId(0), AtomId(1)), (AtomId(1), AtomId(0))], 2, 2)
+                .unwrap(),
+            Correspondence::new(vec![(BondId(0), BondId(1)), (BondId(1), BondId(0))], 2, 2)
+                .unwrap(),
+            Correspondence::new(
+                vec![
+                    (DativeBondId(0), DativeBondId(1)),
+                    (DativeBondId(1), DativeBondId(0)),
+                ],
+                2,
+                2,
+            )
+            .unwrap(),
+            Correspondence::new(vec![(AromaticSystemId(0), AromaticSystemId(0))], 1, 1).unwrap(),
+            Correspondence::new(
+                vec![
+                    (MulticenterBondId(0), MulticenterBondId(1)),
+                    (MulticenterBondId(1), MulticenterBondId(0)),
+                ],
+                2,
+                2,
+            )
+            .unwrap(),
+            Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(0))], 1, 1).unwrap(),
+            Correspondence::new(
+                vec![
+                    (StereoAtomId(0), StereoAtomId(1)),
+                    (StereoAtomId(1), StereoAtomId(0)),
+                ],
+                2,
+                2,
+            )
+            .unwrap(),
+            Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1).unwrap(),
+        );
+        assert_eq!(MoleculeCorrespondence::from(&molecule_remapping), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_from_remapping_empty() {
+        assert_eq!(
+            MoleculeCorrespondence::from(&MoleculeRemapping::default()),
+            MoleculeCorrespondence::new(
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+            )
+        );
     }
 
     #[rstest]
     fn test_molecule_remapping_accessors(molecule_remapping: MoleculeRemapping) {
         assert_eq!(
             molecule_remapping.graph(),
-            &GraphRemapping::new(vec![NodeId(4), NodeId(1)], vec![EdgeId(5), EdgeId(5)])
+            &GraphRemapping::new(
+                Remapping::new(vec![NodeId(1), NodeId(0)]).unwrap(),
+                Remapping::new(vec![EdgeId(1), EdgeId(0)]).unwrap()
+            )
         );
         assert_eq!(
             molecule_remapping.dative_bonds(),
-            &Remapping::new(vec![DativeBondId(2), DativeBondId(0)])
+            &Remapping::new(vec![DativeBondId(1), DativeBondId(0)]).unwrap()
         );
         assert_eq!(
             molecule_remapping.aromatic_systems(),
-            &Remapping::new(vec![AromaticSystemId(8)])
+            &Remapping::new(vec![AromaticSystemId(0)]).unwrap()
         );
         assert_eq!(
             molecule_remapping.multicenter_bonds(),
-            &Remapping::new(vec![MulticenterBondId(1), MulticenterBondId(4)])
+            &Remapping::new(vec![MulticenterBondId(1), MulticenterBondId(0)]).unwrap()
         );
         assert_eq!(
             molecule_remapping.noncovalent_bonds(),
-            &Remapping::new(vec![NoncovalentBondId(0)])
+            &Remapping::new(vec![NoncovalentBondId(0)]).unwrap()
         );
         assert_eq!(
             molecule_remapping.stereo_atoms(),
-            &Remapping::new(vec![StereoAtomId(3), StereoAtomId(3)])
+            &Remapping::new(vec![StereoAtomId(1), StereoAtomId(0)]).unwrap()
         );
         assert_eq!(
             molecule_remapping.stereo_bonds(),
-            &Remapping::new(vec![StereoBondId(6)])
+            &Remapping::new(vec![StereoBondId(0)]).unwrap()
         );
     }
 
     #[rstest]
-    #[case::first(AtomId(0), Some(AtomId(4)))]
-    #[case::last(AtomId(1), Some(AtomId(1)))]
+    #[case::first(AtomId(0), Some(AtomId(1)))]
+    #[case::last(AtomId(1), Some(AtomId(0)))]
     #[case::uncovered(AtomId(2), None)]
     fn test_molecule_remapping_try_map_atom(
         molecule_remapping: MoleculeRemapping,
@@ -282,8 +347,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::first(BondId(0), Some(BondId(5)))]
-    #[case::repeated_target(BondId(1), Some(BondId(5)))]
+    #[case::first(BondId(0), Some(BondId(1)))]
+    #[case::last(BondId(1), Some(BondId(0)))]
     #[case::uncovered(BondId(2), None)]
     fn test_molecule_remapping_try_map_bond(
         molecule_remapping: MoleculeRemapping,
@@ -294,7 +359,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::first(DativeBondId(0), Some(DativeBondId(2)))]
+    #[case::first(DativeBondId(0), Some(DativeBondId(1)))]
     #[case::last(DativeBondId(1), Some(DativeBondId(0)))]
     #[case::uncovered(DativeBondId(2), None)]
     fn test_molecule_remapping_try_map_dative_bond(
@@ -306,7 +371,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::sparse_target(AromaticSystemId(0), Some(AromaticSystemId(8)))]
+    #[case::identity(AromaticSystemId(0), Some(AromaticSystemId(0)))]
     #[case::uncovered(AromaticSystemId(1), None)]
     fn test_molecule_remapping_try_map_aromatic_system(
         molecule_remapping: MoleculeRemapping,
@@ -318,7 +383,7 @@ mod tests {
 
     #[rstest]
     #[case::first(MulticenterBondId(0), Some(MulticenterBondId(1)))]
-    #[case::last(MulticenterBondId(1), Some(MulticenterBondId(4)))]
+    #[case::last(MulticenterBondId(1), Some(MulticenterBondId(0)))]
     #[case::uncovered(MulticenterBondId(2), None)]
     fn test_molecule_remapping_try_map_multicenter_bond(
         molecule_remapping: MoleculeRemapping,
@@ -340,8 +405,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::first(StereoAtomId(0), Some(StereoAtomId(3)))]
-    #[case::repeated_target(StereoAtomId(1), Some(StereoAtomId(3)))]
+    #[case::first(StereoAtomId(0), Some(StereoAtomId(1)))]
+    #[case::last(StereoAtomId(1), Some(StereoAtomId(0)))]
     #[case::uncovered(StereoAtomId(2), None)]
     fn test_molecule_remapping_try_map_stereo_atom(
         molecule_remapping: MoleculeRemapping,
@@ -352,7 +417,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::first(StereoBondId(0), Some(StereoBondId(6)))]
+    #[case::first(StereoBondId(0), Some(StereoBondId(0)))]
     #[case::uncovered(StereoBondId(1), None)]
     fn test_molecule_remapping_try_map_stereo_bond(
         molecule_remapping: MoleculeRemapping,
@@ -364,19 +429,19 @@ mod tests {
 
     #[rstest]
     fn test_molecule_remapping_map(molecule_remapping: MoleculeRemapping) {
-        assert_eq!(molecule_remapping.map_atom(AtomId(0)), AtomId(4));
-        assert_eq!(molecule_remapping.map_bond(BondId(1)), BondId(5));
+        assert_eq!(molecule_remapping.map_atom(AtomId(0)), AtomId(1));
+        assert_eq!(molecule_remapping.map_bond(BondId(1)), BondId(0));
         assert_eq!(
             molecule_remapping.map_dative_bond(DativeBondId(0)),
-            DativeBondId(2)
+            DativeBondId(1)
         );
         assert_eq!(
             molecule_remapping.map_aromatic_system(AromaticSystemId(0)),
-            AromaticSystemId(8)
+            AromaticSystemId(0)
         );
         assert_eq!(
             molecule_remapping.map_multicenter_bond(MulticenterBondId(1)),
-            MulticenterBondId(4)
+            MulticenterBondId(0)
         );
         assert_eq!(
             molecule_remapping.map_noncovalent_bond(NoncovalentBondId(0)),
@@ -384,11 +449,11 @@ mod tests {
         );
         assert_eq!(
             molecule_remapping.map_stereo_atom(StereoAtomId(1)),
-            StereoAtomId(3)
+            StereoAtomId(0)
         );
         assert_eq!(
             molecule_remapping.map_stereo_bond(StereoBondId(0)),
-            StereoBondId(6)
+            StereoBondId(0)
         );
     }
 
@@ -403,13 +468,16 @@ mod tests {
         assert_eq!(
             MoleculeRemapping::default(),
             MoleculeRemapping::new(
-                GraphRemapping::new(vec![], vec![]),
-                vec![],
-                vec![],
-                vec![],
-                vec![],
-                vec![],
-                vec![],
+                GraphRemapping::new(
+                    Remapping::new(vec![]).unwrap(),
+                    Remapping::new(vec![]).unwrap()
+                ),
+                Remapping::new(vec![]).unwrap(),
+                Remapping::new(vec![]).unwrap(),
+                Remapping::new(vec![]).unwrap(),
+                Remapping::new(vec![]).unwrap(),
+                Remapping::new(vec![]).unwrap(),
+                Remapping::new(vec![]).unwrap()
             )
         );
     }

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{EdgeId, Graph, GraphRemapping, NodeId};
+use umol_graph_core::{EdgeId, Graph, GraphRemapping, NodeId, Remapping};
 
 use super::super::aromatic::AromaticSystems;
 use super::super::dative::DativeBonds;
@@ -76,18 +76,24 @@ impl Molecule {
         }
 
         let graph_remapping = GraphRemapping::new(
-            correspondence
-                .atoms()
-                .matched_pairs()
-                .iter()
-                .map(|&(_, right)| NodeId::from(right))
-                .collect(),
-            correspondence
-                .bonds()
-                .matched_pairs()
-                .iter()
-                .map(|&(_, right)| EdgeId::from(right))
-                .collect(),
+            Remapping::new(
+                correspondence
+                    .atoms()
+                    .matched_pairs()
+                    .iter()
+                    .map(|&(_, right)| NodeId::from(right))
+                    .collect(),
+            )
+            .expect("permutation images"),
+            Remapping::new(
+                correspondence
+                    .bonds()
+                    .matched_pairs()
+                    .iter()
+                    .map(|&(_, right)| EdgeId::from(right))
+                    .collect(),
+            )
+            .expect("permutation images"),
         );
 
         let atoms = reorder(

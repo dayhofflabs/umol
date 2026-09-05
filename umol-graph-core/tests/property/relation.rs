@@ -6,7 +6,8 @@ use proptest::prelude::*;
 use proptest::test_runner::TestCaseResult;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet,
-    GraphCorrespondence, GraphRemapping, NodeId, RelationId, VarRelationSet, VarVarBirelationSet,
+    GraphCorrespondence, GraphRemapping, NodeId, RelationId, Remapping, VarRelationSet,
+    VarVarBirelationSet,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,7 +24,10 @@ fn participant_mapping_strategy() -> impl Strategy<Value = (GraphCorrespondence,
                     Correspondence::from_images(&nodes, 8),
                     Correspondence::from_images(&edges, 8),
                 ),
-                GraphRemapping::new(nodes, edges),
+                GraphRemapping::new(
+                    Remapping::new(nodes).expect("permutation images"),
+                    Remapping::new(edges).expect("permutation images"),
+                ),
             )
         })
 }

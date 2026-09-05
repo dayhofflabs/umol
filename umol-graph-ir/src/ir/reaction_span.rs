@@ -13,7 +13,7 @@ use std::mem;
 use thiserror::Error;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphCorrespondence,
-    GraphRemapping, NodeId, RelationId, VarRelationSet,
+    GraphRemapping, NodeId, RelationId, Remapping, VarRelationSet,
 };
 use umol_perm::{DynPermutation, Permutation};
 
@@ -301,18 +301,24 @@ impl ReactionSpan {
         }
 
         let graph_remapping = GraphRemapping::new(
-            correspondence
-                .atoms()
-                .matched_pairs()
-                .iter()
-                .map(|&(_, right)| NodeId::from(right))
-                .collect(),
-            correspondence
-                .bonds()
-                .matched_pairs()
-                .iter()
-                .map(|&(_, right)| EdgeId::from(right))
-                .collect(),
+            Remapping::new(
+                correspondence
+                    .atoms()
+                    .matched_pairs()
+                    .iter()
+                    .map(|&(_, right)| NodeId::from(right))
+                    .collect(),
+            )
+            .expect("permutation images"),
+            Remapping::new(
+                correspondence
+                    .bonds()
+                    .matched_pairs()
+                    .iter()
+                    .map(|&(_, right)| EdgeId::from(right))
+                    .collect(),
+            )
+            .expect("permutation images"),
         );
 
         let atoms = reorder_dense(

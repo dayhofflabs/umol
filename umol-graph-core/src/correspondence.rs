@@ -10,7 +10,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
+use index_vec::Idx;
+
 use crate::graph::{EdgeId, Graph, NodeId};
+use crate::remap::{GraphRemapping, Remapping};
 
 /// Failure to construct a correspondence whose pairs form a partial bijection over its declared id
 /// spaces.
@@ -94,6 +97,22 @@ pub struct Correspondence<Id> {
     matched_pairs: Vec<(Id, Id)>,
     left_count: usize,
     right_count: usize,
+}
+
+impl<Id: Idx> From<&Remapping<Id>> for Correspondence<Id> {
+    /// Preserve every pairing and both counts of the permutation.
+    fn from(remapping: &Remapping<Id>) -> Self {
+        Self {
+            matched_pairs: (0..remapping.len())
+                .map(|idx| {
+                    let left = Id::from_usize(idx);
+                    (left, remapping.map(left))
+                })
+                .collect(),
+            left_count: remapping.len(),
+            right_count: remapping.len(),
+        }
+    }
 }
 
 impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
@@ -366,6 +385,13 @@ pub struct GraphCorrespondence {
     edges: Correspondence<EdgeId>,
 }
 
+impl From<&GraphRemapping> for GraphCorrespondence {
+    /// Preserve the node and edge permutations as complete correspondences.
+    fn from(remapping: &GraphRemapping) -> Self {
+        Self::new(remapping.nodes().into(), remapping.edges().into())
+    }
+}
+
 impl GraphCorrespondence {
     pub fn new(nodes: Correspondence<NodeId>, edges: Correspondence<EdgeId>) -> Self {
         Self { nodes, edges }
@@ -481,6 +507,62 @@ mod tests {
 
     fn e(i: u32) -> EdgeId {
         EdgeId(i)
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![])]
+    #[case::identity(vec![NodeId(0)], vec![(NodeId(0), NodeId(0))])]
+    #[case::crossing(vec![NodeId(2), NodeId(0), NodeId(1)], vec![(NodeId(0), NodeId(2)), (NodeId(1), NodeId(0)), (NodeId(2), NodeId(1))])]
+    fn test_correspondence_from_remapping(
+        #[case] images: Vec<NodeId>,
+        #[case] pairs: Vec<(NodeId, NodeId)>,
+    ) {
+        let count = images.len();
+        let remapping = Remapping::new(images).unwrap();
+        assert_eq!(
+            Correspondence::from(&remapping),
+            Correspondence {
+                matched_pairs: pairs,
+                left_count: count,
+                right_count: count,
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![], vec![], vec![])]
+    #[case::crossing(
+            vec![NodeId(1), NodeId(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)],
+            vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+            vec![(EdgeId(0), EdgeId(2)), (EdgeId(1), EdgeId(0)), (EdgeId(2), EdgeId(1))]
+        )]
+    fn test_graph_correspondence_from_remapping(
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] node_pairs: Vec<(NodeId, NodeId)>,
+        #[case] edge_pairs: Vec<(EdgeId, EdgeId)>,
+    ) {
+        let node_count = nodes.len();
+        let edge_count = edges.len();
+        let remapping = GraphRemapping::new(
+            Remapping::new(nodes).unwrap(),
+            Remapping::new(edges).unwrap(),
+        );
+        assert_eq!(
+            GraphCorrespondence::from(&remapping),
+            GraphCorrespondence::new(
+                Correspondence {
+                    matched_pairs: node_pairs,
+                    left_count: node_count,
+                    right_count: node_count
+                },
+                Correspondence {
+                    matched_pairs: edge_pairs,
+                    left_count: edge_count,
+                    right_count: edge_count
+                },
+            )
+        );
     }
 
     #[fixture]

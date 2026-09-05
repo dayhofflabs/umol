@@ -719,10 +719,12 @@ Remapping is an explicit total bijection between dense id spaces. It transports 
 and incidence without adding, dropping, or identifying entities; it does not validate chemistry,
 normalize attributes, repair references, or remove entities. Removal uses compaction instead.
 
-The current dense carriers establish only the total dense source half of that contract. Their image
-vectors define their source domains, and every id in those domains has an image, but construction
-does not reject sparse or repeated target images. An operation using one as a semantic remapping
-must establish bijectivity separately until the carrier contract is tightened.
+`Remapping::new` checks that the image vector is a permutation of `0..images.len()` and returns
+`RemappingError` for the first out-of-range or repeated image. It does not modify the images.
+The private vector has no public mutable access. Graph and molecule aggregate constructors take
+already-valid component remappings and do not repeat validation. Borrowed `From` conversions
+widen remappings to correspondences without changing pairings or source and target counts.
+Agreement with an independently supplied object remains contextual.
 
 The facility has three coordinated levels:
 

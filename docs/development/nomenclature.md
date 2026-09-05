@@ -1515,11 +1515,11 @@ A **remapping** is a total bijective old-to-new relabeling with a dense source i
 source id has exactly one image, every target id has exactly one preimage, and no entity is added or
 dropped. It is semantics-preserving alpha-renaming rather than a structural edit.
 
-The current dense carriers do not yet enforce that complete semantic contract.
-`umol_graph_core::Remapping<Id>` stores one image for every id in a dense source space but permits
-sparse or repeated target images. `GraphRemapping` aggregates the node and edge carriers, and
-`MoleculeRemapping` aggregates all eight molecule entity kinds. Producers and consumers that need a
-semantic remapping must therefore establish bijectivity separately.
+`umol_graph_core::Remapping<Id>` checks that its image vector is a permutation of its dense
+source space. `GraphRemapping` aggregates validated node and edge remappings, and
+`MoleculeRemapping` aggregates validated remappings for all eight molecule entity kinds.
+Borrowed conversions to correspondences preserve all pairings and both counts. Agreement with
+an independently supplied object's id-space sizes remains a contextual consumer requirement.
 
 A correspondence describes a semantic remapping only when it is total on both sides and both id
 spaces are dense. Relabeling relation participants preserves their stored sequence, so a positional
