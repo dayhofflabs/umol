@@ -107,6 +107,8 @@ PUBLIC_EXPORTS = frozenset(
     Molecule
     MoleculeConstraint
     MoleculeCorrespondence
+    MoleculeRemapping
+    Remapping
     MoleculeDefaults
     MoleculeEditor
     MoleculeMetadata
@@ -352,7 +354,7 @@ def test_deferred_member(owner, name):
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
-            umol.Molecule.canonicalize_with_correspondence,
+            umol.Molecule.canonicalize_with_remapping,
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
@@ -385,7 +387,7 @@ def test_deferred_member(owner, name):
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
-            umol.Reaction.canonicalize_with_correspondence,
+            umol.Reaction.canonicalize_with_remapping,
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
@@ -397,7 +399,7 @@ def test_deferred_member(owner, name):
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
-            umol.ReactionSpan.canonicalize_with_correspondence,
+            umol.ReactionSpan.canonicalize_with_remapping,
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (

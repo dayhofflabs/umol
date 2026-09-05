@@ -108,6 +108,7 @@ use crate::{
         Reaction, ReactionApplicationConfig, ReactionCompositionConfig, ReactionDerivation,
     },
     reaction_span::ReactionSpan,
+    remap::{MoleculeRemapping, Remapping},
     resolve::{
         AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
         AromaticityResolveConfig, AtomCompletions, ResolveConfig, ResolveContradiction,
@@ -184,6 +185,7 @@ mod num;
 mod reaction;
 #[cfg(feature = "graph")]
 mod reaction_span;
+mod remap;
 #[cfg(feature = "graph")]
 mod resolve;
 #[cfg(feature = "graph")]
@@ -325,6 +327,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RoleTaggedHashedFeatureSet>()?;
         module.add_class::<ReactionCombinedFingerprint>()?;
         module.add_class::<Correspondence>()?;
+        module.add_class::<Remapping>()?;
+        module.add_class::<MoleculeRemapping>()?;
         module.add_class::<MoleculeCorrespondence>()?;
         module.add_class::<Entity>()?;
         module.add_class::<MoleculeMetadata>()?;

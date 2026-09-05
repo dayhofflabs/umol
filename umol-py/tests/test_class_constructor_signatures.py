@@ -7,6 +7,12 @@ import umol
 @pytest.mark.parametrize(
     ("constructor", "expected"),
     [
+        (umol.Remapping, "(images)"),
+        (
+            umol.MoleculeRemapping,
+            "(atoms, bonds, dative_bonds, aromatic_systems, multicenter_bonds, "
+            "noncovalent_bonds, stereo_atoms, stereo_bonds)",
+        ),
         (umol.RefinementRounds.Fixed, "(*, rounds)"),
         (umol.RefinementRounds.ToFixpoint, "()"),
         (

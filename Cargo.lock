@@ -2050,6 +2050,7 @@ dependencies = [
 name = "umol-py"
 version = "0.7.0"
 dependencies = [
+ "index_vec",
  "pyo3",
  "rstest",
  "umol-chem",

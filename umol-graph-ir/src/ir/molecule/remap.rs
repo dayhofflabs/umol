@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{EdgeId, Graph, GraphRemapping, NodeId, Remapping};
+use umol_graph_core::Graph;
 
 use super::super::aromatic::AromaticSystems;
 use super::super::dative::DativeBonds;
@@ -10,111 +10,70 @@ use super::super::multicenter::MulticenterBonds;
 use super::super::noncovalent::NoncovalentBonds;
 use super::super::stereo::{StereoAtoms, StereoBonds};
 use super::Molecule;
-use crate::ir::{Constraints, MoleculeCorrespondence};
+use crate::ir::{Constraints, MoleculeCorrespondence, MoleculeRemapping};
 
 impl Molecule {
-    /// Relabel this molecule into the dense target id spaces described by `correspondence`.
+    /// Renumber every entity table and reference using the supplied permutations.
     ///
-    /// The correspondence must describe every entity in this molecule and be total on both sides
-    /// for all eight entity kinds. The operation transports topology, relation participants,
-    /// position-sensitive relation data, stereo frames, entity forms, and constraint references.
-    /// It does not validate chemistry, normalize attributes, repair references, compact tables, or
-    /// remove entities.
+    /// Transports topology, relation participants, entity forms, and constraint references.
+    /// Participant sequences and their positional payloads are preserved. This does not validate
+    /// chemistry, normalize attributes, repair references, or add or remove entities.
     ///
     /// # Panics
     ///
-    /// Panics when `correspondence` does not describe a complete dense renumbering of this
-    /// molecule. Use [`Self::try_remap`] for an independently supplied correspondence.
+    /// Panics when any component length differs from this molecule's corresponding entity count.
+    /// Use [`Self::try_remap`] for independently supplied permutations.
     ///
     /// # Semantic properties
     ///
-    /// The result is equivalent to `self` under `correspondence`. Identity remapping is exact,
-    /// inverse remapping recovers the original molecule, and sequential remapping agrees with
-    /// correspondence composition.
-    pub fn remap(&self, correspondence: &MoleculeCorrespondence) -> Self {
-        self.try_remap(correspondence)
-            .expect("molecule remapping requires a complete dense correspondence")
+    /// Identity is exact; applying the inverse permutations recovers the original molecule.
+    /// Sequential renumbering agrees with the composition of the component permutations.
+    /// The result satisfies [`Self::framed_eq_under`] under the same remapping.
+    pub fn remap(&self, remapping: &MoleculeRemapping) -> Self {
+        self.try_remap(remapping)
+            .expect("molecule remapping requires matching entity counts")
     }
 
     /// Checked form of [`Self::remap`].
     ///
-    /// Returns `None` when the correspondence's source counts differ from the molecule's entity
-    /// counts or when any entity-kind correspondence is not a bijection onto a dense target id space.
-    pub fn try_remap(&self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
+    /// Returns `None` when any component length differs from the molecule's entity count.
+    pub fn try_remap(&self, remapping: &MoleculeRemapping) -> Option<Self> {
         let counts_match = [
-            (correspondence.atoms().left_count(), self.atoms.len()),
-            (correspondence.bonds().left_count(), self.bonds.len()),
+            (remapping.graph().nodes().len(), self.atoms.len()),
+            (remapping.graph().edges().len(), self.bonds.len()),
+            (remapping.dative_bonds().len(), self.dative_bonds.count()),
             (
-                correspondence.dative_bonds().left_count(),
-                self.dative_bonds.count(),
-            ),
-            (
-                correspondence.aromatic_systems().left_count(),
+                remapping.aromatic_systems().len(),
                 self.aromatic_systems.count(),
             ),
             (
-                correspondence.multicenter_bonds().left_count(),
+                remapping.multicenter_bonds().len(),
                 self.multicenter_bonds.count(),
             ),
             (
-                correspondence.noncovalent_bonds().left_count(),
+                remapping.noncovalent_bonds().len(),
                 self.noncovalent_bonds.count(),
             ),
-            (
-                correspondence.stereo_atoms().left_count(),
-                self.stereo_atoms.count(),
-            ),
-            (
-                correspondence.stereo_bonds().left_count(),
-                self.stereo_bonds.count(),
-            ),
+            (remapping.stereo_atoms().len(), self.stereo_atoms.count()),
+            (remapping.stereo_bonds().len(), self.stereo_bonds.count()),
         ]
         .into_iter()
         .all(|(mapped, actual)| mapped == actual);
-        if !counts_match || !correspondence.is_total() {
+        if !counts_match {
             return None;
         }
 
-        let graph_remapping = GraphRemapping::new(
-            Remapping::new(
-                correspondence
-                    .atoms()
-                    .matched_pairs()
-                    .iter()
-                    .map(|&(_, right)| NodeId::from(right))
-                    .collect(),
-            )
-            .expect("permutation images"),
-            Remapping::new(
-                correspondence
-                    .bonds()
-                    .matched_pairs()
-                    .iter()
-                    .map(|&(_, right)| EdgeId::from(right))
-                    .collect(),
-            )
-            .expect("permutation images"),
-        );
+        let graph_remapping = remapping.graph();
 
-        let atoms = reorder(
-            self.atoms.as_ref().clone(),
-            correspondence.atoms().right_count(),
-            correspondence
-                .atoms()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?;
-        let bonds = reorder(
-            self.bonds.as_ref().clone(),
-            correspondence.bonds().right_count(),
-            correspondence
-                .bonds()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?;
-        let edges = reorder(
+        let atoms = remapping
+            .graph()
+            .nodes()
+            .reorder(self.atoms.as_ref().clone());
+        let bonds = remapping
+            .graph()
+            .edges()
+            .reorder(self.bonds.as_ref().clone());
+        let edges = remapping.graph().edges().reorder(
             self.graph
                 .edge_ids()
                 .map(|edge| {
@@ -125,78 +84,45 @@ impl Molecule {
                     ]
                 })
                 .collect(),
-            correspondence.bonds().right_count(),
-            correspondence
-                .bonds()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?;
+        );
         let graph = Graph::new(atoms.len(), &edges);
 
-        let dative_bonds = DativeBonds::new(reorder(
-            self.dative_bonds.remap(&graph_remapping).into_entries(),
-            correspondence.dative_bonds().right_count(),
-            correspondence
+        let dative_bonds = DativeBonds::new(
+            remapping
                 .dative_bonds()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?);
-        let aromatic_systems = AromaticSystems::new(reorder(
-            self.aromatic_systems.remap(&graph_remapping).into_entries(),
-            correspondence.aromatic_systems().right_count(),
-            correspondence
+                .reorder(self.dative_bonds.remap(graph_remapping).into_entries()),
+        );
+        let aromatic_systems = AromaticSystems::new(
+            remapping
                 .aromatic_systems()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?);
-        let multicenter_bonds = MulticenterBonds::new(reorder(
-            self.multicenter_bonds
-                .remap(&graph_remapping)
-                .into_entries(),
-            correspondence.multicenter_bonds().right_count(),
-            correspondence
+                .reorder(self.aromatic_systems.remap(graph_remapping).into_entries()),
+        );
+        let multicenter_bonds = MulticenterBonds::new(
+            remapping
                 .multicenter_bonds()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?);
-        let noncovalent_bonds = NoncovalentBonds::new(reorder(
-            self.noncovalent_bonds
-                .remap(&graph_remapping)
-                .into_entries(),
-            correspondence.noncovalent_bonds().right_count(),
-            correspondence
+                .reorder(self.multicenter_bonds.remap(graph_remapping).into_entries()),
+        );
+        let noncovalent_bonds = NoncovalentBonds::new(
+            remapping
                 .noncovalent_bonds()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?);
-        let stereo_atoms = StereoAtoms::new(reorder(
-            self.stereo_atoms.remap(&graph_remapping).into_entries(),
-            correspondence.stereo_atoms().right_count(),
-            correspondence
+                .reorder(self.noncovalent_bonds.remap(graph_remapping).into_entries()),
+        );
+        let stereo_atoms = StereoAtoms::new(
+            remapping
                 .stereo_atoms()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?);
-        let stereo_bonds = StereoBonds::new(reorder(
-            self.stereo_bonds.remap(&graph_remapping).into_entries(),
-            correspondence.stereo_bonds().right_count(),
-            correspondence
+                .reorder(self.stereo_atoms.remap(graph_remapping).into_entries()),
+        );
+        let stereo_bonds = StereoBonds::new(
+            remapping
                 .stereo_bonds()
-                .matched_pairs()
-                .iter()
-                .map(|&(left, right)| (left.index(), right.index())),
-        )?);
+                .reorder(self.stereo_bonds.remap(graph_remapping).into_entries()),
+        );
+        let correspondence = MoleculeCorrespondence::from(remapping);
         let constraints: Constraints = self
             .constraints
             .clone()
             .into_iter()
-            .map(|constraint| constraint.map(correspondence))
+            .map(|constraint| constraint.map(&correspondence))
             .collect();
 
         Some(
@@ -215,24 +141,4 @@ impl Molecule {
             .expect("dense molecule remapping preserves representation integrity"),
         )
     }
-}
-
-fn reorder<T>(
-    values: Vec<T>,
-    target_count: usize,
-    pairs: impl IntoIterator<Item = (usize, usize)>,
-) -> Option<Vec<T>> {
-    let mut source = values.into_iter().map(Some).collect::<Vec<_>>();
-    let mut target = (0..target_count).map(|_| None).collect::<Vec<_>>();
-    for (left, right) in pairs {
-        let value = source.get_mut(left)?.take()?;
-        let entry = target.get_mut(right)?;
-        if entry.replace(value).is_some() {
-            return None;
-        }
-    }
-    if source.iter().any(Option::is_some) {
-        return None;
-    }
-    target.into_iter().collect()
 }

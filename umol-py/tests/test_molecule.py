@@ -1,3 +1,4 @@
+from umol import MoleculeRemapping
 import re
 
 import pytest
@@ -392,18 +393,18 @@ def test_molecule_canonicalize():
     assert source.canonical_eq(expected)
 
 
-def test_molecule_canonicalize_with_correspondence():
+def test_molecule_canonicalize_with_remapping():
     source = Molecule.parse(
         '{:atoms ["C#c+" "C"] :constraints '
         '[{:charge-sum {:atoms [0 0] :sum 0}}]}'
     )
 
-    canonical, correspondence = source.canonicalize_with_correspondence()
+    canonical, remapping = source.canonicalize_with_remapping()
 
     assert canonical == source.canonicalize()
-    assert isinstance(correspondence, MoleculeCorrespondence)
-    assert correspondence.is_total()
-    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 0)]
+    assert isinstance(remapping, MoleculeRemapping)
+    assert remapping.to_correspondence().is_total()
+    assert remapping.atoms.images == [1, 0]
 
 
 def test_molecule_canonicalize_error():
@@ -414,7 +415,7 @@ def test_molecule_canonicalize_error():
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         molecule.canonicalize()
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        molecule.canonicalize_with_correspondence()
+        molecule.canonicalize_with_remapping()
 
 
 def test_molecule_stereo_mutation_integrity_error():
@@ -436,7 +437,7 @@ def test_molecule_stereo_mutation_integrity_error():
         StereoCoset.Lit(0),
     )
     molecule.canonicalize()
-    molecule.canonicalize_with_correspondence()
+    molecule.canonicalize_with_remapping()
 
 
 def test_molecule_from_smiles():

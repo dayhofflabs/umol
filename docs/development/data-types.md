@@ -346,7 +346,7 @@ ordinary conversion must not perform one as an incidental implementation step.
 Derived `==` compares the stored IR structure exactly, including constraints, ids, ordering, and
 non-normal value encodings. `normalized_eq` compares normal forms in the current participant and
 entity-id frame. `framed_eq` additionally selects participant frames, while
-`framed_eq_under` first applies an explicitly supplied entity-id correspondence and then performs
+`framed_eq_under` first applies an explicitly supplied entity-id remapping and then performs
 framed equality. Aggregate `canonical_eq` compares complete canonical IR values after selecting
 participant frames and entity ids. Every semantic comparison includes constraints. This
 distinction matters for patterns, where constraints are not redundant with the structural
@@ -387,7 +387,7 @@ The equality operations form the same nested quotient pipeline:
 - `==` compares the exact stored representation;
 - `normalized_eq` compares normal forms in the current participant and entity-id frame;
 - `framed_eq` compares after selecting participant frames, while `framed_eq_under` first applies an
-  explicitly supplied entity-id correspondence and then performs framed equality; and
+  explicitly supplied entity-id remapping and then performs framed equality; and
 - `canonical_eq` compares complete aggregate canonical forms under a shared context, selecting the
   participant frames and entity ids rather than receiving an id witness from the caller.
 
@@ -408,10 +408,10 @@ pub trait Canonicalize: Reframe {
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         self,
         context: &CanonicalizeContext,
-    ) -> Result<(Self, MoleculeCorrespondence), Self::Error>;
+    ) -> Result<(Self, MoleculeRemapping), Self::Error>;
 
     fn canonical_hash(
         self,
@@ -426,8 +426,8 @@ pub trait Canonicalize: Reframe {
 }
 ```
 
-`canonicalize_with_correspondence` returns the entity-id-renumbering witness, not the participant
-frame action. Applying that correspondence and then `reframe` reconstructs the canonical value;
+`canonicalize_with_remapping` returns the entity-id-renumbering witness, not the participant
+frame action. Applying that remapping and then `reframe` reconstructs the canonical value;
 remapping alone need not do so.
 
 Use one concrete context for `Molecule`, `ReactionSpan`, and `Reaction` unless an
@@ -871,11 +871,11 @@ therefore related operations with different codomains.
 
 ### Dense molecule remapping
 
-A public end-to-end remapping operation on `Molecule` accepts a `MoleculeCorrespondence` that
-describes the complete old and new id spaces. The correspondence source counts must equal the
-molecule counts, and every component correspondence must be total on both sides. The operation
-returns `None` when these independently supplied structural conditions do not hold. The asserted
-route panics under the same condition. The published source is already closed and is not rechecked.
+A public end-to-end remapping operation on `Molecule` accepts a `MoleculeRemapping`.
+Each component length must equal the corresponding molecule entity count; bijectivity is already
+established by construction. The checked operation returns `None` on a count mismatch, and the
+asserted route panics under the same condition. Component `reorder` operations move table values;
+constraint transport widens the remapping to a correspondence and uses the existing traversal.
 
 On success, it transports topology, every relation participant, position-sensitive relation data,
 stereo frames, entity forms, and every typed reference in constraints. It does not validate
@@ -884,14 +884,14 @@ entities. Identity remapping is exact; applying a remapping and its inverse reco
 and sequential remapping agrees with correspondence composition.
 
 Dense molecule remapping is semantics-preserving alpha-renaming. Its primary semantic law is
-`source.framed_eq_under(&remapped, &correspondence)`. Property tests must state this law directly in
+`source.framed_eq_under(&remapped, &remapping)`. Property tests must state this law directly in
 addition to testing identity, inverse, composition, and referential integrity. Generated cases must
 include crossing permutations, all entity kinds, position-sensitive relation data and stereo
 frames, and constraints containing typed entity references; testing only reordered atom and bond
 tables is insufficient.
 
 Canonicalization is a consumer of this operation, not an alternative implementation of it. It
-derives a complete correspondence from a canonical labeling and applies the ordinary molecule
+constructs a complete remapping directly from its selected entity order and applies the ordinary molecule
 remapping operation. Canonicalization code must not introduce a second path for transporting entity
 tables or referenced values.
 
@@ -944,16 +944,14 @@ for an LHS-anchored span in the documented constraint normal form; for another v
 returns the equivalent LHS-anchored normal form.
 
 Dense span remapping follows the molecule remapping API. `ReactionSpan::remap` and
-`ReactionSpan::try_remap` accept a `MoleculeCorrespondence` over the eight union tables. Its source
-counts must equal the span's table sizes and each component must be a total bijection onto a dense
-target id space. The operation transports both values of every `EntitySpan`, relation participants,
+`ReactionSpan::try_remap` accept a `MoleculeRemapping` over the eight union tables. Component
+lengths must equal the span's table sizes; each component is already a dense bijection. The operation transports both values of every `EntitySpan`, relation participants,
 position-sensitive relation data, stereo frames, and all constraint references. It does not
 normalize, repair, project, or reanchor the span implicitly. The asserted route panics when its
-documented producer contract is violated; the checked route returns `None` only for an unsuitable
-correspondence. The published source and remapped result are closed by construction and are not
+documented producer contract is violated; the checked route returns `None` only for a component-count mismatch. The published source and remapped result are closed by construction and are not
 rechecked.
 
-Canonicalization derives an LHS-anchored correspondence and applies this ordinary remapping
+Canonicalization constructs an LHS-anchored remapping and applies this ordinary remapping
 operation. It does not maintain a second canonicalization-only transport path. For
 `S(s) = s.to_reaction().to_reaction_span()?` and span canonicalization `C`, the normal-form laws are
 `S(C(s)) == C(s)`, `S(S(s)) == S(s)`, and `C(S(s)) == C(s)`. Only the first requires exact

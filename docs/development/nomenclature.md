@@ -309,7 +309,7 @@ defines the selected frame; backend canonical labels may guide and prune the sea
 define that order.
 
 **Canonical equality** compares the complete canonical forms produced under the same context. It is
-the search-based counterpart of `framed_eq_under`: the caller does not supply a correspondence because
+the search-based counterpart of `framed_eq_under`: the caller does not supply a remapping because
 canonicalization selects the frame.
 
 The public operation is complete-only: topology, constitution, and structure are private search
@@ -326,7 +326,7 @@ from the cells or equivalence classes of a refined partition and from a stereo c
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
 labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
 whereas aggregate canonicalization constructs the complete remapped graph IR.
-**In code:** `Canonicalize`, `canonicalize`, `canonicalize_with_correspondence`, `canonical_eq`.
+**In code:** `Canonicalize`, `canonicalize`, `canonicalize_with_remapping`, `canonical_eq`.
 
 ### Class
 
@@ -745,13 +745,13 @@ level.
 - **`normalized_eq`** — equality of normal forms in the current entity-id and participant frame.
 - **`framed_eq`** — equality after normalization and participant-frame selection.
   **`Molecule::framed_eq_under`** first remaps entity ids through an explicitly supplied
-  `MoleculeCorrespondence`, then performs framed equality.
+  `MoleculeRemapping`, then performs framed equality.
 - **`canonical_eq`** — equality of complete aggregate canonical forms under a shared context. The
   implementation selects participant frames and entity ids rather than receiving an id witness
   from the caller.
 
 For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
-when an admissible total dense correspondence exists under which `framed_eq_under` holds. Equality
+when a remapping exists under which `framed_eq_under` holds. Equality
 totalization for two intrinsic contradictions does not require such a witness.
 
 Structural canonical labeling initially establishes automorphism orbits from inherent fields and

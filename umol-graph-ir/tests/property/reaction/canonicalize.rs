@@ -11,10 +11,12 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
+use umol_graph_core::{
+    AutomorphismAlgorithm, Correspondence, EdgeId, GraphRemapping, NodeId, Remapping,
+};
 use umol_graph_ir::ir::{
     Canonicalize, CanonicalizeContext, Contradiction, Deltas, EntitySpan, Molecule,
-    MoleculeCorrespondence, MoleculeEntries, Normalize, NumForm, Reaction,
+    MoleculeCorrespondence, MoleculeEntries, MoleculeRemapping, Normalize, NumForm, Reaction,
     ReactionCanonicalizeError, ReactionDerivation, ReactionSpan, Reframe,
 };
 
@@ -213,7 +215,7 @@ proptest! {
         })?;
         let (with_correspondence, correspondence) = reaction
             .clone()
-            .canonicalize_with_correspondence(&context)
+            .canonicalize_with_remapping(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!(
                     "generated reaction did not canonicalize with a correspondence: {error}"
@@ -244,27 +246,39 @@ proptest! {
         let context = context();
         let source = scenario.reaction;
         let identical = source.clone();
-        let normalized = source.clone().normalize().map_err(|_| {
-            TestCaseError::fail("generated reaction is intrinsically contradictory")
-        })?;
-        let normalized_again = normalized.clone().normalize().map_err(|_| {
-            TestCaseError::fail("normalized reaction became contradictory")
-        })?;
-        let reframed = source.clone().reframe().map_err(|_| {
-            TestCaseError::fail("generated reaction is intrinsically contradictory")
-        })?;
+        let normalized = source
+            .clone()
+            .normalize()
+            .map_err(|_| TestCaseError::fail("generated reaction is intrinsically contradictory"))?;
+        let normalized_again = normalized
+            .clone()
+            .normalize()
+            .map_err(|_| TestCaseError::fail("normalized reaction became contradictory"))?;
+        let reframed = source
+            .clone()
+            .reframe()
+            .map_err(|_| TestCaseError::fail("generated reaction is intrinsically contradictory"))?;
         let canonical = source.clone().canonicalize(&context).map_err(|error| {
             TestCaseError::fail(format!("generated reaction did not canonicalize: {error}"))
         })?;
-        let renumbered = scenario.span.remap(&scenario.correspondence).to_reaction();
+        let renumbered = scenario.span.remap(&scenario.remapping).to_reaction();
 
         prop_assert_eq!(normalized.clone().normalize(), Ok(normalized.clone()));
         prop_assert_eq!(reframed.clone().reframe(), Ok(reframed.clone()));
-        prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical.clone()));
+        prop_assert_eq!(
+            canonical.clone().canonicalize(&context),
+            Ok(canonical.clone())
+        );
         prop_assert_eq!(normalized.clone().reframe(), Ok(reframed.clone()));
         prop_assert_eq!(reframed.clone().normalize(), Ok(reframed.clone()));
-        prop_assert_eq!(normalized.clone().canonicalize(&context), Ok(canonical.clone()));
-        prop_assert_eq!(reframed.clone().canonicalize(&context), Ok(canonical.clone()));
+        prop_assert_eq!(
+            normalized.clone().canonicalize(&context),
+            Ok(canonical.clone())
+        );
+        prop_assert_eq!(
+            reframed.clone().canonicalize(&context),
+            Ok(canonical.clone())
+        );
         prop_assert_eq!(canonical.clone().normalize(), Ok(canonical.clone()));
         prop_assert_eq!(canonical.clone().reframe(), Ok(canonical.clone()));
 
@@ -353,17 +367,17 @@ proptest! {
             .expect("generated reaction materializes");
         let (canonical, union) = reaction
             .clone()
-            .canonicalize_with_correspondence(&context)
+            .canonicalize_with_remapping(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!("generated reaction did not canonicalize: {error}"))
             })?;
         let canonical_span = canonical
             .to_reaction_span()
             .expect("canonical reaction materializes");
+        let union = MoleculeCorrespondence::from(&union);
         let lhs_atoms = projected_atom_correspondence(&source_span, union.atoms(), Side::Left);
-        let lhs_action =
-            MoleculeCorrespondence::induce(reaction.lhs(), canonical.lhs(), lhs_atoms)
-                .expect("canonical union action induces its lhs action");
+        let lhs_action = MoleculeCorrespondence::induce(reaction.lhs(), canonical.lhs(), lhs_atoms)
+            .expect("canonical union action induces its lhs action");
         let canonical_match = lhs_action.reverse().compose(&correspondence).unwrap();
         let source_application = reaction.apply_at(&host, &correspondence);
         let canonical_application = canonical.apply_at(&host, &canonical_match);
@@ -384,7 +398,83 @@ proptest! {
                     &right,
                 );
                 prop_assert!(products.is_total());
-                prop_assert!(left.rhs().framed_eq_under(right.rhs(), &products));
+                let remapping = MoleculeRemapping::new(
+                    GraphRemapping::new(
+                        Remapping::new(
+                            products
+                                .atoms()
+                                .matched_pairs()
+                                .iter()
+                                .map(|&(_, right)| NodeId::from(right))
+                                .collect(),
+                        )
+                        .unwrap(),
+                        Remapping::new(
+                            products
+                                .bonds()
+                                .matched_pairs()
+                                .iter()
+                                .map(|&(_, right)| EdgeId::from(right))
+                                .collect(),
+                        )
+                        .unwrap(),
+                    ),
+                    Remapping::new(
+                        products
+                            .dative_bonds()
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, right)| right)
+                            .collect(),
+                    )
+                    .unwrap(),
+                    Remapping::new(
+                        products
+                            .aromatic_systems()
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, right)| right)
+                            .collect(),
+                    )
+                    .unwrap(),
+                    Remapping::new(
+                        products
+                            .multicenter_bonds()
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, right)| right)
+                            .collect(),
+                    )
+                    .unwrap(),
+                    Remapping::new(
+                        products
+                            .noncovalent_bonds()
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, right)| right)
+                            .collect(),
+                    )
+                    .unwrap(),
+                    Remapping::new(
+                        products
+                            .stereo_atoms()
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, right)| right)
+                            .collect(),
+                    )
+                    .unwrap(),
+                    Remapping::new(
+                        products
+                            .stereo_bonds()
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, right)| right)
+                            .collect(),
+                    )
+                    .unwrap(),
+                );
+                prop_assert!(left.rhs().framed_eq_under(right.rhs(), &remapping));
             }
             (left, right) => prop_assert!(false, "application mismatch: {left:?} != {right:?}"),
         }
@@ -416,7 +506,7 @@ proptest! {
         prop_assert!(second.canonical_eq(&third, &context));
         prop_assert!(first.canonical_eq(&third, &context));
         prop_assert_eq!(
-            first.canonicalize_with_correspondence(&context),
+            first.canonicalize_with_remapping(&context),
             Err(ReactionCanonicalizeError::Contradiction(Contradiction)),
         );
     }

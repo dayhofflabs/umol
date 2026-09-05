@@ -5,9 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{iter, mem};
 
+use index_vec::Idx;
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, Graph, NodeId,
+    AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, GraphRemapping, NodeId, Remapping,
     SubdivisionNodeSource, UnionFind,
 };
 use umol_perm::{Orientation, Permutation};
@@ -23,7 +24,6 @@ use super::constraint::{
     StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
     TopicityRelationForm,
 };
-use super::correspondence::MoleculeCorrespondence;
 use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintSpan, DativeBondDelta, Delta, EntitySpan,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
@@ -43,6 +43,7 @@ use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
 use super::reaction::Reaction;
 use super::reaction_span::ReactionSpan;
+use super::remap::MoleculeRemapping;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
     CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
@@ -334,9 +335,9 @@ pub trait Canonicalize: Reframe {
     /// unsatisfiable.
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error>;
 
-    /// Construct the complete canonical form and its source-to-canonical correspondence.
+    /// Construct the complete canonical form and its source-to-canonical remapping.
     ///
-    /// The correspondence maps every entity id in the input frame to its id in the returned
+    /// The remapping maps every entity id in the input frame to its id in the returned
     /// canonical frame. Each of its eight entity-kind components is total on both sides and
     /// therefore represents a dense bijection. For [`Reaction`], the two frames are the complete
     /// union frames of the materialized input and returned reaction spans.
@@ -348,13 +349,13 @@ pub trait Canonicalize: Reframe {
     ///
     /// # Semantic properties
     ///
-    /// Discarding the correspondence yields exactly [`Self::canonicalize`] under the same context.
-    /// Remapping the input through the correspondence and then applying [`Reframe::reframe`]
+    /// Discarding the remapping yields exactly [`Self::canonicalize`] under the same context.
+    /// Remapping the input through the remapping and then applying [`Reframe::reframe`]
     /// reconstructs the returned canonical value.
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         self,
         context: &CanonicalizeContext,
-    ) -> Result<(Self, MoleculeCorrespondence), Self::Error>;
+    ) -> Result<(Self, MoleculeRemapping), Self::Error>;
 
     /// Hash the complete canonical form.
     ///
@@ -2570,7 +2571,7 @@ fn initial_color_keys(
 /// Topology search carrier with atoms and non-modal bond subdivisions as vertices.
 ///
 /// Bonds in the largest normalized bond-form class are represented directly as edges. Every other
-/// bond remains a colored subdivision vertex. The complete typed leaf key and correspondence still
+/// bond remains a colored subdivision vertex. The complete typed leaf key and remapping still
 /// order and map every bond.
 #[derive(Clone, Debug)]
 struct CompactTopologyCarrier {
@@ -3697,9 +3698,8 @@ fn complete_candidate(
     order: &[NodeId],
 ) -> Result<(CanonicalCandidate<CanonicalComparisonKey>, Molecule), Contradiction> {
     let mut candidate = structure_candidate(molecule, incidence_graph, order)?;
-    let correspondence =
-        correspondence_from_order(molecule, incidence_graph, &candidate.entity_order);
-    let complete = molecule.remap(&correspondence).reframe()?;
+    let remapping = remapping_from_order(molecule, incidence_graph, &candidate.entity_order);
+    let complete = molecule.remap(&remapping).reframe()?;
     candidate.key.constraints = constraint_blocks(&complete);
     Ok((candidate, complete))
 }
@@ -3730,32 +3730,30 @@ fn reaction_span_counts(span: &ReactionSpan) -> [usize; 8] {
     ]
 }
 
-fn molecule_correspondence(images: &[Vec<usize>; 8]) -> MoleculeCorrespondence {
-    fn correspondence<Id>(images: &[usize]) -> Correspondence<Id>
-    where
-        Id: Copy + Ord + From<usize>,
-    {
-        let images = images.iter().copied().map(Id::from).collect::<Vec<_>>();
-        Correspondence::from_images(&images, images.len())
+fn molecule_remapping(images: &[Vec<usize>; 8]) -> MoleculeRemapping {
+    fn remapping<Id: Idx>(images: &[usize]) -> Remapping<Id> {
+        Remapping::new(images.iter().copied().map(Id::from_usize).collect())
+            .expect("selected entity order is a permutation")
     }
-
-    MoleculeCorrespondence::new(
-        correspondence::<AtomId>(&images[0]),
-        correspondence::<BondId>(&images[1]),
-        correspondence::<DativeBondId>(&images[2]),
-        correspondence::<AromaticSystemId>(&images[3]),
-        correspondence::<MulticenterBondId>(&images[4]),
-        correspondence::<NoncovalentBondId>(&images[5]),
-        correspondence::<StereoAtomId>(&images[6]),
-        correspondence::<StereoBondId>(&images[7]),
+    MoleculeRemapping::new(
+        GraphRemapping::new(
+            remapping::<NodeId>(&images[0]),
+            remapping::<EdgeId>(&images[1]),
+        ),
+        remapping::<DativeBondId>(&images[2]),
+        remapping::<AromaticSystemId>(&images[3]),
+        remapping::<MulticenterBondId>(&images[4]),
+        remapping::<NoncovalentBondId>(&images[5]),
+        remapping::<StereoAtomId>(&images[6]),
+        remapping::<StereoBondId>(&images[7]),
     )
 }
 
-fn correspondence_from_order(
+fn remapping_from_order(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     order: &[NodeId],
-) -> MoleculeCorrespondence {
+) -> MoleculeRemapping {
     let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
     let mut next = [0; 8];
     for &node in order {
@@ -3772,14 +3770,14 @@ fn correspondence_from_order(
         images[entity_kind][kind_id] = next[entity_kind];
         next[entity_kind] += 1;
     }
-    molecule_correspondence(&images)
+    molecule_remapping(&images)
 }
 
-fn lhs_anchored_correspondence_from_order(
+fn lhs_anchored_remapping_from_order(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
     order: &[NodeId],
-) -> MoleculeCorrespondence {
+) -> MoleculeRemapping {
     let counts = reaction_span_counts(span);
     let mut lhs = counts.map(|_| Vec::new());
     let mut added = counts.map(|_| Vec::new());
@@ -3852,7 +3850,7 @@ fn lhs_anchored_correspondence_from_order(
             images[entity_kind][kind_id] = image;
         }
     }
-    molecule_correspondence(&images)
+    molecule_remapping(&images)
 }
 
 fn reaction_span_lhs_present(span: &ReactionSpan, entity_kind: usize, kind_id: usize) -> bool {
@@ -3913,7 +3911,7 @@ fn canonicalize_topology_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
-) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
+) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
     let (entity_keys, _) = initial_color_keys(molecule, &incidence_graph)?;
     let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
@@ -3932,11 +3930,11 @@ fn canonicalize_topology_with_options(
         options,
         &leaf_candidate,
     );
-    let correspondence =
-        correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+    let remapping =
+        remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = molecule.remap(&correspondence).reframe()?;
-    Ok((canonical, correspondence))
+    let canonical = molecule.remap(&remapping).reframe()?;
+    Ok((canonical, remapping))
 }
 
 #[cfg(test)]
@@ -3959,7 +3957,7 @@ fn canonicalize_constitution_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
-) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
+) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
@@ -3976,11 +3974,11 @@ fn canonicalize_constitution_with_options(
         options,
         &leaf_candidate,
     );
-    let correspondence =
-        correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+    let remapping =
+        remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = molecule.remap(&correspondence).reframe()?;
-    Ok((canonical, correspondence))
+    let canonical = molecule.remap(&remapping).reframe()?;
+    Ok((canonical, remapping))
 }
 
 #[cfg(test)]
@@ -4003,7 +4001,7 @@ fn canonicalize_structure_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
-) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
+) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
@@ -4031,11 +4029,11 @@ fn canonicalize_structure_with_options(
         &leaf_candidate,
         &filter_generators,
     );
-    let correspondence =
-        correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+    let remapping =
+        remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = molecule.remap(&correspondence).reframe()?;
-    Ok((canonical, correspondence))
+    let canonical = molecule.remap(&remapping).reframe()?;
+    Ok((canonical, remapping))
 }
 
 #[cfg(test)]
@@ -4058,7 +4056,7 @@ fn canonicalize_full_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
-) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
+) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let normalized = molecule.clone().normalize()?;
     let molecule = &normalized;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -4088,11 +4086,11 @@ fn canonicalize_full_with_options(
         },
         &leaf_candidate,
     );
-    let correspondence =
-        correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+    let remapping =
+        remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
     let (_, canonical) =
         complete_candidate(molecule, &incidence_graph, &selected.candidate.entity_order)?;
-    Ok((canonical, correspondence))
+    Ok((canonical, remapping))
 }
 
 fn canonical_key_by(
@@ -4616,11 +4614,11 @@ fn constraint_span_key(span: &ConstraintSpan) -> CanonicalKeyValue {
     }
 }
 
-fn canonicalize_molecule_with_correspondence_by_effective(
+fn canonicalize_molecule_with_remapping_by_effective(
     molecule: &Molecule,
     level: DescriptionLevel,
     context: &CanonicalizeContext,
-) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
+) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let options = CanonicalSearchOptions {
         automorphism_pruning: matches!(
             level,
@@ -4653,7 +4651,7 @@ fn canonicalize_molecule_by_effective(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<Molecule, MoleculeCanonicalizeError> {
-    canonicalize_molecule_with_correspondence_by_effective(molecule, level, context)
+    canonicalize_molecule_with_remapping_by_effective(molecule, level, context)
         .map(|(canonical, _)| canonical)
 }
 
@@ -4665,12 +4663,12 @@ impl Canonicalize for Molecule {
         canonicalize_molecule_by_effective(&self, level, context)
     }
 
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         self,
         context: &CanonicalizeContext,
-    ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
+    ) -> Result<(Self, MoleculeRemapping), Self::Error> {
         let level = molecule_canonicalize_level(&self);
-        canonicalize_molecule_with_correspondence_by_effective(&self, level, context)
+        canonicalize_molecule_with_remapping_by_effective(&self, level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
@@ -4723,8 +4721,8 @@ fn reaction_span_canonical_candidate(
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let leaf_candidate = |order: &[NodeId]| {
-        let correspondence = lhs_anchored_correspondence_from_order(span, &incidence_graph, order);
-        let remapped = span.remap(&correspondence);
+        let remapping = lhs_anchored_remapping_from_order(span, &incidence_graph, order);
+        let remapped = span.remap(&remapping);
         let action = remapped.representative_action();
         let reframed = remapped
             .reframe_by(&action)
@@ -4773,9 +4771,9 @@ fn reaction_span_from_candidate(
         DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = span.incidence_graph(incidence_level);
-    let correspondence =
-        lhs_anchored_correspondence_from_order(span, &incidence_graph, &candidate.entity_order);
-    span.remap(&correspondence).reframe()
+    let remapping =
+        lhs_anchored_remapping_from_order(span, &incidence_graph, &candidate.entity_order);
+    span.remap(&remapping).reframe()
 }
 
 fn canonicalize_reaction_span_by(
@@ -4791,14 +4789,14 @@ fn canonicalize_checked_reaction_span_by(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<ReactionSpan, Contradiction> {
-    Ok(canonicalize_checked_reaction_span_with_correspondence_by(span, level, context)?.0)
+    Ok(canonicalize_checked_reaction_span_with_remapping_by(span, level, context)?.0)
 }
 
-fn canonicalize_checked_reaction_span_with_correspondence_by(
+fn canonicalize_checked_reaction_span_with_remapping_by(
     span: &ReactionSpan,
     level: DescriptionLevel,
     context: &CanonicalizeContext,
-) -> Result<(ReactionSpan, MoleculeCorrespondence), Contradiction> {
+) -> Result<(ReactionSpan, MoleculeRemapping), Contradiction> {
     let normalized = span.clone().normalize()?;
     let candidate = reaction_span_canonical_candidate(&normalized, level, context)?;
     let incidence_level = match level {
@@ -4807,14 +4805,11 @@ fn canonicalize_checked_reaction_span_with_correspondence_by(
         DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = normalized.incidence_graph(incidence_level);
-    let correspondence = lhs_anchored_correspondence_from_order(
-        &normalized,
-        &incidence_graph,
-        &candidate.entity_order,
-    );
+    let remapping =
+        lhs_anchored_remapping_from_order(&normalized, &incidence_graph, &candidate.entity_order);
     Ok((
         reaction_span_from_candidate(&normalized, level, &candidate)?,
-        correspondence,
+        remapping,
     ))
 }
 
@@ -4838,12 +4833,12 @@ fn canonicalize_reaction_span_by_effective(
     canonicalize_reaction_span_by(span, level, context)
 }
 
-fn canonicalize_reaction_span_with_correspondence_by_effective(
+fn canonicalize_reaction_span_with_remapping_by_effective(
     span: &ReactionSpan,
     level: DescriptionLevel,
     context: &CanonicalizeContext,
-) -> Result<(ReactionSpan, MoleculeCorrespondence), ReactionSpanCanonicalizeError> {
-    Ok(canonicalize_checked_reaction_span_with_correspondence_by(
+) -> Result<(ReactionSpan, MoleculeRemapping), ReactionSpanCanonicalizeError> {
+    Ok(canonicalize_checked_reaction_span_with_remapping_by(
         span, level, context,
     )?)
 }
@@ -4856,12 +4851,12 @@ impl Canonicalize for ReactionSpan {
         canonicalize_reaction_span_by_effective(&self, level, context)
     }
 
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         self,
         context: &CanonicalizeContext,
-    ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
+    ) -> Result<(Self, MoleculeRemapping), Self::Error> {
         let level = reaction_span_canonicalize_level(&self);
-        canonicalize_reaction_span_with_correspondence_by_effective(&self, level, context)
+        canonicalize_reaction_span_with_remapping_by_effective(&self, level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
@@ -4909,15 +4904,15 @@ fn canonicalize_reaction_by_effective(
     canonicalize_reaction_by(reaction, level, context)
 }
 
-fn canonicalize_reaction_with_correspondence_by_effective(
+fn canonicalize_reaction_with_remapping_by_effective(
     reaction: &Reaction,
     level: DescriptionLevel,
     context: &CanonicalizeContext,
-) -> Result<(Reaction, MoleculeCorrespondence), ReactionCanonicalizeError> {
+) -> Result<(Reaction, MoleculeRemapping), ReactionCanonicalizeError> {
     let span = reaction.to_reaction_span()?;
-    let (canonical, correspondence) =
-        canonicalize_checked_reaction_span_with_correspondence_by(&span, level, context)?;
-    Ok((canonical.to_reaction(), correspondence))
+    let (canonical, remapping) =
+        canonicalize_checked_reaction_span_with_remapping_by(&span, level, context)?;
+    Ok((canonical.to_reaction(), remapping))
 }
 
 impl Canonicalize for Reaction {
@@ -4928,12 +4923,12 @@ impl Canonicalize for Reaction {
         canonicalize_reaction_by_effective(&self, level, context)
     }
 
-    fn canonicalize_with_correspondence(
+    fn canonicalize_with_remapping(
         self,
         context: &CanonicalizeContext,
-    ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
+    ) -> Result<(Self, MoleculeRemapping), Self::Error> {
         let level = reaction_canonicalize_level(&self);
-        canonicalize_reaction_with_correspondence_by_effective(&self, level, context)
+        canonicalize_reaction_with_remapping_by_effective(&self, level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {

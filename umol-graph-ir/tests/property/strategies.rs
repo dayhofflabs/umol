@@ -13,7 +13,7 @@ use proptest::bool::weighted;
 use proptest::prelude::*;
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
-use umol_graph_core::{Correspondence, EdgeId};
+use umol_graph_core::{Correspondence, EdgeId, GraphRemapping, NodeId, Remapping};
 pub(crate) use umol_graph_ir::dsl::{
     parse_num, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
     BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, EditsDsl,
@@ -55,7 +55,7 @@ pub(crate) use umol_graph_ir::ir::{
     TetrahedralStereoForm, Topicity, TopicityForm, TopicityRelationForm, TransactionError,
     UnpairedElectronsForm, UnpairedElectronsUpdate,
 };
-use umol_graph_ir::ir::{OverlaysFrameAction, Reframe};
+use umol_graph_ir::ir::{MoleculeRemapping, OverlaysFrameAction, Reframe};
 pub(crate) use umol_perm::{Orientation, Permutation};
 
 const ELEMENTS: &[Element] = &[
@@ -2332,7 +2332,7 @@ pub(crate) fn stereo_reframed_molecule_pair_strategy() -> impl Strategy<Value = 
 }
 
 pub(crate) fn molecule_dense_renumbering_strategy(
-) -> impl Strategy<Value = (Molecule, MoleculeCorrespondence)> {
+) -> impl Strategy<Value = (Molecule, MoleculeRemapping)> {
     molecule_with_constraints_strategy().prop_flat_map(|molecule| {
         (
             Just(molecule.clone()),
@@ -2357,15 +2357,19 @@ pub(crate) fn molecule_dense_renumbering_strategy(
                     stereo_atoms,
                     stereo_bonds,
                 )| {
-                    let correspondence = MoleculeCorrespondence::new(
-                        Correspondence::from_images(&atoms, atoms.len()),
-                        Correspondence::from_images(&bonds, bonds.len()),
-                        Correspondence::from_images(&dative, dative.len()),
-                        Correspondence::from_images(&aromatic, aromatic.len()),
-                        Correspondence::from_images(&multicenter, multicenter.len()),
-                        Correspondence::from_images(&noncovalent, noncovalent.len()),
-                        Correspondence::from_images(&stereo_atoms, stereo_atoms.len()),
-                        Correspondence::from_images(&stereo_bonds, stereo_bonds.len()),
+                    let correspondence = MoleculeRemapping::new(
+                        GraphRemapping::new(
+                            Remapping::new(atoms.iter().copied().map(NodeId::from).collect())
+                                .unwrap(),
+                            Remapping::new(bonds.iter().copied().map(EdgeId::from).collect())
+                                .unwrap(),
+                        ),
+                        Remapping::new(dative).unwrap(),
+                        Remapping::new(aromatic).unwrap(),
+                        Remapping::new(multicenter).unwrap(),
+                        Remapping::new(noncovalent).unwrap(),
+                        Remapping::new(stereo_atoms).unwrap(),
+                        Remapping::new(stereo_bonds).unwrap(),
                     );
                     (molecule, correspondence)
                 },
@@ -2381,7 +2385,7 @@ pub(crate) struct StandardizationScenario {
     pub(crate) molecule: Molecule,
     pub(crate) reaction: Reaction,
     pub(crate) span: ReactionSpan,
-    pub(crate) correspondence: MoleculeCorrespondence,
+    pub(crate) remapping: MoleculeRemapping,
     pub(crate) first_action: OverlaysFrameAction,
     pub(crate) second_action: OverlaysFrameAction,
     pub(crate) covering_action: OverlaysFrameAction,
@@ -2458,7 +2462,7 @@ pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = Stand
         let molecule = Molecule::from_entries(entries);
         let covering_molecule = Molecule::from_entries(covering_entries);
         let incompatible_molecule = Molecule::from_entries(incompatible_entries);
-        let correspondence = |source: &Molecule, factor: usize| {
+        let remapping = |source: &Molecule, factor: usize| {
             let atoms = (0..source.atoms().count())
                 .map(|index| AtomId(((index * factor) % ATOM_COUNT) as u32))
                 .collect::<Vec<_>>();
@@ -2469,32 +2473,30 @@ pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = Stand
             let noncovalent_bonds = source.noncovalent_bonds().ids().collect::<Vec<_>>();
             let stereo_atoms = source.stereo_atoms().ids().collect::<Vec<_>>();
             let stereo_bonds = source.stereo_bonds().ids().collect::<Vec<_>>();
-            MoleculeCorrespondence::new(
-                Correspondence::from_images(&atoms, atoms.len()),
-                Correspondence::from_images(&bonds, bonds.len()),
-                Correspondence::from_images(&dative_bonds, dative_bonds.len()),
-                Correspondence::from_images(&aromatic_systems, aromatic_systems.len()),
-                Correspondence::from_images(&multicenter_bonds, multicenter_bonds.len()),
-                Correspondence::from_images(&noncovalent_bonds, noncovalent_bonds.len()),
-                Correspondence::from_images(&stereo_atoms, stereo_atoms.len()),
-                Correspondence::from_images(&stereo_bonds, stereo_bonds.len()),
+            MoleculeRemapping::new(
+                GraphRemapping::new(
+                    Remapping::new(atoms.iter().copied().map(NodeId::from).collect()).unwrap(),
+                    Remapping::new(bonds.iter().copied().map(EdgeId::from).collect()).unwrap(),
+                ),
+                Remapping::new(dative_bonds).unwrap(),
+                Remapping::new(aromatic_systems).unwrap(),
+                Remapping::new(multicenter_bonds).unwrap(),
+                Remapping::new(noncovalent_bonds).unwrap(),
+                Remapping::new(stereo_atoms).unwrap(),
+                Remapping::new(stereo_bonds).unwrap(),
             )
         };
-        let first_correspondence = correspondence(&molecule, factor);
-        let second_correspondence = correspondence(&molecule, ATOM_COUNT - factor);
-        let first_action = molecule
-            .remap(&first_correspondence)
-            .representative_action();
-        let second_action = molecule
-            .remap(&second_correspondence)
-            .representative_action();
-        let covering_correspondence = correspondence(&covering_molecule, factor);
+        let first_remapping = remapping(&molecule, factor);
+        let second_remapping = remapping(&molecule, ATOM_COUNT - factor);
+        let first_action = molecule.remap(&first_remapping).representative_action();
+        let second_action = molecule.remap(&second_remapping).representative_action();
+        let covering_remapping = remapping(&covering_molecule, factor);
         let covering_action = covering_molecule
-            .remap(&covering_correspondence)
+            .remap(&covering_remapping)
             .representative_action();
-        let incompatible_correspondence = correspondence(&incompatible_molecule, factor);
+        let incompatible_remapping = remapping(&incompatible_molecule, factor);
         let incompatible_action = incompatible_molecule
-            .remap(&incompatible_correspondence)
+            .remap(&incompatible_remapping)
             .representative_action();
 
         let original_charge = molecule.atom(AtomId(10)).attributes.charge.clone();
@@ -2536,7 +2538,7 @@ pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = Stand
             molecule,
             reaction,
             span,
-            correspondence: first_correspondence,
+            remapping: first_remapping,
             first_action,
             second_action,
             covering_action,

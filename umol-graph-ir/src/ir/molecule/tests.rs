@@ -9,9 +9,9 @@ use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
     ConnectedComponentsAlgorithm, Correspondence, EdgeId, GeneralMaximumMatchingAlgorithm, Graph,
-    MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, NodeId, NonBipartiteGraphError,
-    RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm,
+    GraphRemapping, MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, NodeId,
+    NonBipartiteGraphError, RelevantCycleEnumerationAlgorithm, Remapping, ShortestCycleAlgorithm,
+    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_perm::{DynPermutation, Permutation, MAX_DEGREE};
 
@@ -54,6 +54,7 @@ use super::{
     AromaticSystems, DativeBonds, Molecule, MoleculeApplyError, MoleculeEntries,
     MoleculeIntegrityError, MulticenterBonds, NoncovalentBonds, StereoAtoms, StereoBonds,
 };
+use crate::ir::MoleculeRemapping;
 use crate::{mol_dsl, mol_dsl_concrete};
 
 fn ground_atom() -> AtomForm {
@@ -1170,7 +1171,7 @@ fn test_molecule_from_entries_error() {
 #[fixture]
 fn framed_eq_under_molecules(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
-) -> (Molecule, Molecule, MoleculeCorrespondence) {
+) -> (Molecule, Molecule, MoleculeRemapping) {
     let atom_images = [AtomId(2), AtomId(3), AtomId(0), AtomId(1)];
     let map_atom = |id: AtomId| atom_images[id.index()];
 
@@ -1261,9 +1262,48 @@ fn framed_eq_under_molecules(
             },
         )),
     });
-    let atom_correspondence = Correspondence::from_images(&atom_images, atom_images.len());
-    let correspondence = MoleculeCorrespondence::induce(&left, &right, atom_correspondence)
-        .expect("the atom correspondence describes the molecule pair");
+    let correspondence = MoleculeRemapping::new(
+        GraphRemapping::new(
+            Remapping::new(atom_images.iter().copied().map(NodeId::from).collect()).unwrap(),
+            Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap(),
+        ),
+        Remapping::new(
+            (0..left.dative_bonds().count())
+                .map(DativeBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.aromatic_systems().count())
+                .map(AromaticSystemId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.multicenter_bonds().count())
+                .map(MulticenterBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.noncovalent_bonds().count())
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_atoms().count())
+                .map(StereoAtomId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_bonds().count())
+                .map(StereoBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+    );
 
     (left, right, correspondence)
 }
@@ -1791,14 +1831,13 @@ fn test_molecule_normalized_eq_structure_and_counts(
 
 #[rstest]
 fn test_molecule_framed_eq_under_entity_ids(
-    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeRemapping),
 ) {
     let (left, right, correspondence) = case;
 
-    assert!(correspondence.is_total());
     assert!(!left.normalized_eq(&right));
     assert!(left.framed_eq_under(&right, &correspondence));
-    assert!(right.framed_eq_under(&left, &correspondence.reverse()));
+    assert!(right.framed_eq_under(&left, &correspondence));
 }
 
 #[rstest]
@@ -1819,12 +1858,48 @@ fn test_molecule_framed_eq_under_aromatic_system_frame() {
         )],
         ..Default::default()
     });
-    let correspondence = MoleculeCorrespondence::induce(
-        &left,
-        &right,
-        Correspondence::from_images(&[AtomId(0), AtomId(1), AtomId(2)], 3),
-    )
-    .expect("the identity atom mapping induces the aromatic-system correspondence");
+    let correspondence = MoleculeRemapping::new(
+        GraphRemapping::new(
+            Remapping::new((0..left.atoms().count()).map(NodeId::from).collect()).unwrap(),
+            Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap(),
+        ),
+        Remapping::new(
+            (0..left.dative_bonds().count())
+                .map(DativeBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.aromatic_systems().count())
+                .map(AromaticSystemId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.multicenter_bonds().count())
+                .map(MulticenterBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.noncovalent_bonds().count())
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_atoms().count())
+                .map(StereoAtomId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_bonds().count())
+                .map(StereoBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+    );
 
     assert!(!left.normalized_eq(&right));
     assert!(left.framed_eq_under(&right, &correspondence));
@@ -1871,12 +1946,48 @@ fn test_molecule_framed_eq_under_stereo_atom_constraint() {
         .into(),
         ..Default::default()
     });
-    let correspondence = MoleculeCorrespondence::induce(
-        &left,
-        &right,
-        Correspondence::from_images(&(0..5).map(AtomId::from).collect::<Vec<_>>(), 5),
-    )
-    .expect("the identity atom mapping induces the overlay correspondence");
+    let correspondence = MoleculeRemapping::new(
+        GraphRemapping::new(
+            Remapping::new((0..left.atoms().count()).map(NodeId::from).collect()).unwrap(),
+            Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap(),
+        ),
+        Remapping::new(
+            (0..left.dative_bonds().count())
+                .map(DativeBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.aromatic_systems().count())
+                .map(AromaticSystemId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.multicenter_bonds().count())
+                .map(MulticenterBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.noncovalent_bonds().count())
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_atoms().count())
+                .map(StereoAtomId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_bonds().count())
+                .map(StereoBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+    );
 
     assert!(left.framed_eq_under(&right, &correspondence));
 }
@@ -1929,12 +2040,48 @@ fn test_molecule_framed_eq_under_stereo_bond_block() {
         .into(),
         ..Default::default()
     });
-    let correspondence = MoleculeCorrespondence::induce(
-        &left,
-        &right,
-        Correspondence::from_images(&(0..4).map(AtomId::from).collect::<Vec<_>>(), 4),
-    )
-    .expect("the identity atom mapping induces the stereo-bond correspondence");
+    let correspondence = MoleculeRemapping::new(
+        GraphRemapping::new(
+            Remapping::new((0..left.atoms().count()).map(NodeId::from).collect()).unwrap(),
+            Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap(),
+        ),
+        Remapping::new(
+            (0..left.dative_bonds().count())
+                .map(DativeBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.aromatic_systems().count())
+                .map(AromaticSystemId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.multicenter_bonds().count())
+                .map(MulticenterBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.noncovalent_bonds().count())
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_atoms().count())
+                .map(StereoAtomId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_bonds().count())
+                .map(StereoBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+    );
 
     assert!(!left.normalized_eq(&right));
     assert!(left.framed_eq_under(&right, &correspondence));
@@ -2031,20 +2178,7 @@ fn test_molecule_framed_eq_under_participant_mismatch_error(#[case] entity: Enti
     };
     assert_ne!(left, right, "{entity}: the shift must actually move a participant");
 
-    fn identity<Id: Copy + Ord + From<usize>>(count: usize) -> Correspondence<Id> {
-        Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
-    }
-    let one = |matches: bool| usize::from(matches);
-    let correspondence = MoleculeCorrespondence::new(
-        identity(6),
-        identity(6),
-        identity(one(matches!(entity, Entity::DativeBond(_)))),
-        identity(one(matches!(entity, Entity::AromaticSystem(_)))),
-        identity(one(matches!(entity, Entity::MulticenterBond(_)))),
-        identity(one(matches!(entity, Entity::NoncovalentBond(_)))),
-        identity(one(matches!(entity, Entity::StereoAtom(_)))),
-        identity(one(matches!(entity, Entity::StereoBond(_)))),
-    );
+    let correspondence = MoleculeRemapping::new(GraphRemapping::new(Remapping::new((0..left.atoms().count()).map(NodeId::from).collect()).unwrap(), Remapping::new((0..left.bonds().count()).map(EdgeId::from).collect()).unwrap()), Remapping::new((0..left.dative_bonds().count()).map(DativeBondId::from).collect()).unwrap(), Remapping::new((0..left.aromatic_systems().count()).map(AromaticSystemId::from).collect()).unwrap(), Remapping::new((0..left.multicenter_bonds().count()).map(MulticenterBondId::from).collect()).unwrap(), Remapping::new((0..left.noncovalent_bonds().count()).map(NoncovalentBondId::from).collect()).unwrap(), Remapping::new((0..left.stereo_atoms().count()).map(StereoAtomId::from).collect()).unwrap(), Remapping::new((0..left.stereo_bonds().count()).map(StereoBondId::from).collect()).unwrap());
 
     assert!(
         !left.framed_eq_under(&right, &correspondence),
@@ -2053,135 +2187,147 @@ fn test_molecule_framed_eq_under_participant_mismatch_error(#[case] entity: Enti
 }
 
 #[rstest]
-fn test_molecule_framed_eq_under_partial_correspondence_error(
-    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+fn test_molecule_framed_eq_under_count_error(
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeRemapping),
 ) {
-    let (left, right, correspondence) = case;
-    let partial = MoleculeCorrespondence::new(
-        Correspondence::new(
-            vec![
-                (AtomId(0), AtomId(2)),
-                (AtomId(1), AtomId(3)),
-                (AtomId(2), AtomId(0)),
-            ],
-            4,
-            4,
-        )
-        .expect("correspondence producer preserves partial-bijection invariants"),
-        correspondence.bonds().clone(),
-        correspondence.dative_bonds().clone(),
-        correspondence.aromatic_systems().clone(),
-        correspondence.multicenter_bonds().clone(),
-        correspondence.noncovalent_bonds().clone(),
-        correspondence.stereo_atoms().clone(),
-        correspondence.stereo_bonds().clone(),
-    );
-
-    assert!(!left.framed_eq_under(&right, &partial));
+    let (left, right, _) = case;
+    assert!(!left.framed_eq_under(&right, &MoleculeRemapping::default()));
 }
 
 #[rstest]
 fn test_molecule_framed_eq_under_entity_id_mismatch_error(
-    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeRemapping),
 ) {
-    let (left, right, correspondence) = case;
-    let inconsistent = MoleculeCorrespondence::new(
-        correspondence.atoms().clone(),
-        Correspondence::from_images(&[BondId(1), BondId(0), BondId(2)], 3),
-        correspondence.dative_bonds().clone(),
-        correspondence.aromatic_systems().clone(),
-        correspondence.multicenter_bonds().clone(),
-        correspondence.noncovalent_bonds().clone(),
-        correspondence.stereo_atoms().clone(),
-        correspondence.stereo_bonds().clone(),
+    let (left, right, _) = case;
+    let inconsistent = MoleculeRemapping::new(
+        GraphRemapping::new(
+            Remapping::new(vec![NodeId(2), NodeId(3), NodeId(0), NodeId(1)]).unwrap(),
+            Remapping::new(vec![EdgeId(1), EdgeId(0), EdgeId(2)]).unwrap(),
+        ),
+        Remapping::new(
+            (0..left.dative_bonds().count())
+                .map(DativeBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.aromatic_systems().count())
+                .map(AromaticSystemId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.multicenter_bonds().count())
+                .map(MulticenterBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.noncovalent_bonds().count())
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_atoms().count())
+                .map(StereoAtomId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_bonds().count())
+                .map(StereoBondId::from)
+                .collect(),
+        )
+        .unwrap(),
     );
-
-    assert!(inconsistent.is_total());
     assert!(!left.framed_eq_under(&right, &inconsistent));
 }
 
 #[rstest]
 fn test_molecule_remap(
-    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeRemapping),
 ) {
-    let (left, right, correspondence) = case;
-
-    assert_eq!(left.remap(&correspondence), right);
+    let (left, right, remapping) = case;
+    assert_eq!(left.remap(&remapping), right);
 }
 
 #[rstest]
-#[case::partial_correspondence(|molecule: Molecule, correspondence: &MoleculeCorrespondence| {
-    let atoms = Correspondence::new(
-        correspondence.atoms().matched_pairs()[..3].to_vec(),
-        correspondence.atoms().left_count(),
-        correspondence.atoms().right_count(),
-    )
-    .expect("the subset remains a partial bijection");
-    (
-        molecule,
-        MoleculeCorrespondence::new(
-            atoms,
-            correspondence.bonds().clone(),
-            correspondence.dative_bonds().clone(),
-            correspondence.aromatic_systems().clone(),
-            correspondence.multicenter_bonds().clone(),
-            correspondence.noncovalent_bonds().clone(),
-            correspondence.stereo_atoms().clone(),
-            correspondence.stereo_bonds().clone(),
-        ),
-    )
-})]
-#[case::source_count(|molecule: Molecule, correspondence: &MoleculeCorrespondence| {
-    (
-        molecule,
-        MoleculeCorrespondence::new(
-            Correspondence::from_images(
-                &[AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
-                5,
-            ),
-            correspondence.bonds().clone(),
-            correspondence.dative_bonds().clone(),
-            correspondence.aromatic_systems().clone(),
-            correspondence.multicenter_bonds().clone(),
-            correspondence.noncovalent_bonds().clone(),
-            correspondence.stereo_atoms().clone(),
-            correspondence.stereo_bonds().clone(),
-        ),
-    )
-})]
+#[case::atoms(0)]
+#[case::bonds(1)]
+#[case::dative_bonds(2)]
+#[case::aromatic_systems(3)]
+#[case::multicenter_bonds(4)]
+#[case::noncovalent_bonds(5)]
+#[case::stereo_atoms(6)]
+#[case::stereo_bonds(7)]
 fn test_molecule_try_remap_error(
-    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
-    #[case] prepare: fn(Molecule, &MoleculeCorrespondence) -> (Molecule, MoleculeCorrespondence),
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeRemapping),
+    #[case] kind: usize,
 ) {
-    let (left, _, correspondence) = case;
-    let (left, correspondence) = prepare(left, &correspondence);
-
-    assert_eq!(left.try_remap(&correspondence), None);
+    let (left, _, _) = case;
+    let remapping = MoleculeRemapping::new(
+        GraphRemapping::new(
+            Remapping::new(
+                (0..left.atoms().count() + usize::from(kind == 0))
+                    .map(NodeId::from)
+                    .collect(),
+            )
+            .unwrap(),
+            Remapping::new(
+                (0..left.bonds().count() + usize::from(kind == 1))
+                    .map(EdgeId::from)
+                    .collect(),
+            )
+            .unwrap(),
+        ),
+        Remapping::new(
+            (0..left.dative_bonds().count() + usize::from(kind == 2))
+                .map(DativeBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.aromatic_systems().count() + usize::from(kind == 3))
+                .map(AromaticSystemId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.multicenter_bonds().count() + usize::from(kind == 4))
+                .map(MulticenterBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.noncovalent_bonds().count() + usize::from(kind == 5))
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_atoms().count() + usize::from(kind == 6))
+                .map(StereoAtomId::from)
+                .collect(),
+        )
+        .unwrap(),
+        Remapping::new(
+            (0..left.stereo_bonds().count() + usize::from(kind == 7))
+                .map(StereoBondId::from)
+                .collect(),
+        )
+        .unwrap(),
+    );
+    assert_eq!(left.try_remap(&remapping), None);
 }
 
 #[rstest]
-#[should_panic(expected = "molecule remapping requires a complete dense correspondence")]
+#[should_panic(expected = "molecule remapping requires matching entity counts")]
 fn test_molecule_remap_error(
-    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeRemapping),
 ) {
-    let (left, _, correspondence) = case;
-    let partial = MoleculeCorrespondence::new(
-        Correspondence::new(
-            correspondence.atoms().matched_pairs()[..3].to_vec(),
-            correspondence.atoms().left_count(),
-            correspondence.atoms().right_count(),
-        )
-        .expect("the subset remains a partial bijection"),
-        correspondence.bonds().clone(),
-        correspondence.dative_bonds().clone(),
-        correspondence.aromatic_systems().clone(),
-        correspondence.multicenter_bonds().clone(),
-        correspondence.noncovalent_bonds().clone(),
-        correspondence.stereo_atoms().clone(),
-        correspondence.stereo_bonds().clone(),
-    );
-
-    left.remap(&partial);
+    let (left, _, _) = case;
+    left.remap(&MoleculeRemapping::default());
 }
 
 #[rstest]

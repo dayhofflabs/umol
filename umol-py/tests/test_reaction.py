@@ -1,3 +1,4 @@
+from umol import MoleculeRemapping
 import re
 
 import pytest
@@ -1159,18 +1160,18 @@ def test_reaction_canonicalize():
     assert source.canonical_eq(expected)
 
 
-def test_reaction_canonicalize_with_correspondence():
+def test_reaction_canonicalize_with_remapping():
     source = Reaction.parse(
         '{:lhs {:atoms ["C#c0" "C#c0"]} '
         ':deltas [{:atom {:modify [0 "#c1"]}}]}'
     )
 
-    canonical, correspondence = source.canonicalize_with_correspondence()
+    canonical, remapping = source.canonicalize_with_remapping()
 
     assert canonical == source.canonicalize()
-    assert isinstance(correspondence, MoleculeCorrespondence)
-    assert correspondence.is_total()
-    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 0)]
+    assert isinstance(remapping, MoleculeRemapping)
+    assert remapping.to_correspondence().is_total()
+    assert remapping.atoms.images == [1, 0]
 
 
 def test_reaction_canonicalize_error():
@@ -1194,7 +1195,7 @@ def test_reaction_canonicalize_error():
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         reaction.canonicalize()
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        reaction.canonicalize_with_correspondence()
+        reaction.canonicalize_with_remapping()
 
 
 def test_reaction_reverse():

@@ -173,6 +173,14 @@ and `MoleculeRemapping::new` takes the graph aggregate and the six overlay
 remappings. Validation remains at the single-id-space boundary rather than
 being repeated with aggregate-specific error types.
 
+`Remapping::reorder<T>(&self, values: Vec<T>) -> Vec<T>` consumes a vector
+and places each source value at its image position, without requiring
+`T: Clone`. `try_reorder` returns `Option<Vec<T>>`, with `None` exactly when
+the vector length differs from the remapping length. The asserted form
+panics on the same mismatch; both consume the input even on failure.
+This single-space operation owns vector reordering for molecule and span
+renumbering rather than separate private free functions.
+
 Agreement with an independently supplied molecule or reaction span is
 contextual, not intrinsic to the carrier. `Molecule::remap` and
 `ReactionSpan::remap` accept `&MoleculeRemapping`; their checked companions
@@ -558,7 +566,10 @@ rejected: a flag-dependent return type needs `Literal` overloads to type
 precisely and degrades to a union under a runtime flag, while method pairs
 type exactly — decisive for a surface that maintains a signature inventory.
 The existing `canonicalize_with_correspondence` binding migrates with Rust to
-the remapping-bearing name and return type. Python mirrors the accepted
+the remapping-bearing name and return type. Python exposes frozen `Remapping`
+values constructed from image lists, and frozen `MoleculeRemapping` values
+constructed from eight remapping components named `atoms`, `bonds`, and the
+six overlay kinds. It does not expose `GraphRemapping`. Python mirrors the accepted
 method pairs and `(output, witness)` shapes, including
 `MoleculePushoutCorrespondence`. Existing APIs may break to follow these
 contracts; no return-type-changing witness flag is introduced.
@@ -918,7 +929,7 @@ estimates.
   all-targets check with Python 3.13.15; core/IR all-targets clippy with
   `-D warnings`; nightly formatting; and `git diff --check`.
   Molecule/span operation signatures and canonicalization remain for S2b.
-- [ ] **S2b — Molecule/span renumbering and canonicalization.** Graph-IR
+- [x] **S2b — Molecule/span renumbering and canonicalization.** Graph-IR
   molecule remap, constraints, reaction span, canonicalization, traits, and
   dependent bindings. Breaking (red→green). [dep: S2a, S1e]
   Accept `MoleculeRemapping` in renumbering and `framed_eq_under`, and return
@@ -928,6 +939,25 @@ estimates.
   adapter. Migrate consumers, benchmarks, and tests together. Check exact
   identity/inverse/composition, all-family reference transport, framed
   equivalence, and equality of bare/witnessed canonical outputs.
+  Completed 2026-09-04: molecule/span renumbering and molecule framed
+  comparison accept `MoleculeRemapping`, checking all eight component counts.
+  Molecule, reaction, and span canonicalization construct and return dense
+  remappings directly; constraint transport widens to correspondence.
+  `Remapping::reorder` and `try_reorder` own vector transport without a
+  `Clone` bound. Python exposes the approved frozen `Remapping` and
+  `MoleculeRemapping` types and `canonicalize_with_remapping` methods.
+  Consumers, benchmarks, and normative documentation are migrated.
+  Inverse test references sort source/target pairs independently of
+  `reorder`; composition references apply the two image lookups directly.
+  Existing generated domains and exact assertions are preserved.
+  Core/IR library tests passed (7,527 passed, 3 ignored), as did integration
+  and doc tests. Core/IR properties passed with `PROPTEST_CASES=256`
+  (488 passed, 1 ignored), including the independent reorder reference.
+  The corrected IR property suite and affected canonicalization unit test
+  were rerun successfully. Graph/IO library tests passed (4,297);
+  rebuilt Python tests passed (1,350 passed, 2 skipped, Python 3.13.15).
+  Workspace all-targets check and clippy, core/IR property-enabled clippy
+  with `-D warnings`, nightly formatting, and `git diff --check` passed.
 
 ### S3 — Complete compaction carriers
 

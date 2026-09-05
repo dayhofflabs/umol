@@ -1,3 +1,4 @@
+from umol import MoleculeRemapping
 import pytest
 from umol import (
     AtomForm,
@@ -193,20 +194,20 @@ def test_reaction_span_canonicalize():
     assert source.canonical_eq(expected)
 
 
-def test_reaction_span_canonicalize_with_correspondence():
+def test_reaction_span_canonicalize_with_remapping():
     source = ReactionSpan.parse(
         '{:atoms [{:add "O"} {:modify ["C" "N"]} {:remove "F"} "Cl"] '
         ':bonds [{:remove [2 3 :single]} {:add [0 1 :double]} '
         '{:modify [1 3 [:single :double]]}]}'
     )
 
-    canonical, correspondence = source.canonicalize_with_correspondence()
+    canonical, remapping = source.canonicalize_with_remapping()
 
     assert canonical == source.canonicalize()
-    assert isinstance(correspondence, MoleculeCorrespondence)
-    assert correspondence.is_total()
-    assert correspondence.atoms.matched_pairs == [(0, 3), (1, 2), (2, 1), (3, 0)]
-    assert correspondence.bonds.matched_pairs == [(0, 0), (1, 2), (2, 1)]
+    assert isinstance(remapping, MoleculeRemapping)
+    assert remapping.to_correspondence().is_total()
+    assert remapping.atoms.images == [3, 2, 1, 0]
+    assert remapping.bonds.images == [0, 2, 1]
 
 
 def test_reaction_span_canonicalize_error():
@@ -222,7 +223,7 @@ def test_reaction_span_canonicalize_error():
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         span.canonicalize()
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        span.canonicalize_with_correspondence()
+        span.canonicalize_with_remapping()
 
 
 def test_reaction_to_reaction_span_error():

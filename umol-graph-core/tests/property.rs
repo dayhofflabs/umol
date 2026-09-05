@@ -16,6 +16,8 @@ mod cycles;
 mod graph;
 #[path = "property/relation.rs"]
 mod relation;
+#[path = "property/remap.rs"]
+mod remap;
 #[path = "property/strategy.rs"]
 mod strategy;
 #[path = "property/subgraph_isomorphism.rs"]

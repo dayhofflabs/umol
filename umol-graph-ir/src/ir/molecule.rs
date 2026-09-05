@@ -31,6 +31,7 @@ use super::id::{
 use super::ligand::StereoLigand;
 use super::multicenter::{reframe_multicenter_bonds_with, MulticenterBondForm, MulticenterBonds};
 use super::noncovalent::{reframe_noncovalent_bonds_with, NoncovalentBondForm, NoncovalentBonds};
+use super::remap::MoleculeRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{
     reframe_stereo_atoms_with, reframe_stereo_bonds_with, StereoAtomForm, StereoAtoms,
@@ -409,21 +410,17 @@ impl Molecule {
         &self.graph
     }
 
-    /// Complete framed equality under a dense entity-id correspondence from `self` to `other`.
+    /// Complete framed equality under an entity-id remapping from `self` to `other`.
     ///
-    /// The correspondence is checked as a complete dense remapping of `self`. The remapped
-    /// molecule is then compared with `other` modulo participant frames. This returns `false`
-    /// when the correspondence has the wrong source domain, is partial, is not bijective onto a
-    /// dense target domain, or maps `self` to a molecule outside `other`'s framed-equality class.
+    /// Returns `false` when a component length differs from `self`'s entity count or the
+    /// remapped molecule lies outside `other`'s framed-equality class.
     ///
-    /// Under the identity correspondence this is exactly [`Reframe::framed_eq`]. Reversing
-    /// a correspondence reverses the comparison, and sequential correspondences compose.
-    /// For integrity-valid molecules whose complete canonicalizations both succeed,
-    /// `canonical_eq` holds exactly when some admissible total correspondence makes this
-    /// comparison true. Equality totalization for two intrinsic contradictions does not require
-    /// such a witness.
-    pub fn framed_eq_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
-        self.try_remap(correspondence)
+    /// Under identity this is [`Reframe::framed_eq`]. Inverting the permutations reverses the
+    /// comparison, and successive remappings compose. For molecules whose canonicalizations
+    /// succeed, `canonical_eq` holds exactly when some remapping makes this comparison true.
+    /// Equality totalization for two intrinsic contradictions does not require such a witness.
+    pub fn framed_eq_under(&self, other: &Self, remapping: &MoleculeRemapping) -> bool {
+        self.try_remap(remapping)
             .is_some_and(|remapped| remapped.framed_eq(other))
     }
 

@@ -5,14 +5,15 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use index_vec::Idx;
 use umol_chem::element::Element;
 use umol_edn::FromEdn;
-use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
+use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
     Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, IncidenceLevel,
-    Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm,
+    Molecule, MoleculeConstraint, MoleculeEntries, MoleculeRemapping, MulticenterBondForm,
     MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm,
     Reframe, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
     StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
@@ -617,18 +618,20 @@ fn graph_size(nodes: usize, edges: usize) -> String {
     format!("n{nodes}_e{edges}")
 }
 
-fn reverse_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
-    fn reverse<Id>(count: usize) -> Correspondence<Id>
+fn reverse_remapping(molecule: &Molecule) -> MoleculeRemapping {
+    fn reverse<Id>(count: usize) -> Remapping<Id>
     where
-        Id: Copy + Ord + From<usize>,
+        Id: Idx + From<usize>,
     {
         let images = (0..count).rev().map(Id::from).collect::<Vec<_>>();
-        Correspondence::from_images(&images, count)
+        Remapping::new(images).unwrap()
     }
 
-    MoleculeCorrespondence::new(
-        reverse::<AtomId>(molecule.atoms().count()),
-        reverse::<BondId>(molecule.bonds().count()),
+    MoleculeRemapping::new(
+        GraphRemapping::new(
+            reverse::<NodeId>(molecule.atoms().count()),
+            reverse::<EdgeId>(molecule.bonds().count()),
+        ),
         reverse::<DativeBondId>(molecule.dative_bonds().count()),
         reverse::<AromaticSystemId>(molecule.aromatic_systems().count()),
         reverse::<MulticenterBondId>(molecule.multicenter_bonds().count()),
@@ -665,7 +668,7 @@ fn bench_remapping(c: &mut Criterion) {
     let mut group = c.benchmark_group("canonicalize/remapping");
 
     for case in &corpus {
-        let correspondence = reverse_correspondence(&case.molecule);
+        let correspondence = reverse_remapping(&case.molecule);
         let counts = molecule_counts(&case.molecule)
             .into_iter()
             .map(|count| count.to_string())
@@ -731,7 +734,7 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
     let cases = retained_scaling_corpus()
         .into_iter()
         .map(|case| {
-            let renumbered = case.molecule.remap(&reverse_correspondence(&case.molecule));
+            let renumbered = case.molecule.remap(&reverse_remapping(&case.molecule));
             let additional_atom = Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O)],
                 ..Default::default()
@@ -761,7 +764,7 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("canonicalize/scaling/canonicalize_with_correspondence");
+    let mut group = c.benchmark_group("canonicalize/scaling/canonicalize_with_remapping");
     for (case, _, _) in &cases {
         group.bench_function(case.name, |b| {
             b.iter_batched(
@@ -769,7 +772,7 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
                 |molecule| {
                     black_box(
                         molecule
-                            .canonicalize_with_correspondence(&context)
+                            .canonicalize_with_remapping(&context)
                             .expect("retained scaling case canonicalizes"),
                     )
                 },
