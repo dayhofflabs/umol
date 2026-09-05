@@ -36,7 +36,7 @@ proptest! {
         .expect("identity atom correspondence induces a molecule correspondence");
         let direct = reaction.apply_at(reaction.lhs(), &correspondence).map_err(|error| {
             TestCaseError::fail(format!("identity application failed: {error}"))
-        })?;
+        })?.expect("identity application is applicable");
         let mut applications = reaction
             .apply(
                 reaction.lhs(),
@@ -52,7 +52,7 @@ proptest! {
             let application = application.map_err(|error| {
                 TestCaseError::fail(format!("matched application failed: {error}"))
             })?;
-            if application.rhs() == direct.rhs() {
+            if application.rhs() == &direct {
                 found = true;
                 break;
             }
@@ -70,9 +70,11 @@ proptest! {
             Correspondence::from_images(&atom_images, atom_count),
         )
         .expect("identity atom correspondence induces a molecule correspondence");
-        let derivation = reaction.apply_at(reaction.lhs(), &correspondence).map_err(|error| {
-            TestCaseError::fail(format!("identity application failed: {error}"))
-        })?;
+        let derivation = reaction.apply(reaction.lhs(), SubstructureMatchConfig {
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+        }).unwrap().next().unwrap().unwrap();
 
         prop_assert_eq!(derivation.reverse().reverse(), derivation.clone());
 
@@ -87,8 +89,8 @@ proptest! {
             .apply_at(derivation.lhs(), &recovered_correspondence)
             .map_err(|error| {
                 TestCaseError::fail(format!("recovered reaction did not apply: {error}"))
-            })?;
-        prop_assert_eq!(recovered_derivation.rhs(), derivation.rhs());
+            })?.expect("recovered reaction is applicable");
+        prop_assert_eq!(&recovered_derivation, derivation.rhs());
 
         let identity = derivation.chain(&derivation.reverse()).unwrap();
         prop_assert_eq!(identity.lhs(), derivation.lhs());

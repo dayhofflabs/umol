@@ -60,6 +60,7 @@ use super::multicenter::{
 use super::noncovalent::{
     noncovalent_bond_representative_action, NoncovalentBondForm, NoncovalentBondUpdate,
 };
+use super::reaction_span::ReactionSpan;
 use super::stereo::{
     stereo_atom_representative_action, stereo_bond_representative_action, StereoConfigurationForm,
     StereoCoset, StereoKind, StereoTerm,
@@ -121,8 +122,14 @@ impl Iterator for ReactionApplicationIter {
                 .reaction
                 .apply_at_canonical(&self.host, &correspondence, self.deltas.clone())
             {
-                Ok(derivation) => return Some(Ok(derivation)),
-                Err(error) if error.is_match_rejection() => {}
+                Ok(Some((product, correspondence))) => {
+                    return Some(Ok(ReactionDerivation::new(
+                        self.host.clone(),
+                        product,
+                        correspondence,
+                    )));
+                }
+                Ok(None) => {}
                 Err(error) => {
                     self.failed = true;
                     return Some(Err(error));
@@ -964,14 +971,20 @@ impl Reaction {
     }
 
     /// Apply the reaction at one match of `lhs` into `host` — the injective pattern→host
-    /// `correspondence` — producing the derivation `lhs ⇒ rhs` (the transformed host plus the
-    /// lhs↔rhs comap). DPO: a deleted host atom must carry no localized bond the rule does not also
-    /// delete (else `ApplyError::Dangling`). Created atoms/bonds are appended, preserved entities are
+    /// `correspondence` — producing the transformed host. DPO: a deleted host atom must carry no
+    /// localized bond the rule does not also delete. Created atoms/bonds are appended, preserved entities are
     /// mutated in place, deleted entities are removed (the host renumbers). Molecule-level constraints
     /// are added/removed with their entity refs re-anchored through the match (lhs → host, created →
     /// appended); transact's renumbering compacts them on removal. The supplied correspondence must
     /// be total on the pattern and agree with the mapped topology, overlay incidence, and stereo
     /// sites; incompatible stereo ligand frames are reported separately.
+    /// Returns `Ok(None)` when this match is inapplicable because of dangling incidence or a
+    /// structural conflict in the product.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for inconsistent deltas, an invalid supplied correspondence or stereo
+    /// frame, failed edit execution, or a violated internal application invariant.
     ///
     /// # Semantic properties
     ///
@@ -984,7 +997,32 @@ impl Reaction {
         &self,
         host: &Molecule,
         correspondence: &MoleculeCorrespondence,
-    ) -> Result<ReactionDerivation, ApplyError> {
+    ) -> Result<Option<Molecule>, ApplyError> {
+        self.tracked_apply_at(host, correspondence)
+            .map(|result| result.map(|(product, _)| product))
+    }
+
+    /// Apply at a supplied rule-to-host match and return the product with host-to-product provenance.
+    ///
+    /// Atom pairs follow surviving host atoms through removal and renumbering; added atoms are
+    /// right-unmatched. Other entity pairs are induced from the atom pairing and compatible
+    /// incidence, with different determined stereo kinds left unmatched.
+    ///
+    /// Returns `Ok(None)` for the same inapplicable matches as [`Self::apply_at`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the same application errors as [`Self::apply_at`].
+    ///
+    /// # Semantic properties
+    ///
+    /// Discarding the correspondence produces exactly [`Self::apply_at`]'s molecule. The witness
+    /// describes the host and product, not the rule-to-host match supplied as input.
+    pub fn tracked_apply_at(
+        &self,
+        host: &Molecule,
+        correspondence: &MoleculeCorrespondence,
+    ) -> Result<Option<(Molecule, MoleculeCorrespondence)>, ApplyError> {
         if correspondence.atoms().left_count() != self.lhs.atoms().count()
             || correspondence.atoms().right_count() != host.atoms().count()
             || correspondence.atoms().matched_pair_count() != self.lhs.atoms().count()
@@ -1107,12 +1145,67 @@ impl Reaction {
         self.apply_at_canonical(host, correspondence, deltas)
     }
 
+    /// Apply at a supplied match and return the realized host-to-product reaction.
+    ///
+    /// Returns `Ok(None)` for the same inapplicable matches as [`Self::apply_at`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the same application errors as [`Self::apply_at`].
+    ///
+    /// # Semantic properties
+    ///
+    /// The lhs is the supplied host. Deltas are derived from the produced molecule and its
+    /// host-to-product correspondence, including realized host values rather than rule patterns.
+    /// Materializing the result preserves the product up to the reaction's lhs-anchored frame
+    /// and constraint normal form.
+    pub fn apply_at_to_reaction(
+        &self,
+        host: &Molecule,
+        correspondence: &MoleculeCorrespondence,
+    ) -> Result<Option<Reaction>, ApplyError> {
+        let Some((product, witness)) = self.tracked_apply_at(host, correspondence)? else {
+            return Ok(None);
+        };
+        let deltas = host
+            .difference_to(&product, &witness)
+            .expect("application correspondence describes compatible molecule sides");
+        Ok(Some(Self::new(host.clone(), deltas)))
+    }
+
+    /// Apply at a supplied match and return the realized host-to-product reaction span.
+    ///
+    /// Returns `Ok(None)` for the same inapplicable matches as [`Self::apply_at`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the same application errors as [`Self::apply_at`].
+    ///
+    /// # Semantic properties
+    ///
+    /// The lhs projection is the host. The rhs projection represents the product in the
+    /// lhs-anchored span frame, preserving its semantics under the induced correspondence.
+    /// The span's intrinsic correspondence is not the supplied rule-to-host match.
+    pub fn apply_at_to_reaction_span(
+        &self,
+        host: &Molecule,
+        correspondence: &MoleculeCorrespondence,
+    ) -> Result<Option<ReactionSpan>, ApplyError> {
+        let Some((product, witness)) = self.tracked_apply_at(host, correspondence)? else {
+            return Ok(None);
+        };
+        Ok(Some(
+            ReactionSpan::superimpose(host, &product, &witness)
+                .expect("application correspondence describes compatible molecule sides"),
+        ))
+    }
+
     fn apply_at_canonical(
         &self,
         host: &Molecule,
         correspondence: &MoleculeCorrespondence,
         mut deltas: Deltas,
-    ) -> Result<ReactionDerivation, ApplyError> {
+    ) -> Result<Option<(Molecule, MoleculeCorrespondence)>, ApplyError> {
         deltas = reframe_application_deltas(deltas, &self.lhs, host, correspondence)?;
         let host_atom = |id: AtomId| {
             correspondence
@@ -1561,39 +1654,39 @@ impl Reaction {
             let atom = host.atom(host_atom);
             for bond in atom.bond_ids() {
                 if !removed_host_bonds.contains(&bond) {
-                    return Err(ApplyError::Dangling { host_atom });
+                    return Ok(None);
                 }
             }
             for dative in atom.dative_bond_ids() {
                 if !removed_host_dative.contains(&dative) {
-                    return Err(ApplyError::Dangling { host_atom });
+                    return Ok(None);
                 }
             }
             if let Some(aromatic) = atom.aromatic_system_id() {
                 if !removed_host_aromatic.contains(&aromatic) {
-                    return Err(ApplyError::Dangling { host_atom });
+                    return Ok(None);
                 }
             }
             for multicenter in atom.multicenter_bond_ids() {
                 if !removed_host_multicenter.contains(&multicenter) {
-                    return Err(ApplyError::Dangling { host_atom });
+                    return Ok(None);
                 }
             }
             for noncovalent in atom.noncovalent_bond_ids() {
                 if !removed_host_noncovalent.contains(&noncovalent) {
-                    return Err(ApplyError::Dangling { host_atom });
+                    return Ok(None);
                 }
             }
             // Stereo incidence (site or ligand) via the stereo views; a stereo bond's site is a bond,
             // so a deleted atom touches a stereo bond only as a ligand — `incident_ids` covers both.
             for stereo_atom in host.stereo_atoms().incident_ids(host_atom) {
                 if !removed_host_stereo_atom.contains(&stereo_atom) {
-                    return Err(ApplyError::Dangling { host_atom });
+                    return Ok(None);
                 }
             }
             for stereo_bond in host.stereo_bonds().incident_ids(host_atom) {
                 if !removed_host_stereo_bond.contains(&stereo_bond) {
-                    return Err(ApplyError::Dangling { host_atom });
+                    return Ok(None);
                 }
             }
         }
@@ -2020,7 +2113,7 @@ impl Reaction {
                 | MoleculeIntegrityError::StereoBondSitesDuplicate { .. }
                 | MoleculeIntegrityError::StereoLigandIncidenceMismatch { .. },
             ) => {
-                return Err(ApplyError::StructuralConflict);
+                return Ok(None);
             }
             Err(_) => return Err(ApplyError::InternalInvariant),
         };
@@ -2046,7 +2139,7 @@ impl Reaction {
         .expect("correspondence producer preserves partial-bijection invariants");
         let comap = MoleculeCorrespondence::induce(host, &product, atom_map)
             .expect("successful reaction application preserves unique entity incidence");
-        Ok(ReactionDerivation::new(host.clone(), product, comap))
+        Ok(Some((product, comap)))
     }
 
     /// Check the reaction-local structural preconditions shared by every application.
@@ -3602,8 +3695,8 @@ mod tests {
             owner.to_reaction_span().unwrap(),
         );
         assert_eq!(
-            local.apply_at(&host, &correspondence).unwrap(),
-            owner.apply_at(&host, &correspondence).unwrap(),
+            local.tracked_apply_at(&host, &correspondence).unwrap(),
+            owner.tracked_apply_at(&host, &correspondence).unwrap(),
         );
         assert_eq!(
             local.reverse().unwrap().to_reaction_span().unwrap(),
@@ -4246,9 +4339,205 @@ mod tests {
         )
         .expect("the atom correspondence describes the molecule pair");
         assert_eq!(
-            reaction.apply_at(&host, &correspondence).unwrap().rhs(),
-            &expected
+            reaction.apply_at(&host, &correspondence).unwrap(),
+            Some(expected)
         );
+    }
+
+    #[rstest]
+    fn test_reaction_tracked_apply_at() {
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::N),
+                    AtomForm::from_element(Element::O),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+                ..Default::default()
+            }),
+            Deltas::from_iter([
+                Delta::Bond(BondDelta::Remove {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Atom(AtomDelta::Remove {
+                    id: AtomId(0),
+                    attributes: AtomForm::from_element(Element::N),
+                }),
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    attributes: AtomForm::from_element(Element::Cl),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(1), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        );
+        let host = Molecule::from_entries(MoleculeEntries {
+            atoms: [Element::F, Element::O, Element::N, Element::C]
+                .into_iter()
+                .map(AtomForm::from_element)
+                .collect(),
+            bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(1))],
+            ..Default::default()
+        });
+        let occurrence = MoleculeCorrespondence::induce(
+            reaction.lhs(),
+            &host,
+            Correspondence::new(vec![(AtomId(0), AtomId(2)), (AtomId(1), AtomId(1))], 2, 4)
+                .unwrap(),
+        )
+        .unwrap();
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: [Element::F, Element::O, Element::C, Element::Cl]
+                .into_iter()
+                .map(AtomForm::from_element)
+                .collect(),
+            bonds: vec![(AtomId(1), AtomId(3), BondForm::from_order(1))],
+            ..Default::default()
+        });
+        let witness = MoleculeCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (AtomId(0), AtomId(0)),
+                    (AtomId(1), AtomId(1)),
+                    (AtomId(3), AtomId(2)),
+                ],
+                4,
+                4,
+            )
+            .unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+        );
+        assert_eq!(
+            reaction.apply_at(&host, &occurrence),
+            Ok(Some(expected.clone()))
+        );
+        assert_eq!(
+            reaction.tracked_apply_at(&host, &occurrence),
+            Ok(Some((expected.clone(), witness.clone())))
+        );
+        let span = reaction
+            .apply_at_to_reaction_span(&host, &occurrence)
+            .unwrap()
+            .unwrap();
+        assert_eq!(span.lhs(), host);
+        assert_eq!(span.rhs(), expected);
+        assert_eq!(span.correspondence(), witness);
+        let realized = reaction
+            .apply_at_to_reaction(&host, &occurrence)
+            .unwrap()
+            .unwrap();
+        assert_eq!(realized, span.to_reaction());
+    }
+
+    #[rstest]
+    fn test_reaction_tracked_apply_at_empty() {
+        let reaction = Reaction::default();
+        let host = Molecule::new();
+        let occurrence = MoleculeCorrespondence::empty();
+        assert_eq!(
+            reaction.apply_at(&host, &occurrence),
+            Ok(Some(host.clone()))
+        );
+        assert_eq!(
+            reaction.tracked_apply_at(&host, &occurrence),
+            Ok(Some((host, occurrence.clone())))
+        );
+        assert_eq!(
+            reaction.apply_at_to_reaction(&Molecule::new(), &occurrence),
+            Ok(Some(reaction.clone()))
+        );
+        assert_eq!(
+            reaction.apply_at_to_reaction_span(&Molecule::new(), &occurrence),
+            Ok(Some(ReactionSpan::from_entries(Default::default())))
+        );
+    }
+
+    #[rstest]
+    #[case::same_kind(StereoKind::Tetrahedral, vec![(StereoAtomId(0), StereoAtomId(0))])]
+    #[case::different_kind(StereoKind::SquarePlanar, vec![])]
+    fn test_reaction_tracked_apply_at_stereo_kind(
+        #[case] kind: StereoKind,
+        #[case] pairs: Vec<(StereoAtomId, StereoAtomId)>,
+    ) {
+        let ligands: Vec<_> = (1..=4)
+            .map(|idx| StereoLigand::new(AtomId(idx), StereoLigandKind::Atom))
+            .collect();
+        let old = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
+        let new = StereoAtomForm::new(kind, 1u32);
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: (1..=4)
+                .map(|idx| (AtomId(0), AtomId(idx), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(AtomId(0), ligands.clone(), old.clone())],
+            ..Default::default()
+        };
+        let host = Molecule::from_entries(entries.clone());
+        let expected = Molecule::from_entries(MoleculeEntries {
+            stereo_atoms: vec![(AtomId(0), ligands.clone(), new.clone())],
+            ..entries
+        });
+        let reaction = Reaction::new(
+            host.clone(),
+            Deltas::from_iter([
+                Delta::StereoAtom(StereoAtomDelta::Remove {
+                    id: StereoAtomId(0),
+                    site: AtomId(0),
+                    ligands: ligands.clone(),
+                    attributes: old,
+                }),
+                Delta::StereoAtom(StereoAtomDelta::Add {
+                    id: StereoAtomId(1),
+                    site: AtomId(0),
+                    ligands,
+                    attributes: new,
+                }),
+            ]),
+        );
+        let occurrence =
+            MoleculeCorrespondence::induce(&host, &host, Correspondence::identity(5)).unwrap();
+        let expected_witness = MoleculeCorrespondence::new(
+            Correspondence::identity(5),
+            Correspondence::identity(4),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::new(pairs, 1, 1).unwrap(),
+            Correspondence::empty(),
+        );
+        assert_eq!(
+            reaction.apply_at(&host, &occurrence),
+            Ok(Some(expected.clone()))
+        );
+        assert_eq!(
+            reaction.tracked_apply_at(&host, &occurrence),
+            Ok(Some((expected.clone(), expected_witness.clone())))
+        );
+        let span = reaction
+            .apply_at_to_reaction_span(&host, &occurrence)
+            .unwrap()
+            .unwrap();
+        assert_eq!(span.lhs(), host);
+        assert_eq!(span.rhs(), expected);
+        assert_eq!(span.correspondence(), expected_witness);
+        let realized = reaction
+            .apply_at_to_reaction(&host, &occurrence)
+            .unwrap()
+            .unwrap();
+        assert_eq!(realized, span.to_reaction());
+        assert_eq!(realized.to_reaction_span().unwrap(), span);
     }
 
     #[rstest]
@@ -4291,8 +4580,8 @@ mod tests {
         .expect("the atom correspondence describes the molecule pair");
 
         assert_eq!(
-            reaction.apply_at(&host, &correspondence).unwrap().rhs(),
-            &expected,
+            reaction.apply_at(&host, &correspondence).unwrap(),
+            Some(expected),
         );
     }
 
@@ -4392,8 +4681,8 @@ mod tests {
         .expect("the atom correspondence describes the molecule pair");
 
         assert_eq!(
-            reaction.apply_at(&host, &correspondence).unwrap().rhs(),
-            &expected,
+            reaction.apply_at(&host, &correspondence).unwrap(),
+            Some(expected),
         );
     }
 
@@ -4472,8 +4761,8 @@ mod tests {
         .expect("the atom correspondence describes the molecule pair");
 
         assert_eq!(
-            reaction.apply_at(&host, &correspondence).unwrap().rhs(),
-            &expected,
+            reaction.apply_at(&host, &correspondence).unwrap(),
+            Some(expected),
         );
     }
 
@@ -4622,8 +4911,8 @@ mod tests {
         .expect("the atom correspondence describes the molecule pair");
 
         assert_eq!(
-            reaction.apply_at(&host, &correspondence).unwrap().rhs(),
-            &expected,
+            reaction.apply_at(&host, &correspondence).unwrap(),
+            Some(expected),
         );
     }
 
@@ -4668,8 +4957,8 @@ mod tests {
         .expect("the atom correspondence describes the molecule pair");
 
         assert_eq!(
-            reaction.apply_at(&lhs, &correspondence).unwrap().rhs(),
-            &expected,
+            reaction.apply_at(&lhs, &correspondence).unwrap(),
+            Some(expected),
         );
     }
 
@@ -4733,9 +5022,6 @@ mod tests {
         );
     }
 
-    // `dangling_*`: the rule deletes a host atom still carrying an undeleted bond/overlay (DPO gluing
-    // condition). `structural_conflict`: the rule's add lands a second bond on an already-bonded atom
-    // pair, so checked product publication rejects the parallel bonds.
     #[rstest]
     #[case::dangling_bond(
         Reaction::new(
@@ -4747,7 +5033,6 @@ mod tests {
         ),
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
         vec![AtomId(0)],
-        ApplyError::Dangling { host_atom: AtomId(0) },
     )]
     #[case::dangling_noncovalent(
         Reaction::new(
@@ -4759,7 +5044,6 @@ mod tests {
         ),
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         vec![AtomId(0)],
-        ApplyError::Dangling { host_atom: AtomId(0) },
     )]
     #[case::structural_conflict(
         Reaction::new(
@@ -4772,13 +5056,11 @@ mod tests {
         ),
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
         vec![AtomId(0), AtomId(1)],
-        ApplyError::StructuralConflict,
     )]
-    fn test_reaction_apply_at_error(
+    fn test_reaction_apply_at_absence(
         #[case] reaction: Reaction,
         #[case] host: Molecule,
         #[case] atom_map: Vec<AtomId>,
-        #[case] expected: ApplyError,
     ) {
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
@@ -4786,9 +5068,15 @@ mod tests {
             Correspondence::from_images(&atom_map, host.atoms().count()),
         )
         .expect("the atom correspondence describes the molecule pair");
+        assert_eq!(reaction.apply_at(&host, &correspondence), Ok(None));
+        assert_eq!(reaction.tracked_apply_at(&host, &correspondence), Ok(None));
         assert_eq!(
-            reaction.apply_at(&host, &correspondence).unwrap_err(),
-            expected
+            reaction.apply_at_to_reaction(&host, &correspondence),
+            Ok(None)
+        );
+        assert_eq!(
+            reaction.apply_at_to_reaction_span(&host, &correspondence),
+            Ok(None)
         );
     }
 
@@ -4842,7 +5130,10 @@ mod tests {
         #[case] correspondence: MoleculeCorrespondence,
         #[case] expected: ApplyError,
     ) {
-        assert_eq!(reaction.apply_at(&host, &correspondence), Err(expected));
+        assert_eq!(reaction.apply_at(&host, &correspondence), Err(expected.clone()));
+        assert_eq!(reaction.tracked_apply_at(&host, &correspondence), Err(expected.clone()));
+        assert_eq!(reaction.apply_at_to_reaction(&host, &correspondence), Err(expected.clone()));
+        assert_eq!(reaction.apply_at_to_reaction_span(&host, &correspondence), Err(expected));
     }
 
     #[rstest]
@@ -5066,9 +5357,9 @@ mod tests {
             Correspondence::from_images(&[AtomId(1), AtomId(2)], host.atoms().count()),
         )
         .expect("the atom correspondence describes the molecule pair");
-        let result = reaction.apply_at(&host, &correspondence).unwrap();
+        let result = reaction.apply_at(&host, &correspondence).unwrap().unwrap();
         assert_eq!(
-            result.rhs().constraints(),
+            result.constraints(),
             &Constraints::from(Constraint::Molecule(MoleculeConstraint::ChargeSum {
                 atoms: Some(vec![AtomId(1), AtomId(2)]),
                 sum: NumForm::Lit(0),
@@ -5198,9 +5489,9 @@ mod tests {
                 .expect("correspondence producer preserves partial-bijection invariants"),
         )
         .expect("the atom correspondence describes the molecule pair");
-        let result = reaction.apply_at(&host, &correspondence).unwrap();
+        let result = reaction.apply_at(&host, &correspondence).unwrap().unwrap();
 
-        assert_eq!(result.rhs().constraints(), &Constraints::from(constraint));
+        assert_eq!(result.constraints(), &Constraints::from(constraint));
     }
 
     #[rstest]
@@ -5868,22 +6159,19 @@ mod tests {
             Correspondence::from_images(&[AtomId(0), AtomId(1)], host.atoms().count()),
         )
         .expect("the atom correspondence describes the molecule pair");
-        let derivation = reaction.apply_at(&host, &correspondence).unwrap();
+        let (product, witness) = reaction
+            .tracked_apply_at(&host, &correspondence)
+            .unwrap()
+            .unwrap();
         assert_eq!(
-            derivation.rhs(),
-            &Molecule::from_entries(MoleculeEntries {
+            product,
+            Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 bonds: vec![],
                 ..Default::default()
             })
         );
-        assert_eq!(
-            derivation.atom_correspondence().matched_pairs(),
-            &[(AtomId(0), AtomId(0))]
-        );
-        assert_eq!(
-            derivation.atom_correspondence().left_unmatched(),
-            vec![AtomId(1)]
-        );
+        assert_eq!(witness.atoms().matched_pairs(), &[(AtomId(0), AtomId(0))]);
+        assert_eq!(witness.atoms().left_unmatched(), vec![AtomId(1)]);
     }
 }

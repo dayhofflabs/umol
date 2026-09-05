@@ -145,7 +145,8 @@ impl MoleculeCorrespondence {
     /// Derive the full per-entity correspondence between `lhs` and `rhs` from their atom
     /// correspondence. Bonds are the induced edge correspondence; each overlay's lhs entities are
     /// matched to an rhs entity by their atom constituents mapped through `atoms`. An entity whose
-    /// constituents are not all matched is unmatched.
+    /// constituents are not all matched is unmatched. Stereo entities with different determined
+    /// geometry kinds are also unmatched, so a geometry change is represented as removal and addition.
     ///
     /// Returns `None` when the atom correspondence is not compatible with the supplied molecule
     /// pair, or
@@ -180,6 +181,24 @@ impl MoleculeCorrespondence {
             }),
             rhs.stereo_atoms().count(),
         )?;
+        let stereo_atoms = Correspondence::new(
+            stereo_atoms
+                .matched_pairs()
+                .iter()
+                .copied()
+                .filter(|&(left, right)| {
+                    lhs.stereo_atom(left)
+                        .attributes
+                        .configuration
+                        .kind()
+                        .zip(rhs.stereo_atom(right).attributes.configuration.kind())
+                        .is_none_or(|(left, right)| left == right)
+                })
+                .collect(),
+            lhs.stereo_atoms().count(),
+            rhs.stereo_atoms().count(),
+        )
+        .expect("filtering an induced correspondence preserves its partial bijection");
 
         let stereo_bonds = induce_by_key(
             lhs.stereo_bonds().iter().filter_map(|stereo| {
@@ -200,6 +219,24 @@ impl MoleculeCorrespondence {
             }),
             rhs.stereo_bonds().count(),
         )?;
+        let stereo_bonds = Correspondence::new(
+            stereo_bonds
+                .matched_pairs()
+                .iter()
+                .copied()
+                .filter(|&(left, right)| {
+                    lhs.stereo_bond(left)
+                        .attributes
+                        .configuration
+                        .kind()
+                        .zip(rhs.stereo_bond(right).attributes.configuration.kind())
+                        .is_none_or(|(left, right)| left == right)
+                })
+                .collect(),
+            lhs.stereo_bonds().count(),
+            rhs.stereo_bonds().count(),
+        )
+        .expect("filtering an induced correspondence preserves its partial bijection");
 
         Some(Self::new(
             atoms,
@@ -2125,6 +2162,145 @@ mod tests {
         assert_eq!(
             c.dative_bonds().matched_pairs(),
             &[(DativeBondId(0), DativeBondId(0))]
+        );
+    }
+
+    #[rstest]
+    #[case::tetrahedral(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+        vec![(StereoAtomId(0), StereoAtomId(0))],
+    )]
+    #[case::square_planar(
+        StereoAtomForm::new(StereoKind::SquarePlanar, 0u32),
+        StereoAtomForm::new(StereoKind::SquarePlanar, 1u32),
+        vec![(StereoAtomId(0), StereoAtomId(0))],
+    )]
+    #[case::different_kinds(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        StereoAtomForm::new(StereoKind::SquarePlanar, 0u32),
+        vec![],
+    )]
+    #[case::undetermined(
+        StereoAtomForm::default(),
+        StereoAtomForm::default(),
+        vec![(StereoAtomId(0), StereoAtomId(0))],
+    )]
+    #[case::one_undetermined(
+        StereoAtomForm::default(),
+        StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        vec![(StereoAtomId(0), StereoAtomId(0))],
+    )]
+    fn test_molecule_correspondence_induce_stereo_atoms(
+        #[case] left: StereoAtomForm,
+        #[case] right: StereoAtomForm,
+        #[case] pairs: Vec<(StereoAtomId, StereoAtomId)>,
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: (1..=4)
+                .map(|idx| (AtomId(0), AtomId(idx), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        };
+        let ligands: Vec<_> = (1..=4)
+            .map(|idx| StereoLigand::new(AtomId(idx), StereoLigandKind::Atom))
+            .collect();
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            stereo_atoms: vec![(AtomId(0), ligands.clone(), left)],
+            ..entries.clone()
+        });
+        let rhs = Molecule::from_entries(MoleculeEntries {
+            stereo_atoms: vec![(AtomId(0), ligands, right)],
+            ..entries
+        });
+        let expected = MoleculeCorrespondence::new(
+            Correspondence::identity(5),
+            Correspondence::identity(4),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::new(pairs, 1, 1).unwrap(),
+            Correspondence::empty(),
+        );
+        assert_eq!(
+            MoleculeCorrespondence::induce(&lhs, &rhs, Correspondence::identity(5)),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            MoleculeCorrespondence::induce(&rhs, &lhs, Correspondence::identity(5)),
+            Some(expected.reverse())
+        );
+    }
+
+    #[rstest]
+    #[case::cis_trans(
+        StereoBondForm::new(StereoKind::CisTrans, 0u32),
+        StereoBondForm::new(StereoKind::CisTrans, 1u32),
+        vec![(StereoBondId(0), StereoBondId(0))],
+    )]
+    #[case::axial(
+        StereoBondForm::new(StereoKind::Axial, 0u32),
+        StereoBondForm::new(StereoKind::Axial, 1u32),
+        vec![(StereoBondId(0), StereoBondId(0))],
+    )]
+    #[case::different_kinds(
+        StereoBondForm::new(StereoKind::CisTrans, 0u32),
+        StereoBondForm::new(StereoKind::Axial, 0u32),
+        vec![],
+    )]
+    #[case::undetermined(
+        StereoBondForm::default(),
+        StereoBondForm::default(),
+        vec![(StereoBondId(0), StereoBondId(0))],
+    )]
+    #[case::one_undetermined(
+        StereoBondForm::default(),
+        StereoBondForm::new(StereoKind::CisTrans, 0u32),
+        vec![(StereoBondId(0), StereoBondId(0))],
+    )]
+    fn test_molecule_correspondence_induce_stereo_bonds(
+        #[case] left: StereoBondForm,
+        #[case] right: StereoBondForm,
+        #[case] pairs: Vec<(StereoBondId, StereoBondId)>,
+    ) {
+        let entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: [(0, 1), (0, 2), (0, 3), (1, 4), (1, 5)]
+                .into_iter()
+                .map(|(a, b)| (AtomId(a), AtomId(b), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        };
+        let ligands: Vec<_> = (2..=5)
+            .map(|idx| StereoLigand::new(AtomId(idx), StereoLigandKind::Atom))
+            .collect();
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            stereo_bonds: vec![(BondId(0), ligands.clone(), left)],
+            ..entries.clone()
+        });
+        let rhs = Molecule::from_entries(MoleculeEntries {
+            stereo_bonds: vec![(BondId(0), ligands, right)],
+            ..entries
+        });
+        let expected = MoleculeCorrespondence::new(
+            Correspondence::identity(6),
+            Correspondence::identity(5),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::new(pairs, 1, 1).unwrap(),
+        );
+        assert_eq!(
+            MoleculeCorrespondence::induce(&lhs, &rhs, Correspondence::identity(6)),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            MoleculeCorrespondence::induce(&rhs, &lhs, Correspondence::identity(6)),
+            Some(expected.reverse())
         );
     }
 

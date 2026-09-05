@@ -3074,7 +3074,14 @@ mod tests {
             .expect("correspondence producer preserves partial-bijection invariants"),
         )
         .expect("the atom correspondence describes the molecule pair");
-        let derivation = reaction.apply_at(&host, &correspondence).unwrap();
+        let derivation = reaction
+            .apply(&host, ReactionApplicationConfig::default().to_rust())
+            .unwrap()
+            .find_map(|result| {
+                let derivation = result.unwrap();
+                (derivation.atom_correspondence() == correspondence.atoms()).then_some(derivation)
+            })
+            .unwrap();
         (derivation, host)
     }
 
@@ -3154,7 +3161,14 @@ mod tests {
             .expect("correspondence producer preserves partial-bijection invariants"),
         )
         .expect("the atom correspondence describes the molecule pair");
-        let second = reaction.apply_at(&middle, &correspondence).unwrap();
+        let second = reaction
+            .apply(&middle, ReactionApplicationConfig::default().to_rust())
+            .unwrap()
+            .find_map(|result| {
+                let derivation = result.unwrap();
+                (derivation.atom_correspondence() == correspondence.atoms()).then_some(derivation)
+            })
+            .unwrap();
         let first_value = ReactionDerivation::from_rust(first.clone());
         let second_value = ReactionDerivation::from_rust(second.clone());
         let chained = first_value.chain(&second_value).unwrap();

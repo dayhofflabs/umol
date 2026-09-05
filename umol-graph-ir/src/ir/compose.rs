@@ -37,18 +37,16 @@ fn compose_overlap(
     overlap: &GraphCorrespondence,
 ) -> Option<Reaction> {
     let (glue, correspondence) = a_inverse.lhs().tracked_meet_pushout(b.lhs(), overlap)?;
-    let derivation_a = a_inverse.apply_at(&glue, &correspondence.left).ok()?;
-    let derivation_b = b.apply_at(&glue, &correspondence.right).ok()?;
-    let correspondence = derivation_a
-        .atom_correspondence()
+    let (lhs, left) = a_inverse
+        .tracked_apply_at(&glue, &correspondence.left)
+        .ok()??;
+    let (rhs, right) = b.tracked_apply_at(&glue, &correspondence.right).ok()??;
+    let correspondence = left
+        .atoms()
         .reverse()
-        .compose(derivation_b.atom_correspondence())
+        .compose(right.atoms())
         .expect("both applications share the pushout host");
-    let composite = Reaction::from_sides(
-        derivation_a.rhs().clone(),
-        derivation_b.rhs().clone(),
-        correspondence,
-    )?;
+    let composite = Reaction::from_sides(lhs, rhs, correspondence)?;
     let (lhs, deltas) = composite.into_parts();
     Some(Reaction::new(lhs, deltas.normalize().ok()?))
 }

@@ -281,9 +281,11 @@ higher layers follow the same suffix.
 
 **Application** realizes an operation against a concrete host. Edit application executes a complete
 edit plan and publishes the result only when edit execution and the result's publication checks
-succeed. Reaction
-application matches a reaction rule against a host and emits one `ReactionDerivation` per successful
-match.
+succeed. Reaction application applies a rule at a supplied or enumerated match.
+The supplied-match methods distinguish a result, ordinary non-applicability, and execution
+failure through `Result<Option<T>, ApplyError>`. Non-applicability is not an error category.
+The application iterator skips inapplicable matches and emits one `ReactionDerivation` per
+successful match.
 
 **Not:** plan (which is derived without mutating), `react` (which intentionally discards the
 derivation and emits only product components).

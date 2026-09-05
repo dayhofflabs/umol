@@ -3,7 +3,6 @@
 use thiserror::Error;
 
 use super::entity::Entity;
-use super::id::AtomId;
 use super::molecule::transact::TransactionError;
 use super::molecule::MoleculeIntegrityError;
 use super::reaction::DpoContradiction;
@@ -33,15 +32,9 @@ pub enum MoleculeApplyError {
 /// Error from applying a reaction onto a host molecule (`Reaction::apply_at`).
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ApplyError {
-    /// DPO gluing condition is violated.
-    #[error("dangling edge at deleted host atom {host_atom}")]
-    Dangling { host_atom: AtomId },
     /// The reaction's deltas are inconsistent (normalization failed).
     #[error("inconsistent reaction deltas")]
     Inconsistent,
-    /// Structural conflict: a parallel bond, overlapping systems, two stereo centers on one site, etc.
-    #[error("applied product has a structural conflict")]
-    StructuralConflict,
     /// The lowered edit transaction failed against the host.
     #[error("apply transaction failed: {0}")]
     Transaction(#[from] TransactionError),
@@ -56,13 +49,6 @@ pub enum ApplyError {
     /// lowering.
     #[error("application reached an internal invariant failure")]
     InternalInvariant,
-}
-
-impl ApplyError {
-    /// Whether this failure rejects only the current pattern embedding.
-    pub fn is_match_rejection(&self) -> bool {
-        matches!(self, Self::Dangling { .. } | Self::StructuralConflict)
-    }
 }
 
 /// A reaction or host does not satisfy the structural preconditions for application.
@@ -90,27 +76,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::ir::id::{BondId, StereoAtomId};
-
-    #[rstest]
-    #[case::dangling(ApplyError::Dangling { host_atom: AtomId(3) }, true)]
-    #[case::structural_conflict(ApplyError::StructuralConflict, true)]
-    #[case::inconsistent(ApplyError::Inconsistent, false)]
-    #[case::transaction(ApplyError::Transaction(TransactionError::OldStateMismatch), false)]
-    #[case::correspondence(
-        ApplyError::CorrespondenceMismatch { entity: Entity::Bond(BondId(2)) },
-        false,
-    )]
-    #[case::stereo_frame(
-        ApplyError::StereoFrameMismatch {
-            entity: Entity::StereoAtom(StereoAtomId(1)),
-        },
-        false,
-    )]
-    #[case::internal(ApplyError::InternalInvariant, false)]
-    fn test_apply_error_is_match_rejection(#[case] error: ApplyError, #[case] expected: bool) {
-        assert_eq!(error.is_match_rejection(), expected);
-    }
+    use crate::ir::id::{AtomId, StereoAtomId};
 
     #[rstest]
     #[case::correspondence(

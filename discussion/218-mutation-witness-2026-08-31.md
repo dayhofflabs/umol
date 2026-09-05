@@ -304,7 +304,10 @@ audit trace and does not promise operational persistence through every
 internal removal and addition. The operation constructs its atom
 correspondence; internal remove/add mechanics alone do not determine the
 pairing. Incidence-based induction of bonds and overlays may pair equivalent
-entities across an internal remove/add sequence. That is consistent with this
+entities across an internal remove/add sequence. Stereo entities with equal
+kinds remain matchable; two different determined kinds identify different
+entities and must remain unmatched, producing removal plus addition. An
+undetermined kind retains the existing compatibility behavior. That is consistent with this
 contract and is not a defect requiring an action journal.
 
 ### Reaction application
@@ -332,13 +335,20 @@ These are methods on `Reaction`, with the following names:
 | Primary result | Supplied match | Iterate over matches |
 | --- | --- | --- |
 | Product molecule | `apply_at` | `apply` |
-| Product and correspondence | `apply_at_with_correspondence` | `apply_with_correspondence` |
+| Product and correspondence | `tracked_apply_at` | `tracked_apply` |
 | Realized reaction | `apply_at_to_reaction` | `apply_to_reaction` |
 | Realized reaction span | `apply_at_to_reaction_span` | `apply_to_reaction_span` |
 
-The correspondence form returns `(Molecule, MoleculeCorrespondence)`. The
-reaction and span forms return those primary objects directly. Iterators
-follow the same item contracts, including operation errors, without a
+All four supplied-match methods return `Result<Option<T>, ApplyError>`,
+where `T` is the selected primary result. `Ok(Some(T))` means applied;
+`Ok(None)` means this match is inapplicable because of dangling incidence
+or a structural conflict; `Err` means execution failed. The correspondence
+form uses `(Molecule, MoleculeCorrespondence)` for `T`. The reaction and
+span forms use their primary objects directly. Rejection diagnostics are
+not retained as errors; application returns `None` at the rejecting branch.
+Iterators skip `None` and yield an execution error once before terminating,
+without inspecting error variants. Iterator items are `Result<T, ApplyError>`
+for the selected primary result, without an `Option` layer or a
 replacement result wrapper for `ReactionDerivation`. Rust and Python expose
 the same names and result shapes. The `React` trait methods remain separate,
 providing the product-component convenience workflow.
@@ -1291,7 +1301,7 @@ the same object-only/tracked split, preserving their categorical mapping directi
 
 ### S7 — Reaction application results
 
-- [ ] **S7a — Application at a supplied match.** Graph-IR reaction application.
+- [x] **S7a — Application at a supplied match.** Graph-IR reaction application.
   Breaking (red→green). [dep: S6b, S5b]
   Implement the four accepted `apply_at` result forms. Product provenance is
   optional: `apply_at` returns the product, and `tracked_apply_at` returns
@@ -1300,15 +1310,42 @@ the same object-only/tracked split, preserving their categorical mapping directi
   intrinsic side relationships are not optional witnesses. Add no tracked
   companions to these two forms. A supplied rule-to-host match is not the
   host-to-product witness. Keep host-to-product correspondence direction,
-  existing preconditions, and stereo/frame handling. Migrate direct consumers
+  existing preconditions, and stereo/frame handling. All four supplied-match
+  forms use `Result<Option<T>, ApplyError>`; return `None` directly for
+  inapplicability and remove rejection classification from `ApplyError`.
+  Preserve same-kind stereo induction while excluding different determined
+  kinds. Migrate direct consumers
   of the old derivation return. Test identical bare/tracked products and
   failures, realized reaction/span consistency, and expected atom pairings.
+
+  Implemented the four supplied-match forms with the shared three-outcome
+  application path. Induction retains equal stereo kinds and excludes
+  conflicting determined kinds for both stereo atoms and bonds. Direct
+  composition and test consumers use product/correspondence results;
+  the existing iterator still wraps successful results in
+  `ReactionDerivation` until S7b. No new return-container type was added.
+  Exact tests cover same-kind matching, geometry replacement, undetermined
+  kinds, host-to-product atom provenance, empty successful products,
+  inapplicable matches, and execution errors. Generated tests check result
+  agreement, reaction/span reconstruction, canonicalization, and iterator
+  skip/termination behavior.
+  Verification: 6,827 IR library tests passed (3 ignored), plus integration
+  and doc tests; all 371 IR properties passed at 256 cases (1 ignored).
+  Workspace all-targets check and IR all-targets clippy with properties
+  enabled and warnings denied passed. The 183 reaction-related Rust binding
+  tests passed (2 ignored); no Python-facing API changes are made in S7a.
+  On the six-atom ring fixture with a host-frame aromatic electron-count
+  update, product/tracked product measured 4.44/4.41 µs, realized reaction
+  21.97 µs, and realized span 16.97 µs. Criterion used 10 samples with
+  1-second warmup and measurement; match enumeration is outside these calls.
+
 - [ ] **S7b — Iteration and derivation retirement.** Graph-IR reaction
   iterators and their Rust/Python consumers. Breaking (red→green).
   [dep: S7a, S5a] Mirror S7a per iterator item: `apply` is product-only,
   `tracked_apply` adds optional provenance, and `apply_to_reaction` /
   `apply_to_reaction_span` return the primary objects directly. Add no further
-  tracked variants. Implement these forms, preserving captured-input
+  tracked variants. Iterator items are `Result<T, ApplyError>`; inapplicable
+  matches are skipped rather than yielded as `None`. Implement these forms, preserving captured-input
   ownership, match order, lazy result production, and terminal error behavior.
   Remove `ReactionDerivation`, its exports and bindings, and update all
   consumers. Keep `React` methods separate and verify their products still

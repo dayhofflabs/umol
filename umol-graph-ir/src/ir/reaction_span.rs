@@ -2091,8 +2091,8 @@ impl Reaction {
     /// `n = r.to_reaction_span()?.to_reaction()`. Then `n.lhs` has the same structural entities as
     /// `r.lhs` and canonically equal constraint-set semantics, `n` materializes the same span, and
     /// applying `n` or `r` to the same host at the same explicit correspondence returns the same
-    /// exact error or [`ReactionDerivation`](super::ReactionDerivation). Repeating the span/reaction
-    /// conversion on `n` returns `n` by exact structural equality.
+    /// exact error, non-applicability, or product and host-to-product correspondence. Repeating
+    /// the span/reaction conversion on `n` returns `n` by exact structural equality.
     pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
         let deltas = normalize_reaction_deltas(self.lhs(), self.deltas())?;
         let lhs = self.lhs();

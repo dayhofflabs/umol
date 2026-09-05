@@ -713,6 +713,26 @@ It does not make correspondence construction, composition, reversal, or unrelate
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
+### Supplied-match reaction application
+
+The four supplied-match reaction methods return `Result<Option<T>, ApplyError>`:
+`apply_at` produces a molecule, `tracked_apply_at` produces a molecule and its
+host-to-product correspondence, and `apply_at_to_reaction` /
+`apply_at_to_reaction_span` produce the realized primary objects.
+`Ok(None)` is ordinary non-applicability caused by dangling incidence or a structural
+conflict; it is not an execution error. Iteration skips that outcome directly.
+Actual errors are yielded once and terminate iteration; error variants are not
+classified to recover continuation policy.
+
+All four methods preserve the same application and applicability behavior. The supplied
+correspondence maps the rule into the host; the produced witness maps host to product.
+Other entity pairings are induced from atom provenance and compatible incidence. Equal
+stereo kinds remain matchable, while different determined kinds identify different entities
+and produce removal plus addition. An undetermined kind does not assert a conflicting geometry.
+Realized reactions and spans use the existing lhs-anchored representation and constraint
+normal form; their product projections preserve the produced molecule's semantics rather
+than promising its exact row ordering.
+
 ### Consuming correspondence updates
 
 `Correspondence::identity(count)` initializes a declared identity without temporary images.

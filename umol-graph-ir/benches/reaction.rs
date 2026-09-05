@@ -150,6 +150,23 @@ fn benchmark_reaction(c: &mut Criterion) {
     group.bench_function("apply_at", |b| {
         b.iter(|| black_box(reaction.apply_at(black_box(&host), black_box(&correspondence))))
     });
+    group.bench_function("tracked_apply_at", |b| {
+        b.iter(|| {
+            black_box(reaction.tracked_apply_at(black_box(&host), black_box(&correspondence)))
+        })
+    });
+    group.bench_function("apply_at_to_reaction", |b| {
+        b.iter(|| {
+            black_box(reaction.apply_at_to_reaction(black_box(&host), black_box(&correspondence)))
+        })
+    });
+    group.bench_function("apply_at_to_reaction_span", |b| {
+        b.iter(|| {
+            black_box(
+                reaction.apply_at_to_reaction_span(black_box(&host), black_box(&correspondence)),
+            )
+        })
+    });
     group.bench_function("reverse", |b| {
         b.iter(|| black_box(black_box(&reversal).reverse()))
     });
