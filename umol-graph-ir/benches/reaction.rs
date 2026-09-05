@@ -198,7 +198,17 @@ fn benchmark_mutation(c: &mut Criterion) {
             b.iter_batched(
                 || molecule.edit(),
                 |mut editor| {
-                    let compaction = editor.remove(black_box(&removed), &[]);
+                    editor.remove(black_box(&removed), &[]);
+                    black_box(editor)
+                },
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(BenchmarkId::new("tracked_remove/path", size), |b| {
+            b.iter_batched(
+                || molecule.edit(),
+                |mut editor| {
+                    let compaction = editor.tracked_remove(black_box(&removed), &[]);
                     black_box((editor, compaction))
                 },
                 BatchSize::SmallInput,

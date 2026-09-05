@@ -30,9 +30,9 @@ returned.
 ## Current state
 
 - The editor returns piecewise information in Rust: additions return their
-  new ids, and `MoleculeEditor::remove` returns a pre-to-post
-  `MoleculeCompaction`. Finalization returns only the molecule, so an editing
-  session has no aggregate witness.
+  new ids, and `MoleculeEditor::tracked_remove` returns a pre-to-post
+  `MoleculeCompaction`; plain `remove` returns unit. Finalization returns only
+  the molecule, so an editing session has no aggregate witness.
 - `Molecule::apply(edits)` returns only the new molecule. Contrary to the
   first version of this document, it does not construct and discard a
   `MoleculeCorrespondence`; the edit machinery has operation-local handles
@@ -1174,7 +1174,7 @@ the same object-only/tracked split, preserving their categorical mapping directi
   passed at 256 cases (1 ignored), and 1,370 Python tests passed (2 skipped)
   after rebuilding. Workspace all-targets check, core/IR/Python all-targets
   property-enabled clippy, nightly formatting, and diff checks passed.
-- [ ] **S5c — Removal and extraction.** Graph-IR editor removal families and
+- [x] **S5c — Removal and extraction.** Graph-IR editor removal families and
   molecule extraction. Breaking (red→green). [dep: S3b, S4a]
   Compactions are optional provenance, not the primary result. Add
   `tracked_remove`, `tracked_extract`, and `tracked_remove_*` for the six
@@ -1187,6 +1187,21 @@ the same object-only/tracked split, preserving their categorical mapping directi
   transaction use of removal. Test exact all-family compactions and equality
   of resulting state across each method pair. Adapt callers rather than
   adding hydrogen or other chemistry transformer variants.
+  Completed 2026-09-04: plain editor removals return unit; tracked topology
+  and six bulk overlay removals return full, count-bearing compactions.
+  `tracked_extract` returns the molecule and host-to-result compaction,
+  preserving host order independently of selection numbering. Edit and
+  transaction callers reuse the returned compactions instead of rebuilding
+  them; constraint snapshots and rollback behavior are preserved.
+  Exact tests cover all eight families, cascades, empty/identity cases,
+  repeated removal ids, invalid ids, and plain/tracked equality. Properties
+  retain the compaction/undo law and compare publication results, including
+  integrity errors for transient invalid stereo frames. Core/IR library
+  tests passed (7,700 passed, 3 ignored), plus integration and doc tests;
+  491 properties passed at 256 cases (1 ignored). Graph/IO library tests
+  passed (4,297 tests). Workspace all-targets check, core/IR property-enabled
+  all-targets clippy with `-D warnings`, nightly formatting, and diff checks
+  passed. Python exposure remains in S8a.
 
 ### S6 — Editor and transaction correspondences
 

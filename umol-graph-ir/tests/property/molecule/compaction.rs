@@ -28,7 +28,10 @@ proptest! {
             molecule.stereo_bonds().count(),
         );
         let mut editor = molecule.edit();
-        let compaction = editor.remove(&atoms, &bonds);
+        let compaction = editor.tracked_remove(&atoms, &bonds);
+        let mut plain = molecule.edit();
+        plain.remove(&atoms, &bonds);
+        prop_assert_eq!(plain.try_build(), editor.try_build());
         let undo = compaction.undo_compaction();
 
         for index in 0..counts.0 {

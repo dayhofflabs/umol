@@ -773,6 +773,12 @@ Single-node/edge cascading-removal conveniences return no witness. Relation-set
 `compact` returns the resulting set; `tracked_compact` returns that set
 and its relation-id compaction. Each pair preserves the same output and failure behavior.
 
+Molecule editor `remove` and the six bulk relation-removal methods return `()`; their
+`tracked_` companions return a full `MoleculeCompaction`, including unchanged-family counts.
+Molecule `extract` returns only the molecule; `tracked_extract` pairs it with the actual
+host-to-result compaction. Its sub-to-host input describes selection, not result numbering:
+extraction preserves host order. Both forms retain the same cascades and constraint transport.
+
 Rollback checks result counts against the current editor before applying an inverse compaction.
 A mismatch remains `TransactionError::RollbackStateMismatch`, not an indexing panic.
 

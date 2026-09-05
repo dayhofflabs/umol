@@ -1113,6 +1113,17 @@ impl MoleculeEditor {
     ///
     /// Panics when a supplied id is outside the current relation table.
     pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
+        self.tracked_remove_dative_bonds(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_dative_bonds`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_dative_bonds(&mut self, ids: &[DativeBondId]) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
@@ -1129,6 +1140,7 @@ impl MoleculeEditor {
         );
         self.dative_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        compaction
     }
 
     /// Remove aromatic-system overlays directly from the editor.
@@ -1140,6 +1152,20 @@ impl MoleculeEditor {
     ///
     /// Panics when a supplied id is outside the current relation table.
     pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
+        self.tracked_remove_aromatic_systems(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_aromatic_systems`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_aromatic_systems(
+        &mut self,
+        ids: &[AromaticSystemId],
+    ) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
@@ -1156,6 +1182,7 @@ impl MoleculeEditor {
         );
         self.aromatic_systems.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        compaction
     }
 
     /// Remove multicenter-bond overlays directly from the editor.
@@ -1167,6 +1194,20 @@ impl MoleculeEditor {
     ///
     /// Panics when a supplied id is outside the current relation table.
     pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
+        self.tracked_remove_multicenter_bonds(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_multicenter_bonds`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_multicenter_bonds(
+        &mut self,
+        ids: &[MulticenterBondId],
+    ) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
@@ -1183,6 +1224,7 @@ impl MoleculeEditor {
         );
         self.multicenter_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        compaction
     }
 
     /// Remove noncovalent-bond overlays directly from the editor.
@@ -1194,6 +1236,20 @@ impl MoleculeEditor {
     ///
     /// Panics when a supplied id is outside the current relation table.
     pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
+        self.tracked_remove_noncovalent_bonds(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_noncovalent_bonds`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_noncovalent_bonds(
+        &mut self,
+        ids: &[NoncovalentBondId],
+    ) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
@@ -1210,6 +1266,7 @@ impl MoleculeEditor {
         );
         self.noncovalent_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        compaction
     }
 
     /// Remove stereo-atom overlays directly from the editor.
@@ -1217,6 +1274,17 @@ impl MoleculeEditor {
     /// Low-level dense removal primitive; compacts molecule-level constraints but
     /// does not build rollback data.
     pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
+        self.tracked_remove_stereo_atoms(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_stereo_atoms`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
@@ -1233,6 +1301,7 @@ impl MoleculeEditor {
         );
         self.stereo_atoms.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        compaction
     }
 
     /// Remove stereo-bond overlays directly from the editor.
@@ -1240,6 +1309,17 @@ impl MoleculeEditor {
     /// Low-level dense removal primitive; compacts molecule-level constraints but
     /// does not build rollback data.
     pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
+        self.tracked_remove_stereo_bonds(ids);
+    }
+
+    /// Remove overlays and return the source-to-result compaction for all entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove_stereo_bonds`]; unchanged families retain their counts.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a supplied id is outside the current relation table.
+    pub fn tracked_remove_stereo_bonds(&mut self, ids: &[StereoBondId]) -> MoleculeCompaction {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
@@ -1256,19 +1336,27 @@ impl MoleculeEditor {
         );
         self.stereo_bonds.remove_relations(&raw);
         self.constraints.compact(&compaction);
+        compaction
     }
 
     // -- Topological removal --------------------------------------------------
 
-    /// Remove topology directly from the editor and return the forward compaction.
+    /// Remove topology directly from the editor, cascading dependent relations and constraints.
     ///
     /// This is the low-level dense topology-removal primitive. It removes the
     /// requested atoms and bonds, cascades relations whose participants were
-    /// removed, compacts molecule-level constraints, and returns the forward
-    /// `MoleculeCompaction` for downstream id holders. It does not build rollback
+    /// removed, and compacts molecule-level constraints. It does not build rollback
     /// data; checked transactions capture the removed payloads before calling
     /// this method.
-    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> MoleculeCompaction {
+    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) {
+        self.tracked_remove(atoms, bonds);
+    }
+
+    /// Remove topology and return the source-to-result compaction for all eight entity kinds.
+    ///
+    /// Leaves the same state as [`Self::remove`], including cascading relation and constraint
+    /// removal. Every component retains the source count from before removal.
+    pub fn tracked_remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> MoleculeCompaction {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
         let compaction = self.graph.tracked_remove_cascading(&nodes, &edges);
@@ -2077,7 +2165,7 @@ mod tests {
             },
         ];
 
-        let compaction = triatomic.remove(&[AtomId(1)], &[]);
+        let compaction = triatomic.tracked_remove(&[AtomId(1)], &[]);
         triatomic.restore_topology(
             removed_atoms,
             removed_bonds,

@@ -834,6 +834,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::aromatic::AromaticSystemForm;
@@ -905,8 +906,26 @@ mod tests {
         let removed = (removed_start..removed_start + 6)
             .map(AtomId)
             .collect::<Vec<_>>();
-        let compaction = editor.remove(&removed, &[]);
+        let compaction = editor.tracked_remove(&removed, &[]);
         let result = editor.build();
+        let mut plain = source.edit();
+        plain.remove(&removed, &[]);
+        assert_eq!(plain.build(), result);
+        let expected_compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::new(12, (removed_start..removed_start + 6).map(NodeId).collect())
+                    .unwrap(),
+                Compaction::new(12, (removed_start..removed_start + 6).map(EdgeId).collect())
+                    .unwrap(),
+            ),
+            Compaction::new(2, vec![DativeBondId(1 - surviving_overlay)]).unwrap(),
+            Compaction::new(2, vec![AromaticSystemId(1 - surviving_overlay)]).unwrap(),
+            Compaction::new(2, vec![MulticenterBondId(1 - surviving_overlay)]).unwrap(),
+            Compaction::new(2, vec![NoncovalentBondId(1 - surviving_overlay)]).unwrap(),
+            Compaction::new(2, vec![StereoAtomId(1 - surviving_overlay)]).unwrap(),
+            Compaction::new(2, vec![StereoBondId(1 - surviving_overlay)]).unwrap(),
+        );
+        assert_eq!(compaction, expected_compaction);
         let correspondence = MoleculeCorrespondence::from(&compaction);
         let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
@@ -1017,7 +1036,7 @@ mod tests {
         } else {
             Vec::new()
         };
-        let compaction = editor.remove(&removed, &[]);
+        let compaction = editor.tracked_remove(&removed, &[]);
         let result = editor.build();
         assert_eq!(
             result,

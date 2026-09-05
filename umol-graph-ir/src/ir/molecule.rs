@@ -16,6 +16,7 @@ use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId
 use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
 use super::bond::BondForm;
+use super::compact::MoleculeCompaction;
 use super::constraint::{
     Constraint, ConstraintFrameActionMap, Constraints, MoleculeConstraint, RelationalConstraint,
 };
@@ -623,6 +624,15 @@ impl Molecule {
     /// molecule: drop every host atom/bond absent from `sub`. Host order preserved, gaps compacted;
     /// overlay drops cascade through the builder.
     pub fn extract(&self, sub: &MoleculeCorrespondence) -> Molecule {
+        self.tracked_extract(sub).0
+    }
+
+    /// Extract the same molecule as [`Self::extract`] together with its host-to-result compaction.
+    ///
+    /// The right-hand atom ids of `sub` select host atoms. Result ids follow host order, not
+    /// the selection's left-hand numbering. The compaction covers all eight entity kinds,
+    /// including cascaded removals; its source counts are those of this molecule.
+    pub fn tracked_extract(&self, sub: &MoleculeCorrespondence) -> (Molecule, MoleculeCompaction) {
         let kept: HashSet<AtomId> = sub
             .atoms()
             .matched_pairs()
@@ -643,8 +653,8 @@ impl Molecule {
             .map(|b| b.id)
             .collect();
         let mut builder = self.edit();
-        builder.remove(&remove_atoms, &remove_bonds);
-        builder.build()
+        let compaction = builder.tracked_remove(&remove_atoms, &remove_bonds);
+        (builder.build(), compaction)
     }
 
     /// Edits transforming `self` into the extracted subgraph `sub`: one `RemoveTopology` over the

@@ -48,6 +48,9 @@ proptest! {
     ) {
         let correspondence = molecule.induced_subgraph(&atoms);
         let extracted = molecule.extract(&correspondence);
+        let (tracked, compaction) = molecule.tracked_extract(&correspondence);
+        prop_assert_eq!(&tracked, &extracted);
+        prop_assert_eq!(MoleculeCorrespondence::from(&compaction), correspondence.reverse());
         let reinduced = MoleculeCorrespondence::induce(
             &extracted,
             &molecule,

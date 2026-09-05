@@ -8,9 +8,10 @@ use rstest::*;
 use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
-    ConnectedComponentsAlgorithm, Correspondence, EdgeId, GeneralMaximumMatchingAlgorithm, Graph,
-    GraphRemapping, MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, NodeId,
-    NonBipartiteGraphError, RelevantCycleEnumerationAlgorithm, Remapping, ShortestCycleAlgorithm,
+    Compaction, ConnectedComponentsAlgorithm, Correspondence, EdgeId,
+    GeneralMaximumMatchingAlgorithm, Graph, GraphCompaction, GraphRemapping,
+    MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, NodeId, NonBipartiteGraphError,
+    RelevantCycleEnumerationAlgorithm, Remapping, ShortestCycleAlgorithm,
     SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_perm::{DynPermutation, Permutation, MAX_DEGREE};
@@ -19,6 +20,7 @@ use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::super::bond::BondForm;
 use super::super::boolean::BooleanForm;
+use super::super::compact::MoleculeCompaction;
 use super::super::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, AtomConstraintsForm, BondConstraintForm,
     BondConstraintsForm, Constraint, Constraints, DativeBondConstraintForm,
@@ -3418,10 +3420,576 @@ fn test_molecule_apply_error(
 }
 
 #[rstest]
+fn test_molecule_tracked_extract(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+    let expected = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![entries.atoms[0].clone(), entries.atoms[3].clone()],
+        noncovalent: vec![(
+            [AtomId(0), AtomId(1)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        )],
+        ..Default::default()
+    });
+    let source = Molecule::from_entries(entries);
+    let selection = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(0), AtomId(3)), (AtomId(1), AtomId(0))], 2, 4).unwrap(),
+        Correspondence::new(vec![], 0, 3).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(0))], 1, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+    );
+    let expected_compaction = MoleculeCompaction::new(
+        GraphCompaction::new(
+            Compaction::new(4, vec![NodeId(1), NodeId(2)]).unwrap(),
+            Compaction::new(3, vec![EdgeId(0), EdgeId(1), EdgeId(2)]).unwrap(),
+        ),
+        Compaction::new(1, vec![DativeBondId(0)]).unwrap(),
+        Compaction::new(1, vec![AromaticSystemId(0)]).unwrap(),
+        Compaction::new(1, vec![MulticenterBondId(0)]).unwrap(),
+        Compaction::identity(1),
+        Compaction::new(1, vec![StereoAtomId(0)]).unwrap(),
+        Compaction::new(1, vec![StereoBondId(0)]).unwrap(),
+    );
+
+    assert_eq!(source.extract(&selection), expected);
+    assert_eq!(
+        source.tracked_extract(&selection),
+        (expected, expected_compaction)
+    );
+}
+
+#[rstest]
+fn test_molecule_tracked_extract_empty() {
+    let source = Molecule::new();
+    let selection = MoleculeCorrespondence::empty();
+
+    assert_eq!(source.extract(&selection), Molecule::new());
+    assert_eq!(
+        source.tracked_extract(&selection),
+        (Molecule::new(), MoleculeCompaction::empty())
+    );
+}
+
+#[rstest]
+fn test_molecule_tracked_extract_identity(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let source = Molecule::from_entries(entries);
+    let selection = source.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2), AtomId(3)]);
+    let expected_compaction = MoleculeCompaction::new(
+        GraphCompaction::new(Compaction::identity(4), Compaction::identity(3)),
+        Compaction::identity(1),
+        Compaction::identity(1),
+        Compaction::identity(1),
+        Compaction::identity(1),
+        Compaction::identity(1),
+        Compaction::identity(1),
+    );
+
+    assert_eq!(source.extract(&selection), source);
+    assert_eq!(
+        source.tracked_extract(&selection),
+        (source, expected_compaction)
+    );
+}
+
+#[rstest]
 fn test_molecule_extract(#[from(rich_molecule)] molecule: Molecule) {
     let sub = molecule.induced_subgraph(&[AtomId(0), AtomId(1)]);
     let extracted = molecule.extract(&sub);
     assert_eq!(extracted.atoms().count(), 2);
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_remove_dative_bonds_empty() {
+    let mut plain = Molecule::new().edit();
+    let mut tracked = Molecule::new().edit();
+
+    plain.remove_dative_bonds(&[]);
+    assert_eq!(
+        tracked.tracked_remove_dative_bonds(&[]),
+        MoleculeCompaction::empty()
+    );
+    assert_eq!(plain.build(), Molecule::new());
+    assert_eq!(tracked.build(), Molecule::new());
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_remove_aromatic_systems_empty() {
+    let mut plain = Molecule::new().edit();
+    let mut tracked = Molecule::new().edit();
+
+    plain.remove_aromatic_systems(&[]);
+    assert_eq!(
+        tracked.tracked_remove_aromatic_systems(&[]),
+        MoleculeCompaction::empty()
+    );
+    assert_eq!(plain.build(), Molecule::new());
+    assert_eq!(tracked.build(), Molecule::new());
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_remove_multicenter_bonds_empty() {
+    let mut plain = Molecule::new().edit();
+    let mut tracked = Molecule::new().edit();
+
+    plain.remove_multicenter_bonds(&[]);
+    assert_eq!(
+        tracked.tracked_remove_multicenter_bonds(&[]),
+        MoleculeCompaction::empty()
+    );
+    assert_eq!(plain.build(), Molecule::new());
+    assert_eq!(tracked.build(), Molecule::new());
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_remove_noncovalent_bonds_empty() {
+    let mut plain = Molecule::new().edit();
+    let mut tracked = Molecule::new().edit();
+
+    plain.remove_noncovalent_bonds(&[]);
+    assert_eq!(
+        tracked.tracked_remove_noncovalent_bonds(&[]),
+        MoleculeCompaction::empty()
+    );
+    assert_eq!(plain.build(), Molecule::new());
+    assert_eq!(tracked.build(), Molecule::new());
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_remove_stereo_atoms_empty() {
+    let mut plain = Molecule::new().edit();
+    let mut tracked = Molecule::new().edit();
+
+    plain.remove_stereo_atoms(&[]);
+    assert_eq!(
+        tracked.tracked_remove_stereo_atoms(&[]),
+        MoleculeCompaction::empty()
+    );
+    assert_eq!(plain.build(), Molecule::new());
+    assert_eq!(tracked.build(), Molecule::new());
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_remove_stereo_bonds_empty() {
+    let mut plain = Molecule::new().edit();
+    let mut tracked = Molecule::new().edit();
+
+    plain.remove_stereo_bonds(&[]);
+    assert_eq!(
+        tracked.tracked_remove_stereo_bonds(&[]),
+        MoleculeCompaction::empty()
+    );
+    assert_eq!(plain.build(), Molecule::new());
+    assert_eq!(tracked.build(), Molecule::new());
+}
+
+#[rstest]
+fn test_molecule_editor_tracked_remove_empty() {
+    let mut plain = Molecule::new().edit();
+    let mut tracked = Molecule::new().edit();
+
+    plain.remove(&[], &[]);
+    assert_eq!(
+        tracked.tracked_remove(&[], &[]),
+        MoleculeCompaction::empty()
+    );
+    assert_eq!(plain.build(), Molecule::new());
+    assert_eq!(tracked.build(), Molecule::new());
+}
+
+#[rstest]
+#[case::none(vec![], vec![])]
+#[case::first(vec![DativeBondId(0)], vec![DativeBondId(0)])]
+#[case::middle(vec![DativeBondId(1)], vec![DativeBondId(1)])]
+#[case::unsorted_repeated(vec![DativeBondId(2), DativeBondId(0), DativeBondId(2)], vec![DativeBondId(0), DativeBondId(2)])]
+#[case::all(vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)], vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)])]
+fn test_molecule_editor_tracked_remove_dative_bonds(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] ids: Vec<DativeBondId>,
+    #[case] removed: Vec<DativeBondId>,
+) {
+    entries.constraints = Constraints::from_iter([Constraint::DativeBond(
+        DativeBondId(0),
+        DativeBondConstraintForm::aromatic(false),
+    )]);
+    let component = Molecule::from_entries(entries.clone());
+    let source = Molecule::combine_all([&component, &component, &component]);
+    let expected_components = (0..3)
+        .map(|idx| {
+            let mut entries = entries.clone();
+            if removed.contains(&DativeBondId(idx)) {
+                entries.dative.clear();
+                entries.constraints = Constraints::new();
+            }
+            Molecule::from_entries(entries)
+        })
+        .collect::<Vec<_>>();
+    let expected = Molecule::combine_all(&expected_components);
+    let expected_compaction = MoleculeCompaction::new(
+        GraphCompaction::new(Compaction::identity(12), Compaction::identity(9)),
+        Compaction::new(3, removed).unwrap(),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+    );
+    let mut plain = source.edit();
+    let mut tracked = source.edit();
+
+    plain.remove_dative_bonds(&ids);
+    let compaction = tracked.tracked_remove_dative_bonds(&ids);
+
+    assert_eq!(compaction, expected_compaction);
+    assert_eq!(plain.build(), expected);
+    assert_eq!(tracked.build(), expected);
+}
+
+#[rstest]
+#[case::boundary(DativeBondId(1))]
+#[case::outside(DativeBondId(2))]
+#[should_panic(expected = "removed entities belong to the source table")]
+fn test_molecule_editor_tracked_remove_dative_bonds_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] id: DativeBondId,
+    #[values(false, true)] tracked: bool,
+) {
+    let mut editor = Molecule::from_entries(entries).edit();
+    if tracked {
+        editor.tracked_remove_dative_bonds(&[id]);
+    } else {
+        editor.remove_dative_bonds(&[id]);
+    }
+}
+
+#[rstest]
+#[case::none(vec![], vec![])]
+#[case::first(vec![AromaticSystemId(0)], vec![AromaticSystemId(0)])]
+#[case::middle(vec![AromaticSystemId(1)], vec![AromaticSystemId(1)])]
+#[case::unsorted_repeated(vec![AromaticSystemId(2), AromaticSystemId(0), AromaticSystemId(2)], vec![AromaticSystemId(0), AromaticSystemId(2)])]
+#[case::all(vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)], vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)])]
+fn test_molecule_editor_tracked_remove_aromatic_systems(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] ids: Vec<AromaticSystemId>,
+    #[case] removed: Vec<AromaticSystemId>,
+) {
+    entries.constraints = Constraints::from_iter([Constraint::AromaticSystem(
+        AromaticSystemId(0),
+        AromaticSystemConstraintForm::electron_count(NumForm::Lit(3)),
+    )]);
+    let component = Molecule::from_entries(entries.clone());
+    let source = Molecule::combine_all([&component, &component, &component]);
+    let expected_components = (0..3)
+        .map(|idx| {
+            let mut entries = entries.clone();
+            if removed.contains(&AromaticSystemId(idx)) {
+                entries.aromatic.clear();
+                entries.constraints = Constraints::new();
+            }
+            Molecule::from_entries(entries)
+        })
+        .collect::<Vec<_>>();
+    let expected = Molecule::combine_all(&expected_components);
+    let expected_compaction = MoleculeCompaction::new(
+        GraphCompaction::new(Compaction::identity(12), Compaction::identity(9)),
+        Compaction::identity(3),
+        Compaction::new(3, removed).unwrap(),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+    );
+    let mut plain = source.edit();
+    let mut tracked = source.edit();
+
+    plain.remove_aromatic_systems(&ids);
+    let compaction = tracked.tracked_remove_aromatic_systems(&ids);
+
+    assert_eq!(compaction, expected_compaction);
+    assert_eq!(plain.build(), expected);
+    assert_eq!(tracked.build(), expected);
+}
+
+#[rstest]
+#[case::boundary(AromaticSystemId(1))]
+#[case::outside(AromaticSystemId(2))]
+#[should_panic(expected = "removed entities belong to the source table")]
+fn test_molecule_editor_tracked_remove_aromatic_systems_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] id: AromaticSystemId,
+    #[values(false, true)] tracked: bool,
+) {
+    let mut editor = Molecule::from_entries(entries).edit();
+    if tracked {
+        editor.tracked_remove_aromatic_systems(&[id]);
+    } else {
+        editor.remove_aromatic_systems(&[id]);
+    }
+}
+
+#[rstest]
+#[case::none(vec![], vec![])]
+#[case::first(vec![MulticenterBondId(0)], vec![MulticenterBondId(0)])]
+#[case::middle(vec![MulticenterBondId(1)], vec![MulticenterBondId(1)])]
+#[case::unsorted_repeated(vec![MulticenterBondId(2), MulticenterBondId(0), MulticenterBondId(2)], vec![MulticenterBondId(0), MulticenterBondId(2)])]
+#[case::all(vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)], vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)])]
+fn test_molecule_editor_tracked_remove_multicenter_bonds(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] ids: Vec<MulticenterBondId>,
+    #[case] removed: Vec<MulticenterBondId>,
+) {
+    entries.constraints = Constraints::from_iter([Constraint::MulticenterBond(
+        MulticenterBondId(0),
+        MulticenterBondConstraintForm::electron_count(NumForm::Lit(3)),
+    )]);
+    let component = Molecule::from_entries(entries.clone());
+    let source = Molecule::combine_all([&component, &component, &component]);
+    let expected_components = (0..3)
+        .map(|idx| {
+            let mut entries = entries.clone();
+            if removed.contains(&MulticenterBondId(idx)) {
+                entries.multicenter.clear();
+                entries.constraints = Constraints::new();
+            }
+            Molecule::from_entries(entries)
+        })
+        .collect::<Vec<_>>();
+    let expected = Molecule::combine_all(&expected_components);
+    let expected_compaction = MoleculeCompaction::new(
+        GraphCompaction::new(Compaction::identity(12), Compaction::identity(9)),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::new(3, removed).unwrap(),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+    );
+    let mut plain = source.edit();
+    let mut tracked = source.edit();
+
+    plain.remove_multicenter_bonds(&ids);
+    let compaction = tracked.tracked_remove_multicenter_bonds(&ids);
+
+    assert_eq!(compaction, expected_compaction);
+    assert_eq!(plain.build(), expected);
+    assert_eq!(tracked.build(), expected);
+}
+
+#[rstest]
+#[case::boundary(MulticenterBondId(1))]
+#[case::outside(MulticenterBondId(2))]
+#[should_panic(expected = "removed entities belong to the source table")]
+fn test_molecule_editor_tracked_remove_multicenter_bonds_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] id: MulticenterBondId,
+    #[values(false, true)] tracked: bool,
+) {
+    let mut editor = Molecule::from_entries(entries).edit();
+    if tracked {
+        editor.tracked_remove_multicenter_bonds(&[id]);
+    } else {
+        editor.remove_multicenter_bonds(&[id]);
+    }
+}
+
+#[rstest]
+#[case::none(vec![], vec![])]
+#[case::first(vec![NoncovalentBondId(0)], vec![NoncovalentBondId(0)])]
+#[case::middle(vec![NoncovalentBondId(1)], vec![NoncovalentBondId(1)])]
+#[case::unsorted_repeated(vec![NoncovalentBondId(2), NoncovalentBondId(0), NoncovalentBondId(2)], vec![NoncovalentBondId(0), NoncovalentBondId(2)])]
+#[case::all(vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)], vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)])]
+fn test_molecule_editor_tracked_remove_noncovalent_bonds(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] ids: Vec<NoncovalentBondId>,
+    #[case] removed: Vec<NoncovalentBondId>,
+) {
+    entries.constraints = Constraints::from_iter([Constraint::NoncovalentBond(
+        NoncovalentBondId(0),
+        NoncovalentBondConstraintForm::intramolecular(true),
+    )]);
+    let component = Molecule::from_entries(entries.clone());
+    let source = Molecule::combine_all([&component, &component, &component]);
+    let expected_components = (0..3)
+        .map(|idx| {
+            let mut entries = entries.clone();
+            if removed.contains(&NoncovalentBondId(idx)) {
+                entries.noncovalent.clear();
+                entries.constraints = Constraints::new();
+            }
+            Molecule::from_entries(entries)
+        })
+        .collect::<Vec<_>>();
+    let expected = Molecule::combine_all(&expected_components);
+    let expected_compaction = MoleculeCompaction::new(
+        GraphCompaction::new(Compaction::identity(12), Compaction::identity(9)),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::new(3, removed).unwrap(),
+        Compaction::identity(3),
+        Compaction::identity(3),
+    );
+    let mut plain = source.edit();
+    let mut tracked = source.edit();
+
+    plain.remove_noncovalent_bonds(&ids);
+    let compaction = tracked.tracked_remove_noncovalent_bonds(&ids);
+
+    assert_eq!(compaction, expected_compaction);
+    assert_eq!(plain.build(), expected);
+    assert_eq!(tracked.build(), expected);
+}
+
+#[rstest]
+#[case::boundary(NoncovalentBondId(1))]
+#[case::outside(NoncovalentBondId(2))]
+#[should_panic(expected = "removed entities belong to the source table")]
+fn test_molecule_editor_tracked_remove_noncovalent_bonds_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] id: NoncovalentBondId,
+    #[values(false, true)] tracked: bool,
+) {
+    let mut editor = Molecule::from_entries(entries).edit();
+    if tracked {
+        editor.tracked_remove_noncovalent_bonds(&[id]);
+    } else {
+        editor.remove_noncovalent_bonds(&[id]);
+    }
+}
+
+#[rstest]
+#[case::none(vec![], vec![])]
+#[case::first(vec![StereoAtomId(0)], vec![StereoAtomId(0)])]
+#[case::middle(vec![StereoAtomId(1)], vec![StereoAtomId(1)])]
+#[case::unsorted_repeated(vec![StereoAtomId(2), StereoAtomId(0), StereoAtomId(2)], vec![StereoAtomId(0), StereoAtomId(2)])]
+#[case::all(vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)], vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)])]
+fn test_molecule_editor_tracked_remove_stereo_atoms(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] ids: Vec<StereoAtomId>,
+    #[case] removed: Vec<StereoAtomId>,
+) {
+    entries.constraints = Constraints::from_iter([Constraint::StereoAtom(
+        StereoAtomId(0),
+        StereoKind::Tetrahedral,
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+    )]);
+    let component = Molecule::from_entries(entries.clone());
+    let source = Molecule::combine_all([&component, &component, &component]);
+    let expected_components = (0..3)
+        .map(|idx| {
+            let mut entries = entries.clone();
+            if removed.contains(&StereoAtomId(idx)) {
+                entries.stereo_atoms.clear();
+                entries.constraints = Constraints::new();
+            }
+            Molecule::from_entries(entries)
+        })
+        .collect::<Vec<_>>();
+    let expected = Molecule::combine_all(&expected_components);
+    let expected_compaction = MoleculeCompaction::new(
+        GraphCompaction::new(Compaction::identity(12), Compaction::identity(9)),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::new(3, removed).unwrap(),
+        Compaction::identity(3),
+    );
+    let mut plain = source.edit();
+    let mut tracked = source.edit();
+
+    plain.remove_stereo_atoms(&ids);
+    let compaction = tracked.tracked_remove_stereo_atoms(&ids);
+
+    assert_eq!(compaction, expected_compaction);
+    assert_eq!(plain.build(), expected);
+    assert_eq!(tracked.build(), expected);
+}
+
+#[rstest]
+#[case::boundary(StereoAtomId(1))]
+#[case::outside(StereoAtomId(2))]
+#[should_panic(expected = "removed entities belong to the source table")]
+fn test_molecule_editor_tracked_remove_stereo_atoms_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] id: StereoAtomId,
+    #[values(false, true)] tracked: bool,
+) {
+    let mut editor = Molecule::from_entries(entries).edit();
+    if tracked {
+        editor.tracked_remove_stereo_atoms(&[id]);
+    } else {
+        editor.remove_stereo_atoms(&[id]);
+    }
+}
+
+#[rstest]
+#[case::none(vec![], vec![])]
+#[case::first(vec![StereoBondId(0)], vec![StereoBondId(0)])]
+#[case::middle(vec![StereoBondId(1)], vec![StereoBondId(1)])]
+#[case::unsorted_repeated(vec![StereoBondId(2), StereoBondId(0), StereoBondId(2)], vec![StereoBondId(0), StereoBondId(2)])]
+#[case::all(vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)], vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)])]
+fn test_molecule_editor_tracked_remove_stereo_bonds(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] ids: Vec<StereoBondId>,
+    #[case] removed: Vec<StereoBondId>,
+) {
+    entries.constraints = Constraints::from_iter([Constraint::StereoBond(
+        StereoBondId(0),
+        StereoKind::CisTrans,
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+    )]);
+    let component = Molecule::from_entries(entries.clone());
+    let source = Molecule::combine_all([&component, &component, &component]);
+    let expected_components = (0..3)
+        .map(|idx| {
+            let mut entries = entries.clone();
+            if removed.contains(&StereoBondId(idx)) {
+                entries.stereo_bonds.clear();
+                entries.constraints = Constraints::new();
+            }
+            Molecule::from_entries(entries)
+        })
+        .collect::<Vec<_>>();
+    let expected = Molecule::combine_all(&expected_components);
+    let expected_compaction = MoleculeCompaction::new(
+        GraphCompaction::new(Compaction::identity(12), Compaction::identity(9)),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::identity(3),
+        Compaction::new(3, removed).unwrap(),
+    );
+    let mut plain = source.edit();
+    let mut tracked = source.edit();
+
+    plain.remove_stereo_bonds(&ids);
+    let compaction = tracked.tracked_remove_stereo_bonds(&ids);
+
+    assert_eq!(compaction, expected_compaction);
+    assert_eq!(plain.build(), expected);
+    assert_eq!(tracked.build(), expected);
+}
+
+#[rstest]
+#[case::boundary(StereoBondId(1))]
+#[case::outside(StereoBondId(2))]
+#[should_panic(expected = "removed entities belong to the source table")]
+fn test_molecule_editor_tracked_remove_stereo_bonds_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] id: StereoBondId,
+    #[values(false, true)] tracked: bool,
+) {
+    let mut editor = Molecule::from_entries(entries).edit();
+    if tracked {
+        editor.tracked_remove_stereo_bonds(&[id]);
+    } else {
+        editor.remove_stereo_bonds(&[id]);
+    }
 }
 
 #[rstest]
@@ -3764,7 +4332,7 @@ fn test_molecule_editor_add_and_remove(#[from(rich_molecule)] molecule: Molecule
     let new_a = b.add_atom(AtomForm::from_element(Element::Br));
     b.add_bond(AtomId(0), new_a, BondForm::from_order(1));
     b.remove_aromatic_systems(&[AromaticSystemId(0)]);
-    let _compaction = b.remove(&[AtomId(3)], &[BondId(2)]);
+    b.remove(&[AtomId(3)], &[BondId(2)]);
     let result = b.build();
     let atoms: Vec<Element> = result
         .atoms()
