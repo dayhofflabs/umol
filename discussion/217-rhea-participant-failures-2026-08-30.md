@@ -276,8 +276,13 @@ The reader follows the published CTfile specification and nothing beyond it. Nam
 - Degenerate geometry is rejected, never computed: a wedge whose endpoint ligands have all-zero or
   collinear projected positions, and a code-0 double bond whose axis or substituent positions
   are all zero or collinear, raise `RaiseError::DegenerateWedgeGeometry { atom }` and
-  `RaiseError::DegenerateBondGeometry { bond }` (proposed). Today the wedge path computes a coset
-  from all-zero coordinates silently.
+  `RaiseError::DegenerateBondGeometry { bond }`. The atom-block parsers keep all-zero
+  coordinates; positions are absent only under `IGNORE_POSITIONS`, so a 0D record reaches the
+  raise with its zeros and is rejected there when a wedge or a code-0 double bond needs them. A
+  projection that places both substituents of one atom on one side of the axis, as a drawn cage
+  does, yields `#C` with an undetermined coset, the reading code 3 produces: the raise has no
+  ring knowledge, and a ring double bond below the stereo model's threshold is then skipped by
+  the model while a chain double bond drawn that way resolves Underdetermined.
 - The parsers reject stereo codes the specification does not define for the bond order: codes 1,
   4, 6 on anything but a single bond, code 3 on anything but a double bond, and any nonzero code on
   other orders. Unconditional, in every preset.
@@ -413,7 +418,14 @@ S8 — Cis/trans from coordinates
   `DegenerateWedgeGeometry` on all-zero or collinear positions instead of computing. Tests:
   fumarate and maleate literals in 2D and in 3D, a ring double bond asserted as the spec says,
   code 3 unchanged, all-zero coordinates rejected, a collinear substituent rejected, SMILES
-  directional rows unchanged. Breaking for the raise's MOL output [dep: S6a, S7b].
+  directional rows unchanged. Breaking for the raise's MOL output [dep: S6a, S7b]. Completed;
+  the parsers' former collapse of all-zero coordinates to absent positions is removed so that the
+  rejection can be observed, and a folded projection reads as an undetermined coset
+  (`CisTransReading` in the raise utilities) with its own row. The ring gate of S7 now also
+  applies to the resolver's partial-constraint check, through
+  `StereoPerception::skipped_stereo_bonds`, so an undetermined assertion on a small-ring double
+  bond is cleared instead of making the whole resolution Underdetermined; a cyclohexene row with
+  an undetermined coset covers it in perception and resolver tests.
 
 Gate: `cargo test -p umol-io --features conformance,proptest` and `cargo test -p umol-graph`.
 

@@ -98,10 +98,15 @@ impl StereoResolver {
                 .tetrahedral_stereo()
                 .is_some_and(|constraint| !constraint.is_undetermined() && !constraint.is_ground())
         });
+        let skipped = self.perception.skipped_stereo_bonds(molecule);
         let partial_bond_constraint = molecule.bonds().iter().any(|bond| {
-            bond.constraints()
-                .cis_trans_stereo()
-                .is_some_and(|constraint| !constraint.is_undetermined() && !constraint.is_ground())
+            !skipped.contains(&bond.id)
+                && bond
+                    .constraints()
+                    .cis_trans_stereo()
+                    .is_some_and(|constraint| {
+                        !constraint.is_undetermined() && !constraint.is_ground()
+                    })
         });
         if partial_atom_constraint || partial_bond_constraint {
             return Ok(Solution::Underdetermined(Edits::new()));
@@ -499,6 +504,17 @@ mod tests {
             id: BondHandle::Id(BondId(1)),
             old: Some(BondConstraintForm::CisTransStereo(
                 CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+            )),
+            new: None,
+        }])
+    )]
+    #[case::cyclohexene_asserted_undetermined(
+        mol_dsl_concrete!(r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 5 "1"] [0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
+        Edits::from_iter([Edit::ModifyBondConstraint {
+            id: BondHandle::Id(BondId(1)),
+            old: Some(BondConstraintForm::CisTransStereo(
+                CisTransStereoForm::Stereo(StereoCoset::Undetermined),
             )),
             new: None,
         }])

@@ -1,7 +1,9 @@
 //! Raise-time stereo helpers for `super`: ligand orderings, directional-bond faces, and the
 //! capability/validation predicates the `raise_*` functions build on.
 
-use umol_geometric_core::{complementary_direction, signed_volume, Point3D};
+use umol_geometric_core::{
+    complementary_direction, same_side_of_axis, signed_volume, Point3D, AXIS_SIDE_TOLERANCE,
+};
 use umol_graph_ir::ir::NoncovalentBondKind;
 
 use super::RaiseError;
@@ -123,14 +125,15 @@ pub(super) fn first_neighbor_toward_ordering(
     ordering
 }
 
-/// Tetrahedral stereo coset index from wedge bonds at `atom_idx`.
+/// Tetrahedral stereo coset index from wedge bonds at `atom_idx`, or `None` when the projected
+/// ligand positions are all at the center or collinear, so that no winding exists.
 pub(super) fn coset_from_wedge_winding(
     atom_idx: usize,
     ordering: &[StereoLigand],
     wedged: usize,
     positions: &[Point3D],
     outofplane: StereoOutofPlane,
-) -> usize {
+) -> Option<usize> {
     let z = if outofplane == StereoOutofPlane::Front {
         1.0
     } else {
@@ -155,13 +158,23 @@ pub(super) fn coset_from_wedge_winding(
             StereoLigand::Virtual(_) => virtual_position,
         })
         .collect();
+    let scale = neighbor_positions
+        .iter()
+        .map(|position| {
+            let (dx, dy) = (
+                position.x - center_position.x,
+                position.y - center_position.y,
+            );
+            (dx * dx + dy * dy).sqrt()
+        })
+        .fold(0.0, f64::max);
+    let volume = signed_volume(points[0], points[1], points[2], points[3]);
+    if scale == 0.0 || volume.abs() <= AXIS_SIDE_TOLERANCE * scale * scale {
+        return None;
+    }
     // umol convention (matching the SMILES `@` = anticlockwise = coset 0 path): the ascending-index
     // ligands of coset 0 have a negative signed volume.
-    if signed_volume(points[0], points[1], points[2], points[3]) < 0.0 {
-        0
-    } else {
-        1
-    }
+    Some(if volume < 0.0 { 0 } else { 1 })
 }
 
 /// Wide endpoints of the definite wedges whose narrow end is `atom_idx`, each with its
@@ -296,6 +309,82 @@ pub(super) fn cis_trans_side(
         second_ligand,
         first_halfplane,
     }))
+}
+
+/// Cis/trans reading of a double bond from coordinates.
+pub(super) enum CisTransReading {
+    Determined(StereoBondAtom, StereoBondAtom),
+    /// Both substituents of one atom lie on one side of the axis, as a projected cage can draw
+    /// them: the bond is a stereo bond whose configuration the coordinates do not yield.
+    Undetermined,
+}
+
+/// Arrangements of both atoms of the double bond `bond_idx` read from coordinates, as the
+/// specification prescribes for stereo code 0: the first substituent of `atom_1_idx` defines the
+/// `Top` halfplane and every other substituent takes the side of the bond axis it lies on. `None`
+/// when either atom has no substituent; `Err` when all-zero or collinear positions leave a side
+/// undetermined.
+pub(super) fn cis_trans_sides_from_positions(
+    mol: &TableMolecule,
+    bond_idx: usize,
+    atom_1_idx: usize,
+    atom_2_idx: usize,
+    positions: &[Point3D],
+) -> Result<Option<CisTransReading>, RaiseError> {
+    let substituents = |atom_idx: usize, other_atom_idx: usize| -> Vec<usize> {
+        atom_ordering(mol, atom_idx)
+            .into_iter()
+            .filter(|&n| n != other_atom_idx)
+            .collect()
+    };
+    let (substituents_1, substituents_2) = (
+        substituents(atom_1_idx, atom_2_idx),
+        substituents(atom_2_idx, atom_1_idx),
+    );
+    let (Some(&reference), Some(_)) = (substituents_1.first(), substituents_2.first()) else {
+        return Ok(None);
+    };
+    let side = |ligand: usize| -> Result<bool, RaiseError> {
+        same_side_of_axis(
+            positions[atom_1_idx],
+            positions[atom_2_idx],
+            positions[reference],
+            positions[ligand],
+        )
+        .ok_or(RaiseError::DegenerateBondGeometry { bond: bond_idx })
+    };
+    let arrangement =
+        |atom_idx: usize, substituents: &[usize]| -> Result<Option<StereoBondAtom>, RaiseError> {
+            let first = substituents[0];
+            let first_same_side = side(first)?;
+            let second_ligand = match substituents.get(1) {
+                Some(&second) => {
+                    if side(second)? == first_same_side {
+                        return Ok(None);
+                    }
+                    StereoLigand::Atom(second)
+                }
+                None => StereoLigand::Virtual(atom_idx),
+            };
+            Ok(Some(StereoBondAtom {
+                first_ligand: StereoLigand::Atom(first),
+                second_ligand,
+                first_halfplane: if first_same_side {
+                    StereoHalfplane::Top
+                } else {
+                    StereoHalfplane::Bottom
+                },
+            }))
+        };
+    Ok(Some(
+        match (
+            arrangement(atom_1_idx, &substituents_1)?,
+            arrangement(atom_2_idx, &substituents_2)?,
+        ) {
+            (Some(side_1), Some(side_2)) => CisTransReading::Determined(side_1, side_2),
+            _ => CisTransReading::Undetermined,
+        },
+    ))
 }
 
 /// Halfplane (top/bottom) of `other_atom_idx` viewed from `atom_idx`.

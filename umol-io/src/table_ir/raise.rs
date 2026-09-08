@@ -33,9 +33,10 @@ use crate::table_ir::{BondStereo, Chirality, ChiralityFrame, Molecule as TableMo
 mod utils;
 
 use utils::{
-    cis_trans_capable, cis_trans_side, first_neighbor_toward_ordering, has_either_wedge,
-    neighbor_count, noncovalent_kind, tetrahedral_ligand_ordering, validate_bond_direction,
-    validate_tetrahedral_geometry, wedge_bond_neighbors, StereoBondAtom, StereoHalfplane,
+    cis_trans_capable, cis_trans_side, cis_trans_sides_from_positions,
+    first_neighbor_toward_ordering, has_either_wedge, neighbor_count, noncovalent_kind,
+    tetrahedral_ligand_ordering, validate_bond_direction, validate_tetrahedral_geometry,
+    wedge_bond_neighbors, CisTransReading, StereoBondAtom, StereoHalfplane,
 };
 
 /// Error variants for TableIR -> Molecule raise.
@@ -51,6 +52,10 @@ pub enum RaiseError {
     CisTransConflict { atom: usize },
     #[error("inconsistent wedge bonds at atom {atom}")]
     WedgeConflict { atom: usize },
+    #[error("wedge coordinates at atom {atom} do not determine a configuration")]
+    DegenerateWedgeGeometry { atom: usize },
+    #[error("coordinates of double bond {bond} do not determine cis or trans")]
+    DegenerateBondGeometry { bond: usize },
 }
 
 impl UmolError for RaiseError {
@@ -297,22 +302,19 @@ fn raise_tetrahedral_stereo(
                 return Ok(None);
             };
             let target_ordering = tetrahedral_ligand_ordering(mol, atom_idx);
-            let source_coset = coset_from_wedge_winding(
-                atom_idx,
-                &target_ordering,
-                neighbor_idx,
-                positions,
-                outofplane,
-            );
-            for &(neighbor_idx, outofplane) in &neighbors[1..] {
-                if coset_from_wedge_winding(
+            let winding = |neighbor_idx, outofplane| {
+                coset_from_wedge_winding(
                     atom_idx,
                     &target_ordering,
                     neighbor_idx,
                     positions,
                     outofplane,
-                ) != source_coset
-                {
+                )
+                .ok_or(RaiseError::DegenerateWedgeGeometry { atom: atom_idx })
+            };
+            let source_coset = winding(neighbor_idx, outofplane)?;
+            for &(neighbor_idx, outofplane) in &neighbors[1..] {
+                if winding(neighbor_idx, outofplane)? != source_coset {
                     return Err(RaiseError::WedgeConflict { atom: atom_idx });
                 }
             }
@@ -347,11 +349,29 @@ fn raise_cis_trans_stereo(
     if !cis_trans_capable(mol, atom_1_idx, atom_2_idx) {
         return Ok(None);
     }
-    let (Some(side_1), Some(side_2)) = (
+    // Directional marks decide when present at both atoms; a double bond without any mark is read
+    // from coordinates when the record has them.
+    let (side_1, side_2) = match (
         cis_trans_side(mol, atom_1_idx, atom_2_idx)?,
         cis_trans_side(mol, atom_2_idx, atom_1_idx)?,
-    ) else {
-        return Ok(None);
+    ) {
+        (Some(side_1), Some(side_2)) => (side_1, side_2),
+        (None, None) => {
+            let Some(positions) = mol.positions.as_ref() else {
+                return Ok(None);
+            };
+            match cis_trans_sides_from_positions(mol, bond_idx, atom_1_idx, atom_2_idx, positions)?
+            {
+                Some(CisTransReading::Determined(side_1, side_2)) => (side_1, side_2),
+                Some(CisTransReading::Undetermined) => {
+                    return Ok(Some(BondConstraintForm::CisTransStereo(
+                        CisTransStereoForm::stereo(StereoCoset::Undetermined),
+                    )));
+                }
+                None => return Ok(None),
+            }
+        }
+        _ => return Ok(None),
     };
     // Generate the halfplane assignments for each side of the double bond.
     let halfplanes = |side: &StereoBondAtom| match side.first_halfplane {
@@ -464,6 +484,26 @@ mod tests {
     // Atom 0 is wedged toward atom 1, which has its own wedge toward atom 4; read alone, the
     // incoming wedge would give atom 1 the opposite coset.
     const INCOMING_WEDGE_MOL: &str = "\n\n\n  8  7  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    1.3812   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906    0.6906    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  1        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\n  1  6  1  0        0\n  1  7  1  0        0\n  1  8  1  0        0\nM  END\n";
+
+    const DIFLUOROETHENE_E_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+
+    const DIFLUOROETHENE_Z_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+
+    const DIFLUOROETHENE_E_3D_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.0000    0.7500 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500    0.0000   -0.7500 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+
+    const DIFLUOROETHENE_Z_3D_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.0000    0.7500 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500    0.0000    0.7500 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+
+    const CYCLOHEXENE_MOL: &str = "\n\n\n  6  6  0  0  0  0  0  0  0  0999 V2000\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.5000    0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.5000    0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.5000   -0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.5000   -0.8660    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  6  1  0        0\n  1  2  2  0        0\n  2  3  1  0        0\n  3  4  1  0        0\n  4  5  1  0        0\n  5  6  1  0        0\nM  END\n";
+
+    const DIFLUOROETHENE_ZERO_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+
+    const DIFLUOROETHENE_COLLINEAR_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+
+    const CFCLBRI_ZERO_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\nM  END\n";
+
+    const CFCLBRI_COLLINEAR_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.6906    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3812    0.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n   -1.3812    0.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\nM  END\n";
+
+    const FOLDED_ALKENE_MOL: &str = "\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6500    0.2500    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  3  1  0        0\n  2  3  1  0        0\n  3  4  2  0        0\n  4  5  1  0        0\nM  END\n";
 
     const CIS_TRANS_EITHER_MOL: &str = "butene\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  2  3  2  3  0  0  0\n  3  4  1  0  0  0  0\nM  END\n";
 
@@ -837,6 +877,8 @@ mod tests {
     #[case::cfclbri_inconsistent_wedges(parse_mol_bytes_to_table_ir(CFCLBRI_INCONSISTENT_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::WedgeConflict { atom: 1 })]
     #[case::cfclbri_definite_and_either_wedge(parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::WedgeConflict { atom: 1 })]
     #[case::either_wedge_two_ligands(parse_mol_bytes_to_table_ir(EITHER_WEDGE_TWO_LIGANDS_MOL.as_bytes()).unwrap(), 1, RaiseError::TetrahedralLigandCount { atom: 1, count: 2 })]
+    #[case::wedge_zero_coordinates(parse_mol_bytes_to_table_ir(CFCLBRI_ZERO_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::DegenerateWedgeGeometry { atom: 1 })]
+    #[case::wedge_collinear_coordinates(parse_mol_bytes_to_table_ir(CFCLBRI_COLLINEAR_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::DegenerateWedgeGeometry { atom: 1 })]
     fn test_raise_tetrahedral_stereo_error(
         #[case] mol: TableMolecule,
         #[case] atom_idx: usize,
@@ -870,6 +912,12 @@ mod tests {
     #[case::fluoropropene_e_methyl_first_backslash(Smiles::parse_bytes(b"C\\C=C\\F").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
     #[case::trisubstituted(Smiles::parse_bytes(b"F/C(C)=C(Cl)/C").unwrap().into_table_ir(), 2, Some(StereoCoset::Lit(0)))]
     #[case::mol_either(parse_mol_bytes_to_table_ir(CIS_TRANS_EITHER_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Undetermined))]
+    #[case::mol_coordinates_e(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_E_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::mol_coordinates_z(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_Z_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::mol_coordinates_e_3d(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_E_3D_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::mol_coordinates_z_3d(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_Z_3D_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::mol_coordinates_ring(parse_mol_bytes_to_table_ir(CYCLOHEXENE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::mol_coordinates_folded(parse_mol_bytes_to_table_ir(FOLDED_ALKENE_MOL.as_bytes()).unwrap(), 2, Some(StereoCoset::Undetermined))]
     #[case::one_sided_marker(Smiles::parse_bytes(b"C(C)=C(Cl)/C").unwrap().into_table_ir(), 1, None)]
     #[case::plain_double(Smiles::parse_bytes(b"C=C").unwrap().into_table_ir(), 0, None)]
     #[case::terminal_no_substituent(Smiles::parse_bytes(b"F/C=C").unwrap().into_table_ir(), 1, None)]
@@ -891,6 +939,8 @@ mod tests {
 
     #[rstest]
     #[case::conflict(Smiles::parse_bytes(b"F/C(\\Cl)=CF").unwrap().into_table_ir(), 2, RaiseError::CisTransConflict { atom: 1 })]
+    #[case::mol_zero_coordinates(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_ZERO_MOL.as_bytes()).unwrap(), 1, RaiseError::DegenerateBondGeometry { bond: 1 })]
+    #[case::mol_collinear_substituent(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_COLLINEAR_MOL.as_bytes()).unwrap(), 1, RaiseError::DegenerateBondGeometry { bond: 1 })]
     fn test_raise_cis_trans_stereo_error(
         #[case] mol: TableMolecule,
         #[case] bond_idx: usize,
