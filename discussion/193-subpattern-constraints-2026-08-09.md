@@ -4,7 +4,8 @@ Status: Proposed
 Date: 2026-08-09
 Relates: [164](164-dsl-edn-worklist-2026-07-27.md),
 [165](165-ast-api-worklist-2026-07-27.md), [176](176-ast-naming-2026-07-31.md),
-[192](192-python-api-type-roles-2026-08-09.md)
+[192](192-python-api-type-roles-2026-08-09.md),
+[222](222-pattern-semantics-spike-2026-09-05.md)
 
 ## Purpose
 

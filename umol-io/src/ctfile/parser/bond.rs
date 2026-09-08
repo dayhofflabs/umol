@@ -13,7 +13,7 @@ use super::utils::{
 };
 use crate::ctfile::config::CtabParseFlags;
 use crate::ctfile::error::ParseError;
-use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
+use crate::table_ir::bond::{Bond, BondOrder, BondTaper, BondWedge, ExtendedBond};
 
 /// Parse bond block (basic bonds only)
 pub(super) fn bond_block(
@@ -142,7 +142,7 @@ fn bond_input<'inp>(
         offset = 9;
 
         // Stereo/direction (9-11)
-        let (stereo, wedge) = if bytes.len() >= 12 {
+        let (stereo, orientation) = if bytes.len() >= 12 {
             offset = 12;
             let stereo_code = parse_int_opt::<u8>(&bytes[9..12], 9)?.unwrap_or(0);
             if !matches!(stereo_code, 0 | 1 | 3 | 4 | 6) {
@@ -167,10 +167,18 @@ fn bond_input<'inp>(
         }
 
         let mut bond = Bond::new(first_atom, second_atom, order);
-        // The stereo/direction field applies only to single and double bonds.
+        // The stereo/direction field applies only to single and double bonds. The source first
+        // atom is the wedge's narrow end.
         if matches!(order, BondOrder::Single | BondOrder::Double) {
             bond.stereo = stereo;
-            bond.wedge = wedge;
+            bond.wedge = orientation.map(|orientation| BondWedge {
+                orientation,
+                taper: if first_atom <= second_atom {
+                    BondTaper::Widening
+                } else {
+                    BondTaper::Narrowing
+                },
+            });
         }
 
         let _: &[u8] = take(offset).parse_next(input)?;
@@ -228,7 +236,7 @@ fn extended_bond_input<'inp>(
             .map_err(|_| ErrMode::Backtrack(InputError { column: 6 }))?;
 
         // Stereo/direction (9-11)
-        let (stereo, wedge) = if bytes.len() >= 12 {
+        let (stereo, orientation) = if bytes.len() >= 12 {
             offset = 12;
             let stereo_code = parse_int_opt::<u8>(&bytes[9..12], 9)?.unwrap_or(0);
             if !matches!(stereo_code, 0 | 1 | 3 | 4 | 6) {
@@ -268,10 +276,18 @@ fn extended_bond_input<'inp>(
         };
 
         let mut bond = ExtendedBond::new(first_atom, second_atom, order);
-        // The stereo/direction field applies only to single and double bonds.
+        // The stereo/direction field applies only to single and double bonds. The source first
+        // atom is the wedge's narrow end.
         if matches!(order, BondOrder::Single | BondOrder::Double) {
             bond.stereo = stereo;
-            bond.wedge = wedge;
+            bond.wedge = orientation.map(|orientation| BondWedge {
+                orientation,
+                taper: if first_atom <= second_atom {
+                    BondTaper::Widening
+                } else {
+                    BondTaper::Narrowing
+                },
+            });
         }
         bond.topology = topology;
         bond.reacting_center = reacting_center;

@@ -6,7 +6,7 @@ use umol_graph_ir::ir::NoncovalentBondKind;
 
 use super::RaiseError;
 use crate::table_ir::bond::{BondNoncovalent as TableNoncovalent, BondOrder as TableBondOrder};
-use crate::table_ir::{BondDirection, BondWedge, Molecule as TableMolecule};
+use crate::table_ir::{BondDirection, BondOrientation, Molecule as TableMolecule};
 
 pub(super) fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
     match kind {
@@ -173,24 +173,25 @@ pub(super) fn coset_from_wedge_winding(
     }
 }
 
-/// Neighbors reached by wedge bonds at `atom_idx`, each with its out-of-plane direction.
+/// Wide endpoints of the definite wedges whose narrow end is `atom_idx`, each with its
+/// out-of-plane direction. A wedge describes only its narrow endpoint; `Either` wedges are not read.
 pub(super) fn wedge_bond_neighbors(
     mol: &TableMolecule,
     atom_idx: usize,
 ) -> Vec<(usize, StereoOutofPlane)> {
     mol.bonds
         .iter()
-        .filter_map(
-            |bond| match (bond.atoms.other(atom_idx as u32), bond.wedge) {
-                (Some(other), Some(BondWedge::Up)) => {
-                    Some((other as usize, StereoOutofPlane::Front))
-                }
-                (Some(other), Some(BondWedge::Down)) => {
-                    Some((other as usize, StereoOutofPlane::Back))
-                }
-                _ => None,
-            },
-        )
+        .filter(|bond| bond.narrow_endpoint() == Some(atom_idx as u32))
+        .filter_map(|bond| {
+            let wide = bond.wide_endpoint()? as usize;
+            match bond.wedge?.orientation {
+                BondOrientation::Up => Some((wide, StereoOutofPlane::Front)),
+                BondOrientation::Down => Some((wide, StereoOutofPlane::Back)),
+                BondOrientation::Either
+                | BondOrientation::EitherUp
+                | BondOrientation::EitherDown => None,
+            }
+        })
         .collect()
 }
 

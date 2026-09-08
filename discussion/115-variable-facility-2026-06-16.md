@@ -1,8 +1,17 @@
 # 115 · Variable facility (prospecting, deferred)
 
-Status: Deferred (forward-looking; not built in the 113 restructure)
+Status: Proposed
 Date: 2026-06-16
-Relates: 097 (JointDomain), 098 (bind scope), 113 (AST restructure), 114 (interning)
+Relates: [097](097-joint-domain-design-2026-05-23.md),
+[098](098-bind-scope-2026-05-23.md),
+[113](113-ast-canonical-equality-and-lattice-2026-06-14.md),
+[114](114-atom-bond-interning-2026-06-16.md),
+[222](222-pattern-semantics-spike-2026-09-05.md)
+
+2026-09-05: The [nested-query scope decision](#nested-query-scope-decision-2026-09-05)
+settles lexical visibility and an initial evaluation restriction. It supersedes the earlier
+suggestion that scope may simply follow the region a solver walks. The representation options
+and historical implementation observations below remain prospecting; no implementation is committed.
 
 ## Purpose
 
@@ -122,3 +131,59 @@ All three need the same core: **distinguish anonymous local bounds from molecule
 variables, treat the anonymous ones as non-correlating**, keep them structurally canonical.
 (1) is the most contained principled answer. Until then, 113 uses the fixed name `"r"` —
 the one place to revisit when this facility lands.
+
+## Nested-query scope decision (2026-09-05)
+
+The SMARTS/SMIRKS exploration in [doc 222](222-pattern-semantics-spike-2026-09-05.md)
+adopts lexical scope with correlated existential queries for the variable facility. This is
+a semantic decision, not a new SMARTS spelling or a choice of variable-environment API.
+
+### Precedents
+
+Lexical binding gives each variable an owning scope: consistently renaming a local binding
+and its references, without capture, preserves meaning. Nested existential queries supply
+the corresponding visibility and witness rules:
+
+- [SQL correlated EXISTS](https://www.postgresql.org/docs/current/functions-subquery.html#FUNCTIONS-SUBQUERY-EXISTS)
+  permits references to enclosing values, which act as constants during an individual
+  subquery evaluation. Its result reports existence rather than exporting a witness.
+- [SPARQL EXISTS and NOT EXISTS](https://www.w3.org/TR/sparql11-query/#negation)
+  similarly test a nested graph pattern using enclosing bindings without generating
+  additional bindings for the surrounding query.
+- [Soufflé's Datalog grounding rules](https://souffle-lang.github.io/rules) require
+  variables to obtain values from positive body predicates and require grounded arguments
+  for arithmetic and string functors. This supplies a precedent for restricting evaluation
+  without requiring arbitrary equation solving.
+
+These precedents supply reusable rules; adopting them does not require SQL null semantics,
+the full SPARQL algebra, or a recursive Datalog evaluator.
+
+### Agreed initial rules
+
+1. Every variable has a type and an owning scope. References resolve structurally,
+   independently of matching order. Initially, shadowing an enclosing variable name is
+   rejected. Equal spellings in independent sibling local scopes do not establish identity.
+2. Nested predicates may read enclosing bindings but cannot reassign them. An inner
+   condition may reject an outer candidate, so shared values still impose correlations.
+3. Variables introduced within a nested predicate are existential and local. Neither their
+   values nor their entity witnesses escape into the surrounding pattern or sibling
+   predicates. Locality does not impose disjointness: independently chosen witnesses may
+   overlap, subject to each nested pattern's own structural constraints.
+4. Negation means that no satisfying local witness exists for the supplied enclosing
+   bindings. It exports no bindings and cannot obtain a value from a failed match.
+5. The initial evaluator requires referenced values to be supplied by parameters or positive
+   structural matches. Conditions compare supplied values; they need not solve equations
+   to discover them. This is an evaluation capability restriction, not a change to the
+   denotation of symbolic patterns or set-valued results.
+
+For example, an outer match supplies an atom and its charge q. A nested predicate asks
+whether that atom has a neighbor with charge q. The neighbor is a local witness; q is an
+enclosing input. Negating the predicate asks whether no such neighbor exists. Ordinary
+rooted recursive SMARTS already has the analogous fixed input in its root atom; named
+attribute variables extend that correlation mechanism.
+
+Evaluation can use an environment of supplied values and nested matching with fixed inputs.
+These rules do not require mutable bindings, general unification, or fixed-point evaluation.
+Binding syntax, environment representation, and richer symbolic evaluation remain deferred.
+Explicit witness export or richer solving can be considered later without changing the
+meaning of patterns admitted by this initial fragment.

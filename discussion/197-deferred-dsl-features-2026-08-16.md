@@ -6,7 +6,8 @@ Relates: [115](115-variable-facility-2026-06-16.md),
 [163](163-release-preparation-2026-07-26.md),
 [164](164-dsl-edn-worklist-2026-07-27.md),
 [195](195-molecule-constraint-matching-2026-08-12.md),
-[DSL specification](../umol-graph-ir/spec/umol-dsl-spec.md)
+[DSL specification](../umol-graph-ir/spec/umol-dsl-spec.md),
+[222](222-pattern-semantics-spike-2026-09-05.md)
 
 ## Purpose
 

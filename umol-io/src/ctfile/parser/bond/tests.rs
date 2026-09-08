@@ -8,15 +8,18 @@ use winnow::Parser;
 
 use super::*;
 use crate::ctfile::config::CtabParseFlags;
-use crate::table_ir::{BondOrder, BondReactingCenter, BondStereo, BondTopology, BondWedge};
+use crate::table_ir::{
+    BondOrder, BondOrientation, BondReactingCenter, BondStereo, BondTaper, BondTopology, BondWedge,
+};
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len22_trailing_whitespace(b" 12  2  1  6  0  0  0 \n", 11, 1, BondOrder::Single, None, Some(BondWedge::Down))]
-#[case::len21(b"  2  5  2  1  0  0  0\n", 1, 4, BondOrder::Double, None, Some(BondWedge::Up))]
+#[case::len22_trailing_whitespace(b" 12  2  1  6  0  0  0 \n", 11, 1, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }))]
+#[case::len21(b"  2  5  2  1  0  0  0\n", 1, 4, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
 #[case::len18(b"  1  2  1  0  0  0\n", 0, 1, BondOrder::Single, None, None)]
-#[case::len13(b"  1  3  1  6\n", 0, 2, BondOrder::Single, None, Some(BondWedge::Down))]
-#[case::len12(b"  1  3  2  1\n", 0, 2, BondOrder::Double, None, Some(BondWedge::Up))]
+#[case::len13(b"  1  3  1  6\n", 0, 2, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Widening }))]
+#[case::len12(b"  1  3  2  1\n", 0, 2, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
+#[case::len12_reversed(b"  3  1  1  1\n", 2, 0, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }))]
 #[case::len10(b"  1  2  1 \n", 0, 1, BondOrder::Single, None, None)]
 #[case::len9(b"  1  2  1\n", 0, 1, BondOrder::Single, None, None)]
 fn test_bond_block(
@@ -61,11 +64,12 @@ fn test_bond_block_error(#[case] input: &[u8], #[case] col: u32) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len22_trailing_whitespace(b" 12  2  1  6  0  0  0 \n", 11, 1, BondOrder::Single, None, Some(BondWedge::Down))]
-#[case::len21(b"  2  5  2  1  0  0  0\n", 1, 4, BondOrder::Double, None, Some(BondWedge::Up))]
+#[case::len22_trailing_whitespace(b" 12  2  1  6  0  0  0 \n", 11, 1, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }))]
+#[case::len21(b"  2  5  2  1  0  0  0\n", 1, 4, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
 #[case::len18(b"  1  2  1  0  0  0\n", 0, 1, BondOrder::Single, None, None)]
-#[case::len13(b"  1  3  1  6\n", 0, 2, BondOrder::Single, None, Some(BondWedge::Down))]
-#[case::len12(b"  1  3  2  1\n", 0, 2, BondOrder::Double, None, Some(BondWedge::Up))]
+#[case::len13(b"  1  3  1  6\n", 0, 2, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Widening }))]
+#[case::len12(b"  1  3  2  1\n", 0, 2, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
+#[case::len12_reversed(b"  3  1  1  1\n", 2, 0, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }))]
 #[case::len10(b"  1  2  1 \n", 0, 1, BondOrder::Single, None, None)]
 #[case::len9(b"  1  2  1\n", 0, 1, BondOrder::Single, None, None)]
 fn test_extended_bond_block(
@@ -128,11 +132,11 @@ fn test_bond_block_eof_error(#[case] extended: bool) {
 #[rustfmt::skip]
 #[rstest]
 #[case::len21_single(b"  2  5  1  0  0  0  0", 1, 4, BondOrder::Single, None, None)]
-#[case::len21_single_wedge(b"  1  2  1  1  0  0  0", 0, 1, BondOrder::Single, None, Some(BondWedge::Up))]
+#[case::len21_single_wedge(b"  1  2  1  1  0  0  0", 0, 1, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
 #[case::len21_double(b"  2  5  2  0  0  0  0", 1, 4, BondOrder::Double, None, None)]
-#[case::len21_double_wedge_up(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, None, Some(BondWedge::Up))]
-#[case::len21_double_wedge_down(b"  2  5  2  6  0  0  0", 1, 4, BondOrder::Double, None, Some(BondWedge::Down))]
-#[case::len21_double_wedge_either(b"  2  5  2  4  0  0  0", 1, 4, BondOrder::Double, None, Some(BondWedge::Either))]
+#[case::len21_double_wedge_up(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
+#[case::len21_double_wedge_down(b"  2  5  2  6  0  0  0", 1, 4, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Widening }))]
+#[case::len21_double_wedge_either(b"  2  5  2  4  0  0  0", 1, 4, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Widening }))]
 #[case::len21_triple(b"  2  5  3  0  0  0  0", 1, 4, BondOrder::Triple, None, None)]
 #[case::len21_triple_ignored_stereo(b"  2  5  3  1  0  0  0", 1, 4, BondOrder::Triple, None, None)]
 #[case::len21_triple_empty_fields(b"  2  5  3  1         ", 1, 4, BondOrder::Triple, None, None)]
@@ -142,17 +146,19 @@ fn test_bond_block_eof_error(#[case] extended: bool) {
 #[case::len18_blank(b"  1  2  1  0  0   ", 0, 1, BondOrder::Single, None, None)]
 #[case::len15_blank(b"  1  2  1  0   ", 0, 1, BondOrder::Single, None, None)]
 #[case::len15_zero(b"  1  2  1  0  0", 0, 1, BondOrder::Single, None, None)]
-#[case::len12_single_wedge(b"  1  3  1  1", 0, 2, BondOrder::Single, None, Some(BondWedge::Up))]
+#[case::len12_single_wedge(b"  1  3  1  1", 0, 2, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
 #[case::len12_double(b"  2  5  2  0", 1, 4, BondOrder::Double, None, None)]
-#[case::len12_double_wedge_up(b"  1  3  2  1", 0, 2, BondOrder::Double, None, Some(BondWedge::Up))]
-#[case::len12_single_dash(b"  2  4  1  6", 1, 3, BondOrder::Single, None, Some(BondWedge::Down))]
+#[case::len12_double_wedge_up(b"  1  3  2  1", 0, 2, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
+#[case::len12_single_dash(b"  2  4  1  6", 1, 3, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Widening }))]
+#[case::len12_single_wedge_reversed(b"  3  1  1  1", 2, 0, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }))]
+#[case::len12_single_dash_reversed(b"  4  2  1  6", 3, 1, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }))]
 #[case::len12_triple_empty_fields(b"  2  5  3   ", 1, 4, BondOrder::Triple, None, None)]
 #[case::len12_blank(b"  1  2  1   ", 0, 1, BondOrder::Single, None, None)]
 #[case::len9_single(b"  1  2  1", 0, 1, BondOrder::Single, None, None)]
 #[case::len9_double(b"  2  5  2", 1, 4, BondOrder::Double, None, None)]
 #[case::len9_triple(b"  2  5  3", 1, 4, BondOrder::Triple, None, None)]
 #[case::len9_aromatic(b"  2  5  4", 1, 4, BondOrder::Aromatic, None, None)]
-#[case::invalid_unused(b"  1  2  1  1XXX  0  0", 0, 1, BondOrder::Single, None, Some(BondWedge::Up))]
+#[case::invalid_unused(b"  1  2  1  1XXX  0  0", 0, 1, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }))]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] atom1: usize,
@@ -252,16 +258,17 @@ fn test_bond_input_lenient_error(#[case] input: &[u8], #[case] column: u32) {
 #[rustfmt::skip]
 #[rstest]
 #[case::len_9(b"  1  2  1", 0, 1, BondOrder::Single, None, None, None, None)]
-#[case::len_12_double_wedge_up(b"  1  3  2  1", 0, 2, BondOrder::Double, None, Some(BondWedge::Up), None, None)]
-#[case::len_12_single_dash(b"  1  2  1  6", 0, 1, BondOrder::Single, None, Some(BondWedge::Down), None, None)]
+#[case::len_12_double_wedge_up(b"  1  3  2  1", 0, 2, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), None, None)]
+#[case::len_12_single_dash(b"  1  2  1  6", 0, 1, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Widening }), None, None)]
+#[case::len_12_single_wedge_reversed(b"  3  1  1  1", 2, 0, BondOrder::Single, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }), None, None)]
 #[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, None, None, None)]
-#[case::len_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, None, Some(BondWedge::Up), None, None)]
+#[case::len_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), None, None)]
 #[case::len_12_double_either(b"  1  2  2  3", 0, 1, BondOrder::Double, Some(BondStereo::Either), None, None, None)]
 #[case::len_18_any_bond_ring(b"  1  2  8  0     1", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
 #[case::len_21_chain_center(b"  1  2  1  0     2  1", 0, 1, BondOrder::Single, None, None, Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
 #[case::len_21_not_center(b"  1  2  1  0     2 -1", 0, 1, BondOrder::Single, None, None, Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
 #[case::len_21_blank_fields(b"  1  2  1            ", 0, 1, BondOrder::Single, None, None, None, None)]
-#[case::len_21_reaction_center(b"  2  5  2  1  0  0  1", 1, 4, BondOrder::Double, None, Some(BondWedge::Up), None, Some(BondReactingCenter::CENTER))]
+#[case::len_21_reaction_center(b"  2  5  2  1  0  0  1", 1, 4, BondOrder::Double, None, Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), None, Some(BondReactingCenter::CENTER))]
 #[case::len_15_invalid_unused(b"  1  2  8  0XXX  1", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
 fn test_extended_bond_input(
     #[case] input: &[u8],

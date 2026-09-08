@@ -303,7 +303,6 @@ fn raise_tetrahedral_stereo(
             let Some(positions) = mol.positions.as_ref() else {
                 return Ok(None);
             };
-            // Exclude atoms adjacent to tetrahedral stereo centers that share a wedge bond.
             let count = neighbor_count(mol, atom_idx);
             if count != 3 && count != 4 {
                 return Ok(None);
@@ -463,6 +462,16 @@ mod tests {
     const METHYLOXIRANE_WEDGE_MOL: &str = "\n\n\n  5  5  0  0  1  0  0  0  0  0999 V2000\n   -0.1738    0.0355    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.4076    0.6168    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.9889    0.1428    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.9889    0.0355    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6743   -0.6168    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  1  3  1  1        0\n  2  4  1  0        0\n  4  1  1  0        0\n  1  5  1  6        0\nM  END\n";
 
     const PROCHIRAL_METHYLENE_WEDGE_MOL: &str = "\n\n\n  7  6  0  0  0  0  0  0  0  0999 V2000\n   -0.3009   -0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.4111    0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.4111    1.0277    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    1.1231   -0.2055    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.3009   -1.0277    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.7120    0.5065    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.1231   -0.2055    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  2  0        0\n  1  5  1  0        0\n  1  6  1  1        0\n  1  7  1  6        0\nM  END\n";
+
+    // Atom 1 is wedged toward atom 4, whose four neighbors make it look like a stereo site.
+    const WIDE_ENDPOINT_WEDGE_MOL: &str = "\n\n\n  8  7  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -1.3812    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906   -1.3812    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.3812    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\n  5  6  1  0        0\n  5  7  1  0        0\n  5  8  1  0        0\nM  END\n";
+
+    // Atoms 1 and 2 are each wedged toward atom 0, written as the higher-numbered first atom.
+    const SHARED_WIDE_ENDPOINT_WEDGE_MOL: &str = "\n\n\n 10  9  0  0  1  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    1.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    1.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000   -1.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n   -2.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    1.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000   -1.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  2  1  1  1        0\n  3  1  1  6        0\n  1  4  1  0        0\n  2  5  1  0        0\n  2  6  1  0        0\n  2  7  1  0        0\n  3  8  1  0        0\n  3  9  1  0        0\n  3 10  1  0        0\nM  END\n";
+
+    // Atom 0 is wedged toward atom 1, which has its own wedge toward atom 4; read alone, the
+    // incoming wedge would give atom 1 the opposite coset.
+    const INCOMING_WEDGE_MOL: &str = "\n\n\n  8  7  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    1.3812   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906    0.6906    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  1        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\n  1  6  1  0        0\n  1  7  1  0        0\n  1  8  1  0        0\nM  END\n";
 
     const CHIRAL_PARITY_MOL: &str = "chiral\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    1.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1  3  1  0  0  0  0\n  1  4  1  0  0  0  0\n  1  5  1  0  0  0  0\nM  END\n";
 
@@ -804,6 +813,13 @@ mod tests {
     #[case::mol_wedge_sulfoxide(parse_mol_bytes_to_table_ir(SULFOXIDE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
     #[case::mol_wedge_methyloxirane(parse_mol_bytes_to_table_ir(METHYLOXIRANE_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCoset::Lit(0)))]
     #[case::mol_wedge_prochiral_methylene(parse_mol_bytes_to_table_ir(PROCHIRAL_METHYLENE_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCoset::Lit(1)))]
+    #[case::mol_wedge_wide_endpoint_site(parse_mol_bytes_to_table_ir(WIDE_ENDPOINT_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::mol_wedge_wide_endpoint(parse_mol_bytes_to_table_ir(WIDE_ENDPOINT_WEDGE_MOL.as_bytes()).unwrap(), 4, None)]
+    #[case::mol_wedge_shared_wide_endpoint_first_site(parse_mol_bytes_to_table_ir(SHARED_WIDE_ENDPOINT_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::mol_wedge_shared_wide_endpoint_second_site(parse_mol_bytes_to_table_ir(SHARED_WIDE_ENDPOINT_WEDGE_MOL.as_bytes()).unwrap(), 2, Some(StereoCoset::Lit(0)))]
+    #[case::mol_wedge_shared_wide_endpoint(parse_mol_bytes_to_table_ir(SHARED_WIDE_ENDPOINT_WEDGE_MOL.as_bytes()).unwrap(), 0, None)]
+    #[case::mol_wedge_incoming_site(parse_mol_bytes_to_table_ir(INCOMING_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::mol_wedge_incoming_source(parse_mol_bytes_to_table_ir(INCOMING_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCoset::Lit(0)))]
     #[case::sulfoxide_counterclockwise(Smiles::parse_bytes(b"C[S@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
     #[case::sulfoxide_clockwise(Smiles::parse_bytes(b"C[S@@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
     #[case::sulfoxide_charge_separated(Smiles::parse_bytes(b"C[S@@+]([O-])CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]

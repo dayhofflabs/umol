@@ -9,7 +9,7 @@ use crate::ctfile::error::ParseError;
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomSymbol, AttachmentPointType,
-    BondOrder, BondReactingCenter, BondStereo, BondTopology, BondWedge, RingBondCount,
+    BondOrder, BondOrientation, BondReactingCenter, BondStereo, BondTopology, RingBondCount,
     SubstitutionCount, UnsaturatedAtom,
 };
 
@@ -222,19 +222,20 @@ pub(super) fn convert_extended_bond_type_code(
 }
 
 /// Convert bond stereo/direction code.
-/// 'sss' field - single-bond wedge direction or double-bond stereo; the codes are disjoint by bond order.
-/// Single bond: 0 = none, 1 = Up wedge, 6 = Down wedge, 4 = Either (wavy).
+/// 'sss' field - single-bond wedge orientation or double-bond stereo; the codes are disjoint by bond order.
+/// Single bond: 0 = none, 1 = Up wedge, 6 = Down wedge, 4 = Either (wavy). The wedge's narrow end
+/// is the bond line's first atom; the caller derives the taper from the endpoint order.
 /// Double bond: 0 = from coordinates, 3 = Either (cis-or-trans unknown, crossed double bond).
 /// Definite cis/trans is never encoded in this field; it derives from coordinates.
 pub(super) fn convert_bond_stereo_direction_code(
     code: u8,
-) -> (Option<BondStereo>, Option<BondWedge>) {
+) -> (Option<BondStereo>, Option<BondOrientation>) {
     match code {
         0 => (None, None),
-        1 => (None, Some(BondWedge::Up)),
+        1 => (None, Some(BondOrientation::Up)),
         3 => (Some(BondStereo::Either), None),
-        4 => (None, Some(BondWedge::Either)),
-        6 => (None, Some(BondWedge::Down)),
+        4 => (None, Some(BondOrientation::Either)),
+        6 => (None, Some(BondOrientation::Down)),
         _ => unreachable!("invalid stereo/direction code: {}", code),
     }
 }
@@ -667,13 +668,13 @@ mod tests {
 
     #[rstest]
     #[case::not_stereo(0, (None, None))]
-    #[case::up_wedge(1, (None, Some(BondWedge::Up)))]
+    #[case::up_wedge(1, (None, Some(BondOrientation::Up)))]
     #[case::either_double(3, (Some(BondStereo::Either), None))]
-    #[case::either_single(4, (None, Some(BondWedge::Either)))]
-    #[case::down_wedge(6, (None, Some(BondWedge::Down)))]
+    #[case::either_single(4, (None, Some(BondOrientation::Either)))]
+    #[case::down_wedge(6, (None, Some(BondOrientation::Down)))]
     fn test_convert_bond_stereo_direction_code(
         #[case] code: u8,
-        #[case] expected: (Option<BondStereo>, Option<BondWedge>),
+        #[case] expected: (Option<BondStereo>, Option<BondOrientation>),
     ) {
         assert_eq!(convert_bond_stereo_direction_code(code), expected);
     }
