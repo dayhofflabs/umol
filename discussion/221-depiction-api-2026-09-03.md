@@ -3,7 +3,16 @@
 Status: Completed
 Date: 2026-09-03
 Relates: [220](220-readable-depiction-2026-09-02.md),
+[222](222-supplied-layout-depiction-2026-09-08.md),
 [225](225-depiction-problems-2026-09-09.md)
+
+## Partially superseded
+
+Doc [222](222-supplied-layout-depiction-2026-09-08.md) (2026-09-08) reverses one settled item: it
+adds the public `umol_io::depict::depict_molecule` operation that lowers a supplied `MoleculeLayout`
+into a `Depiction` and re-adds the `MoleculeDepictionError::LayoutFrame` variant removed in S2a.
+The statements below that `MoleculeLayout` needs no public lowering operation and is not a route to
+`Depiction` no longer describe the API. Every other decision in this document stands.
 
 ## Purpose
 
