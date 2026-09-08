@@ -2,13 +2,14 @@
 //!
 //! This module is available with the `depiction` feature. [`Depict`] is implemented for graph-IR
 //! molecules and reactions: `depict` uses [`DepictConfig::default`], while `depict_with` accepts an
-//! explicit configuration. Both operations return an opaque [`Depiction`], whose
-//! [`Depiction::render_svg`] method produces SVG text.
+//! explicit configuration. [`depict_molecule`] depicts a molecule in a supplied
+//! [`MoleculeLayout`](crate::layout::MoleculeLayout) instead of generating one. All operations
+//! return an opaque [`Depiction`], whose [`Depiction::render_svg`] method produces SVG text.
 
 pub(crate) mod molecule;
 mod reaction;
 
-pub use molecule::MoleculeDepictionError;
+pub use molecule::{depict_molecule, MoleculeDepictionError};
 pub use reaction::ReactionDepictionError;
 use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::Entity;
