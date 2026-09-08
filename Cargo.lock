@@ -2046,6 +2046,7 @@ dependencies = [
  "pyo3",
  "rstest",
  "umol-chem",
+ "umol-geometric-core",
  "umol-graph",
  "umol-graph-core",
  "umol-graph-ir",

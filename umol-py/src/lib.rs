@@ -5,6 +5,8 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "depiction")]
 use crate::depict::{DepictConfig, Depiction, MoleculeLayoutAlgorithm};
+#[cfg(feature = "depiction")]
+use crate::layout::MoleculeLayout;
 #[cfg(feature = "graph")]
 use crate::{
     algorithm::{
@@ -171,6 +173,8 @@ mod error;
 mod fingerprint;
 #[cfg(feature = "graph")]
 mod lattice;
+#[cfg(feature = "depiction")]
+mod layout;
 #[cfg(feature = "graph")]
 mod metadata;
 #[cfg(feature = "graph")]
@@ -212,6 +216,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     {
         #[cfg(feature = "depiction")]
         module.add_class::<MoleculeLayoutAlgorithm>()?;
+        #[cfg(feature = "depiction")]
+        module.add_class::<MoleculeLayout>()?;
         #[cfg(feature = "depiction")]
         module.add_class::<DepictConfig>()?;
         #[cfg(feature = "depiction")]

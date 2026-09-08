@@ -1,15 +1,16 @@
 //! Explicit layout and SVG depiction bindings, enabled by the `depiction` feature.
 
-use pyo3::exceptions::PyRuntimeError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_io::depict::{
-    Depict as IoDepict, DepictConfig as IoDepictConfig, Depiction as IoDepiction,
+    depict_molecule, Depict as IoDepict, DepictConfig as IoDepictConfig, Depiction as IoDepiction,
     MoleculeDepictionError as IoMoleculeDepictionError,
     ReactionDepictionError as IoReactionDepictionError,
 };
 use umol_io::layout::MoleculeLayoutAlgorithm as IoMoleculeLayoutAlgorithm;
 
 use crate::error::contradiction_error;
+use crate::layout::MoleculeLayout;
 use crate::molecule::Molecule;
 use crate::reaction::Reaction;
 
@@ -144,6 +145,16 @@ impl Molecule {
             .map(Depiction::from_rust)
             .map_err(molecule_depiction_error)
     }
+
+    /// Construct a format-neutral depiction in a supplied `layout`.
+    ///
+    /// Raises `ValueError` if `layout` does not share this molecule's atom frame and
+    /// `RuntimeError` if tetrahedral depiction fails.
+    fn depict_with_layout(&self, layout: &MoleculeLayout) -> PyResult<Depiction> {
+        depict_molecule(self.to_rust(), layout.to_rust())
+            .map(Depiction::from_rust)
+            .map_err(molecule_depiction_error)
+    }
 }
 
 #[pymethods]
@@ -173,7 +184,15 @@ impl Reaction {
 }
 
 fn molecule_depiction_error(error: IoMoleculeDepictionError) -> PyErr {
-    PyRuntimeError::new_err(error.to_string())
+    match error {
+        error @ IoMoleculeDepictionError::LayoutFrame(_) => {
+            PyValueError::new_err(error.to_string())
+        }
+        error @ (IoMoleculeDepictionError::Layout(_)
+        | IoMoleculeDepictionError::TetrahedralGeometry { .. }) => {
+            PyRuntimeError::new_err(error.to_string())
+        }
+    }
 }
 
 fn reaction_depiction_error(error: IoReactionDepictionError) -> PyErr {
@@ -186,11 +205,17 @@ fn reaction_depiction_error(error: IoReactionDepictionError) -> PyErr {
 
 #[cfg(test)]
 mod tests {
-    use pyo3::exceptions::{PyRuntimeError, PyTypeError};
+    use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
     use rstest::rstest;
+    use umol_geometric_core::Point2D;
     use umol_graph_ir::ir::{
         BondDelta, BondFieldChange, BondId, Delta, Deltas, Molecule as GraphIrMolecule, NumForm,
         Reaction as GraphIrReaction, StereoAtomId,
+    };
+    use umol_graph_ir::mol_dsl;
+    use umol_io::layout::{
+        layout_molecule, MoleculeLayout as IoMoleculeLayout,
+        MoleculeLayoutError as IoMoleculeLayoutError,
     };
 
     use super::*;
@@ -273,6 +298,38 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_depict_with_layout() {
+        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#));
+        let layout = MoleculeLayout::from_rust(
+            layout_molecule(molecule.to_rust(), IoMoleculeLayoutAlgorithm::CoordGen).unwrap(),
+        );
+        let expected = molecule.to_rust().depict().unwrap().render_svg();
+
+        let depiction = molecule.depict_with_layout(&layout).unwrap();
+
+        assert_eq!(depiction.render_svg(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_depict_with_layout_error() {
+        Python::attach(|py| {
+            let molecule =
+                Molecule::from_rust(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#));
+            let layout = MoleculeLayout::from_rust(
+                IoMoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
+            );
+
+            let error = molecule.depict_with_layout(&layout).err().unwrap();
+
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "layout frame: molecule atom count 2 does not match layout atom count 1"
+            );
+        });
+    }
+
+    #[rstest]
     fn test_molecule_depiction_error() {
         Python::attach(|py| {
             let error = molecule_depiction_error(IoMoleculeDepictionError::TetrahedralGeometry {
@@ -283,6 +340,24 @@ mod tests {
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "tetrahedral geometry cannot establish a display wedge for stereo atom 3"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_depiction_error_layout_frame() {
+        Python::attach(|py| {
+            let error = molecule_depiction_error(IoMoleculeDepictionError::LayoutFrame(
+                IoMoleculeLayoutError::FrameSizeMismatch {
+                    molecule_atom_count: 2,
+                    layout_atom_count: 1,
+                },
+            ));
+
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "layout frame: molecule atom count 2 does not match layout atom count 1"
             );
         });
     }

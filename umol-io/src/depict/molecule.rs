@@ -18,9 +18,9 @@ use super::{
 };
 #[cfg(feature = "coordgen")]
 use super::{Depict, DepictConfig};
-use crate::layout::MoleculeLayout;
 #[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, LayoutError};
+use crate::layout::{MoleculeLayout, MoleculeLayoutError};
 
 const AROMATIC_CONTOUR_OFFSET: f64 = 0.18;
 const AROMATIC_ANNOTATION_CLEARANCE: f64 = 0.28;
@@ -29,27 +29,39 @@ const AROMATIC_ANNOTATION_EXTERIOR_OFFSET: f64 = 0.35;
 const GEOMETRY_EPSILON: f64 = 1.0e-9;
 const MAX_CONTOUR_MITER: f64 = 4.0;
 
-/// Constructs the first format-neutral depiction projection of `molecule` in `layout`.
+/// Constructs the first format-neutral depiction projection of `molecule` in a supplied `layout`.
 ///
-/// Localized bonds and selected tetrahedral wedges are followed by visible atom labels, then one
-/// trustworthy outer contour and any literal system annotation for each explicit aromatic system;
-/// each group is ordered by graph-IR id. Carbon labels are omitted at non-isolated skeleton
-/// vertices unless an isotope, charge, or radical count decorates the atom. Definite cis/trans
-/// stereo is carried by the supplied coordinates. Nonliteral projected fields and unsupported
-/// overlays, stereo kinds, local aromatic assertions, or constraints are omitted. The first
-/// projection does not represent dative, multicenter, or noncovalent bonds, unprojected inherent
-/// fields, or unsupported constraints. Crossed, degenerate, self-intersecting, and cage-like
-/// aromatic projections receive no contour or system annotation.
+/// The layout must share `molecule`'s dense atom frame; a generated layout from
+/// [`crate::layout::layout_molecule`] does, and an edited copy of one keeps the frame. Localized
+/// bonds and selected tetrahedral wedges are followed by visible atom labels, then one trustworthy
+/// outer contour and any literal system annotation for each explicit aromatic system; each group is
+/// ordered by graph-IR id. Carbon labels are omitted at non-isolated skeleton vertices unless an
+/// isotope, charge, or radical count decorates the atom. Definite cis/trans stereo is carried by the
+/// supplied coordinates. Nonliteral projected fields and unsupported overlays, stereo kinds, local
+/// aromatic assertions, or constraints are omitted. The first projection does not represent dative,
+/// multicenter, or noncovalent bonds, unprojected inherent fields, or unsupported constraints.
+/// Crossed, degenerate, self-intersecting, and cage-like aromatic projections receive no contour or
+/// system annotation.
 ///
 /// # Errors
 ///
-/// Returns [`MoleculeDepictionError::TetrahedralGeometry`] if a definite tetrahedral stereo atom
+/// Returns [`MoleculeDepictionError::LayoutFrame`] if `layout` does not share `molecule`'s atom
+/// frame, and [`MoleculeDepictionError::TetrahedralGeometry`] if a definite tetrahedral stereo atom
 /// cannot be represented by a distinct, geometrically valid display wedge.
 ///
 /// # Semantic properties
 ///
 /// Every emitted tetrahedral wedge replaces its selected localized single bond. Reading the wedge
 /// with the TableIR winding convention in the selected ligand frame reproduces the stored coset.
+pub fn depict_molecule(
+    molecule: &Molecule,
+    layout: &MoleculeLayout,
+) -> Result<Depiction, MoleculeDepictionError> {
+    layout.check_frame(molecule)?;
+    depict(molecule, layout)
+}
+
+/// Lowers `molecule` in a `layout` whose producer has established frame agreement.
 pub(crate) fn depict(
     molecule: &Molecule,
     layout: &MoleculeLayout,
@@ -118,7 +130,7 @@ impl Depict for Molecule {
 
     fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error> {
         let layout = layout_molecule(self, config.layout_algorithm)?;
-        depict(self, &layout)
+        depict_molecule(self, &layout)
     }
 }
 
@@ -129,6 +141,9 @@ pub enum MoleculeDepictionError {
     #[cfg(feature = "coordgen")]
     #[error("layout: {0}")]
     Layout(#[from] LayoutError),
+    /// The supplied layout does not share the molecule's dense atom frame.
+    #[error("layout frame: {0}")]
+    LayoutFrame(#[from] MoleculeLayoutError),
     /// A definite tetrahedral stereo atom could not be represented by a display wedge.
     #[error("tetrahedral geometry cannot establish a display wedge for stereo atom {stereo_atom}")]
     TetrahedralGeometry { stereo_atom: StereoAtomId },
@@ -1819,6 +1834,34 @@ mod tests {
             Some(MoleculeDepictionError::TetrahedralGeometry {
                 stereo_atom: StereoAtomId(0),
             })
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_depict_molecule() {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);
+        let layout = layout_molecule(&molecule, MoleculeLayoutAlgorithm::CoordGen).unwrap();
+
+        assert_eq!(
+            depict_molecule(&molecule, &layout).unwrap().items,
+            molecule.depict().unwrap().items
+        );
+    }
+
+    #[rstest]
+    fn test_depict_molecule_error() {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);
+        let layout = layout(&[[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]);
+
+        assert_eq!(
+            depict_molecule(&molecule, &layout).err(),
+            Some(MoleculeDepictionError::LayoutFrame(
+                MoleculeLayoutError::FrameSizeMismatch {
+                    molecule_atom_count: 2,
+                    layout_atom_count: 3,
+                }
+            ))
         );
     }
 
