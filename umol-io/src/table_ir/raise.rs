@@ -33,7 +33,7 @@ use crate::table_ir::{BondStereo, Chirality, ChiralityFrame, Molecule as TableMo
 mod utils;
 
 use utils::{
-    cis_trans_capable, cis_trans_side, first_neighbor_toward_ordering, last_neighbor_away_ordering,
+    cis_trans_capable, cis_trans_side, first_neighbor_toward_ordering, has_either_wedge,
     neighbor_count, noncovalent_kind, tetrahedral_ligand_ordering, validate_bond_direction,
     validate_tetrahedral_geometry, wedge_bond_neighbors, StereoBondAtom, StereoHalfplane,
 };
@@ -254,52 +254,38 @@ fn raise_tetrahedral_stereo(
     mol: &TableMolecule,
     atom_idx: usize,
 ) -> Result<Option<AtomConstraintForm>, RaiseError> {
-    let chirality = mol.atoms[atom_idx].chirality;
+    // CTfile atom parity is retained in TableIR and not read: the specification marks the field
+    // ignored when read, and a CTfile record's tetrahedral stereo comes from its wedges.
+    let chirality = match mol.chirality_frame {
+        Some(ChiralityFrame::FirstNeighborToward) => mol.atoms[atom_idx].chirality,
+        Some(ChiralityFrame::LastNeighborAway) | None => None,
+    };
     let (relabeling, source_coset): (Permutation, usize) = match chirality {
-        Some(Chirality::Unspecified) => {
-            validate_tetrahedral_geometry(mol, atom_idx)?;
-            return Ok(Some(AtomConstraintForm::TetrahedralStereo(
-                TetrahedralStereoForm::stereo(StereoCoset::Undetermined),
-            )));
-        }
         Some(symbol) => {
-            let source_coset = match (symbol, mol.chirality_frame) {
-                (
-                    Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 },
-                    Some(ChiralityFrame::FirstNeighborToward),
-                ) => 0,
-                (
-                    Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 },
-                    Some(ChiralityFrame::FirstNeighborToward),
-                ) => 1,
-                (
-                    Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 },
-                    Some(ChiralityFrame::LastNeighborAway),
-                ) => 1,
-                (
-                    Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 },
-                    Some(ChiralityFrame::LastNeighborAway),
-                ) => 0,
+            let source_coset = match symbol {
+                Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 } => 0,
+                Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 } => 1,
                 _ => return Ok(None),
             };
             validate_tetrahedral_geometry(mol, atom_idx)?;
-            let source_ordering = match mol.chirality_frame {
-                Some(ChiralityFrame::FirstNeighborToward) => {
-                    first_neighbor_toward_ordering(mol, atom_idx)
-                }
-                Some(ChiralityFrame::LastNeighborAway) => {
-                    last_neighbor_away_ordering(mol, atom_idx)
-                }
-                None => return Ok(None),
-            };
             let permutation = Permutation::between(
-                &source_ordering,
+                &first_neighbor_toward_ordering(mol, atom_idx),
                 &tetrahedral_ligand_ordering(mol, atom_idx),
             )
             .expect("validated tetrahedral frames contain the same ligands");
             (permutation, source_coset)
         }
         None => {
+            let neighbors = wedge_bond_neighbors(mol, atom_idx);
+            if has_either_wedge(mol, atom_idx) {
+                if !neighbors.is_empty() {
+                    return Err(RaiseError::WedgeConflict { atom: atom_idx });
+                }
+                validate_tetrahedral_geometry(mol, atom_idx)?;
+                return Ok(Some(AtomConstraintForm::TetrahedralStereo(
+                    TetrahedralStereoForm::stereo(StereoCoset::Undetermined),
+                )));
+            }
             let Some(positions) = mol.positions.as_ref() else {
                 return Ok(None);
             };
@@ -307,7 +293,6 @@ fn raise_tetrahedral_stereo(
             if count != 3 && count != 4 {
                 return Ok(None);
             }
-            let neighbors = wedge_bond_neighbors(mol, atom_idx);
             let Some(&(neighbor_idx, outofplane)) = neighbors.first() else {
                 return Ok(None);
             };
@@ -404,6 +389,7 @@ mod tests {
     use crate::ctfile::parse_mol_to_ir;
     use crate::ctfile::parser::parse_mol_bytes_to_table_ir;
     use crate::smiles::Smiles;
+    use crate::smiles::SmilesIoConfig;
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
     use crate::table_ir::Molecule as TableMolecule;
@@ -463,6 +449,12 @@ mod tests {
 
     const PROCHIRAL_METHYLENE_WEDGE_MOL: &str = "\n\n\n  7  6  0  0  0  0  0  0  0  0999 V2000\n   -0.3009   -0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.4111    0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.4111    1.0277    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    1.1231   -0.2055    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.3009   -1.0277    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.7120    0.5065    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.1231   -0.2055    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  2  0        0\n  1  5  1  0        0\n  1  6  1  1        0\n  1  7  1  6        0\nM  END\n";
 
+    const CFCLBRI_EITHER_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  4        0\nM  END\n";
+
+    const CFCLBRI_MIXED_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  1        0\n  2  4  1  0        0\n  2  5  1  4        0\nM  END\n";
+
+    const EITHER_WEDGE_TWO_LIGANDS_MOL: &str = "\n\n\n  3  2  0  0  0  0  0  0  0  0999 V2000\n   -0.6906    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  2  1  1  4        0\n  2  3  1  0        0\nM  END\n";
+
     // Atom 1 is wedged toward atom 4, whose four neighbors make it look like a stereo site.
     const WIDE_ENDPOINT_WEDGE_MOL: &str = "\n\n\n  8  7  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -1.3812    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906   -1.3812    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.3812    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\n  5  6  1  0        0\n  5  7  1  0        0\n  5  8  1  0        0\nM  END\n";
 
@@ -472,8 +464,6 @@ mod tests {
     // Atom 0 is wedged toward atom 1, which has its own wedge toward atom 4; read alone, the
     // incoming wedge would give atom 1 the opposite coset.
     const INCOMING_WEDGE_MOL: &str = "\n\n\n  8  7  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    1.3812   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906    0.6906    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  1        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\n  1  6  1  0        0\n  1  7  1  0        0\n  1  8  1  0        0\nM  END\n";
-
-    const CHIRAL_PARITY_MOL: &str = "chiral\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    1.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1  3  1  0  0  0  0\n  1  4  1  0  0  0  0\n  1  5  1  0  0  0  0\nM  END\n";
 
     const CIS_TRANS_EITHER_MOL: &str = "butene\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  2  3  2  3  0  0  0\n  3  4  1  0  0  0  0\nM  END\n";
 
@@ -555,7 +545,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::tetrahedral(CHIRAL_PARITY_MOL, Entity::Atom(AtomId(0)))]
+    #[case::tetrahedral(CFCLBRI_SINGLE_WEDGE_MOL, Entity::Atom(AtomId(1)))]
     #[case::cis_trans(CIS_TRANS_EITHER_MOL, Entity::Bond(BondId(1)))]
     fn test_parse_mol_to_ir_stereo(#[case] input: &str, #[case] entity: Entity) {
         let molecule = parse_mol_to_ir(input).unwrap();
@@ -804,7 +794,6 @@ mod tests {
     #[case::alanine(Smiles::parse_bytes(b"C[C@H](N)C(O)=O").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
     #[case::ring_then_branch(Smiles::parse_bytes(b"C[C@]1(Cl)CC(C)CC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
     #[case::branch_then_ring(Smiles::parse_bytes(b"C[C@](Cl)1CC(C)CC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
-    #[case::mol_parity_clockwise(parse_mol_bytes_to_table_ir(CHIRAL_PARITY_MOL.as_bytes()).unwrap(), 0, Some(StereoCoset::Lit(0)))]
     #[case::mol_wedge_cfclbri(parse_mol_bytes_to_table_ir(CFCLBRI_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
     #[case::mol_wedge_cfclbri_r(parse_mol_bytes_to_table_ir(CFCLBRI_R_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
     #[case::mol_wedge_cfclbri_single(parse_mol_bytes_to_table_ir(CFCLBRI_SINGLE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
@@ -820,6 +809,12 @@ mod tests {
     #[case::mol_wedge_shared_wide_endpoint(parse_mol_bytes_to_table_ir(SHARED_WIDE_ENDPOINT_WEDGE_MOL.as_bytes()).unwrap(), 0, None)]
     #[case::mol_wedge_incoming_site(parse_mol_bytes_to_table_ir(INCOMING_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
     #[case::mol_wedge_incoming_source(parse_mol_bytes_to_table_ir(INCOMING_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCoset::Lit(0)))]
+    #[case::mol_either_wedge(parse_mol_bytes_to_table_ir(CFCLBRI_EITHER_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Undetermined))]
+    #[case::mol_either_wedge_wide_endpoint(parse_mol_bytes_to_table_ir(CFCLBRI_EITHER_WEDGE_MOL.as_bytes()).unwrap(), 4, None)]
+    #[case::cx_wiggly(Smiles::parse_bytes_with(b"F[C](Cl)(Br)I |w:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 1, Some(StereoCoset::Undetermined))]
+    #[case::cx_wiggly_up(Smiles::parse_bytes_with(b"F[C](Cl)(Br)I |wU:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 1, Some(StereoCoset::Undetermined))]
+    #[case::cx_wiggly_down(Smiles::parse_bytes_with(b"F[C](Cl)(Br)I |wD:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 1, Some(StereoCoset::Undetermined))]
+    #[case::cx_wiggly_wide_endpoint(Smiles::parse_bytes_with(b"F[C](Cl)(Br)I |w:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 0, None)]
     #[case::sulfoxide_counterclockwise(Smiles::parse_bytes(b"C[S@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
     #[case::sulfoxide_clockwise(Smiles::parse_bytes(b"C[S@@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
     #[case::sulfoxide_charge_separated(Smiles::parse_bytes(b"C[S@@+]([O-])CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
@@ -840,6 +835,8 @@ mod tests {
     #[case::parallel_bonds(Smiles::parse_bytes(b"C[C]2[C@@]2[C-]").unwrap().into_table_ir(), 2, RaiseError::TetrahedralLigandCount { atom: 2, count: 2 })]
     #[case::wedge_conflict(parse_mol_bytes_to_table_ir(WEDGE_CONFLICT_MOL.as_bytes()).unwrap(), 0, RaiseError::WedgeConflict { atom: 0 })]
     #[case::cfclbri_inconsistent_wedges(parse_mol_bytes_to_table_ir(CFCLBRI_INCONSISTENT_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::WedgeConflict { atom: 1 })]
+    #[case::cfclbri_definite_and_either_wedge(parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::WedgeConflict { atom: 1 })]
+    #[case::either_wedge_two_ligands(parse_mol_bytes_to_table_ir(EITHER_WEDGE_TWO_LIGANDS_MOL.as_bytes()).unwrap(), 1, RaiseError::TetrahedralLigandCount { atom: 1, count: 2 })]
     fn test_raise_tetrahedral_stereo_error(
         #[case] mol: TableMolecule,
         #[case] atom_idx: usize,

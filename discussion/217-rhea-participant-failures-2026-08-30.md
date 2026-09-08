@@ -210,7 +210,7 @@ four neighbors, two stereo sites sharing a wide endpoint, a site with one incomi
 wedge, and a wedge whose pointed end is the higher-numbered atom.
 
 Corpus evidence: the release-142 basic pipeline was rerun under
-[wedge-endpoint](../materials/databases/elixir/rhea-142/wedge-endpoint/run-manifest.json) with
+[wedge-endpoint](../scratch/rhea-census/rhea-142/wedge-endpoint/run-manifest.json) with
 the same inputs, parser configurations, MDL counts-valence model, resolution configuration, and
 aromaticity model as the census below.
 
@@ -230,11 +230,11 @@ wide-endpoint contradictions. The remaining basic outcomes are the 43 valence ex
 tetrahedral contradictions (five narrow-endpoint sites, three parity sites on trigonal carbon,
 CHEBI:146007), the four narrow-only wedge conflicts, and the two-ligand parity record.
 Extended-parser acceptance is unchanged.
-[Transitions](../materials/databases/elixir/rhea-142/wedge-endpoint/transitions.json) and the
+[Transitions](../scratch/rhea-census/rhea-142/wedge-endpoint/transitions.json) and the
 per-configuration changed-outcome files retain the per-record evidence.
 
 The 936 newly accepted records were probed directly
-([raise-sites.jsonl](../materials/databases/elixir/rhea-142/wedge-endpoint/raise-sites.jsonl)).
+([raise-sites.jsonl](../scratch/rhea-census/rhea-142/wedge-endpoint/raise-sites.jsonl)).
 In every record the raised tetrahedral sites are exactly the narrow endpoints of its Up/Down
 wedges together with its parity-1/2 atoms, every raised coset is literal, resolution is
 Determined, and the stereo atom count equals the site count. At the baseline these records had
@@ -256,6 +256,51 @@ itself a site.
 
 CHEBI:40, CHEBI:15393, and CHEBI:58540 are catalogued as ChEBI parsing examples in the MOL parsing
 suite. The umol-io unit, conformance, and property suites and clippy pass at the stage gate.
+
+### CTfile stereo reading contract
+
+The reader follows the published CTfile specification and nothing beyond it. Names marked
+(proposed) await sign-off.
+
+- Tetrahedral stereo comes from wedges only. An `Up` or `Down` wedge asserts `#T` with a literal
+  coset at its narrow endpoint; an `Either` wedge (code 4), and the CXSMILES `w:`, `wU:`, `wD:`
+  marks, assert `#T` with an undetermined coset at their narrow endpoint, following Appendix A ("a
+  center with an Either bond has a parity value of 3"). Both readings require three or four
+  ligands at the endpoint, as today. Atom parity is not read ("Ignored when read"). No tetrahedral
+  configuration is derived from coordinates, in 2D or 3D; a record without wedges carries no `#T`.
+- Double-bond stereo with code 0 is derived from the atom-block x, y, z coordinates for every
+  double bond whose two ends each have two distinguishable ligands, the predicate
+  `cis_trans_capable` already applies to SMILES. Code 3 asserts `#C` with an undetermined coset,
+  as today. Coordinates are consulted only when the double bond's neighborhood carries no SMILES
+  directional marks. Ring membership plays no part in the reader.
+- Degenerate geometry is rejected, never computed: a wedge whose endpoint ligands have all-zero or
+  collinear projected positions, and a code-0 double bond whose axis or substituent positions
+  are all zero or collinear, raise `RaiseError::DegenerateWedgeGeometry { atom }` and
+  `RaiseError::DegenerateBondGeometry { bond }` (proposed). Today the wedge path computes a coset
+  from all-zero coordinates silently.
+- The parsers reject stereo codes the specification does not define for the bond order: codes 1,
+  4, 6 on anything but a single bond, code 3 on anything but a double bond, and any nonzero code on
+  other orders. Unconditional, in every preset.
+- geometric-core gains `same_side_of_axis(axis_start, axis_end, first, second) -> Option<bool>`
+  (proposed): whether two points lie on the same side of the line through the axis, using their
+  components perpendicular to it, `None` when either component is below the tolerance constant
+  `AXIS_SIDE_TOLERANCE` (proposed). One formula serves 2D and 3D.
+- The stereo model, not the reader, decides which ring double bonds are stereo bonds.
+  `StereoModel` gains `stereo_bond_minimum_ring_size: u32` (proposed), default 8, the smallest
+  ring in which a trans double bond is isolable. Stereo perception drops a `#C` assertion on a
+  double bond whose smallest ring, from `RingSet::bond_smallest_ring_size` under the default ring
+  model, is below the threshold: no stereo bond is created and the assertion is cleared to
+  undetermined in the edit plan, the same edit `reset_stereo_constraints` uses. It is not a
+  contradiction. The parameter is bound in Python with the rest of `StereoModel`.
+- CXSMILES `c:` and `t:` are read only once their ligand frame is settled from ChemAxon's
+  published definition; the vendored CDK reader ignores them and the RDKit reader applies a
+  "CX ordering" the repository does not document. Until then they stay unread.
+
+Effects measured on the repository catalogs and the census: two catalog records
+(`openbabel/culgi_10.mol`, `indigo/bold-bonds.mol`) carry a wedge code on a double bond and move
+to the invalid category; the parser tests that expect wedge codes on double or triple bonds
+become rejection rows; the parity removal effects are recorded above; 3D records without wedges
+and the 23 reversed-wedge sites carry no tetrahedral stereo, both future lint items.
 
 ### Implementation plan
 
@@ -306,6 +351,122 @@ S2 — Corpus verification
 
 Critical path: S0a → S0b → S0c, S0d, S0e → S2a. S1 is independent of S0.
 
+Reopened for the CTfile stereo reading contract. Each stage ends green; breaking subitems carry
+their test migration.
+
+S3 — Parser stereo codes by bond order
+
+- S3a `ctfile::parser::bond`: both bond line parsers reject a stereo code not defined for the
+  parsed bond order at column 9. Tests: the rows `len21_double_wedge_up`, `len21_double_wedge_down`,
+  `len21_double_wedge_either`, `len12_double_wedge_up`, `len21_triple_ignored_stereo`,
+  `len21_triple_empty_fields` (if its code is nonzero), `len_12_double_wedge_up`, `len_21`,
+  `len_21_reaction_center`, and the `len21`/`len12` rows of both block tables become error rows
+  with the column; new rows cover code 3 on a single bond. Breaking [dep: none]. Completed.
+- S3b `tests/mol_parsing`: reclassify `openbabel/culgi_10.mol` and `indigo/bold-bonds.mol` into
+  `data/invalid/`, record their snapshots. [dep: S3a]. Completed.
+
+Gate: `cargo test -p umol-io --features conformance,proptest`.
+
+S4 — Parity removal
+
+- S4a `table_ir::raise`, `table_ir::raise::utils`: `raise_tetrahedral_stereo` ignores
+  `chirality` when the frame is `LastNeighborAway`; `last_neighbor_away_ordering` is removed;
+  the `ChiralityFrame::LastNeighborAway` doc comment states the field is retained as parsed and
+  not read. Tests: delete `mol_parity_clockwise` and `CHIRAL_PARITY_MOL`; point
+  `test_parse_mol_to_ir_stereo::tetrahedral` at `CFCLBRI_SINGLE_WEDGE_MOL` site 1. Breaking
+  [dep: none]. Completed.
+
+S5 — Either wedges
+
+- S5a `table_ir::raise::utils`, `table_ir::raise`: `Either`, `EitherUp`, and `EitherDown` at
+  their narrow endpoint yield `#T` with an undetermined coset after the ligand-count check; a
+  definite and an either wedge at one endpoint is a wedge conflict. Tests: MOL rows with code 4,
+  CXSMILES rows with `w:`, `wU:`, `wD:`, a two-ligand code-4 error row, a mixed-wedge conflict
+  row. The predicate is `has_either_wedge` in the raise utilities. Additive [dep: S4a].
+  Completed.
+
+S6 — Geometry primitive
+
+- S6a `umol-geometric-core`: `same_side_of_axis` and `AXIS_SIDE_TOLERANCE`. Tests: same side,
+  opposite side, in 2D and 3D, degenerate axis, degenerate substituent, tolerance boundary.
+  Additive [dep: none]. Completed.
+
+S7 — Stereo-model ring threshold
+
+- S7a `umol-graph::ops::model`: `StereoModel::stereo_bond_minimum_ring_size`, default 8; Python
+  binding of the field. Tests: default, construction, Python parity. Additive [dep: none].
+- S7b `umol-graph::ops::stereo`, `ops::resolve::stereo`: perception consults the ring set and
+  skips `#C` on ring double bonds below the threshold; the resolver clears those assertions.
+  Tests: cyclohexene with `#C` yields no stereo bond and a cleared constraint; cyclooctene yields a
+  stereo bond; threshold 0 keeps cyclohexene; a resolution-suite fixture for each. Additive
+  [dep: S7a].
+
+Gate: `cargo test -p umol-graph --features conformance` and the Python suite.
+
+S8 — Cis/trans from coordinates
+
+- S8a `table_ir::raise::utils`: a positions-based counterpart of `cis_trans_side` building the
+  same `StereoBondAtom`, chosen when the bond's neighborhood has no directional marks and the
+  molecule has positions; degenerate geometry raises the new errors; the wedge path raises
+  `DegenerateWedgeGeometry` on all-zero or collinear positions instead of computing. Tests:
+  fumarate and maleate literals in 2D and in 3D, a ring double bond asserted as the spec says,
+  code 3 unchanged, all-zero coordinates rejected, a collinear substituent rejected, SMILES
+  directional rows unchanged. Breaking for the raise's MOL output [dep: S6a, S7b].
+
+Gate: `cargo test -p umol-io --features conformance,proptest` and `cargo test -p umol-graph`.
+
+S9 — Corpus verification
+
+- S9a Rerun the census basic and basic+editor configurations and the all-record probe; record
+  the outcome table, the stereo bond counts, and any new contradictions from coordinate-derived
+  `#C` under Verification [dep: S8a].
+
+S10 — Covalently bonded transition-metal states
+
+- S10a `umol-graph/config/default-registry.toml`: rows for the formal-charge encodings in the
+  census, nonbonding electrons from valence electrons minus charge minus covalence; one spin
+  state per encoding for now, Fe(III) high-spin and Co(II) low-spin. Each row's lone pairs,
+  unpaired electrons, and multiplicity are to be checked against Holleman-Wiberg before commit.
+
+  ```toml
+  [Fe]   # Fe(III), d5, high-spin only for now: nonbonding 5 = #u5 (sextet)
+  -3 = ["Fe #c-3 #v6 #u5"]
+  -2 = ["Fe #c-2 #v5 #u5"]
+  -1 = ["Fe #c- #v4 #u5"]
+   0 = ["Fe #v3 #u5"]          # added to the existing key
+   1 = ["Fe #c+ #v2 #u5"]
+  [Co]   # Co(II), d7, low-spin only for now: nonbonding 7 = #n3 #u (doublet)
+  -3 = ["Co #c-3 #v5 #n3 #u"]
+  -2 = ["Co #c-2 #v4 #n3 #u"]
+   1 = ["Co #c+ #v1 #n3 #u"]
+  [Mn]   # Mn(IV), d3: nonbonding 3 = #u3 (quartet)
+   0 = ["Mn #v4 #u3"]                                                     # added to the existing key
+  [V]    # V(IV) vanadyl, d1: nonbonding 1 = #u (doublet)
+   2 = ["V #c+2 #v2 #u"]                                                  # added to the existing key
+  ```
+
+  Tests: registry parse, one resolution-suite fixture per encoding row of the census table
+  (cob(II)yrinate-type Co, iron(III) dicitrate-type Fe, heme-type Fe, vanadyl, MnO2) under the
+  atom-typing model. Additive [dep: none].
+- The counts model is untouched: the MDL table is frozen by its header, and the counts model's
+  isoelectronic charge shift has no reading for a formal-charge metal encoding.
+
+S11 — Line-level parser errors are cuts
+
+- S11a `ctfile::parser::{atom, bond, counts, legacy_atom_list, properties, utils}`: a field or
+  line error inside a fixed-width record is `ErrMode::Cut` carrying the column from the point of
+  failure; the block parsers stop converting backtracks into cuts. `Backtrack` remains only where
+  an alternative exists: block dispatch in `parser.rs`, the `alt` sites in `rgroup` and `sgroup`,
+  and the `opt` tails of multi-line properties. Today 73 line and field sites backtrack, which no
+  caller can use, because a fixed-width line admits no alternative parse. Tests: the existing
+  error tables keep their columns; new rows show that a line error is reported at its column
+  without a later alternative being tried. Breaking [dep: none]; independent of S3 to S10.
+
+Deferrable: CXSMILES `c:`/`t:` reading, gated on the ChemAxon definition.
+
+Critical path: S6a → S7a → S7b → S8a → S9a; S3, S4, S5 are independent of it and of each other
+except S5 after S4.
+
 ## Bond stereo code converter
 
 An earlier revision of this document reported that bond stereo code 2 reached the `unreachable!`
@@ -317,9 +478,10 @@ bond stereo code outside 0, 1, 3, 4, and 6 in any of its raw V2000 records.
 ## Release-142 census
 
 Rhea 142, released 2026-09-02, is the current baseline. This rerun uses individual MOL files, not
-SMILES. Downloads and analysis artifacts live under
-[materials/databases/elixir](../materials/databases/elixir/README.md); that directory is ignored by
-git, and the standalone research runner changes no production behavior. The upstream
+SMILES. The release downloads live under `materials/databases/elixir/rhea-142`; the standalone
+research runner and every analysis output live under
+[scratch/rhea-census](../scratch/rhea-census/README.md). Both directories are ignored by git, and
+the runner changes no production behavior. The upstream
 [CTfile README](https://ftp.expasy.org/databases/rhea/ctfiles/README.txt) identifies chebi.sdf.gz
 as the ChEBI snapshot synchronized to Rhea. SHA-256 fingerprints and download URLs are in
 [sources.json](../materials/databases/elixir/rhea-142/sources.json).
@@ -338,7 +500,7 @@ the title line and line endings, and the synchronized SDF supplies the same 12,9
 The runner uses source revision cd902742b20eec4cf4aac65c0d0e5afa8e93fee9 and applies
 `ValenceModel::mdl()`, MostSaturated selection, Daylight aromaticity, the default stereo model,
 and `ResolveConfig::default()`. Each participant has one outcome per configuration in
-[census.jsonl](../materials/databases/elixir/rhea-142/census.jsonl).
+[census.jsonl](../scratch/rhea-census/rhea-142/census.jsonl).
 
 ### Parser acceptance
 
@@ -369,8 +531,8 @@ CHEBI:30212 and CHEBI:57503 then fail at column 69, where a trailing zero remain
 69-character atom fields. Offsets here and in the ledger are zero-based.
 
 The extended inputs were inventoried at atom and attachment level in
-[semantic-inventory.json](../materials/databases/elixir/rhea-142/semantic-inventory.json) and
-[semantic-features.jsonl](../materials/databases/elixir/rhea-142/semantic-features.jsonl):
+[semantic-inventory.json](../scratch/rhea-census/rhea-142/semantic-inventory.json) and
+[semantic-features.jsonl](../scratch/rhea-census/rhea-142/semantic-features.jsonl):
 
 | Observed feature | Scope in the 1,446 records |
 | --- | --- |
@@ -415,9 +577,9 @@ records and reproduce the release-141 breakdown exactly: 20 wide-only and 31 mix
 conflicts, four narrow-only conflicts, one two-ligand parity failure, 886 wide-only tetrahedral
 contradictions, eight other tetrahedral contradictions, 363/12/3 unknown-stereo records, and the
 same six-metal valence table.
-[Classification counts](../materials/databases/elixir/rhea-142/classification-counts.json),
-[category members](../materials/databases/elixir/rhea-142/category-members.json), and the
-[per-participant evidence](../materials/databases/elixir/rhea-142/classification.jsonl) preserve
+[Classification counts](../scratch/rhea-census/rhea-142/classification-counts.json),
+[category members](../scratch/rhea-census/rhea-142/category-members.json), and the
+[per-participant evidence](../scratch/rhea-census/rhea-142/classification.jsonl) preserve
 exact ids, source fingerprints, first-failure lines, and wedge endpoint relationships.
 
 ### Resolver behavior on partial input
@@ -425,8 +587,8 @@ exact ids, source fingerprints, first-failure lines, and wedge endpoint relation
 Both `CountsValence::admit` and `AtomTypingValence::admit` first scan every atom and return
 `Underdetermined` with an empty completion map if any element is non-literal, including finite
 and complement sets. A standalone
-[partial-IR probe](../materials/databases/elixir/census/src/bin/partial-probe.rs) constructs IR
-directly; its [results](../materials/databases/elixir/rhea-142/partial-probe.jsonl) establish:
+[partial-IR probe](../scratch/rhea-census/census/src/bin/partial-probe.rs) constructs IR
+directly; its [results](../scratch/rhea-census/rhea-142/partial-probe.jsonl) establish:
 
 - An isolated neutral carbon with open hydrogen count completes under the MDL counts model.
 - Adding a disconnected unspecified atom, bonding the carbon to an unspecified atom, or adding a
@@ -461,16 +623,55 @@ copy has completed valence; `test_resolver_resolve_later_underdetermined` covers
 [ingest::interpret_molecule](../umol-graph/src/ingest.rs) turns `Underdetermined` into an ingestion
 error.
 
+### MOL atom parity reading
+
+The CTfile specification marks the V2000 atom parity field "Ignored when read". The raise reads it
+nevertheless, with precedence over wedges, into a tetrahedral constraint in the LastNeighborAway
+frame. A scratch build in which the raise ignores parity under that frame was compared with the
+current tree on every accepted record; the evidence is under
+[parity-unread](../scratch/rhea-census/rhea-142/parity-unread/).
+
+- At 15,404 sites carrying both a parity flag and an outgoing wedge, the parity reading and the
+  wedge reading give different cosets at 15,033. Of the 371 agreements, 348 are sites with an
+  explicit hydrogen neighbor that is not the highest-indexed neighbor; the MDL definition numbers a
+  hydrogen ligand last, the raise orders by index only, and the two errors cancel there
+  ([cross-tab](../scratch/rhea-census/rhea-142/parity-unread/parity-vs-wedge-by-site.txt),
+  [hydrogen rule](../scratch/rhea-census/rhea-142/parity-unread/parity-vs-wedge-crosstab.txt)).
+- RDKit, reading only wedges, reproduces umol's expected cosets on umol's own four-neighbor wedge
+  fixtures and then agrees with umol's wedge reading at all 750 four-neighbor parity sites
+  examined, while disagreeing with the parity reading at 634 of them
+  ([arbitration](../scratch/rhea-census/rhea-142/parity-unread/rdkit-arbitration.txt)).
+- From the definition: with ligand 4 behind and ligands 1, 2, 3 counterclockwise (parity 2), the
+  configuration is the one SMILES writes as `@` over the ascending ligand order, which is umol
+  coset 0. The raise maps parity 1 to coset 0, and the `ChiralityFrame` doc comment states the
+  same inverted correspondence. The `CHIRAL_PARITY_MOL` fixture encodes it.
+
+The current tree therefore derives an inverted configuration from every parity flag that is not
+accompanied by an out-of-order explicit hydrogen. Because the resolver sees a self-consistent
+assertion either way, no census outcome exposed this. It does not explain the CHEBI:40
+cross-format discrepancy: with parity unread both routes still produce four stereo atoms and
+remain canonically unequal.
+
+Decision: the raise stops reading atom parity, following the specification. Measured effect in
+the basic configuration: 363 unknown-stereo records, the three parity-on-trigonal-carbon
+contradictions, and the two-neighbor parity record become accepted; no record newly fails; the
+15 records with bond stereo code 3 remain Underdetermined. Two unit tests encode parity reading
+and fail, `test_raise_tetrahedral_stereo::mol_parity_clockwise` and
+`test_parse_mol_to_ir_stereo::tetrahedral`; no conformance suite, umol-graph test, or Python test
+depends on it. Twenty-one accepted records lose 23 stereo atoms: at each of those sites the only
+wedge is drawn from a terminal substituent toward the center, so the narrow end carries no site and
+the parity flag was the only readable marker. These reversed wedges are a first candidate for
+boundary linting.
+
 ### Paired MOL and SMILES input for CHEBI:40
 
-With the wedge defect removed in a diagnostic build, both CHEBI:40 inputs resolve concretely with
-four stereo atoms, but their complete canonical IR values are not equal. The MOL route retains
+With the wedge defect removed, and equally with parity unread, both CHEBI:40 inputs resolve
+concretely with four stereo atoms, but their complete canonical IR values are not equal. The MOL route retains
 Kekulé double bonds alongside aromatic systems; the SMILES route has single localized bonds in
 those systems. `AromaticityPerceiver::add_systems` adds aromatic constraints without changing
 localized bond orders. Removing atom/bond constraints and setting aromatic-system localized bonds
-to order one in a diagnostic copy does not eliminate the discrepancy. The
-[paired probe](../materials/databases/elixir/rhea-142/post-wedge/paired-smiles.log) retains the
-evidence; the cause is open.
+to order one in a diagnostic copy does not eliminate the discrepancy. The `wedge-pair-probe`
+bin of the research runner reproduces the comparison; the cause is open.
 
 ### Remaining non-accepted records
 
@@ -542,16 +743,31 @@ format-boundary question to settle explicitly.
 1. Resolver diagnostics: identify the underdetermined phase and cause in `ResolveReport`, and
    retain atom-local context for counts-valence mismatch, preserving the distinction between
    semantic `Solution` outcomes and operational `Result` errors.
-2. Remaining stereo records: axial stereo (allene, biaryl) has no umol stereo class; wedges at
-   double-bonded ring carbons and inconsistent two-wedge projections need a documented reading;
-   parity on non-tetrahedral sites and `Either` wedges need an explicit precedence policy.
-3. Raising extended MOL features: R groups and wildcard atoms into the existing partial IR forms
+2. The CTfile stereo reading contract above, planned as S3 to S9. Axial stereo (allene,
+   biaryl) is a separate stereo class to enable. Wedges at double-bonded ring carbons and
+   inconsistent two-wedge projections have no reading in the specification and stay rejected.
+3. Boundary linting: report uninterpretable or reversed marks with a proposed fix that the caller
+   accepts or rejects before raise, instead of changing input. Doc 036 holds the earlier SMILES
+   diagnostics taxonomy.
+4. Raising extended MOL features: R groups and wildcard atoms into the existing partial IR forms
    (`ElementForm::Undetermined`, element sets, open attachments). The inventory above bounds the
    observed input; no mapping or public conversion surface is selected. Doc 153 T3 and T5 own the
    related boundary-storage and raise items.
-4. Partial-input resolution: the gates listed above stop all work on the first non-literal
+5. Partial-input resolution: the gates listed above stop all work on the first non-literal
    element and never publish a partially refined molecule. Publication and reporting semantics
    are undecided.
-5. Transition-metal valence coverage under the MDL counts model: 43 records, no rows added.
-6. The CHEBI:40 cross-format canonical discrepancy.
-7. Editor property acceptance (`M  ZZC`) and overlong atom lines (CHEBI:30212, CHEBI:57503).
+6. Transition-metal valence: the 45 failing metal atoms all encode the oxidation state as formal
+   charge plus covalence. The default atom-typing registry holds the five free ions but no
+   covalently bonded state; the rows are planned as S10 and await the Holleman-Wiberg check.
+7. The CHEBI:40 cross-format canonical discrepancy.
+8. Editor property acceptance (`M  ZZC`) and overlong atom lines (CHEBI:30212, CHEBI:57503);
+   presets are not changed for them.
+9. Pseudoatom symbols: the specification defines periodic-table symbols, L, A, Q, *, LP, and R#.
+   The extended preset parses all of them (LP under `ELECTRONS`, R# under `RGROUPS`) plus the
+   vendor wildcards X and M under `WILDCARDS`, which the vendored specification does not define.
+   `PSEUDOATOMS` is in no preset but `EXTENDED_MAX`, so `e` and `hv` are rejected by the basic,
+   extended, and lenient presets already. No change.
+10. Parser selection: no strategy decides when the basic or the extended parser is used.
+    Candidates are always-extended with conversion to the basic record when no extended feature
+    is present, basic with fallback to extended, or content sniffing. Doc 153 T3 owns the merge of
+    the two result types. Design discussion needed.

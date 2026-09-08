@@ -20,8 +20,10 @@ pub enum ChiralityFrame {
     /// First-listed neighbor points toward the viewer; remaining neighbors,
     /// in order, wind counterclockwise for the negative token (SMILES `@`).
     FirstNeighborToward,
-    /// Last (highest-numbered) neighbor points away, behind the plane of the
-    /// others; remaining neighbors, in order, wind clockwise for the negative
-    /// token (CTAB parity 1).
+    /// CTfile atom parity: neighbors numbered by increasing atom number with a
+    /// hydrogen last, viewed with the last neighbor away; parity 2
+    /// (counterclockwise) is the configuration SMILES writes as `@` over the
+    /// same order. Retained as parsed and not read by the raise, which follows
+    /// the specification's "ignored when read".
     LastNeighborAway,
 }

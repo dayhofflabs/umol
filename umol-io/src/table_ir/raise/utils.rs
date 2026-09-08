@@ -123,15 +123,6 @@ pub(super) fn first_neighbor_toward_ordering(
     ordering
 }
 
-/// MDL/CTFile tetradehral ligand ordering, LastNeighborAway: atom index ordering,
-/// virtual ligand is last.
-pub(super) fn last_neighbor_away_ordering(
-    mol: &TableMolecule,
-    atom_idx: usize,
-) -> Vec<StereoLigand> {
-    tetrahedral_ligand_ordering(mol, atom_idx)
-}
-
 /// Tetrahedral stereo coset index from wedge bonds at `atom_idx`.
 pub(super) fn coset_from_wedge_winding(
     atom_idx: usize,
@@ -174,7 +165,8 @@ pub(super) fn coset_from_wedge_winding(
 }
 
 /// Wide endpoints of the definite wedges whose narrow end is `atom_idx`, each with its
-/// out-of-plane direction. A wedge describes only its narrow endpoint; `Either` wedges are not read.
+/// out-of-plane direction. A wedge describes only its narrow endpoint; `Either` wedges are read
+/// by `has_either_wedge`.
 pub(super) fn wedge_bond_neighbors(
     mol: &TableMolecule,
     atom_idx: usize,
@@ -193,6 +185,22 @@ pub(super) fn wedge_bond_neighbors(
             }
         })
         .collect()
+}
+
+/// Whether an `Either` wedge (MOL code 4, CXSMILES `w:`, `wU:`, `wD:`) has its narrow end at
+/// `atom_idx`: the source asserts a stereo center of unknown configuration there.
+pub(super) fn has_either_wedge(mol: &TableMolecule, atom_idx: usize) -> bool {
+    mol.bonds.iter().any(|bond| {
+        bond.narrow_endpoint() == Some(atom_idx as u32)
+            && matches!(
+                bond.wedge.map(|wedge| wedge.orientation),
+                Some(
+                    BondOrientation::Either
+                        | BondOrientation::EitherUp
+                        | BondOrientation::EitherDown
+                )
+            )
+    })
 }
 
 /// Validate that tetrahedral stereo has 3 or 4 neighbors.

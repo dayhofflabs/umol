@@ -141,11 +141,17 @@ fn bond_input<'inp>(
 
         offset = 9;
 
-        // Stereo/direction (9-11)
+        // Stereo/direction (9-11): the specification defines codes 1, 4, 6 for single bonds and
+        // code 3 for double bonds only.
         let (stereo, orientation) = if bytes.len() >= 12 {
             offset = 12;
             let stereo_code = parse_int_opt::<u8>(&bytes[9..12], 9)?.unwrap_or(0);
-            if !matches!(stereo_code, 0 | 1 | 3 | 4 | 6) {
+            let defined = match order {
+                BondOrder::Single => matches!(stereo_code, 0 | 1 | 4 | 6),
+                BondOrder::Double => matches!(stereo_code, 0 | 3),
+                _ => stereo_code == 0,
+            };
+            if !defined {
                 return Err(ErrMode::Backtrack(InputError { column: 9 }));
             }
             convert_bond_stereo_direction_code(stereo_code)
@@ -167,19 +173,16 @@ fn bond_input<'inp>(
         }
 
         let mut bond = Bond::new(first_atom, second_atom, order);
-        // The stereo/direction field applies only to single and double bonds. The source first
-        // atom is the wedge's narrow end.
-        if matches!(order, BondOrder::Single | BondOrder::Double) {
-            bond.stereo = stereo;
-            bond.wedge = orientation.map(|orientation| BondWedge {
-                orientation,
-                taper: if first_atom <= second_atom {
-                    BondTaper::Widening
-                } else {
-                    BondTaper::Narrowing
-                },
-            });
-        }
+        // The source first atom is the wedge's narrow end.
+        bond.stereo = stereo;
+        bond.wedge = orientation.map(|orientation| BondWedge {
+            orientation,
+            taper: if first_atom <= second_atom {
+                BondTaper::Widening
+            } else {
+                BondTaper::Narrowing
+            },
+        });
 
         let _: &[u8] = take(offset).parse_next(input)?;
         Ok(bond)
@@ -235,11 +238,17 @@ fn extended_bond_input<'inp>(
         let order = convert_extended_bond_type_code(order_code, extended_range, allow_wildcards)
             .map_err(|_| ErrMode::Backtrack(InputError { column: 6 }))?;
 
-        // Stereo/direction (9-11)
+        // Stereo/direction (9-11): the specification defines codes 1, 4, 6 for single bonds and
+        // code 3 for double bonds only.
         let (stereo, orientation) = if bytes.len() >= 12 {
             offset = 12;
             let stereo_code = parse_int_opt::<u8>(&bytes[9..12], 9)?.unwrap_or(0);
-            if !matches!(stereo_code, 0 | 1 | 3 | 4 | 6) {
+            let defined = match order {
+                BondOrder::Single => matches!(stereo_code, 0 | 1 | 4 | 6),
+                BondOrder::Double => matches!(stereo_code, 0 | 3),
+                _ => stereo_code == 0,
+            };
+            if !defined {
                 return Err(ErrMode::Backtrack(InputError { column: 9 }));
             }
             convert_bond_stereo_direction_code(stereo_code)
@@ -276,19 +285,16 @@ fn extended_bond_input<'inp>(
         };
 
         let mut bond = ExtendedBond::new(first_atom, second_atom, order);
-        // The stereo/direction field applies only to single and double bonds. The source first
-        // atom is the wedge's narrow end.
-        if matches!(order, BondOrder::Single | BondOrder::Double) {
-            bond.stereo = stereo;
-            bond.wedge = orientation.map(|orientation| BondWedge {
-                orientation,
-                taper: if first_atom <= second_atom {
-                    BondTaper::Widening
-                } else {
-                    BondTaper::Narrowing
-                },
-            });
-        }
+        // The source first atom is the wedge's narrow end.
+        bond.stereo = stereo;
+        bond.wedge = orientation.map(|orientation| BondWedge {
+            orientation,
+            taper: if first_atom <= second_atom {
+                BondTaper::Widening
+            } else {
+                BondTaper::Narrowing
+            },
+        });
         bond.topology = topology;
         bond.reacting_center = reacting_center;
 
