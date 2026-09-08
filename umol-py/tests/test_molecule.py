@@ -693,6 +693,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
         stereo=StereoModel(
             kind_models={},
             para_stereo=False,
+            stereo_bond_minimum_ring_size=8,
         ),
     )
 

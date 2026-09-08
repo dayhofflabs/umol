@@ -258,11 +258,15 @@ impl Default for RingLimits {
 /// Stereo perception model. `kind_models` is a per-`StereoKind` array (indexed
 /// by the kind's discriminant); a `None` entry means that kind is not perceived.
 /// `para_stereo` enables the graph-symmetry fixpoint iteration that resolves
-/// para-stereocenters.
+/// para-stereocenters. `stereo_bond_minimum_ring_size` is the smallest ring in
+/// which a double bond is realized as a stereo bond: a cis/trans assertion on a
+/// double bond whose smallest ring is below it is cleared rather than realized,
+/// and zero realizes every ring double bond.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StereoModel {
     pub kind_models: [Option<StereoKindModel>; StereoKind::COUNT],
     pub para_stereo: bool,
+    pub stereo_bond_minimum_ring_size: u32,
 }
 
 /// Per-kind perception settings: the elements eligible to bear this kind and
@@ -284,7 +288,8 @@ impl Default for StereoModel {
     /// Perceive the two realized binary kinds — tetrahedral atoms and cis/trans
     /// bonds — for any element; the higher geometries (square-planar,
     /// trigonal-bipyramidal, octahedral, axial) are staged off. No para-stereo
-    /// fixpoint by default.
+    /// fixpoint by default. Ring double bonds are stereo bonds from ring size
+    /// eight, the smallest ring with an isolable trans double bond.
     fn default() -> Self {
         let mut kind_models: [Option<StereoKindModel>; StereoKind::COUNT] =
             array::from_fn(|_| None);
@@ -299,6 +304,7 @@ impl Default for StereoModel {
         Self {
             kind_models,
             para_stereo: false,
+            stereo_bond_minimum_ring_size: 8,
         }
     }
 }
@@ -612,6 +618,10 @@ mod tests {
         para_stereo: true,
         ..StereoModel::default()
     })]
+    #[case::stereo_bond_minimum_ring_size(StereoModel {
+        stereo_bond_minimum_ring_size: 0,
+        ..StereoModel::default()
+    })]
     fn test_stereo_model_eq_difference(#[case] other: StereoModel) {
         assert_ne!(StereoModel::default(), other);
     }
@@ -633,6 +643,7 @@ mod tests {
             StereoModel {
                 kind_models,
                 para_stereo: false,
+                stereo_bond_minimum_ring_size: 8,
             },
         );
     }

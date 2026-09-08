@@ -134,13 +134,13 @@ impl StereoResolver {
             }
         }
 
-        let atoms: BTreeMap<_, _> = derivation
-            .atoms
+        let stereo_atoms: BTreeMap<_, _> = derivation
+            .stereo_atoms
             .into_iter()
             .map(|(id, ligands, stereo)| (id, (ligands, stereo)))
             .collect();
-        let bonds: BTreeMap<_, _> = derivation
-            .bonds
+        let stereo_bonds: BTreeMap<_, _> = derivation
+            .stereo_bonds
             .into_iter()
             .map(|(id, ligands, stereo)| (id, (ligands, stereo)))
             .collect();
@@ -240,6 +240,10 @@ impl StereoResolver {
             }
         }
 
+        for site in derivation.skipped_stereo_bonds {
+            remove_bond_constraints.insert(site);
+        }
+
         if !remove_stereo_atoms.is_empty() {
             edits.remove_stereo_atoms(
                 remove_stereo_atoms
@@ -290,7 +294,7 @@ impl StereoResolver {
             .map(|view| view.site_id())
             .collect();
 
-        for (id, (ligands, stereo)) in atoms {
+        for (id, (ligands, stereo)) in stereo_atoms {
             if suppressed_atoms.contains(&id) || retained_atom_sites.contains(&id) {
                 continue;
             }
@@ -306,7 +310,7 @@ impl StereoResolver {
                 remove_atom_constraints.insert(id);
             }
         }
-        for (id, (ligands, stereo)) in bonds {
+        for (id, (ligands, stereo)) in stereo_bonds {
             if suppressed_bonds.contains(&id) || retained_bond_sites.contains(&id) {
                 continue;
             }
@@ -474,6 +478,31 @@ mod tests {
             attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         }])
     )]
+    #[case::cyclooctene_asserted(
+        mol_dsl_concrete!(r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#),
+        Edits::from_iter([Edit::AddStereoBond {
+            site: BondHandle::Id(BondId(2)),
+            ligands: vec![
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
+            ],
+            attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+        }])
+    )]
+    #[case::cyclohexene_asserted(
+        mol_dsl_concrete!(r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
+        Edits::from_iter([Edit::ModifyBondConstraint {
+            id: BondHandle::Id(BondId(1)),
+            old: Some(BondConstraintForm::CisTransStereo(
+                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+            )),
+            new: None,
+        }])
+    )]
     fn test_stereo_resolver_plan(
         stereo_model: StereoModel,
         #[case] molecule: Molecule,
@@ -481,6 +510,49 @@ mod tests {
     ) {
         assert_eq!(
             StereoResolver::new(&stereo_model).plan(&molecule),
+            Ok(Solution::Determined(expected))
+        );
+    }
+
+    #[rstest]
+    #[case::cyclohexene_realized_at_zero(
+        0,
+        mol_dsl_concrete!(r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
+        Edits::from_iter([Edit::AddStereoBond {
+            site: BondHandle::Id(BondId(1)),
+            ligands: vec![
+                (AtomHandle::Id(AtomId(5)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+            ],
+            attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+        }])
+    )]
+    #[case::cyclooctene_skipped_at_nine(
+        9,
+        mol_dsl_concrete!(r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
+                             :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#),
+        Edits::from_iter([Edit::ModifyBondConstraint {
+            id: BondHandle::Id(BondId(2)),
+            old: Some(BondConstraintForm::CisTransStereo(
+                CisTransStereoForm::Stereo(StereoCoset::Lit(1)),
+            )),
+            new: None,
+        }])
+    )]
+    fn test_stereo_resolver_plan_stereo_bond_minimum_ring_size(
+        #[case] stereo_bond_minimum_ring_size: u32,
+        #[case] molecule: Molecule,
+        #[case] expected: Edits,
+    ) {
+        let model = StereoModel {
+            stereo_bond_minimum_ring_size,
+            ..StereoModel::default()
+        };
+        assert_eq!(
+            StereoResolver::new(&model).plan(&molecule),
             Ok(Solution::Determined(expected))
         );
     }

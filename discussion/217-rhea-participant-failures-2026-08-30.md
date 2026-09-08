@@ -395,11 +395,13 @@ S7 — Stereo-model ring threshold
 
 - S7a `umol-graph::ops::model`: `StereoModel::stereo_bond_minimum_ring_size`, default 8; Python
   binding of the field. Tests: default, construction, Python parity. Additive [dep: none].
+  Completed.
 - S7b `umol-graph::ops::stereo`, `ops::resolve::stereo`: perception consults the ring set and
   skips `#C` on ring double bonds below the threshold; the resolver clears those assertions.
   Tests: cyclohexene with `#C` yields no stereo bond and a cleared constraint; cyclooctene yields a
   stereo bond; threshold 0 keeps cyclohexene; a resolution-suite fixture for each. Additive
-  [dep: S7a].
+  [dep: S7a]. Completed. The perception reports the skipped assertions in
+  `StereoDerivation::skipped_stereo_bonds`; the fixture is `stereo_cis_trans/cyclohexene-asserted.edn`.
 
 Gate: `cargo test -p umol-graph --features conformance` and the Python suite.
 

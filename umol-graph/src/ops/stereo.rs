@@ -8,9 +8,9 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AsLit, AtomId, BondId, CisTransStereoForm, Lattice, Molecule, StereoAtomForm, StereoAtomId,
-    StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    TetrahedralStereoForm,
+    AsLit, AtomId, BondId, CisTransStereoForm, Lattice, Molecule, RingConfig, RingModel,
+    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind,
+    StereoLigand, StereoLigandKind, TetrahedralStereoForm,
 };
 
 use crate::ops::model::StereoModel;
@@ -19,9 +19,12 @@ use crate::ops::model::StereoModel;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StereoDerivation {
     /// Realizable tetrahedral stereo atoms.
-    pub atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
+    pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
     /// Realizable cis-trans stereo bonds.
-    pub bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
+    pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
+    /// Sites of cis-trans assertions on double bonds whose smallest ring is below the model's
+    /// `stereo_bond_minimum_ring_size`: no stereo bond is realized, and nothing is inconsistent.
+    pub skipped_stereo_bonds: Vec<BondId>,
     /// Constraint failures, entity failures, and independently valid mismatches.
     pub inconsistencies: Vec<StereoInconsistency>,
 }
@@ -68,9 +71,19 @@ impl StereoPerception {
 
     /// Derive stereo relations and compare them with every existing relation.
     pub fn derive(&self, molecule: &Molecule) -> StereoDerivation {
-        let mut atoms = Vec::new();
-        let mut bonds = Vec::new();
+        let mut stereo_atoms = Vec::new();
+        let mut stereo_bonds = Vec::new();
+        let mut skipped_stereo_bonds = Vec::new();
         let mut inconsistencies = BTreeSet::new();
+        let minimum_ring_size = self.model.stereo_bond_minimum_ring_size as usize;
+        let rings = (minimum_ring_size > 0
+            && molecule.bonds().iter().any(|bond| {
+                matches!(
+                    bond.constraints().cis_trans_stereo(),
+                    Some(CisTransStereoForm::Stereo(_))
+                )
+            }))
+        .then(|| molecule.rings(RingModel::default(), RingConfig::default()));
 
         for atom in molecule.atoms().ids() {
             let relations: Vec<_> = molecule
@@ -99,7 +112,7 @@ impl StereoPerception {
             };
 
             if let Some((ligands, stereo)) = &constraint_candidate {
-                atoms.push((atom, ligands.clone(), stereo.clone()));
+                stereo_atoms.push((atom, ligands.clone(), stereo.clone()));
             }
             for relation in relations {
                 let entity_candidate =
@@ -122,7 +135,7 @@ impl StereoPerception {
                 if constraint_candidate.is_none()
                     && matches!(assertion, TetrahedralStereoForm::Undetermined)
                 {
-                    atoms.push((atom, entity_ligands.clone(), entity_stereo.clone()));
+                    stereo_atoms.push((atom, entity_ligands.clone(), entity_stereo.clone()));
                 }
                 let mismatch =
                     match assertion {
@@ -164,6 +177,17 @@ impl StereoPerception {
                 .unwrap_or(&CisTransStereoForm::Undetermined);
 
             let constraint_candidate = match assertion {
+                CisTransStereoForm::Stereo(_)
+                    if rings.as_ref().is_some_and(|rings| {
+                        rings
+                            .bond(bond)
+                            .smallest_ring_size()
+                            .is_some_and(|size| size < minimum_ring_size)
+                    }) =>
+                {
+                    skipped_stereo_bonds.push(bond);
+                    None
+                }
                 CisTransStereoForm::Stereo(coset) => {
                     let candidate = self.derive_stereo_bond(molecule, bond, coset);
                     if candidate.is_none() {
@@ -176,7 +200,7 @@ impl StereoPerception {
             };
 
             if let Some((ligands, stereo)) = &constraint_candidate {
-                bonds.push((bond, ligands.clone(), stereo.clone()));
+                stereo_bonds.push((bond, ligands.clone(), stereo.clone()));
             }
             for relation in relations {
                 let entity_candidate =
@@ -199,7 +223,7 @@ impl StereoPerception {
                 if constraint_candidate.is_none()
                     && matches!(assertion, CisTransStereoForm::Undetermined)
                 {
-                    bonds.push((bond, entity_ligands.clone(), entity_stereo.clone()));
+                    stereo_bonds.push((bond, entity_ligands.clone(), entity_stereo.clone()));
                 }
                 let mismatch = match assertion {
                     CisTransStereoForm::Stereo(_) => {
@@ -229,8 +253,9 @@ impl StereoPerception {
         }
 
         StereoDerivation {
-            atoms,
-            bonds,
+            stereo_atoms,
+            stereo_bonds,
+            skipped_stereo_bonds,
             inconsistencies: inconsistencies.into_iter().collect(),
         }
     }
@@ -349,7 +374,7 @@ mod tests {
                     [4 5 "1"] [5 6 "2#C1"] [6 7 "1"]]
         }"#),
         StereoDerivation {
-            atoms: vec![(
+            stereo_atoms: vec![(
                 AtomId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
@@ -359,7 +384,7 @@ mod tests {
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
-            bonds: vec![(
+            stereo_bonds: vec![(
                 BondId(4),
                 vec![
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
@@ -369,6 +394,7 @@ mod tests {
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
+            skipped_stereo_bonds: vec![],
             inconsistencies: vec![],
         },
     )]
@@ -390,7 +416,7 @@ mod tests {
             }]
         }"#),
         StereoDerivation {
-            atoms: vec![(
+            stereo_atoms: vec![(
                 AtomId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
@@ -400,7 +426,7 @@ mod tests {
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
-            bonds: vec![(
+            stereo_bonds: vec![(
                 BondId(4),
                 vec![
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
@@ -410,6 +436,7 @@ mod tests {
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
+            skipped_stereo_bonds: vec![],
             inconsistencies: vec![],
         },
     )]
@@ -420,8 +447,9 @@ mod tests {
             :bonds [[0 1 "1"] [1 2 "1"] [3 4 "1"] [4 5 "2#C1"]]
         }"#),
         StereoDerivation {
-            atoms: vec![],
-            bonds: vec![],
+            stereo_atoms: vec![],
+            stereo_bonds: vec![],
+            skipped_stereo_bonds: vec![],
             inconsistencies: vec![
                 StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) },
                 StereoInconsistency::CisTransStereoFailure { bond: BondId(3) },
@@ -446,7 +474,7 @@ mod tests {
             }]
         }"#),
         StereoDerivation {
-            atoms: vec![(
+            stereo_atoms: vec![(
                 AtomId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
@@ -456,7 +484,7 @@ mod tests {
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
-            bonds: vec![(
+            stereo_bonds: vec![(
                 BondId(4),
                 vec![
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
@@ -466,6 +494,7 @@ mod tests {
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
+            skipped_stereo_bonds: vec![],
             inconsistencies: vec![
                 StereoInconsistency::TetrahedralStereoMismatch {
                     atom: AtomId(1),
@@ -488,8 +517,9 @@ mod tests {
             :stereo-bonds [{:site 4 :ligands [4 [:h 5] 7 [:h 6]] :attrs "Ct1"}]
         }"#),
         StereoDerivation {
-            atoms: vec![],
-            bonds: vec![],
+            stereo_atoms: vec![],
+            stereo_bonds: vec![],
+            skipped_stereo_bonds: vec![],
             inconsistencies: vec![
                 StereoInconsistency::StereoAtomFailure {
                     stereo_atom: StereoAtomId(0),
@@ -510,8 +540,9 @@ mod tests {
             :stereo-bonds [{:site 4 :ligands [4 [:h 5] 7 [:h 6]] :attrs "Ct1"}]
         }"#),
         StereoDerivation {
-            atoms: vec![],
-            bonds: vec![],
+            stereo_atoms: vec![],
+            stereo_bonds: vec![],
+            skipped_stereo_bonds: vec![],
             inconsistencies: vec![
                 StereoInconsistency::TetrahedralStereoMismatch {
                     atom: AtomId(1),
@@ -522,6 +553,18 @@ mod tests {
                     stereo_bond: StereoBondId(0),
                 },
             ],
+        },
+    )]
+    #[case::cyclohexene_asserted(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h1" "C#h1" "C#h2" "C#h2" "C#h2" "C#h2"]
+            :bonds [[0 5 "1"] [0 1 "2#C1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]
+        }"#),
+        StereoDerivation {
+            stereo_atoms: vec![],
+            stereo_bonds: vec![],
+            skipped_stereo_bonds: vec![BondId(1)],
+            inconsistencies: vec![],
         },
     )]
     fn test_stereo_perception_derive(
