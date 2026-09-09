@@ -1,4 +1,5 @@
 import inspect
+import sys
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -47,7 +48,14 @@ def test_molecule_layout_algorithm():
 @pytest.mark.parametrize(
     ("callable_", "expected"),
     [
-        (MoleculeLayout, "(positions)"),
+        pytest.param(
+            MoleculeLayout,
+            "(positions)",
+            marks=pytest.mark.skipif(
+                sys.version_info < (3, 10),
+                reason="class __text_signature__ requires Python 3.10",
+            ),
+        ),
         (Molecule.layout, "(self, /, *, algorithm=Ellipsis)"),
         (Molecule.depict_with_layout, "(self, /, layout)"),
     ],
