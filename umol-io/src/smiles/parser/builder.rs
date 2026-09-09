@@ -52,6 +52,9 @@ pub(super) struct MoleculeEditor {
     ring_table: Vec<Option<OpenRing>>,
     /// (close_rank, open_index) per ring-closure bond, for CX bond-index remapping.
     ring_bonds: Vec<(usize, usize)>,
+    /// (atom, reserved bond slot, bond-table length) at each marked ring closure.
+    stereo_closures: Vec<(u32, usize, usize)>,
+    stereo_roots: Vec<u32>,
     /// Count of completed bonds; a bond's completion order is its CX close index.
     closed_bonds: usize,
     /// Whether to record ring closures (set only when a CX block is present).
@@ -70,6 +73,8 @@ impl MoleculeEditor {
             bond_table: Vec::with_capacity(approx_bonds),
             ring_table: Vec::new(),
             ring_bonds: Vec::new(),
+            stereo_closures: Vec::new(),
+            stereo_roots: Vec::new(),
             closed_bonds: 0,
             store_rings,
             molecules: Vec::new(),
@@ -101,6 +106,11 @@ impl MoleculeEditor {
     }
 
     #[inline]
+    pub(crate) fn on_stereo_root(&mut self, atom_idx: usize) {
+        self.stereo_roots.push(atom_idx as u32);
+    }
+
+    #[inline]
     pub(crate) fn on_wildcard(&mut self, span_start: Option<u32>, span_end: Option<u32>) -> usize {
         let mut atom = Atom::wildcard();
         atom.span = Span::from_bytes_opt(span_start, span_end);
@@ -125,6 +135,17 @@ impl MoleculeEditor {
 
     #[inline]
     fn on_ring_bond_close(&mut self, bond_idx: usize, start: usize, end: usize, b: BondData) {
+        if matches!(
+            self.atoms[end].chirality,
+            Some(
+                Chirality::Clockwise
+                    | Chirality::CounterClockwise
+                    | Chirality::Tetrahedral { arr: 1 | 2 }
+            )
+        ) {
+            self.stereo_closures
+                .push((end as u32, bond_idx, self.bond_table.len()));
+        }
         self.bond_table[bond_idx] = Some(make_bond(start, end, b));
         if self.store_rings {
             self.ring_bonds.push((self.closed_bonds, bond_idx));
@@ -297,6 +318,8 @@ impl MoleculeEditor {
         let mut mol = Molecule::empty();
         mol.atoms = mem::take(&mut self.atoms);
         mol.bonds = self.bond_table.drain(..).flatten().collect();
+        self.stereo_closures.clear();
+        self.stereo_roots.clear();
         self.molecules.push(mol);
     }
 
@@ -330,6 +353,9 @@ pub(super) struct ExtendedMoleculeBuilder {
     ring_table: Vec<Option<OpenRing>>,
     /// (close_rank, open_index) per ring-closure bond, for CX bond-index remapping.
     ring_bonds: Vec<(usize, usize)>,
+    /// (atom, reserved bond slot, bond-table length) at each marked ring closure.
+    stereo_closures: Vec<(u32, usize, usize)>,
+    stereo_roots: Vec<u32>,
     /// Count of completed bonds; a bond's completion order is its CX close index.
     closed_bonds: usize,
     /// Whether to record ring closures (set only when a CX block is present).
@@ -348,6 +374,8 @@ impl ExtendedMoleculeBuilder {
             bond_table: Vec::with_capacity(approx_bonds),
             ring_table: Vec::new(),
             ring_bonds: Vec::new(),
+            stereo_closures: Vec::new(),
+            stereo_roots: Vec::new(),
             closed_bonds: 0,
             store_rings,
             molecules: Vec::new(),
@@ -390,6 +418,11 @@ impl ExtendedMoleculeBuilder {
     }
 
     #[inline]
+    pub(crate) fn on_stereo_root(&mut self, atom_idx: usize) {
+        self.stereo_roots.push(atom_idx as u32);
+    }
+
+    #[inline]
     pub(crate) fn on_bond(&mut self, start: usize, end: usize, b: BondData) {
         self.bond_table
             .push(Some(make_extended_bond(start, end, b)));
@@ -407,6 +440,17 @@ impl ExtendedMoleculeBuilder {
 
     #[inline]
     fn on_ring_bond_close(&mut self, bond_idx: usize, start: usize, end: usize, b: BondData) {
+        if matches!(
+            self.atoms[end].chirality,
+            Some(
+                Chirality::Clockwise
+                    | Chirality::CounterClockwise
+                    | Chirality::Tetrahedral { arr: 1 | 2 }
+            )
+        ) {
+            self.stereo_closures
+                .push((end as u32, bond_idx, self.bond_table.len()));
+        }
         self.bond_table[bond_idx] = Some(make_extended_bond(start, end, b));
         if self.store_rings {
             self.ring_bonds.push((self.closed_bonds, bond_idx));
@@ -642,6 +686,8 @@ impl ExtendedMoleculeBuilder {
         let mut mol = ExtendedMolecule::empty();
         mol.atoms = mem::take(&mut self.atoms);
         mol.bonds = self.bond_table.drain(..).flatten().collect();
+        self.stereo_closures.clear();
+        self.stereo_roots.clear();
         self.molecules.push(mol);
     }
 
@@ -657,3 +703,6 @@ impl ExtendedMoleculeBuilder {
         mem::take(&mut self.ring_bonds)
     }
 }
+
+#[cfg(test)]
+mod tests;

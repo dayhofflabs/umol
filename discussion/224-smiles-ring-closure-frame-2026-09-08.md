@@ -815,11 +815,61 @@ Conversion, frame, malformed-record and MOL controls pass, as does the full
 and warnings denied, formatting, and diff whitespace checks pass. Existing parser expectations
 required no changes. Parser frame emission and ChiralityFrame removal remain S2.
 
+## S2a completion — 2026-09-09
+
+Both builders now retain marked traversal-root ids and private ring-closure tuples
+(atom, reserved bond slot, bond-table length). Only supported tetrahedral closing sites add
+closure records; equal boundaries preserve digit order. The parser supplies root status from
+its preceding-atom state, including after dots. Ordinary atoms, unmarked closures and opening-only
+sites add no closure records. No per-atom vector or ordinary-bond accumulator was added.
+Records are cleared at component finalization; emitting full frames remains S2b.
+
+The initial 28 new builder cases and the full IO conformance/property gate passed, with no existing
+expectation changes. All-target Clippy with those features and warnings denied, formatting,
+and diff whitespace checks pass. Opening slots, diagnostics, direction/donation handling,
+CX completion ranks and spans use their existing paths.
+
+The existing smiles_parsing benchmarks were measured against S1 commit
+`bc5ab5247052fdb1f9a9dfddfa777f3d37492383`, using Rust 1.96.0, the default features and release
+bench profile. No builds or tests ran concurrently with measurements. The baseline and first
+comparison used 20 samples, 0.2 s warmup and 0.5 s measurement; a repeat used 40 samples,
+0.5 s warmup and 1 s measurement. Criterion's repeat point estimates relative to baseline were:
+
+| Control | Basic | Extended |
+| --- | ---: | ---: |
+| chain/c_10 | +0.5% | +1.8% |
+| rings/c6 | −2.2% | +0.4% |
+| ring_stereo/dir_up_open | +0.7% | +1.3% |
+| brackets/brkt_C_50 | +6.6% | +0.6% |
+
+The basic bracket-chain slowdown persisted in both comparisons (+6.8% and +6.6%); the initial
+basic directed-ring slowdown (+5.0%) did not. These unmarked controls allocate no new records,
+so the bracket-chain result is not a record-allocation cost.
+
+Follow-up isolation identified an inlining change: the root-recording branch makes basic
+MoleculeEditor::on_atom an out-of-line call at every bracket atom. S1 inlines it; removing only
+root recording restores inlining, while removing only closure recording does not. Extended
+on_atom was already out of line. Two reverse-order rounds (50 samples, 0.5 s warmup, 2 s measurement)
+measured S1 at 1.34–1.35 µs, S2a at 1.41–1.44 µs, root recording removed at 1.35–1.36 µs, and
+closure recording removed at 1.39–1.41 µs. A further isolated experiment retained all S2a logic
+and forced basic on_atom to inline: 1.32–1.33 µs versus 1.41 µs for S2a between those runs.
+This supports changed inlining as the dominant cost, not sparse-record allocation. Forced inlining
+remains experimental; production retains the existing inline annotation. Full-finalization
+measurements remain due in S2b.
+
+The approved follow-up moves the supported-root check into both bracket-atom parsing branches,
+with a small on_stereo_root method retaining private storage. on_atom has its original signature
+and body; the boolean parameter is gone. Generated code confirms basic on_atom and the root push
+inline without forcing the annotation. Alternating the updated and saved S1 executables with the
+same 50-sample settings measured 1.340–1.357 µs for the update and 1.339–1.340 µs for S1, recovering
+the earlier slowdown. The remaining 14 builder cases cover closure recording and component cleanup;
+full IO conformance/property tests and all-target Clippy pass again without expectation changes.
+
 ## Implementation plan
 
 S0a and S0b are complete, with their results above. The design contract is specified above.
 S0 establishes measurements and exercises the revised prototype;
-S1 is complete. S2–S4 have not started. No mutating git operation
+S1 and S2a are complete. S2b–S4 have not started. No mutating git operation
 or commit is implied by the reviewable subitems below.
 
 Stages end green, including required caller/expectation migrations. Each code subitem includes its
@@ -869,7 +919,7 @@ Graph-IR construction and its invariants remain unchanged.
 
 ### S2 — Finalize SMILES frames and retire the interpretation flag
 
-- **S2a — Sparse encounter state** — additive (green). Update the basic and extended builders'
+- **S2a — Sparse encounter state (completed 2026-09-09)** — additive (green). Update the basic and extended builders'
   ring-closing paths to retain only the specified private records, and record marked traversal roots
   when there is no preceding atom. Preserve opening slots, pending ring diagnostics, direction/donation
   handling, CX completion ranks, and source spans. Carry focused record-order/root tests and benchmark ordinary/ring-free controls at this change. **[dep: S1b]**
@@ -967,5 +1017,5 @@ are required only if approved implementation changes actually touch those compon
 
 Critical path: **S0 baseline/prototype approval → S1 checked boundary → S2 parser/flag migration →
 S3 bounded coverage and downstream review**. S4 is independent cleanup scheduled afterward to isolate
-its effects. S0 and S1 are complete. The parser migration and subsequent
+its effects. S0, S1 and S2a are complete. Full frame finalization and subsequent
 subitems remain pending.

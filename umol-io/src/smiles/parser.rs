@@ -23,8 +23,8 @@ use self::utils::{
 use super::config::{SmilesIoConfig, SmilesSyntaxFlags};
 use super::error::ParseError;
 use crate::table_ir::{
-    BondDirection, BondDonation, BondOrder, ChiralityFrame, ExtendedMolecule, ExtendedReaction,
-    Molecule, Reaction, SourceFormat, Span, WildcardAtom,
+    BondDirection, BondDonation, BondOrder, Chirality, ChiralityFrame, ExtendedMolecule,
+    ExtendedReaction, Molecule, Reaction, SourceFormat, Span, WildcardAtom,
 };
 
 /// Parse a molecular SMILES byte slice into `table_ir::Molecule`.
@@ -382,6 +382,18 @@ fn parse_smiles_inner(
                 span: Span::from_bytes_opt(s, e),
             };
             let curr = builder.on_atom(atom);
+            if last_atom_idx.is_none()
+                && matches!(
+                    chir_opt,
+                    Some(
+                        Chirality::Clockwise
+                            | Chirality::CounterClockwise
+                            | Chirality::Tetrahedral { arr: 1 | 2 }
+                    )
+                )
+            {
+                builder.on_stereo_root(curr);
+            }
             let aromatic = aromatic.unwrap_or(false);
 
             attach_atom(
@@ -1003,6 +1015,18 @@ fn parse_extended_smiles_inner(
                 span: Span::from_bytes_opt(s, e),
             };
             let curr = builder.on_atom(atom);
+            if last_atom_idx.is_none()
+                && matches!(
+                    chir_opt,
+                    Some(
+                        Chirality::Clockwise
+                            | Chirality::CounterClockwise
+                            | Chirality::Tetrahedral { arr: 1 | 2 }
+                    )
+                )
+            {
+                builder.on_stereo_root(curr);
+            }
 
             attach_extended_atom(
                 &mut builder,
