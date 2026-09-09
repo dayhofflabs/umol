@@ -18,6 +18,7 @@ use super::ctfile_data::CtfileData;
 use super::cx_data::CxAnnotationData;
 use super::error::ConversionError;
 use super::multicenter::MulticenterBond;
+use super::neighbors::AtomNeighbors;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
@@ -59,6 +60,11 @@ impl Molecule {
 
     pub fn bond_count(&self) -> usize {
         self.bonds.len()
+    }
+
+    /// Bonds at each atom in bond order, computed from the current bond list.
+    pub fn atom_neighbors(&self) -> AtomNeighbors {
+        AtomNeighbors::new(self.atoms.len(), self.bonds.iter().map(|bond| bond.atoms))
     }
 
     pub fn multicenter_bond_count(&self) -> usize {
@@ -146,6 +152,11 @@ impl ExtendedMolecule {
 
     pub fn bond_count(&self) -> usize {
         self.bonds.len()
+    }
+
+    /// Bonds at each atom in bond order, computed from the current bond list.
+    pub fn atom_neighbors(&self) -> AtomNeighbors {
+        AtomNeighbors::new(self.atoms.len(), self.bonds.iter().map(|bond| bond.atoms))
     }
 
     pub fn multicenter_bond_count(&self) -> usize {

@@ -28,15 +28,17 @@ use crate::table_ir::bond::{
     Bond as TableBond, BondDonation as TableBondDonation, BondOrder as TableBondOrder,
 };
 use crate::table_ir::raise::utils::coset_from_wedge_winding;
-use crate::table_ir::{BondStereo, Chirality, ChiralityFrame, Molecule as TableMolecule};
+use crate::table_ir::{
+    AtomNeighbors, BondStereo, Chirality, ChiralityFrame, Molecule as TableMolecule,
+};
 
 mod utils;
 
 use utils::{
-    cis_trans_capable, cis_trans_side, cis_trans_sides_from_positions,
+    cis_trans_capable, cis_trans_side, cis_trans_sides_from_positions, double_bond_partner,
     first_neighbor_toward_ordering, has_either_wedge, neighbor_count, noncovalent_kind,
     tetrahedral_ligand_ordering, validate_bond_direction, validate_tetrahedral_geometry,
-    wedge_bond_neighbors, CisTransReading, StereoBondAtom, StereoHalfplane,
+    wedge_bond_neighbors, StereoBondAtom, StereoHalfplane,
 };
 
 /// Error variants for TableIR -> Molecule raise.
@@ -54,8 +56,6 @@ pub enum RaiseError {
     WedgeConflict { atom: usize },
     #[error("wedge coordinates at atom {atom} do not determine a configuration")]
     DegenerateWedgeGeometry { atom: usize },
-    #[error("coordinates of double bond {bond} do not determine cis or trans")]
-    DegenerateBondGeometry { bond: usize },
 }
 
 impl UmolError for RaiseError {
@@ -69,13 +69,14 @@ impl TryIntoIr<Molecule> for &TableMolecule {
     type Error = RaiseError;
 
     fn try_into_ir(self, context: &Self::Context) -> Result<Molecule, RaiseError> {
+        let neighbors = self.atom_neighbors();
         let atoms: Vec<AtomForm> = self
             .atoms
             .iter()
             .enumerate()
             .map(|(atom_idx, table_atom)| {
                 let mut atom = table_atom.try_into_ir(context)?;
-                if let Some(constraint) = raise_tetrahedral_stereo(self, atom_idx)? {
+                if let Some(constraint) = raise_tetrahedral_stereo(self, &neighbors, atom_idx)? {
                     atom.constraints.set(constraint);
                 }
                 Ok(atom)
@@ -86,7 +87,7 @@ impl TryIntoIr<Molecule> for &TableMolecule {
         let mut dative_bonds: Vec<(Vec<AtomId>, AtomId, DativeBondForm)> = Vec::new();
         let mut noncovalent_bonds = Vec::new();
         for (bond_idx, b) in self.bonds.iter().enumerate() {
-            validate_bond_direction(self, bond_idx)?;
+            validate_bond_direction(self, &neighbors, bond_idx)?;
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
@@ -104,7 +105,7 @@ impl TryIntoIr<Molecule> for &TableMolecule {
                 dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
                 let mut bond_form = b.try_into_ir(context)?;
-                if let Some(constraint) = raise_cis_trans_stereo(self, bond_idx)? {
+                if let Some(constraint) = raise_cis_trans_stereo(self, &neighbors, bond_idx)? {
                     bond_form.constraints.set(constraint);
                 }
                 bonds.push((a_idx, b_idx, bond_form));
@@ -257,6 +258,7 @@ fn raise_bond_order(order: TableBondOrder) -> NumForm {
 /// Raise tetrahedral stereo constraint for `atom_idx`.
 fn raise_tetrahedral_stereo(
     mol: &TableMolecule,
+    neighbors: &AtomNeighbors,
     atom_idx: usize,
 ) -> Result<Option<AtomConstraintForm>, RaiseError> {
     // CTfile atom parity is retained in TableIR and not read: the specification marks the field
@@ -272,21 +274,25 @@ fn raise_tetrahedral_stereo(
                 Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 } => 1,
                 _ => return Ok(None),
             };
-            validate_tetrahedral_geometry(mol, atom_idx)?;
+            validate_tetrahedral_geometry(neighbors, atom_idx)?;
             let permutation = Permutation::between(
-                &first_neighbor_toward_ordering(mol, atom_idx),
-                &tetrahedral_ligand_ordering(mol, atom_idx),
+                &first_neighbor_toward_ordering(neighbors, atom_idx),
+                &tetrahedral_ligand_ordering(neighbors, atom_idx),
             )
             .expect("validated tetrahedral frames contain the same ligands");
             (permutation, source_coset)
         }
         None => {
-            let neighbors = wedge_bond_neighbors(mol, atom_idx);
-            if has_either_wedge(mol, atom_idx) {
-                if !neighbors.is_empty() {
+            let wedged = wedge_bond_neighbors(mol, neighbors, atom_idx);
+            // An either wedge at an atom with one double bond marks that bond; see
+            // `raise_cis_trans_stereo`.
+            if has_either_wedge(mol, neighbors, atom_idx)
+                && double_bond_partner(mol, neighbors, atom_idx).is_none()
+            {
+                if !wedged.is_empty() {
                     return Err(RaiseError::WedgeConflict { atom: atom_idx });
                 }
-                validate_tetrahedral_geometry(mol, atom_idx)?;
+                validate_tetrahedral_geometry(neighbors, atom_idx)?;
                 return Ok(Some(AtomConstraintForm::TetrahedralStereo(
                     TetrahedralStereoForm::stereo(StereoCoset::Undetermined),
                 )));
@@ -294,14 +300,14 @@ fn raise_tetrahedral_stereo(
             let Some(positions) = mol.positions.as_ref() else {
                 return Ok(None);
             };
-            let count = neighbor_count(mol, atom_idx);
+            let count = neighbor_count(neighbors, atom_idx);
             if count != 3 && count != 4 {
                 return Ok(None);
             }
-            let Some(&(neighbor_idx, outofplane)) = neighbors.first() else {
+            let Some(&(neighbor_idx, outofplane)) = wedged.first() else {
                 return Ok(None);
             };
-            let target_ordering = tetrahedral_ligand_ordering(mol, atom_idx);
+            let target_ordering = tetrahedral_ligand_ordering(neighbors, atom_idx);
             let winding = |neighbor_idx, outofplane| {
                 coset_from_wedge_winding(
                     atom_idx,
@@ -313,7 +319,7 @@ fn raise_tetrahedral_stereo(
                 .ok_or(RaiseError::DegenerateWedgeGeometry { atom: atom_idx })
             };
             let source_coset = winding(neighbor_idx, outofplane)?;
-            for &(neighbor_idx, outofplane) in &neighbors[1..] {
+            for &(neighbor_idx, outofplane) in &wedged[1..] {
                 if winding(neighbor_idx, outofplane)? != source_coset {
                     return Err(RaiseError::WedgeConflict { atom: atom_idx });
                 }
@@ -333,41 +339,46 @@ fn raise_tetrahedral_stereo(
 /// Raise cis/trans stereo constraint for `bond_idx`.
 fn raise_cis_trans_stereo(
     mol: &TableMolecule,
+    neighbors: &AtomNeighbors,
     bond_idx: usize,
 ) -> Result<Option<BondConstraintForm>, RaiseError> {
     let bond = &mol.bonds[bond_idx];
     if bond.order != TableBondOrder::Double {
         return Ok(None);
     }
-    if bond.stereo == Some(BondStereo::Either) {
+    let atom_1_idx = bond.start_atom() as usize;
+    let atom_2_idx = bond.end_atom() as usize;
+    // Stereo code 3, or the drawing convention of an either wedge at an atom of the double bond,
+    // asserts an unknown configuration.
+    let either_marked = |atom_idx: usize, other_atom_idx: usize| {
+        has_either_wedge(mol, neighbors, atom_idx)
+            && double_bond_partner(mol, neighbors, atom_idx) == Some(other_atom_idx)
+    };
+    if bond.stereo == Some(BondStereo::Either)
+        || either_marked(atom_1_idx, atom_2_idx)
+        || either_marked(atom_2_idx, atom_1_idx)
+    {
         return Ok(Some(BondConstraintForm::CisTransStereo(
             CisTransStereoForm::stereo(StereoCoset::Undetermined),
         )));
     }
-    let atom_1_idx = bond.start_atom() as usize;
-    let atom_2_idx = bond.end_atom() as usize;
-    if !cis_trans_capable(mol, atom_1_idx, atom_2_idx) {
+    if !cis_trans_capable(neighbors, atom_1_idx, atom_2_idx) {
         return Ok(None);
     }
     // Directional marks decide when present at both atoms; a double bond without any mark is read
     // from coordinates when the record has them.
     let (side_1, side_2) = match (
-        cis_trans_side(mol, atom_1_idx, atom_2_idx)?,
-        cis_trans_side(mol, atom_2_idx, atom_1_idx)?,
+        cis_trans_side(mol, neighbors, atom_1_idx, atom_2_idx)?,
+        cis_trans_side(mol, neighbors, atom_2_idx, atom_1_idx)?,
     ) {
         (Some(side_1), Some(side_2)) => (side_1, side_2),
         (None, None) => {
             let Some(positions) = mol.positions.as_ref() else {
                 return Ok(None);
             };
-            match cis_trans_sides_from_positions(mol, bond_idx, atom_1_idx, atom_2_idx, positions)?
+            match cis_trans_sides_from_positions(mol, neighbors, atom_1_idx, atom_2_idx, positions)
             {
-                Some(CisTransReading::Determined(side_1, side_2)) => (side_1, side_2),
-                Some(CisTransReading::Undetermined) => {
-                    return Ok(Some(BondConstraintForm::CisTransStereo(
-                        CisTransStereoForm::stereo(StereoCoset::Undetermined),
-                    )));
-                }
+                Some((side_1, side_2)) => (side_1, side_2),
                 None => return Ok(None),
             }
         }
@@ -486,6 +497,7 @@ mod tests {
     const INCOMING_WEDGE_MOL: &str = "\n\n\n  8  7  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    1.3812   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906    0.6906    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.6906   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  1        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\n  1  6  1  0        0\n  1  7  1  0        0\n  1  8  1  0        0\nM  END\n";
 
     const DIFLUOROETHENE_E_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+    const DIFLUOROETHENE_E_REVERSED_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  3  2  2  0        0\n  3  4  1  0        0\nM  END\n";
 
     const DIFLUOROETHENE_Z_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
 
@@ -498,12 +510,21 @@ mod tests {
     const DIFLUOROETHENE_ZERO_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
 
     const DIFLUOROETHENE_COLLINEAR_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+    const DIFLUOROETHENE_COLLINEAR_REVERSED_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  3  2  2  0        0\n  3  4  1  0        0\nM  END\n";
 
     const CFCLBRI_ZERO_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\nM  END\n";
 
     const CFCLBRI_COLLINEAR_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.6906    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3812    0.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n   -1.3812    0.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\nM  END\n";
 
     const FOLDED_ALKENE_MOL: &str = "\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6500    0.2500    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  3  1  0        0\n  2  3  1  0        0\n  3  4  2  0        0\n  4  5  1  0        0\nM  END\n";
+
+    const WAVY_ALKENE_TWO_LIGANDS_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  2  1  1  4        0\n  2  3  2  0        0\n  3  4  1  0        0\nM  END\n";
+
+    const WAVY_ALKENE_THREE_LIGANDS_MOL: &str = "\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9500   -0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6500   -0.7500    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n  2  1  1  4        0\n  2  3  2  0        0\n  3  4  1  0        0\n  2  5  1  0        0\nM  END\n";
+
+    const ALLENE_MOL: &str = "\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.6000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.2500   -0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  2  0        0\n  4  5  1  0        0\nM  END\n";
+
+    const ISOTHIOCYANATE_MOL: &str = "\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n   -0.6500    0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0\n    1.3000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.6000    0.0000    0.0000 S   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  2  0        0\n  3  4  2  0        0\nM  END\n";
 
     const CIS_TRANS_EITHER_MOL: &str = "butene\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  2  3  2  3  0  0  0\n  3  4  1  0  0  0  0\nM  END\n";
 
@@ -855,6 +876,9 @@ mod tests {
     #[case::cx_wiggly_up(Smiles::parse_bytes_with(b"F[C](Cl)(Br)I |wU:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 1, Some(StereoCoset::Undetermined))]
     #[case::cx_wiggly_down(Smiles::parse_bytes_with(b"F[C](Cl)(Br)I |wD:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 1, Some(StereoCoset::Undetermined))]
     #[case::cx_wiggly_wide_endpoint(Smiles::parse_bytes_with(b"F[C](Cl)(Br)I |w:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 0, None)]
+    #[case::mol_wavy_alkene_two_ligands(parse_mol_bytes_to_table_ir(WAVY_ALKENE_TWO_LIGANDS_MOL.as_bytes()).unwrap(), 1, None)]
+    #[case::mol_wavy_alkene_three_ligands(parse_mol_bytes_to_table_ir(WAVY_ALKENE_THREE_LIGANDS_MOL.as_bytes()).unwrap(), 1, None)]
+    #[case::cx_wiggly_alkene(Smiles::parse_bytes_with(b"CC=CC |w:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 1, None)]
     #[case::sulfoxide_counterclockwise(Smiles::parse_bytes(b"C[S@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
     #[case::sulfoxide_clockwise(Smiles::parse_bytes(b"C[S@@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
     #[case::sulfoxide_charge_separated(Smiles::parse_bytes(b"C[S@@+]([O-])CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
@@ -867,7 +891,10 @@ mod tests {
         let expected = expected.map(|coset| {
             AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::stereo(coset))
         });
-        assert_eq!(raise_tetrahedral_stereo(&mol, atom_idx), Ok(expected));
+        assert_eq!(
+            raise_tetrahedral_stereo(&mol, &mol.atom_neighbors(), atom_idx),
+            Ok(expected)
+        );
     }
 
     #[rstest]
@@ -884,7 +911,10 @@ mod tests {
         #[case] atom_idx: usize,
         #[case] expected: RaiseError,
     ) {
-        assert_eq!(raise_tetrahedral_stereo(&mol, atom_idx), Err(expected));
+        assert_eq!(
+            raise_tetrahedral_stereo(&mol, &mol.atom_neighbors(), atom_idx),
+            Err(expected)
+        );
     }
 
     #[rstest]
@@ -913,11 +943,22 @@ mod tests {
     #[case::trisubstituted(Smiles::parse_bytes(b"F/C(C)=C(Cl)/C").unwrap().into_table_ir(), 2, Some(StereoCoset::Lit(0)))]
     #[case::mol_either(parse_mol_bytes_to_table_ir(CIS_TRANS_EITHER_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Undetermined))]
     #[case::mol_coordinates_e(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_E_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::mol_coordinates_e_reversed_bond_line(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_E_REVERSED_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
     #[case::mol_coordinates_z(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_Z_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
     #[case::mol_coordinates_e_3d(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_E_3D_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
     #[case::mol_coordinates_z_3d(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_Z_3D_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
     #[case::mol_coordinates_ring(parse_mol_bytes_to_table_ir(CYCLOHEXENE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
-    #[case::mol_coordinates_folded(parse_mol_bytes_to_table_ir(FOLDED_ALKENE_MOL.as_bytes()).unwrap(), 2, Some(StereoCoset::Undetermined))]
+    #[case::mol_coordinates_folded(parse_mol_bytes_to_table_ir(FOLDED_ALKENE_MOL.as_bytes()).unwrap(), 2, None)]
+    #[case::mol_coordinates_zero(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_ZERO_MOL.as_bytes()).unwrap(), 1, None)]
+    #[case::mol_coordinates_collinear_substituent(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_COLLINEAR_MOL.as_bytes()).unwrap(), 1, None)]
+    #[case::mol_coordinates_collinear_substituent_reversed_bond_line(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_COLLINEAR_REVERSED_MOL.as_bytes()).unwrap(), 1, None)]
+    #[case::mol_wavy_two_ligands(parse_mol_bytes_to_table_ir(WAVY_ALKENE_TWO_LIGANDS_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Undetermined))]
+    #[case::mol_wavy_three_ligands(parse_mol_bytes_to_table_ir(WAVY_ALKENE_THREE_LIGANDS_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Undetermined))]
+    #[case::cx_wiggly_alkene(Smiles::parse_bytes_with(b"CC=CC |w:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 1, Some(StereoCoset::Undetermined))]
+    #[case::mol_allene_first(parse_mol_bytes_to_table_ir(ALLENE_MOL.as_bytes()).unwrap(), 1, None)]
+    #[case::mol_allene_second(parse_mol_bytes_to_table_ir(ALLENE_MOL.as_bytes()).unwrap(), 2, None)]
+    #[case::mol_isothiocyanate_n_c(parse_mol_bytes_to_table_ir(ISOTHIOCYANATE_MOL.as_bytes()).unwrap(), 1, None)]
+    #[case::mol_isothiocyanate_c_s(parse_mol_bytes_to_table_ir(ISOTHIOCYANATE_MOL.as_bytes()).unwrap(), 2, None)]
     #[case::one_sided_marker(Smiles::parse_bytes(b"C(C)=C(Cl)/C").unwrap().into_table_ir(), 1, None)]
     #[case::plain_double(Smiles::parse_bytes(b"C=C").unwrap().into_table_ir(), 0, None)]
     #[case::terminal_no_substituent(Smiles::parse_bytes(b"F/C=C").unwrap().into_table_ir(), 1, None)]
@@ -934,19 +975,23 @@ mod tests {
     ) {
         let expected = expected
             .map(|coset| BondConstraintForm::CisTransStereo(CisTransStereoForm::stereo(coset)));
-        assert_eq!(raise_cis_trans_stereo(&mol, bond_idx), Ok(expected));
+        assert_eq!(
+            raise_cis_trans_stereo(&mol, &mol.atom_neighbors(), bond_idx),
+            Ok(expected)
+        );
     }
 
     #[rstest]
     #[case::conflict(Smiles::parse_bytes(b"F/C(\\Cl)=CF").unwrap().into_table_ir(), 2, RaiseError::CisTransConflict { atom: 1 })]
-    #[case::mol_zero_coordinates(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_ZERO_MOL.as_bytes()).unwrap(), 1, RaiseError::DegenerateBondGeometry { bond: 1 })]
-    #[case::mol_collinear_substituent(parse_mol_bytes_to_table_ir(DIFLUOROETHENE_COLLINEAR_MOL.as_bytes()).unwrap(), 1, RaiseError::DegenerateBondGeometry { bond: 1 })]
     fn test_raise_cis_trans_stereo_error(
         #[case] mol: TableMolecule,
         #[case] bond_idx: usize,
         #[case] expected: RaiseError,
     ) {
-        assert_eq!(raise_cis_trans_stereo(&mol, bond_idx), Err(expected));
+        assert_eq!(
+            raise_cis_trans_stereo(&mol, &mol.atom_neighbors(), bond_idx),
+            Err(expected)
+        );
     }
 
     #[rstest]
@@ -957,6 +1002,9 @@ mod tests {
         #[case] bond_idx: usize,
         #[case] expected: Result<(), RaiseError>,
     ) {
-        assert_eq!(validate_bond_direction(&mol, bond_idx), expected);
+        assert_eq!(
+            validate_bond_direction(&mol, &mol.atom_neighbors(), bond_idx),
+            expected
+        );
     }
 }

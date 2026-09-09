@@ -9,8 +9,8 @@ use umol_chem::spin::SpinMultiplicity;
 use super::*;
 use crate::table_ir::{
     Atom, AtomStereoCare, AtomSymbol, Bond, BondOrder, Chirality, ConversionError, CtfileData,
-    CxAnnotationData, ExtendedAtom, ExtendedBond, MulticenterBond, MulticenterSet, RGroup,
-    RGroupOccurrence, SGroup, SGroupType, SourceFormat, Span, WildcardAtom,
+    CxAnnotationData, ExtendedAtom, ExtendedBond, MulticenterBond, MulticenterSet, Neighbor,
+    RGroup, RGroupOccurrence, SGroup, SGroupType, SourceFormat, Span, WildcardAtom,
 };
 
 #[rstest]
@@ -62,6 +62,26 @@ fn test_molecule_bond_count(#[case] bonds: Vec<Bond>, #[case] expected: usize) {
         .bond_count(),
         expected
     );
+}
+
+#[rstest]
+#[case::chain(vec![Bond::new(0, 1, BondOrder::Single), Bond::new(1, 2, BondOrder::Double)], 1, vec![Neighbor { atom: 0, bond: 0 }, Neighbor { atom: 2, bond: 1 }])]
+#[case::isolated(vec![Bond::new(0, 1, BondOrder::Single)], 2, vec![])]
+fn test_molecule_atom_neighbors(
+    #[case] bonds: Vec<Bond>,
+    #[case] atom: u32,
+    #[case] expected: Vec<Neighbor>,
+) {
+    let mol = Molecule {
+        atoms: vec![
+            Atom::aliphatic_atom(Element::C),
+            Atom::aliphatic_atom(Element::C),
+            Atom::aliphatic_atom(Element::O),
+        ],
+        bonds,
+        ..Molecule::empty()
+    };
+    assert_eq!(mol.atom_neighbors().neighbors(atom), expected.as_slice());
 }
 
 #[rstest]
@@ -198,6 +218,26 @@ fn test_extended_molecule_bond_count(#[case] bonds: Vec<ExtendedBond>, #[case] e
         .bond_count(),
         expected
     );
+}
+
+#[rstest]
+#[case::chain(vec![ExtendedBond::new(0, 1, BondOrder::Single), ExtendedBond::new(1, 2, BondOrder::Any)], 1, vec![Neighbor { atom: 0, bond: 0 }, Neighbor { atom: 2, bond: 1 }])]
+#[case::isolated(vec![ExtendedBond::new(0, 1, BondOrder::Single)], 2, vec![])]
+fn test_extended_molecule_atom_neighbors(
+    #[case] bonds: Vec<ExtendedBond>,
+    #[case] atom: u32,
+    #[case] expected: Vec<Neighbor>,
+) {
+    let mol = ExtendedMolecule {
+        atoms: vec![
+            ExtendedAtom::from_element(Element::C),
+            ExtendedAtom::from_element(Element::C),
+            ExtendedAtom::from_element(Element::O),
+        ],
+        bonds,
+        ..ExtendedMolecule::empty()
+    };
+    assert_eq!(mol.atom_neighbors().neighbors(atom), expected.as_slice());
 }
 
 #[rstest]
