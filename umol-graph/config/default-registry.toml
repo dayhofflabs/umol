@@ -353,10 +353,11 @@
     "V #n #u3", # V atom, s2d3
 ]
 2 = [
-    "V #c+2 #u3", #  #v2+, d3
+    "V #c+2 #u3",    # V2+, d3
+    "V #c+2 #v2 #u", # VO2+, d1
 ]
 3 = [
-    "V #c+3 #u2", #  #v3+, d2
+    "V #c+3 #u2", # V3+, d2
 ]
 
 [Cr]
@@ -373,7 +374,8 @@
 
 [Mn]
 0 = [
-    "Mn #n #u5", # Mn atom, s2d5
+    "Mn #n #u5",  # Mn atom, s2d5
+    "Mn #v4 #u3", # MnX4-, d3
 ]
 2 = [
     "Mn #c+2 #u5",    # Mn2+, d5 high-spin
@@ -388,6 +390,19 @@
 [Fe]
 0 = [
     "Fe #n2 #u4", # Fe atom, s2d6
+    "Fe #v3 #u5", # FeX3-, d5 high-spin
+]
+1 = [
+    "Fe #c+ #v2 #u5", # FeX2-, d5 high-spin
+]
+-1 = [
+    "Fe #c- #v4 #u5", # FeX4-, d5 high-spin
+]
+-2 = [
+    "Fe #c-2 #v5 #u5", # FeX5-, d5 high-spin
+]
+-3 = [
+    "Fe #c-3 #v6 #u5", # FeX6-, d5 high-spin
 ]
 2 = [
     "Fe #c+2 #n #u4",  # Fe2+, d6 high-spin
@@ -403,6 +418,15 @@
 [Co]
 0 = [
     "Co #n3 #u3", # Co atom, s2d7
+]
+1 = [
+    "Co #c+ #v1 #n3 #u", # CoX-, d7 low-spin
+]
+-2 = [
+    "Co #c-2 #v4 #n3 #u", # CoX4-, d7 low-spin
+]
+-3 = [
+    "Co #c-3 #v5 #n3 #u", # CoX5-, d7 low-spin
 ]
 2 = [
     "Co #c+2 #n2 #u3", # Co2+, d7 high-spin

@@ -1,0 +1,25 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {:atoms ["Fe#c+#u5" "O#h#n2" "O#h#n2"] :bonds [[0 1 :single] [0 2 :single]]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {:atoms ["Fe#c+#u5" "O#h#n2" "O#h#n2"] :bonds [[0 1 :single] [0 2 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["Fe#c+#n2#u" "O#h#n2" "O#h#n2"]
+      :bonds [[0 1 :single] [0 2 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["Fe#c+#n2#u" "O#h#n2" "O#h#n2"]
+      :bonds [[0 1 :single] [0 2 :single]]}
+    :success true
+    :tie-breaks []}}
