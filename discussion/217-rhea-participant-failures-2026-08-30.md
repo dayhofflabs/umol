@@ -6,7 +6,8 @@ Relates: [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
 [168](168-api-hygiene-2026-07-27.md),
 [174](174-aromatic-hydrogen-resolution-2026-07-31.md),
 [216](216-canonicalization-performance-2026-08-30.md),
-[data types guide](../docs/development/data-types.md)
+[data types guide](../docs/development/data-types.md),
+[224](224-smiles-ring-closure-frame-2026-09-08.md)
 
 ## Purpose
 
@@ -389,105 +390,105 @@ All work is in `umol-io`; no other crate names the wedge types. S0 is one breaki
 the field type change invalidates every producer and the one consumer; each subitem carries its
 tests and the tree is green at the end of the stage.
 
-S0 — TableIR wedge representation
+S0 — TableIR wedge representation (Done)
 
-- S0a `table_ir::bond`: `BondTaper` with `flip`. Tests: `test_bond_taper_flip`. Additive. Completed.
+- S0a `table_ir::bond`: `BondTaper` with `flip`. Tests: `test_bond_taper_flip`. Additive. Done.
 - S0b `table_ir::bond`: rename the orientation enum to `BondOrientation`; add the `BondWedge`
   struct with `flip`; change the `wedge` field of `Bond` and `ExtendedBond` to `Option<BondWedge>`;
   reorder both records and their `From`/`TryFrom` impls to the settled field order; `update_atoms`
   flips the wedge with `BondWedge::flip` beside the donation; add `narrow_endpoint` and
   `wide_endpoint` to both records. Tests: `test_bond_wedge_flip`, `update_atoms` tables asserting
   whole bonds with identity tables split out, `narrow_endpoint` and `wide_endpoint` tables, and
-  conversion rows carrying a wedge. Breaking [dep: S0a]. Completed.
+  conversion rows carrying a wedge. Breaking [dep: S0a]. Done.
 - S0c `ctfile::parser::convert`, `ctfile::parser::bond`: the stereo/direction converter returns
   `Option<BondOrientation>`; both bond line parsers derive the taper from source endpoint order
   and assign a `BondWedge`. Tests: the converter table and parser rows with the pointed end at the
-  higher-numbered atom. Migration [dep: S0b]. Completed.
+  higher-numbered atom. Migration [dep: S0b]. Done.
 - S0d `smiles::parser::cx`: `CxEntry::WigglyBonds` carries `BondOrientation`; both apply sites
   derive the taper from the explicit atom after the incidence check. Tests: wiggly rows naming
-  either endpoint. Migration [dep: S0b]. Completed.
+  either endpoint. Migration [dep: S0b]. Done.
 - S0e `table_ir::raise::utils`: `wedge_bond_neighbors` keeps only wedges whose narrow endpoint
   is the examined atom and reads the orientation; the stale exclusion comment in
   `raise_tetrahedral_stereo` is removed. Tests: reduced MOL reproducers in the existing
   tetrahedral tables for a wide endpoint with three or four neighbors, two sites sharing a wide
   endpoint, one incoming and one outgoing wedge at a site, and a wedge pointed at the
-  higher-numbered atom. Migration [dep: S0b]. Completed.
+  higher-numbered atom. Migration [dep: S0b]. Done.
 
 Gate: `cargo test -p umol-io --features conformance,proptest` and
 `cargo clippy -p umol-io --all-targets --features conformance,proptest -- -D warnings`.
 
-S1 — Parsing examples
+S1 — Parsing examples (Done)
 
 - S1a `tests/mol_parsing`: add CHEBI_40, CHEBI_15393, and CHEBI_58540 to `data_raw/chebi/`,
   classify them with `classify_mol_files` (all three are `molecule`), place the copies under
-  `data/molecule/chebi/`, record their snapshots, and remove `tests/raise/`. Additive. Completed.
+  `data/molecule/chebi/`, record their snapshots, and remove `tests/raise/`. Additive. Done.
 
 Gate: `cargo test -p umol-io --features conformance --test mol_parsing`.
 
-S2 — Corpus verification
+S2 — Corpus verification (Done)
 
 - S2a Rebuild the census runner against the workspace, rerun the basic and basic+editor
   configurations on the release-142 inputs, and record the outcome table under Verification
-  above [dep: S0]. Completed.
+  above [dep: S0]. Done.
 
 Critical path: S0a → S0b → S0c, S0d, S0e → S2a. S1 is independent of S0.
 
 Reopened for the CTfile stereo reading contract. Each stage ends green; breaking subitems carry
 their test migration.
 
-S3 — Parser stereo codes by bond order
+S3 — Parser stereo codes by bond order (Done)
 
 - S3a `ctfile::parser::bond`: both bond line parsers reject a stereo code not defined for the
   parsed bond order at column 9. Tests: the rows `len21_double_wedge_up`, `len21_double_wedge_down`,
   `len21_double_wedge_either`, `len12_double_wedge_up`, `len21_triple_ignored_stereo`,
   `len21_triple_empty_fields` (if its code is nonzero), `len_12_double_wedge_up`, `len_21`,
   `len_21_reaction_center`, and the `len21`/`len12` rows of both block tables become error rows
-  with the column; new rows cover code 3 on a single bond. Breaking [dep: none]. Completed.
+  with the column; new rows cover code 3 on a single bond. Breaking [dep: none]. Done.
 - S3b `tests/mol_parsing`: reclassify `openbabel/culgi_10.mol` and `indigo/bold-bonds.mol` into
-  `data/invalid/`, record their snapshots. [dep: S3a]. Completed.
+  `data/invalid/`, record their snapshots. [dep: S3a]. Done.
 
 Gate: `cargo test -p umol-io --features conformance,proptest`.
 
-S4 — Parity removal
+S4 — Parity removal (Done)
 
 - S4a `table_ir::raise`, `table_ir::raise::utils`: `raise_tetrahedral_stereo` ignores
   `chirality` when the frame is `LastNeighborAway`; `last_neighbor_away_ordering` is removed;
   the `ChiralityFrame::LastNeighborAway` doc comment states the field is retained as parsed and
   not read. Tests: delete `mol_parity_clockwise` and `CHIRAL_PARITY_MOL`; point
   `test_parse_mol_to_ir_stereo::tetrahedral` at `CFCLBRI_SINGLE_WEDGE_MOL` site 1. Breaking
-  [dep: none]. Completed.
+  [dep: none]. Done.
 
-S5 — Either wedges
+S5 — Either wedges (Done)
 
 - S5a `table_ir::raise::utils`, `table_ir::raise`: `Either`, `EitherUp`, and `EitherDown` at
   their narrow endpoint yield `#T` with an undetermined coset after the ligand-count check; a
   definite and an either wedge at one endpoint is a wedge conflict. Tests: MOL rows with code 4,
   CXSMILES rows with `w:`, `wU:`, `wD:`, a two-ligand code-4 error row, a mixed-wedge conflict
   row. The predicate is `has_either_wedge` in the raise utilities. Additive [dep: S4a].
-  Completed.
+  Done.
 
-S6 — Geometry primitive
+S6 — Geometry primitive (Done)
 
 - S6a `umol-geometric-core`: `same_side_of_axis` and `AXIS_SIDE_TOLERANCE`. Tests: same side,
   opposite side, in 2D and 3D, degenerate axis, degenerate substituent, tolerance boundary.
-  Additive [dep: none]. Completed.
+  Additive [dep: none]. Done.
 
-S7 — Stereo-model ring threshold
+S7 — Stereo-model ring threshold (Done)
 
 - S7a `umol-graph::ops::model`: `StereoModel::stereo_bond_minimum_ring_size`, default 8; Python
   binding of the field. Tests: default, construction, Python parity. Additive [dep: none].
-  Completed.
+  Done.
 - S7b `umol-graph::ops::stereo`, `ops::resolve::stereo`: perception consults the ring set and
   skips `#C` on ring double bonds below the threshold; the resolver clears those assertions.
   Tests: cyclohexene with `#C` yields no stereo bond and a cleared constraint; cyclooctene yields a
   stereo bond; threshold 0 keeps cyclohexene; a resolution-suite fixture for each. Additive
-  [dep: S7a]. Completed. The perception reports the skipped assertions in
+  [dep: S7a]. Done. The perception reports the skipped assertions in
   `StereoDerivation::skipped_stereo_bonds`; the fixture is
   `stereo_cis_trans/cyclohexene-asserted.edn`.
 
 Gate: `cargo test -p umol-graph --features conformance` and the Python suite.
 
-S8 — Cis/trans from coordinates
+S8 — Cis/trans from coordinates (Done)
 
 - S8a `table_ir::raise::utils`: a positions-based counterpart of `cis_trans_side` building the
   same `StereoBondAtom`, chosen when the bond's neighborhood has no directional marks and the
@@ -495,7 +496,7 @@ S8 — Cis/trans from coordinates
   `DegenerateWedgeGeometry` on all-zero or collinear positions instead of computing. Tests:
   fumarate and maleate literals in 2D and in 3D, a ring double bond asserted as the spec says,
   code 3 unchanged, all-zero coordinates rejected, a collinear substituent rejected, SMILES
-  directional rows unchanged. Breaking for the raise's MOL output [dep: S6a, S7b]. Completed;
+  directional rows unchanged. Breaking for the raise's MOL output [dep: S6a, S7b]. Done;
   the parsers' former collapse of all-zero coordinates to absent positions is removed. A drawing
   that does not settle the configuration yields no constraint, with rows for zero coordinates, a
   substituent on the axis, the same drawing with a reversed bond line, and a folded projection.
@@ -507,14 +508,14 @@ S8 — Cis/trans from coordinates
 
 Gate: `cargo test -p umol-io --features conformance,proptest` and `cargo test -p umol-graph`.
 
-S9 — Corpus verification
+S9 — Corpus verification (Done)
 
 - S9a Rerun the census basic and basic+editor configurations and the all-record probe; record
   the outcome table, the stereo bond counts, and any new contradictions from coordinate-derived
-  `#C` under Verification [dep: S8a]. Completed: Stereo reading verification above; no new
+  `#C` under Verification [dep: S8a]. Done: Stereo reading verification above; no new
   contradiction; RDKit agrees at every shared stereo bond.
 
-S10 — Covalently bonded transition-metal states
+S10 — Covalently bonded transition-metal states (Done)
 
 - S10a `umol-graph/config/default-registry.toml`: rows for the formal-charge encodings in the
   census, nonbonding electrons from valence electrons minus charge minus covalence; one spin
@@ -539,7 +540,7 @@ S10 — Covalently bonded transition-metal states
   ```
 
   Tests: registry parse and resolution-suite fixtures under the atom-typing model. Additive
-  [dep: none]. Completed: seven fixtures under `resolution/data/transition_metals/`, real
+  [dep: none]. Done: seven fixtures under `resolution/data/transition_metals/`, real
   compounds with explicit ligand hydrogen counts so that only the metal state is open:
   hexafluoridoferrate(3-), tetrachloridoferrate(1-), dihydroxidoiron(1+), pentacyanocobaltate(3-),
   cobalt(II) porphine, manganese dioxide, vanadyl. Each resolves to the intended metal state in
@@ -767,13 +768,41 @@ verification.
 
 ### Paired MOL and SMILES input for CHEBI:40
 
-With the wedge defect removed, and equally with parity unread, both CHEBI:40 inputs resolve
-concretely with four stereo atoms, but their complete canonical IR values are not equal. The MOL
-route retains Kekulé double bonds alongside aromatic systems; the SMILES route has single localized
-bonds in those systems. `AromaticityPerceiver::add_systems` adds aromatic constraints without
-changing localized bond orders. Removing atom/bond constraints and setting aromatic-system localized
-bonds to order one in a diagnostic copy does not eliminate the discrepancy. The `wedge-pair-probe`
-bin of the research runner reproduces the comparison; the cause is open.
+CHEBI:40 is (+)-pinoresinol. Rhea supplies a MOL file and a SMILES string,
+`[H][C@]12CO[C@H](c3ccc(O)c(OC)c3)[C@@]1([H])CO[C@@H]2c1ccc(O)c(OC)c1`; RDKit reads both as the
+same stereoisomer and writes the identical canonical SMILES from either. umol resolves both
+concretely with four stereo atoms, and their canonical forms are unequal. The `wedge-pair-probe`
+bin of the research runner reproduces the comparison and writes the canonical and normalized
+dumps under [stereo-reading](../scratch/rhea-census/rhea-142/stereo-reading/). Two independent
+differences:
+
+- The inputs differ: the SMILES is aromatic-written, the MOL is Kekulé, and umol represents each
+  as written (order-one ring bonds without bond constraints from the SMILES; Kekulé orders with an
+  `Aromatic` constraint per ring bond after aromatization of the MOL). That difference is the
+  source's, not a defect. With constraints cleared and ring bond orders equalized on both sides,
+  atoms, bonds, and aromatic systems agree entry for entry, and the stereo configurations remain
+  different.
+- The SMILES tetrahedral reading is inverted at every stereocenter that carries a ring-closing
+  digit. Transporting the cosets to a common frame shows two of the four centers differing, the
+  two written `[C@@]1([H])` and `[C@@H]2`. A 3D embedding of RDKit's reading, evaluated in umol's
+  frame (`tetrahedral_arbitration.py` in the research runner), agrees with umol's MOL reading at
+  all four centers and with umol's SMILES reading at the two centers that do not close a ring.
+  The minimal case: `C[C@H]1CCCCO1` and `O1CCCC[C@@H]1C` are the same isomer, umol reads the
+  second inverted; `O1CCCC[C@]1([H])C` and `[C@@]` likewise, while `C[C@]1([H])CCCCO1`, whose
+  digit opens the ring, reads correctly.
+
+Cause: `first_neighbor_toward_ordering` takes the ligand order from the TableIR bond list, and
+the SMILES builder records a ring-closure bond at the position of its opening digit
+(`on_ring_bond_open` reserves the slot; the CXSMILES `BondIndexMap` documents the open-order
+list). At the closing atom the SMILES rule places the ring bond at the digit, after the preceding
+atom, so the frame differs from the bond-list order by one transposition. At the opening atom the
+two orders coincide. The conformance suite did not catch it because its fixtures are umol's own
+lowering of the example SMILES: `cis-1-2-dichlorocyclohexane.edn` (from `Cl[C@H]1CCCC[C@H]1Cl`)
+encodes the chiral trans isomer and `trans-1-2-dichlorocyclohexane.edn` the meso cis isomer;
+`alpha-d-glucopyranose.edn` encodes the C4 epimer, alpha-D-galactopyranose. Any SMILES with a
+stereocenter at a ring-closing digit is affected, which includes the common writing of pyranoses.
+Where the correction lives, in the bond list order, in an explicit ligand frame from the parser,
+or in the ordering function, is a design choice; the affected fixtures are regenerated with it.
 
 ### Remaining non-accepted records
 
@@ -861,7 +890,8 @@ the census configuration was not changed, so the 43 records stay in this table.
    Fe(III) high-spin, Co(II) low-spin, Mn(IV), vanadyl); further spin states and the
    Holleman-Wiberg check of the electron counts are open. The census configuration still selects
    the frozen MDL counts table.
-7. The CHEBI:40 cross-format canonical discrepancy.
+7. The SMILES ring-closure stereo frame defect and its three fixtures (CHEBI:40 above):
+   design and plan in doc 224.
 8. Editor property acceptance (`M  ZZC`) and overlong atom lines (CHEBI:30212, CHEBI:57503);
    presets are not changed for them.
 9. Pseudoatom symbols: the specification defines periodic-table symbols, L, A, Q, *, LP, and R#.

@@ -1,6 +1,7 @@
 # 104 — Stereochemistry implementation plan
 
 Status: **Completed**
+Relates: [224](224-smiles-ring-closure-frame-2026-09-08.md)
 
 Step 1 and Phases A, A′, B, C, D, and the
 absolute-stereo portion of E are implemented. The remaining `#T`/`#C`

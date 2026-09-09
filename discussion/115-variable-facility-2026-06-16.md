@@ -6,7 +6,7 @@ Relates: [097](097-joint-domain-design-2026-05-23.md),
 [098](098-bind-scope-2026-05-23.md),
 [113](113-ast-canonical-equality-and-lattice-2026-06-14.md),
 [114](114-atom-bond-interning-2026-06-16.md),
-[222](222-pattern-semantics-spike-2026-09-05.md)
+[223](223-pattern-semantics-spike-2026-09-05.md)
 
 2026-09-05: The [nested-query scope decision](#nested-query-scope-decision-2026-09-05)
 settles lexical visibility and an initial evaluation restriction. It supersedes the earlier
@@ -134,7 +134,7 @@ the one place to revisit when this facility lands.
 
 ## Nested-query scope decision (2026-09-05)
 
-The SMARTS/SMIRKS exploration in [doc 222](222-pattern-semantics-spike-2026-09-05.md)
+The SMARTS/SMIRKS exploration in [doc 223](223-pattern-semantics-spike-2026-09-05.md)
 adopts lexical scope with correlated existential queries for the variable facility. This is
 a semantic decision, not a new SMARTS spelling or a choice of variable-environment API.
 

@@ -4,7 +4,8 @@ Status: Proposed
 Date: 2026-07-18
 Relates: [047](047-smiles-conformance-suite-2026-01-21.md), [048](048-smiles-parser-configuration-2026-01-23.md), [100](100-table-ir-raise-ast-2026-05-27.md), [112](112-winnow-unification-2026-06-13.md), [151](151-python-molecule-workflows-2026-07-13.md), [152](152-basic-molecule-wildcards-2026-07-18.md),
 [206](206-umol-perm-review-2026-08-21.md),
-[217](217-rhea-participant-failures-2026-08-30.md)
+[217](217-rhea-participant-failures-2026-08-30.md),
+[224](224-smiles-ring-closure-frame-2026-09-08.md)
 
 ## Purpose
 

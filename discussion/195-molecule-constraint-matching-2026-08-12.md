@@ -7,7 +7,7 @@ Relates: [128](128-substructure-derived-predicates-2026-06-23.md),
 [166](166-molecule-ops-2026-07-27.md),
 [193](193-subpattern-constraints-2026-08-09.md),
 [194](194-constraint-assertion-semantics-2026-08-10.md),
-[222](222-pattern-semantics-spike-2026-09-05.md)
+[223](223-pattern-semantics-spike-2026-09-05.md)
 
 ## Purpose
 
