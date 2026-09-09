@@ -3,11 +3,6 @@
 //! Implements `TryIntoIr<Molecule> for &Molecule` (and the per-atom and
 //! per-bond analogues). Table IR fields copy to `Lit` / `Undetermined`; IO
 //! raise applies fixed IO ground semantics for resolution.
-//!
-//! TableIR currently raises tetrahedral (`#T`) and cis/trans (`#C`) assertions as constraints; it
-//! has no explicit stereo participant-frame field. Any future field that supplies such a frame
-//! must remain part of the entries assembled here and publish through `Molecule::try_from_entries`,
-//! which is the authoritative format-ingress integrity boundary.
 
 use std::any::Any;
 use std::collections::HashSet;
@@ -17,8 +12,8 @@ use umol_graph_ir::ir::{
     AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm,
     BooleanForm, CisTransStereoForm, Constraints, DativeBondForm, ElementForm, IsotopeMassForm,
     Lattice, Molecule, MoleculeEntries, MoleculeIntegrityError, MulticenterBondForm,
-    NoncovalentBondForm, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr,
-    UnpairedElectronsForm,
+    NoncovalentBondForm, NumForm, StereoAtomForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
 };
 use umol_perm::{ClassKey, Permutation};
 use umol_utils::error::UmolError;
@@ -30,6 +25,7 @@ use crate::table_ir::bond::{
 use crate::table_ir::raise::utils::coset_from_wedge_winding;
 use crate::table_ir::{
     AtomNeighbors, BondStereo, Chirality, ChiralityFrame, Molecule as TableMolecule,
+    StereoLigand as TableStereoLigand, Winding,
 };
 
 mod utils;
@@ -127,11 +123,41 @@ impl TryIntoIr<Molecule> for &TableMolecule {
             })
             .collect();
 
+        let stereo_atoms = self
+            .stereo_atoms
+            .iter()
+            .map(|frame| {
+                let ligands = frame
+                    .ligands
+                    .iter()
+                    .map(|ligand| {
+                        let (atom, kind) = match ligand {
+                            TableStereoLigand::Atom(atom) => (*atom, StereoLigandKind::Atom),
+                            TableStereoLigand::ImplicitHydrogen => {
+                                (frame.atom, StereoLigandKind::ImplicitHydrogen)
+                            }
+                            TableStereoLigand::LonePair => (frame.atom, StereoLigandKind::LonePair),
+                        };
+                        StereoLigand::new(AtomId(atom), kind)
+                    })
+                    .collect();
+                let coset = match frame.winding {
+                    Winding::CounterClockwise => 0,
+                    Winding::Clockwise => 1,
+                };
+                (
+                    AtomId(frame.atom),
+                    ligands,
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(coset)),
+                )
+            })
+            .collect();
         let constraints = Constraints::new();
 
         Molecule::try_from_entries(MoleculeEntries {
             atoms,
             bonds,
+            stereo_atoms,
             dative: dative_bonds,
             multicenter: multicenter_bond,
             noncovalent: noncovalent_bonds,
@@ -261,6 +287,13 @@ fn raise_tetrahedral_stereo(
     neighbors: &AtomNeighbors,
     atom_idx: usize,
 ) -> Result<Option<AtomConstraintForm>, RaiseError> {
+    if mol
+        .stereo_atoms
+        .iter()
+        .any(|frame| frame.atom as usize == atom_idx)
+    {
+        return Ok(None);
+    }
     // CTfile atom parity is retained in TableIR and not read: the specification marks the field
     // ignored when read, and a CTfile record's tetrahedral stereo comes from its wedges.
     let chirality = match mol.chirality_frame {
@@ -414,7 +447,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_chem::spin::SpinMultiplicity;
-    use umol_graph_ir::ir::{AtomConstraintsForm, BondId, Entity};
+    use umol_graph_ir::ir::{AtomConstraintsForm, BondId, Entity, StereoAtomId};
 
     use super::*;
     use crate::ctfile::parse_mol_to_ir;
@@ -423,7 +456,7 @@ mod tests {
     use crate::smiles::SmilesIoConfig;
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
-    use crate::table_ir::Molecule as TableMolecule;
+    use crate::table_ir::{Molecule as TableMolecule, StereoAtom};
 
     #[fixture]
     fn methane() -> TableMolecule {
@@ -549,6 +582,111 @@ mod tests {
                 ..Default::default()
             })
         );
+    }
+
+    #[rstest]
+    #[case::actual(
+        Smiles::parse("[C@](F)(Cl)(Br)I").unwrap().into_table_ir(), 0,
+        vec![TableStereoLigand::Atom(4), TableStereoLigand::Atom(2), TableStereoLigand::Atom(1), TableStereoLigand::Atom(3)], Winding::Clockwise,
+        vec![(4, StereoLigandKind::Atom), (2, StereoLigandKind::Atom), (1, StereoLigandKind::Atom), (3, StereoLigandKind::Atom)], 1
+    )]
+    #[case::hydrogen(
+        Smiles::parse("C.[C@@H](F)(Cl)Br").unwrap().into_table_ir(), 1,
+        vec![TableStereoLigand::Atom(4), TableStereoLigand::ImplicitHydrogen, TableStereoLigand::Atom(2), TableStereoLigand::Atom(3)], Winding::CounterClockwise,
+        vec![(4, StereoLigandKind::Atom), (1, StereoLigandKind::ImplicitHydrogen), (2, StereoLigandKind::Atom), (3, StereoLigandKind::Atom)], 0
+    )]
+    #[case::lone_pair(
+        Smiles::parse("[N@@](C)(F)Cl").unwrap().into_table_ir(), 0,
+        vec![TableStereoLigand::Atom(1), TableStereoLigand::LonePair, TableStereoLigand::Atom(3), TableStereoLigand::Atom(2)], Winding::CounterClockwise,
+        vec![(1, StereoLigandKind::Atom), (0, StereoLigandKind::LonePair), (3, StereoLigandKind::Atom), (2, StereoLigandKind::Atom)], 0
+    )]
+    #[case::mixed_wedges(
+        parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap(), 1,
+        vec![TableStereoLigand::Atom(4), TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3)], Winding::Clockwise,
+        vec![(4, StereoLigandKind::Atom), (0, StereoLigandKind::Atom), (2, StereoLigandKind::Atom), (3, StereoLigandKind::Atom)], 1
+    )]
+    fn test_table_molecule_try_into_ir_frame(
+        #[case] mut table: TableMolecule,
+        #[case] atom: u32,
+        #[case] ligands: Vec<TableStereoLigand>,
+        #[case] winding: Winding,
+        #[case] expected_ligands: Vec<(u32, StereoLigandKind)>,
+        #[case] coset: u32,
+    ) {
+        table.stereo_atoms = vec![StereoAtom {
+            atom,
+            ligands,
+            winding,
+        }];
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: table
+                .atoms
+                .iter()
+                .map(|atom| atom.try_into_ir(&()).unwrap())
+                .collect(),
+            bonds: table
+                .bonds
+                .iter()
+                .map(|bond| {
+                    (
+                        AtomId(bond.start_atom()),
+                        AtomId(bond.end_atom()),
+                        bond.try_into_ir(&()).unwrap(),
+                    )
+                })
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(atom),
+                expected_ligands
+                    .into_iter()
+                    .map(|(atom, kind)| StereoLigand::new(AtomId(atom), kind))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(coset)),
+            )],
+            ..Default::default()
+        });
+        assert_eq!((&table).try_into_ir(&()), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::empty(1, vec![], 1, MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 0 })]
+    #[case::oversized(1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4), TableStereoLigand::ImplicitHydrogen], 1, MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 5 })]
+    #[case::repeated_hydrogen(1, vec![TableStereoLigand::ImplicitHydrogen, TableStereoLigand::ImplicitHydrogen, TableStereoLigand::Atom(2), TableStereoLigand::Atom(3)], 1, MoleculeIntegrityError::DuplicateStereoLigand { entity: Entity::StereoAtom(StereoAtomId(0)), ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen) })]
+    #[case::missing_site(8, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(8)) })]
+    #[case::missing_ligand(1, vec![TableStereoLigand::Atom(8), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(8)) })]
+    #[case::duplicate_site(1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 2, MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: AtomId(1) })]
+    #[case::site_ligand(1, vec![TableStereoLigand::Atom(1), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::DuplicateParticipant { entity: Entity::StereoAtom(StereoAtomId(0)), atom: AtomId(1) })]
+    #[case::non_neighbor(1, vec![TableStereoLigand::Atom(5), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity: Entity::StereoAtom(StereoAtomId(0)) })]
+    fn test_table_molecule_try_into_ir_frame_error(
+        #[case] atom: u32,
+        #[case] ligands: Vec<TableStereoLigand>,
+        #[case] copies: usize,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        let mut table = parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap();
+        table.atoms.push(TableAtom::from_element(Element::C));
+        table.stereo_atoms = vec![
+            StereoAtom {
+                atom,
+                ligands,
+                winding: Winding::Clockwise
+            };
+            copies
+        ];
+        if atom != 1 {
+            table.bonds.iter_mut().for_each(|bond| bond.wedge = None);
+        }
+        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        assert_eq!(result, Err(RaiseError::MoleculeEntries(expected)));
+    }
+
+    #[rstest]
+    fn test_table_molecule_try_into_ir_parity() {
+        let mut table = parse_mol_bytes_to_table_ir(METHANE_MOL.as_bytes()).unwrap();
+        let expected: Molecule = (&table).try_into_ir(&()).unwrap();
+        table.atoms[0].chirality = Some(Chirality::Clockwise);
+        table.chirality_frame = Some(ChiralityFrame::LastNeighborAway);
+        assert_eq!((&table).try_into_ir(&()), Ok(expected));
     }
 
     #[rstest]

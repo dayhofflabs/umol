@@ -22,7 +22,7 @@ use super::neighbors::AtomNeighbors;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
-use super::stereo::{ChiralityFrame, ConfigurationScope};
+use super::stereo::{ChiralityFrame, ConfigurationScope, StereoAtom};
 use super::utils::{element_symbol_key, format_sum_formula};
 
 /// Basic molecule IR
@@ -34,6 +34,7 @@ pub struct Molecule {
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub configuration_scope: Option<ConfigurationScope>,
     pub chirality_frame: Option<ChiralityFrame>,
+    pub stereo_atoms: Vec<StereoAtom>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
     pub source_format: SourceFormat,
@@ -48,6 +49,7 @@ impl Molecule {
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
             chirality_frame: None,
+            stereo_atoms: Vec::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
             source_format: SourceFormat::UNKNOWN,
@@ -122,6 +124,7 @@ pub struct ExtendedMolecule {
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub configuration_scope: Option<ConfigurationScope>,
     pub chirality_frame: Option<ChiralityFrame>,
+    pub stereo_atoms: Vec<StereoAtom>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
     pub ctfile_data: Option<CtfileData>,
@@ -138,6 +141,7 @@ impl ExtendedMolecule {
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
             chirality_frame: None,
+            stereo_atoms: Vec::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
             ctfile_data: None,
@@ -308,6 +312,7 @@ impl From<Molecule> for ExtendedMolecule {
             multicenter_bonds: mol.multicenter_bonds,
             configuration_scope: mol.configuration_scope,
             chirality_frame: mol.chirality_frame,
+            stereo_atoms: mol.stereo_atoms,
             comments: mol.comments,
             properties: mol.properties,
             ctfile_data: None,
@@ -334,9 +339,10 @@ impl TryFrom<ExtendedMolecule> for Molecule {
                 .collect::<Result<Vec<_>, _>>()?,
             positions: extended.positions.clone(),
             multicenter_bonds: extended.multicenter_bonds.clone(),
-            comments: extended.comments.clone(),
             configuration_scope: extended.configuration_scope,
             chirality_frame: extended.chirality_frame,
+            stereo_atoms: extended.stereo_atoms.clone(),
+            comments: extended.comments.clone(),
             properties: extended.properties.clone(),
             source_format: extended.source_format,
         })

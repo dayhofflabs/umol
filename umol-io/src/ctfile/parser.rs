@@ -160,6 +160,7 @@ fn build_molecule(
         properties: IndexMap::new(),
         configuration_scope: None,
         chirality_frame: None,
+        stereo_atoms: Vec::new(),
         source_format: SourceFormat::MOL,
     };
 
@@ -196,6 +197,7 @@ fn build_extended_molecule(
         ctfile_data: None,
         cx_data: None,
         chirality_frame: None,
+        stereo_atoms: Vec::new(),
         source_format: SourceFormat::MOL,
     };
 

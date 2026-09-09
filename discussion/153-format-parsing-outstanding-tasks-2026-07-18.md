@@ -96,6 +96,11 @@ Required work:
 
 ### T4 — Relocate or redesign `ChiralityFrame`
 
+The draft plan in [224](224-smiles-ring-closure-frame-2026-09-08.md) owns the targeted replacement
+with complete operative stereo frames finalized from SMILES. MOL parity remains unread and the
+wedge path is retained; source conventions need not survive as interpretation flags. This portion
+is proposed, not implemented; the broader format coverage below remains an inventory.
+
 `ChiralityFrame` is still a molecule-level TableIR field even though it reflects source-format stereo conventions.
 
 Required work:

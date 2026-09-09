@@ -96,8 +96,9 @@ from source comments or public rustdoc.
 - Current code and tests define implemented behavior.
 - `discussion/000-status.md` defines discussion status. Proposed work is not implemented; a
   completed record covers only its completed scope. Basenames are at most 55 characters.
-- `materials/` holds research inputs and reference implementations, not runtime data or ordinary
-  fixtures.
+- `scratch/` holds temporary data, experiments, and exploratory code and outputs.
+- `materials/` holds background information such as datasets, papers, and external reference sources;
+  do not place exploratory code or experimental outputs there.
 
 ## Session start
 
