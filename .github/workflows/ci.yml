@@ -59,6 +59,20 @@ jobs:
       - name: Run all test suites
         run: cargo test --locked --workspace --all-features --tests --no-fail-fast
 
+  browser-wasm:
+    name: Browser WebAssembly library boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+      - name: Install browser WebAssembly target
+        run: rustup target add wasm32-unknown-unknown
+      - name: Check graph IR library without native nauty
+        run: >-
+          cargo check --locked --package umol-graph-ir
+          --target wasm32-unknown-unknown --lib
+
   msrv:
     name: Rust 1.87
     runs-on: ubuntu-latest
@@ -77,11 +91,12 @@ jobs:
   gate:
     name: Rust CI gate
     if: ${{ always() }}
-    needs: [quality, test, msrv]
+    needs: [quality, test, browser-wasm, msrv]
     runs-on: ubuntu-latest
     steps:
       - name: Require every Rust job to pass
         run: |
           test "${{ needs.quality.result }}" = success
           test "${{ needs.test.result }}" = success
+          test "${{ needs.browser-wasm.result }}" = success
           test "${{ needs.msrv.result }}" = success

@@ -98,7 +98,6 @@ fn main() {
     let source_dir = PathBuf::from("nauty");
     let include_dir = PathBuf::from("include");
     let shim = PathBuf::from("src/umol_nauty.c");
-    let word_size = target_word_size();
 
     println!("cargo:rerun-if-changed={}", shim.display());
     println!(
@@ -117,6 +116,11 @@ fn main() {
     ) {
         println!("cargo:rerun-if-changed={}", source_dir.join(file).display());
     }
+
+    if is_browser_wasm() {
+        return;
+    }
+    let word_size = target_word_size();
 
     let mut shim_build = cc::Build::new();
     shim_build
@@ -158,4 +162,9 @@ fn target_word_size() -> &'static str {
     } else {
         "64"
     }
+}
+
+fn is_browser_wasm() -> bool {
+    env::var("CARGO_CFG_TARGET_FAMILY").as_deref() == Ok("wasm")
+        && env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("unknown")
 }

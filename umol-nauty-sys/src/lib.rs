@@ -2,18 +2,27 @@
 //!
 //! Only the stable umol-owned C shim is declared here. Upstream nauty structs,
 //! options, statistics, and allocation macros remain private to the C side.
+//!
+//! Browser WebAssembly can compile graph consumers that do not require nauty.
+//! On that target, [`run`] returns [`NautyError::UnsupportedTarget`] for every
+//! nonempty input instead of attempting to build or link the native C backend.
 
 use std::error::Error;
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 use std::ffi::c_void;
 use std::fmt::{self, Display, Formatter};
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 use std::panic::{catch_unwind, AssertUnwindSafe};
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 use std::slice;
 
 /// Vendored upstream nauty version.
 pub const NAUTY_VERSION: &str = "2.9.3";
 
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 type GeneratorCallback = unsafe extern "C" fn(*mut c_void, *const u32, u32);
 
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(dead_code)] // Variants are constructed by the C return ABI.
@@ -34,6 +43,7 @@ enum RawError {
     InvalidPartition = 13,
 }
 
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 unsafe extern "C" {
     fn umol_nauty_run(
         vertex_count: u32,
@@ -53,18 +63,49 @@ unsafe extern "C" {
 /// Failure while validating input or running the native shim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NautyError {
-    OffsetCount { expected: usize, actual: usize },
-    FirstOffset { actual: usize },
-    NonmonotonicOffsets { vertex: usize },
-    TerminalOffset { expected: usize, actual: usize },
-    ColorCount { expected: usize, actual: usize },
-    NeighborOutOfBounds { position: usize, neighbor: u32 },
-    PartitionCount { expected: usize, actual: usize },
-    PartitionVertexOutOfBounds { position: usize, vertex: u32 },
-    DuplicatePartitionVertex { vertex: u32 },
-    NonmonotonicPartitionColors { position: usize },
-    VertexCountOverflow { count: usize },
-    DegreeOverflow { vertex: usize, degree: usize },
+    OffsetCount {
+        expected: usize,
+        actual: usize,
+    },
+    FirstOffset {
+        actual: usize,
+    },
+    NonmonotonicOffsets {
+        vertex: usize,
+    },
+    TerminalOffset {
+        expected: usize,
+        actual: usize,
+    },
+    ColorCount {
+        expected: usize,
+        actual: usize,
+    },
+    NeighborOutOfBounds {
+        position: usize,
+        neighbor: u32,
+    },
+    PartitionCount {
+        expected: usize,
+        actual: usize,
+    },
+    PartitionVertexOutOfBounds {
+        position: usize,
+        vertex: u32,
+    },
+    DuplicatePartitionVertex {
+        vertex: u32,
+    },
+    NonmonotonicPartitionColors {
+        position: usize,
+    },
+    VertexCountOverflow {
+        count: usize,
+    },
+    DegreeOverflow {
+        vertex: usize,
+        degree: usize,
+    },
     NullPointer,
     InvalidVertexCount,
     InvalidCsr,
@@ -79,6 +120,8 @@ pub enum NautyError {
     Unknown,
     InvalidPartition,
     GeneratorCallbackPanicked,
+    /// Vendored nauty is unavailable in browser WebAssembly.
+    UnsupportedTarget,
 }
 
 impl Display for NautyError {
@@ -89,6 +132,7 @@ impl Display for NautyError {
 
 impl Error for NautyError {}
 
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 impl RawError {
     fn into_result(self) -> Result<(), NautyError> {
         match self {
@@ -266,12 +310,14 @@ pub struct NautyOutput {
     pub generators: Vec<Vec<u32>>,
 }
 
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 #[derive(Default)]
 struct GeneratorCollector {
     generators: Vec<Vec<u32>>,
     panicked: bool,
 }
 
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 unsafe extern "C" fn collect_generator(
     context: *mut c_void,
     permutation: *const u32,
@@ -303,8 +349,18 @@ pub fn run(input: &NautyInput) -> Result<NautyOutput, NautyError> {
         });
     }
 
+    run_nonempty(input)
+}
+
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+fn run_nonempty(_input: &NautyInput) -> Result<NautyOutput, NautyError> {
+    Err(NautyError::UnsupportedTarget)
+}
+
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+fn run_nonempty(input: &NautyInput) -> Result<NautyOutput, NautyError> {
     let vertex_count =
-        u32::try_from(vertex_count).map_err(|_| NautyError::VertexCountOverflow {
+        u32::try_from(input.vertex_count()).map_err(|_| NautyError::VertexCountOverflow {
             count: input.vertex_count(),
         })?;
     let mut canonical_labels = vec![0; vertex_count as usize];
@@ -344,7 +400,7 @@ pub fn run(input: &NautyInput) -> Result<NautyOutput, NautyError> {
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(all(target_family = "wasm", target_os = "unknown"))))]
 mod tests {
     use std::collections::HashSet;
     use std::{iter, thread};
