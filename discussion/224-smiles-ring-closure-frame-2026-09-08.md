@@ -21,7 +21,7 @@ SMILES roundtripping. Retain the selected pending finalizer and vector reuse. Th
 cost and retained-capacity limitations are accepted for this integration; closing order is a diagnostic
 counterexample, not an implementation alternative. S2b6 fixtures and baseline verification are
 complete, as are S2b7 integration, S2b8 output/performance verification, and S2c flag removal.
-S2d ingestion and the three planned fixture corrections are complete. S2e wildcard correction is next;
+S2d ingestion, the three planned fixture corrections, and S2e wildcard correction are complete. S3 is next;
 the additionally identified swapped decalin fixtures await a scope decision. No further tuning round is queued.
 
 ## Finding
@@ -2312,12 +2312,58 @@ stereo failure/mismatch policy cases pass unchanged. Both affected crates pass a
 formatting and diff checks pass. The three planned corrections and the report of additional catalog
 differences complete S2d's scoped work. No resolver implementation was changed.
 
+### S2e wildcard aromaticity — 2026-09-09
+
+The discrepancy originates in parse_extended_bracket: a bool represented both the wildcard and an
+explicit aliphatic element as false. Extended::bracket then stored Some(false), which checked
+TableIR conversion preserved and raising correctly interpreted as NotAromatic. The basic parser
+already preserved None for bracketed wildcards. This affects every bracketed wildcard, not only
+isotope-labelled ones; bare wildcards already agree.
+
+The existing wildcard contract is that `*` leaves aromaticity unspecified. TableIR Atom and
+ExtendedAtom remain open boundary carriers with an optional aromatic field. Their constructors,
+checked conversions, public names, Rust/Python boundaries, and error behavior are unchanged.
+Conversion preserves supplied assertions; raising interprets them without selecting chemistry.
+Only the internal extended bracket result and ExtendedAtomData now carry Option<bool>, preserving
+None for wildcards and Some(false/true) for aliphatic/aromatic elements. The atom cursor still uses
+`aromatic == Some(true)` for implicit bond classification. No accumulator or allocation is added.
+
+Direct extended-parser cases assert complete tables for `[*]` and `[1*]`. Basic/extended conversion
+cases cover bare and bracketed wildcards, isotope/charge/hydrogen/class fields, aromatic neighbors,
+and the Rhea stereo input. Exact raising cases cover both paths and retain their distinct bare versus
+bracketed hydrogen and unpaired-electron defaults.
+
+The 250-case exploration corpus now raises identically through both paths. Against S2c, only
+rhea_atom_stereo_50 changes: its extended table has None instead of Some(false) on the two wildcard
+atoms, and its raised output loses exactly those two NotAromatic assertions. Basic outputs, bond
+tables, and stereo data are unchanged. No maintained snapshot needed an update.
+
+A bounded macOS ARM64 release remeasurement with Rust 1.96.0 gives the following microseconds per
+input (median of three approximately 80 ms batches, parsing includes finalization and destruction).
+These are current absolute timings, not a paired estimate of S2e's cost or a replacement for the
+S2a comparison. Extended parse-plus-raise includes checked conversion to basic TableIR.
+
+| Input group | Basic parse | Extended parse | Basic parse + raise | Extended parse + raise |
+| --- | ---: | ---: | ---: | ---: |
+| ZINC, 64 inputs | 0.480 | 0.904 | 4.965 | 6.737 |
+| Rhea atom stereo, 63 inputs | 1.109 | 1.953 | 12.070 | 15.311 |
+| Rhea bond stereo, 64 inputs | 1.105 | 2.091 | 13.068 | 16.828 |
+| Isotope-labelled wildcard case | 0.575 | 0.963 | 6.299 | 7.869 |
+
+Basic ingestion medians over seven 10,000-call batches are 15.965 µs for octane, 23.082 µs for
+benzene, and 17.629 µs for `C[C@H]1CCCCO1`. This path's implementation is unchanged by S2e.
+
+Verification passes: 3,494 IO unit tests, six layout tests, 2,253 MOL cases, 407 SDF cases,
+10,223 SMILES cases, and six IO property tests; the graph conformance gate includes 989 library
+tests and 683 resolution cases. All-target Clippy for both crates, formatting, and diff checks pass.
+S2e is complete; limited permutation coverage remains S3.
+
 ## Implementation plan
 
 S0, S1, S2a, S2b, and S2b1–S2b5 are complete. The subsequent bounded experiments and architecture
 selection are also complete. S2b6–S2b8 are complete; the integrated cursor/pending implementation
-has passed its output, correctness, memory, and bounded performance gates. S2c and S2d are complete.
-S2e and S3 retain the wildcard correction and limited permutation scope. The additional decalin
+has passed its output, correctness, memory, and bounded performance gates. S2c–S2e are complete.
+S3 retains the limited permutation scope. The additional decalin
 fixture defect reported above awaits a separate scope decision. These remaining subitems have not started. S2b7 subsumes the former S4 cleanup; earlier S4 references
 describe the original sequencing. No mutating git operation or commit is implied.
 
@@ -2450,11 +2496,11 @@ Graph-IR construction and its invariants remain unchanged.
   as evidence, not authorization for wholesale fixture regeneration. Include existing stereo failure
   and mismatch policy controls; report newly exposed differences without widening resolver scope.
   **[dep: S2b, S2c]**
-- **S2e — Wildcard constraint discrepancy** — green at completion. In `umol-io`, trace where the
+- **S2e — Wildcard constraint discrepancy (completed 2026-09-09)** — green at completion. In `umol-io`, trace where the
   extended path introduces NotAromatic for the isotope-labelled wildcard case recorded in S2b2.
   Establish the intended behavior from the boundary contracts before making a correction; return
   unresolved semantics to review. Correct the discrepancy and add focused basic/extended conversion
-  and raising regression coverage, recording any output movement separately from the stereo fix.
+  and raising coverage, recording any output movement separately from the stereo fix.
   **[dep: S2d]**
 
 **Gate:** all affected tests pass, including `cargo test -p umol-io --features conformance,proptest`
@@ -2519,7 +2565,6 @@ workspace test alone does not cover them. Existing property suites are regressio
 expansion into a new randomized-testing project. Additional graph-IR or other feature-specific gates
 are required only if approved implementation changes actually touch those components.
 
-Remaining critical path: **S2e wildcard discrepancy →
-S3a limited atom/bond permutation laws → S3b downstream/Python coverage → S3c impact review**.
-All stages end green. The wildcard discrepancy remains later required work, not deferred work.
+Remaining critical path: **S3a limited atom/bond permutation laws → S3b downstream/Python coverage → S3c impact review**.
+All stages end green. The wildcard discrepancy is corrected in S2e.
 Optional optimization is outside this critical path; the core deliverable does not wait for it.

@@ -538,7 +538,7 @@ pub(super) fn parse_extended_bracket(
 ) -> Result<
     (
         AtomSymbol,
-        bool,
+        Option<bool>,
         Option<u32>,
         Option<i8>,
         Option<u32>,
@@ -564,16 +564,16 @@ pub(super) fn parse_extended_bracket(
     }
 
     let symbol: AtomSymbol;
-    let aromatic: bool;
+    let aromatic: Option<bool>;
     if i < n && input[i] == b'*' {
         symbol = AtomSymbol::WildcardAtom(WildcardAtom::Any);
-        aromatic = false;
+        aromatic = None;
         i += 1;
     } else if i < n && input[i].is_ascii_alphabetic() {
         if let Some((e, consumed)) = parse_bracket_aliphatic_element(input, i) {
             symbol = AtomSymbol::Element(e);
             i += consumed;
-            aromatic = false;
+            aromatic = Some(false);
         } else if let Some((e, consumed)) = parse_bracket_aromatic_element(
             input,
             i,
@@ -581,7 +581,7 @@ pub(super) fn parse_extended_bracket(
         ) {
             symbol = AtomSymbol::Element(e);
             i += consumed;
-            aromatic = true;
+            aromatic = Some(true);
         } else {
             return Err(ParseError::InvalidBracket {
                 pos: pos_offset + 1 + i,

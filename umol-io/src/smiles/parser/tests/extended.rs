@@ -10,7 +10,10 @@ use super::utils::{
     build_extended_from_graph, find_extended_chiral_center, find_extended_stereo_bond,
 };
 use crate::table_ir::atom::Chirality;
-use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, ExtendedMolecule};
+use crate::table_ir::{
+    AtomSymbol, BondDirection, BondOrder, ExtendedAtom, ExtendedMolecule, Molecule, SourceFormat,
+    Span, WildcardAtom,
+};
 
 #[rstest]
 #[case::organic_c(b"C", build_extended_from_graph("C@0 |"))]
@@ -1132,7 +1135,34 @@ fn test_whitespace_trailing_content(#[case] input: &[u8], #[case] expected: Exte
 #[case::wildcard_branch(b"C(*)C", build_extended_from_graph("C@0 *@2 C@4 | 0-1@2 0-2@4"))]
 #[case::wildcard_bonded(b"C-*", build_extended_from_graph("C@0 *@2 | 0-1:-@1"))]
 #[case::multiple_wildcards(b"*.*", build_extended_from_graph("*@0 *@2 |"))]
-fn test_wildcard(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
+#[case::bracket(
+    b"[*]",
+    ExtendedMolecule {
+        atoms: vec![ExtendedAtom {
+            aromatic: None,
+            implicit_hydrogens: Some(0),
+            span: Some(Span::bytes(0, 3)),
+            ..ExtendedAtom::from_atom_symbol(AtomSymbol::WildcardAtom(WildcardAtom::Any))
+        }],
+        source_format: SourceFormat::SMILES,
+        ..ExtendedMolecule::empty()
+    }
+)]
+#[case::isotope(
+    b"[1*]",
+    ExtendedMolecule {
+        atoms: vec![ExtendedAtom {
+            aromatic: None,
+            isotope_mass: Some(1),
+            implicit_hydrogens: Some(0),
+            span: Some(Span::bytes(0, 4)),
+            ..ExtendedAtom::from_atom_symbol(AtomSymbol::WildcardAtom(WildcardAtom::Any))
+        }],
+        source_format: SourceFormat::SMILES,
+        ..ExtendedMolecule::empty()
+    }
+)]
+fn test_parse_extended_smiles_bytes_wildcard(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
     let res = parse_extended_smiles_bytes(input);
     let input_str = input.to_str_lossy();
     assert!(res.is_ok(), "{:?} should have succeeded: {:?}", input_str, res);
@@ -1163,6 +1193,20 @@ fn test_wildcard_bracket(
     if let Some(expected_class) = class {
         assert_eq!(mol.atoms[0].class, Some(expected_class));
     }
+}
+
+#[rstest]
+#[case::bare(b"*")]
+#[case::bracket(b"[*]")]
+#[case::isotope(b"[1*]")]
+#[case::fields(b"[2*H+:3]")]
+#[case::aromatic_neighbors(b"c1cc*cc1")]
+#[case::bracket_aromatic_neighbors(b"c1cc[1*]cc1")]
+#[case::ring_stereo(b"[1*][C@@H]1O[C@@H]2COP(=O)([O-])O[C@H]2[C@H]1[2*]")]
+fn test_parse_extended_smiles_bytes_conversion(#[case] input: &[u8]) {
+    let extended = parse_extended_smiles_bytes(input).unwrap();
+    let basic = parse_molecule(input, &SmilesIoConfig::opensmiles()).unwrap();
+    assert_eq!(Molecule::try_from(extended).unwrap(), basic);
 }
 
 #[rstest]

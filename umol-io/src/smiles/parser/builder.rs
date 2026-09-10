@@ -74,7 +74,7 @@ pub(super) struct ExtendedAtomData {
     pub charge: Option<i8>,
     pub implicit_hydrogens: Option<u8>,
     pub class: Option<u32>,
-    pub aromatic: bool,
+    pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub span: Option<Span>,
 }
@@ -108,8 +108,8 @@ pub(super) trait Target {
 
 pub(super) struct Basic;
 pub(super) struct Extended;
-pub(super) type MoleculeEditor<'a> = Assembler<'a, Basic>;
-pub(super) type ExtendedMoleculeBuilder<'a> = Assembler<'a, Extended>;
+pub(super) type MoleculeEditor<'a> = Builder<'a, Basic>;
+pub(super) type ExtendedMoleculeBuilder<'a> = Builder<'a, Extended>;
 
 impl Target for Basic {
     type Atom = Atom;
@@ -127,7 +127,6 @@ impl Target for Basic {
         Option<u32>,
         Option<Span>,
     ) {
-        let metadata = (a.aromatic == Some(true), a.chirality, a.class, a.span);
         let atom = Atom {
             element: a.element,
             charge: a.charge,
@@ -145,7 +144,7 @@ impl Target for Basic {
             span: a.span,
         };
 
-        (atom, metadata.0, metadata.1, metadata.2, metadata.3)
+        (atom, a.aromatic == Some(true), a.chirality, a.class, a.span)
     }
 
     fn organic(element: Element, aromatic: bool, span: Option<Span>) -> Self::Atom {
@@ -205,7 +204,6 @@ impl Target for Extended {
         Option<u32>,
         Option<Span>,
     ) {
-        let metadata = (a.aromatic, a.chirality, a.class, a.span);
         let atom = ExtendedAtom {
             symbol: a.symbol,
             charge: a.charge,
@@ -215,7 +213,7 @@ impl Target for Extended {
             lone_pairs: None,
             unpaired_electrons: None,
             multiplicity: None,
-            aromatic: Some(a.aromatic),
+            aromatic: a.aromatic,
             chirality: a.chirality,
             class: a.class,
             label: None,
@@ -235,7 +233,7 @@ impl Target for Extended {
             span: a.span,
         };
 
-        (atom, metadata.0, metadata.1, metadata.2, metadata.3)
+        (atom, a.aromatic == Some(true), a.chirality, a.class, a.span)
     }
 
     fn organic(element: Element, aromatic: bool, span: Option<Span>) -> Self::Atom {
@@ -279,7 +277,7 @@ impl Target for Extended {
     }
 }
 
-pub(super) struct Assembler<'a, T: Target> {
+pub(super) struct Builder<'a, T: Target> {
     atoms: Vec<T::Atom>,
     bond_table: Vec<Option<T::Bond>>,
     ring_table: Vec<Option<OpenRing>>,
@@ -294,7 +292,7 @@ pub(super) struct Assembler<'a, T: Target> {
     mapping: Option<(&'a mut AtomMapping, bool)>,
 }
 
-impl<'a, T: Target> Assembler<'a, T> {
+impl<'a, T: Target> Builder<'a, T> {
     pub(super) fn with_capacity(
         approx_atoms: usize,
         approx_bonds: usize,

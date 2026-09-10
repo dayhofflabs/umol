@@ -87,6 +87,10 @@ from source comments or public rustdoc.
   not `module/mod.rs`.
 - In prose, use bare type/trait/constant names and parent-qualified free functions.
 - Apply `ir-literal-extraction` before graph-IR literal extraction in `umol-graph` or higher crates.
+- Before declaring work complete, review the full diff against the agreed scope and local conventions.
+  Check for unrequested renames, unnecessary abstractions, and changes to what tests exercise. Passing
+  checks does not replace this review. When challenged, inspect the relevant producers and consumers
+  before defending or editing the code.
 
 ## Authority and synchronization
 

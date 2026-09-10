@@ -107,7 +107,7 @@ fn test_extended_molecule_builder_on_ring_bond(
             charge: None,
             implicit_hydrogens: None,
             class: None,
-            aromatic: false,
+            aromatic: Some(false),
             chirality: if atom == 2 { chirality } else { None },
             span: None,
         });
@@ -144,7 +144,7 @@ fn test_extended_molecule_builder_finish() {
             charge: None,
             implicit_hydrogens: None,
             class: None,
-            aromatic: false,
+            aromatic: Some(false),
             chirality,
             span: None,
         });

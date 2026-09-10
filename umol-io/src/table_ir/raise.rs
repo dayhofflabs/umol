@@ -424,8 +424,7 @@ mod tests {
     use super::*;
     use crate::ctfile::parse_mol_to_ir;
     use crate::ctfile::parser::parse_mol_bytes_to_table_ir;
-    use crate::smiles::Smiles;
-    use crate::smiles::SmilesIoConfig;
+    use crate::smiles::{parse_extended_smiles_bytes, Smiles, SmilesIoConfig};
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
     use crate::table_ir::{Chirality, Molecule as TableMolecule, SourceFormat, StereoAtom};
@@ -979,20 +978,43 @@ mod tests {
     }
 
     #[rstest]
-    fn test_table_molecule_try_into_ir_smiles_wildcard() {
-        let smiles = Smiles::parse("*").unwrap();
-        let molecule: Molecule = smiles.as_table_ir().try_into_ir(&()).unwrap();
+    #[case::bare("*", IsotopeMassForm::Natural, NumForm::Undetermined, NumForm::Lit(0))]
+    #[case::bracket(
+        "[*]",
+        IsotopeMassForm::Natural,
+        NumForm::Lit(0),
+        NumForm::Undetermined
+    )]
+    #[case::isotope(
+        "[1*]",
+        IsotopeMassForm::Lit(1),
+        NumForm::Lit(0),
+        NumForm::Undetermined
+    )]
+    fn test_table_molecule_try_into_ir_smiles_wildcard(
+        #[case] input: &str,
+        #[case] isotope_mass: IsotopeMassForm,
+        #[case] implicit_hydrogens: NumForm,
+        #[case] unpaired_electrons: NumForm,
+        #[values(false, true)] is_extended: bool,
+    ) {
+        let table = if is_extended {
+            TableMolecule::try_from(parse_extended_smiles_bytes(input.as_bytes()).unwrap()).unwrap()
+        } else {
+            Smiles::parse(input).unwrap().into_table_ir()
+        };
+        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
 
         assert_eq!(
             molecule.atom(AtomId(0)).attributes,
             &AtomForm {
                 element: ElementForm::Undetermined,
-                isotope_mass: IsotopeMassForm::Natural,
+                isotope_mass,
                 charge: NumForm::Lit(0),
-                implicit_hydrogens: NumForm::Undetermined,
+                implicit_hydrogens,
                 lone_pairs: NumForm::Undetermined,
                 unpaired_electrons: UnpairedElectronsForm {
-                    count: NumForm::Lit(0),
+                    count: unpaired_electrons,
                     multiplicity: NumForm::Undetermined,
                 },
                 constraints: AtomConstraintsForm::new(),
