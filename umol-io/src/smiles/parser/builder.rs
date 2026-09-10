@@ -8,9 +8,9 @@ use umol_chem::element::Element;
 use super::super::error::ParseError;
 use super::utils::{invalid_ring_context, make_bond, make_extended_bond, Frame};
 use crate::table_ir::{
-    Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ChiralityFrame,
-    ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, StereoAtom,
-    StereoLigand, WildcardAtom, Winding,
+    Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ExtendedAtom,
+    ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, StereoAtom, StereoLigand,
+    WildcardAtom, Winding,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -103,7 +103,6 @@ pub(super) trait Target {
         atoms: Vec<Self::Atom>,
         bonds: Vec<Self::Bond>,
         stereo: Vec<StereoAtom>,
-        has_chirality: bool,
     ) -> Self::Molecule;
 }
 
@@ -178,13 +177,11 @@ impl Target for Basic {
         atoms: Vec<Self::Atom>,
         bonds: Vec<Self::Bond>,
         stereo: Vec<StereoAtom>,
-        has_chirality: bool,
     ) -> Self::Molecule {
         let mut mol = Molecule::empty();
         if !atoms.is_empty() {
             mol.source_format = SourceFormat::SMILES;
         }
-        mol.chirality_frame = has_chirality.then_some(ChiralityFrame::FirstNeighborToward);
         mol.atoms = atoms;
         mol.bonds = bonds;
         mol.stereo_atoms = stereo;
@@ -270,13 +267,11 @@ impl Target for Extended {
         atoms: Vec<Self::Atom>,
         bonds: Vec<Self::Bond>,
         stereo: Vec<StereoAtom>,
-        has_chirality: bool,
     ) -> Self::Molecule {
         let mut mol = ExtendedMolecule::empty();
         if !atoms.is_empty() {
             mol.source_format = SourceFormat::SMILES;
         }
-        mol.chirality_frame = has_chirality.then_some(ChiralityFrame::FirstNeighborToward);
         mol.atoms = atoms;
         mol.bonds = bonds;
         mol.stereo_atoms = stereo;
@@ -292,7 +287,6 @@ pub(super) struct Assembler<'a, T: Target> {
     open_rings: usize,
     store_rings: bool,
     stereo: Vec<PendingStereo>,
-    has_chirality: bool,
     current: Option<Cursor>,
     branches: Vec<Frame>,
     pending_bond: Option<BondSpec>,
@@ -315,7 +309,6 @@ impl<'a, T: Target> Assembler<'a, T> {
             open_rings: 0,
             store_rings,
             stereo: Vec::new(),
-            has_chirality: false,
             current: None,
             branches: Vec::new(),
             pending_bond: None,
@@ -467,7 +460,6 @@ impl<'a, T: Target> Assembler<'a, T> {
         let (atom, aromatic, chirality, class, span) = T::bracket(data);
         let index = self.atoms.len();
         self.atoms.push(atom);
-        self.has_chirality |= chirality.is_some();
         if let (Some(class), Some((mapping, is_product))) = (class, self.mapping.as_mut()) {
             let entry = mapping.entry(class).or_default();
             if *is_product {
@@ -786,10 +778,7 @@ impl<'a, T: Target> Assembler<'a, T> {
                 }
             })
             .collect();
-        Ok((
-            T::molecule(self.atoms, bonds, stereo, self.has_chirality),
-            self.ring_bonds,
-        ))
+        Ok((T::molecule(self.atoms, bonds, stereo), self.ring_bonds))
     }
 }
 

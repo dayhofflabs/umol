@@ -73,23 +73,6 @@ pub(super) fn neighbor_count(neighbors: &AtomNeighbors, atom_idx: usize) -> usiz
     neighbors.degree(atom_idx as u32)
 }
 
-/// Neighbor atom ordering of `atom_idx` by bond ordering (used by SMILES, which refers to it as parse ordering).
-/// Neighbor atoms appear in the order of incident bonds (including ring-closure indices).
-/// Can differ from the ascending atom index order when rings are present.
-fn bond_neighbor_ordering(neighbors: &AtomNeighbors, atom_idx: usize) -> Vec<usize> {
-    let mut indices = Vec::new();
-    for other in neighbors
-        .neighbors(atom_idx as u32)
-        .iter()
-        .map(|neighbor| neighbor.atom as usize)
-    {
-        if !indices.contains(&other) {
-            indices.push(other);
-        }
-    }
-    indices
-}
-
 /// Ligand ordering used in tetrahedral stereo constraints (#T): neighbors ascending as `Atom`,
 /// then at most one `Virtual`. More than one virtual ligand is disallowed by `validate_tetrahedral_geometry`.
 pub(super) fn tetrahedral_ligand_ordering(
@@ -102,23 +85,6 @@ pub(super) fn tetrahedral_ligand_ordering(
         .collect();
     if ordering.len() == 3 {
         ordering.push(StereoLigand::Virtual(atom_idx));
-    }
-    ordering
-}
-
-/// SMILES/SMARTS tetrahedral ligand ordering, FirstNeighborToward: neighbors in parse order, virtual
-/// ligand is first if `atom_idx` opens the SMILES, else second.
-pub(super) fn first_neighbor_toward_ordering(
-    neighbors: &AtomNeighbors,
-    atom_idx: usize,
-) -> Vec<StereoLigand> {
-    let mut ordering: Vec<StereoLigand> = bond_neighbor_ordering(neighbors, atom_idx)
-        .into_iter()
-        .map(StereoLigand::Atom)
-        .collect();
-    if ordering.len() == 3 {
-        let ligand_idx = if atom_idx > 0 { 1 } else { 0 };
-        ordering.insert(ligand_idx, StereoLigand::Virtual(atom_idx));
     }
     ordering
 }

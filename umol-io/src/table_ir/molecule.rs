@@ -22,7 +22,7 @@ use super::neighbors::AtomNeighbors;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
-use super::stereo::{ChiralityFrame, ConfigurationScope, StereoAtom};
+use super::stereo::{ConfigurationScope, StereoAtom};
 use super::utils::{element_symbol_key, format_sum_formula};
 
 /// Basic molecule IR
@@ -33,7 +33,6 @@ pub struct Molecule {
     pub positions: Option<Vec<Point3D>>,
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub configuration_scope: Option<ConfigurationScope>,
-    pub chirality_frame: Option<ChiralityFrame>,
     pub stereo_atoms: Vec<StereoAtom>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
@@ -48,7 +47,6 @@ impl Molecule {
             positions: None,
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
-            chirality_frame: None,
             stereo_atoms: Vec::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
@@ -123,7 +121,6 @@ pub struct ExtendedMolecule {
     pub positions: Option<Vec<Point3D>>,
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub configuration_scope: Option<ConfigurationScope>,
-    pub chirality_frame: Option<ChiralityFrame>,
     pub stereo_atoms: Vec<StereoAtom>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
@@ -140,7 +137,6 @@ impl ExtendedMolecule {
             positions: None,
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
-            chirality_frame: None,
             stereo_atoms: Vec::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
@@ -311,7 +307,6 @@ impl From<Molecule> for ExtendedMolecule {
             positions: mol.positions,
             multicenter_bonds: mol.multicenter_bonds,
             configuration_scope: mol.configuration_scope,
-            chirality_frame: mol.chirality_frame,
             stereo_atoms: mol.stereo_atoms,
             comments: mol.comments,
             properties: mol.properties,
@@ -340,7 +335,6 @@ impl TryFrom<ExtendedMolecule> for Molecule {
             positions: extended.positions.clone(),
             multicenter_bonds: extended.multicenter_bonds.clone(),
             configuration_scope: extended.configuration_scope,
-            chirality_frame: extended.chirality_frame,
             stereo_atoms: extended.stereo_atoms.clone(),
             comments: extended.comments.clone(),
             properties: extended.properties.clone(),

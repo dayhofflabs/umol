@@ -10,7 +10,7 @@ use super::utils::{
     build_extended_from_graph, find_extended_chiral_center, find_extended_stereo_bond,
 };
 use crate::table_ir::atom::Chirality;
-use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, ChiralityFrame, ExtendedMolecule};
+use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, ExtendedMolecule};
 
 #[rstest]
 #[case::organic_c(b"C", build_extended_from_graph("C@0 |"))]
@@ -39,13 +39,13 @@ fn test_element(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
 
 #[rstest]
 #[case::achiral(b"C", None)]
-#[case::atom_descriptor(b"[C@]", Some(ChiralityFrame::FirstNeighborToward))]
+#[case::atom_descriptor(b"[C@]", Some(Chirality::CounterClockwise))]
 fn test_parse_extended_smiles_bytes_chirality(
     #[case] input: &[u8],
-    #[case] expected: Option<ChiralityFrame>,
+    #[case] expected: Option<Chirality>,
 ) {
     assert_eq!(
-        parse_extended_smiles_bytes(input).map(|molecule| molecule.chirality_frame),
+        parse_extended_smiles_bytes(input).map(|molecule| molecule.atoms[0].chirality),
         Ok(expected)
     );
 }

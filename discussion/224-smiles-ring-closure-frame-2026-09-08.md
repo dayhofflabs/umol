@@ -20,8 +20,8 @@ slots is selected for both basic and extended parsing, preserving source-order s
 SMILES roundtripping. Retain the selected pending finalizer and vector reuse. The measured extended
 cost and retained-capacity limitations are accepted for this integration; closing order is a diagnostic
 counterexample, not an implementation alternative. S2b6 fixtures and baseline verification are
-complete, and S2b7 cursor/pending integration is complete. S2b8 output and performance verification
-is next, before the remaining flag removal and limited permutation work. No further tuning round is queued.
+complete, as are S2b7 integration, S2b8 output/performance verification, and S2c flag removal.
+S2d ingestion and fixture corrections are next, before the wildcard correction and limited permutation work. No further tuning round is queued.
 
 ## Finding
 
@@ -2138,11 +2138,136 @@ Verification passed: 3,478 library tests, six layout tests, 2,253 MOL cases, 407
 All-target IO Clippy with conformance/proptest enabled passed with warnings denied. Formatting and
 `git diff --check` passed. S2b7 is complete; S2b8 is next.
 
+### S2b8 integration verification — 2026-09-09
+
+The integrated parser matches corrected S2b and the selected pending prototype on all 253 frozen
+molecule validation records, including full basic/extended tables, stereo frames, parse errors,
+conversion errors, and raised results. Another 34 inputs compare complete reaction tables and mapping,
+CX annotations, and malformed-input diagnostics against both baselines; all match exactly.
+No expected output or production source changed in this subitem.
+
+The same allocation harness reports exact pending/integrated identity for 1,012 parse and
+parse-and-raise records plus four reaction/CX records. All 506 retained-memory records also match,
+including capacities and peak live requested bytes. The older three-input allocation report contained
+only six parse records; rerunning the saved pending executable confirmed identity for the current
+12-record parse/raise report. This was a report-coverage difference, not an allocation change.
+
+Compared with corrected S2b, the selected memory tradeoff remains: for 100 stereo components, basic
+allocation count falls from
+108 to 104 and peak requested bytes from 268,200 to 226,344, while retained bytes rise from 204,152
+to 226,184. Extended peak falls from 686,208 to 586,048 and retained bytes rise from 537,312 to
+585,888. These are allocator-requested bytes, not process RSS. Optional extended bond conversion
+and retained capacity remain the accepted limitations of this integration.
+
+IO and graph tests pass with conformance and property features enabled and property seed 224.
+This includes 10,223 unchanged SMILES snapshots, the nine assembly cases, 984 graph library tests,
+683 resolution cases, and the five graph property tests. Both crates pass all-target Clippy with
+warnings denied. One graph doctest remains ignored.
+
+The bounded timing run uses the established 56 operation/input pairs and seven rotating rounds,
+with three calibrated approximately 80 ms batches per pair and variant. The saved S2a, corrected S2b,
+and pending timing binaries retain their recorded hashes; compiler and input manifests are unchanged.
+The integrated binary uses the same harness source and locked dependencies. Builds, tests, and
+allocator probes finished before timing. S2a is the primary performance baseline for the net cost of
+this work. It lacks the corrected stereo-frame behavior, so output identity uses corrected S2b and
+the selected prototype; that distinction does not diminish S2a's relevance for performance.
+
+**Primary performance comparison: S2a → integrated (µs).** Times are medians of round medians;
+changes are median paired percentages across seven rounds, so they need not equal the percentage
+computed from the rounded marginal times. Positive changes mean slower parsing.
+
+| Input | Basic: S2a → integrated | Change | Extended: S2a → integrated | Change |
+| --- | ---: | ---: | ---: | ---: |
+| Sampled ZINC | 0.702 → 0.482 | -31.3% | 1.048 → 0.908 | -13.9% |
+| Sampled Rhea atom stereo | 1.119 → 1.102 | -1.0% | 1.732 → 1.915 | +10.7% |
+| Sampled Rhea bond stereo | 1.241 → 1.104 | -10.8% | 1.928 → 2.090 | +6.4% |
+| 10 stereo components | 1.775 → 1.667 | -5.6% | 3.003 → 3.273 | +10.6% |
+| 100 stereo components | 12.743 → 14.121 | +10.2% | 26.438 → 32.294 | +23.0% |
+| 202 atoms, 100 markers | 4.287 → 7.529 | +73.2% | 7.870 → 12.154 | +53.3% |
+| 202 atoms, no markers | 4.587 → 4.274 | -5.5% | 7.841 → 8.571 | +10.9% |
+| 64 bracket atoms | 1.682 → 1.503 | -11.9% | 2.933 → 3.166 | +8.2% |
+| 256-atom chain | 3.522 → 3.235 | -8.5% | 7.917 → 8.332 | +4.9% |
+| 1000-atom prefix | 14.100 → 12.949 | -7.8% | 32.171 → 35.271 | +10.7% |
+
+Basic parsing recovers the correction's cost on the sampled cohorts and ten-component case, but
+substantial overhead remains on densely marked input: 202 atoms with 100 markers cost an additional
+3.164 µs (73.2%) in basic and 4.251 µs (53.3%) in extended. These increases occur in every round.
+The hundred-component case remains 1.297 µs (10.2%) slower in basic and 6.005 µs (23.0%) slower in
+extended. Extended parsing generally retains additional cost, including on unmarked input.
+
+Against S2a, the extended long-prefix paired increase is 3.469 µs, with a range of +3.054 to
++10.836 µs. Its variable timing remains a qualification on the point estimate. The sampled extended
+Rhea bond-stereo change ranges from −0.233 to +0.289 µs around a +0.122 µs median; the modest
+percentage there is less consistent than the dense-stereo costs.
+
+**Secondary integration comparisons.** Corrected S2b measures recovery from the expensive
+intermediate implementation; the pending prototype checks that integration preserves the selected
+design. Neither comparison establishes the net cost against S2a or makes the remaining cost
+unavoidable. The S2b8 run did not measure S2a parse-and-raise or reaction/CX lanes, so the corresponding
+S2b comparisons below do not establish their net performance change against S2a.
+
+The integration preserves the selected prototype's gains. In 55 of 56 operation/input pairs, the
+median paired integrated/prototype difference is within ±1.5%. The exception is the extended
+64-atom ring with label 99, which is 0.437 µs faster (16.1%); this isolated favorable difference is
+not evidence of an additional optimization. Basic ten/hundred-component cases save 1.072/14.308 µs
+against corrected S2b (39.4%/49.9%), faster in every round. Extended equivalents save 0.685/9.298 µs
+(17.3%/22.6%), also in every round. Against the older-semantics S2a reference, the basic hundred-
+component case remains 1.297 µs (10.2%) slower, and the extended case 6.005 µs (23.0%) slower.
+
+The accepted extended countercases remain slower than corrected S2b in all seven rounds: 64 bracket
+atoms by 0.235 µs (7.9%), the 256-atom chain by 0.212 µs (2.7%), and the unmarked 202-atom case by
+0.867 µs (11.3%). The chain's paired range is +0.068 to +2.487 µs; its smaller median than the
+previous run does not establish a removed cost. The extended long-prefix case remains variable:
+paired change against corrected S2b is +0.225 µs, ranging from −0.408 to +7.541 µs. Integrated versus
+prototype ranges from −5.925 to +7.284 µs there, with a +0.126 µs median. These ranges support
+retaining the earlier qualification rather than treating a single point estimate as stable.
+
+For sampled parse-and-raise groups, basic paired savings against corrected S2b are 0.292–0.596 µs
+(3.7–5.5%); extended changes range from −0.071 to +0.079 µs (−0.5% to +1.2%). The extended combined
+lane still includes conversion to basic and is not a proposed production path. Reaction/CX parsing
+also retains the prototype gains, with paired savings of 13.2–27.4% against corrected S2b.
+
+S2b8 is complete. Output identity, memory identity, correctness gates, and the bounded performance
+handoff confirm faithful integration of the selected opening-order pending design. The primary S2a
+comparison above records its remaining costs; matching the prototype does not establish that those
+costs are small or unavoidable. No further architecture or
+tuning experiment is queued. S2c removes ChiralityFrame next; S2e still owns the isotope-wildcard
+discrepancy, and S3 still owns the limited atom/bond permutation coverage.
+
+### S2c frame-flag removal — 2026-09-09
+
+The settled public change removes ChiralityFrame and the chirality_frame fields from TableIR
+Molecule and ExtendedMolecule. These remain open boundary carriers; empty construction, other
+constructors, and conversion signatures are unchanged. Basic/extended conversions preserve explicit
+stereo frames and raw atom descriptors. Raw descriptors alone supply no operative tetrahedral frame;
+raising consumes explicit frames and retains wedge/directional interpretation without source-format
+dispatch. The existing checked graph-IR constructor remains the integrity gate for supplied frames;
+no new validation, panic boundary, or Python-facing type is introduced. ConfigurationScope and raw
+MOL parity remain available. No transformation or compatibility layer is added.
+
+The enum, both fields, constructor/conversion assignments, and SMILES has_chirality bookkeeping
+are removed. Tetrahedral raising retains the wedge path and removes raw-descriptor reconstruction,
+its first-neighbor ordering helpers, and the now-redundant identity reindexing. Shared neighbor,
+geometry, wedge, and directional-bond helpers remain. Parser tests now check the retained raw
+descriptors; the parity control verifies that raw parity alone has no raising effect under MOL,
+SMILES, or unknown source metadata.
+
+All 253 frozen molecule records and 34 wrapper/diagnostic cases match S2b8 after excluding only the
+deleted field from the old debug tables. Raised outputs, errors, explicit stereo frames, and reaction
+mappings are unchanged in that comparison. No conformance snapshot changed. The IO/graph gate passes
+with conformance and property features enabled: 3,480 IO library tests, 10,223 SMILES cases, 2,253 MOL
+cases, 407 SDF cases, six layout tests, six IO property tests, and the graph suites including 984
+library tests, 683 resolution cases, and five property tests (seed 224). One graph doctest remains
+ignored. All-target Clippy for both crates, formatting, and diff checks pass. A workspace source
+search finds no retired flag or reconstruction-helper references. No replacement source-format
+dispatch or public symbol was added. S2c is complete; S2d is next.
+
 ## Implementation plan
 
 S0, S1, S2a, S2b, and S2b1–S2b5 are complete. The subsequent bounded experiments and architecture
-selection are also complete. S2b6–S2b7 are complete; S2b8 verifies the integrated cursor/pending
-implementation. S2c–S2e and S3 retain the remaining flag migration, known corrections,
+selection are also complete. S2b6–S2b8 are complete; the integrated cursor/pending implementation
+has passed its output, correctness, memory, and bounded performance gates. S2c is complete.
+S2d–S2e and S3 retain the known corrections,
 and limited permutation scope. These remaining subitems have not started. S2b7 subsumes the former S4 cleanup; earlier S4 references
 describe the original sequencing. No mutating git operation or commit is implied.
 
@@ -2252,17 +2377,17 @@ Graph-IR construction and its invariants remain unchanged.
   compaction policy, or experimental finalization rewrite. Include S2b6's cases and the IO
   conformance/property gate; fit the production files' conventions rather than copying harness
   scaffolding. **[dep: S2b6]**
-- **S2b8 — Integration verification and performance handoff** — additive (green), parser/raise
+- **S2b8 — Integration verification and performance handoff (completed 2026-09-09)** — additive (green), parser/raise
   validation, benchmarks, and this record. Compare the integrated parser against the selected pending
   prototype and corrected S2b: full basic/extended tables and frames, errors, reaction mapping, CX
   annotations, and raised outputs. Require exact identity for this opening-order rewire, with focused
-  regressions for any discrepancy. Run the affected IO and graph suites. After builds finish, repeat
-  the established bounded timing and allocation/peak/retained-memory comparison, keeping S2a solely
-  as an older-semantics cost reference. Verify integration preserves the selected prototype's gains
+  cases for any discrepancy. Run the affected IO and graph suites. After builds finish, repeat
+  the established bounded timing and allocation/peak/retained-memory comparison, using S2a as the
+  primary performance baseline and corrected S2b/prototype as the output and integration baselines. Verify integration preserves the selected prototype's gains
   and explicitly retain its known extended/capacity limitations. Investigate an integration mismatch
   within this rewire; do not start another architecture or tuning search. Record the handoff before
   removing the flag. **[dep: S2b7]**
-- **S2c — Remove ChiralityFrame** — breaking (red→green within the subitem). Remove the enum,
+- **S2c — Remove ChiralityFrame (completed 2026-09-09)** — breaking (red→green within the subitem). Remove the enum,
   molecule fields, conversions, parser assignments, and old source-descriptor interpretation branch;
   migrate all imports, literals, and tests. Remove helpers used solely for the retired SMILES frame
   reconstruction. Retain helpers still used by wedges or directional stereo, raw MOL parity, and
@@ -2344,7 +2469,7 @@ workspace test alone does not cover them. Existing property suites are regressio
 expansion into a new randomized-testing project. Additional graph-IR or other feature-specific gates
 are required only if approved implementation changes actually touch those components.
 
-Remaining critical path: **S2b8 verification → S2c flag removal → S2d ingestion/fixtures → S2e wildcard discrepancy →
+Remaining critical path: **S2d ingestion/fixtures → S2e wildcard discrepancy →
 S3a limited atom/bond permutation laws → S3b downstream/Python coverage → S3c impact review**.
 All stages end green. The wildcard discrepancy remains later required work, not deferred work.
 Optional optimization is outside this critical path; the core deliverable does not wait for it.

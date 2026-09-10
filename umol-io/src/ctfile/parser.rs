@@ -23,7 +23,6 @@ use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::ParseError;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
-use crate::table_ir::stereo::ChiralityFrame;
 use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
 use crate::utils::normalize_whitespace;
 
@@ -159,7 +158,6 @@ fn build_molecule(
         comments: Vec::new(),
         properties: IndexMap::new(),
         configuration_scope: None,
-        chirality_frame: None,
         stereo_atoms: Vec::new(),
         source_format: SourceFormat::MOL,
     };
@@ -169,11 +167,6 @@ fn build_molecule(
         acc.add_entry(entry, flags)?;
     }
     acc.update_molecule(&mut molecule, flags)?;
-    molecule.chirality_frame = molecule
-        .atoms
-        .iter()
-        .any(|atom| atom.chirality.is_some())
-        .then_some(ChiralityFrame::LastNeighborAway);
 
     Ok(molecule)
 }
@@ -196,7 +189,6 @@ fn build_extended_molecule(
         properties: IndexMap::new(),
         ctfile_data: None,
         cx_data: None,
-        chirality_frame: None,
         stereo_atoms: Vec::new(),
         source_format: SourceFormat::MOL,
     };
@@ -207,11 +199,6 @@ fn build_extended_molecule(
     }
 
     acc.update_extended_molecule(&mut molecule, flags)?;
-    molecule.chirality_frame = molecule
-        .atoms
-        .iter()
-        .any(|atom| atom.chirality.is_some())
-        .then_some(ChiralityFrame::LastNeighborAway);
 
     Ok(molecule)
 }

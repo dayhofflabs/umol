@@ -8,8 +8,8 @@ use regex::Regex;
 use umol_chem::element::Element;
 
 use crate::table_ir::{
-    Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ChiralityFrame,
-    ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, WildcardAtom,
+    Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ExtendedAtom,
+    ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, WildcardAtom,
 };
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
@@ -262,11 +262,6 @@ pub fn build_from_graph(spec: &str) -> Molecule {
     }
 
     mol.source_format = SourceFormat::SMILES;
-    mol.chirality_frame = mol
-        .atoms
-        .iter()
-        .any(|atom| atom.chirality.is_some())
-        .then_some(ChiralityFrame::FirstNeighborToward);
     mol
 }
 
@@ -331,10 +326,5 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     }
 
     mol.source_format = SourceFormat::SMILES;
-    mol.chirality_frame = mol
-        .atoms
-        .iter()
-        .any(|atom| atom.chirality.is_some())
-        .then_some(ChiralityFrame::FirstNeighborToward);
     mol
 }
