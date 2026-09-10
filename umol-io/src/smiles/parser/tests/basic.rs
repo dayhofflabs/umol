@@ -8,7 +8,10 @@ use umol_chem::element::Element;
 use super::super::*;
 use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
 use crate::table_ir::atom::Chirality;
-use crate::table_ir::{Atom, Bond, BondDirection, BondOrder, ChiralityFrame, SourceFormat, Span};
+use crate::table_ir::{
+    Atom, Bond, BondDirection, BondOrder, ChiralityFrame, SourceFormat, Span, StereoAtom,
+    StereoLigand, Winding,
+};
 
 #[rstest]
 #[case::organic_c(b"C", build_from_graph("C@0 |"))]
@@ -1099,6 +1102,11 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
             ..Atom::wildcard()
         }],
         chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        stereo_atoms: vec![StereoAtom {
+            atom: 0,
+            ligands: vec![StereoLigand::ImplicitHydrogen, StereoLigand::ImplicitHydrogen],
+            winding: Winding::CounterClockwise,
+        }],
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }

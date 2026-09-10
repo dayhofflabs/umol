@@ -707,7 +707,18 @@ mod tests {
     )]
     #[case::repeated_virtual_tetrahedral_completion(
         Smiles::parse_bytes(b"[C@H2](F)Cl").unwrap().into_table_ir(),
-        RaiseError::TetrahedralLigandCount { atom: 0, count: 2 }
+        RaiseError::MoleculeEntries(MoleculeIntegrityError::DuplicateStereoLigand {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        })
+    )]
+    #[case::incomplete(
+        Smiles::parse("[C@]").unwrap().into_table_ir(),
+        RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 0 })
+    )]
+    #[case::oversized(
+        Smiles::parse("[C@](F)(Cl)(Br)(I)N").unwrap().into_table_ir(),
+        RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 5 })
     )]
     fn test_table_molecule_try_into_ir_error(
         #[case] molecule: TableMolecule,
@@ -724,15 +735,45 @@ mod tests {
         let smiles = Smiles::parse(input).unwrap();
         let molecule: Molecule = smiles.as_table_ir().try_into_ir(&()).unwrap();
 
-        assert_eq!(molecule.stereo_atoms().count(), 0);
         assert_eq!(molecule.stereo_bonds().count(), 0);
         match entity {
-            Entity::Atom(id) => assert!(molecule
-                .atom(id)
-                .attributes
-                .constraints
-                .tetrahedral_stereo()
-                .is_some()),
+            Entity::Atom(id) => {
+                let frames: Vec<_> = molecule
+                    .stereo_atoms()
+                    .iter()
+                    .map(|frame| {
+                        (
+                            frame.site_id(),
+                            frame
+                                .ligands()
+                                .map(|ligand| (ligand.atom_id(), ligand.kind()))
+                                .collect::<Vec<_>>(),
+                            frame.attributes.clone(),
+                        )
+                    })
+                    .collect();
+                assert_eq!(
+                    frames,
+                    vec![(
+                        id,
+                        vec![
+                            (AtomId(0), StereoLigandKind::Atom),
+                            (id, StereoLigandKind::ImplicitHydrogen),
+                            (AtomId(2), StereoLigandKind::Atom),
+                            (AtomId(3), StereoLigandKind::Atom)
+                        ],
+                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+                    )]
+                );
+                assert_eq!(
+                    molecule
+                        .atom(id)
+                        .attributes
+                        .constraints
+                        .tetrahedral_stereo(),
+                    None
+                );
+            }
             Entity::Bond(id) => assert!(molecule
                 .bond(id)
                 .attributes
@@ -985,14 +1026,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::cfclbri_clockwise(Smiles::parse_bytes(b"Br[C@@](F)(Cl)I").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
-    #[case::cfclbri_counterclockwise(Smiles::parse_bytes(b"Br[C@](F)(Cl)I").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
-    #[case::cfclbri_fluorine_first(Smiles::parse_bytes(b"F[C@](Cl)(Br)I").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
-    #[case::methyloxirane_explicit_h(Smiles::parse_bytes(b"C[C@@]1([H])OC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
-    #[case::butan_2_ol(Smiles::parse_bytes(b"C[C@@H](O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
-    #[case::alanine(Smiles::parse_bytes(b"C[C@H](N)C(O)=O").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
-    #[case::ring_then_branch(Smiles::parse_bytes(b"C[C@]1(Cl)CC(C)CC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
-    #[case::branch_then_ring(Smiles::parse_bytes(b"C[C@](Cl)1CC(C)CC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
     #[case::mol_wedge_cfclbri(parse_mol_bytes_to_table_ir(CFCLBRI_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
     #[case::mol_wedge_cfclbri_r(parse_mol_bytes_to_table_ir(CFCLBRI_R_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
     #[case::mol_wedge_cfclbri_single(parse_mol_bytes_to_table_ir(CFCLBRI_SINGLE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
@@ -1017,9 +1050,6 @@ mod tests {
     #[case::mol_wavy_alkene_two_ligands(parse_mol_bytes_to_table_ir(WAVY_ALKENE_TWO_LIGANDS_MOL.as_bytes()).unwrap(), 1, None)]
     #[case::mol_wavy_alkene_three_ligands(parse_mol_bytes_to_table_ir(WAVY_ALKENE_THREE_LIGANDS_MOL.as_bytes()).unwrap(), 1, None)]
     #[case::cx_wiggly_alkene(Smiles::parse_bytes_with(b"CC=CC |w:1.0|", &SmilesIoConfig::chemaxon()).unwrap().into_table_ir(), 1, None)]
-    #[case::sulfoxide_counterclockwise(Smiles::parse_bytes(b"C[S@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
-    #[case::sulfoxide_clockwise(Smiles::parse_bytes(b"C[S@@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
-    #[case::sulfoxide_charge_separated(Smiles::parse_bytes(b"C[S@@+]([O-])CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
     #[case::no_descriptor(Smiles::parse_bytes(b"F[C@](Cl)(Br)I").unwrap().into_table_ir(), 0, None)]
     fn test_raise_tetrahedral_stereo(
         #[case] mol: TableMolecule,
@@ -1036,8 +1066,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::dimethyl_sulfide(Smiles::parse_bytes(b"C[S@]C").unwrap().into_table_ir(), 1, RaiseError::TetrahedralLigandCount { atom: 1, count: 2 })]
-    #[case::parallel_bonds(Smiles::parse_bytes(b"C[C]2[C@@]2[C-]").unwrap().into_table_ir(), 2, RaiseError::TetrahedralLigandCount { atom: 2, count: 2 })]
     #[case::wedge_conflict(parse_mol_bytes_to_table_ir(WEDGE_CONFLICT_MOL.as_bytes()).unwrap(), 0, RaiseError::WedgeConflict { atom: 0 })]
     #[case::cfclbri_inconsistent_wedges(parse_mol_bytes_to_table_ir(CFCLBRI_INCONSISTENT_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::WedgeConflict { atom: 1 })]
     #[case::cfclbri_definite_and_either_wedge(parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::WedgeConflict { atom: 1 })]

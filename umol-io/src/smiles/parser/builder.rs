@@ -8,7 +8,8 @@ use super::super::error::ParseError;
 use super::utils::{make_bond, make_extended_bond};
 use crate::table_ir::{
     Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ExtendedAtom,
-    ExtendedBond, ExtendedMolecule, Molecule, Span, WildcardAtom,
+    ExtendedBond, ExtendedMolecule, Molecule, Span, StereoAtom, StereoLigand, WildcardAtom,
+    Winding,
 };
 
 /// Open ring-closure bond awaiting its matching digit. `bond_idx` is the
@@ -22,6 +23,65 @@ struct OpenRing {
     donation: Option<BondDonation>,
     open_pos: usize,
     open_end: usize,
+}
+
+fn finish_stereo(
+    frames: &mut [StereoAtom],
+    closures: &[(u32, usize, usize)],
+    roots: &[u32],
+    bond_count: usize,
+    bond_atoms: impl Fn(usize) -> (u32, u32),
+    hydrogens: impl Fn(u32) -> u8,
+) {
+    let mut by_bond: Vec<_> = closures.iter().collect();
+    by_bond.sort_unstable_by_key(|record| record.1);
+    let mut closing = closures.iter().peekable();
+    for index in 0..=bond_count {
+        while closing.peek().is_some_and(|record| record.2 == index) {
+            let record = closing.next().unwrap();
+            let (a, b) = bond_atoms(record.1);
+            let neighbor = if a == record.0 { b } else { a };
+            let site = frames
+                .binary_search_by_key(&record.0, |frame| frame.atom)
+                .unwrap();
+            frames[site].ligands.push(StereoLigand::Atom(neighbor));
+        }
+        if index == bond_count {
+            break;
+        }
+        let (start, end) = bond_atoms(index);
+        let delayed = by_bond
+            .binary_search_by_key(&index, |record| record.1)
+            .ok()
+            .map(|i| by_bond[i].0);
+        if delayed != Some(start) || start == end {
+            if let Ok(site) = frames.binary_search_by_key(&start, |frame| frame.atom) {
+                frames[site].ligands.push(StereoLigand::Atom(end));
+            }
+        }
+        if delayed != Some(end) {
+            if let Ok(site) = frames.binary_search_by_key(&end, |frame| frame.atom) {
+                frames[site].ligands.push(StereoLigand::Atom(start));
+            }
+        }
+    }
+    for frame in frames {
+        let count = hydrogens(frame.atom);
+        let position = if roots.binary_search(&frame.atom).is_ok() {
+            0
+        } else {
+            1
+        };
+        if count > 0 {
+            for offset in 0..count as usize {
+                frame
+                    .ligands
+                    .insert(position + offset, StereoLigand::ImplicitHydrogen);
+            }
+        } else if frame.ligands.len() == 3 {
+            frame.ligands.insert(position, StereoLigand::LonePair);
+        }
+    }
 }
 
 /// Atom event data
@@ -55,6 +115,7 @@ pub(super) struct MoleculeEditor {
     /// (atom, reserved bond slot, bond-table length) at each marked ring closure.
     stereo_closures: Vec<(u32, usize, usize)>,
     stereo_roots: Vec<u32>,
+    stereo_atoms: Vec<StereoAtom>,
     /// Count of completed bonds; a bond's completion order is its CX close index.
     closed_bonds: usize,
     /// Whether to record ring closures (set only when a CX block is present).
@@ -75,6 +136,7 @@ impl MoleculeEditor {
             ring_bonds: Vec::new(),
             stereo_closures: Vec::new(),
             stereo_roots: Vec::new(),
+            stereo_atoms: Vec::new(),
             closed_bonds: 0,
             store_rings,
             molecules: Vec::new(),
@@ -106,8 +168,15 @@ impl MoleculeEditor {
     }
 
     #[inline]
-    pub(crate) fn on_stereo_root(&mut self, atom_idx: usize) {
-        self.stereo_roots.push(atom_idx as u32);
+    pub(crate) fn on_stereo_atom(&mut self, atom_idx: usize, winding: Winding, is_root: bool) {
+        self.stereo_atoms.push(StereoAtom {
+            atom: atom_idx as u32,
+            ligands: Vec::new(),
+            winding,
+        });
+        if is_root {
+            self.stereo_roots.push(atom_idx as u32);
+        }
     }
 
     #[inline]
@@ -316,6 +385,20 @@ impl MoleculeEditor {
             return;
         }
         let mut mol = Molecule::empty();
+        if !self.stereo_atoms.is_empty() {
+            finish_stereo(
+                &mut self.stereo_atoms,
+                &self.stereo_closures,
+                &self.stereo_roots,
+                self.bond_table.len(),
+                |index| {
+                    let bond = self.bond_table[index].as_ref().unwrap();
+                    (bond.atoms.first(), bond.atoms.second())
+                },
+                |atom| self.atoms[atom as usize].implicit_hydrogens.unwrap_or(0),
+            );
+        }
+        mol.stereo_atoms = mem::take(&mut self.stereo_atoms);
         mol.atoms = mem::take(&mut self.atoms);
         mol.bonds = self.bond_table.drain(..).flatten().collect();
         self.stereo_closures.clear();
@@ -356,6 +439,7 @@ pub(super) struct ExtendedMoleculeBuilder {
     /// (atom, reserved bond slot, bond-table length) at each marked ring closure.
     stereo_closures: Vec<(u32, usize, usize)>,
     stereo_roots: Vec<u32>,
+    stereo_atoms: Vec<StereoAtom>,
     /// Count of completed bonds; a bond's completion order is its CX close index.
     closed_bonds: usize,
     /// Whether to record ring closures (set only when a CX block is present).
@@ -376,6 +460,7 @@ impl ExtendedMoleculeBuilder {
             ring_bonds: Vec::new(),
             stereo_closures: Vec::new(),
             stereo_roots: Vec::new(),
+            stereo_atoms: Vec::new(),
             closed_bonds: 0,
             store_rings,
             molecules: Vec::new(),
@@ -418,8 +503,15 @@ impl ExtendedMoleculeBuilder {
     }
 
     #[inline]
-    pub(crate) fn on_stereo_root(&mut self, atom_idx: usize) {
-        self.stereo_roots.push(atom_idx as u32);
+    pub(crate) fn on_stereo_atom(&mut self, atom_idx: usize, winding: Winding, is_root: bool) {
+        self.stereo_atoms.push(StereoAtom {
+            atom: atom_idx as u32,
+            ligands: Vec::new(),
+            winding,
+        });
+        if is_root {
+            self.stereo_roots.push(atom_idx as u32);
+        }
     }
 
     #[inline]
@@ -684,6 +776,20 @@ impl ExtendedMoleculeBuilder {
             return;
         }
         let mut mol = ExtendedMolecule::empty();
+        if !self.stereo_atoms.is_empty() {
+            finish_stereo(
+                &mut self.stereo_atoms,
+                &self.stereo_closures,
+                &self.stereo_roots,
+                self.bond_table.len(),
+                |index| {
+                    let bond = self.bond_table[index].as_ref().unwrap();
+                    (bond.atoms.first(), bond.atoms.second())
+                },
+                |atom| self.atoms[atom as usize].implicit_hydrogens.unwrap_or(0),
+            );
+        }
+        mol.stereo_atoms = mem::take(&mut self.stereo_atoms);
         mol.atoms = mem::take(&mut self.atoms);
         mol.bonds = self.bond_table.drain(..).flatten().collect();
         self.stereo_closures.clear();

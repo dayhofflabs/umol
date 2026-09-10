@@ -283,7 +283,8 @@ mod tests {
     use smallvec::smallvec;
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceForm, AtomId, BondConstraintForm, BondId, BooleanForm,
-        Constraint, Deltas, ElectronCountsForm, NumForm, TetrahedralStereoForm,
+        Canonicalize, CanonicalizeContext, Constraint, Deltas, ElectronCountsForm, Entity,
+        MoleculeIntegrityError, NumForm, StereoAtomId, StereoKind, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
@@ -647,7 +648,7 @@ mod tests {
         ChemistryModel::default(),
         ReactionInterpretationError::Reactants(
             MoleculeInterpretationError::ModelConversion(
-                RaiseError::TetrahedralLigandCount { atom: 1, count: 2 },
+                RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }),
             ),
         ),
     )]
@@ -656,7 +657,7 @@ mod tests {
         ChemistryModel::default(),
         ReactionInterpretationError::Products(
             MoleculeInterpretationError::ModelConversion(
-                RaiseError::TetrahedralLigandCount { atom: 1, count: 2 },
+                RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }),
             ),
         ),
     )]
@@ -775,10 +776,7 @@ mod tests {
     #[case::syntax(" C", SmilesInputError::Syntax(SmilesParseError::LeadingWhitespace))]
     #[case::model_conversion(
         "C[S@]C",
-        SmilesInputError::ModelConversion(RaiseError::TetrahedralLigandCount {
-            atom: 1,
-            count: 2,
-        })
+        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }))
     )]
     #[case::underdetermined(
         "*",
@@ -861,6 +859,19 @@ mod tests {
                 .charge,
             expected_system_charge
         );
+    }
+
+    #[rstest]
+    #[case::equivalent("C[C@H]1CCCCO1", "O1CCCC[C@@H]1C", true)]
+    #[case::mirror("C[C@H]1CCCCO1", "O1CCCC[C@H]1C", false)]
+    fn test_ingest_smiles_stereo(#[case] left: &str, #[case] right: &str, #[case] expected: bool) {
+        let left = ingest_smiles(left).unwrap();
+        let right = ingest_smiles(right).unwrap();
+        let context = CanonicalizeContext {
+            para_stereo: false,
+            automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
+        };
+        assert_eq!(left.canonical_eq(&right, &context), expected);
     }
 
     #[rstest]

@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=273; reaction_id=Rh_11176; side=1; participant=0
+O=P([O-])([O-])O[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O

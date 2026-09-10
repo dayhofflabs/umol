@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=6163; reaction_id=Rh_37247; side=0; participant=0
+CC1=CN([C@H]2C[C@H](OP(=O)([O-])[O-])[C@@H](CO)O2)C(=O)NC1=O

@@ -1,0 +1,13 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+assertion_line: 271
+expression: results
+---
+expected_category: opensmiles
+category: opensmiles
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C2N2O2
+    atom_count: 6
+    bond_count: 5

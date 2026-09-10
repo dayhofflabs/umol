@@ -8,7 +8,7 @@ use umol_chem::element::Element;
 use super::super::*;
 use crate::table_ir::{
     Atom, Bond, BondDonation, BondOrder, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
-    SourceFormat, Span,
+    SourceFormat, Span, StereoAtom, StereoLigand, Winding,
 };
 
 #[rstest]
@@ -360,4 +360,68 @@ fn test_parse_extended_reaction_smiles_bytes_with_cx() {
             .map(|reaction| { reaction.reactants.cx_data.and_then(|data| data.components) }),
         Ok(Some(vec![vec![0, 1]]))
     );
+}
+
+#[rstest]
+#[case::side_local_rings(
+    b"[C@:7]1(CC1)1CC1>>[C@@:7]1(CC1)1CC1",
+    [
+        vec![StereoAtom { atom: 0, ligands: vec![StereoLigand::Atom(2), StereoLigand::Atom(1), StereoLigand::Atom(4), StereoLigand::Atom(3)], winding: Winding::CounterClockwise }],
+        vec![],
+        vec![StereoAtom { atom: 0, ligands: vec![StereoLigand::Atom(2), StereoLigand::Atom(1), StereoLigand::Atom(4), StereoLigand::Atom(3)], winding: Winding::Clockwise }],
+    ],
+    [
+        vec![(0, 2), (0, 1), (1, 2), (0, 4), (0, 3), (3, 4)],
+        vec![],
+        vec![(0, 2), (0, 1), (1, 2), (0, 4), (0, 3), (3, 4)],
+    ],
+    [vec![Some(7), None, None, None, None], vec![], vec![Some(7), None, None, None, None]],
+    btree_map!(7 => (vec![0], vec![0]))
+)]
+fn test_parse_reaction_assembly(
+    #[case] input: &[u8],
+    #[case] expected_stereo: [Vec<StereoAtom>; 3],
+    #[case] expected_bonds: [Vec<(u32, u32)>; 3],
+    #[case] expected_classes: [Vec<Option<u32>>; 3],
+    #[case] expected_mapping: BTreeMap<u32, (Vec<u32>, Vec<u32>)>,
+) {
+    let basic = parse_reaction(input, &SmilesIoConfig::default()).unwrap();
+    let extended =
+        parse_extended_reaction_smiles_bytes_with(input, &SmilesIoConfig::default()).unwrap();
+    assert_eq!(basic.atom_mapping, expected_mapping);
+    assert_eq!(extended.atom_mapping, expected_mapping);
+    for (index, side) in [basic.reactants, basic.agents, basic.products]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(side.stereo_atoms, expected_stereo[index]);
+        assert_eq!(
+            side.bonds
+                .iter()
+                .map(|bond| (bond.atoms.first(), bond.atoms.second()))
+                .collect::<Vec<_>>(),
+            expected_bonds[index]
+        );
+        assert_eq!(
+            side.atoms.iter().map(|atom| atom.class).collect::<Vec<_>>(),
+            expected_classes[index]
+        );
+    }
+    for (index, side) in [extended.reactants, extended.agents, extended.products]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(side.stereo_atoms, expected_stereo[index]);
+        assert_eq!(
+            side.bonds
+                .iter()
+                .map(|bond| (bond.atoms.first(), bond.atoms.second()))
+                .collect::<Vec<_>>(),
+            expected_bonds[index]
+        );
+        assert_eq!(
+            side.atoms.iter().map(|atom| atom.class).collect::<Vec<_>>(),
+            expected_classes[index]
+        );
+    }
 }

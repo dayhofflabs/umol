@@ -1,0 +1,13 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+assertion_line: 271
+expression: results
+---
+expected_category: opensmiles
+category: opensmiles
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C27H5O5
+    atom_count: 37
+    bond_count: 40

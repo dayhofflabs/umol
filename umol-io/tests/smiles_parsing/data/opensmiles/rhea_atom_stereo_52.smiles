@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=7629; reaction_id=Rh_43272; side=1; participant=0
+*C(=O)N[C@@H](CO[C@@H]1O[C@H](CO)[C@@H](O[C@@H]2O[C@H](CO)[C@H](O[C@@H]3O[C@H](CO)[C@H](O)[C@H](O)[C@H]3NC(C)=O)[C@H](O[C@]3(C(=O)[O-])C[C@H](O)[C@@H](NC(C)=O)[C@]([H])([C@H](O)[C@@H](CO)O[C@]4(C(=O)[O-])C[C@H](O)[C@@H](NC(C)=O)[C@]([H])([C@H](O)[C@H](O)CO)O4)O3)[C@H]2O)[C@H](O)[C@H]1O)[C@@H](*)O

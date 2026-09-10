@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=9997; reaction_id=Rh_53112; side=0; participant=1
+[H][C@@]12CC[C@]3([H])[C@]([H])(CC[C@]4(C)[C@@H](O[C@@H]5O[C@H](C(=O)[O-])[C@@H](O)[C@H](O)[C@H]5O)CC[C@@]34[H])[C@@]1(C)CC[C@@H](O)C2

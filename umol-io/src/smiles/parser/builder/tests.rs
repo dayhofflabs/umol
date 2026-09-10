@@ -32,8 +32,8 @@ fn test_molecule_editor_on_ring_bond(
 fn test_molecule_editor_on_component_end() {
     let mut builder = MoleculeEditor::with_capacity(3, 0, false);
     builder.atoms = vec![Atom::from_element(Element::C); 3];
-    builder.on_stereo_root(0);
-    builder.on_stereo_root(2);
+    builder.on_stereo_atom(0, Winding::CounterClockwise, true);
+    builder.on_stereo_atom(2, Winding::Clockwise, true);
     assert_eq!(builder.stereo_roots, vec![0, 2]);
     builder.on_component_end();
     assert_eq!(builder.stereo_roots, vec![]);
@@ -69,8 +69,8 @@ fn test_extended_molecule_builder_on_ring_bond(
 fn test_extended_molecule_builder_on_component_end() {
     let mut builder = ExtendedMoleculeBuilder::with_capacity(3, 0, false);
     builder.atoms = vec![ExtendedAtom::from_element(Element::C); 3];
-    builder.on_stereo_root(0);
-    builder.on_stereo_root(2);
+    builder.on_stereo_atom(0, Winding::CounterClockwise, true);
+    builder.on_stereo_atom(2, Winding::Clockwise, true);
     assert_eq!(builder.stereo_roots, vec![0, 2]);
     builder.on_component_end();
     assert_eq!(builder.stereo_roots, vec![]);

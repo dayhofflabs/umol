@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=2045; reaction_id=Rh_18893; side=1; participant=0
+*C1=C(*)C(*)=C(C2=C(O[C@@H]3O[C@H](CO)[C@@H](O)[C@H](O)[C@H]3O[C@@H]3O[C@H](CO)[C@@H](O)[C@H](O)[C@H]3O)C(=O)C3=C(O2)/C(*)=C(*)\C(*)=C/3*)C(*)=C1*

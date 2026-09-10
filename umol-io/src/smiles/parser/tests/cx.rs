@@ -1316,3 +1316,52 @@ fn test_cx_sgroup_data_invalid(#[case] input: &[u8], #[case] expected: ParseErro
     );
     assert_eq!(res.unwrap_err(), expected);
 }
+
+#[rstest]
+#[case::reverse_closures(
+    b"C12(CC2)CC1 |C:4.5,0.2|",
+    vec![
+        (0, 4, BondOrder::Single, Some(BondDonation::Accepting)),
+        (0, 2, BondOrder::Single, Some(BondDonation::Donating)),
+        (0, 1, BondOrder::Single, None),
+        (1, 2, BondOrder::Single, None),
+        (0, 3, BondOrder::Single, None),
+        (3, 4, BondOrder::Single, None),
+    ]
+)]
+fn test_parse_molecule_cx_assembly(
+    #[case] input: &[u8],
+    #[case] expected: Vec<(u32, u32, BondOrder, Option<BondDonation>)>,
+) {
+    let config = SmilesIoConfig::chemaxon();
+    let basic = parse_molecule(input, &config).unwrap();
+    let extended = parse_extended_smiles_bytes_with(input, &config).unwrap();
+    assert_eq!(basic.stereo_atoms, vec![]);
+    assert_eq!(extended.stereo_atoms, vec![]);
+    assert_eq!(
+        basic
+            .bonds
+            .iter()
+            .map(|bond| (
+                bond.atoms.first(),
+                bond.atoms.second(),
+                bond.order,
+                bond.donation
+            ))
+            .collect::<Vec<_>>(),
+        expected,
+    );
+    assert_eq!(
+        extended
+            .bonds
+            .iter()
+            .map(|bond| (
+                bond.atoms.first(),
+                bond.atoms.second(),
+                bond.order,
+                bond.donation
+            ))
+            .collect::<Vec<_>>(),
+        expected,
+    );
+}

@@ -24,7 +24,7 @@ use super::config::{SmilesIoConfig, SmilesSyntaxFlags};
 use super::error::ParseError;
 use crate::table_ir::{
     BondDirection, BondDonation, BondOrder, Chirality, ChiralityFrame, ExtendedMolecule,
-    ExtendedReaction, Molecule, Reaction, SourceFormat, Span, WildcardAtom,
+    ExtendedReaction, Molecule, Reaction, SourceFormat, Span, WildcardAtom, Winding,
 };
 
 /// Parse a molecular SMILES byte slice into `table_ir::Molecule`.
@@ -382,17 +382,17 @@ fn parse_smiles_inner(
                 span: Span::from_bytes_opt(s, e),
             };
             let curr = builder.on_atom(atom);
-            if last_atom_idx.is_none()
-                && matches!(
-                    chir_opt,
-                    Some(
-                        Chirality::Clockwise
-                            | Chirality::CounterClockwise
-                            | Chirality::Tetrahedral { arr: 1 | 2 }
-                    )
-                )
-            {
-                builder.on_stereo_root(curr);
+            let winding = match chir_opt {
+                Some(Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 }) => {
+                    Some(Winding::CounterClockwise)
+                }
+                Some(Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 }) => {
+                    Some(Winding::Clockwise)
+                }
+                _ => None,
+            };
+            if let Some(winding) = winding {
+                builder.on_stereo_atom(curr, winding, last_atom_idx.is_none());
             }
             let aromatic = aromatic.unwrap_or(false);
 
@@ -1015,17 +1015,17 @@ fn parse_extended_smiles_inner(
                 span: Span::from_bytes_opt(s, e),
             };
             let curr = builder.on_atom(atom);
-            if last_atom_idx.is_none()
-                && matches!(
-                    chir_opt,
-                    Some(
-                        Chirality::Clockwise
-                            | Chirality::CounterClockwise
-                            | Chirality::Tetrahedral { arr: 1 | 2 }
-                    )
-                )
-            {
-                builder.on_stereo_root(curr);
+            let winding = match chir_opt {
+                Some(Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 }) => {
+                    Some(Winding::CounterClockwise)
+                }
+                Some(Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 }) => {
+                    Some(Winding::Clockwise)
+                }
+                _ => None,
+            };
+            if let Some(winding) = winding {
+                builder.on_stereo_atom(curr, winding, last_atom_idx.is_none());
             }
 
             attach_extended_atom(

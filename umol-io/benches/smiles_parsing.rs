@@ -2,8 +2,13 @@
 
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use umol_io::smiles::{parse_extended_smiles_bytes, Smiles};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use umol_graph_ir::ir::{Molecule, TryIntoIr};
+use umol_io::smiles::{
+    parse_extended_reaction_smiles, parse_extended_smiles_bytes, parse_extended_smiles_bytes_with,
+    ReactionSmiles, Smiles, SmilesIoConfig,
+};
+use umol_io::table_ir;
 
 // Chain-only corpus, bare atoms (organic-only mix omitting bare H)
 fn chain_inputs() -> Vec<(&'static str, &'static [u8])> {
@@ -18,6 +23,9 @@ fn chain_inputs() -> Vec<(&'static str, &'static [u8])> {
         // ("mix_20", b"COSPSNPOSNCCIOFIPFNF"),
         // ("mix_50", b"PSNPPSICSFFFIPISONNNPIFCOOINCFSOOFICCCCSOCNONSFPIP"),
         // ("mix_100", b"NSOOPNFNSIINOPCNNONCFOPPPNFISSFSPCFSIPNOCSISIFCFPOPCOCSCSICFFICFNPPOSNONSSFOCPCOSNOCCPNPFIIOIFFNCIII"),
+        ("c_64", b"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
+        ("c_256", b"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
+        ("stereo_after_1000", b"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCO1CCCC[C@@H]1C"),
     ]
 }
 
@@ -55,6 +63,8 @@ fn tree_inputs() -> Vec<(&'static str, &'static [u8])> {
         // ("c_1000_r50", b"C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
         // ("c_1000_r100", b"C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
         // ("c_1000_r250", b"C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)C(C)CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
+        ("depth_8", b"C(C(C(C(C(C(C(C(C))))))))"),
+        ("depth_64", b"C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C(C))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"),
     ]
 }
 
@@ -110,6 +120,14 @@ fn ring_inputs() -> Vec<(&'static str, &'static [u8])> {
         ("c6", b"C1CCCCC1"),
         ("c8", b"C1CCCCCCC1"),
         ("pct12", b"C%12CCCC%12"),
+        (
+            "c64_label_1",
+            b"C1CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC1",
+        ),
+        (
+            "c64_label_99",
+            b"C%99CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC%99",
+        ),
     ]
 }
 
@@ -143,6 +161,14 @@ fn ring_complex_inputs() -> Vec<(&'static str, &'static [u8])> {
         // ("closo-dodecaborane", b"[H]B1234B567([H])B189([H])B21%10([H])B32%11([H])B453([H])B645([H])B786([H])B478([H])B12([H])([B-]9%1067[H])[B-]3%1158[H]"),
         // ("c60_fullerene", b"C12=C3C4=C5C6=C1C7=C8C9=C1C%10=C%11C(=C29)C3=C2C3=C4C4=C5C5=C9C6=C7C6=C7C8=C1C1=C8C%10=C%10C%11=C2C2=C3C3=C4C4=C5C5=C%11C%12=C(C6=C95)C7=C1C1=C%12C5=C%11C4=C3C3=C5C(=C81)C%10=C23"),
         // ("vitamin_b12", b"[H][C@]12[C@H](CC(N)=O)[C@@]3(C)CCC(=O)NC[C@@H](C)OP(=O)([O-])O[C@H]4[C@@H](O)[C@H](O[C@@H]4COP(=O)(O)O)n4c[n+](c5cc(C)c(C)cc54)[Co-3]456([CH2][C@H]7O[C@@H](n8cnc9c(N)ncnc98)[C@H](O)[C@@H]7O)[N]1C3=C(C)C1=[N+]4C(=CC3=[N+]5C(=C(C)C4=[N+]6[C@]2(C)[C@@](C)(CC(N)=O)[C@@H]4CCC(N)=O)[C@@](C)(CC(N)=O)[C@@H]3CCC(N)=O)C(C)(C)[C@@H]1CCC(N)=O"),
+        (
+            "serial_64_8",
+            b"C1CCCCC1C1CCCCC1C1CCCCC1C1CCCCC1C1CCCCC1C1CCCCC1C1CCCCC1C1CCCCC1CCCCCCCCCCCCCCCC",
+        ),
+        (
+            "nested_64_8",
+            b"C1C2C3C4C5C6C7C8CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC8C7C6C5C4C3C2C1",
+        ),
     ]
 }
 
@@ -158,6 +184,8 @@ fn component_inputs() -> Vec<(&'static str, &'static [u8])> {
         // ("stereo_down", b"C\\1.CC\\1"),
         // ("stereo_up_pct", b"C/%12.CC/%12"),
         // ("stereo_down_pct", b"C\\%12.CC\\%12"),
+        ("stereo_10", b"O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C"),
+        ("stereo_100", b"O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C.O1CCCC[C@@H]1C"),
     ]
 }
 
@@ -171,6 +199,7 @@ fn bracket_inputs() -> Vec<(&'static str, &'static [u8])> {
         // ("brkt_class_50", b"[C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1][C:1]"),
         // ("brkt_hcount_50", b"[CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3][CH3]"),
         // ("brkt_mixed_100", b"[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C[C]C"),
+        ("c_64", b"[CH3][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH2][CH3]"),
     ]
 }
 
@@ -224,6 +253,222 @@ fn cx_inputs() -> Vec<(&'static str, &'static [u8])> {
             "sgroup_hierarchy",
             b"CCC |Sg:n:0,1:n,SgD:0:MW:150:::::,SgD:1,2:MW:200:::::,SgH:0:1.2|",
         ),
+    ]
+}
+
+fn atom_stereo_inputs() -> Vec<(&'static str, &'static [u8])> {
+    vec![
+        ("atoms_42_marked_0", b"N[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)O"),
+        ("atoms_42_marked_1", b"N[C@H](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)O"),
+        ("atoms_42_marked_10", b"N[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)O"),
+        ("atoms_202_marked_0", b"N[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)O"),
+        ("atoms_202_marked_10", b"N[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)[CH](F)O"),
+        ("atoms_202_marked_100", b"N[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)[C@H](F)O"),
+    ]
+}
+
+fn corpus_inputs() -> Vec<(&'static str, Vec<&'static str>)> {
+    vec![
+        ("zinc_plain", vec![
+            "COC1(OC)C2CC(O)(C1C=C2)C1=CCC2CCC12",
+            "COC1=C(C)C=C(C=C2CC3=C(C=CC=C3)C2=O)C=C1",
+            "CCOC(=O)C(C)C(C)=O",
+            "CC(O)C(C)(C)C",
+            "CC1=C(C)C(C)(O)OC1=O",
+            "COC1=C(OC)C=C(C=C1)C(=O)C1=C(C)C=CC=C1",
+            "COC1=C2C3CCC(C(C)=C3)C2=C(OC)C=C1",
+            "CCOC(=O)C(CCC(C)C)C(C)=O",
+            "CCC1=CC=C(OCC(=O)OC2=CC(C)=CC(C)=C2)C=C1",
+            "CCOC1=CC2=C(C=C1)C(C)=C(CC)C(=O)O2",
+            "O=C1CCC2C3CC(C=C3)C12",
+            "COC1=CC=C(C=C1)C(C)=CC(=O)OCCC#C",
+            "COC1=CC=C(C=C1)C(=O)CSC1=CC=C(C)C=C1",
+            "CCSC(O)=CC(C)=O",
+            "CC(C)(COCC1=CC=CC=C1)C=O",
+            "OCCCCCCCCC=C",
+            "CC(C)COC(=O)CCCCCC1CCCCC1",
+            "O=C1CCCC2=C1C=C1C=CC3=CC=CC4=C3C1=C2C=C4",
+            "CCOC1=CC2=C(C=C1)C(=O)C(O2)=CC1=CC=C(C)C=C1",
+            "CC(OC1=C(CC2=CC=CC=C2)C=CC=C1)C([O-])=O",
+            "CC(CCC=O)C1CC(C)(C)C1CCC(C)=O",
+            "CCCCOC(=O)C(C)CCC",
+            "CCOC1=CC(=CC=C1)C(=O)OC1=C(C)C(C)=CC=C1",
+            "COC1OC(C)(OC)C=C1",
+            "CC1=CC(C(=O)OCC2=CC=CC=C2)=C(C)O1",
+            "CSC1=CC=C(C=C1)C(C)(C)C",
+            "CCCCC1(O)CC2CC1C(C)C2(C)C",
+            "CC(C)CCC(C)(O)C#CC(C)=C",
+            "COC1=CC=C(C=C1)C1=CC(=O)C2=C(O1)C=CC=C2",
+            "OCC1=C(COC2=CC=CC=C2)C=CC=C1",
+            "CCC1=CC=C(C=CC(=O)C2=C(C)C=C(C)C=C2)C=C1",
+            "COC(=O)CC(=O)C1=CC(=CC=C1)C1=CC=CC=C1",
+            "CC(C)C1=CC=C(C=C(C)C=O)C=C1",
+            "COC1=CC=C2C=C(C=CC2=C1)C1=CC=C(C=C1)C([O-])=O",
+            "CC(C)(C)OCC1=CC=CC=C1",
+            "CCSCCOC(=O)C1C(C=C(C)C)C1(C)C",
+            "COC1=C(C=CC(=O)C2=C(O)C=CC(C)=C2)C=CC=C1",
+            "O=C(C1CCOCC1)C1=CC=CC=C1",
+            "CC1=CC(=CC2=CC=CO2)C(=O)O1",
+            "CCCC1=CC2=C(OC1=O)C=C(O)C=C2",
+            "CC=C(C=O)C1=C(C)C=CC=C1",
+            "O=C1C2=C(OC=C2)C=CC2=C1C=CS2",
+            "O1C=C(OC2=C1C=CC=C2)C1=CC=CC=C1",
+            "CCCCC(CC)C(C)C1=CC=C(O)C=C1",
+            "COC(C)CC=C1C(C)=CCCC1(C)C",
+            "O=C1C=CC2C3C2C2=C(C=CC=C2)C13",
+            "CC(C)(C)C1=CC=C(C(=O)C1=O)C(C)(C)C",
+            "COC1=C(C=C(C=O)C=C1)C1=CC=CC=C1",
+            "O=C1OC(CC11CCCCC1)C1=CC=CC=C1",
+            "CCC1=CC=C2OC=C(CC([O-])=O)C2=C1",
+            "COC1=CC=CC2=C1OC(=C2)C(C)=O",
+            "CC1(C)C2CCC1(C)C(CO)C2",
+            "O=C(OCC#CC1=CC=CC=C1)C=CC1=CC=CS1",
+            "CC(C)(C)C1=CC2=C(C=C1)C(=O)CC2",
+            "CC1=CC=C([S-])C=C1",
+            "O=C1CCCC2CC=C3CCCCC3C12",
+            "CCOC(=O)C1(C=C1C1=CC=CC=C1)C1=CSC=C1",
+            "CC=CC(=O)C1C(C)=CCCC1(C)C",
+            "COC(=O)COC1=CC=C(C=C1)C1=CC=C(C)C=C1",
+            "CC1=CCC2C3CCC(C3)C2C(=O)C2CC=CC12",
+            "CCCCCC1=CC=C(C=C1)C(C)O",
+            "CC1CC2(CCCCC2)OC1=O",
+            "CCOC=CCC1(C)CCC(C(C)C)C11COC(C)(C)O1",
+            "CCC1(SC2=C(C=CC(OC)=C2)C1=O)C1=CC=CC=C1",
+        ]),
+        ("rhea_atom_stereo", vec![
+            "CCC1=CC(=O)[C@]2(C)C1=CC=C(C)C[C@@H]2OC(=O)[C@@H]1CCC[NH2+]1",
+            "CC1=CN([C@H]2C[C@H](OP(=O)([O-])[O-])[C@@H](CO)O2)C(=O)NC1=O",
+            "*N[C@@H](CO[C@H]1O[C@H](COP(=O)([O-])[O-])[C@@H](O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O[C@@H]3O[C@H](CO)[C@H](O)[C@H](O)[C@H]3NC(C)=O)[C@H]2NC(C)=O)[C@H](O)[C@@H]1O)C(*)=O",
+            "CCCCCCCCCCCCCCCC(=O)[C@@H]([NH3+])CO",
+            "CC(=O)[C@@H](C)O",
+            "O=C([O-])C[C@H](C(=O)[O-])[C@@H](O)C(=O)[O-]",
+            "CSCC[C@H](NC(=O)[C@H](CC1=CC=CC=C1)NC(=O)CNC(=O)CNC(=O)[C@@H]([NH3+])CC1=CC=C(O)C=C1)C(=O)N[C@@H](CCCNC(N)=[NH2+])C(=O)N[C@@H](CC1=CC=CC=C1)C(=O)[O-]",
+            "*N[C@@H](COC(C)=O)C(*)=O",
+            "NC(=[NH2+])NC[C@@H](O)C[C@H]([NH3+])C(=O)[O-]",
+            "NC1=CC=CC=C1C(=O)C[C@H]([NH3+])C(=O)[O-]",
+            "*O[C@H]1[C@@H](O)[C@H](*)O[C@@H]1COP(=O)([O-])O[C@H]1[C@@H](O)[C@H](N2C=NC3=C2N=CN=C3N)O[C@@H]1COP(=O)([O-])OP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=[N+](C)C3=C2N=C(N)NC3=O)[C@H](O)[C@@H]1O",
+            "CC(=O)N[C@H]1[C@H](O[C@H]2[C@H](O[C@H](C)C(=O)N[C@@H](C)C(=O)N[C@H](CCC(=O)N[C@@H](CCCC([NH3+])C(=O)[O-])C(=O)[O-])C(=O)[O-])[C@@H](NC(C)=O)C(O)O[C@@H]2CO)O[C@H](CO)[C@@H](O)[C@@H]1O",
+            "C#CC[C@H](NC(=O)CC[C@H]([NH3+])C(=O)[O-])C(=O)[O-]",
+            "CC(C)=CCC[C@]1(C)[C@H]2CC=C(C)[C@@H]1C2",
+            "[H][C@@]12CC[C@@H](C)[C@@]13CC=C(C)[C@H](C3)C2(C)C",
+            "[H][C@@]12C[C@H](O)CC[C@]1(C)[C@@]1([H])CC[C@@]3(C)[C@@]([H])(CC[C@]3([H])[C@H](C)CCC[C@@H](C)C(=O)[O-])[C@]1([H])[C@H](O)C2",
+            "CSCC(=O)[C@@H](O)[C@H](O)COP(=O)([O-])[O-]",
+            "[H][C@]12CC[C@]3([H])[C@]([H])(CC[C@]4(C)[C@@H](O)CC[C@@]34[H])[C@@]1(C)CCC(=O)C2",
+            "CC(C)(COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-])[C@@H](O)C(=O)NCCC(=O)NCCSC(=O)C1CCC[C@H](O)C1",
+            "CCCCCCCCCCCCCC(=O)O[C@H](CCCCCCCCCCC)CC(=O)O[C@@H]1[C@@H](NC(=O)C[C@@H](CCCCCCCCCCC)OC(=O)CCCCCCCCCCC)[C@H](OC[C@H]2O[C@H](OP(=O)([O-])[O-])[C@H](NC(=O)C[C@H](O)CCCCCCCCCCC)[C@@H](OC(=O)C[C@H](O)CCCCCCCCCCC)[C@@H]2O)O[C@H](CO)[C@H]1OP(=O)([O-])OP(=O)([O-])OCC[NH3+]",
+            "NC1=NC=NC2=C1N=CN2[C@@H]1O[C@H](COP(=O)([O-])OP(=O)([O-])O)[C@@H](OP(=O)([O-])OP(=O)([O-])[O-])[C@H]1O",
+            "NC(=O)N[C@@H](CC(=O)[O-])C(=O)[O-]",
+            "[H][C@]12CCC(C)=C[C@@]1([H])[C@H](C(C)C)CC[C@@]2(C)O",
+            "[NH3+][C@H](CCl)C(=O)[O-]",
+            "*N[C@@H](CCCCNC(=O)CCCCC)C(*)=O",
+            "O=C([O-])C[C@@H](C(=O)[O-])N(O)O",
+            "[H][C@@]12CC[C@]3([H])[C@]([H])(CC[C@@]4(C)[C@@]3([H])CC[C@]4([H])[C@H](C)CCC[C@@H](C)CO)[C@@]1(C)CC[C@H](O)C2",
+            "CCCCCCCCCCCCCCCCCCCCCCCCC(C(=O)[O-])C(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-]",
+            "CCCCCCCCCCCCCCCC(=O)OC[C@H](COP(=O)([O-])O[C@@H]1[C@H](O)[C@H](O)[C@@H](OP(=O)([O-])[O-])[C@H](OP(=O)([O-])[O-])[C@H]1O)OC(=O)CCCCCCCCCCCCCCC",
+            "CC(C)(COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-])[C@@H](O)C(=O)NCCC(=O)NCCSC(=O)C=CC1=CC=C(O)C=C1",
+            "[H][C@]12[C@H](OC(=O)C3=CC=CC=C3)[C@]3(O)C[C@H](OC(=O)[C@H](O)[C@@H](NC(=O)C4=CC=CC=C4)C4=CC=CC=C4)C(C)=C([C@@H](OC(C)=O)C(=O)[C@]1(C)[C@@H](O)C[C@H]1OC[C@]12OC(C)=O)C3(C)C",
+            "CC(=O)N[C@H]1C(O)O[C@H](CO)[C@@H](O)[C@@H]1O[C@@H]1O[C@H](CO)[C@H](O)[C@H](O)[C@H]1O[C@@H]1O[C@@H](C)[C@@H](O)C[C@@H]1O",
+            "OC[C@]1(O)OC[C@@H](O)[C@@H]1O",
+            "*OC[C@@H](CO[C@@H]1O[C@H](CO)[C@H](O)[C@H](O)[C@H]1O)O*",
+            "O=C([O-])[C@H](O)CC1=CC=C(O)C(O)=C1",
+            "CCCC[C@H](O)C1=C(CO)C2=C(C=C1)C[C@H](C(C)(C)O)O2",
+            "[H][C@@]12CC(=O)[C@@]3([H])C[C@H](O)[C@H](O)C[C@]3(C)[C@@]1([H])CC[C@@]1(C)[C@@]2([H])CC[C@]1([H])[C@H](C)[C@@H](O)[C@H](O)CC(C)C",
+            "[H][C@@]12COC3=C(C=CC(O)=C3)[C@]1([H])OC1=C(CC=C(C)C)C(O)=CC=C12",
+            "*N[C@@H](CSC(=O)CCCCCCCCCCCCCCCCC)C(*)=O",
+            "CCCCCCCCCCCCCC(=O)OC[C@@H](O)COP(=O)([O-])[O-]",
+            "C=C(C)C(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-]",
+            "[H][C@@]1([C@H](C)O)OC(O)[C@H](O)[C@@H]1O",
+            "*N[C@H](C(*)=O)[C@@H](C)O[C@@H]1O[C@@H](C)[C@@H](O)[C@@H](O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2NC(C)=O)[C@@H]1O",
+            "CC(=O)N[C@H]1[C@H](O[C@H]2[C@@H](O)[C@@H](CO)O[C@@H](O[C@H]3[C@H](O)[C@@H](O)C(O)O[C@@H]3CO)[C@@H]2O)O[C@H](CO)[C@@H](O[C@@H]2O[C@H](CO)[C@H](O)[C@H](O)[C@H]2O)[C@@H]1O",
+            "[NH3+][C@H]1[C@@H](O[C@@H](CC(=O)[O-])C(=O)[O-])O[C@H](CO)[C@@H](O)[C@@H]1O",
+            "CC(C)(COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-])[C@@H](O)C(=O)NCCC(=O)NCCSC(=O)CC1(O)CCCCC1",
+            "*N[C@@H](CCCN(C)C(N)=[NH2+])C(*)=O",
+            "CSC[C@H](NC(=O)CC[C@H]([NH3+])C(=O)[O-])C(=O)NCC(=O)[O-]",
+            "[H][C@]12CC[C@]3([H])[C@@]([H])([C@@](C)(O)CCC=C(C)C)CC[C@@]3(C)[C@]1(C)CC[C@@]1([H])C(C)(C)[C@@H](O)CC[C@]21C",
+            "C[NH2+]C[C@H](O)C1=CC=C(O)C=C1",
+            "COC1=CC(C[C@H](CO)[C@@H](CO)CC2=CC=C(O)C(OC)=C2)=CC=C1O",
+            "*C(=O)N[C@@H](CO[C@@H]1O[C@H](CO)[C@@H](O[C@@H]2O[C@H](CO)[C@H](O[C@@H]3O[C@H](CO)[C@H](O)[C@H](O)[C@H]3NC(C)=O)[C@H](O[C@]3(C(=O)[O-])C[C@H](O)[C@@H](NC(C)=O)[C@]([H])([C@H](O)[C@@H](CO)O[C@]4(C(=O)[O-])C[C@H](O)[C@@H](NC(C)=O)[C@]([H])([C@H](O)[C@H](O)CO)O4)O3)[C@H]2O)[C@H](O)[C@H]1O)[C@@H](*)O",
+            "CCCCC[C@H](C)[NH3+]",
+            "CC(C)[C@@H]([NH3+])C(=O)[O-]",
+            "O=P([O-])([O-])OC[C@@H](O)CO",
+            "[H][C@]12CC[C@]3([H])[C@]([H])(C[C@H](O)[C@@]4(C)[C@@]3([H])CC[C@]4([H])[C@H](C)CCC(=O)NCCS(=O)(=O)[O-])[C@@]1(C)CC[C@@H](OS(=O)(=O)[O-])C2",
+            "[NH3+][C@@H](CC1=CC(I)=C(OC2=CC(I)=C(OS(=O)(=O)[O-])C(I)=C2)C(I)=C1)C(=O)[O-]",
+            "[H][C@]12C[C@@]1(C)[C@]1([H])CCC(C(=O)[O-])=C1C[C@@]1(CO)CC[C@]3(C)CC[C@H](C(C)C)[C@@]3([H])[C@@]12[H]",
+            "[NH3+]CC1=CC(COC2=CC=C(CCNC(=O)CC[C@H]([NH3+])C(=O)[O-])C=C2)=CO1",
+            "NC1=NC2=C(N=C([C@H](O)[C@H](O)COP(=O)([O-])[O-])CN2)C(=O)N1",
+            "[H][C@@]12CC[C@]3([H])[C@]([H])(CC[C@]4(C)[C@@H](O[C@@H]5O[C@H](C(=O)[O-])[C@@H](O)[C@H](O)[C@H]5O)CC[C@@]34[H])[C@@]1(C)CC[C@@H](O)C2",
+            "CN1C(=O)C2=CC=CC=C2NC(=O)[C@]12O[C@@H]2C1=CC=CC=C1",
+            "O=P([O-])([O-])O[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O",
+        ]),
+        ("rhea_isotope_wildcard", vec![
+            "[1*][C@@H]1O[C@@H]2COP(=O)([O-])O[C@H]2[C@H]1[2*]",
+        ]),
+        ("rhea_bond_stereo", vec![
+            "*C1=C(*)C(*)=C(C2=C(O[C@@H]3O[C@H](CO)[C@@H](O)[C@H](O)[C@H]3O[C@@H]3O[C@H](CO)[C@@H](O)[C@H](O)[C@H]3O)C(=O)C3=C(O2)/C(*)=C(*)\\C(*)=C/3*)C(*)=C1*",
+            "CC1=C(/C=C/C(C)=C/C=C/C(C)=C/CO)C(C)(C)CC=C1",
+            "CC/C=C\\C/C=C\\C/C=C\\CCCCCCCCCC(=O)[O-]",
+            "CSC1=C(CCC(C)CCCC(C)CCCC(C)CCCC(C)CCCC(C)CCCC(C)C)C(=O)C2=C(/C=C\\S2)C1=O",
+            "[NH3+]C(CO)CO/C=C/[C@H]([NH3+])C(=O)[O-]",
+            "[H][C@@]12CC[C@]([H])([C@H](C)CCC(=O)C(C)(C)O)[C@@]1(C)CCC/C2=C\\C=C1\\C[C@@H](O)CCC1=C",
+            "C/[N+]([O-])=N/CO",
+            "[H][C@@]12CC/C3=C/C(=O)CC[C@]3(C)[C@@]1([H])CC[C@@]1(C)[C@@]2([H])CC[C@]1([H])[C@H](C)CC[C@@H](C)C(C)C",
+            "CC/C=C\\C/C=C\\C/C=C\\C=C\\C(C/C=C\\C/C=C\\CCC(=O)[O-])OO",
+            "*C[C@H](C)C[C@H](C)/C=C(\\C)C(=O)O[C@H]1[C@H](O)[C@@H](CO)O[C@H](O[C@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)[C@@H]1OC(*)=O",
+            "[H][C@]12OC=C[C@@]1([H])C1=C(O)/C3=C(/C=C/1O2)C(/O)=C1/CC(O)=CC(=O)/C1=C\\3O",
+            "O=C1C2=C(/C=C(O)\\C=C/2O)OC(C2=CC=C(O)C(O)=C2)C1O",
+            "C=CC1=CNC(/C=C2\\[NH+]=C(/C=C3\\N/C(=C\\C4=[NH+]C(C=C)C(C)=C4C=C)C(C)=C3CCC(=O)[O-])C(CCC(=O)[O-])=C2C)=C1C",
+            "CCCCC/C=C\\C[C@H](/C=C/C=C\\CCCCC(=O)[O-])OO",
+            "CCCCCCCC/C=C\\CCCCCCCC(=O)O[C@@H](CO)COC(=O)CCCCCCCCCCCCCCCCC",
+            "CC(C)=CCC/C(C)=C/CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\COP(=O)([O-])O[C@@H]1O[C@H](CO)[C@@H](O)[C@@H]1O",
+            "CC1=C(/C=C/C(C)=C/C=C/C(C)=C/CO)C(C)(C)CCC1",
+            "CCCCCCCCC/C=C/CCC[C@@H](O)[C@@H](O)[C@H](CO)NC(=O)CCCCCCCCCCCCCCCCCCCCCCC",
+            "CCCCC/C=C\\C/C=C\\C=C\\C(C/C=C\\CCCC(=O)OC)OO",
+            "[H][C@@]12C[C@]3(O)/C(C)=C4/CC[C@@H](C)[C@]4([H])CC[C@H](C)[C@@]3([H])C[C@@]1(C)CC[C@@H]2C(C)C",
+            "CC/C=C\\CC(/C=C/C=C\\C/C=C\\C/C=C\\CCCCCC(=O)[O-])OO",
+            "C[C@@]12CC(=O)N[C@@]13C[C@H]1[C@@H](CCC(=O)[O-])[C@](C)(CC(N)=O)C4=[N+]1[Ni-2]15N6/C(=C\\C(=[N+]31)[C@H]2CCC(=O)[O-])[C@@H](CC(=O)[O-])[C@H](CCC(=O)[O-])/C6=C1\\C(=O)CC[C@@H]2\\C1=[N+]\\5[C@H](C4)[C@H]2CC(=O)[O-]",
+            "CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\COP(=O)([O-])OP(=O)([O-])O[C@H]1O[C@H](CO)[C@H](O)[C@H](O[C@@H]2O[C@@H](C)[C@H](O)[C@@H](O)[C@H]2O)[C@H]1O",
+            "CCCCCCCC/C=C\\CCCCCCCC(=O)OC[C@H](COP(=O)([O-])[O-])OC(=O)CCCCCCCCCCCCC",
+            "CCCCC[C@H]1O[C@H]1C[C@@H](/C=C/C=C\\C/C=C\\CCCC(=O)[O-])OO",
+            "COC1=C(C/C=C(\\C)CC/C=C(\\C)[C@H](O)CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(=O)([O-])OP(=O)([O-])OC[C@H]2O[C@@H](N3C=NC4=C3N=CN=C4N)[C@H](O)[C@@H]2OP(=O)([O-])[O-])C(O)=C2C(=O)OCC2=C1C",
+            "*/C=C\\OC[C@H](COP(=O)([O-])[O-])OC(*)=O",
+            "COC1=C(OC)C2=C(C=C1)CC(=O)C1=C(/C=C3\\OCO/C3=C/1)CCN(C)C2",
+            "CC(=O)CC[C@H]1C2=C(O)/C3=C(/C=C/2O[C@@H]1O)C(=O)C1=C(C3=O)C(O)=CC([O-])=C1",
+            "CC1=C(/C=C/C(C)=C\\C=C\\C(C)=C\\C=O)C(C)(C)CCC1",
+            "COC1=CC=C([C@@]2(O)C3=C(C=CC(/C=C/[C@@]4(C)CCC(C)(C)CO4)=C3O)NC(=O)[C@@H]2OC)C=C1",
+            "C/C(=C\\CC/C(C)=C/CO)CO",
+            "O=C([O-])C/C=C/C(=O)C(=O)[O-]",
+            "CCCCCCCC/C=C\\CCCCCCCC(=O)OC[C@H](COP(=O)([O-])OC[C@@H](O)COP(=O)([O-])[O-])OC(=O)CCCCCCC/C=C\\CCCCCCCC",
+            "O=C1/C=C2/C=CN/C2=C/C1=O",
+            "[H][C@@]12CC[C@]([H])([C@H](C)CCCC(C)(C)O[C@@H]3O[C@H](C(=O)[O-])[C@@H](O)[C@H](O)[C@H]3O)[C@@]1(C)CCC/C2=C\\C=C1\\C[C@@H](O)C[C@H](O)C1=C",
+            "[H][C@@]12CC[C@]([H])([C@H](C)CCCC(C)C)[C@@]1(C)CCC/C2=C\\C=C1\\C[C@@H](O)C[C@H](O)C1=C",
+            "COC1=CC(/C=C/C(=O)[O-])=CC(OC)=C1OC(=O)[C@@H](O)CC(=O)[O-]",
+            "C=CC(=C)CC/C=C(\\C)CCC=C(C)C",
+            "C[C@@]1(CC(=O)[O-])/C2=C/C3=C(CC(=O)[O-])C(CCC(=O)[O-])=C(/C=C4\\N=C(/C=C5\\N/C(=C\\C(=N2)[C@H]1CCC(=O)[O-])[C@@](C)(CC(=O)[O-])[C@@H]5CCC(=O)[O-])C(CC(=O)[O-])=C4CCC(=O)[O-])N3",
+            "[H][C@@]12[C@@H](O)/C3=C(/C(=O)C4=C(C=CC=C4O)[C@@]3(C)O)C(=O)[C@]1(O)C(=O)C(C(N)=O)=C([O-])[C@H]2[NH+](C)C",
+            "[H][C@@]12CC/C3=C/C(=O)CC[C@]3(C)[C@@]1([H])[C@@H](O)C[C@]1(CO)[C@@H](C(=O)CO)CC[C@]12[H]",
+            "[H][C@@]12CC3=C(CN1CCC1=C/C4=C(\\C=C/12)OCO4)C1=C(C=C3)OCO1",
+            "CCCCCC/C=C\\CCCCCCCC(=O)O[C@H](COC(=O)CCCCCCCCCCCCCCC)COP(=O)([O-])OCC[N+](C)(C)C",
+            "CC(/C=C/C=C(C)/C=C/C(=O)[C@]1(C)C[C@@H](O)CC1(C)C)=C\\C=C\\C=C(C)\\C=C\\C=C(C)\\C=C\\[C@@]12O[C@]1(C)C[C@@H](O)CC2(C)C",
+            "CCCCCCCCC/C=C\\CCC[C@@H](O)[C@@H](O)[C@@H]([NH3+])CO",
+            "CC(C)=CCC/C(C)=C\\COP(=O)([O-])OP(=O)([O-])[O-]",
+            "CC(C)(COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-])[C@@H](O)C(=O)NCCC(=O)NCCSC(=O)/C1=C2\\CCC(=O)[C@@]2(C)CC[C@H]1O",
+            "COC1=C(O)C(C/C=C(\\C)CC/C=C(\\C)CC/C=C(\\C)CC/C=C(\\C)CC/C=C(\\C)CC/C=C(\\C)CC/C=C(\\C)CC/C=C(\\C)CC/C=C(\\C)CCC=C(C)C)=C(C)C(O)=C1",
+            "[NH3+]CCCCNC(=O)/C=C/C1=CC(O)=C(O)C=C1",
+            "*C(=O)N[C@@H](COP(=O)([O-])OCC[N+](C)(C)C)[C@H](O)/C=C/CCCCCCCCCCCCC",
+            "[H]/C(C)=C1\\C[C@@H](C)[C@@](C)(O)C(=O)OCC2=CC[NH+]3CC[C@@]([H])(OC1=O)[C@@]23[H]",
+            "[H][C@@]12C/C=C3/C[C@@H](O)CC[C@]3(C)[C@@]1([H])CC[C@@]1(C)[C@@]2([H])CC[C@]1([H])[C@H](C)[C@H](O)CCC(C)C",
+            "[H][C@]12C[C@@H](O)[C@H](/C=C/[C@@H](O)CCCC(C)O)[C@@]1([H])C/C(=C/CCCC(=O)[O-])O2",
+            "CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\CC/C(C)=C\\COP(=O)([O-])[O-]",
+            "CCCCCCCC/C=C\\CCCCCCCCCC(=O)CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-]",
+            "*C(=O)O[C@H]1CC[C@@]2(C)/C(=C\\C[C@@]3([H])[C@]4([H])CC[C@]([H])([C@H](C)CCCC(C)C)[C@@]4(C)CC[C@@]32[H])C1",
+            "*C1=C(*)C2=C(OC1=O)/C(*)=C1/O/C(*)=C(*)\\C1=C\\2OC",
+            "NC1=NC2=C(/N=C\\N2[C@@H]2O[C@@H]3COP(=O)([O-])O[C@H]4[C@@H](O)[C@H](N5/C=N\\C6=C5N=C(N)NC6=O)O[C@@H]4COP(=O)([O-])O[C@H]3[C@H]2O)C(=O)N1",
+            "CC(=O)N[C@@H](C/C1=C/NC2=CC=CC=C21)C(=O)[O-]",
+            "*O[C@H]1[C@@H](O)[C@H](N2C=NC3=C2N/C2=N/C(C)=C(/CC[C@H]([NH3+])C(=O)[O-])N2C3=O)O[C@@H]1COP(*)(=O)[O-]",
+            "CC(=O)N[C@H]1[C@@H](OP(=O)([O-])OP(=O)([O-])OC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(\\C)CC/C=C(\\C)CCC=C(C)C)O[C@H](CO)[C@@H](O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)[C@@H]1O",
+            "CC(=O)N[C@H]1[C@@H](O[C@@H]2[C@@H](NC(C)=O)[C@@H](OP(=O)([O-])OP(=O)([O-])OC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(\\C)CC/C=C(\\C)CC/C=C(\\C)CCC=C(C)C)O[C@H](C)[C@H]2NC(C)=O)O[C@H](CO)[C@H](O[C@H]2O[C@H](CO)[C@H](O[C@H]3O[C@H](CO)[C@H](O[C@H]4O[C@H](CO)[C@H](O[C@H]5O[C@H](CO)[C@H](O)[C@H](O)[C@H]5NC(C)=O)[C@H](O)[C@H]4NC(C)=O)[C@H](O)[C@H]3NC(C)=O)[C@H](O)[C@H]2NC(C)=O)[C@@H]1O",
+            "O=C([O-])CCC(=O)/C=C\\C=C(\\O)C(=O)[O-]",
+        ]),
     ]
 }
 
@@ -376,6 +621,30 @@ fn smiles_parsing(c: &mut Criterion) {
         });
     }
     group_wild.finish();
+    let mut group_atom_stereo = c.benchmark_group("smiles_parsing/atom_stereo");
+    for (name, input) in atom_stereo_inputs().iter() {
+        group_atom_stereo.bench_with_input(BenchmarkId::from_parameter(name), input, |b, input| {
+            b.iter(|| {
+                let result = Smiles::parse_bytes(black_box(input));
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_atom_stereo.finish();
+
+    let reaction = "[C@:7]1(CC1)1CC1>>[C@@:7]1(CC1)1CC1";
+    let cx = "C12(CC2)CC1 |C:4.5,0.2|";
+    let config = SmilesIoConfig::chemaxon();
+    c.bench_function("smiles_parsing/reaction/side_local_rings", |b| {
+        b.iter(|| {
+            black_box(ReactionSmiles::parse(black_box(reaction)).unwrap());
+        });
+    });
+    c.bench_function("smiles_parsing/cx/reverse_closures", |b| {
+        b.iter(|| {
+            black_box(Smiles::parse_with(black_box(cx), &config).unwrap());
+        });
+    });
 }
 
 fn extended_smiles_parsing(c: &mut Criterion) {
@@ -530,7 +799,99 @@ fn extended_smiles_parsing(c: &mut Criterion) {
         });
     }
     group_cx.finish();
+    let mut group_atom_stereo = c.benchmark_group("extended_smiles_parsing/atom_stereo");
+    for (name, input) in atom_stereo_inputs().iter() {
+        group_atom_stereo.bench_with_input(BenchmarkId::from_parameter(name), input, |b, input| {
+            b.iter(|| {
+                let result = parse_extended_smiles_bytes(black_box(input));
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_atom_stereo.finish();
+
+    let reaction = "[C@:7]1(CC1)1CC1>>[C@@:7]1(CC1)1CC1";
+    let cx = "C12(CC2)CC1 |C:4.5,0.2|";
+    let config = SmilesIoConfig::chemaxon();
+    c.bench_function("extended_smiles_parsing/reaction/side_local_rings", |b| {
+        b.iter(|| {
+            black_box(parse_extended_reaction_smiles(black_box(reaction)).unwrap());
+        });
+    });
+    c.bench_function("extended_smiles_parsing/cx/reverse_closures", |b| {
+        b.iter(|| {
+            black_box(parse_extended_smiles_bytes_with(black_box(cx.as_bytes()), &config).unwrap());
+        });
+    });
 }
 
-criterion_group!(benches, smiles_parsing, extended_smiles_parsing);
+fn corpus_parsing(c: &mut Criterion) {
+    let corpus = corpus_inputs();
+    let mut basic = c.benchmark_group("smiles_parsing/corpus");
+    for (name, inputs) in &corpus {
+        for input in inputs {
+            Smiles::parse(input).unwrap();
+        }
+        basic.throughput(Throughput::Elements(inputs.len() as u64));
+        basic.bench_with_input(BenchmarkId::from_parameter(name), inputs, |b, inputs| {
+            b.iter(|| {
+                for input in inputs {
+                    black_box(Smiles::parse(black_box(input)).unwrap());
+                }
+            });
+        });
+    }
+    basic.finish();
+    let mut extended = c.benchmark_group("extended_smiles_parsing/corpus");
+    for (name, inputs) in &corpus {
+        for input in inputs {
+            parse_extended_smiles_bytes(input.as_bytes()).unwrap();
+        }
+        extended.throughput(Throughput::Elements(inputs.len() as u64));
+        extended.bench_with_input(BenchmarkId::from_parameter(name), inputs, |b, inputs| {
+            b.iter(|| {
+                for input in inputs {
+                    black_box(parse_extended_smiles_bytes(black_box(input.as_bytes())).unwrap());
+                }
+            });
+        });
+    }
+    extended.finish();
+    let mut basic_raise = c.benchmark_group("smiles_parsing/parse_raise");
+    for (name, inputs) in &corpus {
+        basic_raise.throughput(Throughput::Elements(inputs.len() as u64));
+        basic_raise.bench_with_input(BenchmarkId::from_parameter(name), inputs, |b, inputs| {
+            b.iter(|| {
+                for input in inputs {
+                    let parsed = Smiles::parse(black_box(input)).unwrap();
+                    let raised: Molecule = parsed.as_table_ir().try_into_ir(&()).unwrap();
+                    black_box(raised);
+                }
+            });
+        });
+    }
+    basic_raise.finish();
+    let mut extended_raise = c.benchmark_group("extended_smiles_parsing/parse_raise");
+    for (name, inputs) in &corpus {
+        extended_raise.throughput(Throughput::Elements(inputs.len() as u64));
+        extended_raise.bench_with_input(BenchmarkId::from_parameter(name), inputs, |b, inputs| {
+            b.iter(|| {
+                for input in inputs {
+                    let parsed = parse_extended_smiles_bytes(black_box(input.as_bytes())).unwrap();
+                    let table = table_ir::Molecule::try_from(parsed).unwrap();
+                    let raised: Molecule = table.try_into_ir(&()).unwrap();
+                    black_box(raised);
+                }
+            });
+        });
+    }
+    extended_raise.finish();
+}
+
+criterion_group!(
+    benches,
+    smiles_parsing,
+    extended_smiles_parsing,
+    corpus_parsing
+);
 criterion_main!(benches);
