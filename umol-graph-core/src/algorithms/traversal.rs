@@ -237,6 +237,24 @@ impl Graph {
         )
     }
 
+    /// Collects the complete depth-first event sequence for ordered candidate roots.
+    ///
+    /// # Semantic properties
+    ///
+    /// The result is exactly the sequence emitted by [`Graph::visit_depth_first`]
+    /// with the same roots and a visitor that always continues.
+    pub fn enumerate_depth_first_events<R>(&self, roots: R) -> Vec<DepthFirstEvent>
+    where
+        R: IntoIterator<Item = NodeId>,
+    {
+        let mut events = Vec::new();
+        let _: ControlFlow<()> = self.visit_depth_first(roots, |event| {
+            events.push(event);
+            ControlFlow::Continue(())
+        });
+        events
+    }
+
     /// Visits each candidate root's tree in breadth-first order using CSR neighbors.
     ///
     /// Pass [`Graph::node_ids`] and no depth limit to visit all components.
@@ -259,6 +277,30 @@ impl Graph {
             |node| self.neighbors(node).iter().copied(),
             visitor,
         )
+    }
+
+    /// Collects the complete breadth-first event sequence for ordered candidate roots.
+    ///
+    /// # Semantic properties
+    ///
+    /// The result is exactly the sequence emitted by [`Graph::visit_breadth_first`]
+    /// with the same roots and depth limit and a visitor that always continues.
+    /// Roots are sequential and share visitation state; limited trees need not
+    /// cover entire connected components.
+    pub fn enumerate_breadth_first_events<R>(
+        &self,
+        roots: R,
+        max_depth: Option<usize>,
+    ) -> Vec<BreadthFirstEvent>
+    where
+        R: IntoIterator<Item = NodeId>,
+    {
+        let mut events = Vec::new();
+        let _: ControlFlow<()> = self.visit_breadth_first(roots, max_depth, |event| {
+            events.push(event);
+            ControlFlow::Continue(())
+        });
+        events
     }
 
     /// Nodes within `max_depth` edges of `source` (inclusive) as `(node, distance)`

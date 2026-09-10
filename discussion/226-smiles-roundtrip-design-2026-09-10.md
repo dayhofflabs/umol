@@ -1162,20 +1162,20 @@ Sorting is an output operation, not a change to BFS queue order. Component order
 first unreached candidate roots. With a depth limit, later roots can reach previously unvisited
 parts of the same connected component; the component interpretation requires unrestricted depth.
 
-### The current LIFO flood fill
+### Replaced LIFO flood fill
 
-Despite ConnectedComponentsAlgorithm::Bfs and its documentation, the current implementation in
-[components.rs](../umol-graph-core/src/algorithms/connectivity/components.rs) uses Vec::pop and
-marks all unseen neighbors when pushing them. It is a LIFO reachability flood fill. It finds
-components correctly, and sorting their members hides visitation order in the returned result,
-but it supplies neither BFS distances nor the proposed nested DFS event semantics.
+Before S1c, despite ConnectedComponentsAlgorithm::Bfs and its documentation, the implementation in
+[components.rs](../umol-graph-core/src/algorithms/connectivity/components.rs) used Vec::pop and
+marked all unseen neighbors when pushing them. It was a LIFO reachability flood fill. It found
+components correctly, and sorting their members hid visitation order in the returned result,
+but it supplied neither BFS distances nor the proposed nested DFS event semantics.
 
 For edges A–B, A–C, and B–C, that flood fill discovers B and C from A before exploring either.
 Recursive-style DFS instead explores one and discovers the other through it. A stack alone does
 not establish the DFS frame contract.
 
-The agreed direction is to replace this component flood-fill loop with collection over the shared
-BFS implementation, retaining sorted component results and the explicit Bfs selection. No separate
+S1c replaces this component flood-fill loop with collection over the shared BFS implementation,
+retaining sorted component results and the explicit Bfs selection. No separate
 LIFO algorithm selector is needed for the initial design. DFS and BFS remain separate traversal
 implementations using the common connectivity interface; a universal event engine is unnecessary.
 
@@ -1277,11 +1277,11 @@ algorithm are settled above. Exact diagnostic variants and cohesive helper signa
 reconciled with the public contract before their implementing subitem; this is not permission to
 introduce new wrappers, strategies, or chemistry transformations. Implement the supported inverse
 domain with explicit failures, not a promise of general valence inversion or minimum encodings.
-The plan below sequences the work; S0 is complete.
+The plan below sequences the work; S0 and S1 are complete.
 
 ## Staged implementation plan
 
-S0a–S0c and S1a–S1b are complete; S1c and later subitems are pending.
+S0 and S1 are complete; S2a and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1372,7 +1372,7 @@ implemented behavior, future assertions, and independent outstanding validation.
   independently, maximum-depth boundaries, duplicate roots, disconnected components, exact order,
   and Break with no further callbacks. Document that depth-limited multi-root trees are not
   necessarily full components and are not multi-source BFS.
-- **S1c — Event collectors and component visitor.** Modules: traversal.rs and
+- **S1c — Event collectors and component visitor (completed 2026-09-10).** Modules: traversal.rs and
   algorithms/connectivity/components.rs. **Additive (green).** [dep: S1a, S1b]
   Add Graph::enumerate_depth_first_events and enumerate_breadth_first_events through their visitors.
   Add visit_connected_components using unrestricted BFS, collecting/sorting one component at
@@ -2236,6 +2236,92 @@ cargo bench -p umol-graph-core --bench algorithms --offline -- traversal/breadth
 All six measurements completed; the run log is scratch/s1b-core-bench.log. Final diff review
 matches the S1b surface, tests, inline benchmarks, and this record/index. S1c is next: event
 collectors and the component visitor/migration remain pending.
+
+## S1c collectors and components — 2026-09-10
+
+The additions are Graph::enumerate_depth_first_events, Graph::enumerate_breadth_first_events,
+and Graph::visit_connected_components. The collectors retain their visitor's ordered roots
+and, for BFS, Option<usize> depth limit, returning the exact complete event sequence as Vec.
+These open collections add no graph-membership certificate, new constructors, validators,
+transformations, or Python surface. Their contextual guarantees are those of the existing
+Graph traversal visitors; invalid roots retain the visitors' panic-free handling.
+
+The component visitor takes ConnectedComponentsAlgorithm and FnMut(&[NodeId]) -> ControlFlow<B>.
+Graph supplies valid undirected connectivity. With Bfs, unrestricted traversal collects one
+component, sorts its node ids, and visits the borrowed slice at FinishTree. Every node belongs
+to exactly one emitted component; each component is a maximal connected node set. Members are
+ascending and components are ordered by their least node id. Break returns immediately before
+another component is explored. Callback panics/nontermination remain caller-owned. The slice
+is borrowed only for the callback; callers retain a component by copying it.
+
+Graph::enumerate_connected_components retains its signature, selector, ordering, and result
+type, collecting through this visitor. Its old LIFO flood-fill implementation is removed.
+No integrity pass, alternate traversal engine, or additional public helper is introduced.
+Tests compare collectors with visitor sequences and independent references, and components
+with definition-level reachability. Existing BFS FinishTree break tests establish immediate
+termination of the underlying traversal; component tests check propagation and emitted prefixes.
+
+Implemented against source commit 79694704162697e7096384475fd848ee092896da. The public-surface
+audit matches the three additions and the retained enumerate_connected_components method above.
+The event collectors contain only collection through their existing visitors. Component visitation
+uses the existing BFS with one reusable component buffer and sorts it at FinishTree. The old
+connected_components_bfs helper is removed. There are no new reexports, boundary types, or changes
+to the neighborhood/depth APIs scheduled for S2.
+
+Seven new unit cases check empty/isolated graphs, interleaved component membership, loops,
+parallel edges, and Break at the first/middle/last component. Three new properties compare both
+event collectors with their visitors and definition-level references, and components with repeated
+closure under edge incidence. Generated multigraphs are bounded at eight nodes and twenty edges;
+the original DFS/BFS properties retain their laws and generators. The component property also
+checks collector agreement and early-break prefixes. Source review confirms Break is propagated
+from the component callback through the BFS FinishTree callback; S1b's instrumented callback tests
+check that BFS then makes no further root/neighbor/visitor calls.
+
+Validation passed: 1,003 graph-core unit tests, 54 integration tests, and 135 properties, plus all
+three graph-IR component consumer cases. Strict graph-core Clippy with all targets and proptest
+passed, and rustdoc built without warnings. Commands and logs:
+
+```text
+cargo test -p umol-graph-core --features proptest --offline
+    scratch/s1c-tests.log
+cargo test -p umol-graph-ir enumerate_connected_components --offline
+    scratch/s1c-graph-ir-tests.log
+cargo clippy -p umol-graph-core --all-targets --features proptest --offline -- -D warnings
+    scratch/s1c-clippy.log
+cargo doc -p umol-graph-core --no-deps --offline
+    scratch/s1c-doc.log
+```
+
+All 24 benchmark measurements completed on the existing inline examples: six each for DFS event
+collection, BFS event collection, component visitation, and the migrated component enumerator.
+Criterion time point estimates below are in microseconds per operation:
+
+| Example | DFS events | BFS events | Component visitor | Components |
+| --- | ---: | ---: | ---: | ---: |
+| path_64 | 1.5719 | 0.72706 | 0.55926 | 0.58502 |
+| path_1024 | 15.270 | 7.3811 | 6.8372 | 6.6054 |
+| binary_tree_255 | 2.7983 | 2.5289 | 2.2349 | 2.3918 |
+| cycle_64 | 1.3698 | 0.70065 | 0.69514 | 0.72852 |
+| four_hexagons | 0.45190 | 0.40137 | 0.24097 | 0.34119 |
+| loops_parallel_isolated | 0.15954 | 0.16455 | 0.077054 | 0.14111 |
+
+Compared with S0c, component collection has mixed timing changes: the 1,024-node path is
+6.605 µs versus 6.565 µs, the binary tree is 2.392 µs versus 2.752 µs, and the small
+loops/parallel/isolated graph is 0.141 µs versus 0.114 µs. These bounded runs provide baseline
+evidence, not fine rankings; the DFS path_64 interval is notably wider at 1.391–1.894 µs.
+No tuning or repeat campaign was performed. Reproduce with:
+
+```text
+cargo bench -p umol-graph-core --bench algorithms --offline --
+    '(traversal/(depth_first_events|breadth_first_events|component_visitor)|traversal_baseline/components)'
+    --sample-size 20 --warm-up-time 0.1 --measurement-time 0.2
+    --nresamples 1000 --noplot --save-baseline s1c
+```
+
+The run log is scratch/s1c-core-bench.log. cargo fmt --all, its check mode, and git diff --check
+passed. Final diff review covers the agreed public surface, direct visitor composition, unchanged
+existing test laws, and inline benchmark additions. S1 is complete. S2a's neighborhood naming and
+usize migration are next.
 
 ## Staged specification updates
 

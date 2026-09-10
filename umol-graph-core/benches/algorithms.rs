@@ -522,6 +522,35 @@ fn traversal(c: &mut Criterion) {
         });
     }
     breadth_first.finish();
+    let mut depth_first_events = c.benchmark_group("traversal/depth_first_events");
+    for (name, graph) in &graphs {
+        depth_first_events.bench_function(*name, |b| {
+            b.iter(|| black_box(graph).enumerate_depth_first_events(graph.node_ids()));
+        });
+    }
+    depth_first_events.finish();
+    let mut breadth_first_events = c.benchmark_group("traversal/breadth_first_events");
+    for (name, graph) in &graphs {
+        breadth_first_events.bench_function(*name, |b| {
+            b.iter(|| black_box(graph).enumerate_breadth_first_events(graph.node_ids(), None));
+        });
+    }
+    breadth_first_events.finish();
+    let mut component_visitor = c.benchmark_group("traversal/component_visitor");
+    for (name, graph) in &graphs {
+        component_visitor.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).visit_connected_components(
+                    ConnectedComponentsAlgorithm::Bfs,
+                    |component| {
+                        black_box(component);
+                        ControlFlow::<()>::Continue(())
+                    },
+                )
+            });
+        });
+    }
+    component_visitor.finish();
 }
 
 fn biconnected_components(c: &mut Criterion) {

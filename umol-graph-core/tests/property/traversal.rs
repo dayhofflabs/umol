@@ -10,6 +10,8 @@
 //! multigraph domain. Independent edge relaxation checks shortest distances and
 //! reached sets for sequential roots, excluding previous trees. Depth limits,
 //! reversed incidence order, sparse edge ids, and early breaks are included.
+//! Event collectors must equal both the complete visitor sequence and its
+//! definition-level reference for the same roots and depth limit.
 
 use std::collections::{BTreeMap, HashSet};
 use std::ops::ControlFlow;
@@ -237,6 +239,28 @@ fn test_graph_visit_depth_first() {
 }
 
 #[rstest]
+fn test_graph_enumerate_depth_first_events() {
+    proptest!(|(
+        (graph, _) in graph_with_edge_multiset(8, 20),
+        candidates in prop::collection::vec(0u32..8, 0..16),
+    )| {
+        let roots: Vec<_> = candidates.into_iter()
+            .filter(|&node| (node as usize) < graph.node_count()).map(NodeId).collect();
+        let adjacency: Vec<_> = graph.node_ids().map(|node| graph.neighbors(node).to_vec()).collect();
+        let expected = reference_depth_first(&adjacency, &roots);
+        let mut visited = Vec::new();
+        let result = graph.visit_depth_first(roots.iter().copied(), |event| {
+            visited.push(event);
+            ControlFlow::<()>::Continue(())
+        });
+        let actual = graph.enumerate_depth_first_events(roots);
+        prop_assert_eq!(result, ControlFlow::Continue(()));
+        prop_assert_eq!(&actual, &expected);
+        prop_assert_eq!(actual, visited);
+    });
+}
+
+#[rstest]
 fn test_visit_breadth_first() {
     proptest!(|(
         (graph, edges) in graph_with_edge_multiset(8, 20),
@@ -359,5 +383,28 @@ fn test_graph_visit_breadth_first() {
             }
         }
         prop_assert_eq!(actual_trees, expected_trees);
+    });
+}
+
+#[rstest]
+fn test_graph_enumerate_breadth_first_events() {
+    proptest!(|(
+        (graph, _) in graph_with_edge_multiset(8, 20),
+        candidates in prop::collection::vec(0u32..8, 0..16),
+        max_depth in prop::option::of(prop_oneof![0usize..10, Just(usize::MAX)]),
+    )| {
+        let roots: Vec<_> = candidates.into_iter()
+            .filter(|&node| (node as usize) < graph.node_count()).map(NodeId).collect();
+        let adjacency: Vec<_> = graph.node_ids().map(|node| graph.neighbors(node).to_vec()).collect();
+        let expected = reference_breadth_first(&adjacency, &roots, max_depth);
+        let mut visited = Vec::new();
+        let result = graph.visit_breadth_first(roots.iter().copied(), max_depth, |event| {
+            visited.push(event);
+            ControlFlow::<()>::Continue(())
+        });
+        let actual = graph.enumerate_breadth_first_events(roots, max_depth);
+        prop_assert_eq!(result, ControlFlow::Continue(()));
+        prop_assert_eq!(&actual, &expected);
+        prop_assert_eq!(actual, visited);
     });
 }
