@@ -5,7 +5,8 @@ Date: 2026-07-19
 Relates: [094](094-dsl-ast-io-ergonomics-2026-05-07.md),
 [100](100-table-ir-raise-ast-2026-05-27.md),
 [151](151-python-molecule-workflows-2026-07-13.md),
-[153](153-format-parsing-outstanding-tasks-2026-07-18.md)
+[153](153-format-parsing-outstanding-tasks-2026-07-18.md),
+[226](226-smiles-roundtrip-design-2026-09-10.md)
 
 ## Purpose
 
