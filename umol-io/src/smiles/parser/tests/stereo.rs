@@ -1,7 +1,7 @@
 use rstest::rstest;
 
 use super::super::*;
-use crate::table_ir::{StereoAtom, StereoLigand, Winding};
+use crate::table_ir::{BondDirection, BondOrder, StereoAtom, StereoLigand, Winding};
 
 #[rstest]
 #[case::opening("C[C@H]1CCCCO1", vec![StereoAtom { atom: 1, ligands: vec![StereoLigand::Atom(0), StereoLigand::ImplicitHydrogen, StereoLigand::Atom(6), StereoLigand::Atom(2)], winding: Winding::CounterClockwise }])]
@@ -168,4 +168,50 @@ fn test_parse_molecule_assembly(
             .collect::<Vec<_>>(),
         expected_bonds,
     );
+}
+
+#[rstest]
+#[case::forward(vec!["F/C=C/Cl", "Cl/C=C/F"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Rising)), (1, 2, BondOrder::Double, None), (2, 3, BondOrder::Single, Some(BondDirection::Rising))])]
+#[case::both_signs(vec!["F\\C=C\\Cl"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Falling)), (1, 2, BondOrder::Double, None), (2, 3, BondOrder::Single, Some(BondDirection::Falling))])]
+#[case::opposite(vec!["F/C=C\\Cl"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Rising)), (1, 2, BondOrder::Double, None), (2, 3, BondOrder::Single, Some(BondDirection::Falling))])]
+#[case::ring_marker(vec!["C/C=C1CO\\1", "C/C=C/1CO1"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Rising)), (1, 2, BondOrder::Double, None), (2, 4, BondOrder::Single, Some(BondDirection::Rising)), (2, 3, BondOrder::Single, None), (3, 4, BondOrder::Single, None)])]
+#[case::one_sided(vec!["F/C=CCl"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Rising)), (1, 2, BondOrder::Double, None), (2, 3, BondOrder::Single, None)])]
+fn test_parse_molecule_bond_stereo(
+    #[case] inputs: Vec<&str>,
+    #[case] expected: Vec<(u32, u32, BondOrder, Option<BondDirection>)>,
+) {
+    for input in inputs {
+        let basic = parse_molecule(input.as_bytes(), &SmilesIoConfig::default()).unwrap();
+        let extended = parse_extended_smiles_bytes(input.as_bytes()).unwrap();
+        assert_eq!(ExtendedMolecule::from(basic.clone()), extended);
+        let converted = Molecule::try_from(extended).unwrap();
+        assert_eq!(converted, basic);
+        for table in [basic, converted] {
+            assert_eq!(
+                table
+                    .bonds
+                    .iter()
+                    .map(|bond| (
+                        bond.atoms.first(),
+                        bond.atoms.second(),
+                        bond.order,
+                        bond.direction
+                    ))
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+}
+
+#[rstest]
+#[case::rising("C/1CC/1", ParseError::MismatchedRingBondDirections { pos: 6, open_pos: 2 })]
+#[case::falling("C\\1CC\\1", ParseError::MismatchedRingBondDirections { pos: 6, open_pos: 2 })]
+#[case::large_label("C/%99CC/%99", ParseError::MismatchedRingBondDirections { pos: 8, open_pos: 2 })]
+fn test_parse_molecule_bond_stereo_error(#[case] input: &str, #[case] expected: ParseError) {
+    assert_eq!(
+        parse_molecule(input.as_bytes(), &SmilesIoConfig::default()),
+        Err(expected.clone())
+    );
+    assert_eq!(parse_extended_smiles_bytes(input.as_bytes()), Err(expected));
 }

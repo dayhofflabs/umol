@@ -1742,3 +1742,13 @@ match. Run `mol/smiles/sdf_parsing` + resolution conformance (`--features confor
 `#T` and `#C` are stored atom and bond constraint kinds. Their remaining
 frame-correct substructure-matching path is tracked by doc 165. No open work
 remains in this implementation plan.
+
+## Addendum — SMILES frames, 2026-09-09
+
+[224](224-smiles-ring-closure-frame-2026-09-08.md) corrects the assumption that a single TableIR bond
+order can supply every SMILES tetrahedral frame. Ring digits have local positions at both ends;
+opening-order bond storage cannot encode both local orders in general. The parser now finalizes
+explicit complete stereo-atom frames, which raising maps directly to graph IR instead of emitting
+SMILES-derived `#T` constraints. The historical Phase B description above therefore no longer
+applies to SMILES tetrahedral input. Directional-bond `#C` interpretation remains separate; MOL
+parity is still ignored and the wedge/coordinate path is unchanged.

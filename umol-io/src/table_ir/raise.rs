@@ -3,6 +3,8 @@
 //! Implements `TryIntoIr<Molecule> for &Molecule` (and the per-atom and
 //! per-bond analogues). Table IR fields copy to `Lit` / `Undetermined`; IO
 //! raise applies fixed IO ground semantics for resolution.
+//! Explicit atom stereo frames map directly to graph IR; directional bonds
+//! and MOL wedges retain their separate interpretation paths. Raw MOL parity is ignored.
 
 use std::any::Any;
 use std::collections::HashSet;
@@ -419,7 +421,8 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_chem::spin::SpinMultiplicity;
-    use umol_graph_ir::ir::{AtomConstraintsForm, BondId, Entity, StereoAtomId};
+    use umol_graph_core::{EdgeId, GraphRemapping, NodeId, Remapping};
+    use umol_graph_ir::ir::{AtomConstraintsForm, BondId, Entity, MoleculeRemapping, StereoAtomId};
 
     use super::*;
     use crate::ctfile::parse_mol_to_ir;
@@ -427,7 +430,9 @@ mod tests {
     use crate::smiles::{parse_extended_smiles_bytes, Smiles, SmilesIoConfig};
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
-    use crate::table_ir::{Chirality, Molecule as TableMolecule, SourceFormat, StereoAtom};
+    use crate::table_ir::{
+        AtomPair, Chirality, ExtendedMolecule, Molecule as TableMolecule, SourceFormat, StereoAtom,
+    };
 
     #[fixture]
     fn methane() -> TableMolecule {
@@ -1169,5 +1174,216 @@ mod tests {
             validate_bond_direction(&mol, &mol.atom_neighbors(), bond_idx),
             expected
         );
+    }
+
+    #[rstest]
+    #[case::opening_closing("C[C@H]1CCCCO1", "O1CCCC[C@@H]1C", vec![6, 5, 4, 3, 2, 1, 0], vec![6, 0, 5, 4, 3, 2, 1], true)]
+    #[case::mirror("C[C@H]1CCCCO1", "O1CCCC[C@H]1C", vec![6, 5, 4, 3, 2, 1, 0], vec![6, 0, 5, 4, 3, 2, 1], false)]
+    #[case::ring_label("C[C@H]1CCCCO1", "C[C@H]%99CCCCO%99", vec![0, 1, 2, 3, 4, 5, 6], vec![0, 1, 2, 3, 4, 5, 6], true)]
+    #[case::branch_order("N[C@H](F)Cl", "N[C@@H](Cl)F", vec![0, 1, 3, 2], vec![0, 2, 1], true)]
+    #[case::root_hydrogen("[C@H](F)(Cl)Br", "F[C@@H](Cl)Br", vec![1, 0, 2, 3], vec![0, 1, 2], true)]
+    #[case::lone_pair("C[S@](=O)CC", "C[S@@](CC)=O", vec![0, 1, 4, 2, 3], vec![0, 3, 1, 2], true)]
+    #[case::mixed_digits("O1CCC[C@]21CCCC2", "O1CCC[C@@]12CCCC2", (0..9).collect(), (0..10).collect(), true)]
+    #[case::two_closures("O1CCC2CC[C@]12F", "O1CCC2CC[C@@]21F", (0..8).collect(), (0..9).collect(), true)]
+    #[case::explicit_hydrogen("C[C@]1([H])CCCCO1", "C[C@@]1(CCCCO1)[H]", vec![0, 1, 7, 2, 3, 4, 5, 6], vec![0, 1, 7, 2, 3, 4, 5, 6], true)]
+    #[case::later_root("C.[C@H](F)(Cl)Br", "C.F[C@@H](Cl)Br", vec![0, 2, 1, 3, 4], vec![0, 1, 2], true)]
+    fn test_table_molecule_try_into_ir_stereo_presentations(
+        #[case] first: &str,
+        #[case] second: &str,
+        #[case] atoms: Vec<usize>,
+        #[case] bonds: Vec<usize>,
+        #[case] expected: bool,
+        #[values(false, true)] is_extended: bool,
+    ) {
+        let tables = [first, second].map(|input| {
+            if is_extended {
+                TableMolecule::try_from(parse_extended_smiles_bytes(input.as_bytes()).unwrap())
+                    .unwrap()
+            } else {
+                Smiles::parse(input).unwrap().into_table_ir()
+            }
+        });
+        let first: Molecule = (&tables[0]).try_into_ir(&()).unwrap();
+        let second: Molecule = (&tables[1]).try_into_ir(&()).unwrap();
+        let mapping = MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(atoms.into_iter().map(NodeId::from).collect()).unwrap(),
+                Remapping::new(bonds.into_iter().map(EdgeId::from).collect()).unwrap(),
+            ),
+            Remapping::empty(),
+            Remapping::empty(),
+            Remapping::empty(),
+            Remapping::empty(),
+            Remapping::identity(1),
+            Remapping::empty(),
+        );
+        assert_eq!(first.framed_eq_under(&second, &mapping), expected);
+    }
+
+    #[rstest]
+    #[case::opening("C[C@H]1CCCCO1")]
+    #[case::closing("O1CCCC[C@@H]1C")]
+    #[case::multiple_digits("O1CCC[C@]21CCCC2")]
+    #[case::lone_pair("C[S@](=O)CC")]
+    #[case::alkene("F/C=C/F")]
+    #[case::ring_direction("C/C=C1CO\\1")]
+    #[case::conjugated("C/C=C/C=C/C")]
+    fn test_table_molecule_try_into_ir_bond_storage(
+        #[case] input: &str,
+        #[values(false, true)] is_extended: bool,
+        #[values("swap", "rotate", "reverse")] order: &str,
+    ) {
+        let table = if is_extended {
+            TableMolecule::try_from(parse_extended_smiles_bytes(input.as_bytes()).unwrap()).unwrap()
+        } else {
+            Smiles::parse(input).unwrap().into_table_ir()
+        };
+        let mut images: Vec<_> = (0..table.bonds.len()).collect();
+        match order {
+            "swap" => images.swap(0, 1),
+            "rotate" => images.rotate_left(1),
+            "reverse" => images.reverse(),
+            _ => unreachable!(),
+        }
+        let edges = Remapping::new(images.into_iter().map(EdgeId::from).collect()).unwrap();
+        let mut reordered = table.clone();
+        reordered.bonds = edges.remap_vec(reordered.bonds);
+        assert_eq!(reordered.stereo_atoms, table.stereo_atoms);
+        assert_eq!(
+            TableMolecule::try_from(ExtendedMolecule::from(reordered.clone())).unwrap(),
+            reordered
+        );
+        let first: Molecule = (&table).try_into_ir(&()).unwrap();
+        let second: Molecule = (&reordered).try_into_ir(&()).unwrap();
+        let mapping = MoleculeRemapping::new(
+            GraphRemapping::new(Remapping::identity(table.atoms.len()), edges),
+            Remapping::empty(),
+            Remapping::empty(),
+            Remapping::empty(),
+            Remapping::empty(),
+            Remapping::identity(table.stereo_atoms.len()),
+            Remapping::empty(),
+        );
+        assert!(first.framed_eq_under(&second, &mapping));
+    }
+
+    #[rstest]
+    #[case::traversal("F/C=C/Cl", vec![Some(1)], "Cl/C=C/F", vec![Some(1)])]
+    #[case::both_signs("F/C=C/Cl", vec![Some(1)], "F\\C=C\\Cl", vec![Some(1)])]
+    #[case::opposite("F/C=C/Cl", vec![Some(1)], "F/C=C\\Cl", vec![Some(0)])]
+    #[case::substituent("F/C(Cl)=C/Br", vec![Some(1)], "FC(/Cl)=C/Br", vec![Some(1)])]
+    #[case::branch_order("F/C(Cl)=C/Br", vec![Some(1)], "Cl/C(F)=C\\Br", vec![Some(0)])]
+    #[case::ring_marker("C/C=C1CO\\1", vec![Some(0)], "C/C=C/1CO1", vec![Some(0)])]
+    #[case::conjugated("C/C=C/C=C/C", vec![Some(1), Some(1)], "C\\C=C\\C=C\\C", vec![Some(1), Some(1)])]
+    #[case::conjugated_opposite("C/C=C/C=C/C", vec![Some(1), Some(1)], "C/C=C/C=C\\C", vec![Some(1), Some(0)])]
+    #[case::unspecified("FC=CCl", vec![None], "F/C=CCl", vec![None])]
+    fn test_table_molecule_try_into_ir_bond_presentations(
+        #[case] first: &str,
+        #[case] first_cosets: Vec<Option<u32>>,
+        #[case] second: &str,
+        #[case] second_cosets: Vec<Option<u32>>,
+    ) {
+        for (input, expected) in [(first, first_cosets), (second, second_cosets)] {
+            let basic = Smiles::parse(input).unwrap().into_table_ir();
+            let extended = parse_extended_smiles_bytes(input.as_bytes()).unwrap();
+            assert_eq!(ExtendedMolecule::from(basic.clone()), extended);
+            let converted = TableMolecule::try_from(extended).unwrap();
+            assert_eq!(converted, basic);
+            for table in [basic, converted] {
+                let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+                let actual: Vec<_> = table
+                    .bonds
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, bond)| bond.order == TableBondOrder::Double)
+                    .map(|(index, _)| {
+                        molecule
+                            .bond(BondId::from(index))
+                            .attributes
+                            .constraints
+                            .cis_trans_stereo()
+                            .cloned()
+                    })
+                    .collect();
+                assert_eq!(
+                    actual,
+                    expected
+                        .iter()
+                        .map(|coset| coset
+                            .map(|value| CisTransStereoForm::stereo(StereoCoset::Lit(value))))
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::alkene("F/C=C/Cl", vec![3, 2, 1, 0], vec![Some(1)])]
+    #[case::opposite("F/C=C\\Cl", vec![3, 2, 1, 0], vec![Some(0)])]
+    #[case::branched("F/C(Cl)=C/Br", vec![4, 3, 2, 1, 0], vec![Some(0)])]
+    #[case::conjugated("C/C=C/C=C/C", vec![5, 4, 3, 2, 1, 0], vec![Some(1), Some(1)])]
+    #[case::unspecified("F/C=CCl", vec![3, 2, 1, 0], vec![None])]
+    #[case::one_direction("F/C=C/Cl", vec![1, 0, 2, 3], vec![Some(1)])]
+    fn test_table_molecule_try_into_ir_bond_endpoints(
+        #[case] input: &str,
+        #[case] atoms: Vec<usize>,
+        #[case] expected: Vec<Option<u32>>,
+        #[values(false, true)] is_extended: bool,
+    ) {
+        let mut table = if is_extended {
+            TableMolecule::try_from(parse_extended_smiles_bytes(input.as_bytes()).unwrap()).unwrap()
+        } else {
+            Smiles::parse(input).unwrap().into_table_ir()
+        };
+        let atoms = Remapping::new(atoms.into_iter().map(NodeId::from).collect()).unwrap();
+        table.atoms = atoms.remap_vec(table.atoms);
+        for bond in &mut table.bonds {
+            let first = atoms.map(NodeId(bond.atoms.first())).0;
+            let second = atoms.map(NodeId(bond.atoms.second())).0;
+            bond.atoms = AtomPair::new(first, second);
+            if first > second {
+                bond.direction = bond.direction.map(|direction| direction.flip());
+            }
+        }
+        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let actual: Vec<_> = table
+            .bonds
+            .iter()
+            .enumerate()
+            .filter(|(_, bond)| bond.order == TableBondOrder::Double)
+            .map(|(index, _)| {
+                molecule
+                    .bond(BondId::from(index))
+                    .attributes
+                    .constraints
+                    .cis_trans_stereo()
+                    .cloned()
+            })
+            .collect();
+        assert_eq!(
+            actual,
+            expected
+                .into_iter()
+                .map(|coset| coset.map(|value| CisTransStereoForm::stereo(StereoCoset::Lit(value))))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[rstest]
+    #[case::dangling("F/C=C", RaiseError::DanglingBondDirection { bond: 1 })]
+    #[case::conflict("F/C(\\Cl)=CF", RaiseError::CisTransConflict { atom: 1 })]
+    fn test_table_molecule_try_into_ir_bond_storage_error(
+        #[case] input: &str,
+        #[case] expected: RaiseError,
+        #[values(false, true)] is_extended: bool,
+    ) {
+        let mut table = if is_extended {
+            TableMolecule::try_from(parse_extended_smiles_bytes(input.as_bytes()).unwrap()).unwrap()
+        } else {
+            Smiles::parse(input).unwrap().into_table_ir()
+        };
+        table.bonds.reverse();
+        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        assert_eq!(result, Err(expected));
     }
 }

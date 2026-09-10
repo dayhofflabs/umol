@@ -697,13 +697,28 @@ def test_molecule_from_smiles_chemistry_model_stereo():
         ),
     )
 
+    with pytest.raises(
+        ContradictionError,
+        match=r"^stereo inconsistency: stereo atom StereoAtomId\(0\) cannot be realized$",
+    ):
+        Molecule.from_smiles(
+            "C[C@H](N)O",
+            chemistry_model=chemistry_model,
+            resolve_config=ResolveConfig(
+                aromaticity=AromaticityResolveConfig(),
+                stereo=StereoResolveConfig(
+                    tetrahedral_stereo_failure=StereoFailurePolicy.Remove
+                ),
+            ),
+        )
+
     molecule = Molecule.from_smiles(
         "C[C@H](N)O",
         chemistry_model=chemistry_model,
         resolve_config=ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                tetrahedral_stereo_failure=StereoFailurePolicy.Remove
+                stereo_atom_failure=StereoFailurePolicy.Remove
             ),
         ),
     )
@@ -810,7 +825,7 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
             "C[S@]C",
             {},
             ModelConversionError,
-            "tetrahedral stereo at atom 1 with 2 ligands, expected 3 or 4 ligands",
+            "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral",
         ),
         (
             "[nH]1cccc1",
@@ -948,6 +963,123 @@ def test_molecule_from_smiles_ownership():
         stereo=default.stereo,
     )
     assert resolve_config == ResolveConfig.default()
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "expected"),
+    [
+        pytest.param("C[C@H]1CCCCO1", "O1CCCC[C@@H]1C", True, id="opening-closing"),
+        pytest.param("C[C@H]1CCCCO1", "O1CCCC[C@H]1C", False, id="mirror"),
+        pytest.param("N[C@H](F)Cl", "N[C@@H](Cl)F", True, id="branch-order"),
+        pytest.param("[C@H](F)(Cl)Br", "F[C@@H](Cl)Br", True, id="root-hydrogen"),
+        pytest.param("C[S@](=O)CC", "C[S@@](CC)=O", True, id="lone-pair"),
+        pytest.param("F/C=C/Cl", r"F\C=C\Cl", True, id="both-signs"),
+        pytest.param("F/C=C/Cl", r"F/C=C\Cl", False, id="opposite-alkene"),
+        pytest.param("F/C(Cl)=C/Br", "FC(/Cl)=C/Br", True, id="marked-substituent"),
+        pytest.param(r"C/C=C1CO\1", "C/C=C/1CO1", True, id="ring-marker"),
+        pytest.param("C/C=C/C=C/C", r"C\C=C\C=C\C", True, id="conjugated"),
+        pytest.param(
+            "C[C@]1([H])CCCCO1",
+            "C[C@@]1(CCCCO1)[H]",
+            True,
+            id="explicit-hydrogen",
+        ),
+        pytest.param("C.[C@H](F)(Cl)Br", "C.F[C@@H](Cl)Br", True, id="later-root"),
+        pytest.param("O1CCC[C@]21CCNC2", "O1CCC[C@@]12CCNC2", True, id="mixed-digits"),
+    ],
+)
+def test_molecule_from_smiles_stereo(first, second, expected):
+    first = Molecule.from_smiles(first)
+    second = Molecule.from_smiles(second)
+    assert first.canonical_eq(second) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "site", "ligands", "coset"),
+    [
+        (
+            "C[C@H]1CCCCO1",
+            1,
+            [
+                (0, StereoLigandKind.Atom),
+                (1, StereoLigandKind.ImplicitHydrogen),
+                (6, StereoLigandKind.Atom),
+                (2, StereoLigandKind.Atom),
+            ],
+            StereoCoset.Lit(0),
+        ),
+        (
+            "O1CCCC[C@@H]1C",
+            5,
+            [
+                (4, StereoLigandKind.Atom),
+                (5, StereoLigandKind.ImplicitHydrogen),
+                (0, StereoLigandKind.Atom),
+                (6, StereoLigandKind.Atom),
+            ],
+            StereoCoset.Lit(1),
+        ),
+        (
+            "C[S@](=O)CC",
+            1,
+            [
+                (0, StereoLigandKind.Atom),
+                (1, StereoLigandKind.LonePair),
+                (2, StereoLigandKind.Atom),
+                (3, StereoLigandKind.Atom),
+            ],
+            StereoCoset.Lit(0),
+        ),
+    ],
+)
+def test_molecule_from_smiles_stereo_frame(source, site, ligands, coset):
+    molecule = Molecule.from_smiles(source)
+    assert [
+        (frame.site_id, frame.ligands, frame.kind, frame.coset)
+        for frame in molecule.stereo_atoms
+    ] == [
+        (
+            site,
+            [StereoLigand(atom, kind) for atom, kind in ligands],
+            StereoKind.Tetrahedral,
+            coset,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("F/C=C/Cl", [(1, StereoCoset.Lit(1))]),
+        (r"F/C=C\Cl", [(1, StereoCoset.Lit(0))]),
+        ("FC=CCl", []),
+        ("F/C=CCl", []),
+        ("C/C=C/C=C/C", [(1, StereoCoset.Lit(1)), (3, StereoCoset.Lit(1))]),
+    ],
+)
+def test_molecule_from_smiles_bond_stereo(source, expected):
+    molecule = Molecule.from_smiles(source)
+    assert [(bond.site_id, bond.coset) for bond in molecule.stereo_bonds] == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "error_type", "message"),
+    [
+        (
+            "F/C=C",
+            ModelConversionError,
+            "directional bond 0 not adjacent to a stereogenic double bond",
+        ),
+        (
+            r"F/C(\Cl)=CF",
+            ModelConversionError,
+            "contradictory cis/trans markers at atom 1",
+        ),
+    ],
+)
+def test_molecule_from_smiles_bond_stereo_error(source, error_type, message):
+    with pytest.raises(error_type, match=f"^{re.escape(message)}$"):
+        Molecule.from_smiles(source)
 
 
 def test_molecule_combine():

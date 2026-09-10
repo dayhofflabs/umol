@@ -2,7 +2,8 @@
 
 Status: Completed
 Date: 2026-09-03
-Relates: [220](220-readable-depiction-2026-09-02.md)
+Relates: [220](220-readable-depiction-2026-09-02.md),
+[225](225-depiction-problems-2026-09-09.md)
 
 ## Purpose
 

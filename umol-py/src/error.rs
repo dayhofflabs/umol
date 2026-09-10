@@ -327,7 +327,7 @@ mod tests {
     #[case::model_conversion(
         ingest_smiles("C[S@]C").unwrap_err(),
         "ModelConversionError",
-        "tetrahedral stereo at atom 1 with 2 ligands, expected 3 or 4 ligands"
+        "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral"
     )]
     #[case::contradiction(
         GraphSmilesInputError::Contradiction(GraphResolveContradiction::Aromaticity(

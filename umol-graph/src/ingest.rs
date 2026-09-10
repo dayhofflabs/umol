@@ -281,12 +281,15 @@ mod tests {
 
     use rstest::rstest;
     use smallvec::smallvec;
+    use umol_graph_core::{NodeId, Remapping};
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceForm, AtomId, BondConstraintForm, BondId, BooleanForm,
         Canonicalize, CanonicalizeContext, Constraint, Deltas, ElectronCountsForm, Entity,
-        MoleculeIntegrityError, NumForm, StereoAtomId, StereoKind, TetrahedralStereoForm,
+        MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm, StereoCoset, StereoKind,
+        TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
+    use umol_io::table_ir::AtomPair;
 
     use super::*;
     use crate::ops::aromaticity::{
@@ -755,6 +758,64 @@ mod tests {
     }
 
     #[rstest]
+    #[case::opening("C[C@H]1CCCCO1")]
+    #[case::closing("O1CCCC[C@@H]1C")]
+    #[case::lone_pair("C[S@](=O)CC")]
+    #[case::alkene("F/C=C/Cl")]
+    #[case::ring_direction("C/C=C1CO\\1")]
+    #[case::conjugated("C/C=C/C=C/C")]
+    fn test_interpret_molecule_bond_storage(#[case] input: &str) {
+        let table = Smiles::parse(input).unwrap().into_table_ir();
+        let expected = ingest_smiles(input).unwrap();
+        let model = ChemistryModel {
+            valence: ValenceModel::smiles(),
+            ..ChemistryModel::default()
+        };
+        let context = CanonicalizeContext {
+            para_stereo: false,
+            automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
+        };
+        for is_reverse in [true, false] {
+            let mut reordered = table.clone();
+            if is_reverse {
+                reordered.bonds.reverse();
+            } else {
+                reordered.bonds.rotate_left(1);
+            }
+            let actual = interpret_molecule(&reordered, &model, &ResolveConfig::default()).unwrap();
+            assert!(actual.canonical_eq(&expected, &context));
+        }
+    }
+
+    #[rstest]
+    #[case::one_direction("F/C=C/Cl", vec![1, 0, 2, 3])]
+    #[case::branched("F/C(Cl)=C/Br", vec![4, 3, 2, 1, 0])]
+    fn test_interpret_molecule_bond_endpoints(#[case] input: &str, #[case] atoms: Vec<usize>) {
+        let mut table = Smiles::parse(input).unwrap().into_table_ir();
+        let expected = ingest_smiles(input).unwrap();
+        let atoms = Remapping::new(atoms.into_iter().map(NodeId::from).collect()).unwrap();
+        table.atoms = atoms.remap_vec(table.atoms);
+        for bond in &mut table.bonds {
+            let first = atoms.map(NodeId(bond.atoms.first())).0;
+            let second = atoms.map(NodeId(bond.atoms.second())).0;
+            bond.atoms = AtomPair::new(first, second);
+            if first > second {
+                bond.direction = bond.direction.map(|direction| direction.flip());
+            }
+        }
+        let model = ChemistryModel {
+            valence: ValenceModel::smiles(),
+            ..ChemistryModel::default()
+        };
+        let actual = interpret_molecule(&table, &model, &ResolveConfig::default()).unwrap();
+        let context = CanonicalizeContext {
+            para_stereo: false,
+            automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
+        };
+        assert!(actual.canonical_eq(&expected, &context));
+    }
+
+    #[rstest]
     #[case::methane("C")]
     #[case::benzene("c1ccccc1")]
     fn test_ingest_smiles(#[case] input: &str) {
@@ -804,6 +865,9 @@ mod tests {
             ),
         ))
     )]
+    #[case::dangling_direction("F/C=C", SmilesInputError::ModelConversion(RaiseError::DanglingBondDirection { bond: 0 }))]
+    #[case::conflicting_direction("F/C(\\Cl)=CF", SmilesInputError::ModelConversion(RaiseError::CisTransConflict { atom: 1 }))]
+    #[case::ring_direction("C/1CC/1", SmilesInputError::Syntax(SmilesParseError::MismatchedRingBondDirections { pos: 6, open_pos: 2 }))]
     fn test_ingest_smiles_error(#[case] input: &str, #[case] expected: SmilesInputError) {
         assert_eq!(ingest_smiles(input), Err(expected));
     }
@@ -871,6 +935,21 @@ mod tests {
         "OC[C@H]1O[C@H](O)[C@H](O)[C@@H](O)[C@H]1O",
         false
     )]
+    #[case::branch_order("N[C@H](F)Cl", "N[C@@H](Cl)F", true)]
+    #[case::root_hydrogen("[C@H](F)(Cl)Br", "F[C@@H](Cl)Br", true)]
+    #[case::lone_pair("C[S@](=O)CC", "C[S@@](CC)=O", true)]
+    #[case::ring_label("C[C@H]1CCCCO1", "C[C@H]%99CCCCO%99", true)]
+    #[case::both_signs("F/C=C/Cl", "F\\C=C\\Cl", true)]
+    #[case::opposite_alkene("F/C=C/Cl", "F/C=C\\Cl", false)]
+    #[case::bond_traversal("F/C=C/Cl", "Cl/C=C/F", true)]
+    #[case::marked_substituent("F/C(Cl)=C/Br", "FC(/Cl)=C/Br", true)]
+    #[case::bond_branch_order("F/C(Cl)=C/Br", "Cl/C(F)=C\\Br", true)]
+    #[case::ring_marker("C/C=C1CO\\1", "C/C=C/1CO1", true)]
+    #[case::conjugated("C/C=C/C=C/C", "C\\C=C\\C=C\\C", true)]
+    #[case::conjugated_opposite("C/C=C/C=C/C", "C/C=C/C=C\\C", false)]
+    #[case::explicit_hydrogen("C[C@]1([H])CCCCO1", "C[C@@]1(CCCCO1)[H]", true)]
+    #[case::later_root("C.[C@H](F)(Cl)Br", "C.F[C@@H](Cl)Br", true)]
+    #[case::mixed_digits("O1CCC[C@]21CCNC2", "O1CCC[C@@]12CCNC2", true)]
     fn test_ingest_smiles_stereo(#[case] left: &str, #[case] right: &str, #[case] expected: bool) {
         let left = ingest_smiles(left).unwrap();
         let right = ingest_smiles(right).unwrap();
@@ -879,6 +958,30 @@ mod tests {
             automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
         };
         assert_eq!(left.canonical_eq(&right, &context), expected);
+    }
+
+    #[rstest]
+    #[case::e("F/C=C/Cl", vec![(1, StereoCoset::Lit(1))])]
+    #[case::z("F/C=C\\Cl", vec![(1, StereoCoset::Lit(0))])]
+    #[case::unmarked("FC=CCl", vec![])]
+    #[case::one_sided("F/C=CCl", vec![])]
+    #[case::conjugated("C/C=C/C=C/C", vec![(1, StereoCoset::Lit(1)), (3, StereoCoset::Lit(1))])]
+    fn test_ingest_smiles_bond_stereo(
+        #[case] input: &str,
+        #[case] expected: Vec<(usize, StereoCoset)>,
+    ) {
+        let molecule = ingest_smiles(input).unwrap();
+        assert_eq!(
+            molecule
+                .stereo_bonds()
+                .iter()
+                .map(|bond| (usize::from(bond.site_id()), bond.attributes.clone()))
+                .collect::<Vec<_>>(),
+            expected
+                .into_iter()
+                .map(|(site, coset)| (site, StereoBondForm::new(StereoKind::CisTrans, coset)))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[rstest]
@@ -1357,6 +1460,21 @@ mod tests {
     }
 
     #[rstest]
+    #[case::ring_equivalent("[CH3:1][C@H:2]1[CH2:3][CH2:4][CH2:5][CH2:6][O:7]1>>[O:7]1[CH2:6][CH2:5][CH2:4][CH2:3][C@@H:2]1[CH3:1]", true)]
+    #[case::ring_mirror("[CH3:1][C@H:2]1[CH2:3][CH2:4][CH2:5][CH2:6][O:7]1>>[O:7]1[CH2:6][CH2:5][CH2:4][CH2:3][C@H:2]1[CH3:1]", false)]
+    #[case::alkene_equivalent("[F:1]/[CH:2]=[CH:3]/[Cl:4]>>[Cl:4]/[CH:3]=[CH:2]/[F:1]", true)]
+    #[case::alkene_opposite("[F:1]/[CH:2]=[CH:3]/[Cl:4]>>[F:1]/[CH:2]=[CH:3]\\[Cl:4]", false)]
+    fn test_ingest_reaction_smiles_stereo(#[case] input: &str, #[case] expected: bool) {
+        let reaction = ingest_reaction_smiles(input).unwrap();
+        let span = reaction.to_reaction_span().unwrap();
+        let context = CanonicalizeContext {
+            para_stereo: false,
+            automorphism_algorithm: umol_graph_core::AutomorphismAlgorithm::Nauty,
+        };
+        assert_eq!(span.lhs().canonical_eq(&span.rhs(), &context), expected);
+    }
+
+    #[rstest]
     #[case::syntax(
         " C>>C",
         ReactionSmilesInputError::Syntax(SmilesParseError::LeadingWhitespace)
@@ -1385,6 +1503,8 @@ mod tests {
             MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
         ),)
     )]
+    #[case::reactant_direction("F/C=C>>C", ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(MoleculeInterpretationError::ModelConversion(RaiseError::DanglingBondDirection { bond: 0 }))))]
+    #[case::product_direction("C>>F/C=C", ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Products(MoleculeInterpretationError::ModelConversion(RaiseError::DanglingBondDirection { bond: 0 }))))]
     fn test_ingest_reaction_smiles_error(
         #[case] input: &str,
         #[case] expected: ReactionSmilesInputError,

@@ -801,8 +801,13 @@ lowering of the example SMILES: `cis-1-2-dichlorocyclohexane.edn` (from `Cl[C@H]
 encodes the chiral trans isomer and `trans-1-2-dichlorocyclohexane.edn` the meso cis isomer;
 `alpha-d-glucopyranose.edn` encodes the C4 epimer, alpha-D-galactopyranose. Any SMILES with a
 stereocenter at a ring-closing digit is affected, which includes the common writing of pyranoses.
-Where the correction lives, in the bond list order, in an explicit ligand frame from the parser,
-or in the ordering function, is a design choice; the affected fixtures are regenerated with it.
+
+Update 2026-09-09: [224](224-smiles-ring-closure-frame-2026-09-08.md) implements explicit complete
+frames from SMILES finalization while retaining opening-order bonds. The three affected resolution
+fixtures retain their inline `#T` inputs and settings, with the incorrect cosets corrected; their
+matching expected outputs are updated. Limited atom and directional-bond permutation coverage now
+runs through Rust and Python ingestion. This does not rerun the participant census or change its
+remaining MOL/resolution work.
 
 ### Remaining non-accepted records
 
@@ -891,7 +896,8 @@ the census configuration was not changed, so the 43 records stay in this table.
    Holleman-Wiberg check of the electron counts are open. The census configuration still selects
    the frozen MDL counts table.
 7. The SMILES ring-closure stereo frame defect and its three fixtures (CHEBI:40 above):
-   design and plan in doc 224.
+   corrected in [224](224-smiles-ring-closure-frame-2026-09-08.md); the participant census has not
+   been rerun after that correction.
 8. Editor property acceptance (`M  ZZC`) and overlong atom lines (CHEBI:30212, CHEBI:57503);
    presets are not changed for them.
 9. Pseudoatom symbols: the specification defines periodic-table symbols, L, A, Q, *, LP, and R#.

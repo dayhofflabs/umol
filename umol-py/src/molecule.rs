@@ -983,7 +983,7 @@ mod tests {
     #[case::model_conversion(
         "C[S@]C",
         "ModelConversionError",
-        "tetrahedral stereo at atom 1 with 2 ligands, expected 3 or 4 ligands"
+        "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral"
     )]
     #[case::underdetermined("*", "UnderdeterminedError", "resolution underdetermined")]
     fn test_molecule_from_smiles_error(

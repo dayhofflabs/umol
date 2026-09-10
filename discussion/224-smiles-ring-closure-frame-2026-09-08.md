@@ -1,16 +1,17 @@
 # 224 — SMILES ring-closure stereo frame
 
-Status: In Progress
+Status: Completed
 Date: 2026-09-08
 Relates: [104](104-stereochemistry-implementation-plan-2026-05-31.md),
 [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
-[217](217-rhea-participant-failures-2026-08-30.md)
+[217](217-rhea-participant-failures-2026-08-30.md),
+[225](225-depiction-problems-2026-09-09.md)
 
 ## Purpose
 
-The SMILES tetrahedral reading can be inverted at stereocenters that carry ring-closing digits.
+The former SMILES tetrahedral reading could be inverted at stereocenters carrying ring-closing digits.
 Opening-order bond storage is retained for its source-order meaning and usefulness when
-reconstructing SMILES. The proposed finalizer publishes complete stereo frames that raising can map
+reconstructing SMILES. The finalizer publishes complete stereo frames that raising can map
 directly to graph IR. The work separates behavior-preserving builder streamlining, the stereo-frame correction, and limited
 permutation tests. General permutation/randomization testing is out of scope.
 The 2026-09-09 impact review below preserves the evidence behind this decision.
@@ -21,8 +22,10 @@ SMILES roundtripping. Retain the selected pending finalizer and vector reuse. Th
 cost and retained-capacity limitations are accepted for this integration; closing order is a diagnostic
 counterexample, not an implementation alternative. S2b6 fixtures and baseline verification are
 complete, as are S2b7 integration, S2b8 output/performance verification, and S2c flag removal.
-S2d ingestion, the three planned fixture corrections, and S2e wildcard correction are complete. S3 is next;
-the additionally identified swapped decalin fixtures await a scope decision. No further tuning round is queued.
+S2d ingestion, the three planned fixture corrections, S2e wildcard correction, and S3a boundary
+coverage are complete. S3b ingestion/Python coverage and S3c final verification are complete.
+The additional decalin fixture audit is tracked in doc 153 T7 for a separate scope decision.
+No further tuning round is queued.
 
 ## Finding
 
@@ -2358,13 +2361,155 @@ Verification passes: 3,494 IO unit tests, six layout tests, 2,253 MOL cases, 407
 tests and 683 resolution cases. All-target Clippy for both crates, formatting, and diff checks pass.
 S2e is complete; limited permutation coverage remains S3.
 
+### S3a boundary equivalence coverage — 2026-09-09
+
+The existing parser and raise test modules now contain bounded source-presentation and storage
+transformations. Atom cases use explicit atom/bond correspondences and framed_eq_under for opening
+versus closing, ring labels, branch order, mixed digits, two closures, explicit hydrogen, implicit
+hydrogen at first/later traversal roots, and lone pairs. The mirror control remains unequal. Existing
+literal parser-frame expectations remain independent anchors for these comparisons.
+
+Seven small atom/bond-stereo inputs exercise bond swaps, rotation, and reversal. Their atom ids and
+explicit atom frames remain fixed; these fixtures contain no additional bond-reference metadata.
+The induced bond mapping is used for raised framed equality, and basic/extended conversion preserves
+the complete reordered table.
+
+Directional-bond cases separately cover traversal, both-sign reversal, marked-substituent choice,
+branch order, opening/closing ring marks, conjugation, opposite configurations, and absent/one-sided
+marks. Expected constraints are specified per presentation's neighbor frame. Endpoint tests relabel
+atoms because AtomPair normalizes stored endpoints; directions follow each resulting endpoint swap.
+The asymmetric branch case changes its expected raw coset, while a selected swap reverses just one
+directional bond so simultaneous-sign symmetry cannot mask missing transport. Parser cases assert
+exact bond endpoints, orders, and directions. Error controls assert mismatched ring-marker positions,
+the moved dangling-direction bond id, and the conflicting atom id through both parsing paths.
+
+No production API, implementation, fixture, snapshot, or general generator changes are involved.
+Canonical resolved comparisons and the molecule/reaction Python surface remain S3b.
+
+Verification passes: 3,589 IO unit tests (95 added), six layout tests, 2,253 MOL cases, 407 SDF
+cases, 10,223 unchanged SMILES cases, and six IO property tests. All-target IO Clippy, formatting,
+and diff checks pass. S3a is complete.
+
+### S3b ingestion and Python coverage — 2026-09-09
+
+The existing Rust ingestion and Python molecule/reaction tests now carry the bounded stereo cases.
+Canonical molecule comparisons cover opening/closing presentations, branch and ring-label changes,
+explicit/virtual hydrogen, later roots, lone pairs, mixed ring digits, directional-sign and marked-
+substituent changes, ring marks, and conjugation. Mirror and opposite-E/Z controls remain distinct.
+The mixed-digit resolved case uses asymmetric `O1CCC[C@]21CCNC2`; S3a's unsubstituted carbocyclic
+spiro example serves as a boundary-frame case without asserting that its center is stereogenic.
+
+Rust checks canonical resolved agreement after bond-vector reversal/rotation and after atom
+relabeling that reverses selected bond endpoints, with direction transport. Exact stereo-bond
+expectations cover E, Z, conjugation, and absent/one-sided marks. Existing exact Rust molecule
+expectations and new Python ligand/site/kind/coset expectations check full atom-frame preservation.
+Mapped reaction tests compare materialized sides for equivalent and opposite atom/bond stereo.
+Directional failures retain their molecule or reactant/product boundary and exact error information.
+
+The Python extension was rebuilt under the repository's Python 3.13 environment. Four malformed-
+frame message expectations (two Python tests and two Rust binding tests) now describe the checked
+explicit-frame error. The existing unsupported-stereo-model removal test selects stereo_atom_failure
+because SMILES now supplies an entity; its expected removed result is unchanged. An additional
+assertion retains the old constraint-only removal policy and requires the entity failure. Resolver
+policies and binding implementations are unchanged.
+
+MOL control remains at the existing IO boundary: raw atom parity is ignored and wedge/coordinate
+interpretation retains its tests. The supported Python ingestion surface exercised here is SMILES;
+no MOL ingestion API is introduced. S3c retains the final impact and documentation work.
+
+Verification passes: 1,026 graph library tests, the graph conformance gate including all 683
+resolution cases, 219 IO raise controls, 1,635 Rust binding tests (two existing ignored), and 1,509
+Python tests (two existing skipped). All-target graph/Python Clippy, formatting, and diff checks pass.
+No snapshot changes were needed. S3b is complete.
+
+### S3c final impact review — 2026-09-09
+
+The final 516-input comparison reproduces the S0b and S2b full-frame captures exactly. Against S2a
+revision `57ddf339433ae2055fa5c51d642507b42a414472`, the changes are:
+
+| Observation | Changed rows |
+| --- | ---: |
+| Ordered or sorted bond tables | 0 |
+| Raised output | 101 |
+| Resolved output | 96 |
+| Canonical resolved output | 32 |
+| Parse/raise/ingestion acceptance | 0 |
+| Paired fingerprint digests | 0 |
+| Ingestion diagnostic | 1 |
+
+The representation change from source `#T` constraints to explicit stereo entities explains the
+wider raw-output movement; corrected tetrahedral readings explain the canonical changes. The single
+diagnostic change remains the malformed two-ligand descriptor described in S0b. All 516 inputs parse;
+three fail raising and 37 fail ingestion, unchanged from S2a. Nauty canonicalization with para-stereo
+disabled checks 459 successful resolutions and skips the same 20 successful inputs above 40 atoms.
+Fingerprints are supplementary observations, not proof of stereo equivalence.
+
+The separate 250-workload capture matches S2e exactly, and the three original controlled workloads
+match S2c exactly. Basic and extended raised values agree in all 253 records. This retains S2e's
+wildcard correction; it does not extend the complete-ingestion census to arbitrary CX payloads or
+unmeasured molecules. S3 changes no snapshots; the three fixture corrections remain as recorded in S2d.
+
+Public raising rustdoc now states the explicit-frame, directional-bond, and MOL paths. Doc 104 has a
+narrow dated qualification, doc 153 T4 records the completed targeted replacement and remaining format
+coverage, and doc 217 links the correction without claiming a rerun of its participant census. The
+additional decalin identity audit is retained in [153 T7](153-format-parsing-outstanding-tasks-2026-07-18.md#t7--expand-conformance-fuzzing-and-benchmarks)
+for a separate scope decision; neither decalin input nor snapshot was changed. General randomized
+permutation testing, additional stereo kinds, and optional optimization remain outside this plan.
+
+The final timing repeat uses Rust 1.96.0 on macOS ARM64, the retained S2a executable and unchanged
+input manifests (hashes checked against S2b8), and a freshly built current executable. Five rounds
+alternate variant order; each uses three calibrated approximately 80 ms batches. Builds and tests
+finished before timing. Parsing includes finalization and result destruction. Times below are medians
+of round medians; percentages are median paired changes, so rounded columns need not divide exactly.
+S2a remains the primary baseline despite lacking the corrected stereo semantics.
+
+| Input | Basic: S2a → final (µs) | Change | Extended: S2a → final (µs) | Change |
+| --- | ---: | ---: | ---: | ---: |
+| Sampled ZINC (64) | 0.713 → 0.494 | -30.4% | 1.053 → 0.918 | -12.8% |
+| Sampled Rhea atom stereo (63) | 1.130 → 1.134 | +0.7% | 1.768 → 1.962 | +10.9% |
+| Sampled Rhea bond stereo (64) | 1.265 → 1.136 | -9.9% | 1.964 → 2.137 | +8.8% |
+| 202 atoms, no markers | 4.630 → 4.231 | -9.0% | 7.976 → 8.631 | +8.2% |
+| 202 atoms, 100 markers | 4.382 → 7.515 | +71.8% | 8.038 → 12.312 | +53.2% |
+| 10 stereo components | 1.788 → 1.704 | -4.9% | 3.043 → 3.333 | +9.5% |
+| 100 stereo components | 13.084 → 14.373 | +9.8% | 26.595 → 32.915 | +24.0% |
+
+This repeats S2b8's overall finding. The basic Rhea atom-stereo difference spans −0.009 to +0.018 µs,
+so its small percentage is not a stable gain or loss. Extended atom/bond-stereo costs are positive in
+all five rounds. Dense 100-marker input remains slower by paired medians of 3.140 µs basic and
+4.280 µs extended; the hundred-component case remains slower by 1.288 and 6.376 µs. These costs
+remain material, accepted limits of this design, not evidence that further improvement is impossible.
+The final repeat does not remeasure every S2b8 countercase; its bracket/long-prefix qualifications
+and retained-capacity observations remain in force.
+
+Current parse-and-raise measurements (three calibrated batches per group, µs per input):
+
+| Input | Basic | Extended |
+| --- | ---: | ---: |
+| Sampled ZINC (64) | 5.078 | 6.982 |
+| Sampled Rhea atom stereo (63) | 12.275 | 15.520 |
+| Sampled Rhea bond stereo (64) | 13.378 | 17.009 |
+
+Extended parse-and-raise includes conversion to basic for this diagnostic; it is not a proposed
+production requirement. Complete ingest_smiles takes 16.300 µs for octane, 23.521 µs for benzene,
+and 17.862 µs for `C[C@H]1CCCCO1` (medians of seven 10,000-call batches). These are current absolute
+measurements, not net ingestion changes against S2a. The maintained smiles_parsing corpus and
+parse_raise groups also completed, including the isotope-wildcard case, with 20 samples, 0.1 s
+warmup and 0.5 s measurement. No new optimization experiment is scheduled.
+
+Final verification passes: formatting; IO and graph conformance/property gates (16,484 and 1,789
+passing tests); workspace tests (16,100 passed, nine existing ignored); workspace all-target Clippy
+with warnings denied; a rebuilt Python 3.13.15 extension; and Python tests (1,509 passed, two existing
+skipped). The graph feature gate retains one existing ignored doctest. The full diff was reviewed
+against scope, fixture purpose, and local construction/naming conventions. S3c and the agreed plan
+are complete.
+
 ## Implementation plan
 
 S0, S1, S2a, S2b, and S2b1–S2b5 are complete. The subsequent bounded experiments and architecture
 selection are also complete. S2b6–S2b8 are complete; the integrated cursor/pending implementation
 has passed its output, correctness, memory, and bounded performance gates. S2c–S2e are complete.
-S3 retains the limited permutation scope. The additional decalin
-fixture defect reported above awaits a separate scope decision. These remaining subitems have not started. S2b7 subsumes the former S4 cleanup; earlier S4 references
+S3a–S3c are complete. The additional decalin fixture audit is tracked in doc 153 T7 for a separate
+scope decision. S2b7 subsumes the former S4 cleanup; earlier S4 references
 describe the original sequencing. No mutating git operation or commit is implied.
 
 Stages end green, including required caller/expectation migrations. Each code subitem includes its
@@ -2511,7 +2656,7 @@ from changes in stereo meaning; do not advertise the old 37/32 counts as the new
 
 ### S3 — Limited permutation coverage and downstream verification
 
-- **S3a — Boundary equivalence laws** — additive (green). Add the bounded source-presentation and
+- **S3a — Boundary equivalence laws (completed 2026-09-09)** — additive (green). Add the bounded source-presentation and
   bond-storage transformations specified above beside the owning `umol-io` parser/raise tests.
   Reuse existing comparison APIs and literal expected frames; do not widen production visibility or
   add general generators to support tests. Include opening/closing centers, virtual ligands,
@@ -2519,13 +2664,13 @@ from changes in stereo meaning; do not advertise the old 37/32 counts as the new
   stereo-bond source, storage, and endpoint transformations above, including opposite-E/Z and
   under-specified/error controls; test directional interpretation rather than treating it as an atom
   frame. **[dep: S2d, S2e]**
-- **S3b — Ingestion and Python coverage** — additive (green). Exercise the same small semantic cases
+- **S3b — Ingestion and Python coverage (completed 2026-09-09)** — additive (green). Exercise the same small semantic cases
   through molecule and reaction ingestion in `umol-graph`, and the supported Python molecule/reaction
   surface. Verify explicit atom frames survive resolution and directional-bond cases retain the
   expected E/Z distinction through the existing `#C` resolution path. Verify errors reach the existing
   boundary and MOL behavior stays unchanged. Use fingerprints only as supplementary observations. Build the extension
   from this source before Python checks. **[dep: S3a]**
-- **S3c — Impact review and documentation** — additive (green). Run the final gates below, repeat the
+- **S3c — Impact review and documentation (completed 2026-09-09)** — additive (green). Run the final gates below, repeat the
   bounded output comparison, and retain timings including finalization. Update the relevant public
   rustdoc and this record with actual outcomes and limits. Add a narrow dated qualification to doc 104
   about the old bond-list-frame claim; reconcile doc 153 T4's targeted scope and doc 217's link to the
@@ -2561,10 +2706,10 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 Confirm the activated interpreter is Python 3.13 before any workspace/PyO3 compilation. Run the
 selected `smiles_parsing` benchmark cases and the revised S0 raise/ingestion harness after builds have
 finished. Feature-gated IO and graph property/conformance targets are explicit above; the default
-workspace test alone does not cover them. Existing property suites are regression gates, not an
+workspace test alone does not cover them. Existing property suites are verification gates, not an
 expansion into a new randomized-testing project. Additional graph-IR or other feature-specific gates
 are required only if approved implementation changes actually touch those components.
 
-Remaining critical path: **S3a limited atom/bond permutation laws → S3b downstream/Python coverage → S3c impact review**.
+Remaining critical path: **none; the agreed plan is complete**.
 All stages end green. The wildcard discrepancy is corrected in S2e.
 Optional optimization is outside this critical path; the core deliverable does not wait for it.
