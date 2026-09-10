@@ -153,12 +153,12 @@ impl EcfpHashScheme {
 pub enum HashedFingerprintConfig {
     #[pyo3(constructor = (*, radius=2, ring_config=RingConfig::default()))]
     Morgan {
-        radius: u32,
+        radius: usize,
         ring_config: RingConfig,
     },
     #[pyo3(constructor = (*, radius, hashing_scheme=EcfpHashScheme::Xxh3Width64V1(), ring_config=RingConfig::default()))]
     Ecfp {
-        radius: u32,
+        radius: usize,
         hashing_scheme: EcfpHashScheme,
         ring_config: RingConfig,
     },
@@ -662,6 +662,15 @@ mod tests {
     })]
     #[case::morgan_explicit(HashedFingerprintConfig::Morgan {
         radius: 3,
+        ring_config: RingConfig::default(),
+    })]
+    #[case::morgan_maximum(HashedFingerprintConfig::Morgan {
+        radius: usize::MAX,
+        ring_config: RingConfig::default(),
+    })]
+    #[case::ecfp_maximum(HashedFingerprintConfig::Ecfp {
+        radius: usize::MAX,
+        hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
         ring_config: RingConfig::default(),
     })]
     #[case::ecfp_default(HashedFingerprintConfig::Ecfp {

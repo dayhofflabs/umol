@@ -12,6 +12,8 @@
 //! reversed incidence order, sparse edge ids, and early breaks are included.
 //! Event collectors must equal both the complete visitor sequence and its
 //! definition-level reference for the same roots and depth limit.
+//! Neighborhoods additionally agree with the independently relaxed shortest
+//! distances and the BFS discovery order for each valid source.
 
 use std::collections::{BTreeMap, HashSet};
 use std::ops::ControlFlow;
@@ -20,7 +22,7 @@ use proptest::prelude::*;
 use rstest::rstest;
 use umol_graph_core::{
     visit_breadth_first, visit_depth_first, BreadthFirstEvent, DepthFirstEvent, EdgeId, Neighbor,
-    NodeId,
+    NeighborhoodAlgorithm, NodeId,
 };
 
 use super::strategy::graph_with_edge_multiset;
@@ -406,5 +408,30 @@ fn test_graph_enumerate_breadth_first_events() {
         prop_assert_eq!(result, ControlFlow::Continue(()));
         prop_assert_eq!(&actual, &expected);
         prop_assert_eq!(actual, visited);
+    });
+}
+
+#[rstest]
+fn test_graph_neighborhood() {
+    proptest!(|(
+        (graph, edges) in graph_with_edge_multiset(8, 20),
+        max_depth in prop_oneof![0usize..10, Just(usize::MAX)],
+    )| {
+        let adjacency: Vec<_> = graph.node_ids().map(|node| graph.neighbors(node).to_vec()).collect();
+        for source in graph.node_ids() {
+            let expected: Vec<_> = reference_breadth_first(&adjacency, &[source], Some(max_depth))
+                .into_iter().filter_map(|event| match event {
+                    BreadthFirstEvent::Discover { node, depth, .. } => Some((node, depth)),
+                    _ => None,
+                }).collect();
+            let distances: BTreeMap<_, _> = reference_distances(graph.node_count(), &edges, source, &HashSet::new())
+                .into_iter().enumerate().filter_map(|(node, distance)| {
+                    distance.filter(|&depth| depth <= max_depth)
+                        .map(|depth| (NodeId(node as u32), depth))
+                }).collect();
+            let actual = graph.neighborhood(source, max_depth, NeighborhoodAlgorithm::Bfs);
+            prop_assert_eq!(&actual, &expected);
+            prop_assert_eq!(actual.into_iter().collect::<BTreeMap<_, _>>(), distances);
+        }
     });
 }

@@ -31,6 +31,8 @@ const HASH_WIDTH_64: u16 = 64;
 
 /// Circular-refinement recipe: RDKit Morgan via the 32-bit boost hash with
 /// incremental combine. Bit-exact to RDKit 2026.03.x.
+/// The layer salt uses the low 32 bits of `round - 1`, independently of the
+/// platform-sized iteration counter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Morgan;
 
@@ -39,9 +41,9 @@ impl CircularRefinementHash for Morgan {
         u64::from(gboost_hash(components))
     }
 
-    fn combine(&self, round: u32, current: u64, neighbors: &[(u32, u64)]) -> u64 {
-        // RDKit salts with the 0-based layer (round - 1) and hashes in 32 bits.
-        let mut invariant = gboost_combine(round - 1, current as u32);
+    fn combine(&self, round: usize, current: u64, neighbors: &[(u32, u64)]) -> u64 {
+        // The zero-based layer salt is a 32-bit hash word.
+        let mut invariant = gboost_combine((round - 1) as u32, current as u32);
         for &(edge, color) in neighbors {
             invariant = gboost_combine(invariant, gboost_hash(&[edge, color as u32]));
         }
@@ -51,6 +53,7 @@ impl CircularRefinementHash for Morgan {
 
 /// Circular-refinement recipe: Rogers & Hahn 2010 ECFP via `xxh3_64` over the round
 /// array, seeded by `seed`.
+/// The round is encoded as a 64-bit little-endian word on every platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RogersHahn {
     pub seed: u64,
@@ -65,9 +68,9 @@ impl CircularRefinementHash for RogersHahn {
         xxh3_64_with_seed(&buffer, self.seed)
     }
 
-    fn combine(&self, round: u32, current: u64, neighbors: &[(u32, u64)]) -> u64 {
+    fn combine(&self, round: usize, current: u64, neighbors: &[(u32, u64)]) -> u64 {
         let mut buffer = Vec::with_capacity(16 + neighbors.len() * 12);
-        buffer.extend_from_slice(&u64::from(round).to_le_bytes());
+        buffer.extend_from_slice(&(round as u64).to_le_bytes());
         buffer.extend_from_slice(&current.to_le_bytes());
         for &(edge, color) in neighbors {
             buffer.extend_from_slice(&edge.to_le_bytes());
@@ -284,6 +287,34 @@ mod tests {
     };
 
     use super::*;
+
+    #[rstest]
+    #[case::first(1, 2_654_435_769)]
+    #[case::second(2, 2_654_435_832)]
+    fn test_morgan_combine(#[case] round: usize, #[case] expected: u64) {
+        assert_eq!(Morgan.combine(round, 0, &[]), expected);
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[rstest]
+    #[case::wide_round(4_294_967_297, 2_654_435_769)]
+    fn test_morgan_combine_width(#[case] round: usize, #[case] expected: u64) {
+        assert_eq!(Morgan.combine(round, 0, &[]), expected);
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[rstest]
+    #[case::first(1, [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])]
+    #[case::wide_round(4_294_967_297, [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])]
+    fn test_rogers_hahn_combine(#[case] round: usize, #[case] bytes: [u8; 16]) {
+        let scheme = RogersHahn {
+            seed: ECFP_XXH3_64_V1_SEED,
+        };
+        assert_eq!(
+            scheme.combine(round, 0, &[]),
+            xxh3_64_with_seed(&bytes, ECFP_XXH3_64_V1_SEED)
+        );
+    }
 
     fn wl_128(
         rounds: RefinementRounds,

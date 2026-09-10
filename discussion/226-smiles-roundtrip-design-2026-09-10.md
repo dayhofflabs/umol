@@ -1277,11 +1277,11 @@ algorithm are settled above. Exact diagnostic variants and cohesive helper signa
 reconciled with the public contract before their implementing subitem; this is not permission to
 introduce new wrappers, strategies, or chemistry transformations. Implement the supported inverse
 domain with explicit failures, not a promise of general valence inversion or minimum encodings.
-The plan below sequences the work; S0 and S1 are complete.
+The plan below sequences the work; S0–S2 are complete.
 
 ## Staged implementation plan
 
-S0 and S1 are complete; S2a and later subitems are pending.
+S0–S2 are complete; S3a and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1386,7 +1386,7 @@ no specialization or new graph storage is introduced.
 
 ### S2 — Neighborhood and size API migration
 
-- **S2a — Neighborhood naming and usize contract.** Modules: graph-core traversal, refinement,
+- **S2a — Neighborhood naming and usize contract (completed 2026-09-10).** Modules: graph-core traversal, refinement,
   reexports, and every affected graph view/consumer. **Breaking (red→green).** [dep: S1b, S1c]
   Rename TraversalAlgorithm to NeighborhoodAlgorithm and retain Bfs. Reimplement neighborhood
   through the shared BFS visitor, returning usize distances and accepting a usize depth limit.
@@ -2322,6 +2322,112 @@ The run log is scratch/s1c-core-bench.log. cargo fmt --all, its check mode, and 
 passed. Final diff review covers the agreed public surface, direct visitor composition, unchanged
 existing test laws, and inline benchmark additions. S1 is complete. S2a's neighborhood naming and
 usize migration are next.
+
+## S2a neighborhood and size migration — 2026-09-10
+
+The public selector becomes NeighborhoodAlgorithm::Bfs, without a TraversalAlgorithm alias.
+Graph::neighborhood takes max_depth: usize and returns Vec<(NodeId, usize)> by collecting Discover
+events from one-root BFS with that limit. It preserves CSR neighbor order within equal-distance
+shells, shortest distances, the source at depth zero, and exclusion of disconnected nodes.
+Invalid source ids inherit the traversal kernel's panic-free handling. No new validator or error
+type is introduced; Graph already owns consistent connectivity.
+
+The related public size changes are CircularRefinementAlgorithm::Ec::radius,
+CircularRefinementHash::combine's round argument, MorganFeaturizer::radius and ::new,
+EcfpFeaturizer::radius and ::new, and Python HashedFingerprintConfig::{Morgan,Ecfp}::radius.
+These remain open size/configuration values; internal round indices and duplicate-removal keys
+also become usize. Graph node/edge ids, chemistry invariant components, bond labels, hash words,
+and the independent WL RefinementRounds type retain their existing widths. GraphView exposes
+no neighborhood method requiring migration.
+
+Hash recipes retain their frozen encodings: Morgan's zero-based layer salt is a 32-bit hash word
+(low 32 bits), while RogersHahn serializes the round as an eight-byte little-endian word. The
+conversion at that hash-word boundary does not narrow the radius or iteration counter. Existing
+fingerprint golden outputs must remain unchanged. Python radius constructors accept platform-size
+nonnegative integers and preserve them through conversion to Rust; out-of-range integers are
+rejected by the binding's usize conversion. Constructing a large radius does not execute refinement.
+
+Tests retain existing fingerprint goldens, add ordered neighborhood and independent-distance
+checks, exercise refinement beyond radius zero, and check hash encoding and Python size boundaries.
+No new binding wrapper or chemistry interpretation is added.
+
+Implemented against source commit 9c86723d26724be31f047d15921c682df60b21f4. Public-surface review
+matches the selector, neighborhood signature, circular-refinement size fields/trait argument,
+featurizer fields/constructors, and Python radius fields listed above. The circular fingerprint
+benchmark's CIRCULAR_RADIUS constant also becomes usize. Source search finds no TraversalAlgorithm
+or remaining affected u32 radius/depth/round signature; historical discussion records retain their
+original names. The WL round type and subgraph-isomorphism depth counter are independent paths.
+
+Neighborhood fixtures now assert exact returned order instead of sorting before comparison, and
+include depth zero and usize::MAX. A generated property checks every source in bounded multigraphs
+against both BFS event order and independently relaxed distances. Refinement fixtures retain
+radius-zero behavior and check one/two-round duplicate removal. All existing Morgan/ECFP golden
+identifiers are unchanged. Direct hash checks cover the first rounds and rounds above u32::MAX;
+the ECFP expectation uses an explicit 16-byte round/current buffer. Python tests cover zero and
+usize::MAX construction, negative and overflowing integers, and unchanged fingerprint results.
+
+Validation passed:
+
+| Crate | Library unit tests passed | Property tests passed | Additional validation |
+| --- | ---: | ---: | --- |
+| graph-core | 1,007 | 136 | 54 integration tests |
+| graph | 1,066 | 5 | 54 integration tests and 21 binary tests |
+| graph-IR | 6,816 | 373 | 39 integration tests, including the compile-fail suite |
+| Python | 50 selected Rust config tests | — | 94 Python fingerprint tests against the rebuilt extension |
+
+Graph-IR retains three ignored unit tests and one ignored property. The full three-crate test
+gate passed; graph-core and graph were rerun after the final round-iteration lint correction.
+Strict Clippy passed across graph-core, graph-IR, graph, and Python with all targets and the three
+Rust property features enabled. Rustdoc for graph-core and graph built without warnings.
+
+```text
+cargo test -p umol-graph-core -p umol-graph-ir -p umol-graph
+    --features umol-graph-core/proptest,umol-graph-ir/proptest,umol-graph/proptest --offline
+    scratch/s2a-tests.log
+cargo test -p umol-graph-core -p umol-graph
+    --features umol-graph-core/proptest,umol-graph/proptest --offline
+    scratch/s2a-final-core-graph-tests.log
+cargo test -p umol-py --lib fingerprint::config --offline
+    scratch/s2a-python-rust-tests.log
+cargo clippy -p umol-graph-core -p umol-graph-ir -p umol-graph -p umol-py --all-targets
+    --features umol-graph-core/proptest,umol-graph-ir/proptest,umol-graph/proptest --offline -- -D warnings
+    scratch/s2a-clippy.log
+cargo doc -p umol-graph-core -p umol-graph --no-deps --offline
+    scratch/s2a-doc.log
+maturin develop --manifest-path umol-py/Cargo.toml --offline
+    scratch/s2a-maturin-final.log
+pytest -q umol-py/tests/test_fingerprint.py
+    scratch/s2a-python-tests.log
+```
+
+Every Python build/test command ran with umol-py/.venv activated (Python 3.13.15). The native
+rebuild used UV_CACHE_DIR=/private/tmp/umol-s2a-uv-cache because the default uv cache was not writable.
+
+All six existing inline neighborhood benchmarks completed with the usize limit and shared BFS.
+Criterion time point estimates are in microseconds per operation:
+
+| Example | S0c neighborhood | S2a neighborhood |
+| --- | ---: | ---: |
+| path_64 | 0.556 | 0.53127 |
+| path_1024 | 6.119 | 5.7548 |
+| binary_tree_255 | 2.060 | 2.2877 |
+| cycle_64 | 0.556 | 0.51933 |
+| four_hexagons | 0.158 | 0.11249 |
+| loops_parallel_isolated | 0.086 | 0.070969 |
+
+These bounded measurements retain the S0c workloads and establish the migrated baseline without
+tuning. The full intervals are in scratch/s2a-core-bench.log. Reproduce with:
+
+```text
+cargo bench -p umol-graph-core --bench algorithms --offline -- traversal_baseline/neighborhood
+    --sample-size 20 --warm-up-time 0.1 --measurement-time 0.2
+    --nresamples 1000 --noplot --save-baseline s2a
+```
+
+cargo fmt --all, its check mode, and git diff --check passed. Final diff review confirms the
+size migration is limited to the agreed path, with no compatibility alias, radius truncation,
+fingerprint golden changes, or modifications to the independent WL size contract. S2 is complete;
+S3a's explicit TableIR stereo-bond vocabulary and frame algebra are next.
 
 ## Staged specification updates
 

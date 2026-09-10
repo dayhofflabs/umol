@@ -17,13 +17,13 @@ use crate::hash::EcfpHashScheme;
 /// ECFP fingerprint of `radius` iterations (diameter `2 * radius`, i.e. ECFP_{2r}).
 #[derive(Clone, Copy, Debug)]
 pub struct EcfpFeaturizer {
-    pub radius: u32,
+    pub radius: usize,
     pub hashing_scheme: EcfpHashScheme,
     pub ring_config: RingConfig,
 }
 
 impl EcfpFeaturizer {
-    pub fn new(radius: u32) -> Self {
+    pub fn new(radius: usize) -> Self {
         Self {
             radius,
             hashing_scheme: EcfpHashScheme::default(),
@@ -182,7 +182,7 @@ mod tests {
             16670450973526877804,
         ]
     )]
-    fn test_ecfp_featurizer_featurize_butyramide(#[case] radius: u32, #[case] expected: &[u64]) {
+    fn test_ecfp_featurizer_featurize_butyramide(#[case] radius: usize, #[case] expected: &[u64]) {
         let fingerprint = EcfpFeaturizer::new(radius)
             .featurize(&mol_dsl_concrete!(BUTYRAMIDE))
             .unwrap();

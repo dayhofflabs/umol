@@ -24,7 +24,7 @@ use umol_graph_ir::ir::{AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, Mol
 use walkdir::WalkDir;
 
 /// Circular fingerprint radius (ECFP4 / Morgan radius 2).
-const CIRCULAR_RADIUS: u32 = 2;
+const CIRCULAR_RADIUS: usize = 2;
 /// WL refinement rounds.
 const WL_ROUNDS: u32 = 3;
 /// Bond bound for the substructure screen; its connected-subgraph enumeration grows

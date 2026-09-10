@@ -10,10 +10,9 @@ use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
     CommonSubgraphEnumerationAlgorithm, Compaction, ConnectedComponentsAlgorithm, Correspondence,
     EdgeId, EmbeddingKind, GeneralMaximumMatchingAlgorithm, Graph, GraphCorrespondence,
-    MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NodeId,
+    MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NeighborhoodAlgorithm, NodeId,
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm, TraversalAlgorithm, UniqueRingFamilyAlgorithm,
-    ARCMATCH_DEFAULT_PATH_LENGTH,
+    SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -494,7 +493,9 @@ fn traversal(c: &mut Criterion) {
     let mut neighborhood = c.benchmark_group("traversal_baseline/neighborhood");
     for (name, graph) in &graphs {
         neighborhood.bench_function(*name, |b| {
-            b.iter(|| black_box(graph).neighborhood(NodeId(0), u32::MAX, TraversalAlgorithm::Bfs));
+            b.iter(|| {
+                black_box(graph).neighborhood(NodeId(0), usize::MAX, NeighborhoodAlgorithm::Bfs)
+            });
         });
     }
     neighborhood.finish();
