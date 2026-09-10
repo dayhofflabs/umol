@@ -7,16 +7,16 @@ use umol_chem::element::Element;
 
 use super::super::config::SmilesSyntaxFlags;
 use super::super::error::ParseError;
-use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeEditor};
+use super::builder::{BondData, Cursor};
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, ExtendedBond, Span, WildcardAtom,
+    AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, ExtendedBond, WildcardAtom,
 };
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Frame {
     Branch {
-        base: usize,
+        base: Cursor,
         had_atom: bool,
         open_pos: usize,
     },
@@ -348,56 +348,6 @@ pub(super) fn make_extended_bond(start: usize, end: usize, b: BondData) -> Exten
 }
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
-pub(super) fn attach_atom(
-    builder: &mut MoleculeEditor,
-    last_atom_idx: Option<usize>,
-    curr_atom_idx: usize,
-    pending_bond: &mut Option<(
-        BondOrder,
-        Option<BondDirection>,
-        Option<BondDonation>,
-        usize,
-    )>,
-    curr_aromatic: bool,
-    curr_atom_start: u32,
-    curr_atom_end: u32,
-) {
-    if let Some(last) = last_atom_idx {
-        if let Some((order, direction, donation, pos)) = pending_bond.take() {
-            builder.on_bond(
-                last,
-                curr_atom_idx,
-                BondData {
-                    order,
-                    direction,
-                    donation,
-                    span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-                },
-            );
-        } else if builder.is_aromatic(last) && curr_aromatic {
-            builder.on_bond(
-                last,
-                curr_atom_idx,
-                BondData {
-                    order: BondOrder::Aromatic,
-                    direction: None,
-                    donation: None,
-                    span: Span::from_bytes_opt(Some(curr_atom_start), Some(curr_atom_end)),
-                },
-            );
-        } else {
-            builder.on_bond_single_fast(
-                last,
-                curr_atom_idx,
-                Some(curr_atom_start),
-                Some(curr_atom_end),
-            );
-        };
-    }
-}
-
-#[inline]
 pub(super) fn parse_bond(b: u8) -> (BondOrder, Option<BondDirection>) {
     match b {
         b'-' => (BondOrder::Single, None),
@@ -577,56 +527,6 @@ pub(super) fn parse_bracket(
     Ok((
         element, aromatic, isotope, charge, class, hydrogens, chirality,
     ))
-}
-
-#[inline]
-#[allow(clippy::too_many_arguments)]
-pub(super) fn attach_extended_atom(
-    builder: &mut ExtendedMoleculeBuilder,
-    last_atom_idx: Option<usize>,
-    curr_atom_idx: usize,
-    pending_bond: &mut Option<(
-        BondOrder,
-        Option<BondDirection>,
-        Option<BondDonation>,
-        usize,
-    )>,
-    curr_aromatic: bool,
-    curr_atom_start: u32,
-    curr_atom_end: u32,
-) {
-    if let Some(last) = last_atom_idx {
-        if let Some((order, direction, donation, pos)) = pending_bond.take() {
-            builder.on_bond(
-                last,
-                curr_atom_idx,
-                BondData {
-                    order,
-                    direction,
-                    donation,
-                    span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-                },
-            );
-        } else if builder.is_aromatic(last) && curr_aromatic {
-            builder.on_bond(
-                last,
-                curr_atom_idx,
-                BondData {
-                    order: BondOrder::Aromatic,
-                    direction: None,
-                    donation: None,
-                    span: Span::from_bytes_opt(Some(curr_atom_start), Some(curr_atom_end)),
-                },
-            );
-        } else {
-            builder.on_bond_single_fast(
-                last,
-                curr_atom_idx,
-                Some(curr_atom_start),
-                Some(curr_atom_end),
-            );
-        };
-    }
 }
 
 #[inline]

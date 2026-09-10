@@ -20,8 +20,8 @@ slots is selected for both basic and extended parsing, preserving source-order s
 SMILES roundtripping. Retain the selected pending finalizer and vector reuse. The measured extended
 cost and retained-capacity limitations are accepted for this integration; closing order is a diagnostic
 counterexample, not an implementation alternative. S2b6 fixtures and baseline verification are
-complete; S2b7 cursor/pending integration is next, before the remaining flag removal and limited
-permutation work. No further tuning round is queued, and production integration has not started.
+complete, and S2b7 cursor/pending integration is complete. S2b8 output and performance verification
+is next, before the remaining flag removal and limited permutation work. No further tuning round is queued.
 
 ## Finding
 
@@ -2115,13 +2115,35 @@ benchmark passes Clippy with warnings denied. All 18 synthetic controls and all 
 match the frozen exploration inputs exactly. Formatting and diff checks pass. No new timing study
 was run, no runtime parser source changed, and S2b7 remains next.
 
+### S2b7 cursor/pending integration — 2026-09-09
+
+The basic and extended parsers now use the selected statically specialized assembler. The cursor
+carries the current atom, aromaticity, and optional marked-site index through branch restoration.
+Atoms are written directly to their final rows; only supported marked sites accumulate ordered bond
+incidences. Ring bonds retain opening-order reservations, with CX completion ranks recorded only when
+requested. Reaction mappings accumulate directly into the wrapper-owned map.
+
+The consuming finalizer retains the selected owning bond conversion and stereo-vector reuse. The
+full-bond stereo scan, site searches, separate root vector, closing-record replay, and intermediate
+one-molecule collection are removed. Capacity hints, basic/extended error offsets, source metadata,
+and ChiralityFrame are preserved. Private builder tests were migrated in place, and existing expected
+molecule helpers construct TableIR rows directly rather than using removed builder callbacks.
+
+The integrated runtime matches the selected pending prototype apart from import ordering, spacing,
+a boolean parameter name, and removal of a stale comment. No fixture, snapshot, or benchmark input
+was changed. S2b8 will perform the full output comparison and bounded performance handoff.
+
+Verification passed: 3,478 library tests, six layout tests, 2,253 MOL cases, 407 SDF cases,
+10,223 SMILES conformance cases with unchanged snapshots, and six property tests with seed 224.
+All-target IO Clippy with conformance/proptest enabled passed with warnings denied. Formatting and
+`git diff --check` passed. S2b7 is complete; S2b8 is next.
+
 ## Implementation plan
 
 S0, S1, S2a, S2b, and S2b1–S2b5 are complete. The subsequent bounded experiments and architecture
-selection are also complete. S2b6 is complete; S2b7–S2b8 integrate and verify the selected
-cursor/pending implementation. S2c–S2e and S3 retain the remaining flag migration, known corrections,
-and limited permutation scope. These
-remaining subitems have not started. S2b7 subsumes the former S4 cleanup; earlier S4 references
+selection are also complete. S2b6–S2b7 are complete; S2b8 verifies the integrated cursor/pending
+implementation. S2c–S2e and S3 retain the remaining flag migration, known corrections,
+and limited permutation scope. These remaining subitems have not started. S2b7 subsumes the former S4 cleanup; earlier S4 references
 describe the original sequencing. No mutating git operation or commit is implied.
 
 Stages end green, including required caller/expectation migrations. Each code subitem includes its
@@ -2216,7 +2238,7 @@ Graph-IR construction and its invariants remain unchanged.
   checking source/input/build identity; remeasure only if those inputs have drifted. Keep the extended
   ring-free countercases visible. No exploratory data or code goes in `materials/`.
   Run the focused tests and IO conformance/property gate. **[dep: S2b5, settled pending selection]**
-- **S2b7 — Cursor/pending parser integration** — breaking private rewire (red→green within the
+- **S2b7 — Cursor/pending parser integration (completed 2026-09-09)** — breaking private rewire (red→green within the
   subitem), `umol-io::smiles::parser` and `parser::builder`. Integrate the statically specialized
   basic/extended assembler, atom cursor, branch restoration, and direct final atom rows. Keep organic
   atom emission separate from marked bracket handling; retain private incidence records only for
@@ -2227,7 +2249,7 @@ Graph-IR construction and its invariants remain unchanged.
   together, including direct mapping accumulation and private CX records. Preserve exact rows, frames,
   source spans, empty/dot behavior, diagnostics, and both direct target representations. Keep
   ChiralityFrame until S2c. No public symbol changes, closing-order path, storage selector, new
-  compaction policy, or experimental finalization rewrite. Include S2b6's regressions and the IO
+  compaction policy, or experimental finalization rewrite. Include S2b6's cases and the IO
   conformance/property gate; fit the production files' conventions rather than copying harness
   scaffolding. **[dep: S2b6]**
 - **S2b8 — Integration verification and performance handoff** — additive (green), parser/raise
@@ -2322,8 +2344,7 @@ workspace test alone does not cover them. Existing property suites are regressio
 expansion into a new randomized-testing project. Additional graph-IR or other feature-specific gates
 are required only if approved implementation changes actually touch those components.
 
-Remaining critical path: **S2b7 cursor/pending integration →
-S2b8 verification → S2c flag removal → S2d ingestion/fixtures → S2e wildcard discrepancy →
+Remaining critical path: **S2b8 verification → S2c flag removal → S2d ingestion/fixtures → S2e wildcard discrepancy →
 S3a limited atom/bond permutation laws → S3b downstream/Python coverage → S3c impact review**.
 All stages end green. The wildcard discrepancy remains later required work, not deferred work.
 Optional optimization is outside this critical path; the core deliverable does not wait for it.

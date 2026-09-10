@@ -258,4 +258,4 @@ the statuses recorded here remain authoritative.
 | [220-readable-depiction-2026-09-02.md](220-readable-depiction-2026-09-02.md)                                     | Completed     | 2026-09-03   |                                                                                                               |
 | [221-depiction-api-2026-09-03.md](221-depiction-api-2026-09-03.md)                                               | Completed     | 2026-09-03   | Final Rust/Python depiction API, feature boundary, release notes, and verification are complete.               |
 | [223-pattern-semantics-spike-2026-09-05.md](223-pattern-semantics-spike-2026-09-05.md) | Informational | 2026-09-05 | |
-| [224-smiles-ring-closure-frame-2026-09-08.md](224-smiles-ring-closure-frame-2026-09-08.md) | In Progress | 2026-09-09 | S2b6 complete; next is S2b7 cursor/pending integration with opening order. |
+| [224-smiles-ring-closure-frame-2026-09-08.md](224-smiles-ring-closure-frame-2026-09-08.md) | In Progress | 2026-09-09 | S2b7 complete; next is S2b8 output comparison and performance verification. |

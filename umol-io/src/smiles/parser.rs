@@ -9,23 +9,21 @@ mod builder;
 mod cx;
 mod utils;
 
-use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeEditor};
+use self::builder::{
+    AtomData, AtomMapping, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeEditor,
+};
 use self::cx::{
     parse_cx_annotations, parse_extended_cx_annotations, remap_cx_bond_indices,
     split_reaction_cx_entries, update_extended_molecule, update_extended_reaction, update_molecule,
     update_reaction, BondIndexMap,
 };
 use self::utils::{
-    attach_atom, attach_extended_atom, invalid_ring_context, parse_bond, parse_bracket,
-    parse_extended_bond, parse_extended_bracket, parse_organic_aliphatic_element,
-    parse_organic_aromatic_element, parse_ring_index, Frame,
+    parse_bond, parse_bracket, parse_extended_bond, parse_extended_bracket,
+    parse_organic_aliphatic_element, parse_organic_aromatic_element, parse_ring_index,
 };
 use super::config::{SmilesIoConfig, SmilesSyntaxFlags};
 use super::error::ParseError;
-use crate::table_ir::{
-    BondDirection, BondDonation, BondOrder, Chirality, ChiralityFrame, ExtendedMolecule,
-    ExtendedReaction, Molecule, Reaction, SourceFormat, Span, WildcardAtom, Winding,
-};
+use crate::table_ir::{ExtendedMolecule, ExtendedReaction, Molecule, Reaction, SourceFormat, Span};
 
 /// Parse a molecular SMILES byte slice into `table_ir::Molecule`.
 pub(crate) fn parse_molecule(
@@ -46,7 +44,7 @@ pub(crate) fn parse_molecule(
     let has_cx_annotations =
         flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let (remaining, (mut mol, ring_bonds, _)) =
-        parse_smiles_inner(input, 0, false, has_cx_annotations, flags)?;
+        parse_smiles_inner(input, 0, false, has_cx_annotations, flags, None)?;
 
     // Inner parser stops at whitespace.
     let trimmed = remaining.trim_ascii_start();
@@ -74,6 +72,7 @@ pub(crate) fn parse_reaction(
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
         flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
+    let mut atom_mapping = BTreeMap::new();
     let mut remaining = input;
     let mut offset = 0usize;
 
@@ -87,8 +86,14 @@ pub(crate) fn parse_reaction(
     }
 
     // Reactants: parse one side-supermolecule until '>'.
-    let (rest, (reactants, reactant_ring_bonds, new_offset)) =
-        parse_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
+    let (rest, (reactants, reactant_ring_bonds, new_offset)) = parse_smiles_inner(
+        remaining,
+        offset,
+        true,
+        has_cx_annotations,
+        flags,
+        Some((&mut atom_mapping, false)),
+    )?;
     offset = new_offset;
     remaining = rest;
 
@@ -105,7 +110,7 @@ pub(crate) fn parse_reaction(
 
         // Agents: parse one side-supermolecule until '>'.
         let (rest, (agents_parsed, agents_ring_bonds, new_offset)) =
-            parse_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
+            parse_smiles_inner(remaining, offset, true, has_cx_annotations, flags, None)?;
         offset = new_offset;
         remaining = rest;
         agents = agents_parsed;
@@ -121,14 +126,20 @@ pub(crate) fn parse_reaction(
     }
 
     // Products: parse one side-supermolecule until EOF/whitespace.
-    let (rest, (products, product_ring_bonds, _new_offset)) =
-        parse_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
+    let (rest, (products, product_ring_bonds, _new_offset)) = parse_smiles_inner(
+        remaining,
+        offset,
+        true,
+        has_cx_annotations,
+        flags,
+        Some((&mut atom_mapping, true)),
+    )?;
 
     let mut reaction = Reaction {
         reactants,
         products,
         agents,
-        atom_mapping: BTreeMap::new(),
+        atom_mapping,
         comments: Vec::new(),
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
@@ -158,35 +169,23 @@ pub(crate) fn parse_reaction(
         )?;
         update_reaction(&mut reaction, split)?;
     }
-    collect_atom_mapping(&mut reaction);
     Ok(reaction)
 }
 
-// The third tuple element carries the ring-closure records for CX bond-index remapping
-// (a tuple for now; a named parse-result struct is the eventual home).
 #[allow(clippy::type_complexity)]
-fn parse_smiles_inner(
-    input: &[u8],
+fn parse_smiles_inner<'a>(
+    input: &'a [u8],
     offset: usize,
     as_reaction: bool,
     store_rings: bool,
     flags: SmilesSyntaxFlags,
-) -> Result<(&[u8], (Molecule, Vec<(usize, usize)>, usize)), ParseError> {
+    mapping: Option<(&mut AtomMapping, bool)>,
+) -> Result<(&'a [u8], (Molecule, Vec<(usize, usize)>, usize)), ParseError> {
     let extended_bonds = flags.contains(SmilesSyntaxFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
     let mut builder =
-        MoleculeEditor::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
-    let mut branch_stack: Vec<Frame> = Vec::new();
-    let mut last_atom_idx: Option<usize> = None;
-    let mut pending_bond: Option<(
-        BondOrder,
-        Option<BondDirection>,
-        Option<BondDonation>,
-        usize,
-    )> = None;
-    let mut after_closed_group: bool = false;
-
+        MoleculeEditor::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings, mapping);
     while i < n {
         let b0 = input[i];
 
@@ -198,128 +197,25 @@ fn parse_smiles_inner(
             break;
         }
 
-        if b0 != b'(' {
-            after_closed_group = false;
-        }
+        builder.token(b0);
         if b0 == b'(' {
-            if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos: offset + pos });
-            }
-            if after_closed_group {
-                last_atom_idx = None;
-                branch_stack.push(Frame::Group {
-                    had_atom: false,
-                    open_pos: i,
-                });
-                after_closed_group = false;
-            } else {
-                match last_atom_idx {
-                    Some(idx) => branch_stack.push(Frame::Branch {
-                        base: idx,
-                        had_atom: false,
-                        open_pos: i,
-                    }),
-                    None => branch_stack.push(Frame::Group {
-                        had_atom: false,
-                        open_pos: i,
-                    }),
-                }
-            }
+            builder.open_branch(i, offset)?;
             i += 1;
             continue;
         }
         if b0 == b')' {
-            if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos: offset + pos });
-            }
-            let Some(frame) = branch_stack.pop() else {
-                return Err(ParseError::UnbalancedCloseParen { pos: offset + i });
-            };
-            match frame {
-                Frame::Branch { base, had_atom, .. } => {
-                    if !had_atom {
-                        return Err(ParseError::EmptyBranch { pos: offset + i });
-                    }
-                    last_atom_idx = Some(base);
-                }
-                Frame::Group { had_atom, .. } => {
-                    if !had_atom {
-                        return Err(ParseError::EmptyGroup { pos: offset + i });
-                    }
-                    after_closed_group = true;
-                    if let Some(parent) = branch_stack.last_mut() {
-                        match parent {
-                            Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                                *had_atom = true
-                            }
-                        }
-                    }
-                    if branch_stack.is_empty() && i + 1 != n {
-                        let next = input[i + 1];
-                        if next != b'.' {
-                            return Err(ParseError::NonfinalGroup { pos: offset + i });
-                        }
-                    }
-                }
-            }
+            builder.close_branch(input, i, offset)?;
             i += 1;
             continue;
         }
         if b0 == b'.' {
-            if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos: offset + pos });
-            }
-            if i == 0 {
-                return Err(ParseError::LeadingDot { pos: offset + i });
-            }
-            if let Some(Frame::Group {
-                had_atom: false, ..
-            }) = branch_stack.last()
-            {
-                return Err(ParseError::LeadingDot { pos: offset + i });
-            }
-            if i + 1 == n {
-                return Err(ParseError::TrailingDot { pos: offset + i });
-            }
-            if as_reaction && input[i + 1] == b'>' {
-                return Err(ParseError::TrailingDot { pos: offset + i });
-            }
-            if input[i + 1] == b'.' {
-                return Err(ParseError::ConsecutiveDots { pos: offset + i });
-            }
-            // Detect dot before ring (single digit ring index)
-            if input[i + 1].is_ascii_digit() {
-                return Err(ParseError::DotBeforeRing { pos: offset + i });
-            }
-            // Detect dot before percent ring index
-            if input[i + 1] == b'%' {
-                return Err(ParseError::DotBeforeRing { pos: offset + i });
-            }
-            last_atom_idx = None;
+            builder.dot(input, i, offset, as_reaction)?;
             i += 1;
             continue;
         }
         match parse_ring_index(input, i, offset) {
             Ok(Some((idx, next_i, _percent))) => {
-                if last_atom_idx.is_none() {
-                    return Err(ParseError::LeadingRing { pos: offset + i });
-                }
-                if invalid_ring_context(&branch_stack) {
-                    return Err(ParseError::LeadingRing { pos: offset });
-                }
-                let bond = pending_bond.take();
-                let (order_opt, direction_opt, donation_opt) =
-                    bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
-                builder.on_ring_bond(
-                    last_atom_idx.unwrap(),
-                    idx,
-                    order_opt,
-                    direction_opt,
-                    donation_opt,
-                    i,
-                    i + 1,
-                    offset,
-                )?;
+                builder.on_ring_bond(idx, i, i + 1, offset)?;
                 i = next_i;
                 continue;
             }
@@ -330,26 +226,14 @@ fn parse_smiles_inner(
         if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\')
             || (extended_bonds && matches!(b0, b'~' | b'<'))
         {
-            if pending_bond.is_some() {
-                return Err(ParseError::ConsecutiveBonds { pos: offset + i });
-            }
-            if last_atom_idx.is_none() {
-                if let Some(Frame::Group {
-                    had_atom: false, ..
-                }) = branch_stack.last()
-                {
-                    return Err(ParseError::LeadingBond { pos: offset + i });
-                }
-                return Err(ParseError::LeadingBond { pos: offset + i });
-            }
             // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
             if extended_bonds {
                 let (order, direction, donation, consumed) = parse_extended_bond(input, i);
-                pending_bond = Some((order, direction, donation, i));
+                builder.on_bond(order, direction, donation, i, offset)?;
                 i += consumed;
             } else {
                 let (order, bond_direction) = parse_bond(b0);
-                pending_bond = Some((order, bond_direction, None, i));
+                builder.on_bond(order, bond_direction, None, i, offset)?;
                 i += 1;
             }
             continue;
@@ -381,134 +265,31 @@ fn parse_smiles_inner(
                 chirality: chir_opt,
                 span: Span::from_bytes_opt(s, e),
             };
-            let curr = builder.on_atom(atom);
-            let winding = match chir_opt {
-                Some(Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 }) => {
-                    Some(Winding::CounterClockwise)
-                }
-                Some(Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 }) => {
-                    Some(Winding::Clockwise)
-                }
-                _ => None,
-            };
-            if let Some(winding) = winding {
-                builder.on_stereo_atom(curr, winding, last_atom_idx.is_none());
-            }
-            let aromatic = aromatic.unwrap_or(false);
-
-            attach_atom(
-                &mut builder,
-                last_atom_idx,
-                curr,
-                &mut pending_bond,
-                aromatic,
-                i as u32,
-                (j + 1) as u32,
-            );
-            last_atom_idx = Some(curr);
-            if let Some(top) = branch_stack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
+            builder.on_atom(atom);
             i = j + 1;
             continue;
         }
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
                 let (s, e) = (Some(i as u32), Some((i + 2) as u32));
-                let curr = builder.on_atom_fast(Element::Cl, false, s, e);
-
-                attach_atom(
-                    &mut builder,
-                    last_atom_idx,
-                    curr,
-                    &mut pending_bond,
-                    false,
-                    i as u32,
-                    (i + 2) as u32,
-                );
-                last_atom_idx = Some(curr);
-                if let Some(top) = branch_stack.last_mut() {
-                    match top {
-                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                            *had_atom = true
-                        }
-                    }
-                }
+                builder.on_atom_fast(Element::Cl, false, s, e);
                 i += 2;
                 continue;
             }
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
-            let curr = builder.on_atom_fast(Element::C, false, s, e);
-
-            attach_atom(
-                &mut builder,
-                last_atom_idx,
-                curr,
-                &mut pending_bond,
-                false,
-                i as u32,
-                (i + 1) as u32,
-            );
-            last_atom_idx = Some(curr);
-            if let Some(top) = branch_stack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
+            builder.on_atom_fast(Element::C, false, s, e);
             i += 1;
             continue;
         }
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
                 let (s, e) = (Some(i as u32), Some((i + 2) as u32));
-                let curr = builder.on_atom_fast(Element::Br, false, s, e);
-
-                attach_atom(
-                    &mut builder,
-                    last_atom_idx,
-                    curr,
-                    &mut pending_bond,
-                    false,
-                    i as u32,
-                    (i + 2) as u32,
-                );
-                last_atom_idx = Some(curr);
-                if let Some(top) = branch_stack.last_mut() {
-                    match top {
-                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                            *had_atom = true
-                        }
-                    }
-                }
+                builder.on_atom_fast(Element::Br, false, s, e);
                 i += 2;
                 continue;
             }
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
-            let curr = builder.on_atom_fast(Element::B, false, s, e);
-
-            attach_atom(
-                &mut builder,
-                last_atom_idx,
-                curr,
-                &mut pending_bond,
-                false,
-                i as u32,
-                (i + 1) as u32,
-            );
-            last_atom_idx = Some(curr);
-            if let Some(top) = branch_stack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
+            builder.on_atom_fast(Element::B, false, s, e);
             i += 1;
             continue;
         }
@@ -516,49 +297,13 @@ fn parse_smiles_inner(
         if b0.is_ascii_alphabetic() {
             if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
                 let (s, e) = (Some(i as u32), Some((i + consumed) as u32));
-                let curr = builder.on_atom_fast(element, false, s, e);
-
-                attach_atom(
-                    &mut builder,
-                    last_atom_idx,
-                    curr,
-                    &mut pending_bond,
-                    false,
-                    i as u32,
-                    (i + consumed) as u32,
-                );
-                last_atom_idx = Some(curr);
-                if let Some(top) = branch_stack.last_mut() {
-                    match top {
-                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                            *had_atom = true
-                        }
-                    }
-                }
+                builder.on_atom_fast(element, false, s, e);
                 i += consumed;
                 continue;
             }
             if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
                 let (s, e) = (Some(i as u32), Some((i + consumed) as u32));
-                let curr = builder.on_atom_fast(element, true, s, e);
-
-                attach_atom(
-                    &mut builder,
-                    last_atom_idx,
-                    curr,
-                    &mut pending_bond,
-                    true,
-                    i as u32,
-                    (i + consumed) as u32,
-                );
-                last_atom_idx = Some(curr);
-                if let Some(top) = branch_stack.last_mut() {
-                    match top {
-                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                            *had_atom = true
-                        }
-                    }
-                }
+                builder.on_atom_fast(element, true, s, e);
                 i += consumed;
                 continue;
             }
@@ -566,25 +311,7 @@ fn parse_smiles_inner(
         }
         if b0 == b'*' {
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
-            let curr = builder.on_wildcard(s, e);
-
-            attach_atom(
-                &mut builder,
-                last_atom_idx,
-                curr,
-                &mut pending_bond,
-                false,
-                i as u32,
-                (i + 1) as u32,
-            );
-            last_atom_idx = Some(curr);
-            if let Some(top) = branch_stack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
+            builder.on_wildcard(s, e);
             i += 1;
             continue;
         }
@@ -598,34 +325,7 @@ fn parse_smiles_inner(
         return Err(ParseError::InvalidToken { pos: offset + i });
     }
 
-    if let Some((_, _, _, pos)) = pending_bond {
-        return Err(ParseError::TrailingBond { pos: offset + pos });
-    }
-    if !branch_stack.is_empty() {
-        let pos = match branch_stack.last().unwrap() {
-            Frame::Branch { open_pos, .. } | Frame::Group { open_pos, .. } => *open_pos,
-        };
-        return Err(ParseError::UnbalancedOpenParen { pos: offset + pos });
-    }
-    if let Some(pos_open) = builder.unclosed_ring_pos() {
-        return Err(ParseError::UnbalancedRingIndex {
-            open_pos: offset + pos_open,
-        });
-    }
-    let mut mols = builder.finish();
-    let mol = mols
-        .pop()
-        .map(|mut mol| {
-            mol.source_format = SourceFormat::SMILES;
-            mol.chirality_frame = mol
-                .atoms
-                .iter()
-                .any(|atom| atom.chirality.is_some())
-                .then_some(ChiralityFrame::FirstNeighborToward);
-            mol
-        })
-        .unwrap_or_else(Molecule::empty);
-    let ring_bonds = builder.take_ring_bonds();
+    let (mol, ring_bonds) = builder.finish(offset)?;
     let new_offset = offset + i;
     Ok((&input[i..], (mol, ring_bonds, new_offset)))
 }
@@ -663,7 +363,7 @@ pub fn parse_extended_smiles_bytes_with(
     let has_cx_annotations =
         flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let (remaining, (mut mol, ring_bonds, _)) =
-        parse_extended_smiles_inner(input, 0, false, has_cx_annotations, flags)?;
+        parse_extended_smiles_inner(input, 0, false, has_cx_annotations, flags, None)?;
 
     // Inner parser stops at whitespace. Leading whitespace is not allowed
     // (exception: whitespace-only input is allowed)
@@ -714,6 +414,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
         flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
+    let mut atom_mapping = BTreeMap::new();
     let mut remaining = input;
     let mut offset = 0usize;
 
@@ -726,8 +427,14 @@ pub fn parse_extended_reaction_smiles_bytes_with(
     }
 
     // Reactants: parse one side-supermolecule until '>'.
-    let (rest, (reactants, reactant_ring_bonds, new_offset)) =
-        parse_extended_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
+    let (rest, (reactants, reactant_ring_bonds, new_offset)) = parse_extended_smiles_inner(
+        remaining,
+        offset,
+        true,
+        has_cx_annotations,
+        flags,
+        Some((&mut atom_mapping, false)),
+    )?;
     offset = new_offset;
     remaining = rest;
 
@@ -743,7 +450,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
         offset += 1;
 
         let (rest, (agents_parsed, agents_ring_bonds, new_offset)) =
-            parse_extended_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
+            parse_extended_smiles_inner(remaining, offset, true, has_cx_annotations, flags, None)?;
         offset = new_offset;
         remaining = rest;
         agents = agents_parsed;
@@ -759,14 +466,20 @@ pub fn parse_extended_reaction_smiles_bytes_with(
     }
 
     // Products: parse one side-supermolecule until EOF/whitespace.
-    let (rest, (products, product_ring_bonds, _new_offset)) =
-        parse_extended_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
+    let (rest, (products, product_ring_bonds, _new_offset)) = parse_extended_smiles_inner(
+        remaining,
+        offset,
+        true,
+        has_cx_annotations,
+        flags,
+        Some((&mut atom_mapping, true)),
+    )?;
 
     let mut reaction = ExtendedReaction {
         reactants,
         products,
         agents,
-        atom_mapping: BTreeMap::new(),
+        atom_mapping,
         comments: Vec::new(),
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
@@ -796,33 +509,27 @@ pub fn parse_extended_reaction_smiles_bytes_with(
         )?;
         update_extended_reaction(&mut reaction, split)?;
     }
-    collect_extended_atom_mapping(&mut reaction);
     Ok(reaction)
 }
 
 #[allow(clippy::type_complexity)]
-fn parse_extended_smiles_inner(
-    input: &[u8],
+fn parse_extended_smiles_inner<'a>(
+    input: &'a [u8],
     offset: usize,
     as_reaction: bool,
     store_rings: bool,
     flags: SmilesSyntaxFlags,
-) -> Result<(&[u8], (ExtendedMolecule, Vec<(usize, usize)>, usize)), ParseError> {
+    mapping: Option<(&mut AtomMapping, bool)>,
+) -> Result<(&'a [u8], (ExtendedMolecule, Vec<(usize, usize)>, usize)), ParseError> {
     let extended_bonds = flags.contains(SmilesSyntaxFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
-    let mut builder =
-        ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
-    let mut branch_stack: Vec<Frame> = Vec::new();
-    let mut last_atom_idx: Option<usize> = None;
-    let mut pending_bond: Option<(
-        BondOrder,
-        Option<BondDirection>,
-        Option<BondDonation>,
-        usize,
-    )> = None;
-    let mut just_closed_group: bool = false;
-
+    let mut builder = ExtendedMoleculeBuilder::with_capacity(
+        n.max(1),
+        n.max(1).saturating_sub(1),
+        store_rings,
+        mapping,
+    );
     while i < n {
         let b0 = input[i];
 
@@ -834,126 +541,25 @@ fn parse_extended_smiles_inner(
             break;
         }
 
-        if b0 != b'(' {
-            just_closed_group = false;
-        }
+        builder.token(b0);
         if b0 == b'(' {
-            if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos: offset + pos });
-            }
-            if just_closed_group {
-                last_atom_idx = None;
-                branch_stack.push(Frame::Group {
-                    had_atom: false,
-                    open_pos: i,
-                });
-                just_closed_group = false;
-            } else {
-                match last_atom_idx {
-                    Some(idx) => branch_stack.push(Frame::Branch {
-                        base: idx,
-                        had_atom: false,
-                        open_pos: i,
-                    }),
-                    None => branch_stack.push(Frame::Group {
-                        had_atom: false,
-                        open_pos: i,
-                    }),
-                }
-            }
+            builder.open_branch(i, offset)?;
             i += 1;
             continue;
         }
         if b0 == b')' {
-            if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos: offset + pos });
-            }
-            let Some(frame) = branch_stack.pop() else {
-                return Err(ParseError::UnbalancedCloseParen { pos: offset + i });
-            };
-            match frame {
-                Frame::Branch { base, had_atom, .. } => {
-                    if !had_atom {
-                        return Err(ParseError::EmptyBranch { pos: offset + i });
-                    }
-                    last_atom_idx = Some(base);
-                }
-                Frame::Group { had_atom, .. } => {
-                    if !had_atom {
-                        return Err(ParseError::EmptyGroup { pos: offset + i });
-                    }
-                    just_closed_group = true;
-                    if let Some(parent) = branch_stack.last_mut() {
-                        match parent {
-                            Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                                *had_atom = true
-                            }
-                        }
-                    }
-                    if branch_stack.is_empty() && i + 1 != n {
-                        let next = input[i + 1];
-                        if next != b'.' {
-                            return Err(ParseError::NonfinalGroup { pos: offset + i });
-                        }
-                    }
-                }
-            }
+            builder.close_branch(input, i, offset)?;
             i += 1;
             continue;
         }
         if b0 == b'.' {
-            if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos });
-            }
-            if i == 0 {
-                return Err(ParseError::LeadingDot { pos: i });
-            }
-            if let Some(Frame::Group {
-                had_atom: false, ..
-            }) = branch_stack.last()
-            {
-                return Err(ParseError::LeadingDot { pos: i });
-            }
-            if i + 1 == n {
-                return Err(ParseError::TrailingDot { pos: i });
-            }
-            if as_reaction && input[i + 1] == b'>' {
-                return Err(ParseError::TrailingDot { pos: offset + i });
-            }
-            if input[i + 1] == b'.' {
-                return Err(ParseError::ConsecutiveDots { pos: offset + i });
-            }
-            if input[i + 1].is_ascii_digit() {
-                return Err(ParseError::DotBeforeRing { pos: offset + i });
-            }
-            if input[i + 1] == b'%' {
-                return Err(ParseError::DotBeforeRing { pos: offset + i });
-            }
-            last_atom_idx = None;
+            builder.dot(input, i, offset, as_reaction)?;
             i += 1;
             continue;
         }
         match parse_ring_index(input, i, offset) {
             Ok(Some((idx, next_i, _percent))) => {
-                if last_atom_idx.is_none() {
-                    return Err(ParseError::LeadingRing { pos: offset + i });
-                }
-                if invalid_ring_context(&branch_stack) {
-                    return Err(ParseError::LeadingRing { pos: offset });
-                }
-                let bond = pending_bond.take();
-                let (order_opt, direction_opt, donation_opt) =
-                    bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
-                builder.on_ring_bond(
-                    last_atom_idx.unwrap(),
-                    idx,
-                    order_opt,
-                    direction_opt,
-                    donation_opt,
-                    i,
-                    i + 1,
-                    offset,
-                )?;
+                builder.on_ring_bond(idx, i, i + 1, offset)?;
                 i = next_i;
                 continue;
             }
@@ -964,26 +570,14 @@ fn parse_extended_smiles_inner(
         if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\')
             || (extended_bonds && matches!(b0, b'~' | b'<'))
         {
-            if pending_bond.is_some() {
-                return Err(ParseError::ConsecutiveBonds { pos: offset + i });
-            }
-            if last_atom_idx.is_none() {
-                if let Some(Frame::Group {
-                    had_atom: false, ..
-                }) = branch_stack.last()
-                {
-                    return Err(ParseError::LeadingBond { pos: offset + i });
-                }
-                return Err(ParseError::LeadingBond { pos: offset + i });
-            }
             // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
             if extended_bonds {
                 let (order, direction, donation, consumed) = parse_extended_bond(input, i);
-                pending_bond = Some((order, direction, donation, i));
+                builder.on_bond(order, direction, donation, i, offset)?;
                 i += consumed;
             } else {
                 let (order, bond_direction) = parse_bond(b0);
-                pending_bond = Some((order, bond_direction, None, i));
+                builder.on_bond(order, bond_direction, None, i, offset)?;
                 i += 1;
             }
             continue;
@@ -1014,182 +608,44 @@ fn parse_extended_smiles_inner(
                 chirality: chir_opt,
                 span: Span::from_bytes_opt(s, e),
             };
-            let curr = builder.on_atom(atom);
-            let winding = match chir_opt {
-                Some(Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 }) => {
-                    Some(Winding::CounterClockwise)
-                }
-                Some(Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 }) => {
-                    Some(Winding::Clockwise)
-                }
-                _ => None,
-            };
-            if let Some(winding) = winding {
-                builder.on_stereo_atom(curr, winding, last_atom_idx.is_none());
-            }
-
-            attach_extended_atom(
-                &mut builder,
-                last_atom_idx,
-                curr,
-                &mut pending_bond,
-                aromatic,
-                i as u32,
-                (j + 1) as u32,
-            );
-            last_atom_idx = Some(curr);
-            if let Some(top) = branch_stack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
+            builder.on_atom(atom);
             i = j + 1;
             continue;
         }
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
                 let (s, e) = (Some(i as u32), Some((i + 2) as u32));
-                let curr = builder.on_atom_fast(Element::Cl, false, s, e);
-
-                attach_extended_atom(
-                    &mut builder,
-                    last_atom_idx,
-                    curr,
-                    &mut pending_bond,
-                    false,
-                    i as u32,
-                    (i + 2) as u32,
-                );
-                last_atom_idx = Some(curr);
-                if let Some(top) = branch_stack.last_mut() {
-                    match top {
-                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                            *had_atom = true
-                        }
-                    }
-                }
+                builder.on_atom_fast(Element::Cl, false, s, e);
                 i += 2;
                 continue;
             }
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
-            let curr = builder.on_atom_fast(Element::C, false, s, e);
-
-            attach_extended_atom(
-                &mut builder,
-                last_atom_idx,
-                curr,
-                &mut pending_bond,
-                false,
-                i as u32,
-                (i + 1) as u32,
-            );
-            last_atom_idx = Some(curr);
-            if let Some(top) = branch_stack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
+            builder.on_atom_fast(Element::C, false, s, e);
             i += 1;
             continue;
         }
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
                 let (s, e) = (Some(i as u32), Some((i + 2) as u32));
-                let curr = builder.on_atom_fast(Element::Br, false, s, e);
-
-                attach_extended_atom(
-                    &mut builder,
-                    last_atom_idx,
-                    curr,
-                    &mut pending_bond,
-                    false,
-                    i as u32,
-                    (i + 2) as u32,
-                );
-                last_atom_idx = Some(curr);
-                if let Some(top) = branch_stack.last_mut() {
-                    match top {
-                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                            *had_atom = true
-                        }
-                    }
-                }
+                builder.on_atom_fast(Element::Br, false, s, e);
                 i += 2;
                 continue;
             }
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
-            let curr = builder.on_atom_fast(Element::B, false, s, e);
-
-            attach_extended_atom(
-                &mut builder,
-                last_atom_idx,
-                curr,
-                &mut pending_bond,
-                false,
-                i as u32,
-                (i + 1) as u32,
-            );
-            last_atom_idx = Some(curr);
-            if let Some(top) = branch_stack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
+            builder.on_atom_fast(Element::B, false, s, e);
             i += 1;
             continue;
         }
         if b0.is_ascii_alphabetic() {
             if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
                 let (s, e) = (Some(i as u32), Some((i + consumed) as u32));
-                let curr = builder.on_atom_fast(element, false, s, e);
-
-                attach_extended_atom(
-                    &mut builder,
-                    last_atom_idx,
-                    curr,
-                    &mut pending_bond,
-                    false,
-                    i as u32,
-                    (i + consumed) as u32,
-                );
-                last_atom_idx = Some(curr);
-                if let Some(top) = branch_stack.last_mut() {
-                    match top {
-                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                            *had_atom = true
-                        }
-                    }
-                }
+                builder.on_atom_fast(element, false, s, e);
                 i += consumed;
                 continue;
             }
             if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
                 let (s, e) = (Some(i as u32), Some((i + consumed) as u32));
-                let curr = builder.on_atom_fast(element, true, s, e);
-
-                attach_extended_atom(
-                    &mut builder,
-                    last_atom_idx,
-                    curr,
-                    &mut pending_bond,
-                    true,
-                    i as u32,
-                    (i + consumed) as u32,
-                );
-                last_atom_idx = Some(curr);
-                if let Some(top) = branch_stack.last_mut() {
-                    match top {
-                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                            *had_atom = true
-                        }
-                    }
-                }
+                builder.on_atom_fast(element, true, s, e);
                 i += consumed;
                 continue;
             }
@@ -1197,25 +653,7 @@ fn parse_extended_smiles_inner(
         }
         if b0 == b'*' {
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
-            let curr = builder.on_wildcard(WildcardAtom::Any, None, s, e);
-
-            attach_extended_atom(
-                &mut builder,
-                last_atom_idx,
-                curr,
-                &mut pending_bond,
-                false,
-                i as u32,
-                (i + 1) as u32,
-            );
-            last_atom_idx = Some(curr);
-            if let Some(top) = branch_stack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
+            builder.on_wildcard(s, e);
             i += 1;
             continue;
         }
@@ -1228,84 +666,9 @@ fn parse_extended_smiles_inner(
         return Err(ParseError::InvalidToken { pos: offset + i });
     }
 
-    if let Some((_, _, _, pos)) = pending_bond {
-        return Err(ParseError::TrailingBond { pos: offset + pos });
-    }
-    if !branch_stack.is_empty() {
-        let pos = match branch_stack.last().unwrap() {
-            Frame::Branch { open_pos, .. } | Frame::Group { open_pos, .. } => *open_pos,
-        };
-        return Err(ParseError::UnbalancedOpenParen { pos: offset + pos });
-    }
-    if let Some(pos_open) = builder.unclosed_ring_pos() {
-        return Err(ParseError::UnbalancedRingIndex {
-            open_pos: offset + pos_open,
-        });
-    }
-    let mut mols = builder.finish();
-    let mol = mols
-        .pop()
-        .map(|mut mol| {
-            mol.source_format = SourceFormat::SMILES;
-            mol.chirality_frame = mol
-                .atoms
-                .iter()
-                .any(|atom| atom.chirality.is_some())
-                .then_some(ChiralityFrame::FirstNeighborToward);
-            mol
-        })
-        .unwrap_or_else(ExtendedMolecule::empty);
-    let ring_bonds = builder.take_ring_bonds();
+    let (mol, ring_bonds) = builder.finish(offset)?;
     let new_offset = offset + i;
     Ok((&input[i..], (mol, ring_bonds, new_offset)))
-}
-
-fn collect_atom_mapping(reaction: &mut Reaction) {
-    for (at_idx, atom) in reaction.reactants.atoms.iter().enumerate() {
-        if let Some(class) = atom.class {
-            reaction
-                .atom_mapping
-                .entry(class)
-                .or_default()
-                .0
-                .push(at_idx as u32);
-        }
-    }
-
-    for (at_idx, atom) in reaction.products.atoms.iter().enumerate() {
-        if let Some(class) = atom.class {
-            reaction
-                .atom_mapping
-                .entry(class)
-                .or_default()
-                .1
-                .push(at_idx as u32);
-        }
-    }
-}
-
-fn collect_extended_atom_mapping(reaction: &mut ExtendedReaction) {
-    for (at_idx, atom) in reaction.reactants.atoms.iter().enumerate() {
-        if let Some(class) = atom.class {
-            reaction
-                .atom_mapping
-                .entry(class)
-                .or_default()
-                .0
-                .push(at_idx as u32);
-        }
-    }
-
-    for (at_idx, atom) in reaction.products.atoms.iter().enumerate() {
-        if let Some(class) = atom.class {
-            reaction
-                .atom_mapping
-                .entry(class)
-                .or_default()
-                .1
-                .push(at_idx as u32);
-        }
-    }
 }
 
 #[cfg(test)]
