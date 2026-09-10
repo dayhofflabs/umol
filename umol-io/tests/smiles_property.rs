@@ -7,10 +7,12 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{ElementForm, TryIntoIr};
+use umol_graph_ir::ir::{
+    BondId, CisTransStereoForm, ElementForm, Molecule, StereoCoset, TryIntoIr,
+};
 use umol_io::smiles::config::SmilesIoConfig;
 use umol_io::smiles::{parse_extended_smiles_bytes, ParseError, Smiles};
-use umol_io::table_ir::{ExtendedMolecule, Span};
+use umol_io::table_ir::{ExtendedMolecule, Span, StereoAtom, StereoLigand, Winding};
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".
@@ -229,5 +231,51 @@ proptest! {
             .map(|atom| atom.element().clone())
             .collect();
         prop_assert_eq!(actual, expected);
+    }
+
+    // Each alkene is definite exactly when both adjacent single bonds are marked.
+    // Same glyphs along this linear traversal put the reference ligands opposite.
+    #[test]
+    fn test_smiles_parse_directional_chain(markers in vec(prop::option::of(any::<bool>()), 2..10)) {
+        let mut input = String::from("F");
+        for (index, marker) in markers.iter().enumerate() {
+            match marker {
+                Some(true) => input.push('/'),
+                Some(false) => input.push('\\'),
+                None => {},
+            }
+            input.push_str(if index + 1 == markers.len() { "F" } else { "C=C" });
+        }
+        let expected: Vec<_> = markers.windows(2).map(|pair| {
+            match (pair[0], pair[1]) {
+                (Some(left), Some(right)) => Some(CisTransStereoForm::stereo(
+                    StereoCoset::Lit(u32::from(left == right)),
+                )),
+                _ => None,
+            }
+        }).collect();
+        let table = Smiles::parse(&input).unwrap().into_table_ir();
+        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let actual: Vec<_> = (0..markers.len() - 1).map(|index| {
+            molecule.bond(BondId::from(2 * index + 1))
+                .attributes.constraints.cis_trans_stereo().cloned()
+        }).collect();
+        prop_assert_eq!(actual, expected);
+    }
+
+    // Ring labels and atom-map numbers do not change the ligand encounter frame.
+    #[test]
+    fn test_smiles_parse_ring_frame(label in 10_u32..100, class in 0_u32..10000, clockwise in any::<bool>()) {
+        let marker = if clockwise { "@@" } else { "@" };
+        let input = format!("C[C{marker}H:{class}]%{label}CCCCO%{label}");
+        let table = Smiles::parse(&input).unwrap().into_table_ir();
+        prop_assert_eq!(table.stereo_atoms, vec![StereoAtom {
+            atom: 1,
+            ligands: vec![StereoLigand::Atom(0), StereoLigand::ImplicitHydrogen,
+                          StereoLigand::Atom(6), StereoLigand::Atom(2)],
+            winding: if clockwise { Winding::Clockwise } else { Winding::CounterClockwise },
+        }]);
+        prop_assert_eq!(table.atoms[1].class, Some(class));
+        prop_assert_eq!(table.atoms[1].implicit_hydrogens, Some(1));
     }
 }

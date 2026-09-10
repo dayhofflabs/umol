@@ -281,12 +281,13 @@ mod tests {
 
     use rstest::rstest;
     use smallvec::smallvec;
+    use umol_chem::element::Element;
     use umol_graph_core::{NodeId, Remapping};
     use umol_graph_ir::ir::{
-        AromaticSystemId, AromaticValenceForm, AtomId, BondConstraintForm, BondId, BooleanForm,
-        Canonicalize, CanonicalizeContext, Constraint, Deltas, ElectronCountsForm, Entity,
-        MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm, StereoCoset, StereoKind,
-        TetrahedralStereoForm,
+        AromaticSystemId, AromaticValenceForm, AtomForm, AtomId, BondConstraintForm, BondId,
+        BooleanForm, Canonicalize, CanonicalizeContext, Constraint, Deltas, ElectronCountsForm,
+        Entity, MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm, StereoCoset,
+        StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
     use umol_io::table_ir::AtomPair;
@@ -301,9 +302,10 @@ mod tests {
     };
     use crate::ops::resolve::{
         AromaticityFailurePolicy, AromaticityResolveConfig, DischargeContradiction,
-        StereoResolveConfig,
+        StereoContradiction, StereoResolveConfig, ValenceContradiction,
     };
-    use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, ResolveReport};
+    use crate::ops::stereo::StereoInconsistency;
+    use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, AtomTypingError, ResolveReport};
 
     #[rstest]
     #[case::model_conversion(
@@ -843,6 +845,58 @@ mod tests {
         "*",
         SmilesInputError::Underdetermined(ResolveUnderdetermined::default())
     )]
+    #[case::trigonal_carbon(
+        "[C@](F)(Cl)Br",
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(
+            StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure {
+                stereo_atom: StereoAtomId(0),
+            }),
+        ))
+    )]
+    #[case::trigonal_carbocation(
+        "[C@+](F)(Cl)Br",
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(
+            StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure {
+                stereo_atom: StereoAtomId(0),
+            }),
+        ))
+    )]
+    #[case::two_carbon_substituents(
+        "[C@](F)Cl",
+        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
+            MoleculeIntegrityError::StereoLigandArity {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                kind: StereoKind::Tetrahedral, expected: 4, actual: 2,
+            },
+        ))
+    )]
+    #[case::one_carbon_substituent(
+        "[C@]F",
+        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
+            MoleculeIntegrityError::StereoLigandArity {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                kind: StereoKind::Tetrahedral, expected: 4, actual: 1,
+            },
+        ))
+    )]
+    #[case::five_ligands(
+        "[C@H](F)(Cl)(Br)I",
+        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
+            MoleculeIntegrityError::StereoLigandArity {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                kind: StereoKind::Tetrahedral, expected: 4, actual: 5,
+            },
+        ))
+    )]
+    #[case::duplicate_bracket_h(
+        "[C@H2](F)(Cl)Br",
+        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
+            MoleculeIntegrityError::DuplicateStereoLigand {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            },
+        ))
+    )]
     #[case::biphenyl_unwritten_single(
         // OpenSMILES: a single (nonaromatic) bond between two aromatic atoms
         // must be explicitly represented; the unwritten bond raises as an
@@ -948,6 +1002,7 @@ mod tests {
     #[case::conjugated("C/C=C/C=C/C", "C\\C=C\\C=C\\C", true)]
     #[case::conjugated_opposite("C/C=C/C=C/C", "C/C=C/C=C\\C", false)]
     #[case::explicit_hydrogen("C[C@]1([H])CCCCO1", "C[C@@]1(CCCCO1)[H]", true)]
+    #[case::hydrogen_representation("[C@H](F)(Cl)Br", "[C@]([H])(F)(Cl)Br", false)]
     #[case::later_root("C.[C@H](F)(Cl)Br", "C.F[C@@H](Cl)Br", true)]
     #[case::mixed_digits("O1CCC[C@]21CCNC2", "O1CCC[C@@]12CCNC2", true)]
     fn test_ingest_smiles_stereo(#[case] left: &str, #[case] right: &str, #[case] expected: bool) {
@@ -1207,8 +1262,192 @@ mod tests {
         "O1CCCC[C@@H]1C",
         mol_dsl!(r##"{:atoms ["O#i=#c0#h0#n2#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h1#n0#u0#s" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 5 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"]] :stereo-atoms [{:site 5 :ligands [4 [:h 5] 0 6] :attrs :cw}]}"##)
     )]
+    #[case::tetrahedral_four_atoms(
+        "[C@](F)(Cl)(Br)I",
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#h0#n0#u0#s" "F#i=#c0#h0#n3#u0#s"
+                    "Cl#i=#c0#h0#n3#u0#s" "Br#i=#c0#h0#n3#u0#s" "I#i=#c0#h0#n3#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"] [0 4 "1#c0#u0#s"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs :ccw}]
+        }"#)
+    )]
+    #[case::tetrahedral_bracket_h(
+        "[C@H](F)(Cl)Br",
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#h1#n0#u0#s" "F#i=#c0#h0#n3#u0#s"
+                    "Cl#i=#c0#h0#n3#u0#s" "Br#i=#c0#h0#n3#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
+            :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs :ccw}]
+        }"#)
+    )]
+    #[case::tetrahedral_explicit_h(
+        "[C@]([H])(F)(Cl)Br",
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#h0#n0#u0#s" "H#i=#c0#h0#n0#u0#s"
+                    "F#i=#c0#h0#n3#u0#s" "Cl#i=#c0#h0#n3#u0#s" "Br#i=#c0#h0#n3#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"] [0 4 "1#c0#u0#s"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs :ccw}]
+        }"#)
+    )]
+    #[case::carbanion_lone_pair(
+        "[C@-](F)(Cl)Br",
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c-#h0#n1#u0#s" "F#i=#c0#h0#n3#u0#s"
+                    "Cl#i=#c0#h0#n3#u0#s" "Br#i=#c0#h0#n3#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
+            :stereo-atoms [{:site 0 :ligands [[:lp 0] 1 2 3] :attrs :ccw}]
+        }"#)
+    )]
+    #[case::sulfoxide_lone_pair(
+        "[S@](=O)(C)CC",
+        mol_dsl!(r#"{
+            :atoms ["S#i=#c0#h0#n1#u0#s" "O#i=#c0#h0#n2#u0#s"
+                    "C#i=#c0#h3#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h3#n0#u0#s"]
+            :bonds [[0 1 "2#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]]
+            :stereo-atoms [{:site 0 :ligands [[:lp 0] 1 2 3] :attrs :ccw}]
+        }"#)
+    )]
+    #[case::sulfoxide_zwitterion(
+        "[S@+]([O-])(C)CC",
+        mol_dsl!(r#"{
+            :atoms ["S#i=#c+#h0#n1#u0#s" "O#i=#c-#h0#n3#u0#s"
+                    "C#i=#c0#h3#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h3#n0#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]]
+            :stereo-atoms [{:site 0 :ligands [[:lp 0] 1 2 3] :attrs :ccw}]
+        }"#)
+    )]
+    #[case::alkene_opposite(
+        "F/C=C/Cl",
+        mol_dsl!(r#"{
+            :atoms ["F#i=#c0#h0#n3#u0#s" "C#i=#c0#h1#n0#u0#s"
+                    "C#i=#c0#h1#n0#u0#s" "Cl#i=#c0#h0#n3#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [1 2 "2#c0#u0#s"] [2 3 "1#c0#u0#s"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]
+        }"#)
+    )]
+    #[case::alkene_same(
+        "F/C=C\\Cl",
+        mol_dsl!(r#"{
+            :atoms ["F#i=#c0#h0#n3#u0#s" "C#i=#c0#h1#n0#u0#s"
+                    "C#i=#c0#h1#n0#u0#s" "Cl#i=#c0#h0#n3#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [1 2 "2#c0#u0#s"] [2 3 "1#c0#u0#s"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]
+        }"#)
+    )]
     fn test_ingest_smiles_resolution(#[case] input: &str, #[case] expected: Molecule) {
         assert_eq!(ingest_smiles(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::carbanion("[C@-](F)(Cl)Br", atom_dsl!("C#i=#c-#h0#n1#u0#s"))]
+    #[case::nitrogen("[N@](F)(Cl)Br", atom_dsl!("N#i=#c0#h0#n1#u0#s"))]
+    #[case::phosphorus("[P@](F)(Cl)Br", atom_dsl!("P#i=#c0#h0#n1#u0#s"))]
+    #[case::sulfonium("[S@+](F)(Cl)Br", atom_dsl!("S#i=#c+#h0#n1#u0#s"))]
+    fn test_ingest_smiles_with_lone_pair(
+        #[case] input: &str,
+        #[case] expected: AtomForm,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
+    ) {
+        let model = ChemistryModel {
+            valence,
+            ..ChemistryModel::default()
+        };
+        let molecule = ingest_smiles_with(
+            input,
+            &SmilesIoConfig::opensmiles(),
+            &model,
+            &ResolveConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(molecule.atom(AtomId(0)).attributes, &expected);
+        assert_eq!(
+            molecule.stereo_atoms().ids().collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+        assert_eq!(
+            molecule
+                .stereo_atom(StereoAtomId(0))
+                .ligands()
+                .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
+                .collect::<Vec<_>>(),
+            &[
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ]
+        );
+    }
+
+    #[rstest]
+    #[case::carbon("[C@](F)(Cl)(Br)I", atom_dsl!("C#i=#c0#h0#n0#u0#s"))]
+    #[case::nitrogen_cation("[N@+](F)(Cl)(Br)I", atom_dsl!("N#i=#c+#h0#n0#u0#s"))]
+    #[case::phosphorus_cation("[P@+](F)(Cl)(Br)I", atom_dsl!("P#i=#c+#h0#n0#u0#s"))]
+    fn test_ingest_smiles_with_four_ligands(
+        #[case] input: &str,
+        #[case] expected: AtomForm,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
+    ) {
+        let model = ChemistryModel {
+            valence,
+            ..ChemistryModel::default()
+        };
+        let molecule = ingest_smiles_with(
+            input,
+            &SmilesIoConfig::opensmiles(),
+            &model,
+            &ResolveConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(molecule.atom(AtomId(0)).attributes, &expected);
+        assert_eq!(
+            molecule.stereo_atoms().ids().collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+        assert_eq!(
+            molecule
+                .stereo_atom(StereoAtomId(0))
+                .ligands()
+                .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
+                .collect::<Vec<_>>(),
+            &[
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ]
+        );
+    }
+
+    #[rstest]
+    #[case::carbon_anion("[C-](F)(Cl)(Br)I", Element::C, -1)]
+    #[case::carbon_anion_stereo("[C@-](F)(Cl)(Br)I", Element::C, -1)]
+    #[case::carbon_cation("[C+](F)(Cl)(Br)I", Element::C, 1)]
+    #[case::carbon_cation_stereo("[C@+](F)(Cl)(Br)I", Element::C, 1)]
+    #[case::sulfur_cation("[S@+](F)(Cl)(Br)I", Element::S, 1)]
+    #[case::sulfur_anion("[S@-](F)(Cl)Br", Element::S, -1)]
+    fn test_ingest_smiles_with_atom_typing_error(
+        #[case] input: &str,
+        #[case] element: Element,
+        #[case] charge: i8,
+    ) {
+        assert_eq!(
+            ingest_smiles_with(
+                input,
+                &SmilesIoConfig::opensmiles(),
+                &ChemistryModel::default(),
+                &ResolveConfig::default()
+            ),
+            Err(SmilesInputError::Contradiction(
+                ResolveContradiction::Valence(ValenceContradiction::AtomTyping(
+                    AtomTypingError::NoMatch {
+                        atom_id: AtomId(0),
+                        element,
+                        charge: Some(charge),
+                    }
+                ),)
+            )),
+        );
     }
 
     #[rstest]

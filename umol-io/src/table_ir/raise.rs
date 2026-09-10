@@ -1274,9 +1274,18 @@ mod tests {
     #[case::substituent("F/C(Cl)=C/Br", vec![Some(1)], "FC(/Cl)=C/Br", vec![Some(1)])]
     #[case::branch_order("F/C(Cl)=C/Br", vec![Some(1)], "Cl/C(F)=C\\Br", vec![Some(0)])]
     #[case::ring_marker("C/C=C1CO\\1", vec![Some(0)], "C/C=C/1CO1", vec![Some(0)])]
+    #[case::both_ring_markers("C/C=C/1CO\\1", vec![Some(0)], "C/C=C/1CO1", vec![Some(0)])]
     #[case::conjugated("C/C=C/C=C/C", vec![Some(1), Some(1)], "C\\C=C\\C=C\\C", vec![Some(1), Some(1)])]
     #[case::conjugated_opposite("C/C=C/C=C/C", vec![Some(1), Some(1)], "C/C=C/C=C\\C", vec![Some(1), Some(0)])]
     #[case::unspecified("FC=CCl", vec![None], "F/C=CCl", vec![None])]
+    #[case::partial_endpoint("F\\C=CF", vec![None], "FC=C/F", vec![None])]
+    #[case::branch_viewpoint("C(/F)=C/F", vec![Some(0)], "F/C=C\\F", vec![Some(0)])]
+    #[case::four_substituents("F/C(Cl)=C(/Br)I", vec![Some(1)], "F/C(/Cl)=C(/Br)\\I", vec![Some(1)])]
+    #[case::opposite_branches("C(/F)(\\Cl)=C(/Br)\\I", vec![Some(0)], "F\\C(Cl)=C(/Br)I", vec![Some(0)])]
+    #[case::partial_conjugated("C/C=C/C=CC", vec![Some(1), None], "CC=C/C=CC", vec![None, None])]
+    #[case::separated_markers("C/C=CC=C/C", vec![None, None], "F/C=C/CC=CC", vec![Some(1), None])]
+    #[case::triene("C/C=C/C=C/C=C/C", vec![Some(1), Some(1), Some(1)], "C/C=C/C=CC=C/C", vec![Some(1), None, None])]
+    #[case::explicit_h_marker("C/C=C/C=CC(/[H])=C/C", vec![Some(1), None, Some(1)], "C/C=C/C=CC(\\[H])=C/C", vec![Some(1), None, Some(0)])]
     fn test_table_molecule_try_into_ir_bond_presentations(
         #[case] first: &str,
         #[case] first_cosets: Vec<Option<u32>>,
@@ -1315,6 +1324,31 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[rstest]
+    #[case::absent("[F:7]C=CF", None)]
+    #[case::partial("[F:7]/C=CF", None)]
+    #[case::either("[F:7]C=CF |ctu:1|", Some(StereoCoset::Undetermined))]
+    #[case::definite("[F:7]/C=C/F", Some(StereoCoset::Lit(1)))]
+    fn test_table_molecule_try_into_ir_bond_assertion(
+        #[case] input: &str,
+        #[case] expected: Option<StereoCoset>,
+    ) {
+        let table = Smiles::parse_with(input, &SmilesIoConfig::chemaxon())
+            .unwrap()
+            .into_table_ir();
+        assert_eq!(table.atoms[0].class, Some(7));
+        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        assert_eq!(
+            molecule
+                .bond(BondId(1))
+                .attributes
+                .constraints
+                .cis_trans_stereo()
+                .cloned(),
+            expected.map(CisTransStereoForm::stereo),
+        );
     }
 
     #[rstest]

@@ -1,6 +1,6 @@
 # 226 — SMILES roundtrip design
 
-Status: Proposed
+Status: In Progress
 Date: 2026-09-10
 Relates: [155](155-smiles-io-and-resolve-configuration-2026-07-19.md),
 [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
@@ -16,7 +16,7 @@ Convey conversion to TableIR and construction of Smiles or ReactionSmiles for re
 TableIR is the shared SMILES/CTfile
 boundary representation. Decide what it must carry for aromatic systems and stereo, and whether
 shared storage suffices or explicit format separation is needed. The settled design and staged
-implementation plan are recorded below; implementation itself has not been authorized.
+implementation plan are recorded below; S0a inventory and S0b semantic fixtures are complete.
 
 Responsibilities, preservation guarantees, boundary types, and core algorithms are settled.
 The stages below sequence implementation and verification within that agreed scope.
@@ -644,12 +644,12 @@ successfully under that same configuration. Include coupled stereo-marker cases.
 
 ### Independent parser-validation follow-up from doc 224
 
-Run the SMILES parser fuzzing campaign for at least 60 minutes of fuzz execution,
-excluding build/setup time. This is outstanding validation follow-up for the
-doc 224 parser work, independent of implementing SMILES export. Record the
-target, configuration, duration, and any findings when the run is performed;
-retain reproducers for failures. This note schedules the work and does not
-claim that the campaign has run.
+The user reports completing the at-least-60-minute SMILES parser fuzzing campaign. The run's
+terminal log, execution count, and loaded-corpus/configuration details have not been independently
+inspected here. Do not invalidate that run because of the inner catch_unwind: the 2026-09-10
+follow-up below verified that libfuzzer-sys aborts in its panic hook before unwinding. A run under
+that normal runtime still exercises crash detection, though not chemical/stereo equivalence.
+The target and seed follow-up is independent of the roundtrip implementation stages.
 
 Local formatting references include RDKit's SmilesWrite::FragmentSmilesConstruct in
 [SmilesWrite.cpp](../materials/codes/rdkit/Code/GraphMol/SmilesParse/SmilesWrite.cpp), which consumes a
@@ -1276,11 +1276,11 @@ algorithm are settled above. Exact diagnostic variants and cohesive helper signa
 reconciled with the public contract before their implementing subitem; this is not permission to
 introduce new wrappers, strategies, or chemistry transformations. Implement the supported inverse
 domain with explicit failures, not a promise of general valence inversion or minimum encodings.
-The plan below sequences the work; it does not authorize execution or commits.
+The plan below sequences the work; S0a and S0b are complete.
 
 ## Staged implementation plan
 
-All stages are pending. Status remains Proposed until implementation is explicitly started.
+S0a and S0b are complete; S0c and later subitems are pending. Execution has proceeded through S0b.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1324,7 +1324,7 @@ the shared graph-core implementation and a separate decision.
 
 ### S0 — Executable contracts and source inventory
 
-- **S0a — Representation and API inventory.** Modules: graph-core traversal/connectivity,
+- **S0a — Representation and API inventory (completed 2026-09-10).** Modules: graph-core traversal/connectivity,
   TableIR stereo/raise, smiles boundaries, resolver, ingest. **Additive (green).** [dep: none]
   Enumerate changed public symbols and their settled signatures, construction guarantees, and
   error ownership. Pin current producers/consumers with workspace searches, including reexports,
@@ -1332,7 +1332,7 @@ the shared graph-core implementation and a separate decision.
   adapters. Check current doc 224 implementation rather than assuming an earlier snapshot.
   Translate every implementation-facing statement in this document into this inventory; do not
   implement a discarded alternative. Verify existing behavior with focused current tests.
-- **S0b — Independent semantic fixtures and comparisons.** Modules: existing IO/graph property
+- **S0b — Independent semantic fixtures and comparisons (completed 2026-09-10).** Modules: existing IO/graph property
   targets and test support. **Additive (green).** [dep: S0a]
   Preserve the direction-marker examples, stereo/valence scratch findings, and ring-encounter
   regressions as independent expected configurations where relevant. Define boundary equivalence
@@ -1664,6 +1664,293 @@ canonical output, cached traversal/markers, new Python boundary/output surface, 
 extended stereo, coordinate generation, and depiction wedge policy. Expanding the chemistry domain
 requires demonstrated reconstruction rules, not automatic acceptance. No separate optimization
 implementation stages are approved by this plan.
+
+## S0a inventory and verification — 2026-09-10
+
+Completed against source commit `0d8122af465a2347ce0ccdac984f36eb3271e905`, with a clean worktree
+at the start of this subitem. This section inventories implementation work; it adds no production
+API, tests, or algorithm. Tests below establish current behavior only. Later subitems remain pending.
+
+### Public surface inventory
+
+The signatures already specified above are authoritative. The following inventory identifies
+changed and retained symbols, their consumers, and unresolved mechanical details rather than
+inventing extra public seams.
+
+| Owner and symbols | Planned change and contract | Consumers/migration |
+| --- | --- | --- |
+| graph-core traversal: DepthFirstEvent, BreadthFirstEvent | New public event enums with Discover/Finish/FinishTree; DFS also NonTreeEdge. Values are traversal output, not graph handles or persistent correspondence witnesses. | New visitors and event collectors; IO writer consumes node/edge identities. |
+| traversal::visit_depth_first, traversal::visit_breadth_first | New public callback kernels with the bound/root/iterator/ControlFlow signatures above. No validation Result; correctness assumes consistent connectivity, internal handling remains panic-free. | Graph methods supply CSR access; IO supplies temporary table incidence. |
+| Graph::visit_depth_first, Graph::visit_breadth_first | New inherent methods omit the free functions' bounds/neighbor arguments; borrow Graph and retain explicit roots, BFS depth limit, and visitor. | Event collectors, component visitor, neighborhood. |
+| Graph::enumerate_depth_first_events, enumerate_breadth_first_events | New inherent collectors return the corresponding Vec<Event>, retaining root order and BFS depth limit. | Tests, callers needing retained traversal descriptions. No new persistent traversal type. |
+| Graph::visit_connected_components | New ControlFlow visitor over one sorted borrowed node slice, with ConnectedComponentsAlgorithm. | Existing enumerate_connected_components becomes its collector; FinishTree owns completion/early-exit boundary. |
+| Graph::enumerate_connected_components, ConnectedComponentsAlgorithm::Bfs | Retain names, selector, sorted members and component order; replace mislabeled LIFO flood fill with shared FIFO BFS. | Cycle-basis implementation; graph-IR GraphView wrapper; graph constraint validators and aromatic HMO; algorithms benchmark. |
+| Graph::neighborhood; TraversalAlgorithm | Keep operation name, rename selector to NeighborhoodAlgorithm; depth limit and returned distances become usize. | graph-core refinement.rs, traversal tests, lib.rs reexport. No current GraphView neighborhood wrapper was found. |
+| CircularRefinementAlgorithm::Ec { radius }, Graph::circular_refine | Radius feeds neighborhood through circular_refine_ec/remove_duplicate_environments; enumerate the transitive usize migration before S2 edits. | CircularRefinementHash::combine round argument; graph Morgan/ECFP featurizers, hash schemes, Python fingerprint configs; details below. |
+| table_ir::StereoBond, BondConfiguration, BondRelation | New open records/enums with the settled site-only Either or two-reference Framed layout. No arbitrary complete GraphIR ligand frame copied into this type. | Parser finalization, CTfile/CX conversion, raise, checked boundaries and writer. |
+| table_ir::Molecule::stereo_bonds, ExtendedMolecule::stereo_bonds | New collections alongside stereo_atoms; preserve through empty constructors and basic/extended conversion. | All molecule struct literals, reaction component carriers, SMILES targets, CTfile construction, tests. |
+| Bond/ExtendedBond::direction and ::stereo | Retire persistent fields and update constructors, updates/conversions and literals. Retain wedge/donation/ring/source fields for their own meanings. | Parser builder and utils, CX application, CTfile conversion, TableIR raise and tests. |
+| BondDirection, BondStereo and lexical conversion helpers | Inventory lexical use separately from table-field retirement. BondDirection is still needed to interpret source tokens; BondStereo currently represents CT/CX codes. Do not delete lexical vocabulary just because its stored field disappears. | Basic/extended parser targets, ring conflict handling, CT conversion, CX entries. Exact residual public exposure is reconciled in S3. |
+| StereoAtom, StereoLigand, Winding, ConfigurationScope | Retain public layout and the implicit-H/LP participant convention. | Doc 224 parser finalizer, raise, future writer. No LP-removal migration. |
+| AtomNeighbors and table_ir::Neighbor; both molecule atom_neighbors methods | Remain operation-local lookup; no new foundational graph field or adjacency trait. Eliminate unnecessary allocation at callers without assuming final Graph connectivity matches the table. | Raise helpers, table tests; future parser/writer incidence access. Retirement/replacement of the public helper itself is not approved. |
+| TryIntoIr<Molecule> for &table_ir::Molecule; RaiseError | Raise explicit frames instead of interpreting retained directions; preserve model-independent representation errors at the owning conversion. | Interpret, parser/raise fixtures, fuzz target. Source marker conflicts move with their producer; do not erase diagnostics. |
+| Resolver::project and per-resolver project functions | New GraphIR-only inverse transformation, same mutation/publication semantics as resolve; no TableIR or IO-config parameters. | Convey; inverse-law properties and projection benchmarks. Concrete report/contradiction types are not yet named by the design. |
+| Resolver::resolve, ResolveConfig, ResolveState and existing reports/errors | Retain existing semantics. Project's validation uses the same resolver; do not change resolution or its chemistry defaults to force roundtrips. | Existing ingestion and resolution tests; new projection check. |
+| AtomTypeRegistry lookup/admission operations | Reuse candidate filtering initially; no approved new registry pruning signature. | Inverse valence analysis. Any new invariant-bearing public operation needs its own contract within S4a. |
+| Smiles/ReactionSmiles::from_table_ir | New checked owned-table constructors with &SmilesIoConfig; Result establishes renderability. Private table fields remain private. | Convey across the crate boundary; tests of independent open tables. |
+| Smiles/ReactionSmiles::render, render_with | New String-returning Result methods; OpenSMILES default or explicit IO config. Recompute traversal/assignment. | export conveniences; boundary normalization properties. No Display or unchecked formatter is approved. |
+| Smiles/ReactionSmiles::parse, parse_bytes, parse_with, parse_bytes_with, FromStr | Retain parse surface and syntax-config defaults; frame normalization changes their produced internal tables. | Existing ingestion, direct boundary users, properties and fuzzing. Parsing does not become chemistry resolution. |
+| Smiles/ReactionSmiles::as_table_ir, into_table_ir | Retain signatures; borrow/consume private payload, no mutable accessor. | Interpret is the actual production consumer. |
+| Interpret::{Output, Error, interpret} | Change method to interpret(&self, &Resolver); keep associated output/error types. | Both boundary implementations in ingest.rs and every ingestion caller. |
+| Convey::{Input, Config, Error, convey} | New local trait in umol-graph, implemented on output boundary types with the settled signature; Config = SmilesIoConfig here. | Molecular/reaction export. No Export trait or generic format target on Molecule. |
+| ingest_smiles and ingest_reaction_smiles families | All eight existing text/bytes/default/explicit-IO functions receive a supplied Resolver; remove separate model/resolve-config arguments. | Full caller list below, including benches and Python adapters. Default variants retain only default IO selection. |
+| export_smiles/export_reaction_smiles and their _with variants | New four functions return text through convey + render, taking a Resolver and default/explicit IO config. | Rust output callers. No additional sink/byte family or Python wrapper is inferred. |
+| ProjectError, construction/convey/render/output diagnostics | Operation boundaries and proposed names are settled; exact variants, report types, reaction names and shared-reason placement remain for their cohesive implementation subitems. | Error source chains, section context and exact failure fixtures. No catch-all silent fallback. |
+
+Argument ordering not explicitly shown in the approved signatures, error enum layout, and
+per-resolver helper signatures must be reconciled at their owning subitems; the inventory does
+not label invented spellings as approved APIs. New symbols should be exported only through the
+owning module and the repository's established public reexport surface, not from every crate root.
+
+### Producer and consumer paths
+
+- **Current doc 224 implementation:** smiles/parser/builder.rs has PendingStereo, opening-order
+  bond slots completed by complete_bond, and finish that builds explicit StereoAtom records.
+  Bracket H count and the three-incidence/H0 LP convention are applied there; the ring completion
+  map remains separate for CX indexing. Both Basic and Extended implementations of Target use it.
+  The completed document contains historical descriptions of the old bug; those are not current
+  implementation requirements.
+- **SMILES and CX:** smiles/parser.rs parses basic/extended molecules and reaction sections,
+  then remaps CX completion-order bond indices through BondIndexMap before applying annotations.
+  smiles/parser/cx.rs has separate basic and extended branches setting Cis, Trans and Either.
+  The frame producer must run with final interpreted annotations and detect conflicting evidence;
+  early finalization cannot silently bypass later CX assertions.
+- **CTfile:** ctfile/parser/bond.rs and parser/convert.rs interpret the bond codes and wedge
+  orientation, while parser.rs constructs basic/extended tables with supplied positions. Current
+  definite double-bond geometry is interpreted later in table_ir/raise.rs and raise/utils.rs.
+  S3 moves the appropriate interpretation to frame production while preserving wedge responsibility.
+  V2000/V3000, accumulator overrides, and basic/extended conversion must all reach the same result.
+- **Table conversions:** table_ir/molecule.rs implements From<Molecule> for ExtendedMolecule and
+  TryFrom<ExtendedMolecule> for Molecule. ExtendedBond has both fields being retired, not merely
+  Bond. Reaction and ExtendedReaction contain three corresponding molecule carriers and derived
+  mapping indexes. Their from_molecules/from_extended_molecules constructors currently initialize
+  that index empty; checked boundary construction must not assume an independently assembled
+  table carries a valid index.
+- **Raise:** table_ir/raise.rs unconditionally builds AtomNeighbors, constructs atoms/bonds,
+  partitions donating/noncovalent records into relations, copies explicit atom frames, and invokes
+  GraphIR Molecule::try_from_entries. That constructor validates references, builds Graph from
+  localized bonds, and checks integrity. Its graph-accepting try_from_arcs is private. No new
+  public arbitrary-parts GraphIR constructor is needed for this task.
+- **Resolvers:** resolve.rs coordinates valence admission/aromatic selection, atom/system edits,
+  stereo planning, localized/multicenter defaults, discharge, and a final concrete-only publication.
+  resolve/{valence,aromaticity,stereo,bonds,multicenter}.rs own those domains. ops/stereo.rs supplies
+  the existing #T/#C frame derivation and coset transport. Projection must preserve these layer
+  boundaries and must not call IO from a resolver to test expressibility.
+- **Reaction conversion:** ingest.rs reads Atom.class-derived atom_mapping, rejects agents and
+  repeated classes for GraphIR interpretation, raises/resolves both sides and constructs their
+  correspondence. Output must use existing side materialization and correspondence, not infer a
+  new map. Correspondence::matched_pairs is sorted by left ID; pair i supplies label i + 1.
+- **Ingestion callers:** ingest.rs tests; graph benches resolve.rs, fingerprint.rs, substructure.rs;
+  fingerprint/{morgan,reaction,pattern}.rs tests; graph tests fingerprint.rs, whitepaper.rs and
+  property/publication.rs; Python molecule.rs, reaction.rs and error.rs, including embedded tests.
+  Workspace search found no separate graph/examples directory; executable examples live in the
+  declared bin/test targets and must be searched again when signatures change.
+- **Python:** from_smiles/from_reaction_smiles currently accept optional IO/model/resolve configs,
+  construct the SMILES valence preset by default, and call Rust ingestion. S8 preserves that
+  behavior by constructing a Rust Resolver with the required lifetime. There is no existing
+  Python Resolver or Smiles boundary wrapper to assume. New Python output exposure is deferred.
+- **Evidence targets:** graph-core benches/algorithms.rs and feature-gated tests/property.rs;
+  IO benches/smiles_parsing.rs, tests/smiles_property.rs, parser unit tests and conformance targets;
+  graph benches/resolve.rs, tests/property.rs and conformance resolution target; graph-IR property
+  tests and GraphView component fixtures. The 60-minute parser campaign is independent evidence.
+
+### Construction, mutation, and failure ownership
+
+| Value/operation | Integrity and contextual contract | Failure and preservation rule |
+| --- | --- | --- |
+| Graph and traversal callback | Graph establishes its stored connectivity. An arbitrary callback carries the consistency precondition; traversal does not certify it. | No defensive validation Result; inconsistent finite values have no correctness promise, internal processing must avoid panics. Callback execution is caller-owned. |
+| Open TableIR and temporary index | Tables remain authoritative. Index construction establishes its own storage; later table edits promise no index/table correspondence. | No stale-index repair or general validation wrapper. Operations needing table references first establish their required properties; no chemistry inference in parse. |
+| Explicit stereo frames | Site and references belong to the table; endpoint ordering and frame action are fixed. Either has no references. | Source interpretation checks marker consistency; raise/checked construction enforce required references. Do not silently pad, retag virtual ligands, or downgrade configuration. |
+| Checked SMILES boundary | Private payload plus successful construction under IO config establishes representability; parse retains its existing acceptance contract. | Mutable fields are not exposed. Same-config rendering succeeds; other-config rendering may fail. No invented coordinates or lost annotations. |
+| Resolver::project | Caller supplies GraphIR; work is GraphIR throughout, on an intermediate candidate. | Result/Solution follows resolve; only matching determined reconstruction publishes. Failure preserves caller input. |
+| Convey and text export | Convey clones, projects, translates, and calls checked construction. Export composes convey/render. | Preserve source graph and supported semantics; reject unrepresentable fields/constraints. A GraphIR inverse check alone does not prove text preservation. |
+| Reaction boundary construction | A supplied table may have independently assembled labels/index; the constructor owns the required consistency check. | Preserve label semantics including parsed repeats/agents where representable; GraphIR convey produces its index from correspondence labels. |
+
+The laws to verify in later subitems are traversal visitor/collector equivalence and completion,
+projection inverse plus atomic failure, boundary normalization and same-config renderability,
+and molecular/reaction export-ingest equivalence with explicit/implicit H and stereo-frame action.
+These are distinct operational domains; no structural count comparison substitutes for them.
+
+### Migration findings to retain in later stages
+
+1. **Size migration reaches fingerprints.** neighborhood is called by
+   refinement.rs::remove_duplicate_environments with the circular radius. CircularRefinementAlgorithm
+   stores radius: u32, CircularRefinementHash::combine takes round: u32, graph MorganFeaturizer and
+   EcfpFeaturizer expose u32 radii, and Python HashedFingerprintConfig has Morgan/Ecfp radii.
+   Include these callers in S2's size review, including graph/src/hash.rs implementations and
+   fingerprint golden fixtures. usize sizes do not by themselves authorize changing a named hash
+   recipe's serialization or output bits; reconcile that detail before changing its combine input.
+2. **Stored versus lexical directions.** BondDirection remains source-token data in parser
+   state. ParseError::MismatchedRingBondDirections stores source positions, not a BondDirection
+   value. Keep the mismatch diagnostic when removing Bond.direction. Likewise, CT/CX decoding
+   still needs to distinguish source codes after Bond.stereo is removed.
+3. **Panic-reporting correction after S0a.** The initial inventory incorrectly concluded that
+   the target's discarded catch_unwind result hides panics under cargo-fuzz. libfuzzer-sys 0.4.13
+   installs an aborting panic hook before target execution; the hook runs before unwinding.
+   A controlled caught-panic reproducer confirms libFuzzer reports a crash. The redundant inner
+   catch is now removed. See the follow-up below; the user's completed run is not invalidated by
+   this wrapper.
+4. **Checks are baseline evidence only.** Current IO tests exercise persistent directions and the
+   old raise path. Their passing result neither validates future frame normalization nor proves
+   the inverse projection/writer. S0b supplies independent expectations; later stages implement
+   and test the new laws without rewriting them to match behavior.
+
+### S0a verification results
+
+All commands ran with --offline on the pinned source; no production or test code changed.
+
+| Command | Result |
+| --- | --- |
+| cargo test -p umol-graph-core --lib algorithms::traversal --offline | 5 passed |
+| cargo test -p umol-graph-core --lib algorithms::connectivity::components --offline -- --quiet | 5 passed |
+| cargo test -p umol-io --lib --offline | 3,589 passed; includes parser, CTfile and TableIR/raise unit coverage |
+| cargo test -p umol-graph --lib ingest:: --offline -- --quiet | 161 passed |
+| cargo test -p umol-graph --lib ops::resolve:: --offline -- --quiet | 141 passed |
+
+Total: 3,901 passing tests, no failures. cargo fmt --all -- --check also passed, with stable-rustfmt
+warnings about the repository's nightly-only formatting options; git diff --check passed.
+Feature-gated property/conformance suites, Python builds,
+benchmarks, and fuzz execution were not run in this inventory subitem. Those remain in their
+own planned work. S0b was the next subitem at this inventory's closeout.
+
+## Parser fuzzing follow-up — 2026-09-10
+
+This work was explicitly authorized separately from S0b: remove the target's panic catch, audit
+what it exercises, and improve stereo/ring seed representation. It preceded the S0b work below.
+
+The target executes Smiles::parse_bytes on arbitrary bytes with the OpenSMILES configuration,
+then TryIntoIr<Molecule> on successful parses. Returned parse/raise errors are ordinary outcomes.
+It performs no resolution, chemical conformance test, or stereo-equivalence comparison. Its
+useful evidence is crash/timeout/sanitizer robustness over the executed inputs, not stereochemical
+correctness. Panic-free but incorrect stereo requires the independent unit/property expectations.
+
+The earlier claim that the 60-minute run lost panic detection was wrong. The fuzz workspace locks
+libfuzzer-sys 0.4.13; its initialize function installs a hook that aborts before unwinding, before
+an inner catch_unwind can return. The same behavior is present in locally available 0.4.12.
+A scratch cargo-fuzz target containing a deliberate panic inside a discarded catch_unwind
+reported `SUMMARY: libFuzzer: deadly signal` and target exit status 77. The source wrapper was
+still removed so the target clearly lets failures propagate without redundant recovery code.
+
+The user reports the previous run completed for 60 minutes. That is meaningful robustness work
+under the normal cargo-fuzz runtime; no exact historical execution/coverage count is claimed here.
+The live corpus currently contains 13,627 inputs totaling 5,991,687 bytes. A byte-level scan found
+2,113 with @, 3,374 with slash/backslash, and 2,029 with @ plus a digit. These are lexical counts,
+not evidence that those inputs parse, reach a stereo frame, or came exclusively from that run.
+
+### Seed audit and changes
+
+The checked-in seed set previously had 13 inputs. Its stereo-marked entries exercised rejection
+paths; none successfully raised with a tetrahedral frame or a cis/trans assertion. The old
+ring_dir seed itself is a mismatched-direction parse rejection. Retain these regression seeds,
+but do not mistake them for successful stereo-path coverage.
+
+Add 38 named seeds, for 51 total. They cover four actual tetrahedral ligands, bracket and explicit
+H, LP assertions, opening/closing ring digits, percent labels, multiple closures, fused/bridged/
+spiro rings, adjacent centers, later components, ring-label reuse and closure across a dot;
+also definite/partial/redundant cis/trans, four substituents, shared chains, branching and cycles,
+and ring markers supplied at opening/closing/both ends. Add explicit malformed stereo/ring cases
+and aromatic fused systems, bracket H, and localized links. No existing seed was removed.
+
+An actual parse/raise census of the final seeds found 41 successful raises, 3 parse rejections,
+and 7 raise rejections. Twelve successful inputs contain tetrahedral frames, and eleven produce
+cis/trans assertions, including branched and cyclic shared-marker cases. This verifies that
+seeds reach the intended broad paths; it does not validate each configuration's chemical meaning.
+The scratch audit source/results are in scratch/stereo-valence-scan/src/bin/seed_audit.rs and
+scratch/fuzz-seed-audit.jsonl. The tracked fuzz/README.md documents the target, seed categories,
+and commands that explicitly load both seeds and the dictionary. Neither is automatically
+loaded by the default cargo-fuzz command. New corpus inputs should go to the first, mutable corpus
+directory, preserving the checked-in seed directory.
+
+### Verification
+
+- Controlled caught-panic cargo-fuzz reproducer: crash detected, target exit status 77, as expected;
+  source/log under scratch/fuzz-panic-proof. No deliberate panic was inserted in production code.
+- Updated real target built with nightly cargo-fuzz and default AddressSanitizer/debug assertions.
+  Replay of the initial expanded 47 seeds with the existing 98-entry dictionary succeeded.
+- Final 51-seed set was copied to scratch/fuzz-smiles-check-corpus and used for a bounded 30-second
+  mutation run with the dictionary: 547,910 executions in 31 seconds, no crash reported. libFuzzer
+  counters increased from cov 2,764 / ft 5,293 to cov 4,761 / ft 17,113. These are instrumentation
+  counters, not percentages of code or semantic coverage. The log is scratch/fuzz-smiles-check.log.
+- The live accumulated corpus was not modified, and no second 60-minute campaign was started.
+  Broader campaign evidence remains separate from S0b's semantic fixtures.
+
+## S0b semantic fixtures and comparisons — 2026-09-10
+
+This subitem adds tests only. Parser, raise, resolver, and boundary APIs are unchanged.
+Existing independent DSL expectations already cover ordinary molecules, localized charges,
+radicals, aromatic system membership/contributions, and ring-opening/closing stereo frames.
+Retain those expectations and the explicit-remapping frame tests; do not replace them with
+parse/render agreement when output becomes available.
+
+### Comparison contract
+
+- **Boundary law:** compare interpreted boundary information under an atom/bond correspondence,
+  ignoring source spans and equivalent spelling (ring numbers, traversal, branch order, and the
+  agreed redundant direction markers). Preserve each atom/bond property, explicit atoms versus
+  bracket-H counts, atom classes/labels, and supported extension data. Compare stereo in the
+  corresponding ligand frame, including the winding/relation action. Definite, Either, and absent
+  assertions are distinct; a consistent partial directional marking contributes no assertion.
+  Check marker consistency before discarding redundant notation. For reactions, also preserve
+  side/agent membership and mapping classes. GraphIR equality alone is insufficient for this law:
+  raise does not retain all boundary data. A general boundary comparator follows the explicit
+  stereo-bond representation in S3; S0b records concrete expected semantic observations without
+  introducing a helper that erases fields from today's mixed source representation.
+- **GraphIR inverse law:** use Molecule::framed_eq when entity IDs are retained,
+  framed_eq_under when an explicit remapping is supplied, and aggregate canonical_eq when text
+  traversal changes IDs. Compare the complete molecule, including atom states, localized bond
+  states, aromatic system members and electron contributions, and stereo entities/configurations.
+  No hydrogen folding, charge relocation, or overlay removal is part of comparison. Independent
+  expected molecules in ingestion tests use stored equality where their exact frame/order is
+  specified. Existing mirror/alkene controls and the new explicit-versus-implicit-H control
+  prevent equivalence checks from erasing those distinctions.
+
+### Executable evidence
+
+- umol-graph/src/ingest.rs extends independent complete-molecule DSL expectations with four-atom
+  tetrahedral carbon, bracket H, explicit H, a carbanion lone pair, both sulfoxide bond/charge
+  representations, and both alkene configurations. Additional counts/atom-typing cases check
+  exact central atom states and ligand identities for C/N/P/S, including N/P cations with four
+  actual ligands. Neutral trigonal C and C+ reject at stereo resolution; too few/many ligands
+  and duplicate bracket H reject at raise with exact errors. Atom typing rejects the recorded
+  overvalent charged C/S cases. Counts-model acceptance of the known problematic states is not
+  promoted into an expected-success contract; that independent issue remains with doc 166.
+- umol-io/src/table_ir/raise.rs retains ring-frame and explicit-remapping regressions and adds
+  independent coset/absence expectations for redundant four-substituent notation, endpoint
+  viewpoint, partial conjugated systems, trienes, explicit-H marker choices, and two-ended ring
+  markers. A coordinate-free CX case distinguishes Either from absence and definite configuration;
+  its atom class is checked before raise.
+- umol-io/tests/smiles_property.rs generates chains of one through eight double bonds with each
+  adjacent single bond unmarked, forward, or backward. Expected assertions are derived directly
+  from the chosen neighboring glyphs, independently of parser/raise results. A second property
+  varies ring numbers, atom classes, and both tetrahedral windings against a literal encounter
+  frame. These test input semantics; projection and render laws become executable with their
+  implementing stages.
+
+### S0b verification
+
+- cargo test -p umol-io --lib --features proptest --test smiles_property --offline -- --quiet:
+  3,602 unit tests and eight property tests passed.
+- cargo test -p umol-graph --lib --test property --features proptest --offline -- --quiet:
+  1,061 unit tests and five property tests passed.
+- cargo clippy -p umol-io -p umol-graph --lib --tests --features proptest --offline -- -D warnings:
+  passed; log under scratch/s0b-clippy.log.
+- cargo fmt --all and git diff --check passed. Test logs are under scratch/s0b-io-tests.log and
+  scratch/s0b-graph-tests.log. No production APIs, algorithms, resolver acceptance rules, or
+  existing assertions were changed. Projection, rendering, and their future property gates are
+  still unimplemented; this subitem establishes their independent input-side expectations.
+
+S0c is next: bounded evidence fixtures and the remaining benchmark preparation. The separately
+completed fuzz follow-up above supplies its fuzz status; do not duplicate the user's campaign.
 
 ## Staged specification updates
 
