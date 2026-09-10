@@ -1,3 +1,5 @@
+import inspect
+import sys
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -16,6 +18,7 @@ from umol import (  # noqa: E402
     Depiction,
     Deltas,
     Molecule,
+    MoleculeLayout,
     MoleculeLayoutAlgorithm,
     NumForm,
     Reaction,
@@ -40,6 +43,85 @@ def test_molecule_layout_algorithm():
 
     assert algorithm == MoleculeLayoutAlgorithm.CoordGen()
     assert repr(algorithm) == "MoleculeLayoutAlgorithm.CoordGen()"
+
+
+@pytest.mark.parametrize(
+    ("callable_", "expected"),
+    [
+        pytest.param(
+            MoleculeLayout,
+            "(positions)",
+            marks=pytest.mark.skipif(
+                sys.version_info < (3, 10),
+                reason="class __text_signature__ requires Python 3.10",
+            ),
+        ),
+        (Molecule.layout, "(self, /, *, algorithm=Ellipsis)"),
+        (Molecule.depict_with_layout, "(self, /, layout)"),
+    ],
+)
+def test_layout_signature(callable_, expected):
+    assert str(inspect.signature(callable_)) == expected
+
+
+def test_molecule_layout_new():
+    layout = MoleculeLayout([(0.0, 1.0), (2.0, -1.0)])
+
+    assert layout.positions == [(0.0, 1.0), (2.0, -1.0)]
+    assert len(layout) == 2
+    assert layout == MoleculeLayout([(0.0, 1.0), (2.0, -1.0)])
+    assert layout != MoleculeLayout([(0.0, 1.0), (2.0, 1.0)])
+
+
+@pytest.mark.parametrize(
+    ("positions", "message"),
+    [
+        pytest.param(
+            [(0.0, 0.0), (float("nan"), 1.0)],
+            "atom 1 has non-finite position",
+            id="nan",
+        ),
+        pytest.param(
+            [(float("inf"), 0.0)],
+            "atom 0 has non-finite position",
+            id="infinity",
+        ),
+    ],
+)
+def test_molecule_layout_new_error(positions, message):
+    with pytest.raises(ValueError, match=message):
+        MoleculeLayout(positions)
+
+
+def test_molecule_layout_position():
+    layout = MoleculeLayout([(0.0, 1.0), (2.0, -1.0)])
+
+    assert layout.position(1) == (2.0, -1.0)
+    with pytest.raises(IndexError, match="atom 2 is outside layout frame of size 2"):
+        layout.position(2)
+
+
+def test_molecule_layout_with_position():
+    layout = MoleculeLayout([(0.0, 1.0), (2.0, -1.0)])
+
+    moved = layout.with_position(1, (3.5, 4.0))
+
+    assert moved == MoleculeLayout([(0.0, 1.0), (3.5, 4.0)])
+    assert layout == MoleculeLayout([(0.0, 1.0), (2.0, -1.0)])
+
+
+@pytest.mark.parametrize(
+    ("atom_id", "position", "message"),
+    [
+        pytest.param(2, (0.0, 0.0), "atom 2 is outside layout frame of size 2", id="frame"),
+        pytest.param(0, (float("nan"), 0.0), "atom 0 has non-finite position", id="nan"),
+    ],
+)
+def test_molecule_layout_with_position_error(atom_id, position, message):
+    layout = MoleculeLayout([(0.0, 1.0), (2.0, -1.0)])
+
+    with pytest.raises(ValueError, match=message):
+        layout.with_position(atom_id, position)
 
 
 @pytest.mark.parametrize(
@@ -112,6 +194,77 @@ def test_molecule_depict_write_svg(tmp_path):
 def test_molecule_depict_with_config_error():
     with pytest.raises(TypeError):
         Molecule().depict_with()
+
+
+def test_molecule_layout():
+    molecule = Molecule.parse('{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}')
+
+    layout = molecule.layout()
+
+    assert isinstance(layout, MoleculeLayout)
+    assert len(layout) == 3
+    assert layout == molecule.layout(algorithm=MoleculeLayoutAlgorithm.CoordGen())
+    assert all(isinstance(coordinate, float) for x, y in layout.positions for coordinate in (x, y))
+
+
+def test_molecule_layout_keyword_only_error():
+    with pytest.raises(TypeError):
+        Molecule().layout(MoleculeLayoutAlgorithm.CoordGen())
+
+
+def test_molecule_depict_with_layout():
+    molecule = Molecule.parse('{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}')
+
+    assert (
+        molecule.depict_with_layout(molecule.layout()).render_svg()
+        == molecule.depict().render_svg()
+    )
+
+
+def bond_lines(text):
+    root = ET.fromstring(text)
+    lines = {}
+    for group in root.findall("{http://www.w3.org/2000/svg}g"):
+        if group.attrib.get("data-umol-item") != "bond":
+            continue
+        (line,) = list(group)
+        lines[group.attrib["data-umol-references"]] = {
+            name: float(line.attrib[name]) for name in ("x1", "y1", "x2", "y2")
+        }
+    return lines
+
+
+def test_molecule_depict_with_layout_roundtrip():
+    molecule = Molecule.parse(
+        '{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]}'
+    )
+    layout = molecule.layout()
+    before = bond_lines(molecule.depict_with_layout(layout).render_svg())
+
+    moved = layout.with_position(1, (2.5, -1.25))
+    after = bond_lines(molecule.depict_with_layout(moved).render_svg())
+
+    assert (after["molecule/bond/0"]["x2"], after["molecule/bond/0"]["y2"]) == (2.5, 1.25)
+    assert (after["molecule/bond/1"]["x1"], after["molecule/bond/1"]["y1"]) == (2.5, 1.25)
+    assert (after["molecule/bond/0"]["x1"], after["molecule/bond/0"]["y1"]) == (
+        before["molecule/bond/0"]["x1"],
+        before["molecule/bond/0"]["y1"],
+    )
+    assert (after["molecule/bond/1"]["x2"], after["molecule/bond/1"]["y2"]) == (
+        before["molecule/bond/1"]["x2"],
+        before["molecule/bond/1"]["y2"],
+    )
+    assert after["molecule/bond/2"] == before["molecule/bond/2"]
+
+
+def test_molecule_depict_with_layout_error():
+    molecule = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "1"]]}')
+
+    with pytest.raises(
+        ValueError,
+        match="^layout frame: molecule atom count 2 does not match layout atom count 1$",
+    ):
+        molecule.depict_with_layout(MoleculeLayout([(0.0, 0.0)]))
 
 
 def test_reaction_depict():

@@ -3,7 +3,18 @@
 Status: Completed
 Date: 2026-09-03
 Relates: [220](220-readable-depiction-2026-09-02.md),
+[222](222-supplied-layout-depiction-2026-09-08.md),
 [225](225-depiction-problems-2026-09-09.md)
+
+## Partially superseded
+
+Doc [222](222-supplied-layout-depiction-2026-09-08.md) (2026-09-08, revised 2026-09-10) reverses
+one settled item: it proposes a `Depict::depict_layout` trait method that lowers a supplied
+`MoleculeLayout` or `ReactionLayout` into a `Depiction`, re-adds the
+`MoleculeDepictionError::LayoutFrame` variant removed in S2a, and retires the public
+`layout_molecule` free function in favour of `Depict::layout_with`. The statements below that
+`MoleculeLayout` needs no public lowering operation and is not a route to `Depiction` no longer
+describe the intended API. Every other decision in this document stands.
 
 ## Purpose
 

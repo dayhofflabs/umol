@@ -257,6 +257,7 @@ the statuses recorded here remain authoritative.
 | [219-path-constraints-2026-09-01.md](219-path-constraints-2026-09-01.md) | Proposed | 2026-09-05 | Settle path-constraint names, count representation, admission, and matcher integration choices. |
 | [220-readable-depiction-2026-09-02.md](220-readable-depiction-2026-09-02.md)                                     | Completed     | 2026-09-03   |                                                                                                               |
 | [221-depiction-api-2026-09-03.md](221-depiction-api-2026-09-03.md)                                               | Completed     | 2026-09-03   | Final Rust/Python depiction API, feature boundary, release notes, and verification are complete.               |
+| [222-supplied-layout-depiction-2026-09-08.md](222-supplied-layout-depiction-2026-09-08.md)                       | Proposed      | 2026-09-10   | Design revised after review; the implementation on the branch is the reviewed shape and will be replaced once the surface is settled. |
 | [223-pattern-semantics-spike-2026-09-05.md](223-pattern-semantics-spike-2026-09-05.md) | Informational | 2026-09-05 | |
 | [224-smiles-ring-closure-frame-2026-09-08.md](224-smiles-ring-closure-frame-2026-09-08.md) | Completed | 2026-09-09 | |
 | [225-depiction-problems-2026-09-09.md](225-depiction-problems-2026-09-09.md) | Proposed | 2026-09-09 | Settle geometry ownership and coordinate verification, substituent stereo marks, and directional labels. |
