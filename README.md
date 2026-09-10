@@ -1,15 +1,15 @@
 # umol
 
-umol is an experimental molecular representation and manipulation library in Rust
-with Python bindings. Two extensions to the conventional molecular graph model
-are introduced. The molecular graph itself consists only of atoms and localized
-bonds, while aromatic systems, stereochemistry, coordination and multicenter bonds,
-and noncovalent interactions are represented by typed relations overlays.
-The atom, bond, and overlay attributes form a lattice, which allows to represent
-concrete molecules and patterns by the same type `Molecule`. Similarly, `Reaction`
-represents both specific reactions and transformation rules. Strict definitions
-of the molecular graph and overlays admit algebraic laws that are checked by property
-testing.
+umol (pronunciation: micromole) is an experimental molecular representation and
+manipulation library in Rust with Python bindings. Two extensions to the conventional
+molecular graph model are introduced. The molecular graph itself consists only of
+atoms and localized bonds, while aromatic systems, stereochemistry, coordination and
+multicenter bonds, and noncovalent interactions are represented by typed relations
+overlays. The atom, bond, and overlay attributes form a lattice, which allows to
+represent concrete molecules and patterns by the same type `Molecule`. Similarly,
+`Reaction` represents both specific reactions and transformation rules. Strict
+definitions of the molecular graph and overlays admit algebraic laws that are checked
+by property testing.
 
 umol does not enforce a fixed definition of a valid molecule. Instead, chemistry models
 define admissible valence states, aromaticity, and stereochemistry. The umol library
