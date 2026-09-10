@@ -1,6 +1,7 @@
-//! Direct TableIR assembly for SMILES.
+//! Molecule builder for SMILES parser
 
-use std::{collections::BTreeMap, iter};
+use std::collections::BTreeMap;
+use std::iter;
 
 use smallvec::SmallVec;
 use umol_chem::element::Element;
