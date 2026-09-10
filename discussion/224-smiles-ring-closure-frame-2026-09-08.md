@@ -21,7 +21,8 @@ SMILES roundtripping. Retain the selected pending finalizer and vector reuse. Th
 cost and retained-capacity limitations are accepted for this integration; closing order is a diagnostic
 counterexample, not an implementation alternative. S2b6 fixtures and baseline verification are
 complete, as are S2b7 integration, S2b8 output/performance verification, and S2c flag removal.
-S2d ingestion and fixture corrections are next, before the wildcard correction and limited permutation work. No further tuning round is queued.
+S2d ingestion and the three planned fixture corrections are complete. S2e wildcard correction is next;
+the additionally identified swapped decalin fixtures await a scope decision. No further tuning round is queued.
 
 ## Finding
 
@@ -2262,13 +2263,62 @@ ignored. All-target Clippy for both crates, formatting, and diff checks pass. A 
 search finds no retired flag or reconstruction-helper references. No replacement source-format
 dispatch or public symbol was added. S2c is complete; S2d is next.
 
+### S2d ingestion and fixture corrections — 2026-09-09
+
+The ingestion tests now include exact resolved molecules for the ring-opening and ring-closing
+spellings of the minimal pair. Their expected stereo entities use locally specified full ligand
+frames. The existing equivalent/mirror cases remain, with appended cis/trans-dichlorocyclohexane
+mirror controls and a glucose/galactose epimer control. The ordinary stereo resolver's failure and
+mismatch policy tests remain in the gate; no resolver behavior or policy changed.
+
+Only the three planned input fixtures were corrected, with corresponding snapshot updates:
+
+| Fixture | Corrected identity | Independent check |
+| --- | --- | --- |
+| cis-1-2-dichlorocyclohexane | meso cis | Source sites 1/6 are S/R and the source equals its mirror |
+| trans-1-2-dichlorocyclohexane | chiral trans | Source sites 1/6 are S/S and the source differs from its mirror |
+| alpha-d-glucopyranose | alpha-D-glucose, rather than its C4 epimer | Source matches ChEBI:17925 and InChIKey WQZGKKKJIJFFOK-DVKNGEFBSA-N |
+
+RDKit 2025.09.2 supplied the independent source stereochemistry check. The glucose SMILES is also
+identical to the [ChEBI alpha-D-glucose record](https://www.ebi.ac.uk/chebi/CHEBI:17925).
+The corrected fixtures preserve their original inline `#T` resolution constraints, atom assertions,
+configuration overrides, and bond tables. Only site 6 changes in the dichlorocyclohexanes
+(cis `#T0` → `#T1`, trans `#T1` → `#T0`) and site 10 in glucose (`#T1` → `#T0`).
+Direct stereo entities would bypass the constraint interpretation these inputs exercise.
+Snapshot changes are confined to the affected site’s coset in the two successful most-saturated
+outputs per fixture; ligand frames, strict outcomes, unresolved alternatives, and tie-break reports
+are unchanged. All three corrected constraint inputs resolve canonically equal to their parsed
+SMILES references under the counts model with MostSaturated tie-break. No other fixture or snapshot
+was regenerated. The verify_stereo module summary now reflects direct graph-IR lowering; that
+output is not a replacement for these constraint-based resolution inputs.
+
+**Catalog audit and additional finding.** The full 35-entry verify_stereo catalog was lowered in
+scratch and compared with the committed inputs before editing. All 35 textual inputs differ under
+current lowering, including explicit NotAromatic assertions and direct stereo entities. With the
+counts model and MostSaturated tie-break, all 35 resolve and their reports are unchanged. Canonical
+comparison with Nauty and para-stereo disabled finds 30 equivalent outputs and five distinct outputs.
+The five are the three corrected fixtures plus cis-decalin and trans-decalin.
+
+The committed decalin fixtures encode the opposite catalog entries: each resolves canonically equal
+to the other named source. Independent RDKit conformers support the catalog labels: the bridgehead
+H–C–C–H torsions are approximately −177° for its trans input and −51° for its cis input (embedding
+seed 224, followed by UFF optimization). This is an additional fixture-identity defect, not evidence
+for a resolver change. Both decalin inputs and snapshots remain unchanged in this subitem; their
+correction needs a separate scope decision. This finding is not part of S2e's wildcard correction.
+
+Verification passes: 989 graph library tests, all 683 resolution cases, the IO conformance/property
+gate including 10,223 unchanged SMILES snapshots, and the existing graph property suites. The 24
+stereo failure/mismatch policy cases pass unchanged. Both affected crates pass all-target Clippy;
+formatting and diff checks pass. The three planned corrections and the report of additional catalog
+differences complete S2d's scoped work. No resolver implementation was changed.
+
 ## Implementation plan
 
 S0, S1, S2a, S2b, and S2b1–S2b5 are complete. The subsequent bounded experiments and architecture
 selection are also complete. S2b6–S2b8 are complete; the integrated cursor/pending implementation
-has passed its output, correctness, memory, and bounded performance gates. S2c is complete.
-S2d–S2e and S3 retain the known corrections,
-and limited permutation scope. These remaining subitems have not started. S2b7 subsumes the former S4 cleanup; earlier S4 references
+has passed its output, correctness, memory, and bounded performance gates. S2c and S2d are complete.
+S2e and S3 retain the wildcard correction and limited permutation scope. The additional decalin
+fixture defect reported above awaits a separate scope decision. These remaining subitems have not started. S2b7 subsumes the former S4 cleanup; earlier S4 references
 describe the original sequencing. No mutating git operation or commit is implied.
 
 Stages end green, including required caller/expectation migrations. Each code subitem includes its
@@ -2393,7 +2443,7 @@ Graph-IR construction and its invariants remain unchanged.
   reconstruction. Retain helpers still used by wedges or directional stereo, raw MOL parity, and
   ConfigurationScope. Verify that raw parity with no operative frame remains unread and that no
   replacement source-format dispatch was introduced. **[dep: S2b8]**
-- **S2d — Ingestion and known fixture corrections** — additive (green) with required expectation
+- **S2d — Ingestion and known fixture corrections (completed 2026-09-09)** — additive (green) with required expectation
   migrations. In `umol-graph::ingest` and its resolution fixtures, exercise direct-entity resolution
   and the known equivalent/mirror cases. Regenerate the three identified incorrect isomer fixtures
   only after independently checking their intended identities. Review `verify_stereo` output changes
@@ -2469,7 +2519,7 @@ workspace test alone does not cover them. Existing property suites are regressio
 expansion into a new randomized-testing project. Additional graph-IR or other feature-specific gates
 are required only if approved implementation changes actually touch those components.
 
-Remaining critical path: **S2d ingestion/fixtures → S2e wildcard discrepancy →
+Remaining critical path: **S2e wildcard discrepancy →
 S3a limited atom/bond permutation laws → S3b downstream/Python coverage → S3c impact review**.
 All stages end green. The wildcard discrepancy remains later required work, not deferred work.
 Optional optimization is outside this critical path; the core deliverable does not wait for it.

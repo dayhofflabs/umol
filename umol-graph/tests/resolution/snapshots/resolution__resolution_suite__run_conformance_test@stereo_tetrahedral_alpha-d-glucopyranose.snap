@@ -36,7 +36,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         {:attrs :ccw :ligands [3 5 6 [:h 4]] :site 4}
         {:attrs :ccw :ligands [4 7 8 [:h 6]] :site 6}
         {:attrs :cw :ligands [6 9 10 [:h 8]] :site 8}
-        {:attrs :cw :ligands [2 8 11 [:h 10]] :site 10}]}
+        {:attrs :ccw :ligands [2 8 11 [:h 10]] :site 10}]}
     :success true
     :tie-breaks [0 1 5 7 9 11]}
   :atom-typing-strict {
@@ -86,7 +86,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         {:attrs :ccw :ligands [3 5 6 [:h 4]] :site 4}
         {:attrs :ccw :ligands [4 7 8 [:h 6]] :site 6}
         {:attrs :cw :ligands [6 9 10 [:h 8]] :site 8}
-        {:attrs :cw :ligands [2 8 11 [:h 10]] :site 10}]}
+        {:attrs :ccw :ligands [2 8 11 [:h 10]] :site 10}]}
     :success true
     :tie-breaks [0 1 5 7 9 11]}
   :counts-strict {

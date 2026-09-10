@@ -864,6 +864,13 @@ mod tests {
     #[rstest]
     #[case::equivalent("C[C@H]1CCCCO1", "O1CCCC[C@@H]1C", true)]
     #[case::mirror("C[C@H]1CCCCO1", "O1CCCC[C@H]1C", false)]
+    #[case::cis_dichlorocyclohexane("Cl[C@H]1CCCC[C@H]1Cl", "Cl[C@@H]1CCCC[C@@H]1Cl", true)]
+    #[case::trans_dichlorocyclohexane("Cl[C@H]1CCCC[C@@H]1Cl", "Cl[C@@H]1CCCC[C@H]1Cl", false)]
+    #[case::glucose_epimer(
+        "OC[C@H]1O[C@H](O)[C@H](O)[C@@H](O)[C@@H]1O",
+        "OC[C@H]1O[C@H](O)[C@H](O)[C@@H](O)[C@H]1O",
+        false
+    )]
     fn test_ingest_smiles_stereo(#[case] left: &str, #[case] right: &str, #[case] expected: bool) {
         let left = ingest_smiles(left).unwrap();
         let right = ingest_smiles(right).unwrap();
@@ -1088,6 +1095,14 @@ mod tests {
     #[case::chlorine_trifluoride(
         "FCl(F)F",
         mol_dsl!(r##"{:atoms ["F#i=#c0#h0#n3#u0#s" "Cl#i=#c0#h0#n2#u0#s" "F#i=#c0#h0#n3#u0#s" "F#i=#c0#h0#n3#u0#s"] :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [1 3 "1#c0#u0#s"]]}"##)
+    )]
+    #[case::ring_opening_frame(
+        "C[C@H]1CCCCO1",
+        mol_dsl!(r##"{:atoms ["C#i=#c0#h3#n0#u0#s" "C#i=#c0#h1#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "O#i=#c0#h0#n2#u0#s"] :bonds [[0 1 "1#c0#u0#s"] [1 6 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"]] :stereo-atoms [{:site 1 :ligands [0 [:h 1] 6 2] :attrs :ccw}]}"##)
+    )]
+    #[case::ring_closing_frame(
+        "O1CCCC[C@@H]1C",
+        mol_dsl!(r##"{:atoms ["O#i=#c0#h0#n2#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h1#n0#u0#s" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 5 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"]] :stereo-atoms [{:site 5 :ligands [4 [:h 5] 0 6] :attrs :cw}]}"##)
     )]
     fn test_ingest_smiles_resolution(#[case] input: &str, #[case] expected: Molecule) {
         assert_eq!(ingest_smiles(input).unwrap(), expected);
