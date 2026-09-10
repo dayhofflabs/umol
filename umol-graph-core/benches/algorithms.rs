@@ -498,6 +498,18 @@ fn traversal(c: &mut Criterion) {
         });
     }
     neighborhood.finish();
+    let mut depth_first = c.benchmark_group("traversal/depth_first");
+    for (name, graph) in &graphs {
+        depth_first.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).visit_depth_first(graph.node_ids(), |event| {
+                    black_box(event);
+                    ControlFlow::<()>::Continue(())
+                })
+            });
+        });
+    }
+    depth_first.finish();
 }
 
 fn biconnected_components(c: &mut Criterion) {

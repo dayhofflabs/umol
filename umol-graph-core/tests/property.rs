@@ -24,3 +24,5 @@ mod remap;
 mod strategy;
 #[path = "property/subgraph_isomorphism.rs"]
 mod subgraph_isomorphism;
+#[path = "property/traversal.rs"]
+mod traversal;

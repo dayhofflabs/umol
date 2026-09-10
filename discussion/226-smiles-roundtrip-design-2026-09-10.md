@@ -1280,7 +1280,7 @@ The plan below sequences the work; S0 is complete.
 
 ## Staged implementation plan
 
-S0a–S0c are complete; S1 and later stages are pending. Execution has proceeded through S0c.
+S0a–S0c and S1a are complete; S1b and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1355,7 +1355,7 @@ implemented behavior, future assertions, and independent outstanding validation.
 
 ### S1 — Shared graph-core traversal, additive APIs
 
-- **S1a — DFS events, callback kernel, and Graph visitor.** Module:
+- **S1a — DFS events, callback kernel, and Graph visitor (completed 2026-09-10).** Module:
   umol-graph-core/src/algorithms/traversal.rs. **Additive (green).** [dep: S0a, S0b]
   Add DepthFirstEvent and visit_depth_first with the settled callback contract, bounds, ordered
   candidate roots, suspended neighbor iterators, edge identity tracking, and FinishTree. Add the
@@ -2081,6 +2081,80 @@ graph properties; five graph-core traversal and five connected-component tests. 
 passed for all three changed benchmark targets; cargo fmt --all and git diff --check passed.
 Logs are scratch/s0c-tests.log, scratch/s0c-core-{traversal,components}-tests.log, and
 scratch/s0c-clippy.log. Only benchmark code and this record/index changed; S1a is next.
+
+## S1a DFS contract and verification — 2026-09-10
+
+The public additions are DepthFirstEvent, traversal::visit_depth_first (also exported at the
+crate root), and Graph::visit_depth_first. DepthFirstEvent is an open descriptive enum: its
+NodeId and EdgeId fields do not certify membership in a particular graph. There are no new
+constructors, conversions, validators, stored graph views, or Python bindings.
+
+For fixed, consistent undirected connectivity, the callback kernel preserves candidate-root
+and neighbor order, emits nested discovery/finish events, reports each non-tree edge once by
+identity, and emits FinishTree after each completed root. Discover's parent names the parent
+node and connecting edge. Graph supplies its existing CSR. Bounds are usize; ids retain their
+existing types. Suspended iterators live on an explicit stack.
+
+The failure boundary is ControlFlow: Break stops immediately, including further root/neighbor
+iteration and callback calls. Index access must remain panic-free for inconsistent finite
+callback inputs, without a validation pass or a correctness guarantee for those inputs.
+Callback and iterator panics or nontermination remain caller-owned. No separate error type or
+integrity certificate is introduced. Tests cover ordered event traces, an independent recursive
+reference, loops and parallel edges, sparse ids, early termination, malformed inputs, and a
+long path. Benchmarks extend the existing inline traversal examples.
+
+Implemented against source commit 71bf6a8f66c98902de62c25aa0e7b7fddb2a64be. Public-surface
+reconciliation matches the three additions above, including enum fields, Fn neighbor callbacks,
+usize bounds, and ControlFlow return values. No other public symbols changed. The kernel uses
+node/edge visitation arrays and a stack retaining each active neighbor iterator; Graph supplies
+borrowed CSR iterators directly.
+
+Twelve new unit cases cover exact events and early termination, including a 100,000-node path.
+Three new properties compare the kernel and Graph adapter against recursive DFS with set-based
+visitation, check early-break prefixes, and exercise raw finite callback tables with invalid and
+reused ids. Valid generated multigraphs have at most eight nodes and twenty edges; roots can be
+subsets or duplicates, incidence order can reverse, and edge ids can remain sparse. These are
+bounded generative checks, not an exhaustive proof. The immediate-break unit cases also reject
+any subsequent root iteration, neighbor callback, neighbor iteration, or visitor call.
+
+Validation passed: 979 graph-core unit tests, 54 integration tests, and 129 properties with the
+proptest feature enabled. Strict Clippy passed for all graph-core targets with that feature;
+rustdoc built without warnings. Commands and logs:
+
+```text
+cargo test -p umol-graph-core --features proptest --offline
+    scratch/s1a-tests.log
+cargo clippy -p umol-graph-core --all-targets --features proptest --offline -- -D warnings
+    scratch/s1a-clippy.log
+cargo doc -p umol-graph-core --no-deps --offline
+    scratch/s1a-doc.log
+```
+
+All six new traversal/depth_first benchmarks use the existing inline graph examples and visit
+every component with a black-box event consumer. Criterion's reported time estimates are:
+
+| Inline example | DFS visitor |
+| --- | ---: |
+| path_64 | 959.25 ns |
+| path_1024 | 12.635 µs |
+| binary_tree_255 | 2.4593 µs |
+| cycle_64 | 962.82 ns |
+| four_hexagons | 296.18 ns |
+| loops_parallel_isolated | 84.738 ns |
+
+This establishes the new visitor's baseline; it is not a comparison with the different work
+performed by neighborhood or component enumeration. The bounded run used 20 samples, 100 ms
+warm-up and 200 ms measurement time per example, with 1,000 resamples:
+
+```text
+cargo bench -p umol-graph-core --bench algorithms --offline -- traversal/depth_first
+    --sample-size 20 --warm-up-time 0.1 --measurement-time 0.2
+    --nresamples 1000 --noplot --save-baseline s1a
+```
+
+The run log is scratch/s1a-core-bench.log. cargo fmt --all and git diff --check passed. Final
+diff review found only the S1a API, tests, inline benchmark additions, and this record/index.
+S1b is next; existing neighborhood and component implementations remain for their planned stages.
 
 ## Staged specification updates
 
