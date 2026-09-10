@@ -7,7 +7,8 @@ corrections are recorded in place.
 Date: 2026-07-31
 Relates: [053](053-molecule-validation-scheme-2026-02-17.md),
 [054](054-molecule-validation-phases-2026-02-17.md),
-[171](171-aromaticity-inconsistency-policy-2026-07-29.md)
+[171](171-aromaticity-inconsistency-policy-2026-07-29.md),
+[217](217-rhea-participant-failures-2026-08-30.md)
 
 A lowercase aromatic heteroatom written without brackets has an implicit-hydrogen count that cannot be
 computed before aromaticity is perceived, and an aromaticity that cannot be perceived before the

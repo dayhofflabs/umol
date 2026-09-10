@@ -1,8 +1,4 @@
-//! Parse a SMILES (or MOL) to a molecule IR and lower it to DSL — parse + lower
-//! only (no resolve, no perception), so the output is exactly the inline `#T` /
-//! `#C` stereo cosets Phase B produces. Used to generate the stereo resolution
-//! conformance inputs (`umol-graph/tests/resolution/data/stereo_*`): pick a
-//! SMILES, draw + verify it by name in ChemDraw, then commit the lowered DSL.
+//! Parse SMILES or MOL and lower the raised graph IR to DSL without resolution.
 //!
 //! Usage:
 //!   `verify_stereo smiles "<SMILES>"`   (or `-` to read the SMILES from stdin)

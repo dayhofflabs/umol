@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=5947; reaction_id=Rh_36355; side=1; participant=0
+*O[C@H]1[C@@H](O)[C@H](N2C=NC3=C2N/C2=N/C(C)=C(/CC[C@H]([NH3+])C(=O)[O-])N2C3=O)O[C@@H]1COP(*)(=O)[O-]

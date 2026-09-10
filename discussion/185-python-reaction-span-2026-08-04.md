@@ -6,7 +6,8 @@ Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [182](182-python-resolution-2026-08-03.md),
 [184](184-deltas-and-edits-2026-08-04.md),
 [168](168-api-hygiene-2026-07-27.md),
-[data type guide](../docs/development/data-types.md)
+[data type guide](../docs/development/data-types.md),
+[223](223-pattern-semantics-spike-2026-09-05.md)
 
 `ReactionSpanAst` is not exported to `umol-py`. The whitepaper's reactions section names the span form
 as the route by which an existing corpus of rules reaches \umol, so the route should be reachable

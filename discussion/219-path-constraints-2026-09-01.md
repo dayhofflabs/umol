@@ -11,6 +11,7 @@ Relates: [060](060-molecule-builder-dsl-2026-03-21.md),
 [195](195-molecule-constraint-matching-2026-08-12.md),
 [197](197-deferred-dsl-features-2026-08-16.md),
 [207](207-reaction-network-spike-2026-08-24.md),
+[223](223-pattern-semantics-spike-2026-09-05.md),
 [DSL specification](../umol-graph-ir/spec/umol-dsl-spec.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 

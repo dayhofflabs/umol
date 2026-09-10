@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=7701; reaction_id=Rh_43560; side=1; participant=0
+CCCCCCCCCCCCCCCC(=O)OC[C@H](COP(=O)([O-])O[C@@H]1[C@H](O)[C@H](O)[C@@H](OP(=O)([O-])[O-])[C@H](OP(=O)([O-])[O-])[C@H]1O)OC(=O)CCCCCCCCCCCCCCC

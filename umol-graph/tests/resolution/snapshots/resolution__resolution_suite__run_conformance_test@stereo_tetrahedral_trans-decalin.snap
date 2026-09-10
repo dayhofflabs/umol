@@ -22,7 +22,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [10 11 :single]]
       :stereo-atoms [
         {:attrs :ccw :ligands [0 2 6 11] :site 1}
-        {:attrs :ccw :ligands [1 5 7 8] :site 6}]}
+        {:attrs :cw :ligands [1 5 7 8] :site 6}]}
     :success true
     :tie-breaks [2 3 4 5 8 9 10 11]}
   :atom-typing-strict {
@@ -88,7 +88,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [10 11 :single]]
       :stereo-atoms [
         {:attrs :ccw :ligands [0 2 6 11] :site 1}
-        {:attrs :ccw :ligands [1 5 7 8] :site 6}]}
+        {:attrs :cw :ligands [1 5 7 8] :site 6}]}
     :success true
     :tie-breaks [2 3 4 5 8 9 10 11]}
   :counts-strict {

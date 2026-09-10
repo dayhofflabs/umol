@@ -9,8 +9,9 @@ use umol_chem::spin::SpinMultiplicity;
 use super::*;
 use crate::table_ir::{
     Atom, AtomStereoCare, AtomSymbol, Bond, BondOrder, Chirality, ConversionError, CtfileData,
-    CxAnnotationData, ExtendedAtom, ExtendedBond, MulticenterBond, MulticenterSet, RGroup,
-    RGroupOccurrence, SGroup, SGroupType, SourceFormat, Span, WildcardAtom,
+    CxAnnotationData, ExtendedAtom, ExtendedBond, MulticenterBond, MulticenterSet, Neighbor,
+    RGroup, RGroupOccurrence, SGroup, SGroupType, SourceFormat, Span, StereoLigand, WildcardAtom,
+    Winding,
 };
 
 #[rstest]
@@ -23,7 +24,7 @@ fn test_molecule_empty() {
             positions: None,
             multicenter_bonds: vec![],
             configuration_scope: None,
-            chirality_frame: None,
+            stereo_atoms: vec![],
             comments: vec![],
             properties: IndexMap::new(),
             source_format: SourceFormat::UNKNOWN,
@@ -62,6 +63,26 @@ fn test_molecule_bond_count(#[case] bonds: Vec<Bond>, #[case] expected: usize) {
         .bond_count(),
         expected
     );
+}
+
+#[rstest]
+#[case::chain(vec![Bond::new(0, 1, BondOrder::Single), Bond::new(1, 2, BondOrder::Double)], 1, vec![Neighbor { atom: 0, bond: 0 }, Neighbor { atom: 2, bond: 1 }])]
+#[case::isolated(vec![Bond::new(0, 1, BondOrder::Single)], 2, vec![])]
+fn test_molecule_atom_neighbors(
+    #[case] bonds: Vec<Bond>,
+    #[case] atom: u32,
+    #[case] expected: Vec<Neighbor>,
+) {
+    let mol = Molecule {
+        atoms: vec![
+            Atom::aliphatic_atom(Element::C),
+            Atom::aliphatic_atom(Element::C),
+            Atom::aliphatic_atom(Element::O),
+        ],
+        bonds,
+        ..Molecule::empty()
+    };
+    assert_eq!(mol.atom_neighbors().neighbors(atom), expected.as_slice());
 }
 
 #[rstest]
@@ -158,7 +179,7 @@ fn test_extended_molecule_empty() {
             positions: None,
             multicenter_bonds: vec![],
             configuration_scope: None,
-            chirality_frame: None,
+            stereo_atoms: vec![],
             comments: vec![],
             properties: IndexMap::new(),
             ctfile_data: None,
@@ -198,6 +219,26 @@ fn test_extended_molecule_bond_count(#[case] bonds: Vec<ExtendedBond>, #[case] e
         .bond_count(),
         expected
     );
+}
+
+#[rstest]
+#[case::chain(vec![ExtendedBond::new(0, 1, BondOrder::Single), ExtendedBond::new(1, 2, BondOrder::Any)], 1, vec![Neighbor { atom: 0, bond: 0 }, Neighbor { atom: 2, bond: 1 }])]
+#[case::isolated(vec![ExtendedBond::new(0, 1, BondOrder::Single)], 2, vec![])]
+fn test_extended_molecule_atom_neighbors(
+    #[case] bonds: Vec<ExtendedBond>,
+    #[case] atom: u32,
+    #[case] expected: Vec<Neighbor>,
+) {
+    let mol = ExtendedMolecule {
+        atoms: vec![
+            ExtendedAtom::from_element(Element::C),
+            ExtendedAtom::from_element(Element::C),
+            ExtendedAtom::from_element(Element::O),
+        ],
+        bonds,
+        ..ExtendedMolecule::empty()
+    };
+    assert_eq!(mol.atom_neighbors().neighbors(atom), expected.as_slice());
 }
 
 #[rstest]
@@ -376,9 +417,30 @@ fn test_extended_molecule_from() {
         Atom::aromatic_atom(Element::N),
     ];
     let bonds = vec![Bond::new(0, 1, BondOrder::Double)];
+    let stereo_atoms = vec![
+        StereoAtom {
+            atom: 3,
+            ligands: vec![
+                StereoLigand::Atom(8),
+                StereoLigand::LonePair,
+                StereoLigand::Atom(1),
+                StereoLigand::Atom(6),
+            ],
+            winding: Winding::Clockwise,
+        },
+        StereoAtom {
+            atom: 0,
+            ligands: vec![
+                StereoLigand::ImplicitHydrogen,
+                StereoLigand::ImplicitHydrogen,
+            ],
+            winding: Winding::CounterClockwise,
+        },
+    ];
     let molecule = Molecule {
         atoms: atoms.clone(),
         bonds: bonds.clone(),
+        stereo_atoms: stereo_atoms.clone(),
         source_format: SourceFormat::MOL,
         ..Molecule::empty()
     };
@@ -387,6 +449,7 @@ fn test_extended_molecule_from() {
         ExtendedMolecule {
             atoms: atoms.into_iter().map(ExtendedAtom::from).collect(),
             bonds: bonds.into_iter().map(ExtendedBond::from).collect(),
+            stereo_atoms,
             source_format: SourceFormat::MOL,
             ..ExtendedMolecule::empty()
         }
@@ -401,6 +464,26 @@ fn test_molecule_try_from() {
             ExtendedAtom::from_element(Element::O),
         ],
         bonds: vec![ExtendedBond::new(0, 1, BondOrder::Single)],
+        stereo_atoms: vec![
+            StereoAtom {
+                atom: 3,
+                ligands: vec![
+                    StereoLigand::Atom(8),
+                    StereoLigand::LonePair,
+                    StereoLigand::Atom(1),
+                    StereoLigand::Atom(6),
+                ],
+                winding: Winding::Clockwise,
+            },
+            StereoAtom {
+                atom: 0,
+                ligands: vec![
+                    StereoLigand::ImplicitHydrogen,
+                    StereoLigand::ImplicitHydrogen,
+                ],
+                winding: Winding::CounterClockwise,
+            },
+        ],
         source_format: SourceFormat::SMILES,
         ..ExtendedMolecule::empty()
     };
@@ -412,6 +495,26 @@ fn test_molecule_try_from() {
                 Atom::from_element(Element::O),
             ],
             bonds: vec![Bond::new(0, 1, BondOrder::Single)],
+            stereo_atoms: vec![
+                StereoAtom {
+                    atom: 3,
+                    ligands: vec![
+                        StereoLigand::Atom(8),
+                        StereoLigand::LonePair,
+                        StereoLigand::Atom(1),
+                        StereoLigand::Atom(6),
+                    ],
+                    winding: Winding::Clockwise,
+                },
+                StereoAtom {
+                    atom: 0,
+                    ligands: vec![
+                        StereoLigand::ImplicitHydrogen,
+                        StereoLigand::ImplicitHydrogen,
+                    ],
+                    winding: Winding::CounterClockwise,
+                },
+            ],
             source_format: SourceFormat::SMILES,
             ..Molecule::empty()
         })

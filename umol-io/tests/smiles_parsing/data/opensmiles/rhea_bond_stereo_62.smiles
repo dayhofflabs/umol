@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=5501; reaction_id=Rh_34519; side=1; participant=0
+CC(=O)N[C@H]1[C@@H](O[C@@H]2[C@@H](NC(C)=O)[C@@H](OP(=O)([O-])OP(=O)([O-])OC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(/C)CC/C=C(\C)CC/C=C(\C)CC/C=C(\C)CCC=C(C)C)O[C@H](C)[C@H]2NC(C)=O)O[C@H](CO)[C@H](O[C@H]2O[C@H](CO)[C@H](O[C@H]3O[C@H](CO)[C@H](O[C@H]4O[C@H](CO)[C@H](O[C@H]5O[C@H](CO)[C@H](O)[C@H](O)[C@H]5NC(C)=O)[C@H](O)[C@H]4NC(C)=O)[C@H](O)[C@H]3NC(C)=O)[C@H](O)[C@H]2NC(C)=O)[C@@H]1O

@@ -1,0 +1,13 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+assertion_line: 271
+expression: results
+---
+expected_category: opensmiles
+category: opensmiles
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C67O16P2-2
+    atom_count: 85
+    bond_count: 86

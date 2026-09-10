@@ -928,8 +928,8 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
             "C[S@]C>>",
             {},
             ModelConversionError,
-            "reactants: tetrahedral stereo at atom 1 with 2 ligands, "
-            "expected 3 or 4 ligands",
+            "reactants: stereo atom 0: stereo frame has 2 ligands, "
+            "expected 4 for Tetrahedral",
             id="model-conversion",
         ),
         pytest.param(
@@ -1096,6 +1096,55 @@ def test_reaction_from_reaction_smiles_ownership():
     assert reaction == Reaction.parse(
         '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s"] :bonds []}}'
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "[CH3:1][C@H:2]1[CH2:3][CH2:4][CH2:5][CH2:6][O:7]1>>[O:7]1[CH2:6][CH2:5][CH2:4][CH2:3][C@@H:2]1[CH3:1]",
+            True,
+            id="ring-equivalent",
+        ),
+        pytest.param(
+            "[CH3:1][C@H:2]1[CH2:3][CH2:4][CH2:5][CH2:6][O:7]1>>[O:7]1[CH2:6][CH2:5][CH2:4][CH2:3][C@H:2]1[CH3:1]",
+            False,
+            id="ring-mirror",
+        ),
+        pytest.param(
+            "[F:1]/[CH:2]=[CH:3]/[Cl:4]>>[Cl:4]/[CH:3]=[CH:2]/[F:1]",
+            True,
+            id="alkene-equivalent",
+        ),
+        pytest.param(
+            r"[F:1]/[CH:2]=[CH:3]/[Cl:4]>>[F:1]/[CH:2]=[CH:3]\[Cl:4]",
+            False,
+            id="alkene-opposite",
+        ),
+    ],
+)
+def test_reaction_from_reaction_smiles_stereo(source, expected):
+    reaction = Reaction.from_reaction_smiles(source)
+    span = reaction.to_reaction_span()
+    assert span.lhs().canonical_eq(span.rhs()) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        (
+            "F/C=C>>C",
+            "reactants: directional bond 0 not adjacent to a stereogenic double bond",
+        ),
+        (
+            "C>>F/C=C",
+            "products: directional bond 0 not adjacent to a stereogenic double bond",
+        ),
+    ],
+)
+def test_reaction_from_reaction_smiles_bond_stereo_error(source, message):
+    with pytest.raises(ModelConversionError, match=f"^{re.escape(message)}$"):
+        Reaction.from_reaction_smiles(source)
 
 
 def test_reaction_str_components():

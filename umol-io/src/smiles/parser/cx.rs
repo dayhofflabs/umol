@@ -24,11 +24,12 @@ use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::table_ir::bond::BondNoncovalent;
 use crate::table_ir::{
-    BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondStereo, BondWedge,
-    ConfigurationScope, CxAnnotationData, ExtendedMolecule, ExtendedReaction, LinkAtom, Molecule,
-    MulticenterBond, MulticenterSet, Reaction, RingBondCount, SGroup, SGroupBracketCoords,
-    SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType,
-    SGroupSubtype, SGroupType, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
+    BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondOrientation, BondStereo,
+    BondTaper, BondWedge, ConfigurationScope, CxAnnotationData, ExtendedMolecule, ExtendedReaction,
+    LinkAtom, Molecule, MulticenterBond, MulticenterSet, Reaction, RingBondCount, SGroup,
+    SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
+    SGroupData, SGroupDataType, SGroupSubtype, SGroupType, StereoSet, StereoSetRelation,
+    SubstitutionCount, UnsaturatedAtom,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -80,8 +81,8 @@ pub enum CxEntry {
     Values(Vec<(u32, String)>),
     /// Radical electrons: ^n:idx,idx,...
     Radicals(Vec<(u32, (u8, Option<SpinMultiplicity>))>),
-    /// Wiggly bonds: w:, wU:, wD: encoded as `<atom_idx>.<bond_idx>`
-    WigglyBonds(Vec<(u32, u32, BondWedge)>),
+    /// Wiggly bonds: w:, wU:, wD: encoded as `<atom_idx>.<bond_idx>`; the atom is the narrow end
+    WigglyBonds(Vec<(u32, u32, BondOrientation)>),
     /// Cis double bonds: c:
     CisBonds(Vec<u32>),
     /// Trans double bonds: t:
@@ -283,7 +284,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
-                for (atom_idx, bond_idx, wedge) in wiggly {
+                for (atom_idx, bond_idx, orientation) in wiggly {
                     if atom_idx as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
                     }
@@ -294,7 +295,14 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                     if atom_idx != a && atom_idx != b {
                         return Err(ParseError::MismatchedAtomBondIndices { atom_idx, bond_idx });
                     }
-                    bond.wedge = Some(wedge);
+                    bond.wedge = Some(BondWedge {
+                        orientation,
+                        taper: if atom_idx == a {
+                            BondTaper::Widening
+                        } else {
+                            BondTaper::Narrowing
+                        },
+                    });
                 }
             }
             CxEntry::CisBonds(indices) => {
@@ -445,7 +453,7 @@ pub fn update_extended_molecule(
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
-                for (atom_idx, bond_idx, wedge) in wiggly {
+                for (atom_idx, bond_idx, orientation) in wiggly {
                     if atom_idx as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
                     }
@@ -456,7 +464,14 @@ pub fn update_extended_molecule(
                     if atom_idx != a && atom_idx != b {
                         return Err(ParseError::MismatchedAtomBondIndices { atom_idx, bond_idx });
                     }
-                    bond.wedge = Some(wedge);
+                    bond.wedge = Some(BondWedge {
+                        orientation,
+                        taper: if atom_idx == a {
+                            BondTaper::Widening
+                        } else {
+                            BondTaper::Narrowing
+                        },
+                    });
                 }
             }
             CxEntry::CisBonds(indices) => {
@@ -875,7 +890,7 @@ pub fn split_reaction_cx_entries(
             }
             CxEntry::WigglyBonds(items) => {
                 let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
-                for (atom_idx, bond_idx, wedge) in items {
+                for (atom_idx, bond_idx, orientation) in items {
                     let Some((atom_side_idx, local_atom)) = atom_side(atom_idx) else {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
                     };
@@ -885,7 +900,7 @@ pub fn split_reaction_cx_entries(
                     if atom_side_idx != bond_side_idx {
                         return Err(ParseError::MismatchedAtomBondIndices { atom_idx, bond_idx });
                     }
-                    side_items[atom_side_idx].push((local_atom, local_bond, wedge));
+                    side_items[atom_side_idx].push((local_atom, local_bond, orientation));
                 }
                 for (side, items) in side_items.into_iter().enumerate() {
                     if !items.is_empty() {
@@ -1621,10 +1636,10 @@ fn parse_radicals(input: &mut &[u8]) -> PResult<CxEntry> {
 
 /// Parse wiggly bonds: `w:`, `wU:`, `wD:` followed by atom.bond pairs.
 fn parse_wiggly_bonds(input: &mut &[u8]) -> PResult<CxEntry> {
-    let wedge_type = alt((
-        b"wU:".value(BondWedge::EitherUp),
-        b"wD:".value(BondWedge::EitherDown),
-        b"w:".value(BondWedge::Either),
+    let orientation = alt((
+        b"wU:".value(BondOrientation::EitherUp),
+        b"wD:".value(BondOrientation::EitherDown),
+        b"w:".value(BondOrientation::Either),
     ))
     .parse_next(input)?;
 
@@ -1637,7 +1652,7 @@ fn parse_wiggly_bonds(input: &mut &[u8]) -> PResult<CxEntry> {
 
     let result: Vec<_> = pairs
         .into_iter()
-        .map(|(atom_idx, bond_idx)| (atom_idx, bond_idx, wedge_type))
+        .map(|(atom_idx, bond_idx)| (atom_idx, bond_idx, orientation))
         .collect();
     Ok(CxEntry::WigglyBonds(result))
 }
@@ -2476,7 +2491,7 @@ mod tests {
     #[case::hydrogen_bond(b"|H:1.2|", vec![CxEntry::HydrogenBonds(vec![(1, 2)])])]
     #[case::radicals_multiple_atoms(b"|^1:0,1,2|", vec![CxEntry::Radicals(vec![(0, (1, None)),
         (1, (1, None)), (2, (1, None))])])]
-    #[case::wiggly_bonds(b"|w:0.1,2.3|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondWedge::Either), (2, 3, BondWedge::Either)])])]
+    #[case::wiggly_bonds(b"|w:0.1,2.3|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondOrientation::Either), (2, 3, BondOrientation::Either)])])]
     #[case::cis_bonds(b"|c:0,1|", vec![CxEntry::CisBonds(vec![0, 1])])]
     #[case::trans_bonds(b"|t:0,1|", vec![CxEntry::TransBonds(vec![0, 1])])]
     #[case::unspec_bonds(b"|ctu:0,1|", vec![CxEntry::UnspecBonds(vec![0, 1])])]
@@ -2551,7 +2566,7 @@ mod tests {
     #[case::coordinate_bond(b"|C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
     #[case::hydrogen_bond(b"|H:1.2|", vec![CxEntry::HydrogenBonds(vec![(1, 2)])])]
     #[case::radicals(b"|^1:0|", vec![CxEntry::Radicals(vec![(0, (1, None))])])]
-    #[case::wiggly_bonds(b"|w:0.1|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondWedge::Either)])])]
+    #[case::wiggly_bonds(b"|w:0.1|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondOrientation::Either)])])]
     #[case::cis_bonds(b"|c:0|", vec![CxEntry::CisBonds(vec![0])])]
     #[case::trans_bonds(b"|t:0|", vec![CxEntry::TransBonds(vec![0])])]
     #[case::atom_labels(b"|$label$|", vec![CxEntry::Labels(vec![(0, "label".to_string())])])]
@@ -2659,7 +2674,7 @@ mod tests {
     #[case::values(vec![CxEntry::Values(vec![(0, "val0".to_string())])], |mol: &Molecule| mol.atoms[0].value == Some("val0".to_string()))]
     #[case::radicals(vec![CxEntry::Radicals(vec![(0, (1, None))])],
         |mol: &Molecule| mol.atoms[0].unpaired_electrons == Some(1) && mol.atoms[0].multiplicity.is_none())]
-    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(0, 0, BondWedge::Either)])], |mol: &Molecule| mol.bonds[0].wedge == Some(BondWedge::Either))]
+    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(0, 0, BondOrientation::Either)])], |mol: &Molecule| mol.bonds[0].wedge == Some(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Widening }))]
     #[case::cis_bonds(vec![CxEntry::CisBonds(vec![0])], |mol: &Molecule| mol.bonds[0].stereo == Some(BondStereo::Cis))]
     #[case::trans_bonds(vec![CxEntry::TransBonds(vec![1])], |mol: &Molecule| mol.bonds[1].stereo == Some(BondStereo::Trans))]
     #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].donation == Some(BondDonation::Donating))]
@@ -2687,7 +2702,7 @@ mod tests {
     #[case::values(vec![CxEntry::Values(vec![(1, "val1".to_string())])], |mol: &ExtendedMolecule| mol.atoms[1].value == Some("val1".to_string()))]
     #[case::radicals(vec![CxEntry::Radicals(vec![(2, (2, None))])],
         |mol: &ExtendedMolecule| mol.atoms[2].unpaired_electrons == Some(2) && mol.atoms[2].multiplicity.is_none())]
-    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(1, 0, BondWedge::Either)])], |mol: &ExtendedMolecule| mol.bonds[0].wedge == Some(BondWedge::Either))]
+    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(1, 0, BondOrientation::Either)])], |mol: &ExtendedMolecule| mol.bonds[0].wedge == Some(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Narrowing }))]
     #[case::cis_bonds(vec![CxEntry::CisBonds(vec![1])], |mol: &ExtendedMolecule| mol.bonds[1].stereo == Some(BondStereo::Cis))]
     #[case::trans_bonds(vec![CxEntry::TransBonds(vec![0])], |mol: &ExtendedMolecule| mol.bonds[0].stereo == Some(BondStereo::Trans))]
     #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(1, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].donation == Some(BondDonation::Accepting))]

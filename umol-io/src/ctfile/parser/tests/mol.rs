@@ -8,7 +8,7 @@ use crate::ctfile::parser::{
     parse_mol_bytes_to_table_ir, parse_mol_bytes_to_table_ir_with, parse_mol_to_table_ir,
     parse_mol_to_table_ir_with,
 };
-use crate::table_ir::{ChiralityFrame, ConfigurationScope};
+use crate::table_ir::{Chirality, ConfigurationScope};
 
 #[fixture]
 fn methane_mol() -> &'static str {
@@ -62,14 +62,11 @@ fn test_parse_mol_to_table_ir(ethane_mol: &[u8]) {
 )]
 #[case::atom_parity(
     "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\nM  END\n",
-    Some(ChiralityFrame::LastNeighborAway),
+    Some(Chirality::Clockwise),
 )]
-fn test_parse_mol_to_table_ir_chirality(
-    #[case] input: &str,
-    #[case] expected: Option<ChiralityFrame>,
-) {
+fn test_parse_mol_to_table_ir_chirality(#[case] input: &str, #[case] expected: Option<Chirality>) {
     assert_eq!(
-        parse_mol_to_table_ir(input).map(|molecule| molecule.chirality_frame),
+        parse_mol_to_table_ir(input).map(|molecule| molecule.atoms[0].chirality),
         Ok(expected)
     );
 }
@@ -235,14 +232,11 @@ fn test_parse_extended_mol(methane_mol: &str) {
 )]
 #[case::atom_parity(
     "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\nM  END\n",
-    Some(ChiralityFrame::LastNeighborAway),
+    Some(Chirality::Clockwise),
 )]
-fn test_parse_extended_mol_chirality(
-    #[case] input: &str,
-    #[case] expected: Option<ChiralityFrame>,
-) {
+fn test_parse_extended_mol_chirality(#[case] input: &str, #[case] expected: Option<Chirality>) {
     assert_eq!(
-        parse_extended_mol(input).map(|molecule| molecule.chirality_frame),
+        parse_extended_mol(input).map(|molecule| molecule.atoms[0].chirality),
         Ok(expected)
     );
 }

@@ -1,4 +1,4 @@
-//! Stereochemistry metadata for TableIR.
+//! Stereochemistry records and metadata for TableIR.
 
 /// Whether the molecule's stereo descriptors fix the absolute configuration or
 /// only the relative one. Populated from format-specific flags:
@@ -10,18 +10,25 @@ pub enum ConfigurationScope {
     Relative,
 }
 
-/// The frame in which a per-atom chirality descriptor is read into a 3D
-/// arrangement. It governs tetrahedral atom chirality only, not other
-/// stereogenic elements (e.g. E/Z bonds). It is present only when the molecule
-/// contains a raw atom chirality descriptor whose source convention must be
-/// retained.
+/// An explicit tetrahedral configuration in an ordered ligand frame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StereoAtom {
+    pub atom: u32,
+    pub ligands: Vec<StereoLigand>,
+    pub winding: Winding,
+}
+
+/// An actual neighbor or a virtual ligand borne by a stereo atom's site.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ChiralityFrame {
-    /// First-listed neighbor points toward the viewer; remaining neighbors,
-    /// in order, wind counterclockwise for the negative token (SMILES `@`).
-    FirstNeighborToward,
-    /// Last (highest-numbered) neighbor points away, behind the plane of the
-    /// others; remaining neighbors, in order, wind clockwise for the negative
-    /// token (CTAB parity 1).
-    LastNeighborAway,
+pub enum StereoLigand {
+    Atom(u32),
+    ImplicitHydrogen,
+    LonePair,
+}
+
+/// Winding of the last three tetrahedral ligands with the first toward the viewer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Winding {
+    Clockwise,
+    CounterClockwise,
 }

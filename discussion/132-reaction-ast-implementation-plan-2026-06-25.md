@@ -1,5 +1,7 @@
 # 132 — Reaction AST: implementation plan (increment 1)
 
+Relates: [223](223-pattern-semantics-spike-2026-09-05.md)
+
 Implements doc 131 for **localized topology**: `ReactionAst = MoleculeAst (lhs) + Deltas`,
 `apply`, minimal `compose`, the supporting graph-core primitives, and retirement of the
 doc-127 interim. Overlays + stereo + overlay composition (#7–#9) are **increment 2**,

@@ -95,15 +95,15 @@ pub enum BondNoncovalent {
 pub struct Bond {
     pub atoms: AtomPair,
     pub order: BondOrder,
+    pub donation: Option<BondDonation>,
+    pub noncovalent: Option<BondNoncovalent>,
     pub charge: Option<i8>,
     pub unpaired_electrons: Option<u8>,
     pub multiplicity: Option<SpinMultiplicity>,
-    pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
-    pub wedge: Option<BondWedge>,
     pub direction: Option<BondDirection>,
-    pub donation: Option<BondDonation>,
-    pub noncovalent: Option<BondNoncovalent>,
+    pub wedge: Option<BondWedge>,
+    pub ring: Option<u32>,
     pub span: Option<Span>,
 }
 
@@ -112,15 +112,15 @@ impl Bond {
         Self {
             atoms: AtomPair::new(a, b),
             order,
+            donation: None,
+            noncovalent: None,
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            ring: None,
             stereo: None,
-            wedge: None,
             direction: None,
-            donation: None,
-            noncovalent: None,
+            wedge: None,
+            ring: None,
             span: None,
         }
     }
@@ -132,15 +132,15 @@ impl Bond {
         Self {
             atoms: AtomPair::new(a, b),
             order,
+            donation: Some(if swapped { donation.flip() } else { donation }),
+            noncovalent: None,
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            ring: None,
             stereo: None,
-            wedge: None,
             direction: None,
-            donation: Some(if swapped { donation.flip() } else { donation }),
-            noncovalent: None,
+            wedge: None,
+            ring: None,
             span: None,
         }
     }
@@ -150,15 +150,15 @@ impl Bond {
         Self {
             atoms: AtomPair::new(a, b),
             order: BondOrder::Zero,
+            donation: None,
+            noncovalent: Some(noncovalent),
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            ring: None,
             stereo: None,
-            wedge: None,
             direction: None,
-            donation: None,
-            noncovalent: Some(noncovalent),
+            wedge: None,
+            ring: None,
             span: None,
         }
     }
@@ -173,14 +173,32 @@ impl Bond {
         self.atoms.second()
     }
 
-    /// Return a bond with updated atom indices while preserving donation semantics.
+    /// Return the bond with `a` and `b` as the new indices of its first and second atoms.
+    /// Reversing their order re-reads the donation and the wedge from the other endpoint.
     pub fn update_atoms(&self, a: u32, b: u32) -> Self {
         let mut updated = self.clone();
         updated.atoms = AtomPair::new(a, b);
         if a > b {
-            updated.donation = updated.donation.map(|d| d.flip());
+            updated.donation = updated.donation.map(BondDonation::flip);
+            updated.wedge = updated.wedge.map(BondWedge::flip);
         }
         updated
+    }
+
+    /// Narrow (pointed) endpoint of the wedge, if the bond carries one.
+    pub fn narrow_endpoint(&self) -> Option<u32> {
+        self.wedge.map(|wedge| match wedge.taper {
+            BondTaper::Widening => self.atoms.first(),
+            BondTaper::Narrowing => self.atoms.second(),
+        })
+    }
+
+    /// Wide endpoint of the wedge, if the bond carries one.
+    pub fn wide_endpoint(&self) -> Option<u32> {
+        self.wedge.map(|wedge| match wedge.taper {
+            BondTaper::Widening => self.atoms.second(),
+            BondTaper::Narrowing => self.atoms.first(),
+        })
     }
 }
 
@@ -253,17 +271,55 @@ impl BondOrder {
     }
 }
 
-/// Tetrahedral depiction wedge for single bonds.
-/// In MOL files: Wedge (up, code 1), Dash (down, code 6), Either (code 4).
-/// The wedge (pointed) end of the stereo bond is at the first atom.
-/// In CXSMILES: w: (undefined), wU: (undefined, display up), wD: (undefined, display down)
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BondWedge {
+/// Out-of-plane reading of a tetrahedral depiction wedge on a single bond.
+/// In MOL files: Up (code 1), Down (code 6), Either (code 4).
+/// In CXSMILES: w: (Either), wU: (EitherUp), wD: (EitherDown).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BondOrientation {
     Up,         // MOL: Wedge (code 1)
     Down,       // MOL: Dash (code 6)
     Either,     // MOL code 4, CXSMILES: w: (stereo undefined)
     EitherUp,   // CXSMILES: wU: (stereo undefined, display up)
     EitherDown, // CXSMILES: wD: (stereo undefined, display down)
+}
+
+/// Width of a wedge from the stored pair's first endpoint toward its second.
+/// `Widening` puts the narrow (pointed) end at `first()`, `Narrowing` at `second()`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BondTaper {
+    Widening,
+    Narrowing,
+}
+
+impl BondTaper {
+    /// Reverse the taper, as when the same bond is read from its other end.
+    pub fn flip(self) -> Self {
+        match self {
+            Self::Widening => Self::Narrowing,
+            Self::Narrowing => Self::Widening,
+        }
+    }
+}
+
+/// Depiction wedge of a bond: its out-of-plane reading and which stored endpoint is the narrow
+/// (pointed) end. A wedge describes the configuration at its narrow endpoint only.
+/// In MOL files the bond line's first atom is the narrow end; CXSMILES wiggly-bond entries name
+/// the narrow-end atom explicitly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct BondWedge {
+    pub orientation: BondOrientation,
+    pub taper: BondTaper,
+}
+
+impl BondWedge {
+    /// The wedge as read from the bond's other end: the taper reverses, the orientation is
+    /// unchanged.
+    pub fn flip(self) -> Self {
+        Self {
+            orientation: self.orientation,
+            taper: self.taper.flip(),
+        }
+    }
 }
 
 /// Cis/trans directional bond, for a single bond adjacent to a double bond.
@@ -300,16 +356,16 @@ pub enum BondStereo {
 pub struct ExtendedBond {
     pub atoms: AtomPair,
     pub order: BondOrder,
+    pub topology: Option<BondTopology>,
+    pub donation: Option<BondDonation>,
+    pub noncovalent: Option<BondNoncovalent>,
     pub charge: Option<i8>,
     pub unpaired_electrons: Option<u8>,
     pub multiplicity: Option<SpinMultiplicity>,
-    pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
-    pub wedge: Option<BondWedge>,
     pub direction: Option<BondDirection>,
-    pub donation: Option<BondDonation>,
-    pub noncovalent: Option<BondNoncovalent>,
-    pub topology: Option<BondTopology>,
+    pub wedge: Option<BondWedge>,
+    pub ring: Option<u32>,
     pub reacting_center: Option<BondReactingCenter>,
     pub properties: HashMap<String, String>,
     pub span: Option<Span>,
@@ -321,16 +377,16 @@ impl ExtendedBond {
         Self {
             atoms: AtomPair::new(start_atom, end_atom),
             order,
+            topology: None,
+            donation: None,
+            noncovalent: None,
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            ring: None,
             stereo: None,
-            wedge: None,
             direction: None,
-            donation: None,
-            noncovalent: None,
-            topology: None,
+            wedge: None,
+            ring: None,
             reacting_center: None,
             properties: HashMap::new(),
             span: None,
@@ -344,16 +400,16 @@ impl ExtendedBond {
         Self {
             atoms: AtomPair::new(a, b),
             order,
+            topology: None,
+            donation: Some(if swapped { donation.flip() } else { donation }),
+            noncovalent: None,
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            ring: None,
             stereo: None,
-            wedge: None,
             direction: None,
-            donation: Some(if swapped { donation.flip() } else { donation }),
-            noncovalent: None,
-            topology: None,
+            wedge: None,
+            ring: None,
             reacting_center: None,
             properties: HashMap::new(),
             span: None,
@@ -365,16 +421,16 @@ impl ExtendedBond {
         Self {
             atoms: AtomPair::new(a, b),
             order: BondOrder::Zero,
+            topology: None,
+            donation: None,
+            noncovalent: Some(noncovalent),
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            ring: None,
             stereo: None,
-            wedge: None,
             direction: None,
-            donation: None,
-            noncovalent: Some(noncovalent),
-            topology: None,
+            wedge: None,
+            ring: None,
             reacting_center: None,
             properties: HashMap::new(),
             span: None,
@@ -391,14 +447,32 @@ impl ExtendedBond {
         self.atoms.second()
     }
 
-    /// Return a bond with updated atom indices while preserving donation semantics.
+    /// Return the bond with `a` and `b` as the new indices of its first and second atoms.
+    /// Reversing their order re-reads the donation and the wedge from the other endpoint.
     pub fn update_atoms(&self, a: u32, b: u32) -> Self {
         let mut updated = self.clone();
         updated.atoms = AtomPair::new(a, b);
         if a > b {
-            updated.donation = updated.donation.map(|d| d.flip());
+            updated.donation = updated.donation.map(BondDonation::flip);
+            updated.wedge = updated.wedge.map(BondWedge::flip);
         }
         updated
+    }
+
+    /// Narrow (pointed) endpoint of the wedge, if the bond carries one.
+    pub fn narrow_endpoint(&self) -> Option<u32> {
+        self.wedge.map(|wedge| match wedge.taper {
+            BondTaper::Widening => self.atoms.first(),
+            BondTaper::Narrowing => self.atoms.second(),
+        })
+    }
+
+    /// Wide endpoint of the wedge, if the bond carries one.
+    pub fn wide_endpoint(&self) -> Option<u32> {
+        self.wedge.map(|wedge| match wedge.taper {
+            BondTaper::Widening => self.atoms.second(),
+            BondTaper::Narrowing => self.atoms.first(),
+        })
     }
 
     /// Check if this bond has extended features that would be lost in conversion to basic Bond.
@@ -416,16 +490,16 @@ impl From<Bond> for ExtendedBond {
         Self {
             atoms: bond.atoms,
             order: bond.order,
+            topology: None,
+            donation: bond.donation,
+            noncovalent: bond.noncovalent,
             charge: bond.charge,
             unpaired_electrons: bond.unpaired_electrons,
             multiplicity: bond.multiplicity,
-            ring: bond.ring,
             stereo: bond.stereo,
-            wedge: bond.wedge,
             direction: bond.direction,
-            donation: bond.donation,
-            noncovalent: bond.noncovalent,
-            topology: None,
+            wedge: bond.wedge,
+            ring: bond.ring,
             reacting_center: None,
             properties: HashMap::new(),
             span: bond.span,
@@ -444,15 +518,15 @@ impl TryFrom<ExtendedBond> for Bond {
         Ok(Self {
             atoms: extended.atoms,
             order: extended.order,
+            donation: extended.donation,
+            noncovalent: extended.noncovalent,
             charge: extended.charge,
             unpaired_electrons: extended.unpaired_electrons,
             multiplicity: extended.multiplicity,
-            ring: extended.ring,
             stereo: extended.stereo,
-            wedge: extended.wedge,
             direction: extended.direction,
-            donation: extended.donation,
-            noncovalent: extended.noncovalent,
+            wedge: extended.wedge,
+            ring: extended.ring,
             span: extended.span,
         })
     }
@@ -574,19 +648,62 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::normal_donating(0, 4, BondOrder::Single, BondDonation::Donating, Some(BondDonation::Donating))]
-    #[case::swapped_donating(4, 0, BondOrder::Single, BondDonation::Donating, Some(BondDonation::Accepting))]
-    #[case::swapped_accepting(5, 2, BondOrder::Single, BondDonation::Accepting, Some(BondDonation::Donating))]
+    #[case::renumbered_donating(Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating), 1, 3, Bond::new_dative(1, 3, BondOrder::Single, BondDonation::Donating))]
+    #[case::reversed_donating(Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating), 3, 1, Bond::new_dative(1, 3, BondOrder::Single, BondDonation::Accepting))]
+    #[case::reversed_accepting(Bond::new_dative(2, 5, BondOrder::Single, BondDonation::Accepting), 3, 1, Bond::new_dative(1, 3, BondOrder::Single, BondDonation::Donating))]
+    #[case::renumbered_wedge(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..Bond::new(0, 4, BondOrder::Single) }, 1, 3, Bond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..Bond::new(1, 3, BondOrder::Single) })]
+    #[case::reversed_wedge(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..Bond::new(0, 4, BondOrder::Single) }, 3, 1, Bond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }), ..Bond::new(1, 3, BondOrder::Single) })]
+    #[case::reversed_wedge_and_donation(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }), ..Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Accepting) }, 3, 1, Bond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Widening }), ..Bond::new_dative(1, 3, BondOrder::Single, BondDonation::Donating) })]
     fn test_bond_update_atoms(
+        #[case] bond: Bond,
         #[case] a: u32,
         #[case] b: u32,
-        #[case] order: BondOrder,
-        #[case] donation: BondDonation,
-        #[case] expected: Option<BondDonation>,
+        #[case] expected: Bond,
     ) {
-        let bond = Bond::new_dative(a, b, order, donation);
-        let updated = bond.update_atoms(1, 3);
-        assert_eq!(updated.donation, expected);
+        assert_eq!(bond.update_atoms(a, b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::plain(Bond::new(0, 4, BondOrder::Single))]
+    #[case::donating(Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating))]
+    #[case::narrowing_wedge(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }), ..Bond::new(0, 4, BondOrder::Single) })]
+    fn test_bond_update_atoms_identity(#[case] bond: Bond) {
+        assert_eq!(bond.update_atoms(bond.start_atom(), bond.end_atom()), bond);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::none(Bond::new(0, 4, BondOrder::Single), None)]
+    #[case::widening(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..Bond::new(0, 4, BondOrder::Single) }, Some(0))]
+    #[case::narrowing(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }), ..Bond::new(0, 4, BondOrder::Single) }, Some(4))]
+    fn test_bond_narrow_endpoint(#[case] bond: Bond, #[case] expected: Option<u32>) {
+        assert_eq!(bond.narrow_endpoint(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::none(Bond::new(0, 4, BondOrder::Single), None)]
+    #[case::widening(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..Bond::new(0, 4, BondOrder::Single) }, Some(4))]
+    #[case::narrowing(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }), ..Bond::new(0, 4, BondOrder::Single) }, Some(0))]
+    fn test_bond_wide_endpoint(#[case] bond: Bond, #[case] expected: Option<u32>) {
+        assert_eq!(bond.wide_endpoint(), expected);
+    }
+
+    #[rstest]
+    #[case::widening(BondTaper::Widening, BondTaper::Narrowing)]
+    #[case::narrowing(BondTaper::Narrowing, BondTaper::Widening)]
+    fn test_bond_taper_flip(#[case] taper: BondTaper, #[case] expected: BondTaper) {
+        assert_eq!(taper.flip(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::up_widening(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }, BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing })]
+    #[case::down_narrowing(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }, BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Widening })]
+    #[case::either_widening(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Widening }, BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Narrowing })]
+    fn test_bond_wedge_flip(#[case] wedge: BondWedge, #[case] expected: BondWedge) {
+        assert_eq!(wedge.flip(), expected);
     }
 
     #[rstest]
@@ -636,54 +753,63 @@ mod tests {
         assert_eq!(bond.donation, expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::normal_donating(
-        0,
-        4,
-        BondOrder::Single,
-        BondDonation::Donating,
-        Some(BondDonation::Donating)
-    )]
-    #[case::swapped_donating(
-        4,
-        0,
-        BondOrder::Single,
-        BondDonation::Donating,
-        Some(BondDonation::Accepting)
-    )]
-    #[case::swapped_accepting(
-        5,
-        2,
-        BondOrder::Single,
-        BondDonation::Accepting,
-        Some(BondDonation::Donating)
-    )]
+    #[case::renumbered_donating(ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating), 1, 3, ExtendedBond::new_dative(1, 3, BondOrder::Single, BondDonation::Donating))]
+    #[case::reversed_donating(ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating), 3, 1, ExtendedBond::new_dative(1, 3, BondOrder::Single, BondDonation::Accepting))]
+    #[case::reversed_accepting(ExtendedBond::new_dative(2, 5, BondOrder::Single, BondDonation::Accepting), 3, 1, ExtendedBond::new_dative(1, 3, BondOrder::Single, BondDonation::Donating))]
+    #[case::renumbered_wedge(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..ExtendedBond::new(0, 4, BondOrder::Single) }, 1, 3, ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..ExtendedBond::new(1, 3, BondOrder::Single) })]
+    #[case::reversed_wedge(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..ExtendedBond::new(0, 4, BondOrder::Single) }, 3, 1, ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }), ..ExtendedBond::new(1, 3, BondOrder::Single) })]
+    #[case::reversed_wedge_and_donation(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }), ..ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Accepting) }, 3, 1, ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Widening }), ..ExtendedBond::new_dative(1, 3, BondOrder::Single, BondDonation::Donating) })]
     fn test_extended_bond_update_atoms(
+        #[case] bond: ExtendedBond,
         #[case] a: u32,
         #[case] b: u32,
-        #[case] order: BondOrder,
-        #[case] donation: BondDonation,
-        #[case] expected: Option<BondDonation>,
+        #[case] expected: ExtendedBond,
     ) {
-        let bond = ExtendedBond::new_dative(a, b, order, donation);
-        let updated = bond.update_atoms(1, 3);
-        assert_eq!(updated.donation, expected);
+        assert_eq!(bond.update_atoms(a, b), expected);
     }
+
+    #[rustfmt::skip]
     #[rstest]
-    #[case::normal(
-        Bond::new(0, 1, BondOrder::Single),
-        ExtendedBond::new(0, 1, BondOrder::Single)
-    )]
+    #[case::plain(ExtendedBond::new(0, 4, BondOrder::Single))]
+    #[case::donating(ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating))]
+    #[case::narrowing_wedge(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }), ..ExtendedBond::new(0, 4, BondOrder::Single) })]
+    fn test_extended_bond_update_atoms_identity(#[case] bond: ExtendedBond) {
+        assert_eq!(bond.update_atoms(bond.start_atom(), bond.end_atom()), bond);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::none(ExtendedBond::new(0, 4, BondOrder::Single), None)]
+    #[case::widening(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..ExtendedBond::new(0, 4, BondOrder::Single) }, Some(0))]
+    #[case::narrowing(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }), ..ExtendedBond::new(0, 4, BondOrder::Single) }, Some(4))]
+    fn test_extended_bond_narrow_endpoint(#[case] bond: ExtendedBond, #[case] expected: Option<u32>) {
+        assert_eq!(bond.narrow_endpoint(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::none(ExtendedBond::new(0, 4, BondOrder::Single), None)]
+    #[case::widening(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Widening }), ..ExtendedBond::new(0, 4, BondOrder::Single) }, Some(4))]
+    #[case::narrowing(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Up, taper: BondTaper::Narrowing }), ..ExtendedBond::new(0, 4, BondOrder::Single) }, Some(0))]
+    fn test_extended_bond_wide_endpoint(#[case] bond: ExtendedBond, #[case] expected: Option<u32>) {
+        assert_eq!(bond.wide_endpoint(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::normal(Bond::new(0, 1, BondOrder::Single), ExtendedBond::new(0, 1, BondOrder::Single))]
+    #[case::wedge(Bond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }), ..Bond::new(0, 1, BondOrder::Single) }, ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }), ..ExtendedBond::new(0, 1, BondOrder::Single) })]
     fn test_bond_into_extended_bond(#[case] bond: Bond, #[case] expected: ExtendedBond) {
         let extended: ExtendedBond = bond.into();
         assert_eq!(extended, expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::normal(
-        ExtendedBond::new(0, 1, BondOrder::Double),
-        Bond::new(0, 1, BondOrder::Double)
-    )]
+    #[case::normal(ExtendedBond::new(0, 1, BondOrder::Double), Bond::new(0, 1, BondOrder::Double))]
+    #[case::wedge(ExtendedBond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }), ..ExtendedBond::new(0, 1, BondOrder::Single) }, Bond { wedge: Some(BondWedge { orientation: BondOrientation::Down, taper: BondTaper::Narrowing }), ..Bond::new(0, 1, BondOrder::Single) })]
     fn test_extended_bond_try_into_bond(#[case] extended: ExtendedBond, #[case] expected: Bond) {
         let bond: Bond = extended.try_into().unwrap();
         assert_eq!(bond, expected);
@@ -691,9 +817,9 @@ mod tests {
 
     #[rstest]
     #[case::query(ExtendedBond::new(0, 1, BondOrder::Any))]
-    #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, charge: None, unpaired_electrons: None,
-                                    multiplicity: None, ring: None, stereo: None, wedge: None, direction: None, donation: None, noncovalent: None,
-                                    topology: Some(BondTopology::Ring), reacting_center: None, properties: HashMap::new(), span: None })]
+    #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, topology: Some(BondTopology::Ring), donation: None, noncovalent: None,
+                                    charge: None, unpaired_electrons: None, multiplicity: None, stereo: None, direction: None, wedge: None, ring: None,
+                                    reacting_center: None, properties: HashMap::new(), span: None })]
     fn test_extended_bond_try_into_bond_error(#[case] extended: ExtendedBond) {
         let result: Result<Bond, _> = extended.try_into();
         assert!(result.is_err());
@@ -707,9 +833,9 @@ mod tests {
     #[case::normal(ExtendedBond::new(0, 1, BondOrder::Single), false)]
     #[case::query(ExtendedBond::new(0, 1, BondOrder::Any), true)]
     #[case::order_zero(ExtendedBond::new(0, 1, BondOrder::Zero), true)]
-    #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, charge: None, unpaired_electrons: None,
-                                    multiplicity: None, ring: None, stereo: None, wedge: None, direction: None, donation: None, noncovalent: None,
-                                    topology: Some(BondTopology::Ring), reacting_center: None, properties: HashMap::new(), span: None }, true)]
+    #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, topology: Some(BondTopology::Ring), donation: None, noncovalent: None,
+                                    charge: None, unpaired_electrons: None, multiplicity: None, stereo: None, direction: None, wedge: None, ring: None,
+                                    reacting_center: None, properties: HashMap::new(), span: None }, true)]
     fn test_extended_bond_has_extended_features(
         #[case] extended: ExtendedBond,
         #[case] expected: bool,

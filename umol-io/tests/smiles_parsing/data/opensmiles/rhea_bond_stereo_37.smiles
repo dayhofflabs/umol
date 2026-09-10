@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=612; reaction_id=Rh_12625; side=1; participant=0
+COC1=CC(/C=C/C(=O)[O-])=CC(OC)=C1OC(=O)[C@@H](O)CC(=O)[O-]

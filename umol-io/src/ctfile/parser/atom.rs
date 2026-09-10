@@ -67,7 +67,7 @@ pub(super) fn atom_block(
         }
     }
 
-    let positions = if ignore_positions || (atom_count > 1 && Point3D::all_zero(&positions)) {
+    let positions = if ignore_positions {
         None
     } else {
         Some(positions)
@@ -116,7 +116,7 @@ pub(super) fn extended_atom_block(
         }
     }
 
-    let positions = if ignore_positions || (atom_count > 1 && Point3D::all_zero(&positions)) {
+    let positions = if ignore_positions {
         None
     } else {
         Some(positions)

@@ -7,12 +7,9 @@ use std::collections::HashMap;
 use regex::Regex;
 use umol_chem::element::Element;
 
-use super::super::builder::{
-    AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeEditor,
-};
 use crate::table_ir::{
-    AtomSymbol, BondDirection, BondDonation, BondOrder, Chirality, ChiralityFrame,
-    ExtendedMolecule, Molecule, SourceFormat, Span, WildcardAtom,
+    Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ExtendedAtom,
+    ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, WildcardAtom,
 };
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
@@ -222,9 +219,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
     let atoms: Vec<_> = atoms_s.split_whitespace().collect();
     let bonds: Vec<_> = bonds_s.split_whitespace().collect();
 
-    let mut b = MoleculeEditor::with_capacity(atoms.len(), bonds.len(), false);
-    // map of insertion index to atom id is identity by construction; still collect ids
-    let mut ids: Vec<usize> = Vec::with_capacity(atoms.len());
+    let mut mol = Molecule::empty();
     // Keep a map from atom span_start -> span_end for bond defaulting
     let mut atom_span_map: HashMap<u32, u32> = HashMap::new();
 
@@ -244,20 +239,13 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                 end = Some(s + w);
             }
         }
-        let id = b.on_atom(AtomData {
-            element: Some(el),
-            aromatic: Some(arom),
-            isotope: None,
-            charge: None,
-            implicit_hydrogens: None,
-            class: None,
-            chirality: None,
-            span: Span::from_bytes_opt(start, end),
-        });
+        let mut atom = Atom::from_element(el);
+        atom.aromatic = Some(arom);
+        atom.span = Span::from_bytes_opt(start, end);
+        mol.atoms.push(atom);
         if let (Some(s), Some(e)) = (start, end) {
             atom_span_map.insert(s, e);
         }
-        ids.push(id);
     }
     for btok in bonds {
         let (i, j, order, direction, donation, span_start, mut span_end) = parse_bond_token(btok);
@@ -266,26 +254,14 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
             }
         }
-        b.on_bond(
-            ids[i],
-            ids[j],
-            BondData {
-                order,
-                direction,
-                donation,
-                span: Span::from_bytes_opt(span_start, span_end),
-            },
-        );
+        let mut bond = Bond::new(i as u32, j as u32, order);
+        bond.direction = direction.map(|value| if i > j { value.flip() } else { value });
+        bond.donation = donation.map(|value| if i > j { value.flip() } else { value });
+        bond.span = Span::from_bytes_opt(span_start, span_end);
+        mol.bonds.push(bond);
     }
-    let mut mols = b.finish();
-    let mut mol = mols.pop().unwrap_or_else(Molecule::empty);
 
     mol.source_format = SourceFormat::SMILES;
-    mol.chirality_frame = mol
-        .atoms
-        .iter()
-        .any(|atom| atom.chirality.is_some())
-        .then_some(ChiralityFrame::FirstNeighborToward);
     mol
 }
 
@@ -301,8 +277,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     let atoms: Vec<_> = atoms_s.split_whitespace().collect();
     let bonds: Vec<_> = bonds_s.split_whitespace().collect();
 
-    let mut b = ExtendedMoleculeBuilder::with_capacity(atoms.len(), bonds.len(), false);
-    let mut ids: Vec<usize> = Vec::with_capacity(atoms.len());
+    let mut mol = ExtendedMolecule::empty();
     let mut atom_span_map: HashMap<u32, u32> = HashMap::new();
 
     for tok in atoms {
@@ -320,23 +295,21 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
                 end = Some(s + w);
             }
         }
-        let id = match sym {
-            ExtendedAtomSymbol::Wildcard => b.on_wildcard(WildcardAtom::Any, None, start, end),
-            ExtendedAtomSymbol::Element(el) => b.on_atom(ExtendedAtomData {
-                symbol: AtomSymbol::Element(el),
-                aromatic: arom,
-                isotope: None,
-                charge: None,
-                implicit_hydrogens: None,
-                class: None,
-                chirality: None,
-                span: Span::from_bytes_opt(start, end),
-            }),
+        let mut atom = match sym {
+            ExtendedAtomSymbol::Wildcard => {
+                ExtendedAtom::from_atom_symbol(AtomSymbol::WildcardAtom(WildcardAtom::Any))
+            }
+            ExtendedAtomSymbol::Element(el) => {
+                let mut atom = ExtendedAtom::from_element(el);
+                atom.aromatic = Some(arom);
+                atom
+            }
         };
+        atom.span = Span::from_bytes_opt(start, end);
+        mol.atoms.push(atom);
         if let (Some(s), Some(e)) = (start, end) {
             atom_span_map.insert(s, e);
         }
-        ids.push(id);
     }
     for btok in bonds {
         let (i, j, order, direction, donation, span_start, mut span_end) = parse_bond_token(btok);
@@ -345,25 +318,13 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
             }
         }
-        b.on_bond(
-            ids[i],
-            ids[j],
-            BondData {
-                order,
-                direction,
-                donation,
-                span: Span::from_bytes_opt(span_start, span_end),
-            },
-        );
+        let mut bond = ExtendedBond::new(i as u32, j as u32, order);
+        bond.direction = direction.map(|value| if i > j { value.flip() } else { value });
+        bond.donation = donation.map(|value| if i > j { value.flip() } else { value });
+        bond.span = Span::from_bytes_opt(span_start, span_end);
+        mol.bonds.push(bond);
     }
-    let mut mols = b.finish();
-    let mut mol = mols.pop().unwrap_or_else(ExtendedMolecule::empty);
 
     mol.source_format = SourceFormat::SMILES;
-    mol.chirality_frame = mol
-        .atoms
-        .iter()
-        .any(|atom| atom.chirality.is_some())
-        .then_some(ChiralityFrame::FirstNeighborToward);
     mol
 }

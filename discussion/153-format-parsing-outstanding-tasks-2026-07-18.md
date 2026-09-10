@@ -3,7 +3,10 @@
 Status: Proposed
 Date: 2026-07-18
 Relates: [047](047-smiles-conformance-suite-2026-01-21.md), [048](048-smiles-parser-configuration-2026-01-23.md), [100](100-table-ir-raise-ast-2026-05-27.md), [112](112-winnow-unification-2026-06-13.md), [151](151-python-molecule-workflows-2026-07-13.md), [152](152-basic-molecule-wildcards-2026-07-18.md),
-[206](206-umol-perm-review-2026-08-21.md)
+[206](206-umol-perm-review-2026-08-21.md),
+[217](217-rhea-participant-failures-2026-08-30.md),
+[224](224-smiles-ring-closure-frame-2026-09-08.md),
+[225](225-depiction-problems-2026-09-09.md)
 
 ## Purpose
 
@@ -92,17 +95,21 @@ Required work:
 - Add whole-record MOL/SDF benchmarks before replacing representation internals.
 - Keep parse latency, allocation count, and retained size as explicit gates.
 
-### T4 — Relocate or redesign `ChiralityFrame`
+### T4 — Extend stereo format coverage
 
-`ChiralityFrame` is still a molecule-level TableIR field even though it reflects source-format stereo conventions.
+[224](224-smiles-ring-closure-frame-2026-09-08.md) implements the targeted frame replacement:
+SMILES finalization publishes complete stereo-atom frames, raising maps them directly to graph IR,
+and ChiralityFrame is removed. MOL parity remains unread; wedge and coordinate interpretation is
+unchanged. Limited atom-frame and directional-bond permutations are covered through parsing,
+raising, resolution, and supported Python ingestion.
 
-Required work:
+Remaining work:
 
-- Redesign `ChiralityFrame` so raw stereo descriptors cannot be interpreted without the required source frame.
-- Avoid polluting ordinary test construction with source-format chirality details when tests do not care about raw descriptor frames.
-- Preserve the distinction between SMILES `FirstNeighborToward` and CTFile `LastNeighborAway` semantics.
-- Add targeted tests across SMILES, MOL, SDF, and eventually CX enhanced stereo.
-- Coordinate the redesign with TableIR-to-AST raise semantics.
+- Define operative frames for additional supported stereo kinds and CX enhanced stereo when their
+  format semantics are settled.
+- Extend MOL/SDF stereo coverage as those boundaries develop; raw parity does not currently define
+  an operative frame.
+- Coordinate future format coverage with TableIR-to-graph-IR raising.
 
 ### T5 — Close TableIR-to-AST raise gaps for parsed formats
 
@@ -155,6 +162,75 @@ Required work:
 - Refresh classification tools after the ordinary-SMILES/CXSMILES split.
 - Preserve regression fixtures for known parser and raise issue classes.
 
+The doc 224 catalog audit also found that the existing cis/trans-decalin resolution inputs each
+resolve to the opposite catalog SMILES entry. Visual review confirmed that their names were reversed.
+On 2026-09-09 the fixture names were swapped together with their matching snapshots, preserving
+the inline constraint inputs and resolution settings. General randomized permutation testing has
+no selected scope in doc 224.
+
+#### Stereo fixture verification — 2026-09-09
+
+Depiction defects and geometry ownership are tracked separately in
+[doc 225](225-depiction-problems-2026-09-09.md); fixture identity review remains here.
+
+The table tracks identity review of current resolution fixtures, separately from correction of an
+identified defect. Reviewed outcomes record the user's visual review; pending rows await review.
+For all rows, agreement with a catalog SMILES alone is not independent verification of its chemical name.
+
+Depictions use the current EDN inputs and configuration overrides, resolved with the conformance
+suite's counts model and MostSaturated tie-break, then rendered by Depict::depict and
+Depiction::render_svg. Sheet composition changes only placement, scale, labels, and SVG identifiers.
+The fixture filenames label the drawings; they do not assert that the names are correct.
+
+| Fixture | Verification | Remaining check or action |
+| --- | --- | --- |
+| cis-decalin | Reviewed — name corrected | Formerly named trans-decalin; fixture and matching snapshot renamed together. |
+| trans-decalin | Reviewed — name corrected | Formerly named cis-decalin; fixture and matching snapshot renamed together. |
+| alpha-d-glucopyranose | Reviewed — appears correct | None identified in visual review. |
+| cis-1-2-dichlorocyclohexane | Reviewed — appears correct | None identified in visual review. |
+| trans-1-2-dichlorocyclohexane | Reviewed — appears correct | None identified in visual review. |
+| r-methyloxirane | Reviewed — correct | Confirmed in user visual review. |
+| l-ascorbic-acid | Reviewed — correct | Confirmed in user visual review. |
+| 2r3r-dichlorobutane | Reviewed — correct | Confirmed in user visual review. |
+| 2s3s-dichlorobutane | Reviewed — correct | Confirmed in user visual review. |
+| meso-dichlorobutane | Reviewed — correct | Confirmed in user visual review. |
+| 2-3-4-trichloropentane | Reviewed — correct structure | User identifies (2S,4S)-2,3,4-trichloropentane; C3 is not stereogenic. The current resolved output nevertheless retains a stereo-atom entity at C3 (site 3); investigate that discrepancy. |
+| 2r3e-pent-3-en-2-ol | Reviewed — correct | Confirmed in user visual review. |
+| e-cyclooctene | Pending — depiction unavailable | Resolution succeeds; CoordGen ignores ring E/Z below nine atoms and returns geometry inconsistent with the requested OppositeSide relation at bond 2. |
+| z-cyclooctene | Pending | Named E/Z assignment. |
+| e-2-3-difluorobut-2-ene | Pending | Named E/Z assignment. |
+| z-2-3-difluorobut-2-ene | Pending | Named E/Z assignment. |
+| z-2-fluorobut-2-ene | Pending | Named E/Z assignment. |
+| e-azomethane | Pending | Named E/Z assignment. |
+| z-azomethane | Pending | Named E/Z assignment. |
+| z-butan-2-one-oxime | Pending | Named E/Z assignment. |
+| 2e4e-hexa-2-4-diene | Pending | Named E/Z assignments. |
+| 2e-hexa-2-4-diene-partial | Pending | First double bond E; second unspecified. |
+| cyclohexene-asserted | Pending | Verify why the supplied #C1 assertion leaves no stereo entity in the successful resolved output; depiction alone cannot check this policy. |
+
+The E-cyclooctene depiction failure is localized to the vendored CoordGen backend. Its MACROCYCLE
+threshold is nine atoms; sketcherMinimizerBond::isStereo excludes bonds in smaller rings, and
+setAbsoluteStereoFromStereoInfo uses that predicate before applying the supplied cis/trans relation.
+The fixture resolves with an E stereo bond and the IO adapter supplies OppositeSide. Returned
+coordinates fail the Rust boundary's independent relative-side check, which raises
+CisTransGeometryMismatch instead of publishing the wrong drawing. This is a layout limitation,
+not evidence that the fixture resolved as Z. A bounded trial changing MACROCYCLE from nine to eight
+makes E-cyclooctene depict successfully but makes Z-cyclooctene fail the SameSide geometry check.
+The other 21 previously rendered fixtures produce identical SVGs. The macro also selects the ring
+layout algorithm, so this is not an isolated stereo-recognition switch. The trial was rejected and
+the nine-atom definition restored; no fixture or geometry validator was changed permanently.
+A second trial bypassed the output geometry check at the eight-atom threshold to inspect both
+returned drawings. E has well-separated opposite-side substituents. Z has one ring bond nearly
+collinear with the double bond (about 0.005 degrees from its line, normalized cross product magnitude
+0.0000866). Its small deviation is on the opposite side and exceeds the validator's 0.000001
+relative tolerance. Thus the reported Z mismatch comes from nearly degenerate generated geometry,
+not a cleanly drawn E arrangement. Both temporary changes were restored after capture.
+
+These files are in the stereo_tetrahedral and stereo_cis_trans resolution fixture directories.
+The 35-entry catalog comparison covered all of them except cyclohexene-asserted; after the three
+corrections in doc 224, only the two decalins differed from their catalog references. This selected
+review list does not claim independent identity verification of every stereo fixture in the repo.
+
 ### T8 — Add Python-facing format APIs after Rust boundaries stabilize
 
 The current Python workflow round focuses on resolved SMILES. MOL, SDF, and CXSMILES should not be forced through the same API before the Rust boundary types are settled.
@@ -188,7 +264,6 @@ These are the main ordering and design choices that remain open:
 
 - Whether `CxSmiles` initially wraps current `ExtendedMolecule` as an interim measure or waits for the compact semantic superset.
 - Whether `Mol`/`Sdf` wrappers should land before or after the CTFile winnow migration.
-- Whether `ChiralityFrame` relocation should be bundled with the TableIR semantic-superset work or handled earlier as a targeted cleanup.
 - What benchmark and conformance evidence is required before old direct parser helpers are removed or redirected.
 
 ## Non-goals

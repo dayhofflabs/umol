@@ -7,9 +7,10 @@ use umol_geometric_core::Point3D;
 use super::super::*;
 use crate::table_ir::bond::BondNoncovalent;
 use crate::table_ir::{
-    BondDonation, BondOrder, BondStereo, BondWedge, ConfigurationScope, LinkAtom, RingBondCount,
-    SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
-    SGroupDataType, SGroupType, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
+    BondDonation, BondOrder, BondOrientation, BondStereo, BondTaper, BondWedge, ConfigurationScope,
+    LinkAtom, RingBondCount, SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle,
+    SGroupConnectivity, SGroupDataType, SGroupType, StereoSet, StereoSetRelation,
+    SubstitutionCount, UnsaturatedAtom,
 };
 
 fn parse_basic_cxsmiles(input: &[u8]) -> Result<Molecule, ParseError> {
@@ -221,9 +222,11 @@ fn test_cx_radicals_invalid(#[case] input: &[u8], #[case] expected: ParseError) 
 }
 
 #[rstest]
-#[case::either(b"CCC |w:0.0|", 0usize, BondWedge::Either)]
-#[case::either_up(b"CCC |wU:1.0|", 0usize, BondWedge::EitherUp)]
-#[case::either_down(b"CCC |wD:2.1|", 1usize, BondWedge::EitherDown)]
+#[rustfmt::skip]
+#[case::either_first_endpoint(b"CCC |w:0.0|", 0usize, BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Widening })]
+#[case::either_up_second_endpoint(b"CCC |wU:1.0|", 0usize, BondWedge { orientation: BondOrientation::EitherUp, taper: BondTaper::Narrowing })]
+#[case::either_down_second_endpoint(b"CCC |wD:2.1|", 1usize, BondWedge { orientation: BondOrientation::EitherDown, taper: BondTaper::Narrowing })]
+#[case::either_down_first_endpoint(b"CCC |wD:1.1|", 1usize, BondWedge { orientation: BondOrientation::EitherDown, taper: BondTaper::Widening })]
 fn test_cx_wiggly_bonds(#[case] input: &[u8], #[case] bond_idx: usize, #[case] wedge: BondWedge) {
     let input_str = input.to_str_lossy();
 
@@ -1312,4 +1315,53 @@ fn test_cx_sgroup_data_invalid(#[case] input: &[u8], #[case] expected: ParseErro
         res
     );
     assert_eq!(res.unwrap_err(), expected);
+}
+
+#[rstest]
+#[case::reverse_closures(
+    b"C12(CC2)CC1 |C:4.5,0.2|",
+    vec![
+        (0, 4, BondOrder::Single, Some(BondDonation::Accepting)),
+        (0, 2, BondOrder::Single, Some(BondDonation::Donating)),
+        (0, 1, BondOrder::Single, None),
+        (1, 2, BondOrder::Single, None),
+        (0, 3, BondOrder::Single, None),
+        (3, 4, BondOrder::Single, None),
+    ]
+)]
+fn test_parse_molecule_cx_assembly(
+    #[case] input: &[u8],
+    #[case] expected: Vec<(u32, u32, BondOrder, Option<BondDonation>)>,
+) {
+    let config = SmilesIoConfig::chemaxon();
+    let basic = parse_molecule(input, &config).unwrap();
+    let extended = parse_extended_smiles_bytes_with(input, &config).unwrap();
+    assert_eq!(basic.stereo_atoms, vec![]);
+    assert_eq!(extended.stereo_atoms, vec![]);
+    assert_eq!(
+        basic
+            .bonds
+            .iter()
+            .map(|bond| (
+                bond.atoms.first(),
+                bond.atoms.second(),
+                bond.order,
+                bond.donation
+            ))
+            .collect::<Vec<_>>(),
+        expected,
+    );
+    assert_eq!(
+        extended
+            .bonds
+            .iter()
+            .map(|bond| (
+                bond.atoms.first(),
+                bond.atoms.second(),
+                bond.order,
+                bond.donation
+            ))
+            .collect::<Vec<_>>(),
+        expected,
+    );
 }

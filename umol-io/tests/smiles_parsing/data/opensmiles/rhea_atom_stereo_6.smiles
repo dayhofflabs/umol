@@ -1,0 +1,2 @@
+# path=materials/atom_mapping/rhea_reactions.csv; line=14237; reaction_id=Rh_70675; side=0; participant=0
+CSCC[C@H](NC(=O)[C@H](CC1=CC=CC=C1)NC(=O)CNC(=O)CNC(=O)[C@@H]([NH3+])CC1=CC=C(O)C=C1)C(=O)N[C@@H](CCCNC(N)=[NH2+])C(=O)N[C@@H](CC1=CC=CC=C1)C(=O)[O-]

@@ -1,0 +1,13 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+assertion_line: 271
+expression: results
+---
+expected_category: opensmiles
+category: opensmiles
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C14O2
+    atom_count: 16
+    bond_count: 17
