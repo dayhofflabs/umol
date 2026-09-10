@@ -16,7 +16,7 @@ Convey conversion to TableIR and construction of Smiles or ReactionSmiles for re
 TableIR is the shared SMILES/CTfile
 boundary representation. Decide what it must carry for aromatic systems and stereo, and whether
 shared storage suffices or explicit format separation is needed. The settled design and staged
-implementation plan are recorded below; S0a inventory and S0b semantic fixtures are complete.
+implementation plan are recorded below; S0 inventory, semantic fixtures, and baselines are complete.
 
 Responsibilities, preservation guarantees, boundary types, and core algorithms are settled.
 The stages below sequence implementation and verification within that agreed scope.
@@ -1276,11 +1276,11 @@ algorithm are settled above. Exact diagnostic variants and cohesive helper signa
 reconciled with the public contract before their implementing subitem; this is not permission to
 introduce new wrappers, strategies, or chemistry transformations. Implement the supported inverse
 domain with explicit failures, not a promise of general valence inversion or minimum encodings.
-The plan below sequences the work; S0a and S0b are complete.
+The plan below sequences the work; S0 is complete.
 
 ## Staged implementation plan
 
-S0a and S0b are complete; S0c and later subitems are pending. Execution has proceeded through S0b.
+S0a–S0c are complete; S1 and later stages are pending. Execution has proceeded through S0c.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1341,7 +1341,7 @@ the shared graph-core implementation and a separate decision.
   for the GraphIR law; compare atom states, system members/contributions, and stereo explicitly
   rather than formula or entity counts. Add named successful ordinary, charged, radical, aromatic,
   tetrahedral, and cis/trans cases without claiming unimplemented output support.
-- **S0c — Evidence fixtures and independent fuzz follow-up.** Modules: existing benches and
+- **S0c — Evidence fixtures and independent fuzz follow-up (completed 2026-09-10).** Modules: existing benches and
   umol-io/fuzz. **Additive (green).** [dep: S0a]
   Prepare a bounded fixture set for traversal, raise, projection, marker assignment, and rendering;
   measure existing operations only and add new operations with their implementing stages. Preserve
@@ -1949,8 +1949,138 @@ parse/render agreement when output becomes available.
   existing assertions were changed. Projection, rendering, and their future property gates are
   still unimplemented; this subitem establishes their independent input-side expectations.
 
-S0c is next: bounded evidence fixtures and the remaining benchmark preparation. The separately
-completed fuzz follow-up above supplies its fuzz status; do not duplicate the user's campaign.
+S0c followed with the bounded baselines below. The separately completed fuzz follow-up supplies
+its fuzz status; do not duplicate the user's campaign.
+
+## S0c inline benchmark examples and baselines — 2026-09-10
+
+All new benchmark examples are inline in the existing benchmark sources. The 16 molecular cases
+cover a 64-atom chain, branching, components, localized charge/radical states, fused aromaticity,
+aromatic lone-pair donation, tetrahedral actual/bracket-H/explicit-H/LP frames, and definite,
+partial, branched, and cyclic directional systems. The six graph examples cover paths, a binary
+tree, a cycle, disconnected cycles, and a graph with a loop, parallel edges, and an isolated node.
+These are bounded synthetic workloads, not a representative corpus or scale claim.
+
+### Timing boundaries and reuse
+
+- umol-io/benches/smiles_parsing.rs adds smiles_roundtrip/parse and smiles_roundtrip/raise.
+  Raise borrows a pre-parsed TableIR; parsing is not inside its timing. Both use Criterion::iter,
+  including destruction of their returned boundary/GraphIR values.
+- umol-graph/benches/resolve.rs adds smiles_roundtrip/resolve using ValenceModel::smiles()
+  (counts, MostSaturated) with the other chemistry/resolve defaults. Each input must resolve to
+  Determined during setup. Criterion::iter_batched_ref clones the raised input outside timing;
+  parsing, raising, resolver construction, and destruction of the mutated input are also outside.
+  This isolates resolution from the existing end-to-end ingest benchmark.
+- umol-graph-core/benches/algorithms.rs adds traversal_baseline/components and
+  traversal_baseline/neighborhood over prebuilt graphs. Components uses the current Bfs selector
+  whose implementation is still a LIFO flood fill. Neighborhood uses Bfs from node 0 without a
+  practical depth bound. On disconnected graphs it visits only node 0's component; components
+  enumerates all components. These timings are not measurements of identical operations.
+- S1 adds visitor/event measurements on these graph shapes. S3 reuses the isolated raise cases.
+  S4 prepares resolved inputs from the molecular examples outside projection timing; S5/S6 add
+  marker-assignment and rendering measurements on the corresponding normalized tables. Those
+  operations do not exist yet and have no measurements or placeholder implementations here.
+
+### Bounded timing run
+
+Source: e64f787f99d4704bda27e27bf8fa1d0ab8f214c0 plus the S0c benchmark additions;
+rustc 1.96.0, macOS 15.7.3, arm64, normal workspace bench profile (optimized with debug info).
+The three benchmark runs were sequential, with compilation outside measurement and the normal
+allocator. Each case used 20 samples, 0.1-second warm-up, 0.2-second measurement, and 1,000
+resamples. No tuning or repeat campaign was performed.
+
+Run these commands from the workspace root, appending
+`--sample-size 20 --warm-up-time 0.1 --measurement-time 0.2 --nresamples 1000 --noplot --save-baseline s0c`
+to each:
+
+```sh
+cargo bench -p umol-io --bench smiles_parsing --offline -- smiles_roundtrip
+cargo bench -p umol-graph --bench resolve --offline -- smiles_roundtrip
+cargo bench -p umol-graph-core --bench algorithms --offline -- traversal_baseline
+```
+
+Criterion time point estimates in microseconds per operation:
+
+| Example | Parse | Raise | Resolve |
+| --- | ---: | ---: | ---: |
+| chain_64 | 0.983 | 12.232 | 104.240 |
+| branched | 0.274 | 1.882 | 11.551 |
+| components | 0.194 | 1.012 | 5.965 |
+| aromatic_fused | 0.323 | 2.869 | 37.258 |
+| aromatic_lone_pair | 0.244 | 1.659 | 18.483 |
+| charged | 0.151 | 0.576 | 1.766 |
+| radical | 0.148 | 0.571 | 1.778 |
+| tetra_four | 0.297 | 2.225 | 10.345 |
+| tetra_ring | 0.325 | 2.577 | 20.556 |
+| tetra_explicit_h | 0.371 | 2.907 | 15.617 |
+| tetra_lone_pair | 0.285 | 2.231 | 10.756 |
+| alkene_four | 0.244 | 2.015 | 11.873 |
+| shared_chain | 0.216 | 2.236 | 14.390 |
+| partial_triene | 0.246 | 2.576 | 14.993 |
+| shared_branch | 0.272 | 2.553 | 16.096 |
+| shared_cycle | 0.276 | 2.760 | 33.894 |
+
+| Graph | Components | Neighborhood |
+| --- | ---: | ---: |
+| path_64 | 0.537 | 0.556 |
+| path_1024 | 6.565 | 6.119 |
+| binary_tree_255 | 2.752 | 2.060 |
+| cycle_64 | 0.744 | 0.556 |
+| four_hexagons | 0.508 | 0.158 |
+| loops_parallel_isolated | 0.114 | 0.086 |
+
+These short runs establish initial baselines, not fine performance rankings. For example,
+tetra_ring resolve has a wide reported interval, 16.122–26.991 microseconds. Preserve the intervals
+in scratch/s0c-timings.csv and original scratch/s0c-{io,graph,core}-bench.log files when comparing
+later changes. Criterion also saved the s0c baseline under /Users/dr/.cargo-target/criterion.
+Do not sum the columns as an end-to-end time: their setup/destruction boundaries differ.
+
+### Separate allocation snapshot
+
+The scratch/stereo-valence-scan/src/bin/s0c_allocations.rs probe uses the same inline molecular
+examples and a counting System allocator in a release build. It warms parse/raise, then measures
+one parse, neighbor lookup, and raise per example separately. Input creation is outside each
+measurement. The allocator is not installed in the timing benchmarks or production crates.
+
+Counts below include successful alloc, alloc_zeroed, and realloc calls. Requested bytes sum full
+requested sizes, including the full new size on realloc; they are not net retained memory.
+Peak bytes mean added live requested Rust allocation sizes above the pre-operation baseline,
+with the result retained. They exclude allocator overhead, native allocations, and any internal
+old/new-buffer overlap during realloc; they are not process RSS.
+
+| Example | Parse calls | Neighbor calls | Raise calls (including realloc) | Raise requested bytes | Raise peak added bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| chain_64 | 2 | 65 | 102 (9) | 51,828 | 27,320 |
+| aromatic_fused | 3 | 11 | 52 (5) | 13,636 | 8,520 |
+| tetra_ring | 5 | 8 | 53 (5) | 7,284 | 4,688 |
+| shared_cycle | 3 | 9 | 55 (3) | 7,140 | 4,824 |
+
+The chain's neighbor lookup alone requests 3,584 bytes in 65 allocations; full raise includes
+that lookup. This is a concrete S3 allocation baseline, not an estimate of time attributable to
+the lookup. The complete 48-row snapshot is scratch/s0c-allocations.csv. Reproduce with:
+
+```sh
+cargo run --release --offline --manifest-path scratch/stereo-valence-scan/Cargo.toml \
+  --target-dir /Users/dr/.cargo-target --bin s0c_allocations
+```
+
+### Fuzz status and verification
+
+The user-reported completed 60-minute parser/raise campaign and the subsequent target/seed audit
+are recorded above. The original hour-long run log was not available in the inspected scratch
+outputs; no historical execution or coverage count is inferred. The corrected target, 51 named
+seeds, and documented command are already in the repository. S0c did not start another campaign.
+
+All 60 timing benchmarks and the 48 allocation observations completed successfully. The two
+molecular benchmark groups preflight parse/raise success, and all 16 resolver inputs preflight
+Determined outcomes. These checks establish successful workloads, not independent chemistry
+correctness; S0b's exact expectations and properties supply that evidence.
+
+Validation passed: 3,602 IO unit tests and eight SMILES properties; 1,061 graph unit tests and five
+graph properties; five graph-core traversal and five connected-component tests. Strict Clippy
+passed for all three changed benchmark targets; cargo fmt --all and git diff --check passed.
+Logs are scratch/s0c-tests.log, scratch/s0c-core-{traversal,components}-tests.log, and
+scratch/s0c-clippy.log. Only benchmark code and this record/index changed; S1a is next.
 
 ## Staged specification updates
 

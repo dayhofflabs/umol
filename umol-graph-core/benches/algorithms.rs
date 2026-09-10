@@ -12,7 +12,8 @@ use umol_graph_core::{
     EdgeId, EmbeddingKind, GeneralMaximumMatchingAlgorithm, Graph, GraphCorrespondence,
     MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NodeId,
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    SubgraphIsomorphismAlgorithm, TraversalAlgorithm, UniqueRingFamilyAlgorithm,
+    ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -461,6 +462,42 @@ fn connected_components(c: &mut Criterion) {
         });
     }
     group.finish();
+}
+
+fn traversal(c: &mut Criterion) {
+    let tree_edges: Vec<_> = (1..255).map(|node| [(node - 1) / 2, node]).collect();
+    let disconnected_edges: Vec<_> = (0..4)
+        .flat_map(|component| {
+            (0..6).map(move |node| [6 * component + node, 6 * component + (node + 1) % 6])
+        })
+        .collect();
+    let graphs = [
+        ("path_64", path(64)),
+        ("path_1024", path(1024)),
+        ("binary_tree_255", Graph::new(255, &tree_edges)),
+        ("cycle_64", cycle(64)),
+        ("four_hexagons", Graph::new(24, &disconnected_edges)),
+        (
+            "loops_parallel_isolated",
+            Graph::new(4, &[[0, 0], [0, 1], [0, 1], [1, 2]]),
+        ),
+    ];
+    let mut components = c.benchmark_group("traversal_baseline/components");
+    for (name, graph) in &graphs {
+        components.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs)
+            });
+        });
+    }
+    components.finish();
+    let mut neighborhood = c.benchmark_group("traversal_baseline/neighborhood");
+    for (name, graph) in &graphs {
+        neighborhood.bench_function(*name, |b| {
+            b.iter(|| black_box(graph).neighborhood(NodeId(0), u32::MAX, TraversalAlgorithm::Bfs));
+        });
+    }
+    neighborhood.finish();
 }
 
 fn biconnected_components(c: &mut Criterion) {
@@ -1418,6 +1455,7 @@ criterion_group!(
     unique_ring_families,
     shortest_cycle,
     connected_components,
+    traversal,
     biconnected_components,
     maximum_matching,
     maximum_independent_set,

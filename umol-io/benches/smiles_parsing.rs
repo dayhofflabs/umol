@@ -888,10 +888,56 @@ fn corpus_parsing(c: &mut Criterion) {
     extended_raise.finish();
 }
 
+fn smiles_roundtrip(c: &mut Criterion) {
+    let inputs = [
+        (
+            "chain_64",
+            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        ),
+        ("branched", "CC(C)(F)C(Cl)CC"),
+        ("components", "CC.O.[Na+]"),
+        ("aromatic_fused", "c1ccc2ccccc2c1"),
+        ("aromatic_lone_pair", "[nH]1cccc1"),
+        ("charged", "[NH4+]"),
+        ("radical", "[CH3]"),
+        ("tetra_four", "[C@](F)(Cl)(Br)I"),
+        ("tetra_ring", "C[C@H]1CCCCO1"),
+        ("tetra_explicit_h", "C[C@]1([H])CCCCO1"),
+        ("tetra_lone_pair", "C[S@](=O)CC"),
+        ("alkene_four", "F/C(Cl)=C(/Br)I"),
+        ("shared_chain", "C/C=C/C=C/C"),
+        ("partial_triene", "C/C=C/C=CC=C/C"),
+        ("shared_branch", "F/C=C(/C=C/F)C=C"),
+        ("shared_cycle", "C1/C=C/C=C/CCC1"),
+    ];
+    let mut parse = c.benchmark_group("smiles_roundtrip/parse");
+    for &(name, input) in &inputs {
+        Smiles::parse(input).unwrap();
+        parse.bench_function(name, |b| {
+            b.iter(|| Smiles::parse(black_box(input)).unwrap());
+        });
+    }
+    parse.finish();
+
+    let mut raise = c.benchmark_group("smiles_roundtrip/raise");
+    for &(name, input) in &inputs {
+        let table = Smiles::parse(input).unwrap().into_table_ir();
+        let _: Molecule = (&table).try_into_ir(&()).unwrap();
+        raise.bench_function(name, |b| {
+            b.iter(|| {
+                let molecule: Molecule = black_box(&table).try_into_ir(&()).unwrap();
+                molecule
+            });
+        });
+    }
+    raise.finish();
+}
+
 criterion_group!(
     benches,
     smiles_parsing,
     extended_smiles_parsing,
-    corpus_parsing
+    corpus_parsing,
+    smiles_roundtrip
 );
 criterion_main!(benches);
