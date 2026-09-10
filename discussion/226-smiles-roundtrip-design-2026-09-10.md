@@ -1149,7 +1149,8 @@ callback as DFS, with a FIFO queue and node visitation state; it does not need D
 - Traverse each candidate root's component before considering the next candidate, skipping
   nodes already reached. This is sequential component traversal, not multi-source BFS.
 - Mark nodes when enqueued and emit Discover then. Parent records the first reaching edge;
-  depth is shortest distance from that traversal root.
+  depth is shortest distance from that traversal root in the connectivity excluding nodes
+  reached by earlier roots.
 - Emit Finish after examining a node's neighbors. An optional maximum depth suppresses
   expansion at the limit, but nodes there still receive Discover and Finish.
 - Preserve supplied neighbor order and stop immediately on Break.
@@ -1280,7 +1281,7 @@ The plan below sequences the work; S0 is complete.
 
 ## Staged implementation plan
 
-S0a–S0c and S1a are complete; S1b and later subitems are pending.
+S0a–S0c and S1a–S1b are complete; S1c and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1364,7 +1365,7 @@ implemented behavior, future assertions, and independent outstanding validation.
   roots, supplied order, loops, parallel edges, isolated nodes, and immediate Break at every event
   kind. Malformed finite callbacks exercise panic-free internal handling without asserting useful
   output. Callback panics/hangs remain caller behavior. Include a long-chain case for no recursion.
-- **S1b — BFS events, callback kernel, and Graph visitor.** Same module.
+- **S1b — BFS events, callback kernel, and Graph visitor (completed 2026-09-10).** Same module.
   **Additive (green).** [dep: S0a, S0b]
   Add BreadthFirstEvent and visit_breadth_first with FIFO discovery, sequential candidate roots,
   usize depth/limit, per-node Finish, and FinishTree before the next root. Verify shortest distances
@@ -2155,6 +2156,86 @@ cargo bench -p umol-graph-core --bench algorithms --offline -- traversal/depth_f
 The run log is scratch/s1a-core-bench.log. cargo fmt --all and git diff --check passed. Final
 diff review found only the S1a API, tests, inline benchmark additions, and this record/index.
 S1b is next; existing neighborhood and component implementations remain for their planned stages.
+
+## S1b BFS contract and verification — 2026-09-10
+
+The public additions are BreadthFirstEvent, traversal::visit_breadth_first (also exported at the
+crate root), and Graph::visit_breadth_first. The event enum is an open descriptive carrier of
+node ids, an optional parent node/edge pair, and usize depths. Its construction certifies no
+relationship to a particular graph. There are no new constructors, conversions, validators,
+transformations, or Python bindings.
+
+For fixed, consistent undirected connectivity, the kernel preserves candidate-root and neighbor
+order, discovers each node once when enqueued, finishes each node after its permitted expansion,
+and emits FinishTree when that root's queue empties. Roots are sequential, not simultaneous
+sources. Previously visited nodes remain visited across roots; shortest distances for a later
+depth-limited tree are therefore measured in the remaining unvisited graph. At the depth limit,
+nodes receive Discover and Finish without a neighbor callback. A limited tree need not be a
+whole connected component. Graph supplies its existing CSR directly.
+
+The kernel accepts usize node bounds and Option<usize> maximum depth, uses Fn neighbor callbacks,
+and returns ControlFlow. It needs no edge visitation state or edge bound. Consistency is a caller
+precondition for correctness, not a validation pass. Internal indexing remains panic-free for
+inconsistent finite inputs; callback and iterator panics or nontermination remain caller-owned.
+Break immediately stops all event, callback, and iterator execution. Ordered traces, independently
+computed shortest distances, depth boundaries, duplicate roots, malformed inputs, and early
+termination provide the tests. Benchmark inputs remain inline.
+
+Implemented against source commit a47159f267ff2daeb25ab712ecb04b0b92ad2cfe. The public surface
+matches the three additions above and their settled fields/signatures. A VecDeque and node
+visitation array supply FIFO traversal; no common traversal engine or connectivity storage was
+introduced. Existing DFS, neighborhood, and component implementations are unchanged.
+
+Seventeen new unit cases cover exact event order, root order and duplicates, loops and parallel
+edges, sparse edge ids, empty inputs, depth zero/exact/unrestricted/usize::MAX, and limited
+successive trees. Depth-limit tests observe neighbor callback calls directly; Break tests reject
+all later callback and iterator execution, including when other nodes remain queued. A limited
+successive-tree case preserves previously visited nodes as a barrier to a later root's shortcut.
+
+Three new properties cover the kernel, Graph adapter, and malformed finite callback tables.
+Valid generated multigraphs have at most eight nodes and twenty edges. A layer-by-layer reference
+checks exact events and early-break prefixes; independent repeated edge relaxation checks each
+tree's reached set and shortest distances after excluding earlier trees. This is bounded
+generative evidence, not an exhaustive proof. The malformed-input property requires normal
+completion without asserting a useful event stream.
+
+Validation passed: 996 graph-core unit tests, 54 integration tests, and 132 properties. Strict
+Clippy passed for all graph-core targets with the proptest feature; rustdoc built without warnings.
+Formatting and diff checks passed. Commands and logs:
+
+```text
+cargo test -p umol-graph-core --features proptest --offline
+    scratch/s1b-tests.log
+cargo clippy -p umol-graph-core --all-targets --features proptest --offline -- -D warnings
+    scratch/s1b-clippy.log
+cargo doc -p umol-graph-core --no-deps --offline
+    scratch/s1b-doc.log
+cargo fmt --all -- --check
+    scratch/s1b-fmt-check.log
+```
+
+The six traversal/breadth_first benchmarks reuse the existing inline graphs, visit every
+component without a depth limit, and consume each event through black_box. Criterion's reported
+time estimates establish a new BFS baseline:
+
+| Inline example | BFS visitor |
+| --- | ---: |
+| path_64 | 443.99 ns |
+| path_1024 | 6.3370 µs |
+| binary_tree_255 | 1.9734 µs |
+| cycle_64 | 410.53 ns |
+| four_hexagons | 201.12 ns |
+| loops_parallel_isolated | 62.672 ns |
+
+```text
+cargo bench -p umol-graph-core --bench algorithms --offline -- traversal/breadth_first
+    --sample-size 20 --warm-up-time 0.1 --measurement-time 0.2
+    --nresamples 1000 --noplot --save-baseline s1b
+```
+
+All six measurements completed; the run log is scratch/s1b-core-bench.log. Final diff review
+matches the S1b surface, tests, inline benchmarks, and this record/index. S1c is next: event
+collectors and the component visitor/migration remain pending.
 
 ## Staged specification updates
 

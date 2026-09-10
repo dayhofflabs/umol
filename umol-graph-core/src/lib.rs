@@ -45,7 +45,9 @@ pub use algorithms::subgraph_isomorphism::{
     SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;
-pub use algorithms::traversal::{visit_depth_first, DepthFirstEvent, TraversalAlgorithm};
+pub use algorithms::traversal::{
+    visit_breadth_first, visit_depth_first, BreadthFirstEvent, DepthFirstEvent, TraversalAlgorithm,
+};
 pub use compact::{Compaction, CompactionError, GraphCompaction};
 pub use correspondence::{
     Correspondence, CorrespondenceComposeError, CorrespondenceError, GraphCorrespondence,

@@ -112,6 +112,106 @@ where
     ControlFlow::Continue(())
 }
 
+/// An event in an undirected breadth-first traversal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BreadthFirstEvent {
+    /// First encounter with a node, at its distance from the current root.
+    /// `parent` names the parent node and first reaching edge; roots have no parent.
+    Discover {
+        node: NodeId,
+        parent: Option<Neighbor>,
+        depth: usize,
+    },
+    /// The node's permitted neighbor expansion has finished, including at a depth limit.
+    Finish { node: NodeId, depth: usize },
+    /// The traversal queue for `root` is empty.
+    FinishTree { root: NodeId },
+}
+
+/// Visits undirected connectivity in breadth-first order using a FIFO queue.
+///
+/// # Semantic properties
+///
+/// Candidate `roots` are processed sequentially in supplied order, skipping
+/// already reached nodes. Neighbors are examined in iterator order. Nodes are
+/// marked and discovered when enqueued; their parent is the first reaching
+/// node/edge pair. Each reached node receives one Discover and one Finish.
+/// Finish follows its neighbor expansion; FinishTree follows an empty queue,
+/// before the next candidate root is considered.
+///
+/// `max_depth` suppresses neighbor expansion at the limit, including the neighbor
+/// callback, but nodes there still receive Discover and Finish. `None` is
+/// unrestricted. A limited tree need not cover a whole connected component.
+/// Depths are shortest distances from the current root in the graph excluding
+/// nodes reached by previous trees. This is sequential traversal, not multi-source
+/// BFS; all trees share visitation state.
+///
+/// Connectivity must remain fixed, with node ids below `node_bound` and stable
+/// edge identities shared by each undirected edge's incidences. Loops and parallel
+/// edges are supported. Edge ids are carried into parent events without indexing
+/// edge state, so no edge bound is required.
+///
+/// Inconsistent inputs have no correctness guarantee but do not cause internal
+/// indexing panics. There is no validation pass. Panics and nontermination in
+/// supplied callbacks or iterators remain caller-owned. A visitor's
+/// [`ControlFlow::Break`] returns immediately without further callbacks, iterator
+/// calls, or synthetic finish events. State uses space proportional to the node
+/// bound plus the queue.
+pub fn visit_breadth_first<R, N, I, V, B>(
+    node_bound: usize,
+    roots: R,
+    max_depth: Option<usize>,
+    neighbors: N,
+    mut visitor: V,
+) -> ControlFlow<B>
+where
+    R: IntoIterator<Item = NodeId>,
+    N: Fn(NodeId) -> I,
+    I: Iterator<Item = Neighbor>,
+    V: FnMut(BreadthFirstEvent) -> ControlFlow<B>,
+{
+    let mut visited_nodes = vec![false; node_bound];
+    let mut queue = VecDeque::new();
+    let max_depth = max_depth.unwrap_or(usize::MAX);
+    for root in roots {
+        let Some(visited) = visited_nodes.get_mut(root.index()) else {
+            continue;
+        };
+        if *visited {
+            continue;
+        }
+        *visited = true;
+        queue.push_back((root, 0));
+        visitor(BreadthFirstEvent::Discover {
+            node: root,
+            parent: None,
+            depth: 0,
+        })?;
+        while let Some((node, depth)) = queue.pop_front() {
+            if depth < max_depth {
+                for Neighbor { node: to, edge } in neighbors(node) {
+                    let Some(visited) = visited_nodes.get_mut(to.index()) else {
+                        continue;
+                    };
+                    if *visited {
+                        continue;
+                    }
+                    *visited = true;
+                    queue.push_back((to, depth + 1));
+                    visitor(BreadthFirstEvent::Discover {
+                        node: to,
+                        parent: Some(Neighbor { node, edge }),
+                        depth: depth + 1,
+                    })?;
+                }
+            }
+            visitor(BreadthFirstEvent::Finish { node, depth })?;
+        }
+        visitor(BreadthFirstEvent::FinishTree { root })?;
+    }
+    ControlFlow::Continue(())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TraversalAlgorithm {
     Bfs,
@@ -132,6 +232,30 @@ impl Graph {
             self.node_count(),
             self.edge_count(),
             roots,
+            |node| self.neighbors(node).iter().copied(),
+            visitor,
+        )
+    }
+
+    /// Visits each candidate root's tree in breadth-first order using CSR neighbors.
+    ///
+    /// Pass [`Graph::node_ids`] and no depth limit to visit all components.
+    /// See [`visit_breadth_first`] for depth limits, shared visitation across
+    /// roots, event ordering, and immediate [`ControlFlow::Break`] behavior.
+    pub fn visit_breadth_first<R, V, B>(
+        &self,
+        roots: R,
+        max_depth: Option<usize>,
+        visitor: V,
+    ) -> ControlFlow<B>
+    where
+        R: IntoIterator<Item = NodeId>,
+        V: FnMut(BreadthFirstEvent) -> ControlFlow<B>,
+    {
+        visit_breadth_first(
+            self.node_count(),
+            roots,
+            max_depth,
             |node| self.neighbors(node).iter().copied(),
             visitor,
         )
@@ -174,7 +298,7 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::iter;
 
     use rstest::rstest;
@@ -293,6 +417,163 @@ mod tests {
     }
 
     #[rstest]
+    #[case::neighbor_order(
+        vec![
+            vec![Neighbor { node: NodeId(2), edge: EdgeId(u32::MAX) }, Neighbor { node: NodeId(1), edge: EdgeId(7) }],
+            vec![Neighbor { node: NodeId(0), edge: EdgeId(7) }],
+            vec![Neighbor { node: NodeId(0), edge: EdgeId(u32::MAX) }],
+        ],
+        vec![
+            BreadthFirstEvent::Discover { node: NodeId(0), parent: None, depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(2), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(u32::MAX) }), depth: 1 },
+            BreadthFirstEvent::Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(7) }), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(0), depth: 0 },
+            BreadthFirstEvent::Finish { node: NodeId(2), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(1), depth: 1 },
+            BreadthFirstEvent::FinishTree { root: NodeId(0) },
+        ]
+    )]
+    fn test_visit_breadth_first(
+        #[case] adjacency: Vec<Vec<Neighbor>>,
+        #[case] expected: Vec<BreadthFirstEvent>,
+    ) {
+        let mut actual = Vec::new();
+        let result = visit_breadth_first(
+            adjacency.len(),
+            [NodeId(0)],
+            None,
+            |node| adjacency[node.index()].iter().copied(),
+            |event| {
+                actual.push(event);
+                ControlFlow::<()>::Continue(())
+            },
+        );
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::discover(0)]
+    #[case::child_discover(1)]
+    #[case::root_finish(3)]
+    #[case::child_finish(4)]
+    #[case::finish_tree(6)]
+    fn test_visit_breadth_first_break(#[case] stop: usize) {
+        let graph = Graph::new(4, &[[0, 1], [0, 2], [1, 2]]);
+        let expected = [
+            BreadthFirstEvent::Discover {
+                node: NodeId(0),
+                parent: None,
+                depth: 0,
+            },
+            BreadthFirstEvent::Discover {
+                node: NodeId(1),
+                parent: Some(Neighbor {
+                    node: NodeId(0),
+                    edge: EdgeId(0),
+                }),
+                depth: 1,
+            },
+            BreadthFirstEvent::Discover {
+                node: NodeId(2),
+                parent: Some(Neighbor {
+                    node: NodeId(0),
+                    edge: EdgeId(1),
+                }),
+                depth: 1,
+            },
+            BreadthFirstEvent::Finish {
+                node: NodeId(0),
+                depth: 0,
+            },
+            BreadthFirstEvent::Finish {
+                node: NodeId(1),
+                depth: 1,
+            },
+            BreadthFirstEvent::Finish {
+                node: NodeId(2),
+                depth: 1,
+            },
+            BreadthFirstEvent::FinishTree { root: NodeId(0) },
+        ];
+        let stopped = Cell::new(false);
+        let mut candidates = graph.node_ids();
+        let roots = iter::from_fn(|| {
+            assert!(!stopped.get());
+            candidates.next()
+        });
+        let mut actual = Vec::new();
+        let result = visit_breadth_first(
+            graph.node_count(),
+            roots,
+            None,
+            |node| {
+                assert!(!stopped.get());
+                let mut pending = graph.neighbors(node).iter().copied();
+                let stopped = &stopped;
+                iter::from_fn(move || {
+                    assert!(!stopped.get());
+                    pending.next()
+                })
+            },
+            |event| {
+                assert!(!stopped.get());
+                actual.push(event);
+                if actual.len() == stop + 1 {
+                    stopped.set(true);
+                    ControlFlow::Break(event)
+                } else {
+                    ControlFlow::Continue(())
+                }
+            },
+        );
+        assert_eq!(result, ControlFlow::Break(expected[stop]));
+        assert_eq!(actual, expected[..=stop]);
+    }
+
+    #[rstest]
+    #[case::zero(Some(0), vec![(NodeId(0), 0)], vec![])]
+    #[case::one(Some(1), vec![(NodeId(0), 0), (NodeId(1), 1)], vec![NodeId(0)])]
+    #[case::exact(Some(2), vec![(NodeId(0), 0), (NodeId(1), 1), (NodeId(2), 2)], vec![NodeId(0), NodeId(1)])]
+    #[case::unrestricted(None, vec![(NodeId(0), 0), (NodeId(1), 1), (NodeId(2), 2)], vec![NodeId(0), NodeId(1), NodeId(2)])]
+    #[case::maximum(Some(usize::MAX), vec![(NodeId(0), 0), (NodeId(1), 1), (NodeId(2), 2)], vec![NodeId(0), NodeId(1), NodeId(2)])]
+    fn test_visit_breadth_first_depth(
+        #[case] max_depth: Option<usize>,
+        #[case] expected: Vec<(NodeId, usize)>,
+        #[case] expected_expansions: Vec<NodeId>,
+    ) {
+        let graph = Graph::new(3, &[[0, 1], [1, 2]]);
+        let expansions = RefCell::new(Vec::new());
+        let mut discoveries = Vec::new();
+        let mut finishes = Vec::new();
+        let mut trees = Vec::new();
+        let result = visit_breadth_first(
+            graph.node_count(),
+            [NodeId(0)],
+            max_depth,
+            |node| {
+                expansions.borrow_mut().push(node);
+                graph.neighbors(node).iter().copied()
+            },
+            |event| {
+                match event {
+                    BreadthFirstEvent::Discover { node, depth, .. } => {
+                        discoveries.push((node, depth))
+                    }
+                    BreadthFirstEvent::Finish { node, depth } => finishes.push((node, depth)),
+                    BreadthFirstEvent::FinishTree { root } => trees.push(root),
+                }
+                ControlFlow::<()>::Continue(())
+            },
+        );
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(discoveries, expected);
+        assert_eq!(finishes, expected);
+        assert_eq!(trees, vec![NodeId(0)]);
+        assert_eq!(expansions.into_inner(), expected_expansions);
+    }
+
+    #[rstest]
     #[case::empty(Graph::new(0, &[]), vec![], vec![])]
     #[case::no_roots(Graph::new(2, &[[0, 1]]), vec![], vec![])]
     #[case::candidate_order(
@@ -356,6 +637,83 @@ mod tests {
         });
         assert_eq!(result, ControlFlow::Continue(()));
         assert_eq!(expected.next(), None);
+    }
+
+    #[rstest]
+    #[case::empty(Graph::new(0, &[]), vec![], None, vec![])]
+    #[case::no_roots(Graph::new(2, &[[0, 1]]), vec![], None, vec![])]
+    #[case::cycle(
+        Graph::new(3, &[[0, 1], [0, 2], [1, 2]]), vec![NodeId(0), NodeId(1)], None,
+        vec![
+            BreadthFirstEvent::Discover { node: NodeId(0), parent: None, depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(0) }), depth: 1 },
+            BreadthFirstEvent::Discover { node: NodeId(2), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(1) }), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(0), depth: 0 },
+            BreadthFirstEvent::Finish { node: NodeId(1), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(2), depth: 1 },
+            BreadthFirstEvent::FinishTree { root: NodeId(0) },
+        ]
+    )]
+    #[case::loops_parallel_isolated(
+        Graph::new(3, &[[0, 0], [0, 1], [0, 1]]), vec![NodeId(2), NodeId(0), NodeId(1), NodeId(2)], None,
+        vec![
+            BreadthFirstEvent::Discover { node: NodeId(2), parent: None, depth: 0 },
+            BreadthFirstEvent::Finish { node: NodeId(2), depth: 0 },
+            BreadthFirstEvent::FinishTree { root: NodeId(2) },
+            BreadthFirstEvent::Discover { node: NodeId(0), parent: None, depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(1) }), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(0), depth: 0 },
+            BreadthFirstEvent::Finish { node: NodeId(1), depth: 1 },
+            BreadthFirstEvent::FinishTree { root: NodeId(0) },
+        ]
+    )]
+    #[case::limited_trees(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3]]), vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)], Some(1),
+        vec![
+            BreadthFirstEvent::Discover { node: NodeId(0), parent: None, depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(0) }), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(0), depth: 0 },
+            BreadthFirstEvent::Finish { node: NodeId(1), depth: 1 },
+            BreadthFirstEvent::FinishTree { root: NodeId(0) },
+            BreadthFirstEvent::Discover { node: NodeId(2), parent: None, depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(3), parent: Some(Neighbor { node: NodeId(2), edge: EdgeId(2) }), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(2), depth: 0 },
+            BreadthFirstEvent::Finish { node: NodeId(3), depth: 1 },
+            BreadthFirstEvent::FinishTree { root: NodeId(2) },
+        ]
+    )]
+    #[case::limited_barrier(
+        Graph::new(7, &[[0, 1], [1, 2], [2, 3], [4, 2], [4, 5], [5, 6], [6, 3]]), vec![NodeId(0), NodeId(4)], Some(2),
+        vec![
+            BreadthFirstEvent::Discover { node: NodeId(0), parent: None, depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(0) }), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(0), depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(2), parent: Some(Neighbor { node: NodeId(1), edge: EdgeId(1) }), depth: 2 },
+            BreadthFirstEvent::Finish { node: NodeId(1), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(2), depth: 2 },
+            BreadthFirstEvent::FinishTree { root: NodeId(0) },
+            BreadthFirstEvent::Discover { node: NodeId(4), parent: None, depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(5), parent: Some(Neighbor { node: NodeId(4), edge: EdgeId(4) }), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(4), depth: 0 },
+            BreadthFirstEvent::Discover { node: NodeId(6), parent: Some(Neighbor { node: NodeId(5), edge: EdgeId(5) }), depth: 2 },
+            BreadthFirstEvent::Finish { node: NodeId(5), depth: 1 },
+            BreadthFirstEvent::Finish { node: NodeId(6), depth: 2 },
+            BreadthFirstEvent::FinishTree { root: NodeId(4) },
+        ]
+    )]
+    fn test_graph_visit_breadth_first(
+        #[case] graph: Graph,
+        #[case] roots: Vec<NodeId>,
+        #[case] max_depth: Option<usize>,
+        #[case] expected: Vec<BreadthFirstEvent>,
+    ) {
+        let mut actual = Vec::new();
+        let result = graph.visit_breadth_first(roots, max_depth, |event| {
+            actual.push(event);
+            ControlFlow::<()>::Continue(())
+        });
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(actual, expected);
     }
 
     #[rstest]

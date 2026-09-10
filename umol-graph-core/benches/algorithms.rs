@@ -510,6 +510,18 @@ fn traversal(c: &mut Criterion) {
         });
     }
     depth_first.finish();
+    let mut breadth_first = c.benchmark_group("traversal/breadth_first");
+    for (name, graph) in &graphs {
+        breadth_first.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).visit_breadth_first(graph.node_ids(), None, |event| {
+                    black_box(event);
+                    ControlFlow::<()>::Continue(())
+                })
+            });
+        });
+    }
+    breadth_first.finish();
 }
 
 fn biconnected_components(c: &mut Criterion) {
