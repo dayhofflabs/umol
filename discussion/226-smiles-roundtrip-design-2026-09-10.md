@@ -1282,7 +1282,7 @@ The plan below sequences the work; S0–S2 are complete.
 ## Staged implementation plan
 
 S0–S2 and S3a–S3c are complete. S3d's functional migration is implemented; its allocation
-closeout requires S3d1–S3d7 below. S3d1–S3d4 are complete; S3d5–S3d7, S3e, and later subitems are pending.
+closeout requires S3d1–S3d7 below. S3d1–S3d5 are complete; S3d6–S3d7, S3e, and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1473,7 +1473,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   bonds, and Either still suppresses geometry at its site. Verify all combinations of existing
   direction frames, repeated codes, Either, geometry, wavy evidence, and reaction-section remapping;
   include labels-only CX input with existing frames. No reinterpretation or acceptance expansion.
-- **S3d5 — Bounded local stereo scratch.** Modules: both stereo derivation kernels and
+- **S3d5 — Bounded local stereo scratch (completed 2026-09-11).** Modules: both stereo derivation kernels and
   table_ir/raise.rs. **Refactor (green).** [dep: S3d3, S3d4]
   Replace per-endpoint substituent vectors and raise's two-element blocks vector with bounded
   local storage for the supported two-substituent-per-endpoint domain. Check site relevance before
@@ -3303,6 +3303,84 @@ scratch/s3d4-after-confirmation-timings.csv, with corresponding build logs. The 
 same cargo run commands as S3d3 with s3d4-parser-bench as its manifest directory. Verification logs
 are scratch/s3d4-{focused-tests,gate,clippy,fmt}.log; the reviewed diff is
 scratch/s3d4-incremental.diff. S3d5 is next.
+
+
+### S3d5 implementation and measurements (2026-09-11)
+
+Both bond-stereo derivation kernels now gather at most two distinct substituents per endpoint
+in inline SmallVec storage, using the existing dependency. Every push is guarded by the two-entry
+limit; excess incidences never spill onto the heap. Duplicate incidences do not count toward that
+limit. The retained entries are sorted to preserve the minimum table-index reference. SMILES
+checks marker relevance before gathering endpoint ligands.
+
+Raise uses a fixed array of two inline ligand blocks. It scans all qualifying incidences even after
+finding excess ligands, so a reference appearing later still produces UnsupportedStereoBond and
+an absent reference still produces InvalidStereoBondReference. Donation/noncovalent exclusions,
+cumulated-axis rejection, shared-ligand rejection, and endpoint reference transport are unchanged.
+SMILES still skips an empty-ended site before rejecting excess on the other endpoint; table
+geometry still skips unsupported sites unless an explicit assertion requires a frame.
+
+Public-symbol reconciliation: no public symbols, constructors, visibility, fields, or error
+variants change. TableIR remains an open table carrier; raise remains the contextual consumer of
+its explicit frames. There is no new normalization or chemistry inference. Persistent stereo-atom
+ligand vectors, wedge interpretation, neighbor storage, and raise's constraint HashMap are unchanged.
+
+The inline probe in scratch/s3d5-stereo-bench measures basic/extended parsing and borrowed TableIR
+raise separately. Parsing, configuration, and table setup for raise occur outside its measurement;
+raise does not clone its input. The probe checks complete output equality against its warmup result.
+Timing uses the normal allocator, 64 warmups and eleven batches of 512 operations, retaining outputs
+and checking/dropping them outside the timed region. Allocation measurements use a separate build
+with the counting allocator. No fixture files are loaded. Before and after runs use the same probe;
+no tests or other builds ran concurrently with timing. These are bounded examples and batch medians,
+not confidence intervals or a workload-wide performance claim.
+
+| Input | Parse allocation calls, basic and extended | Raise allocation calls | Basic parse median, ns | Extended parse median, ns | Raise median, ns |
+| --- | --- | --- | --- | --- | --- |
+| Bare chain, 64 atoms | 3 → 3 | 102 → 102 | 1053.6 → 1023.6 (-2.9%) | 2857.6 → 2946.5 (+3.1%) | 12630.5 → 12710.1 (+0.6%) |
+| Directional chain, 20 double bonds | 90 → 50 | 160 → 100 | 2964.4 → 2502.7 (-15.6%) | 5080.6 → 4951.3 (-2.5%) | 12987.3 → 12303.4 (-5.3%) |
+| Triene | 19 → 13 | 49 → 40 | 643.6 → 571.7 (-11.2%) | 754.1 → 707.0 (-6.2%) | 2441.3 → 2296.2 (-5.9%) |
+| Branched conjugated sites | 19 → 14 | 45 → 39 | 636.7 → 566.8 (-11.0%) | 758.6 → 702.2 (-7.4%) | 2239.7 → 2131.8 (-4.8%) |
+| Ring with atom and bond stereo | 17 → 15 | 58 → 55 | 588.6 → 557.9 (-5.2%) | 693.8 → 663.0 (-4.4%) | 2644.7 → 2599.3 (-1.7%) |
+| CX coordinates | 18 → 16 | 38 → 35 | 953.4 → 802.1 (-15.9%) | 899.7 → 900.6 (+0.1%) | 1376.6 → 1270.3 (-7.7%) |
+| Four substituents | 14 → 12 | 39 → 36 | 495.3 → 488.1 (-1.4%) | 576.5 → 582.0 (+1.0%) | 1724.9 → 1765.4 (+2.3%) |
+
+The directional chain removes forty allocation calls and 640 requested bytes from either parse
+path, and sixty calls and 1,600 requested bytes from raise. Its parser peak added live memory falls
+by only 32 bytes; its raise peak is unchanged. Across the probe, parser peaks fall by 32 bytes on
+lexically marked inputs, with unchanged peaks for the bare chain and CX geometry. All raise peaks
+are unchanged. These savings remove small, short-lived allocations, not large simultaneously live
+buffers. The branched parser loses five calls: it also avoids gathering the one nonempty endpoint
+of an irrelevant terminal double bond. Bare-chain allocation counts and requested bytes are unchanged.
+
+Assessment against the continuing questions:
+
+- **Does the evidence support the case?** Yes. The expected per-site allocations disappear exactly.
+  Basic parsing improves about 16% and raise about 5% on the directional chain; its extended parse
+  improves about 2.5%. Triene and branched examples also improve. Small cases remain mixed, including
+  a 2.3% raise increase for four substituents, so this does not establish a universal speedup.
+- **What can later subitems improve?** S3d6 still targets the constraint HashMap and construction
+  of constraints away from their destination. S3e targets the remaining neighbor allocation and
+  unnecessary lookup construction; the directional parser still makes fifty allocation calls and
+  raise one hundred. S3d7 addresses initial table reservations. Those costs remain, but this run
+  does not predict their timing gains.
+- **Should S3d5 be retained?** Yes. It removes all identified local ligand/block heap allocations,
+  gives measurable gains on the multiple-stereo-site examples, and keeps the implementation local
+  without new types or API layers. No further tuning is needed to close this subitem.
+
+Verification passes: 3,880 IO and 1,066 graph unit tests with properties; 10,223 SMILES, 2,253 MOL,
+and 407 SDF conformance cases; remaining integration/property suites; and strict all-target
+IO/graph Clippy with those features. One existing graph doctest remains ignored. Final review
+separated cumulation from excess ligands in a new raise fixture; its focused rerun also passes.
+Formatting and diff checks pass. The full diff was reviewed against S3d5; no later subitem was
+implemented. New exact cases cover zero, one,
+two, duplicate, and excess incidences; descending reference order; first/second/both reference swaps;
+shared ligands; cumulated axes; missing versus late references at overfull sites; and donation and
+noncovalent exclusions. Existing stereo properties and conformance suites remain unchanged.
+
+Raw allocation/timing results and build logs are scratch/s3d5-{before,after}-{allocations,timings}.*;
+the complete measurement table is scratch/s3d5-comparison.md. Verification logs use
+scratch/s3d5-{focused-tests,raise-tests,gate,clippy,fmt}.log. The reviewed diff is
+scratch/s3d5-incremental.diff. S3d6 is next.
 
 
 ## Staged specification updates

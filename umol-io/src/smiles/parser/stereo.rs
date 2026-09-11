@@ -2,6 +2,8 @@
 
 use std::cell::Cell;
 
+use smallvec::SmallVec;
+
 use super::super::error::ParseError;
 use crate::table_ir::{
     AtomNeighbors, AtomPair, BondConfiguration, BondDirection, BondOrder, BondRelation, StereoBond,
@@ -50,19 +52,6 @@ pub(super) fn derive_stereo_bonds<B>(
         if order != BondOrder::Double {
             continue;
         }
-        let substituents = |endpoint, other| {
-            let mut atoms: Vec<_> = neighbors
-                .neighbors(endpoint)
-                .iter()
-                .filter(|neighbor| neighbor.atom != other)
-                .map(|neighbor| neighbor.atom)
-                .collect();
-            atoms.sort_unstable();
-            atoms.dedup();
-            atoms
-        };
-        let first = substituents(atoms.first(), atoms.second());
-        let second = substituents(atoms.second(), atoms.first());
         let marked = |endpoint, other| {
             neighbors.neighbors(endpoint).iter().any(|neighbor| {
                 neighbor.atom != other
@@ -73,6 +62,24 @@ pub(super) fn derive_stereo_bonds<B>(
         if !marked(atoms.first(), atoms.second()) && !marked(atoms.second(), atoms.first()) {
             continue;
         }
+        let substituents = |endpoint, other| {
+            let mut atoms = SmallVec::<[u32; 2]>::new();
+            let mut excess = false;
+            for neighbor in neighbors.neighbors(endpoint) {
+                if neighbor.atom == other || atoms.contains(&neighbor.atom) {
+                    continue;
+                }
+                if atoms.len() == 2 {
+                    excess = true;
+                    break;
+                }
+                atoms.push(neighbor.atom);
+            }
+            atoms.sort_unstable();
+            (atoms, excess)
+        };
+        let (first, first_excess) = substituents(atoms.first(), atoms.second());
+        let (second, second_excess) = substituents(atoms.second(), atoms.first());
         if first.is_empty() || second.is_empty() {
             continue;
         }
@@ -85,8 +92,8 @@ pub(super) fn derive_stereo_bonds<B>(
         if atoms.first() == atoms.second()
             || first.contains(&atoms.first())
             || second.contains(&atoms.second())
-            || first.len() > 2
-            || second.len() > 2
+            || first_excess
+            || second_excess
             || first.iter().any(|atom| second.contains(atom))
             || cumulated(atoms.first())
             || cumulated(atoms.second())

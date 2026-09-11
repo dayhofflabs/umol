@@ -85,6 +85,7 @@ fn test_parse_molecule_stereo_bonds(
 #[case::partial("F/C(\\Cl)=CBr", DirectionError::CisTransConflict { atom: 1 })]
 #[case::second_partial("FC=C(/Br)/I", DirectionError::CisTransConflict { atom: 2 })]
 #[case::dangling("C/C", DirectionError::DanglingBondDirection { bond: 0 })]
+#[case::empty_and_excess("F/C(Cl)(Br)=C", DirectionError::DanglingBondDirection { bond: 0 })]
 #[case::missing_reference("F/C=C", DirectionError::DanglingBondDirection { bond: 0 })]
 #[case::excess_ligands("F/C(Cl)(Br)=C/I", DirectionError::UnsupportedSite { bond: 3 })]
 #[case::shared_ligand("C1/C=C1", DirectionError::UnsupportedSite { bond: 2 })]
@@ -147,6 +148,33 @@ fn test_derive_stereo_bonds_order(
                 relation: SameSide
             },
         }])
+    );
+}
+
+#[rstest]
+#[case::one(&[2], &[4])]
+#[case::two(&[3,2], &[5,4])]
+#[case::duplicates(&[3,3,2,3,2], &[5,4,5,4])]
+fn test_derive_stereo_bonds_incidences(#[case] first: &[u32], #[case] second: &[u32]) {
+    let mut bonds = vec![(AtomPair::new(0, 1), Double, None)];
+    for (endpoint, ligands, reference) in [(0, first, 2), (1, second, 4)] {
+        bonds.extend(ligands.iter().map(|&atom| {
+            (
+                AtomPair::new(endpoint, atom),
+                Single,
+                (atom == reference).then(|| DirectionMarker::new(Rising)),
+            )
+        }));
+    }
+    assert_eq!(
+        derive_stereo_bonds(6, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())),
+        Ok(vec![StereoBond {
+            bond: 0,
+            configuration: BondConfiguration::Framed {
+                references: [2, 4],
+                relation: SameSide,
+            }
+        }]),
     );
 }
 

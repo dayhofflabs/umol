@@ -9,6 +9,7 @@
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 
+use smallvec::SmallVec;
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm,
@@ -382,29 +383,35 @@ fn raise_cis_trans_stereo(
                 return Err(unsupported());
             }
             let mut action = [0, 1, 2, 3];
-            let mut blocks = Vec::with_capacity(2);
+            let mut blocks = [SmallVec::<[u32; 2]>::new(), SmallVec::<[u32; 2]>::new()];
             for (side, &endpoint) in endpoints.iter().enumerate() {
-                let mut ligands: Vec<_> = neighbors
-                    .neighbors(endpoint)
-                    .iter()
-                    .filter(|neighbor| {
-                        let bond = &mol.bonds[neighbor.bond as usize];
-                        neighbor.atom != endpoints[1 - side]
-                            && bond.donation.is_none()
-                            && bond.noncovalent.is_none()
-                    })
-                    .map(|neighbor| neighbor.atom)
-                    .collect();
-                ligands.sort_unstable();
-                ligands.dedup();
-                let Some(position) = ligands.iter().position(|&atom| atom == references[side])
-                else {
+                let ligands = &mut blocks[side];
+                let mut excess = false;
+                let mut reference_found = false;
+                for neighbor in neighbors.neighbors(endpoint) {
+                    let bond = &mol.bonds[neighbor.bond as usize];
+                    if neighbor.atom == endpoints[1 - side]
+                        || bond.donation.is_some()
+                        || bond.noncovalent.is_some()
+                    {
+                        continue;
+                    }
+                    reference_found |= neighbor.atom == references[side];
+                    if !ligands.contains(&neighbor.atom) {
+                        if ligands.len() == 2 {
+                            excess = true;
+                        } else {
+                            ligands.push(neighbor.atom);
+                        }
+                    }
+                }
+                if !reference_found {
                     return Err(RaiseError::InvalidStereoBondReference {
                         bond: frame.bond,
                         atom: references[side],
                     });
-                };
-                if ligands.len() > 2
+                }
+                if excess
                     || ligands.contains(&endpoint)
                     || neighbors.neighbors(endpoint).iter().any(|neighbor| {
                         neighbor.bond as usize != bond_idx
@@ -413,10 +420,10 @@ fn raise_cis_trans_stereo(
                 {
                     return Err(unsupported());
                 }
-                if position == 1 {
+                ligands.sort_unstable();
+                if ligands[0] != references[side] {
                     action.swap(2 * side, 2 * side + 1);
                 }
-                blocks.push(ligands);
             }
             if blocks[0].iter().any(|atom| blocks[1].contains(atom)) {
                 return Err(unsupported());
@@ -454,7 +461,8 @@ mod tests {
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
     use crate::table_ir::{
-        AtomPair, Chirality, ExtendedMolecule, Molecule as TableMolecule, SourceFormat, StereoAtom,
+        AtomPair, BondNoncovalent, Chirality, ExtendedMolecule, Molecule as TableMolecule,
+        SourceFormat, StereoAtom,
     };
 
     #[fixture]
@@ -1478,5 +1486,104 @@ mod tests {
         table.stereo_bonds[0].bond = 0;
         let result: Result<Molecule, _> = (&table).try_into_ir(&());
         assert_eq!(result, Err(RaiseError::UnsupportedStereoBond { bond: 0 }));
+    }
+
+    #[rstest]
+    #[case::one(&[2], &[4], [2,4], Ok(0))]
+    #[case::two(&[3,2], &[5,4], [2,4], Ok(0))]
+    #[case::duplicates(&[3,3,2,3,2], &[5,4,5,4], [2,4], Ok(0))]
+    #[case::first_swap(&[3,2], &[5,4], [3,4], Ok(1))]
+    #[case::second_swap(&[3,2], &[5,4], [2,5], Ok(1))]
+    #[case::both_swap(&[3,2], &[5,4], [3,5], Ok(0))]
+    #[case::zero(&[], &[4], [2,4], Err(RaiseError::InvalidStereoBondReference { bond: 0, atom: 2 }))]
+    #[case::excess(&[2,3,5], &[4], [2,4], Err(RaiseError::UnsupportedStereoBond { bond: 0 }))]
+    #[case::late_reference(&[3,5,4,2], &[4], [2,4], Err(RaiseError::UnsupportedStereoBond { bond: 0 }))]
+    #[case::absent_reference(&[3,5,4], &[4], [2,4], Err(RaiseError::InvalidStereoBondReference { bond: 0, atom: 2 }))]
+    #[case::second_excess(&[2], &[3,5,4], [2,4], Err(RaiseError::UnsupportedStereoBond { bond: 0 }))]
+    #[case::shared(&[2,3], &[3,4], [2,4], Err(RaiseError::UnsupportedStereoBond { bond: 0 }))]
+    fn test_raise_cis_trans_stereo_incidences(
+        #[case] first: &[u32],
+        #[case] second: &[u32],
+        #[case] references: [u32; 2],
+        #[case] expected: Result<u32, RaiseError>,
+    ) {
+        let mut table = TableMolecule::empty();
+        table.atoms = vec![TableAtom::from_element(Element::C); 6];
+        table
+            .bonds
+            .push(TableBond::new(0, 1, TableBondOrder::Double));
+        for (endpoint, ligands) in [(0, first), (1, second)] {
+            table.bonds.extend(
+                ligands
+                    .iter()
+                    .map(|&atom| TableBond::new(endpoint, atom, TableBondOrder::Single)),
+            );
+        }
+        let frame = StereoBond {
+            bond: 0,
+            configuration: BondConfiguration::Framed {
+                references,
+                relation: BondRelation::SameSide,
+            },
+        };
+        assert_eq!(
+            raise_cis_trans_stereo(&table, &table.atom_neighbors(), &frame),
+            expected.map(
+                |value| BondConstraintForm::CisTransStereo(CisTransStereoForm::stereo(
+                    StereoCoset::Lit(value)
+                ))
+            ),
+        );
+    }
+
+    #[rstest]
+    #[case::cumulated(&[2], TableBondOrder::Double, None, None, Err(RaiseError::UnsupportedStereoBond { bond: 0 }))]
+    #[case::excess(&[2,3], TableBondOrder::Single, None, None, Err(RaiseError::UnsupportedStereoBond { bond: 0 }))]
+    #[case::donation(&[2,3], TableBondOrder::Single, Some(TableBondDonation::Donating), None, Ok(0))]
+    #[case::noncovalent(
+        &[2,3],
+        TableBondOrder::Single,
+        None,
+        Some(BondNoncovalent::Hydrogen),
+        Ok(0)
+    )]
+    fn test_raise_cis_trans_stereo_context(
+        #[case] first: &[u32],
+        #[case] order: TableBondOrder,
+        #[case] donation: Option<TableBondDonation>,
+        #[case] noncovalent: Option<BondNoncovalent>,
+        #[case] expected: Result<u32, RaiseError>,
+    ) {
+        let mut table = TableMolecule::empty();
+        table.atoms = vec![TableAtom::from_element(Element::C); 6];
+        table.bonds = vec![
+            TableBond::new(0, 1, TableBondOrder::Double),
+            TableBond::new(1, 4, TableBondOrder::Single),
+            TableBond {
+                donation,
+                noncovalent,
+                ..TableBond::new(0, 5, order)
+            },
+        ];
+        table.bonds.extend(
+            first
+                .iter()
+                .map(|&atom| TableBond::new(0, atom, TableBondOrder::Single)),
+        );
+        let frame = StereoBond {
+            bond: 0,
+            configuration: BondConfiguration::Framed {
+                references: [2, 4],
+                relation: BondRelation::SameSide,
+            },
+        };
+        assert_eq!(
+            raise_cis_trans_stereo(&table, &table.atom_neighbors(), &frame),
+            expected.map(
+                |value| BondConstraintForm::CisTransStereo(CisTransStereoForm::stereo(
+                    StereoCoset::Lit(value)
+                ))
+            ),
+        );
     }
 }

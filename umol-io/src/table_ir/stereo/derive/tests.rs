@@ -221,6 +221,11 @@ fn test_derive_stereo_bonds_context(
 }
 
 #[rstest]
+#[case::cumulated_definite(vec![
+    (AtomPair::new(0,1), Double, None),
+    (AtomPair::new(0,2), Double, None),
+    (AtomPair::new(1,3), Single, None),
+], vec![(0,BondStereo::Cis)], Err(StereoDerivationError::UnsupportedSite { bond:0 }))]
 #[case::terminal_definite(vec![(AtomPair::new(0,1), Double, None)], vec![(0,BondStereo::Cis)], Err(StereoDerivationError::UnsupportedSite { bond:0 }))]
 #[case::wavy_conflict(vec![
     (AtomPair::new(0,1), Single, Some(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Narrowing })),
@@ -233,6 +238,66 @@ fn test_derive_stereo_bonds_context_error(
 ) {
     assert_eq!(
         derive_stereo_bonds(4, &bonds, |bond| *bond, None, Vec::new(), annotations),
+        expected
+    );
+}
+
+#[rstest]
+#[case::one(&[2], &[4], true)]
+#[case::two(&[3,2], &[5,4], true)]
+#[case::duplicates(&[3,3,2,3,2], &[5,4,5,4], true)]
+#[case::zero(&[], &[4], false)]
+#[case::excess(&[2,3,5], &[4], false)]
+#[case::second_excess(&[2], &[3,4,5], false)]
+#[case::shared(&[2,3], &[3,4], false)]
+fn test_derive_stereo_bonds_incidences(
+    #[case] first: &[u32],
+    #[case] second: &[u32],
+    #[case] supported: bool,
+    #[values(false, true)] explicit: bool,
+) {
+    let mut bonds = vec![(AtomPair::new(0, 1), Double, None)];
+    for (endpoint, ligands) in [(0, first), (1, second)] {
+        bonds.extend(
+            ligands
+                .iter()
+                .map(|&atom| (AtomPair::new(endpoint, atom), Single, None)),
+        );
+    }
+    let positions = [
+        Point3D::new(0., 0., 0.),
+        Point3D::new(2., 0., 0.),
+        Point3D::new(0., 1., 0.),
+        Point3D::new(0., -1., 0.),
+        Point3D::new(2., 1., 0.),
+        Point3D::new(2., -1., 0.),
+    ];
+    let expected = if supported {
+        Ok(vec![StereoBond {
+            bond: 0,
+            configuration: Framed {
+                references: [2, 4],
+                relation: SameSide,
+            },
+        }])
+    } else if explicit {
+        Err(StereoDerivationError::UnsupportedSite { bond: 0 })
+    } else {
+        Ok(vec![])
+    };
+    assert_eq!(
+        derive_stereo_bonds(
+            6,
+            &bonds,
+            |bond| *bond,
+            Some(&positions),
+            vec![],
+            if explicit {
+                vec![(0, BondStereo::Cis)]
+            } else {
+                vec![]
+            },
+        ),
         expected
     );
 }

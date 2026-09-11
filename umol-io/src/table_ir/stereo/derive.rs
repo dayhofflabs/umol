@@ -1,5 +1,6 @@
 //! Bond frames from supplied geometry and explicit CTfile/CX annotations.
 
+use smallvec::SmallVec;
 use umol_geometric_core::{same_side_of_axis, Point3D};
 
 use crate::table_ir::{
@@ -116,18 +117,23 @@ pub(crate) fn derive_stereo_bonds<B>(
             }
         }
         let substituents = |endpoint, other| {
-            let mut atoms: Vec<_> = neighbors
-                .neighbors(endpoint)
-                .iter()
-                .filter(|neighbor| neighbor.atom != other)
-                .map(|neighbor| neighbor.atom)
-                .collect();
+            let mut atoms = SmallVec::<[u32; 2]>::new();
+            let mut excess = false;
+            for neighbor in neighbors.neighbors(endpoint) {
+                if neighbor.atom == other || atoms.contains(&neighbor.atom) {
+                    continue;
+                }
+                if atoms.len() == 2 {
+                    excess = true;
+                    break;
+                }
+                atoms.push(neighbor.atom);
+            }
             atoms.sort_unstable();
-            atoms.dedup();
-            atoms
+            (atoms, excess)
         };
-        let first = substituents(atoms.first(), atoms.second());
-        let second = substituents(atoms.second(), atoms.first());
+        let (first, first_excess) = substituents(atoms.first(), atoms.second());
+        let (second, second_excess) = substituents(atoms.second(), atoms.first());
         let cumulated = |endpoint| {
             neighbors.neighbors(endpoint).iter().any(|neighbor| {
                 neighbor.bond as usize != bond
@@ -136,8 +142,8 @@ pub(crate) fn derive_stereo_bonds<B>(
         };
         if first.is_empty()
             || second.is_empty()
-            || first.len() > 2
-            || second.len() > 2
+            || first_excess
+            || second_excess
             || atoms.first() == atoms.second()
             || first.contains(&atoms.first())
             || second.contains(&atoms.second())
