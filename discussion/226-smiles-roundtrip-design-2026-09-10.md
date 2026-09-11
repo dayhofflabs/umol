@@ -1345,7 +1345,7 @@ The plan below sequences the work; S0–S3 are complete.
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-S4a0 and S4a are complete; S4b–S4d remain pending.
+S4a0, S4a, and S4b are complete; S4c–S4d remain pending.
 S5 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
@@ -1768,7 +1768,7 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   charges and radicals across both candidate sources, model/tie-break differences, and exact
   rejection of unreconstructible pairing/spin. This code knows no TableIR or SmilesIoConfig.
 - **S4b — Aromatic assertion recovery.** Module: resolve/aromaticity.rs.
-  **Additive (green).** [dep: S4a]
+  **Additive (green); completed 2026-09-11.** [dep: S4a]
   Produce atom/bond #a assertions while removing the corresponding system entities and retaining
   reconstruction evidence. Use existing joint selection to recover atom contributions and system
   grouping. Test benzene, heteroaromatics, localized links between aromatic systems, fused systems
@@ -1833,6 +1833,65 @@ input clone are outside timing. Full results: scratch/s4a-benchmark.log.
 | Chain, 64 atoms | 22.841 | 74.987 | 244.420 | 524.240 |
 | Methyl radical | 0.431 | 2.018 | 3.794 | 9.427 |
 | Ammonium | 0.401 | 2.030 | 2.121 | 5.911 |
+
+S4b completion (2026-09-11): AromaticityResolver::project takes the mutable molecule, a borrowed
+ValenceResolver, and the existing ValenceTieBreak. Its result is
+Result<Solution<ResolveReport, ResolveContradiction>, AromaticityProjectError>. The new error
+type stays in resolve::aromaticity; no facade re-export, registry API, or boundary type is added.
+
+On a private candidate, project sets atom lone-pair count, unpaired-electron count, and
+multiplicity to Undetermined, meets generic aromatic assertions onto system atoms and their
+induced bonds, and removes the systems. Element, isotope, charge, fixed implicit H, bond orders,
+and unrelated entities remain. Clearing the electron fields tests whether retained information
+reconstructs the source atom state; retaining them would supply part of the answer to admission.
+Compatible existing aromatic assertions retain their more specific information. An incompatible
+assertion causes an error. Marking only each system's induced bonds preserves localized links
+between distinct systems. A molecule without systems delegates to ordinary valence projection.
+
+The supplied valence source admits the reduced atoms, then the existing joint selector runs
+without stored systems constraining its answer. The remaining valence tie-break follows the
+forward resolver's rule. Success requires exact inherent atom recovery and equality of system
+membership, atom-aligned electron contributions, charge, and spin, ignoring system ids and
+participant order. Every other outcome preserves the caller. Candidate constraints remain solver
+evidence. Atom changes share the editor's mutable atom storage rather than rebuilding the full
+atom array after assertion insertion.
+
+Unsupported input includes non-concrete atoms/systems, non-literal bond orders, dative or
+multicenter bonds, nonzero system charge, and non-singlet system spin. System-local assertions
+without a projected representation are rejected, as are molecule assertions that system deletion
+would remove. Incomplete candidate fields and changed reconstructed states are errors; ambiguity,
+the existing assignment bound, and chemistry contradictions retain Solution semantics. This is
+the constitution-phase inverse check. Stereo recovery, full resolver equivalence, and the general
+bond charge/spin export restrictions remain S4c–S4d.
+
+Verification covers benzene, pyridine, pyrrole, furan, atom-localized anionic/cationic rings,
+naphthalene, and linked benzene rings under both valence sources, both valence tie-breaks, and both
+aromaticity tie-breaks. Exact output verifies generic atom/bond assertions and removal of system
+entities. A connected 18-atom case rejects a source partition into three six-atom systems when
+selection reconstructs one 18-atom system; the whole-system source succeeds. Failure tests cover
+charge, spin, contribution changes, assertion loss/conflicts, scope exclusion even with Keep,
+custom-registry ambiguity, and the assignment limit. Generated independent ring states verify
+the inverse with rotated/reversed member frames and nonuniform electron contributions.
+
+Graph unit, integration, conformance, and property suites pass with PROPTEST_CASES=256 and
+features conformance,proptest: 1,408 unit cases, 683 resolution conformance cases, and 12 property
+tests. Graph all-target Clippy with these features and -D warnings passes. Logs are in
+scratch/s4b-gate.log and scratch/s4b-clippy.log.
+
+The new inline aromaticity projection benchmark group measures candidate construction, valence
+admission, joint selection, and recovery comparison. Its paired measurement adds full
+re-resolution; parsing, source construction, and caller input cloning are outside timing.
+Central estimates in microseconds from 10 samples, 0.5 s warmup, and 1 s measurement:
+
+| Input | Counts project | Counts project + resolve | Atom typing project | Atom typing project + resolve |
+| --- | ---: | ---: | ---: | ---: |
+| Benzene | 12.487 | 31.546 | 35.008 | 77.069 |
+| Pyrrole | 11.873 | 29.123 | 28.182 | 63.196 |
+| Naphthalene | 23.632 | 59.901 | 61.803 | 135.560 |
+| Biphenyl | 26.002 | 64.160 | 72.129 | 155.510 |
+
+These establish initial costs, not a before/after performance claim. All benchmark input checks
+and measured cases pass. Full output: scratch/s4b-benchmark.log.
 
 **Gate:** graph unit, conformance, and property suites pass for both valence strategies. Record the
 supported domain and exact unsupported categories. Projection benchmarks include candidate building

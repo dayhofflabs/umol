@@ -5,6 +5,8 @@
 //! exercise localized charges, lone pairs, double bonds, and disconnected components, using
 //! explicit ordinary atom states. A counts-only pairing test exercises exact rejection and
 //! atomic failure.
+//! Aromatic rings exercise system reconstruction with member-aligned contributions in rotated
+//! and reversed source frames. Their expected states do not use perception or resolution.
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
@@ -13,8 +15,8 @@ use umol_graph::ops::resolve::valence::ValenceProjectError;
 use umol_graph::ops::resolve::Resolver;
 use umol_graph::ops::valence::ResolveReport;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm,
-    UnpairedElectronsForm,
+    AromaticSystemForm, AtomForm, AtomId, BondForm, ElectronCountsForm, ElementForm,
+    IsotopeMassForm, Molecule, MoleculeEntries, NumForm, Reframe, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -144,5 +146,57 @@ proptest! {
             prop_assert_eq!(resolver.resolve(&mut molecule), Ok(Solution::Determined(ResolveReport::default())));
         }
         prop_assert_eq!(molecule, source);
+    }
+
+    #[test]
+    fn test_aromaticity_resolver_project_roundtrip(
+        rings in prop::collection::vec((0u8..5, 0usize..6, any::<bool>()), 1..5),
+        typing in any::<bool>(),
+        most_saturated in any::<bool>(),
+    ) {
+        let mut entries = MoleculeEntries::default();
+        for (kind, rotation, reverse) in rings {
+            let size = if kind < 2 {6} else {5};
+            let start = entries.atoms.len();
+            let mut contributions = Vec::new();
+            for i in 0..size {
+                let (element, charge, hydrogens, lone_pairs, contribution) = match (kind, i) {
+                    (1, 0) => (Element::N, 0, 0, 1, 1),
+                    (2, 0) => (Element::N, 0, 1, 0, 2),
+                    (3, 0) => (Element::O, 0, 0, 1, 2),
+                    (4, 0) => (Element::C, -1, 1, 0, 2),
+                    _ => (Element::C, 0, 1, 0, 1),
+                };
+                entries.atoms.push(AtomForm {
+                    element: ElementForm::Lit(element), isotope_mass: IsotopeMassForm::Natural,
+                    charge: NumForm::Lit(charge), implicit_hydrogens: NumForm::Lit(hydrogens),
+                    lone_pairs: NumForm::Lit(lone_pairs),
+                    unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: Default::default(),
+                });
+                entries.bonds.push((AtomId((start + i) as u32), AtomId((start + (i + 1) % size) as u32), BondForm {
+                    order: NumForm::Lit(1), charge: NumForm::Lit(0),
+                    unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: Default::default(),
+                }));
+                contributions.push((AtomId((start + i) as u32), contribution));
+            }
+            contributions.rotate_left(rotation % size);
+            if reverse {contributions.reverse();}
+            let (atoms, electrons) = contributions.into_iter().unzip();
+            entries.aromatic.push((atoms, AromaticSystemForm {
+                electrons: ElectronCountsForm::Lit(electrons), charge: NumForm::Lit(0),
+                unpaired_electrons: UnpairedElectronsForm::closed_shell(), constraints: Default::default(),
+            }));
+        }
+        let source = Molecule::from_entries(entries);
+        let model = ChemistryModel {valence: ValenceModel {
+            tie_break: if most_saturated {ValenceTieBreak::MostSaturated} else {ValenceTieBreak::Strict},
+            ..if typing {ValenceModel::default()} else {ValenceModel::smiles()}
+        }, ..Default::default()};
+        let resolver = Resolver::new(&model);
+        let mut molecule = source.clone();
+        prop_assert_eq!(resolver.aromaticity.project(&mut molecule, &resolver.valence, resolver.tie_break),
+            Ok(Solution::Determined(ResolveReport::default())));
+        prop_assert_eq!(resolver.resolve(&mut molecule), Ok(Solution::Determined(ResolveReport::default())));
+        prop_assert!(molecule.framed_eq(&source));
     }
 }

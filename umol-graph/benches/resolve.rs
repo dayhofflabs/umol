@@ -168,10 +168,73 @@ fn bench_valence_project(c: &mut Criterion) {
     }
 }
 
+fn bench_aromaticity_project(c: &mut Criterion) {
+    for (label, valence) in [
+        ("counts", ValenceModel::smiles()),
+        ("atom_typing", ValenceModel::default()),
+    ] {
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let resolver = Resolver::new(&model);
+        let mut group = c.benchmark_group(format!("smiles_roundtrip/aromaticity_project/{label}"));
+        for (name, input) in [
+            ("benzene", "c1ccccc1"),
+            ("pyrrole", "[nH]1cccc1"),
+            ("naphthalene", "c1ccc2ccccc2c1"),
+            ("biphenyl", "c1ccccc1-c1ccccc1"),
+        ] {
+            let source = ingest_smiles(input).unwrap();
+            let mut checked = source.clone();
+            assert!(matches!(
+                resolver
+                    .aromaticity
+                    .project(&mut checked, &resolver.valence, resolver.tie_break)
+                    .unwrap(),
+                Solution::Determined(_)
+            ));
+            assert!(matches!(
+                resolver.resolve(&mut checked).unwrap(),
+                Solution::Determined(_)
+            ));
+            assert_eq!(checked, source);
+            group.bench_function(name, |b| {
+                b.iter_batched_ref(
+                    || source.clone(),
+                    |molecule| {
+                        resolver
+                            .aromaticity
+                            .project(black_box(molecule), &resolver.valence, resolver.tie_break)
+                            .unwrap()
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(format!("{name}_and_resolve"), |b| {
+                b.iter_batched_ref(
+                    || source.clone(),
+                    |molecule| {
+                        let projected = resolver
+                            .aromaticity
+                            .project(black_box(molecule), &resolver.valence, resolver.tie_break)
+                            .unwrap();
+                        let resolved = resolver.resolve(molecule).unwrap();
+                        black_box((projected, resolved))
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+        }
+        group.finish();
+    }
+}
+
 criterion_group!(
     resolve,
     bench_ingest_smiles,
     bench_resolve,
-    bench_valence_project
+    bench_valence_project,
+    bench_aromaticity_project
 );
 criterion_main!(resolve);
