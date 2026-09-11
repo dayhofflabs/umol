@@ -1356,7 +1356,7 @@ The plan below sequences the work; S0–S3 are complete.
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-S4a0a–S4a0c and the S4a–S4b corrections are complete. S4c–S4d remain pending.
+S4a0a–S4a0c, the S4a–S4b corrections, and S4c are complete. S4d remains pending.
 S5 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
@@ -1796,7 +1796,7 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   variations. Remove required rejection cases based solely on alternative partitions, candidate
   ambiguity, scope/selection differences, or search bounds.
 - **S4c — Stereo assertion recovery.** Module: resolve/stereo.rs, reusing ops/stereo.rs and
-  graph-IR coset transport. **Additive (green).** [dep: S4a]
+  graph-IR coset transport. **Additive (green); completed 2026-09-11.** [dep: S4a]
   Recover #T/#C assertions in the frames that the same model derives, remove entities after
   transporting their configurations, and preserve typed virtual participants. Test reordered
   actual ligands, implicit versus explicit H, LP frames, endpoint flips, Either where in domain,
@@ -1904,16 +1904,70 @@ source construction, and caller cloning. Projection now has one policy-independe
 the projection-plus-resolve benchmark is removed. Central estimates in microseconds, using
 10 samples, 0.5 s warmup, and 1 s measurement:
 
-| Input | Previous counts project | Previous atom-typing project | Direct project |
-| --- | ---: | ---: | ---: |
-| Benzene | 12.487 | 35.008 | 1.6204 |
-| Pyrrole | 11.873 | 28.182 | 1.4085 |
-| Naphthalene | 23.632 | 61.803 | 2.3157 |
-| Biphenyl | 26.002 | 72.129 | 2.9099 |
+| Input | Direct project |
+| --- | ---: |
+| Benzene | 1.6204 |
+| Pyrrole | 1.4085 |
+| Naphthalene | 2.3157 |
+| Biphenyl | 2.9099 |
 
-These bounded results support the expected reduction from removing reconstruction; they do not
-establish scaling for large collections of systems. Full output:
-scratch/s4b-correction-benchmark.log. S4c is next.
+These establish baseline costs for direct projection. The historical timings below measured
+reconstruction, a different operation; they are not performance comparisons of equivalent
+implementations. Full output: scratch/s4b-correction-benchmark.log.
+
+#### S4c completion — 2026-09-11
+
+StereoResolver::project takes &mut Molecule and returns
+Result<Solution<(), StereoContradiction>, StereoProjectError>. It obtains the established #T/#C
+reference frames through StereoPerception::derive_stereo_atom/derive_stereo_bond and uses each
+stereo view's coset_for to transport the existing configuration into that frame. It meets the
+result with an existing assertion, writes the assertion, then removes the stereo entities using
+the editor's ordinary constraint-compaction semantics. Other atom and bond fields are preserved.
+Actual ligands, explicit hydrogen atoms, implicit hydrogens, and lone pairs remain distinct.
+Open configurations are transported without choosing a coset; an existing assertion may narrow
+them by meet. An open cis-trans configuration is represented by #C+.
+
+The only added public symbols are StereoResolver::project and StereoProjectError in the existing
+resolve::stereo module. Its six diagnostics are UnsupportedStereoAtom, UnsupportedStereoBond,
+StereoAtomFrame, StereoBondFrame, AtomAssertion, and BondAssertion. Unsupported/undetermined
+kinds, unavailable model reference frames, incompatible ligand frames, and conflicting assertions
+fail without changing the caller's molecule. Projection ignores the forward resolver's removal,
+keep, mismatch, and constraint-reset policies. It uses per-site frame construction directly,
+without whole-molecule perception, ring discovery, re-resolution, or recovery comparison.
+Existing forward StereoResolver methods and perception/transport implementations are unchanged.
+
+Exact tests cover ligand swaps, endpoint-block swaps, explicit/implicit hydrogen, atom and bond
+lone-pair frames, open configurations, existing assertions, absent entities, disabled model kinds,
+unsupported/undetermined kinds, and failure after an earlier atom has been processed. Failure
+tests retain their exact errors and atomicity under permissive resolver policies. Generated
+properties use independent tetrahedral inversion parity and cis-trans side-swap parity to check
+transport and idempotence, including virtual ligands and open configurations.
+
+Five independent SMILES expectations run under unchanged ValenceModel::smiles() and
+ValenceModel::default(). The fixtures state bracket hydrogen counts so the input is determined
+under both existing policies; the test does not modify either model or its tie-break. Exact
+expected molecular states and stereo configurations are shared between the two sources.
+
+Verification: PROPTEST_CASES=256 cargo test -p umol-graph --features conformance,proptest --offline
+passes with 1,472 unit cases, 683 conformance cases, 13 property tests, and integration tests.
+All-target graph Clippy with the same features and -D warnings passes. Formatting and
+git diff --check pass. Logs: scratch/s4c-gate.log, scratch/s4c-input.log, and
+scratch/s4c-clippy.log.
+
+The inline stereo projection benchmarks establish the new operation's baseline, excluding
+source ingestion, resolver construction, and caller cloning. Central estimates in microseconds
+from 10 samples, 0.5 s warmup, and 1 s measurement:
+
+| Input | Stereo project |
+| --- | ---: |
+| Tetrahedral atom | 1.1002 |
+| Explicit hydrogen | 1.2269 |
+| Sulfoxide lone pair | 1.3019 |
+| Cis-trans bond | 1.0256 |
+| Tetrahedral atom and cis-trans bond | 2.2873 |
+
+All benchmark input checks and measured cases pass. Full output: scratch/s4c-benchmark.log.
+S4d is next.
 
 #### Historical S4a/S4b implementation and measurements — 2026-09-11
 

@@ -121,10 +121,41 @@ fn bench_aromaticity_project(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_stereo_project(c: &mut Criterion) {
+    let model = ChemistryModel::default();
+    let resolver = Resolver::new(&model);
+    let mut group = c.benchmark_group("smiles_roundtrip/stereo_project");
+    for (name, input) in [
+        ("tetrahedral", "N[C@H](F)Cl"),
+        ("explicit_hydrogen", "[H][C@](F)(Cl)Br"),
+        ("lone_pair", "C[S@](=O)CC"),
+        ("cis_trans", "C/C=C/C"),
+        ("mixed", "N[C@H](F)/C=C/C"),
+    ] {
+        let source = ingest_smiles(input).unwrap();
+        assert!(source.has_stereo_atoms() || source.has_stereo_bonds());
+        let mut checked = source.clone();
+        assert_eq!(
+            resolver.stereo.project(&mut checked),
+            Ok(Solution::Determined(()))
+        );
+        assert!(!checked.has_stereo_atoms() && !checked.has_stereo_bonds());
+        group.bench_function(name, |b| {
+            b.iter_batched_ref(
+                || source.clone(),
+                |molecule| resolver.stereo.project(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     resolve,
     bench_ingest_smiles,
     bench_resolve,
-    bench_aromaticity_project
+    bench_aromaticity_project,
+    bench_stereo_project
 );
 criterion_main!(resolve);

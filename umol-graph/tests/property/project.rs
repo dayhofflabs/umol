@@ -2,6 +2,8 @@
 //! Independent five- and six-member ring expectations check exact projected values,
 //! idempotence, and transport under rotated/reversed system frames. The same expectations
 //! check projection of successfully ingested SMILES under both valence sources.
+//! Stereo projection is checked against independent tetrahedral permutation parity and
+//! cis-trans side-swap parity, preserving virtual-ligand kinds and open configurations.
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
@@ -10,9 +12,12 @@ use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{ResolveConfig, Resolver};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
-    BondConstraintForm, BondForm, BooleanForm, ElectronCountsForm, ElementForm, IsotopeMassForm,
-    Molecule, MoleculeEntries, NumForm, UnpairedElectronsForm,
+    BondConstraintForm, BondForm, BondId, BooleanForm, CisTransStereoForm, ElectronCountsForm,
+    ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, StereoAtomForm,
+    StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+    UnpairedElectronsForm,
 };
+use umol_graph_ir::mol_dsl_concrete;
 use umol_io::smiles::SmilesIoConfig;
 use umol_utils::solution::Solution;
 
@@ -89,5 +94,103 @@ proptest! {
         prop_assert_eq!(resolver.aromaticity.project(&mut ingested), Ok(Solution::Determined(())));
         expected.bonds = parsed_bonds;
         prop_assert_eq!(ingested, Molecule::from_entries(expected));
+    }
+
+    #[test]
+    fn test_stereo_resolver_project_tetrahedral(
+        kind in 0u8..4,
+        permutation in Just(vec![0usize, 1, 2, 3]).prop_shuffle(),
+        coset in 0u32..2,
+        open in any::<bool>(),
+    ) {
+        let base = match kind {
+            0 => mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
+            1 => mol_dsl_concrete!(r#"{:atoms ["C#h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+            2 => mol_dsl_concrete!(r#"{:atoms ["N#n1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+            _ => mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
+        };
+        let fixed = [
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            match kind {
+                1 => StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                2 => StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                _ => StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            },
+        ];
+        let inversions = (0..4).flat_map(|i| (i + 1..4).map(move |j| (i, j)))
+            .filter(|&(i, j)| permutation[i] > permutation[j]).count();
+        let stored = if open { StereoCoset::Undetermined } else { StereoCoset::Lit(coset) };
+        let projected = if open { StereoCoset::Undetermined } else { StereoCoset::Lit(coset ^ (inversions % 2) as u32) };
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: base.atoms().iter().map(|atom| atom.attributes.clone()).collect(),
+            bonds: base.bonds().iter().map(|bond| {
+                let [first, second] = bond.atom_ids();
+                (first, second, bond.attributes.clone())
+            }).collect(),
+            stereo_atoms: vec![(AtomId(0), permutation.iter().map(|&i| fixed[i]).collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, stored))],
+            ..Default::default()
+        });
+        let mut editor = base.edit();
+        editor.atom_mut(AtomId(0)).attributes.constraints.set(
+            AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(projected)));
+        let expected = editor.build();
+        let model = ChemistryModel::default();
+        let resolver = Resolver::new(&model);
+        prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(&molecule, &expected);
+        prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(molecule, expected);
+    }
+
+    #[test]
+    fn test_stereo_resolver_project_cis_trans(
+        kind in 0u8..3,
+        first_swap in any::<bool>(), second_swap in any::<bool>(), endpoints_swap in any::<bool>(),
+        coset in 0u32..2, open in any::<bool>(),
+    ) {
+        let (base, mut ligands) = match kind {
+            0 => (mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#),
+                vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom)]),
+            1 => (mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]}"#),
+                vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)]),
+            _ => (mol_dsl_concrete!(r#"{:atoms ["N#n1" "C#h1" "C#h3" "F"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]}"#),
+                vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)]),
+        };
+        if first_swap { ligands.swap(0, 1); }
+        if second_swap { ligands.swap(2, 3); }
+        if endpoints_swap { ligands.rotate_left(2); }
+        let stored = if open { StereoCoset::Undetermined } else { StereoCoset::Lit(coset) };
+        let projected = if open { StereoCoset::Undetermined } else { StereoCoset::Lit(coset ^ u32::from(first_swap) ^ u32::from(second_swap)) };
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: base.atoms().iter().map(|atom| atom.attributes.clone()).collect(),
+            bonds: base.bonds().iter().map(|bond| {
+                let [first, second] = bond.atom_ids();
+                (first, second, bond.attributes.clone())
+            }).collect(),
+            stereo_bonds: vec![(BondId(0), ligands, StereoBondForm::new(StereoKind::CisTrans, stored))],
+            ..Default::default()
+        });
+        let mut editor = base.edit();
+        editor.bond_mut(BondId(0)).attributes.constraints.set(
+            BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(projected)));
+        let expected = editor.build();
+        let model = ChemistryModel::default();
+        let resolver = Resolver::new(&model);
+        prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(&molecule, &expected);
+        prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(molecule, expected);
     }
 }
