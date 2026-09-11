@@ -1,10 +1,18 @@
-//! SMILES format parser, linter, and writer.
+//! SMILES format parsing and rendering.
 
 pub mod config;
 pub mod error;
 mod molecule;
 mod parser;
 mod reaction;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "rendering kernels are wired into boundary methods in a later stage"
+    )
+)]
+mod render;
 
 pub use config::SmilesIoConfig;
 pub use error::ParseError;

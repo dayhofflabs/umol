@@ -1357,7 +1357,7 @@ The plan below sequences the work; S0–S3 are complete.
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
 S4 is complete, including S4a0a–S4a0c and the S4a–S4b corrections.
-S5 and later stages are pending.
+S5a is complete; S5b and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1370,7 +1370,7 @@ The consumer requirements determine these work groups; the stages order them fou
 | --- | --- |
 | umol-graph ingest/export | Interpret with a supplied Resolver; Convey on boundary types; text-returning export conveniences and reaction composition |
 | umol-io smiles boundaries | Checked from_table_ir construction, render/render_with, shared representability diagnostics, same-config guarantee |
-| umol-io smiles writer | Deterministic traversal, atom/ring/branch spelling, stereo-frame transport, component-wide marker selection and parity |
+| umol-io smiles::render | Deterministic traversal, atom/ring/branch spelling, stereo-frame transport, component-wide marker selection and parity |
 | umol-graph resolver | Direct GraphIR-only project, isotope default elision, aromatic/stereo assertion recovery, atomic publication |
 | umol-io TableIR and readers | Explicit stereo-bond frames; transient source markers; SMILES/CX/CTfile producers and raise migration; temporary neighbor access |
 | umol-graph-core | Iterator-producing connectivity callback, DFS/BFS visitors and collectors, component visitor, semantic renames and usize depth |
@@ -2141,14 +2141,14 @@ measurement or tuning campaign is required.
 
 ### S5 — IO traversal and direction assignment kernels
 
-- **S5a — Output traversal.** Module: smiles writer implementation within umol-io.
+- **S5a — Output traversal (completed 2026-09-11).** Module: umol-io/src/smiles/render/traversal.rs.
   **Additive (green).** [dep: S1a, S1c, S3d, S3e]
   Adapt temporary bond-row incidence to graph-core DFS. Derive ordered roots, parent/child edges,
   non-tree edges, ring encounters, and emitted atom/bond order without storing a Graph in TableIR.
   Pin deterministic TableIR ordering and ring-label allocation with exact fixtures. Retain the
   traversal only within the operation. Verify branches, disconnected/empty molecules, rings,
   multiple closures at one atom, and reference transport under changed traversal.
-- **S5b — Marker-assignment components.** Module: smiles writer stereo functions.
+- **S5b — Marker-assignment components.** Module: smiles::render stereo functions.
   **Additive (green).** [dep: S3a, S3d, S1c]
   Implement structural site/candidate eligibility and auxiliary connectivity, retaining per-endpoint
   candidate membership and table bond IDs. Include unspecified coupling sites, branches and cycles;
@@ -2164,7 +2164,7 @@ measurement or tuning campaign is required.
   assignment. Use a small exhaustive marker/sign oracle independent of the production propagation
   to test soundness and completeness, plus chain/branch/cycle conflicts and alternative solutions.
   Do not minimize marker count or adopt the reviewed incomplete cleanup/conservative-ban policies.
-- **S5d — Token and atom-stereo formatting.** Module: smiles writer.
+- **S5d — Token and atom-stereo formatting.** Module: smiles::render.
   **Additive (green).** [dep: S5a, S5c]
   Emit atom/bracket fields, preserved implicit-H counts, isotope/charge/class, bonds, aromatic
   tokens, components, branches, and ring labels. Transport StereoAtom into emitted encounter order
@@ -2176,6 +2176,71 @@ measurement or tuning campaign is required.
 **Gate:** kernel tests and exhaustive bounded assignment comparison pass; emitted fixtures parse
 under the intended IO configuration and preserve independent stereo expectations. Formatting and
 marker-search benchmarks use S0 fixtures without making optimization a gate to semantic progress.
+
+#### S5a completion — 2026-09-11
+
+The private smiles::render::traversal module uses graph-core visit_depth_first with the temporary
+AtomNeighbors index. Its adapter borrows each row slice and maps atom/bond indices to NodeId/EdgeId;
+there is no per-neighbor collection, Graph construction, or persistent connectivity in TableIR.
+The module name follows the settled render operation. Public symbols and reexports are unchanged.
+
+Traversal retains two flat arrays: AtomVisit in DFS preorder, carrying the original atom index,
+parent neighbor, exclusive subtree boundary, and ring-encounter range; and RingVisit, carrying the
+original neighbor/bond indices, numeric label, and opening/closing role. Parentless visits identify
+component roots. Child iteration skips subtrees without allocating a child list. Bond iteration
+reports each bond's first lexical encounter and directed endpoints, with ring bonds oriented from
+opening toward closure. These are operation-local results over an unchanged table, not boundary
+payloads or independently reusable context witnesses.
+
+Roots follow atom-table order; DFS neighbors follow bond-table order. All but the final child are
+branches. At each atom, ring encounters precede children and follow bond-table order. Labels start
+at 1, use the smallest currently available positive integer, and are released after processing the
+closing atom, preventing same-atom reuse. Non-tree bonds are recovered from incidence by excluding
+the stored parent edges. The sparse active-label map and available-label heap allocate only for
+rings; there is no additional bond-sized output-order or label array. The temporary atom-position
+array and neighbor index are dropped after construction.
+
+Actual stereo encounter order is parent, rings, then children. Exact fixtures cover changed incoming
+ring/tree bonds, branch-before-closure input, multiple ring openings/closures, explicit H nodes,
+and both even and odd tetrahedral frame permutations. The kernel does not read or change chemistry,
+stereo assertions, or virtual ligands. Virtual-ligand placement, configuration transport, and token
+emission remain S5d. It also does not certify format representability: malformed endpoint rows inherit
+AtomNeighbors' omission behavior without panicking, while loops and parallel bonds stay identifiable.
+The later format consumer must reject topology it cannot represent before publication.
+
+There are 24 exact cases and one generated property. The property compares preorder, parents, and
+subtree boundaries with independent recursive scanning of the bond table; reconstructs all valid
+endpoint rows, including loops/parallel bonds; checks child and neighbor coverage; and verifies label
+allocation against the direct set definition of availability. The generated domain includes empty,
+disconnected, and malformed-endpoint tables. These topology properties do not assert SMILES acceptance.
+
+Verification: PROPTEST_CASES=256 cargo test -p umol-io --features conformance,proptest --offline
+passes: 3,945 unit/property cases, 2,253 MOL, 407 SDF, and 10,223 SMILES conformance cases, six layout
+cases, and ten SMILES property cases. The focused traversal rerun and all-target Clippy with the same
+features and -D warnings pass. Formatting and git diff --check pass. Logs are scratch/s5a-gate.log,
+scratch/s5a-unit.log, and scratch/s5a-clippy.log. Parser, TableIR, raise, and resolver implementations
+are unchanged.
+
+Traversal baseline, central estimates in microseconds, with 10 samples, 0.5-second warmup, and
+1-second measurement per input:
+
+| Input | Traversal |
+| --- | ---: |
+| 64-atom chain | 1.7088 |
+| Branched chain | 0.44634 |
+| Benzene | 0.35768 |
+| Naphthalene | 0.52030 |
+| Spiro rings | 0.49967 |
+| Stereo ring | 0.48729 |
+| Disconnected rings and salt | 0.50271 |
+
+The measurements include temporary incidence construction, DFS, ring-label allocation, and result
+destruction; parsing is excluded. The standalone scratch/s5a-traversal-bench harness uses inline
+SMILES and imports the private source by path, without a benchmark-only public API. Run its release
+binary with --bench --sample-size 10 --warm-up-time 0.5 --measurement-time 1 --noplot. Full output:
+scratch/s5a-benchmark.log. These are baseline costs, not comparisons with a replaced implementation.
+The module's temporary dead-code expectation is removed when boundary methods consume the kernels.
+S5b is next; token emission and the complete S5 gate remain pending.
 
 ### S6 — Checked SMILES boundaries and rendering
 
@@ -2190,7 +2255,7 @@ marker-search benchmarks use S0 fixtures without making optimization a gate to s
   preservation of parsed boundary semantics. Unsupported Either/annotations must fail in a
   notation that cannot express them, never become mere absence. Do not add Display with weaker
   guarantees or an arbitrary-parts shortcut.
-- **S6b — ReactionSmiles construction/rendering.** Module: smiles/reaction.rs and shared writer.
+- **S6b — ReactionSmiles construction/rendering.** Module: smiles/reaction.rs and shared smiles::render functions.
   **Additive (green).** [dep: S6a]
   Add the corresponding checked constructor and render methods. Compose three ordered sections
   and molecular components. Preserve parsed Atom.class values, repeated classes, and agents;
