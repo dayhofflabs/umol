@@ -1282,7 +1282,7 @@ The plan below sequences the work; S0–S2 are complete.
 ## Staged implementation plan
 
 S0–S2 and S3a–S3c are complete. S3d's functional migration is implemented; its allocation
-closeout requires S3d1–S3d7 below. S3d1–S3d3 are complete; S3d4–S3d7, S3e, and later subitems are pending.
+closeout requires S3d1–S3d7 below. S3d1–S3d4 are complete; S3d5–S3d7, S3e, and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1461,7 +1461,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   endpoint viewpoint, atom-stereo incidence order, and CX completion-index remapping. No redesign
   of unrelated parser factoring is included. Verify shared/branched/cyclic markers, partial and
   conflicting notation, ring spelling, and the existing atom/bond remapping laws.
-- **S3d4 — Sparse stereo assertion processing and CX frame updates.** Modules:
+- **S3d4 — Sparse stereo assertion processing and CX frame updates (completed 2026-09-11).** Modules:
   table_ir/stereo/derive.rs and smiles/parser/cx.rs. **Refactor (green).** [dep: S3d2]
   Replace the bond-sized codes array with processing proportional to explicit assertions; group
   assertions by bond using their owned storage and check repeated evidence before consolidation.
@@ -3169,6 +3169,140 @@ Raw results are scratch/s3d3-{before,after}-{allocations,timings}.csv, with corr
 logs; the probe commands are the S3d2 commands with s3d3-parser-bench as the manifest directory.
 Verification logs are scratch/s3d3-{focused-tests,gate,clippy,fmt}.log. The incremental review is
 saved in scratch/s3d3-incremental.diff. S3d4 is next; no later subitem was implemented here.
+
+
+### S3d4 implementation and measurements (2026-09-11)
+
+The CTfile/CX derivation kernel now consumes the existing bond_stereo_assertions vector, validates
+its sites, adds wavy evidence, sorts by bond index, checks conflicting repeats, and deduplicates
+in place. An ordered iterator replaces the dense codes array. CX retains the earlier wavy
+assertions when later entries overwrite the wedge field, so consolidation cannot discard that
+evidence. Grouping may change which of several independent invalid assertions is diagnosed first;
+the error variants and accepted source semantics are unchanged.
+
+The kernel consumes and reuses the existing frame vector. It compares new codes and supplied
+geometry against a retained frame after accounting for complementary reference choices at either
+endpoint, without changing the retained references or relation. Existing Either suppresses geometry
+and conflicts with definite codes; incoming Either conflicts with an existing definite frame.
+New frames append to the reused vector, followed by an in-place table-order sort only when an
+existing collection gained entries. Existing frames are unique and ordered by their private
+parser producers. No frame-to-code expansion or rebuilt unchanged frame collection remains.
+
+Basic and extended CX updates skip derivation when only unrelated metadata changes. Coordinates,
+wedges, coordinate/hydrogen bonds, and multicenter entries mark stereo input as changed; explicit
+bond stereo assertions also trigger derivation. The trigger is conservative for bond-related
+entries. Labels, values, radicals, atom properties, groups, and other unchanged bond-frame inputs
+do not cause an extra stereo pass. Relevant changes still check site order, references, missing
+positions, and contradictory evidence at derivation. The redundant finish_stereo_bonds helper is
+removed. CTfile builders transfer their owned assertion vectors into the same kernel.
+
+No externally public Rust/Python type, constructor, conversion, signature, visibility, or error
+variant changed. TableIR remains an open table carrier. The source interpretation uses supplied
+coordinates only and performs no chemistry transformation. Local substituent vectors and neighbor
+representation remain for their owning later subitems.
+
+Exact tests cover all four reference choices, preserved vector storage when frames are unchanged,
+Either/definite disagreement, invalid references, newly added frames before and after retained
+frames, unsorted duplicates and conflicts, labels on existing directional frames, overwritten
+wavy evidence, geometry agreement/conflict, short coordinate lists, and a CX hydrogen-bond order
+change at an existing stereo site. Existing basic/extended parity, reaction-section remapping,
+ring-completion indices, and CTfile property-order tests remain green. A new generated property
+checks that any tested number of repeated equivalent codes preserves an existing frame across
+both endpoint-complement choices; the coordinate-similarity property is unchanged.
+
+The scratch/s3d4-parser-bench probe uses the established release measurement method: 64 warm-ups,
+one allocation observation with result retention, and normal-allocator timing over 11 batches of
+512 parses with output-vector allocation and result destruction outside timing. The eight inline
+inputs each use basic and extended parsing: a bare 64-atom chain; that chain with a label; a
+42-atom, 20-double-bond directional chain with a label; repeated cis codes; an existing directional
+frame with agreeing trans code; terminal Either; a wavy bond; and supplied geometry. No fixture
+files are read. Construction and verification stay outside measurement, and measurements run
+separately from the test/lint gates. The baseline includes S3d3; affected source is retained under
+scratch/s3d4-before. These are parser measurements, not raise/resolve timings or a corpus-wide
+performance claim.
+
+Allocation calls include reallocations; requested bytes sum full allocation/reallocation requests.
+Peak added live bytes are allocator-tracked above the pre-parse baseline, not RSS or retained-result
+size. Timing ranges are batch-mean ranges, not confidence intervals.
+
+| Case | Allocation calls before → after | Requested bytes before → after | Peak added live bytes before → after | Median µs before → after | Before / after batch-mean ranges µs |
+| --- | ---: | ---: | ---: | ---: | --- |
+| bare_chain_64_basic | 3 → 3 | 12,188 → 12,188 | 9,428 → 9,428 | 1.003 → 0.990 | 0.977–1.686 / 0.971–1.770 |
+| bare_chain_64_extended | 3 → 3 | 31,512 → 31,512 | 24,984 → 24,984 | 2.528 → 2.473 | 2.385–3.503 / 2.396–3.808 |
+| labels_chain_64_basic | 74 → 8 | 21,600 → 17,953 | 14,677 → 14,677 | 2.731 → 1.262 | 2.678–3.232 / 1.209–1.469 |
+| labels_chain_64_extended | 74 → 8 | 43,980 → 40,333 | 32,677 → 32,677 | 4.387 → 2.931 | 4.201–4.822 / 2.729–3.354 |
+| labels_directional_42_basic | 184 → 95 | 29,710 → 25,557 | 18,005 → 18,005 | 5.257 → 3.159 | 5.180–6.517 / 3.077–3.904 |
+| labels_directional_42_extended | 184 → 95 | 57,806 → 53,653 | 40,581 → 40,581 | 7.995 → 5.529 | 7.301–9.077 / 5.248–6.143 |
+| repeated_code_basic | 18 → 17 | 7,579 → 7,576 | 6,432 → 6,432 | 0.850 → 0.829 | 0.817–0.898 / 0.809–0.891 |
+| repeated_code_extended | 18 → 17 | 13,219 → 13,216 | 10,992 → 10,992 | 1.047 → 1.015 | 0.961–1.677 / 0.934–1.263 |
+| existing_frame_basic | 24 → 22 | 6,739 → 6,672 | 5,600 → 5,600 | 0.863 → 0.818 | 0.852–0.940 / 0.787–1.026 |
+| existing_frame_extended | 23 → 21 | 9,331 → 9,264 | 8,720 → 8,720 | 0.879 → 0.839 | 0.867–0.992 / 0.834–1.497 |
+| either_basic | 11 → 10 | 5,457 → 5,456 | 5,248 → 5,248 | 0.498 → 0.487 | 0.494–0.522 / 0.483–0.748 |
+| either_extended | 12 → 11 | 9,041 → 9,040 | 7,792 → 7,792 | 0.560 → 0.758 | 0.559–0.646 / 0.689–1.075 |
+| wavy_basic | 15 → 14 | 6,415 → 6,412 | 5,532 → 5,532 | 0.654 → 0.643 | 0.636–0.691 / 0.622–0.792 |
+| wavy_extended | 14 → 13 | 9,007 → 9,004 | 8,652 → 8,652 | 0.692 → 0.660 | 0.665–0.721 / 0.654–0.823 |
+| geometry_basic | 19 → 18 | 9,771 → 9,768 | 7,960 → 7,960 | 0.839 → 0.994 | 0.828–0.911 / 0.865–1.089 |
+| geometry_extended | 19 → 18 | 18,467 → 18,464 | 14,976 → 14,976 | 0.916 → 0.888 | 0.884–1.271 / 0.878–0.975 |
+
+The first after run showed increases for extended Either and basic geometry. One unchanged-code
+confirmation timing run after the gate checked repeatability; no allocation rerun or tuning was
+performed. Both timing runs are retained rather than selecting only the faster result.
+
+| Case | Before median µs | First after median µs | Confirmation median µs | Confirmation batch-mean range µs |
+| --- | ---: | ---: | ---: | --- |
+| bare_chain_64_basic | 1.003 | 0.990 | 1.001 | 0.975–1.777 |
+| bare_chain_64_extended | 2.528 | 2.473 | 2.638 | 2.358–3.243 |
+| labels_chain_64_basic | 2.731 | 1.262 | 1.340 | 1.208–2.058 |
+| labels_chain_64_extended | 4.387 | 2.931 | 2.844 | 2.756–3.548 |
+| labels_directional_42_basic | 5.257 | 3.159 | 3.162 | 3.080–3.282 |
+| labels_directional_42_extended | 7.995 | 5.529 | 5.898 | 5.210–6.771 |
+| repeated_code_basic | 0.850 | 0.829 | 0.838 | 0.814–0.865 |
+| repeated_code_extended | 1.047 | 1.015 | 0.942 | 0.931–1.242 |
+| existing_frame_basic | 0.863 | 0.818 | 0.796 | 0.791–0.817 |
+| existing_frame_extended | 0.879 | 0.839 | 0.852 | 0.840–0.882 |
+| either_basic | 0.498 | 0.487 | 0.490 | 0.487–0.648 |
+| either_extended | 0.560 | 0.758 | 0.571 | 0.556–0.802 |
+| wavy_basic | 0.654 | 0.643 | 0.650 | 0.627–0.677 |
+| wavy_extended | 0.692 | 0.660 | 0.689 | 0.674–0.768 |
+| geometry_basic | 0.839 | 0.994 | 0.837 | 0.826–0.859 |
+| geometry_extended | 0.916 | 0.888 | 0.939 | 0.877–1.628 |
+
+The two initial small-case increases did not repeat. The metadata-path improvements did repeat:
+label-only chains lose 66 allocation calls per parse, and the labeled directional chains lose 89.
+Requested bytes fall by 3,647 and 4,153 respectively. Peak added live bytes are unchanged in every
+case: eliminating these later allocations does not lower the parser's earlier peak in these
+inputs. Bare-chain allocation controls are unchanged. Relevant stereo cases remove one dense-array
+allocation, or two allocations where unchanged frame rebuilding also disappears; their runtime
+differences are much smaller and do not establish a broad speedup.
+
+Assessment against the continuing questions:
+
+- **Does the evidence support the case?** Yes, strongly for skipping unnecessary derivation. The
+  metadata cases improve roughly 26–54% in median parse time across the two after runs, with large
+  allocation-count reductions. This establishes the benefit of removing that whole
+  pass on these inputs, not that allocator overhead alone explains its runtime or that all SMILES
+  parsing becomes faster. Sparse storage and frame reuse alone show smaller benefits.
+- **What remains promising?** S3d5 still removes the two endpoint-vector allocations per considered
+  double bond, including forty in the 20-double-bond example's required first derivation. S3e
+  addresses other unnecessary neighbor construction, including raise. Those costs remain concrete,
+  but their future timing gains must be measured separately; they cannot be added arithmetically
+  to this stage's gains.
+- **Should S3d4 be retained?** Yes. It has a substantial measured benefit where CX metadata formerly
+  repeated stereo work, reuses existing frame storage, and preserves the reference frame during
+  evidence comparison. The extra merge logic serves the settled semantics, and the unchanged-code
+  confirmation does not support pursuing the initial small-case timing increases further.
+
+Verification passes: 3,844 IO unit tests and 1,066 graph unit tests with proptest; 10,223 SMILES,
+2,253 MOL, and 407 SDF conformance cases; remaining integration/property suites; and strict
+IO/graph Clippy for all targets with those features. One existing graph doctest remains ignored.
+Formatting and diff checks pass. The complete incremental diff was reviewed against S3d4, with
+pre-existing work and later allocation subitems preserved.
+
+Raw results are scratch/s3d4-{before,after}-{allocations,timings}.csv and
+scratch/s3d4-after-confirmation-timings.csv, with corresponding build logs. The probe uses the
+same cargo run commands as S3d3 with s3d4-parser-bench as its manifest directory. Verification logs
+are scratch/s3d4-{focused-tests,gate,clippy,fmt}.log; the reviewed diff is
+scratch/s3d4-incremental.diff. S3d5 is next.
 
 
 ## Staged specification updates

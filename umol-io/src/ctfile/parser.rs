@@ -194,7 +194,8 @@ fn build_molecule(
         &molecule.bonds,
         |bond| (bond.atoms, bond.order, bond.wedge),
         molecule.positions.as_deref(),
-        &bond_stereo_assertions,
+        Vec::new(),
+        bond_stereo_assertions,
     )?;
     Ok(molecule)
 }
@@ -235,7 +236,8 @@ fn build_extended_molecule(
         &molecule.bonds,
         |bond| (bond.atoms, bond.order, bond.wedge),
         molecule.positions.as_deref(),
-        &bond_stereo_assertions,
+        Vec::new(),
+        bond_stereo_assertions,
     )?;
     Ok(molecule)
 }

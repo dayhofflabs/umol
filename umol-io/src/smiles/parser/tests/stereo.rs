@@ -206,6 +206,14 @@ fn test_parse_molecule_bond_stereo_error(#[case] input: &str, #[case] expected: 
 #[case::partial_either("F/C=CF |ctu:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Either }])]
 #[case::terminal_either("C=C |ctu:0|", vec![StereoBond { bond: 0, configuration: BondConfiguration::Either }])]
 #[case::wavy_either("FC=CF |w:1.0,ctu:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Either }])]
+#[case::labels("F/C=C/F |$first$|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::OppositeSide } }])]
+#[case::new_before_existing("FC=CF.F/C=C/F |c:1,c:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }, StereoBond { bond: 4, configuration: BondConfiguration::Framed { references: [4,7], relation: BondRelation::OppositeSide } }])]
+#[case::new_after_existing("F/C=C/F.FC=CF |c:4,c:4|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::OppositeSide } }, StereoBond { bond: 4, configuration: BondConfiguration::Framed { references: [4,7], relation: BondRelation::SameSide } }])]
+#[case::unsorted_duplicates("FC=CF.FC=CF |t:4,c:1,t:4,c:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }, StereoBond { bond: 4, configuration: BondConfiguration::Framed { references: [4,7], relation: BondRelation::OppositeSide } }])]
+#[case::overwritten_wavy("FC=CF |w:1.0,w:0.0|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Either }])]
+#[case::existing_geometry("F/C=C/F |(0,1,;0,0,;2,0,;2,-1,)|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::OppositeSide } }])]
+#[case::geometry_only("FC=CF |(0,1,;0,0,;2,0,;2,1,)|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }])]
+#[case::either_geometry("FC=CF |ctu:1,(0,1,;0,0,;2,0,;2,1,)|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Either }])]
 fn test_parse_molecule_cx_frames(#[case] input: &str, #[case] expected: Vec<StereoBond>) {
     let config = SmilesIoConfig::chemaxon();
     let basic = parse_molecule(input.as_bytes(), &config).unwrap();
@@ -224,6 +232,10 @@ fn test_parse_molecule_cx_frames(#[case] input: &str, #[case] expected: Vec<Ster
 #[case::overwritten_wavy("FC=CF |w:1.0,w:0.0,c:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
 #[case::geometry_code("FC=CF |(0,1,;0,0,;2,0,;2,-1,),c:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
 #[case::single("CC |ctu:0|", ParseError::UnsupportedStereoBond { bond: 0 })]
+#[case::existing_geometry_conflict("F/C=C/F |(0,1,;0,0,;2,0,;2,1,)|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::existing_short_positions("F/C=C/F |(0,1,;0,0,;2,0,)|", ParseError::MissingPosition { atom: 3 })]
+#[case::existing_site_order_change("F/C=C/F |H:1.1|", ParseError::UnsupportedStereoBond { bond: 1 })]
+#[case::unsorted_conflict("FC=CF.FC=CF |t:4,c:1,c:4|", ParseError::ConflictingBondConfiguration { bond: 4 })]
 fn test_parse_molecule_cx_frames_error(#[case] input: &str, #[case] expected: ParseError) {
     let config = SmilesIoConfig::chemaxon();
     assert_eq!(
