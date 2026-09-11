@@ -1282,7 +1282,7 @@ The plan below sequences the work; S0–S2 are complete.
 ## Staged implementation plan
 
 S0–S2 and S3a–S3c are complete. S3d's functional migration is implemented; its allocation
-closeout requires S3d1–S3d7 below. S3d1–S3d5 are complete; S3d6–S3d7, S3e, and later subitems are pending.
+closeout requires S3d1–S3d7 below. S3d1–S3d6 are complete; S3d7, S3e, and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1482,7 +1482,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   and frame transport. Verify zero/one/two/excess substituents, shared ligands, cumulated axes,
   and single/both reference swaps. Persistent StereoAtom ligand vectors and wedge-algorithm
   redesign are not part of this scratch-storage change.
-- **S3d6 — Apply bond frames without a constraint HashMap.** Module: table_ir/raise.rs.
+- **S3d6 — Apply bond frames without a constraint HashMap (completed 2026-09-11).** Module: table_ir/raise.rs.
   **Refactor (green).** [dep: S3d5]
   Order borrowed frame references by their table-bond index and consume them alongside the bond
   construction loop. Construct each constraint at its destination instead of retaining all
@@ -3381,6 +3381,85 @@ Raw allocation/timing results and build logs are scratch/s3d5-{before,after}-{al
 the complete measurement table is scratch/s3d5-comparison.md. Verification logs use
 scratch/s3d5-{focused-tests,raise-tests,gate,clippy,fmt}.log. The reviewed diff is
 scratch/s3d5-incremental.diff. S3d6 is next.
+
+
+### S3d6 implementation and measurements (2026-09-11)
+
+Raise now collects borrowed StereoBond references into one vector, sorts them in place by table-bond
+index, and consumes them alongside bond construction. Each constraint is derived for its destination
+and moved directly into that bond's constraints. The input frames remain untouched. The temporary
+vector contains one reference per frame, not one entry per table bond; empty frame input allocates
+nothing for this ordering. Sorting uses sort_unstable_by_key and adds no sorting buffer.
+
+Frame derivation occurs before the localized/dative/noncovalent dispatch so a frame on a relation
+bond cannot disappear silently, including the Shared donation fallback. Repeated sites produce
+DuplicateStereoBond; a frame left after the bond table is exhausted produces
+StereoBondIndexOutOfBounds. Existing invalid-reference and unsupported-site errors remain at frame
+consumption. Atoms are now raised before bond frames, and frame errors are encountered in table-bond
+order rather than input-frame order. Inputs containing multiple faults may therefore report a
+different fault first; the eager all-frame validation/construction pass is not retained.
+
+Public-symbol reconciliation: no constructor, conversion signature, field, visibility, error variant,
+or Python surface changes. TableIR remains open, and raise checks frame context when it consumes the
+frame. No new validation pass, dense bond-index mapping, or persistent adjacency is introduced.
+Neighbor construction and the later allocation subitems remain unchanged.
+
+The inline scratch/s3d6-raise-bench probe reuses S3d5's borrowed-raise measurement method: parsing,
+configuration, and table preparation outside measurement; 64 warmups; eleven batches of 512 calls;
+outputs retained and checked/dropped outside timing. Normal-allocator timing and counting-allocator
+builds are separate. Reversed frame order is also measured on examples with multiple frames, with
+reversal and cloning outside measurement. No fixture files are loaded and no tests/builds ran
+concurrently with timing. The table reports batch medians, not confidence intervals.
+
+| Case | Calls before → after | Requested bytes before → after | Peak live bytes before → after | Median ns before → after | Change |
+| --- | --- | --- | --- | --- | --- |
+| bare_chain_64_raise | 102 → 102 | 51828 → 51828 | 27320 → 27320 | 12827.5 → 11834.0 | -7.7% |
+| directional_42_raise | 100 → 100 | 52348 → 51188 | 28312 → 27152 | 12891.2 → 11209.6 | -13.0% |
+| directional_42_reversed_raise | 100 → 100 | 52348 → 51188 | 28312 → 27152 | 13136.3 → 11715.3 | -10.8% |
+| triene_raise | 40 → 40 | 6968 → 6820 | 4984 → 4836 | 2432.2 → 2301.3 | -5.4% |
+| triene_reversed_raise | 40 → 40 | 6968 → 6820 | 4984 → 4836 | 2514.7 → 2400.7 | -4.5% |
+| branched_raise | 39 → 39 | 6840 → 6684 | 4856 → 4700 | 2175.9 → 2128.5 | -2.2% |
+| branched_reversed_raise | 39 → 39 | 6840 → 6684 | 4856 → 4700 | 2337.7 → 2072.4 | -11.3% |
+| ring_stereo_raise | 55 → 55 | 7584 → 7420 | 4988 → 4824 | 2745.6 → 2790.8 | +1.6% |
+| geometry_raise | 35 → 35 | 3600 → 3436 | 3160 → 2996 | 1452.4 → 1235.6 | -14.9% |
+| four_substituents_raise | 36 → 36 | 6512 → 6348 | 4544 → 4380 | 1871.1 → 1698.2 | -9.2% |
+
+Allocation calls do not decrease: the frame-reference vector replaces the HashMap's one allocation.
+For twenty frames, that replaces 1,320 requested bytes with 160, reducing both total requested bytes
+and peak added live memory by 1,160 bytes. Three frames save 148 bytes, two save 156, and one saves
+164. The bare-chain control's allocation metrics are unchanged. A constraint is no longer retained
+in temporary map storage while waiting for all atoms and earlier bonds to be raised.
+
+Assessment against the continuing questions:
+
+- **Does the evidence support the case?** Yes for memory and storage ownership. The measured peak
+  reduction matches the smaller temporary container. Timing is encouraging: about 13% lower for
+  the ordered directional chain and 11% for reversed frames. However, the no-stereo control also
+  improves about 8%, and ring stereo increases about 1.6%; these short runs do not isolate a
+  stereo-specific speedup or support assigning all observed improvement to HashMap removal.
+- **What remains for downstream improvement?** S3d7 still addresses initial SMILES reservations.
+  S3e still addresses unnecessary neighbor construction and the nested neighbor allocations.
+  The directional raise still makes one hundred allocation calls, and the bare-chain raise still
+  makes 102; this stage does not remove those costs or establish their future timing benefit.
+- **Should S3d6 be retained?** Yes. It directly constructs constraints where they are used, removes
+  hash insertion/removal and temporary constraint storage, and gives a measurable peak-memory
+  reduction with a small local implementation. Further timing experiments are not needed to close
+  this subitem.
+
+Verification passes: 3,889 IO and 1,066 graph unit tests with properties; 10,223 SMILES, 2,253 MOL,
+and 407 SDF conformance cases; remaining integration/property suites; and strict IO/graph Clippy
+for all targets with those features. One existing graph doctest remains ignored. Formatting and
+diff checks pass, and the full diff was reviewed against S3d6. No later subitem was implemented.
+Added exact tests cover full output and
+input preservation for sorted/reversed frames with dative and noncovalent records before/between
+framed localized bonds; nonadjacent duplicate frames; invalid and maximum-u32 sites; and rejection
+of frames on donating, accepting, Shared, and noncovalent bonds. Existing reference transport and
+stereo property tests are unchanged.
+
+Raw results/build logs are scratch/s3d6-{before,after}-{allocations,timings}.*;
+the full measurement table is scratch/s3d6-comparison.md. Verification logs use
+scratch/s3d6-{focused-tests,gate,clippy,fmt}.log. The reviewed diff is
+scratch/s3d6-incremental.diff. S3d7 is next.
 
 
 ## Staged specification updates

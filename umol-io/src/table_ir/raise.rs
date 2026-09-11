@@ -7,7 +7,7 @@
 //! interpretation path. Raw MOL parity is ignored.
 
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -71,13 +71,9 @@ impl TryIntoIr<Molecule> for &TableMolecule {
 
     fn try_into_ir(self, context: &Self::Context) -> Result<Molecule, RaiseError> {
         let neighbors = self.atom_neighbors();
-        let mut configurations = HashMap::with_capacity(self.stereo_bonds.len());
-        for frame in &self.stereo_bonds {
-            let constraint = raise_cis_trans_stereo(self, &neighbors, frame)?;
-            if configurations.insert(frame.bond, constraint).is_some() {
-                return Err(RaiseError::DuplicateStereoBond { bond: frame.bond });
-            }
-        }
+        let mut frames: Vec<_> = self.stereo_bonds.iter().collect();
+        frames.sort_unstable_by_key(|frame| frame.bond);
+        let mut frames = frames.into_iter().peekable();
         let atoms: Vec<AtomForm> = self
             .atoms
             .iter()
@@ -95,6 +91,16 @@ impl TryIntoIr<Molecule> for &TableMolecule {
         let mut dative_bonds: Vec<(Vec<AtomId>, AtomId, DativeBondForm)> = Vec::new();
         let mut noncovalent_bonds = Vec::new();
         for (bond_idx, b) in self.bonds.iter().enumerate() {
+            let constraint =
+                if let Some(frame) = frames.next_if(|frame| frame.bond as usize == bond_idx) {
+                    let constraint = raise_cis_trans_stereo(self, &neighbors, frame)?;
+                    if frames.peek().is_some_and(|next| next.bond == frame.bond) {
+                        return Err(RaiseError::DuplicateStereoBond { bond: frame.bond });
+                    }
+                    Some(constraint)
+                } else {
+                    None
+                };
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
@@ -112,11 +118,15 @@ impl TryIntoIr<Molecule> for &TableMolecule {
                 dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
                 let mut bond_form = b.try_into_ir(context)?;
-                if let Some(constraint) = configurations.remove(&(bond_idx as u32)) {
+                if let Some(constraint) = constraint {
                     bond_form.constraints.set(constraint);
                 }
                 bonds.push((a_idx, b_idx, bond_form));
             }
+        }
+
+        if let Some(frame) = frames.next() {
+            return Err(RaiseError::StereoBondIndexOutOfBounds { bond: frame.bond });
         }
 
         let multicenter_bond: Vec<(Vec<AtomId>, MulticenterBondForm)> = self
@@ -452,7 +462,9 @@ mod tests {
     use umol_chem::element::Element;
     use umol_chem::spin::SpinMultiplicity;
     use umol_graph_core::{EdgeId, GraphRemapping, NodeId, Remapping};
-    use umol_graph_ir::ir::{AtomConstraintsForm, BondId, Entity, MoleculeRemapping, StereoAtomId};
+    use umol_graph_ir::ir::{
+        AtomConstraintsForm, BondId, Entity, MoleculeRemapping, NoncovalentBondKind, StereoAtomId,
+    };
 
     use super::*;
     use crate::ctfile::parse_mol_to_ir;
@@ -1462,6 +1474,102 @@ mod tests {
     }
 
     #[rstest]
+    #[case::ordered([0,1])]
+    #[case::reversed([1,0])]
+    fn test_table_molecule_try_into_ir_bond_frame_order(#[case] order: [usize; 2]) {
+        let mut table = TableMolecule::empty();
+        table.atoms = vec![TableAtom::from_element(Element::C); 12];
+        table.bonds = vec![
+            TableBond {
+                donation: Some(TableBondDonation::Donating),
+                ..TableBond::new(8, 9, TableBondOrder::Single)
+            },
+            TableBond::new(0, 1, TableBondOrder::Single),
+            TableBond::new(1, 2, TableBondOrder::Double),
+            TableBond::new(2, 3, TableBondOrder::Single),
+            TableBond {
+                noncovalent: Some(BondNoncovalent::Hydrogen),
+                ..TableBond::new(10, 11, TableBondOrder::Single)
+            },
+            TableBond::new(4, 5, TableBondOrder::Single),
+            TableBond::new(5, 6, TableBondOrder::Double),
+            TableBond::new(6, 7, TableBondOrder::Single),
+        ];
+        let frames = [
+            StereoBond {
+                bond: 2,
+                configuration: BondConfiguration::Framed {
+                    references: [0, 3],
+                    relation: BondRelation::OppositeSide,
+                },
+            },
+            StereoBond {
+                bond: 6,
+                configuration: BondConfiguration::Either,
+            },
+        ];
+        table.stereo_bonds = order.map(|i| frames[i].clone()).to_vec();
+        let mut opposite = BondForm::new(NumForm::Lit(2));
+        opposite.constraints.set(BondConstraintForm::CisTransStereo(
+            CisTransStereoForm::stereo(StereoCoset::Lit(1)),
+        ));
+        let mut either = BondForm::new(NumForm::Lit(2));
+        either.constraints.set(BondConstraintForm::CisTransStereo(
+            CisTransStereoForm::stereo(StereoCoset::Undetermined),
+        ));
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: table
+                .atoms
+                .iter()
+                .map(|atom| atom.try_into_ir(&()).unwrap())
+                .collect(),
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::new(NumForm::Lit(1))),
+                (AtomId(1), AtomId(2), opposite),
+                (AtomId(2), AtomId(3), BondForm::new(NumForm::Lit(1))),
+                (AtomId(4), AtomId(5), BondForm::new(NumForm::Lit(1))),
+                (AtomId(5), AtomId(6), either),
+                (AtomId(6), AtomId(7), BondForm::new(NumForm::Lit(1))),
+            ],
+            dative: vec![(
+                vec![AtomId(8)],
+                AtomId(9),
+                DativeBondForm::new(NumForm::Lit(1)),
+            )],
+            noncovalent: vec![(
+                [AtomId(10), AtomId(11)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            ..Default::default()
+        });
+        let original = table.clone();
+        assert_eq!((&table).try_into_ir(&()), Ok(expected));
+        assert_eq!(table, original);
+    }
+
+    #[rstest]
+    #[case::duplicate(&[3,1,3], RaiseError::DuplicateStereoBond { bond: 3 })]
+    #[case::invalid(&[5,1,3], RaiseError::StereoBondIndexOutOfBounds { bond: 5 })]
+    #[case::maximum_index(&[u32::MAX,3,1], RaiseError::StereoBondIndexOutOfBounds { bond: u32::MAX })]
+    fn test_table_molecule_try_into_ir_bond_frame_order_error(
+        #[case] sites: &[u32],
+        #[case] expected: RaiseError,
+    ) {
+        let mut table = Smiles::parse("FC=CC=CF").unwrap().into_table_ir();
+        table.stereo_bonds = sites
+            .iter()
+            .map(|&bond| StereoBond {
+                bond,
+                configuration: BondConfiguration::Either,
+            })
+            .collect();
+        let original = table.clone();
+        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        assert_eq!(result, Err(expected));
+        assert_eq!(table, original);
+    }
+
+    #[rstest]
     fn test_table_molecule_try_into_ir_bond_relations() {
         let mut table = Smiles::parse("N.B.FC=CF").unwrap().into_table_ir();
         let mut dative = TableBond::new(0, 1, TableBondOrder::Single);
@@ -1486,6 +1594,26 @@ mod tests {
         table.stereo_bonds[0].bond = 0;
         let result: Result<Molecule, _> = (&table).try_into_ir(&());
         assert_eq!(result, Err(RaiseError::UnsupportedStereoBond { bond: 0 }));
+    }
+
+    #[rstest]
+    #[case::donating(Some(TableBondDonation::Donating), None)]
+    #[case::accepting(Some(TableBondDonation::Accepting), None)]
+    #[case::shared(Some(TableBondDonation::Shared), None)]
+    #[case::noncovalent(None, Some(BondNoncovalent::Hydrogen))]
+    fn test_table_molecule_try_into_ir_bond_relations_error(
+        #[case] donation: Option<TableBondDonation>,
+        #[case] noncovalent: Option<BondNoncovalent>,
+    ) {
+        let mut table = Smiles::parse("FC=CF").unwrap().into_table_ir();
+        table.bonds[1].donation = donation;
+        table.bonds[1].noncovalent = noncovalent;
+        table.stereo_bonds = vec![StereoBond {
+            bond: 1,
+            configuration: BondConfiguration::Either,
+        }];
+        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        assert_eq!(result, Err(RaiseError::UnsupportedStereoBond { bond: 1 }));
     }
 
     #[rstest]
