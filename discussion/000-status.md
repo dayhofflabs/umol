@@ -34,6 +34,9 @@ the statuses recorded here remain authoritative.
   documentation, and the eventual arXiv link.
 - [213 - Collapsing the editor's overlay storage](213-editor-overlay-storage-2026-08-27.md)
   records the proposed entity-set abstraction for editor overlays.
+- [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
+  records the structural program: test relocation, mechanical checks, the crate split, and the
+  tiered change gate; doc 117 §5 records the participant algebra it depends on.
 
 ## Document index
 
@@ -152,7 +155,7 @@ the statuses recorded here remain authoritative.
 | [114-atom-bond-interning-2026-06-16.md](114-atom-bond-interning-2026-06-16.md)                                   | Proposed      | 2026-07-27   | Deferred forward-looking design.                                                                           |
 | [115-variable-facility-2026-06-16.md](115-variable-facility-2026-06-16.md)                                       | Proposed      | 2026-09-05   | Binding syntax, environment representation, and implementation remain deferred.                             |
 | [116-dative-bond-birelation-2026-06-18.md](116-dative-bond-birelation-2026-06-18.md)                             | Completed     | 2026-06-18   |                                                                                                            |
-| [117-entity-model-extensibility-2026-06-20.md](117-entity-model-extensibility-2026-06-20.md)                     | Proposed      | 2026-07-27   | Analysis only; open entity-model decisions remain and no code is authorized.                               |
+| [117-entity-model-extensibility-2026-06-20.md](117-entity-model-extensibility-2026-06-20.md)                     | Proposed      | 2026-09-10   | §5 participant algebra recorded; design and names to settle before any code.                              |
 | [118-validator-architecture-2026-06-20.md](118-validator-architecture-2026-06-20.md)                             | Completed     | 2026-06-20   |                                                                                                            |
 | [119-umol-perm-review-2026-06-21.md](119-umol-perm-review-2026-06-21.md)                                         | Completed     | 2026-08-31   | A dated addendum corrects the plan step 5 record; see doc 206 F10.                                         |
 | [120-molecular-graph-generation-2026-06-21.md](120-molecular-graph-generation-2026-06-21.md)                     | Proposed      | 2026-07-27   | Architecture proposal with decisions required before implementation planning.                              |
@@ -261,3 +264,4 @@ the statuses recorded here remain authoritative.
 | [224-smiles-ring-closure-frame-2026-09-08.md](224-smiles-ring-closure-frame-2026-09-08.md)                       | Completed     | 2026-09-09   |                                                                                                               |
 | [225-depiction-problems-2026-09-09.md](225-depiction-problems-2026-09-09.md)                                     | Proposed      | 2026-09-09  | Settle geometry ownership and coordinate verification, substituent stereo marks, and directional labels.      |
 | [226-smiles-roundtrip-design-2026-09-10.md](226-smiles-roundtrip-design-2026-09-10.md)                           | In Progress   | 2026-09-10  | S3d frame publication and producer migration is next.                                                    |
+| [227-repository-structure-hygiene-2026-09-10.md](227-repository-structure-hygiene-2026-09-10.md)                 | Proposed      | 2026-09-10   | Settle thresholds, check tooling, tiered gate, and the order against the doc 117 collapse and crate split. |
