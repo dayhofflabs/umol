@@ -1,5 +1,6 @@
 //! SMILES parser
 
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
@@ -24,7 +25,9 @@ use self::utils::{
 };
 use super::config::{SmilesIoConfig, SmilesSyntaxFlags};
 use super::error::ParseError;
-use crate::table_ir::{ExtendedMolecule, ExtendedReaction, Molecule, Reaction, SourceFormat, Span};
+use crate::table_ir::{
+    AtomNeighbors, ExtendedMolecule, ExtendedReaction, Molecule, Reaction, SourceFormat, Span,
+};
 
 const MAX_INITIAL_TABLE_CAPACITY: usize = 64;
 
@@ -34,6 +37,7 @@ pub(crate) fn parse_molecule(
     config: &SmilesIoConfig,
 ) -> Result<Molecule, ParseError> {
     let flags = config.syntax_flags;
+    let neighbors = OnceCell::new();
     if input.is_empty() {
         return Ok(Molecule::empty());
     }
@@ -47,7 +51,7 @@ pub(crate) fn parse_molecule(
     let has_cx_annotations =
         flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let (remaining, (mut mol, ring_bonds, _)) =
-        parse_smiles_inner(input, 0, false, has_cx_annotations, flags, None)?;
+        parse_smiles_inner(input, 0, false, has_cx_annotations, flags, None, &neighbors)?;
 
     // Inner parser stops at whitespace.
     let trimmed = remaining.trim_ascii_start();
@@ -60,7 +64,7 @@ pub(crate) fn parse_molecule(
         let mut entries = parse_cx_annotations(trimmed, flags)?;
         let bond_map = BondIndexMap::new(ring_bonds, mol.bonds.len());
         remap_cx_bond_indices(&mut entries, &bond_map)?;
-        update_molecule(&mut mol, entries)?;
+        update_molecule(&mut mol, entries, &neighbors)?;
     }
 
     Ok(mol)
@@ -72,6 +76,7 @@ pub(crate) fn parse_reaction(
     config: &SmilesIoConfig,
 ) -> Result<Reaction, ParseError> {
     let flags = config.syntax_flags;
+    let neighbors = [OnceCell::new(), OnceCell::new(), OnceCell::new()];
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
         flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
@@ -96,6 +101,7 @@ pub(crate) fn parse_reaction(
         has_cx_annotations,
         flags,
         Some((&mut atom_mapping, false)),
+        &neighbors[0],
     )?;
     offset = new_offset;
     remaining = rest;
@@ -112,8 +118,15 @@ pub(crate) fn parse_reaction(
         offset += 1;
 
         // Agents: parse one side-supermolecule until '>'.
-        let (rest, (agents_parsed, agents_ring_bonds, new_offset)) =
-            parse_smiles_inner(remaining, offset, true, has_cx_annotations, flags, None)?;
+        let (rest, (agents_parsed, agents_ring_bonds, new_offset)) = parse_smiles_inner(
+            remaining,
+            offset,
+            true,
+            has_cx_annotations,
+            flags,
+            None,
+            &neighbors[1],
+        )?;
         offset = new_offset;
         remaining = rest;
         agents = agents_parsed;
@@ -136,6 +149,7 @@ pub(crate) fn parse_reaction(
         has_cx_annotations,
         flags,
         Some((&mut atom_mapping, true)),
+        &neighbors[2],
     )?;
 
     let mut reaction = Reaction {
@@ -170,7 +184,7 @@ pub(crate) fn parse_reaction(
             &mut split.2,
             &BondIndexMap::new(product_ring_bonds, reaction.products.bond_count()),
         )?;
-        update_reaction(&mut reaction, split)?;
+        update_reaction(&mut reaction, split, &neighbors)?;
     }
     Ok(reaction)
 }
@@ -183,6 +197,7 @@ fn parse_smiles_inner<'a>(
     store_rings: bool,
     flags: SmilesSyntaxFlags,
     mapping: Option<(&mut AtomMapping, bool)>,
+    neighbors: &OnceCell<AtomNeighbors>,
 ) -> Result<(&'a [u8], (Molecule, Vec<(usize, usize)>, usize)), ParseError> {
     let extended_bonds = flags.contains(SmilesSyntaxFlags::EXTENDED_BONDS);
     let mut i = 0usize;
@@ -332,7 +347,7 @@ fn parse_smiles_inner<'a>(
         return Err(ParseError::InvalidToken { pos: offset + i });
     }
 
-    let (mol, ring_bonds) = builder.finish(offset)?;
+    let (mol, ring_bonds) = builder.finish(offset, neighbors)?;
     let new_offset = offset + i;
     Ok((&input[i..], (mol, ring_bonds, new_offset)))
 }
@@ -361,6 +376,7 @@ pub fn parse_extended_smiles_bytes_with(
     config: &SmilesIoConfig,
 ) -> Result<ExtendedMolecule, ParseError> {
     let flags = config.syntax_flags;
+    let neighbors = OnceCell::new();
 
     if input.is_empty() {
         return Ok(ExtendedMolecule::empty());
@@ -370,7 +386,7 @@ pub fn parse_extended_smiles_bytes_with(
     let has_cx_annotations =
         flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let (remaining, (mut mol, ring_bonds, _)) =
-        parse_extended_smiles_inner(input, 0, false, has_cx_annotations, flags, None)?;
+        parse_extended_smiles_inner(input, 0, false, has_cx_annotations, flags, None, &neighbors)?;
 
     // Inner parser stops at whitespace. Leading whitespace is not allowed
     // (exception: whitespace-only input is allowed)
@@ -387,7 +403,7 @@ pub fn parse_extended_smiles_bytes_with(
         let mut entries = parse_extended_cx_annotations(remaining.trim_ascii_start(), flags)?;
         let bond_map = BondIndexMap::new(ring_bonds, mol.bonds.len());
         remap_cx_bond_indices(&mut entries, &bond_map)?;
-        update_extended_molecule(&mut mol, entries)?;
+        update_extended_molecule(&mut mol, entries, &neighbors)?;
     }
 
     Ok(mol)
@@ -417,6 +433,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
     config: &SmilesIoConfig,
 ) -> Result<ExtendedReaction, ParseError> {
     let flags = config.syntax_flags;
+    let neighbors = [OnceCell::new(), OnceCell::new(), OnceCell::new()];
 
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
@@ -441,6 +458,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
         has_cx_annotations,
         flags,
         Some((&mut atom_mapping, false)),
+        &neighbors[0],
     )?;
     offset = new_offset;
     remaining = rest;
@@ -456,8 +474,15 @@ pub fn parse_extended_reaction_smiles_bytes_with(
         remaining = &remaining[1..];
         offset += 1;
 
-        let (rest, (agents_parsed, agents_ring_bonds, new_offset)) =
-            parse_extended_smiles_inner(remaining, offset, true, has_cx_annotations, flags, None)?;
+        let (rest, (agents_parsed, agents_ring_bonds, new_offset)) = parse_extended_smiles_inner(
+            remaining,
+            offset,
+            true,
+            has_cx_annotations,
+            flags,
+            None,
+            &neighbors[1],
+        )?;
         offset = new_offset;
         remaining = rest;
         agents = agents_parsed;
@@ -480,6 +505,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
         has_cx_annotations,
         flags,
         Some((&mut atom_mapping, true)),
+        &neighbors[2],
     )?;
 
     let mut reaction = ExtendedReaction {
@@ -514,7 +540,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
             &mut split.2,
             &BondIndexMap::new(product_ring_bonds, reaction.products.bond_count()),
         )?;
-        update_extended_reaction(&mut reaction, split)?;
+        update_extended_reaction(&mut reaction, split, &neighbors)?;
     }
     Ok(reaction)
 }
@@ -527,6 +553,7 @@ fn parse_extended_smiles_inner<'a>(
     store_rings: bool,
     flags: SmilesSyntaxFlags,
     mapping: Option<(&mut AtomMapping, bool)>,
+    neighbors: &OnceCell<AtomNeighbors>,
 ) -> Result<(&'a [u8], (ExtendedMolecule, Vec<(usize, usize)>, usize)), ParseError> {
     let extended_bonds = flags.contains(SmilesSyntaxFlags::EXTENDED_BONDS);
     let mut i = 0usize;
@@ -673,7 +700,7 @@ fn parse_extended_smiles_inner<'a>(
         return Err(ParseError::InvalidToken { pos: offset + i });
     }
 
-    let (mol, ring_bonds) = builder.finish(offset)?;
+    let (mol, ring_bonds) = builder.finish(offset, neighbors)?;
     let new_offset = offset + i;
     Ok((&input[i..], (mol, ring_bonds, new_offset)))
 }

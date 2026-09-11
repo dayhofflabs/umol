@@ -1,5 +1,7 @@
 //! Bond frames from supplied geometry and explicit CTfile/CX annotations.
 
+use std::cell::OnceCell;
+
 use smallvec::SmallVec;
 use umol_geometric_core::{same_side_of_axis, Point3D};
 
@@ -19,6 +21,7 @@ pub(crate) enum StereoDerivationError {
 
 /// Derive frames in table order, using supplied geometry only where no Either code applies.
 /// Existing parser-produced frames are unique and ordered by bond; retain their references.
+/// Reuse the lookup only with the same atom count, bond-table indices, and endpoints.
 pub(crate) fn derive_stereo_bonds<B>(
     atom_count: usize,
     bonds: &[B],
@@ -26,6 +29,7 @@ pub(crate) fn derive_stereo_bonds<B>(
     positions: Option<&[Point3D]>,
     mut frames: Vec<StereoBond>,
     mut bond_stereo_assertions: Vec<(u32, BondStereo)>,
+    neighbors: &OnceCell<AtomNeighbors>,
 ) -> Result<Vec<StereoBond>, StereoDerivationError> {
     for &(bond, _) in &bond_stereo_assertions {
         let Some((_, order, _)) = bonds.get(bond as usize).map(&bond_fields) else {
@@ -35,7 +39,6 @@ pub(crate) fn derive_stereo_bonds<B>(
             return Err(StereoDerivationError::UnsupportedSite { bond });
         }
     }
-    let neighbors = AtomNeighbors::new(atom_count, bonds.iter().map(|bond| bond_fields(bond).0));
     for (atoms, _, wedge) in bonds.iter().map(&bond_fields) {
         let Some(wedge) = wedge.filter(|wedge| {
             matches!(
@@ -52,6 +55,9 @@ pub(crate) fn derive_stereo_bonds<B>(
         if atom as usize >= atom_count {
             return Err(StereoDerivationError::AtomIndexOutOfBounds { atom });
         }
+        let neighbors = neighbors.get_or_init(|| {
+            AtomNeighbors::new(atom_count, bonds.iter().map(|bond| bond_fields(bond).0))
+        });
         let mut partners = neighbors
             .neighbors(atom)
             .iter()
@@ -116,6 +122,9 @@ pub(crate) fn derive_stereo_bonds<B>(
                 return Err(StereoDerivationError::AtomIndexOutOfBounds { atom });
             }
         }
+        let neighbors = neighbors.get_or_init(|| {
+            AtomNeighbors::new(atom_count, bonds.iter().map(|bond| bond_fields(bond).0))
+        });
         let substituents = |endpoint, other| {
             let mut atoms = SmallVec::<[u32; 2]>::new();
             let mut excess = false;

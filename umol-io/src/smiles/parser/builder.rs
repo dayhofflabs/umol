@@ -1,5 +1,6 @@
 //! Molecule builder for SMILES parser
 
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::iter;
 
@@ -10,9 +11,9 @@ use super::super::error::ParseError;
 use super::stereo::{derive_stereo_bonds, DirectionMarker};
 use super::utils::{invalid_ring_context, make_bond, make_extended_bond, Frame};
 use crate::table_ir::{
-    Atom, AtomPair, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality,
-    ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, StereoAtom,
-    StereoBond, StereoLigand, WildcardAtom, Winding,
+    Atom, AtomNeighbors, AtomPair, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder,
+    Chirality, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span,
+    StereoAtom, StereoBond, StereoLigand, WildcardAtom, Winding,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -746,6 +747,7 @@ impl<'a, T: Target> Builder<'a, T> {
     pub(super) fn finish(
         self,
         offset: usize,
+        neighbors: &OnceCell<AtomNeighbors>,
     ) -> Result<(T::Molecule, Vec<(usize, usize)>), ParseError> {
         if let Some((_, _, _, pos)) = self.pending_bond {
             return Err(ParseError::TrailingBond { pos: offset + pos });
@@ -768,11 +770,16 @@ impl<'a, T: Target> Builder<'a, T> {
                 open_pos: offset + open_pos,
             });
         }
-        let stereo_bonds = derive_stereo_bonds(self.atoms.len(), &self.bond_table, |entry| {
-            let (bond, direction) = entry.as_ref().expect("all ring slots completed");
-            let (a, b) = T::bond_atoms(bond);
-            (AtomPair::new(a, b), T::bond_order(bond), direction.as_ref())
-        })
+        let stereo_bonds = derive_stereo_bonds(
+            self.atoms.len(),
+            &self.bond_table,
+            |entry| {
+                let (bond, direction) = entry.as_ref().expect("all ring slots completed");
+                let (a, b) = T::bond_atoms(bond);
+                (AtomPair::new(a, b), T::bond_order(bond), direction.as_ref())
+            },
+            neighbors,
+        )
         .map_err(ParseError::from)?;
         let bonds: Vec<_> = self
             .bond_table

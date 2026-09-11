@@ -1,3 +1,5 @@
+use std::cell::OnceCell;
+
 use rstest::{fixture, rstest};
 use umol_geometric_core::Point3D;
 
@@ -57,7 +59,8 @@ fn test_derive_stereo_bonds_geometry(
             |bond| *bond,
             positions.as_deref(),
             Vec::new(),
-            Vec::new()
+            Vec::new(),
+            &OnceCell::new()
         ),
         Ok(expected
             .into_iter()
@@ -105,7 +108,8 @@ fn test_derive_stereo_bonds_substituents(
             |bond| *bond,
             Some(&positions),
             Vec::new(),
-            Vec::new()
+            Vec::new(),
+            &OnceCell::new()
         ),
         Ok(expected
             .into_iter()
@@ -143,7 +147,8 @@ fn test_derive_stereo_bonds_annotations(
             |bond| *bond,
             positions.as_deref(),
             Vec::new(),
-            annotations
+            annotations,
+            &OnceCell::new()
         ),
         expected
     );
@@ -173,7 +178,8 @@ fn test_derive_stereo_bonds_annotations_error(
             |bond| *bond,
             positions.as_deref(),
             Vec::new(),
-            annotations
+            annotations,
+            &OnceCell::new()
         ),
         expected
     );
@@ -194,7 +200,15 @@ fn test_derive_stereo_bonds_wavy(
 ) {
     alkene[0].2 = Some(BondWedge { orientation, taper });
     assert_eq!(
-        derive_stereo_bonds(4, &alkene, |bond| *bond, None, Vec::new(), Vec::new()),
+        derive_stereo_bonds(
+            4,
+            &alkene,
+            |bond| *bond,
+            None,
+            Vec::new(),
+            Vec::new(),
+            &OnceCell::new()
+        ),
         Ok(expected)
     );
 }
@@ -215,7 +229,15 @@ fn test_derive_stereo_bonds_context(
     #[case] expected: Result<Vec<StereoBond>, StereoDerivationError>,
 ) {
     assert_eq!(
-        derive_stereo_bonds(4, &bonds, |bond| *bond, None, Vec::new(), annotations),
+        derive_stereo_bonds(
+            4,
+            &bonds,
+            |bond| *bond,
+            None,
+            Vec::new(),
+            annotations,
+            &OnceCell::new()
+        ),
         expected
     );
 }
@@ -237,7 +259,15 @@ fn test_derive_stereo_bonds_context_error(
     #[case] expected: Result<Vec<StereoBond>, StereoDerivationError>,
 ) {
     assert_eq!(
-        derive_stereo_bonds(4, &bonds, |bond| *bond, None, Vec::new(), annotations),
+        derive_stereo_bonds(
+            4,
+            &bonds,
+            |bond| *bond,
+            None,
+            Vec::new(),
+            annotations,
+            &OnceCell::new()
+        ),
         expected
     );
 }
@@ -297,6 +327,7 @@ fn test_derive_stereo_bonds_incidences(
             } else {
                 vec![]
             },
+            &OnceCell::new()
         ),
         expected
     );
@@ -316,7 +347,8 @@ fn test_derive_stereo_bonds_positions_error(alkene: Vec<(AtomPair, BondOrder, Op
             |bond| *bond,
             Some(&points),
             Vec::new(),
-            Vec::new()
+            Vec::new(),
+            &OnceCell::new()
         ),
         Err(StereoDerivationError::MissingPosition { atom: 3 })
     );
@@ -331,7 +363,8 @@ fn test_derive_stereo_bonds_index_error() {
             |bond| *bond,
             Some(&[]),
             Vec::new(),
-            Vec::new()
+            Vec::new(),
+            &OnceCell::new()
         ),
         Err(StereoDerivationError::AtomIndexOutOfBounds { atom: 2 })
     );
@@ -377,6 +410,7 @@ fn test_derive_stereo_bonds_frames_identity(
         geometry.then_some(positions.as_slice()),
         frames,
         vec![(0, code), (0, code)],
+        &OnceCell::new(),
     )
     .unwrap();
     assert_eq!(actual, expected);
@@ -410,7 +444,8 @@ fn test_derive_stereo_bonds_frames_error(
                 bond: 0,
                 configuration
             }],
-            vec![(0, code)]
+            vec![(0, code)],
+            &OnceCell::new()
         ),
         Err(expected)
     );
@@ -536,4 +571,28 @@ fn test_parse_mol_bytes_to_table_ir_stereo_properties_error(#[values(false, true
         actual,
         Err(CtfileParseError::UnsupportedStereoBond { bond: 0 })
     );
+}
+
+#[rstest]
+#[case::none(vec![], vec![])]
+#[case::either(vec![(1, BondStereo::Either)], vec![StereoBond { bond: 1, configuration: Either }])]
+fn test_derive_stereo_bonds_lookup(
+    alkene: Vec<(AtomPair, BondOrder, Option<BondWedge>)>,
+    #[case] assertions: Vec<(u32, BondStereo)>,
+    #[case] expected: Vec<StereoBond>,
+) {
+    let neighbors = OnceCell::new();
+    assert_eq!(
+        derive_stereo_bonds(
+            4,
+            &alkene,
+            |bond| *bond,
+            None,
+            vec![],
+            assertions,
+            &neighbors
+        ),
+        Ok(expected)
+    );
+    assert_eq!(neighbors.get(), None);
 }

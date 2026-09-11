@@ -1,3 +1,5 @@
+use std::cell::OnceCell;
+
 use proptest::prelude::*;
 
 use super::{derive_stereo_bonds, DirectionMarker};
@@ -56,6 +58,6 @@ proptest! {
         } else {
             vec![]
         };
-        prop_assert_eq!(derive_stereo_bonds(6, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())), Ok(expected));
+        prop_assert_eq!(derive_stereo_bonds(6, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref()), &OnceCell::new()), Ok(expected));
     }
 }

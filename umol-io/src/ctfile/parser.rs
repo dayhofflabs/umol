@@ -3,6 +3,7 @@
 //! This module provides the main entry points for parsing Connection Table (MDL) formats.
 
 use std::borrow::Cow;
+use std::cell::OnceCell;
 
 use indexmap::IndexMap;
 use umol_geometric_core::Point3D;
@@ -196,6 +197,7 @@ fn build_molecule(
         molecule.positions.as_deref(),
         Vec::new(),
         bond_stereo_assertions,
+        &OnceCell::new(),
     )?;
     Ok(molecule)
 }
@@ -238,6 +240,7 @@ fn build_extended_molecule(
         molecule.positions.as_deref(),
         Vec::new(),
         bond_stereo_assertions,
+        &OnceCell::new(),
     )?;
     Ok(molecule)
 }

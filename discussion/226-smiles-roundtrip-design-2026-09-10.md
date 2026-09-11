@@ -1277,12 +1277,12 @@ algorithm are settled above. Exact diagnostic variants and cohesive helper signa
 reconciled with the public contract before their implementing subitem; this is not permission to
 introduce new wrappers, strategies, or chemistry transformations. Implement the supported inverse
 domain with explicit failures, not a promise of general valence inversion or minimum encodings.
-The plan below sequences the work; S0–S2 are complete.
+The plan below sequences the work; S0–S3 are complete.
 
 ## Staged implementation plan
 
-S0–S2 and S3a–S3d, including allocation follow-ups S3d1–S3d7, are complete.
-S3e and later subitems are pending.
+S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
+S4 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1500,7 +1500,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   check long annotations, bracket-heavy input, and uneven reaction sections using inline examples.
   Capacity estimates must not become acceptance limits. Further tuning does not block the other
   allocation corrections or require an open-ended benchmark campaign.
-- **S3e — Operation-local neighbor lookup.** Modules: TableIR raise and parser normalization.
+- **S3e — Operation-local neighbor lookup (completed 2026-09-11).** Modules: TableIR raise and parser normalization.
   **Additive/refactor (green).** [dep: S3d3, S3d4, S3d6]
   Remove unconditional adjacency construction where frame-based raise needs none; derive temporary
   lookup only for remaining operations that require it. Preserve all-table-bond indices and the
@@ -1516,7 +1516,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
 
 The allocation follow-ups preserve the existing representation and source semantics; each closes
 with its affected tests green. S3d1 and S3d2 are independent of S3d3. The dependency paths converge
-at S3d5, then S3d6 and S3e; S3d7 depends only on S3d3. All remain required S3 closeout work.
+at S3d5, then S3d6 and S3e; S3d7 depends only on S3d3. All are complete.
 The allocation policies are settled; private factoring and capacity tuning remain implementation
 choices within the recorded constraints.
 
@@ -3571,6 +3571,90 @@ its table is scratch/s3d7-confirmation-comparison.md. Verification logs use
 scratch/s3d7-{focused-tests,gate,clippy,fmt}.log. The reviewed diff is scratch/s3d7-incremental.diff.
 S3e is next.
 
+
+### S3e implementation and measurements (2026-09-11)
+
+AtomNeighbors now stores contiguous neighbor entries and row offsets privately. Its public
+constructor, Neighbor entries, neighbors slice accessor, and distinct degree accessor are unchanged.
+Construction collects compact endpoint pairs so the existing single-pass iterator input can be
+replayed, counts incidences, and fills rows backwards in original bond-table order. The offset
+array doubles as the fill cursor; no separate cursor allocation or adjacency sorting is needed.
+For a nonempty borrowed table iterator, construction uses three allocations: temporary endpoint
+pairs and the two retained vectors. No full Bond records are copied. Duplicate incidences,
+single self-incidence, invalid-pair omission, and original bond-index gaps are preserved.
+
+Raise uses one lazy operation-local lookup. Ordinary raising and explicit atom-frame raising
+without wedges no longer construct it; Either bond frames also need none. Wedge interpretation
+and framed bond transport share the lookup when needed. The wedge presence test is deliberately
+coarse; this does not add a separate per-atom wedge index. Parser derivation similarly waits for
+an incidence-dependent operation, avoiding lookup for absent evidence, reference-free Either,
+and coordinates without relevant bond sites.
+
+SMILES lexical normalization and subsequent CX updates share one lazy lookup, with independent
+lookups for reactants, agents, and products. Reuse requires unchanged atom count, bond-table
+indices, and endpoints. The current CX updates preserve those properties; they may change bond
+attributes, which derivation reads from the current tables. CTfile normalization uses the same
+lazy derivation path. These caches are local variables, not TableIR fields. No public symbols,
+visibility, construction boundaries, or conversion guarantees changed. TableIR remains tables;
+final Graph adjacency does not replace the all-table incidence lookup. No unused graph-core
+adapter or new adjacency abstraction was introduced; traversal adaptation belongs at its consumer.
+
+New tests compare contiguous lookup against an independent direct incidence scan, including
+duplicates, self pairs, invalid endpoints, and bond-index gaps. Exact cases verify skipped lookup
+for absent evidence and Either, and independent reaction sections with uneven indices. Fresh and
+reused lookup paths produce identical complete results or errors for CX codes, compatible and
+contradictory geometry, and bond-order updates. Existing raise, mixed-relation, malformed-index,
+and stereo property laws retain their assertions.
+
+The bounded scratch/s3e-neighbors-bench probe uses inline examples, 64 warmups, and eleven
+512-operation samples. Timings use the normal allocator; a separate build counts allocations.
+Raise input setup and output destruction stay outside timing, and results are checked against
+the warmup output. Before and after timing runs had no concurrent tests or builds. The following
+representative results are medians; requested bytes count cumulative allocation requests, while
+peak bytes measure maximum live allocation during the operation.
+
+| Operation | Allocation calls before → after | Requested bytes before → after | Peak bytes before → after | Time ns before → after |
+| --- | --- | --- | --- | --- |
+| Plain 64-atom MOL parse, basic | 69 → 4 | 14,368 → 10,784 | 14,368 → 10,784 | 10,844.8 → 9,482.7 |
+| Plain 64-atom MOL parse, extended | 69 → 4 | 29,672 → 26,088 | 29,672 → 26,088 | 12,664.1 → 11,140.1 |
+| Plain 64-atom raise | 102 → 37 | 51,828 → 48,244 | 27,320 → 23,736 | 11,774.3 → 10,321.3 |
+| Directional 42-atom parse, basic | 50 → 10 | 15,584 → 14,560 | 12,336 → 10,984 | 2,491.1 → 1,861.8 |
+| Directional 42-atom parse, extended | 50 → 10 | 35,024 → 34,000 | 27,952 → 26,600 | 3,921.2 → 3,251.5 |
+| Directional 42-atom raise | 100 → 60 | 51,188 → 50,164 | 27,152 → 25,800 | 11,506.3 → 10,489.6 |
+| Atom-frame raise | 47 → 42 | 4,216 → 3,992 | 3,224 → 3,000 | 1,648.2 → 1,556.8 |
+| Either-frame raise | 31 → 26 | 3,412 → 3,188 | 2,996 → 2,772 | 1,031.3 → 860.4 |
+| Direction plus CX code parse, basic | 18 → 11 | 6,608 → 6,272 | 5,600 → 5,688 | 754.6 → 632.2 |
+| Direction plus CX code parse, extended | 17 → 10 | 9,200 → 8,864 | 8,720 → 8,808 | 1,075.6 → 851.0 |
+| Branched stereo raise | 39 → 33 | 6,684 → 6,476 | 4,700 → 4,436 | 2,010.8 → 2,034.7 |
+| Plain 64-atom SMILES parse, extended control | 3 → 3 | 31,512 → 31,512 | 24,984 → 24,984 | 2,697.2 → 2,924.3 |
+
+Assessment against the continuing questions:
+
+- **Does the evidence support the case?** Yes. Skipping the plain 64-atom lookup removes 65
+  allocation calls; contiguous construction removes 40 calls for the 42-atom directional chain.
+  MOL parsing and ordinary raise improve about 12%; directional parsing improves 17–25%.
+  Sharing lexical/CX lookup saves seven calls in the small example, but retaining it through CX
+  raises peak live storage by 88 bytes while reducing total requested storage. Timings are not
+  universally better: branched stereo raise is 1.2% slower and the unchanged-allocation extended
+  plain-chain control is 8.4% slower. This is bounded before/after evidence, not a universal speed claim.
+- **What remains for downstream improvement?** Required lookups still replay compact endpoint
+  pairs. Final table/Graph construction, wedge-specific scratch collections, and the previously
+  recorded capacity tradeoffs remain. These results establish no need for another allocation
+  subitem or further tuning; S4a moves to ordinary valence reconstruction.
+- **Should S3e be retained?** Yes. It removes unused whole lookup construction and per-atom
+  allocations, with substantial measured reductions and unchanged public semantics. The small
+  CX peak-lifetime tradeoff is explicit and does not outweigh those savings.
+
+Verification passes: 3,920 IO and 1,066 graph unit tests with properties; 10,223 SMILES, 2,253 MOL,
+and 407 SDF conformance cases; remaining integration/property suites; and strict IO/graph Clippy
+for all targets with those features. One existing graph doctest remains ignored. Formatting and
+diff checks pass. Review covered the complete diff, including lookup producers, cache lifetimes,
+CX mutation boundaries, public contract preservation, and unchanged property assertions.
+
+Raw results are scratch/s3e-{before,after}-{allocations,timings}.csv with corresponding build logs;
+the full measurement table is scratch/s3e-comparison.md. Verification logs are
+scratch/s3e-{focused-tests,gate,clippy,fmt-check}.log. The reviewed diff is
+scratch/s3e-incremental.diff. S3 is complete; S4a is next.
 
 ## Staged specification updates
 

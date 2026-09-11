@@ -7,6 +7,7 @@
 //! interpretation path. Raw MOL parity is ignored.
 
 use std::any::Any;
+use std::cell::OnceCell;
 use std::collections::HashSet;
 
 use smallvec::SmallVec;
@@ -70,7 +71,8 @@ impl TryIntoIr<Molecule> for &TableMolecule {
     type Error = RaiseError;
 
     fn try_into_ir(self, context: &Self::Context) -> Result<Molecule, RaiseError> {
-        let neighbors = self.atom_neighbors();
+        let neighbors = OnceCell::new();
+        let has_wedges = self.bonds.iter().any(|bond| bond.wedge.is_some());
         let mut frames: Vec<_> = self.stereo_bonds.iter().collect();
         frames.sort_unstable_by_key(|frame| frame.bond);
         let mut frames = frames.into_iter().peekable();
@@ -80,8 +82,11 @@ impl TryIntoIr<Molecule> for &TableMolecule {
             .enumerate()
             .map(|(atom_idx, table_atom)| {
                 let mut atom = table_atom.try_into_ir(context)?;
-                if let Some(constraint) = raise_tetrahedral_stereo(self, &neighbors, atom_idx)? {
-                    atom.constraints.set(constraint);
+                if has_wedges {
+                    if let Some(constraint) = raise_tetrahedral_stereo(self, &neighbors, atom_idx)?
+                    {
+                        atom.constraints.set(constraint);
+                    }
                 }
                 Ok(atom)
             })
@@ -305,7 +310,7 @@ fn raise_bond_order(order: TableBondOrder) -> NumForm {
 /// Raise tetrahedral stereo constraint for `atom_idx`.
 fn raise_tetrahedral_stereo(
     mol: &TableMolecule,
-    neighbors: &AtomNeighbors,
+    neighbors: &OnceCell<AtomNeighbors>,
     atom_idx: usize,
 ) -> Result<Option<AtomConstraintForm>, RaiseError> {
     if mol
@@ -315,6 +320,7 @@ fn raise_tetrahedral_stereo(
     {
         return Ok(None);
     }
+    let neighbors = neighbors.get_or_init(|| mol.atom_neighbors());
     let wedged = wedge_bond_neighbors(mol, neighbors, atom_idx);
     // An either wedge at an atom with one double bond marks that bond; see
     // parser-produced bond frames.
@@ -365,7 +371,7 @@ fn raise_tetrahedral_stereo(
 /// Transport a table frame to the sorted endpoint blocks used by the cis/trans constraint.
 fn raise_cis_trans_stereo(
     mol: &TableMolecule,
-    neighbors: &AtomNeighbors,
+    neighbors: &OnceCell<AtomNeighbors>,
     frame: &StereoBond,
 ) -> Result<BondConstraintForm, RaiseError> {
     let bond_idx = frame.bond as usize;
@@ -392,6 +398,7 @@ fn raise_cis_trans_stereo(
             {
                 return Err(unsupported());
             }
+            let neighbors = neighbors.get_or_init(|| mol.atom_neighbors());
             let mut action = [0, 1, 2, 3];
             let mut blocks = [SmallVec::<[u32; 2]>::new(), SmallVec::<[u32; 2]>::new()];
             for (side, &endpoint) in endpoints.iter().enumerate() {
@@ -1101,7 +1108,7 @@ mod tests {
             AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::stereo(coset))
         });
         assert_eq!(
-            raise_tetrahedral_stereo(&mol, &mol.atom_neighbors(), atom_idx),
+            raise_tetrahedral_stereo(&mol, &OnceCell::new(), atom_idx),
             Ok(expected)
         );
     }
@@ -1119,7 +1126,7 @@ mod tests {
         #[case] expected: RaiseError,
     ) {
         assert_eq!(
-            raise_tetrahedral_stereo(&mol, &mol.atom_neighbors(), atom_idx),
+            raise_tetrahedral_stereo(&mol, &OnceCell::new(), atom_idx),
             Err(expected)
         );
     }
@@ -1185,7 +1192,7 @@ mod tests {
             mol.stereo_bonds
                 .iter()
                 .find(|frame| frame.bond as usize == bond_idx)
-                .map(|frame| raise_cis_trans_stereo(&mol, &mol.atom_neighbors(), frame))
+                .map(|frame| raise_cis_trans_stereo(&mol, &OnceCell::new(), frame))
                 .transpose(),
             Ok(expected)
         );
@@ -1655,7 +1662,7 @@ mod tests {
             },
         };
         assert_eq!(
-            raise_cis_trans_stereo(&table, &table.atom_neighbors(), &frame),
+            raise_cis_trans_stereo(&table, &OnceCell::new(), &frame),
             expected.map(
                 |value| BondConstraintForm::CisTransStereo(CisTransStereoForm::stereo(
                     StereoCoset::Lit(value)
@@ -1706,7 +1713,7 @@ mod tests {
             },
         };
         assert_eq!(
-            raise_cis_trans_stereo(&table, &table.atom_neighbors(), &frame),
+            raise_cis_trans_stereo(&table, &OnceCell::new(), &frame),
             expected.map(
                 |value| BondConstraintForm::CisTransStereo(CisTransStereoForm::stereo(
                     StereoCoset::Lit(value)

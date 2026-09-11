@@ -1,3 +1,5 @@
+use std::cell::OnceCell;
+
 use rstest::rstest;
 
 use super::{derive_stereo_bonds, DirectionError, DirectionMarker};
@@ -140,7 +142,12 @@ fn test_derive_stereo_bonds_order(
         .map(|(atoms, order, direction)| (atoms, order, direction.map(DirectionMarker::new)))
         .collect();
     assert_eq!(
-        derive_stereo_bonds(5, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())),
+        derive_stereo_bonds(
+            5,
+            &bonds,
+            |bond| (bond.0, bond.1, bond.2.as_ref()),
+            &OnceCell::new()
+        ),
         Ok(vec![StereoBond {
             bond,
             configuration: BondConfiguration::Framed {
@@ -167,7 +174,12 @@ fn test_derive_stereo_bonds_incidences(#[case] first: &[u32], #[case] second: &[
         }));
     }
     assert_eq!(
-        derive_stereo_bonds(6, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())),
+        derive_stereo_bonds(
+            6,
+            &bonds,
+            |bond| (bond.0, bond.1, bond.2.as_ref()),
+            &OnceCell::new()
+        ),
         Ok(vec![StereoBond {
             bond: 0,
             configuration: BondConfiguration::Framed {
@@ -202,7 +214,12 @@ fn test_derive_stereo_bonds_incidence_error(
         .map(|(atoms, order, direction)| (atoms, order, direction.map(DirectionMarker::new)))
         .collect();
     assert_eq!(
-        derive_stereo_bonds(atom_count, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())),
+        derive_stereo_bonds(
+            atom_count,
+            &bonds,
+            |bond| (bond.0, bond.1, bond.2.as_ref()),
+            &OnceCell::new()
+        ),
         Err(expected)
     );
 }
@@ -279,7 +296,12 @@ fn test_derive_stereo_bonds_exhaustive() {
             Ok(vec![])
         };
         assert_eq!(
-            derive_stereo_bonds(6, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())),
+            derive_stereo_bonds(
+                6,
+                &bonds,
+                |bond| (bond.0, bond.1, bond.2.as_ref()),
+                &OnceCell::new()
+            ),
             expected,
             "marker assignment {code}"
         );

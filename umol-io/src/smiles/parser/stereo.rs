@@ -1,6 +1,6 @@
 //! Double-bond frames derived from completed lexical direction markers.
 
-use std::cell::Cell;
+use std::cell::{Cell, OnceCell};
 
 use smallvec::SmallVec;
 
@@ -33,15 +33,16 @@ pub(super) enum DirectionError {
 
 /// Derive local frames in bond-table order. Directions use the first endpoint's viewpoint.
 /// Accepts fresh markers and marks participation without consuming their directions.
+/// Reuse the lookup only with the same atom count, bond-table indices, and endpoints.
 pub(super) fn derive_stereo_bonds<B>(
     atom_count: usize,
     bonds: &[B],
     bond_fields: impl Fn(&B) -> (AtomPair, BondOrder, Option<&DirectionMarker>),
+    neighbors: &OnceCell<AtomNeighbors>,
 ) -> Result<Vec<StereoBond>, DirectionError> {
     if !bonds.iter().any(|bond| bond_fields(bond).2.is_some()) {
         return Ok(Vec::new());
     }
-    let neighbors = AtomNeighbors::new(atom_count, bonds.iter().map(|bond| bond_fields(bond).0));
     let mut frames = Vec::new();
     for (bond, (atoms, order, _)) in bonds.iter().map(&bond_fields).enumerate() {
         for atom in [atoms.first(), atoms.second()] {
@@ -52,6 +53,9 @@ pub(super) fn derive_stereo_bonds<B>(
         if order != BondOrder::Double {
             continue;
         }
+        let neighbors = neighbors.get_or_init(|| {
+            AtomNeighbors::new(atom_count, bonds.iter().map(|bond| bond_fields(bond).0))
+        });
         let marked = |endpoint, other| {
             neighbors.neighbors(endpoint).iter().any(|neighbor| {
                 neighbor.atom != other

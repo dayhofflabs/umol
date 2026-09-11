@@ -1,4 +1,5 @@
 use std::array;
+use std::cell::OnceCell;
 
 use proptest::prelude::*;
 use umol_geometric_core::Point3D;
@@ -32,7 +33,7 @@ proptest! {
         if reverse_atoms { points.reverse(); }
         if reverse_bonds { bonds.reverse(); }
         let references = [0,3];
-        prop_assert_eq!(derive_stereo_bonds(4, &bonds, |bond| *bond, Some(&points), Vec::new(), Vec::new()), Ok(vec![StereoBond {
+        prop_assert_eq!(derive_stereo_bonds(4, &bonds, |bond| *bond, Some(&points), Vec::new(), Vec::new(), &OnceCell::new()), Ok(vec![StereoBond {
             bond:1, configuration:BondConfiguration::Framed {
                 references, relation:if same { BondRelation::SameSide } else { BondRelation::OppositeSide },
             },
@@ -58,7 +59,7 @@ proptest! {
         }}];
         let expected = frames.clone();
         let code = if same {BondStereo::Cis} else {BondStereo::Trans};
-        prop_assert_eq!(derive_stereo_bonds(6, &bonds, |bond| *bond, None, frames, vec![(0,code);copies]), Ok(expected));
+        prop_assert_eq!(derive_stereo_bonds(6, &bonds, |bond| *bond, None, frames, vec![(0,code);copies], &OnceCell::new()), Ok(expected));
     }
 
 }

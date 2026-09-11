@@ -249,16 +249,21 @@ fn test_parse_molecule_cx_frames_error(#[case] input: &str, #[case] expected: Pa
 }
 
 #[rstest]
-fn test_parse_reaction_bond_frames() {
-    let input = b"F/C=C/F>C=C>FC=CF |ctu:3,c:5|";
+#[case::ordinary(b"F/C=C/F>C=C>FC=CF |ctu:3,c:5|", 1, [0,3])]
+#[case::uneven(b"CC.F/C=C/F>C=C>FC=CF |ctu:4,c:6|", 2, [2,5])]
+fn test_parse_reaction_bond_frames(
+    #[case] input: &[u8],
+    #[case] bond: u32,
+    #[case] references: [u32; 2],
+) {
     let config = SmilesIoConfig::chemaxon();
     let basic = parse_reaction(input, &config).unwrap();
     let extended = parse_extended_reaction_smiles_bytes_with(input, &config).unwrap();
     let expected = [
         vec![StereoBond {
-            bond: 1,
+            bond,
             configuration: BondConfiguration::Framed {
-                references: [0, 3],
+                references,
                 relation: BondRelation::OppositeSide,
             },
         }],
@@ -290,4 +295,30 @@ fn test_parse_reaction_bond_frames() {
         ],
         expected
     );
+}
+
+#[rstest]
+#[case::code("|t:1|")]
+#[case::geometry("|(0,1,;0,0,;2,0,;2,-1,)|")]
+#[case::geometry_conflict("|(0,1,;0,0,;2,0,;2,1,)|")]
+#[case::site_order_change("|H:1.1|")]
+#[case::substituent_order_change("|C:0.0|")]
+fn test_update_molecule_lookup(#[case] annotations: &str) {
+    let config = SmilesIoConfig::chemaxon();
+    let neighbors = OnceCell::new();
+    let (_, (mut molecule, _, _)) = parse_smiles_inner(
+        b"F/C=C/F",
+        0,
+        false,
+        true,
+        config.syntax_flags,
+        None,
+        &neighbors,
+    )
+    .unwrap();
+    let entries = parse_cx_annotations(annotations.as_bytes(), config.syntax_flags).unwrap();
+    let mut fresh = molecule.clone();
+    let expected = update_molecule(&mut fresh, entries.clone(), &OnceCell::new()).map(|()| fresh);
+    let actual = update_molecule(&mut molecule, entries, &neighbors).map(|()| molecule);
+    assert_eq!(actual, expected);
 }

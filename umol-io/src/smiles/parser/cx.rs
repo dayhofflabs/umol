@@ -5,6 +5,7 @@
 //! - `parse_cx_annotations`: basic annotations only (for Molecule)
 //! - `parse_extended_cx_annotations`: all annotations (for ExtendedMolecule)
 
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::mem;
 
@@ -26,10 +27,10 @@ use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::table_ir::bond::BondNoncovalent;
 use crate::table_ir::stereo::derive::{derive_stereo_bonds, StereoDerivationError};
 use crate::table_ir::{
-    BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondOrientation, BondStereo,
-    BondTaper, BondWedge, ConfigurationScope, CxAnnotationData, ExtendedMolecule, ExtendedReaction,
-    LinkAtom, Molecule, MulticenterBond, MulticenterSet, Reaction, RingBondCount, SGroup,
-    SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
+    AtomNeighbors, BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondOrientation,
+    BondStereo, BondTaper, BondWedge, ConfigurationScope, CxAnnotationData, ExtendedMolecule,
+    ExtendedReaction, LinkAtom, Molecule, MulticenterBond, MulticenterSet, Reaction, RingBondCount,
+    SGroup, SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
     SGroupData, SGroupDataType, SGroupSubtype, SGroupType, StereoSet, StereoSetRelation,
     SubstitutionCount, UnsaturatedAtom,
 };
@@ -249,7 +250,11 @@ pub fn remap_cx_bond_indices(
 
 /// Update Molecule with parsed CX entries
 /// TODO: Add FragmentGroups, StereoGroups, RelativeStereo, LigandOrder to Molecule?
-pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), ParseError> {
+pub fn update_molecule(
+    mol: &mut Molecule,
+    entries: Vec<CxEntry>,
+    neighbors: &OnceCell<AtomNeighbors>,
+) -> Result<(), ParseError> {
     let mut bond_stereo_assertions = Vec::new();
     let mut stereo_changed = false;
     for entry in entries {
@@ -414,6 +419,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
             mol.positions.as_deref(),
             mem::take(&mut mol.stereo_bonds),
             bond_stereo_assertions,
+            neighbors,
         )?;
     }
     Ok(())
@@ -423,6 +429,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
 pub fn update_extended_molecule(
     mol: &mut ExtendedMolecule,
     entries: Vec<CxEntry>,
+    neighbors: &OnceCell<AtomNeighbors>,
 ) -> Result<(), ParseError> {
     let mut configuration_scope: Option<ConfigurationScope> = None;
     let mut stereo_groups: BTreeMap<u32, StereoSet> = BTreeMap::new();
@@ -764,6 +771,7 @@ pub fn update_extended_molecule(
             mol.positions.as_deref(),
             mem::take(&mut mol.stereo_bonds),
             bond_stereo_assertions,
+            neighbors,
         )?;
     }
     Ok(())
@@ -790,16 +798,17 @@ impl From<StereoDerivationError> for ParseError {
 pub fn update_reaction(
     reaction: &mut Reaction,
     split: (Vec<CxEntry>, Vec<CxEntry>, Vec<CxEntry>),
+    neighbors: &[OnceCell<AtomNeighbors>; 3],
 ) -> Result<(), ParseError> {
     let (reactant_entries, agent_entries, product_entries) = split;
     if !reactant_entries.is_empty() {
-        update_molecule(&mut reaction.reactants, reactant_entries)?;
+        update_molecule(&mut reaction.reactants, reactant_entries, &neighbors[0])?;
     }
     if !agent_entries.is_empty() {
-        update_molecule(&mut reaction.agents, agent_entries)?;
+        update_molecule(&mut reaction.agents, agent_entries, &neighbors[1])?;
     }
     if !product_entries.is_empty() {
-        update_molecule(&mut reaction.products, product_entries)?;
+        update_molecule(&mut reaction.products, product_entries, &neighbors[2])?;
     }
     Ok(())
 }
@@ -807,16 +816,17 @@ pub fn update_reaction(
 pub fn update_extended_reaction(
     reaction: &mut ExtendedReaction,
     split: (Vec<CxEntry>, Vec<CxEntry>, Vec<CxEntry>),
+    neighbors: &[OnceCell<AtomNeighbors>; 3],
 ) -> Result<(), ParseError> {
     let (reactant_entries, agent_entries, product_entries) = split;
     if !reactant_entries.is_empty() {
-        update_extended_molecule(&mut reaction.reactants, reactant_entries)?;
+        update_extended_molecule(&mut reaction.reactants, reactant_entries, &neighbors[0])?;
     }
     if !agent_entries.is_empty() {
-        update_extended_molecule(&mut reaction.agents, agent_entries)?;
+        update_extended_molecule(&mut reaction.agents, agent_entries, &neighbors[1])?;
     }
     if !product_entries.is_empty() {
-        update_extended_molecule(&mut reaction.products, product_entries)?;
+        update_extended_molecule(&mut reaction.products, product_entries, &neighbors[2])?;
     }
     Ok(())
 }
@@ -2733,7 +2743,7 @@ mod tests {
         #[case] check: fn(&Molecule) -> bool,
     ) {
         let mut mol = triatomic_molecule;
-        update_molecule(&mut mol, entries).unwrap();
+        update_molecule(&mut mol, entries, &OnceCell::new()).unwrap();
         assert!(check(&mol));
     }
 
@@ -2769,7 +2779,7 @@ mod tests {
         #[case] check: fn(&ExtendedMolecule) -> bool,
     ) {
         let mut mol = triatomic_extended_molecule;
-        update_extended_molecule(&mut mol, entries).unwrap();
+        update_extended_molecule(&mut mol, entries, &OnceCell::new()).unwrap();
         assert!(check(&mol));
     }
 }
