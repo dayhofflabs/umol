@@ -1281,7 +1281,7 @@ The plan below sequences the work; S0–S2 are complete.
 
 ## Staged implementation plan
 
-S0–S2 are complete; S3a and later subitems are pending.
+S0–S2 and S3a are complete; S3b and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1401,7 +1401,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
 
 ### S3 — Explicit TableIR stereo-bond frames and producer migration
 
-- **S3a — Stereo-bond vocabulary and frame algebra.** Module: umol-io/src/table_ir/stereo.rs
+- **S3a — Stereo-bond vocabulary and frame algebra (completed 2026-09-10).** Module: umol-io/src/table_ir/stereo.rs
   and its exports. **Additive (green).** [dep: S0a, S0b]
   Add StereoBond { bond, configuration }, BondConfiguration::{Either, Framed { references,
   relation }}, and BondRelation::{SameSide, OppositeSide}. Pin endpoint/reference ordering and
@@ -2428,6 +2428,68 @@ cargo fmt --all, its check mode, and git diff --check passed. Final diff review 
 size migration is limited to the agreed path, with no compatibility alias, radius truncation,
 fingerprint golden changes, or modifications to the independent WL size contract. S2 is complete;
 S3a's explicit TableIR stereo-bond vocabulary and frame algebra are next.
+
+## S3a stereo-bond vocabulary and frame algebra — 2026-09-10
+
+Contract for this additive subitem:
+
+- **Types and role:** StereoBond, BondConfiguration, and BondRelation are open TableIR carriers.
+  Public fields and enum variants have exactly the settled shape above; the existing table_ir
+  reexport exposes them. No constructor, validator, conversion, transformation method, or Python
+  binding is added.
+- **Intrinsic representation:** Either has no references; Framed has exactly two actual atom ids
+  and a definite relation. No record means absence of an assertion, distinct from Either.
+- **Context:** the site id indexes the owning molecule's bond table. Reference positions follow
+  that bond's ordered AtomPair endpoints. Index validity, substituent incidence, and compatibility
+  of operative assertions belong to the first consumer requiring those properties, introduced in
+  later subitems. Bare construction does not inspect a molecule or certify chemistry.
+- **Preservation and failures:** this subitem performs no conversion or normalization and adds no
+  fallible operation. Renumbering must preserve reference identity, exchanging the reference slots
+  if the site's ordered endpoints reverse. Bond-table renumbering transports the site id. Selecting
+  minimum-index references is a producer policy, not a representation invariant.
+- **Algebra:** with complete endpoint blocks `[a, b]; [c, d]` and references `[a, c]`, SameSide
+  corresponds to ClassKey::CisTrans coset 0 and OppositeSide to coset 1. Changing one reference
+  exchanges the cosets; changing both or exchanging complete endpoint blocks preserves them.
+  These correspondences are explicit, independent of enum discriminants. Tests use the existing
+  permutation/coset operations and independently specified target frames; they do not introduce
+  a second production frame-transport implementation.
+
+StereoAtom, Winding, and LonePair retain their existing definitions. Parser production, collection
+storage, source-marker retirement, and raise migration remain S3b–S3e work.
+
+Implemented against source commit c59421b1c82932b3989ef855d22353bed3e69015. The public-surface
+review matches the three records/enums, their fields/variants, and the existing table_ir reexport;
+there is no new conversion or remapping API. Rustdoc states endpoint order, site-id transport,
+the distinction between absence and Either, contextual checks, and the explicit coset convention.
+
+The 38 contract cases comprise all eight admissible endpoint-block actions on both configurations,
+six atom/bond renumberings for Either and both definite configurations, and two inadmissible
+cross-endpoint actions on both cosets. Exact target references and complete frames are independent
+case data. Permutation/coset operations and GraphIR StereoBondForm frame transport are checked
+against those expectations, with independent signed side labels for the reference relation.
+Renumbering cases include reversed endpoints, changed site ids, and retained references that are
+no longer minimum-indexed. These are vocabulary/algebra fixtures; integrated producer and consumer
+transport is exercised when those paths adopt the records. No executable algorithm is added in
+S3a, so no new benchmark is needed for this subitem.
+
+Validation passed:
+
+```text
+cargo test -p umol-io --lib table_ir::stereo --offline
+cargo test -p umol-io -p umol-graph
+    --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline
+cargo clippy -p umol-io -p umol-graph --all-targets
+    --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline -- -D warnings
+RUSTDOCFLAGS='-D warnings' cargo doc -p umol-io --no-deps --offline
+cargo fmt --all -- --check
+git diff --check
+```
+
+The final focused run passes all 38 frame-contract cases. The broader gate includes IO unit,
+SMILES property, SMILES/MOL/SDF conformance, and dependent graph unit/integration/property tests.
+Full diff review confirms only the agreed vocabulary, documentation, and contract tests changed;
+the existing atom-stereo types and parser/raise paths are unchanged. S3b source direction
+normalization is next.
 
 ## Staged specification updates
 
