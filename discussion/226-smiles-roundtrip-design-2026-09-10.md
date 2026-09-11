@@ -939,7 +939,8 @@ Atom typing already filters registry rows by element, charge, retained propertie
 asserted/derived incidence constraints. A conservative initial criterion is one completed state
 matching the source; multiple rows yielding the same state need not imply ambiguity. Evaluate
 the proposed retained properties, not the fully ground source atom, which admission may skip.
-These are initial reconstruction criteria to verify, not completed roundtrip coverage.
+These criteria establish ordinary valence reconstruction; the full molecular and external-format
+roundtrip checks remain separate work.
 
 ### Isotope resolution and registry raising (settled during S4a)
 
@@ -998,9 +999,10 @@ distinct. Custom overlapping registry patterns supplied the motivating reproduct
 variants become inadmissible under the registry invariant; regressions must exercise admissible
 non-isotope overlaps instead, preserving the exact-equality law.
 
-S4a has an implementation draft, but is not complete. S4a0a revised its temporary
-default-registry isotope-rejection expectations and its isotope-asserting custom registry fixtures.
-S4a0c completed isotope integration; S4a can now resume against the corrected resolution pipeline.
+S4a is complete after the isotope prerequisites. S4a0a replaced its temporary default-registry
+isotope-rejection expectations and isotope-asserting custom registry fixtures; S4a0c integrated
+the isotope phase. Ordinary valence reconstruction now preserves Natural and explicit masses
+under both candidate sources without a valence-specific isotope policy.
 
 ### Aromatic reconstruction and the inverse check
 
@@ -1343,7 +1345,7 @@ The plan below sequences the work; S0–S3 are complete.
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-S4a has an implementation draft; its S4a0 prerequisites and the remaining S4 work are pending.
+S4a0 and S4a are complete; S4b–S4d remain pending.
 S5 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
@@ -1600,8 +1602,8 @@ changes are reviewed for semantic preservation, not accepted solely because test
 
 ### S4 — GraphIR-only inverse projection
 
-S4a0 groups three isotope-repair prerequisites. Keep the existing S4a draft unfinished until they
-are complete; the draft's default-registry isotope rejection is not an accepted support boundary.
+S4a0 grouped three isotope-repair prerequisites, completed before S4a. The draft's default-registry
+isotope rejection was repaired rather than retained as a support boundary.
 S4a0a's registry change exposed its dependency on isotope resolution and was not an independent
 green milestone. S4a0c has restored the conformance gate through the isotope phase with Natural
 resolver policy; the test harness does not fill isotope fields, and the corpus inputs and
@@ -1755,7 +1757,7 @@ benchmark target passes in Criterion test mode. Logs and the full comparison are
 scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.csv.
 
 - **S4a — Ordinary valence reconstruction.** Modules: resolve/valence.rs and valence
-  atom_typing/counts/registry as needed. **Additive (green).** [dep: S0a, S0b, S4a0c]
+  atom_typing/counts/registry as needed. **Additive (green); completed 2026-09-11.** [dep: S0a, S0b, S4a0c]
   Implement reconstruction from retained GraphIR properties for the initial non-aromatic domain.
   Reuse candidate admission and compare completed states; admission deduplicates exactly equal
   post-meet AtomForms, including constraints, independently of isotope policy and valence tie-break;
@@ -1788,6 +1790,49 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   including aromatic partitions and transported stereo. Only determined matching success publishes
   the projected value; all other outcomes leave the caller unchanged. Test the inverse law and
   atomic failure independently, including candidate ambiguity and configured search limits.
+
+S4a completion (2026-09-11): ValenceResolver::project retains element, isotope, charge, fixed
+implicit H, bonds, entities, and assertions. It opens lone pairs and both unpaired-electron fields
+on a private molecule, admits that reduced input, applies the supplied existing tie-break, and
+publishes only when the selected inherent atom fields exactly match the source. Candidate
+constraints remain admission evidence; projection does not copy them into the output. Exact
+post-meet duplicate elimination remains in the atom-typing producer. No registry pruning API or
+additional production change was needed after S4a0.
+
+The phase requires concrete atoms, literal localized bond orders, and no aromatic evidence,
+dative bonds, or multicenter bonds. Non-concrete atoms, unsupported structures, incomplete
+admissions, and selected-state mismatches have distinct ValenceProjectError variants. Admission
+contradictions and unresolved candidate plurality retain Solution semantics. Every unsuccessful
+outcome leaves the caller unchanged. This is the ordinary valence phase: other entities are
+preserved without interpretation, and the full molecule inverse and bond/system export restrictions
+remain S4b–S4d.
+
+Exact fixtures cover ordinary main-group atoms, charges, radicals, Natural and explicit isotope
+masses, implicit versus explicit H, branches, rings, nitriles, amides, sulfoxides, zwitterions, and
+disconnected components. Custom registries exercise overlapping rows, strict ambiguity,
+MostSaturated selection, unreconstructible pairing/multiplicity, and incomplete candidates.
+Generated inverse tests retain the carbon/radical/isotope domain and add C/N/O/S chains with
+localized charges, lone pairs, single/double bonds, and disconnected components, checking both
+candidate sources and both tie-breaks. Expected source states are constructed independently of
+resolution. Tests remain in the general valence test module and existing project property module.
+
+Verification: graph unit, integration, conformance, and property suites pass with
+PROPTEST_CASES=256 and features conformance,proptest, including 1,326 unit cases, 683 resolution
+conformance cases, and 11 property tests. Graph all-target Clippy with those features and
+-D warnings passes. Logs: scratch/s4a-gate.log and scratch/s4a-clippy.log.
+
+The existing inline projection benchmarks ran with 10 samples, 0.5 s warmup, and 1 s measurement.
+Times below are central estimates in microseconds; these establish current costs, not an
+improvement claim. Projection includes its private copy and candidate admission; the second
+measurement also includes deliberate full re-resolution. Input construction and the caller's
+input clone are outside timing. Full results: scratch/s4a-benchmark.log.
+
+| Input | Counts project | Counts project + resolve | Atom typing project | Atom typing project + resolve |
+| --- | ---: | ---: | ---: | ---: |
+| Methane | 0.393 | 1.991 | 3.740 | 8.804 |
+| Chain, 64 atoms | 22.841 | 74.987 | 244.420 | 524.240 |
+| Methyl radical | 0.431 | 2.018 | 3.794 | 9.427 |
+| Ammonium | 0.401 | 2.030 | 2.121 | 5.911 |
 
 **Gate:** graph unit, conformance, and property suites pass for both valence strategies. Record the
 supported domain and exact unsupported categories. Projection benchmarks include candidate building

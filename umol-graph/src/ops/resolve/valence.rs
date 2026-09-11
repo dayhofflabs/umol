@@ -475,15 +475,47 @@ mod tests {
     #[case::explicit_hydrogen(mol_dsl_concrete!(r#"{:atoms ["C#h3" "H"] :bonds [[0 1 "1"]]}"#), mol_dsl!(r#"{:atoms ["C#i=#c0#h3" "H#i=#c0#h0"] :bonds [[0 1 "1#c0#u0#s"]]}"#))]
     #[case::assertion(mol_dsl_concrete!(r#"{:atoms ["C#h4#D0"]}"#), mol_dsl!(r#"{:atoms ["C#i=#c0#h4#D0"]}"#))]
     fn test_valence_resolver_project_preservation(
+        #[values(ValenceModel::smiles(), ValenceModel::default())] model: ValenceModel,
         #[case] mut molecule: Molecule,
         #[case] expected: Molecule,
     ) {
-        let model = ValenceModel::smiles();
         assert_eq!(
             ValenceResolver::new(&model).project(&mut molecule, model.tie_break),
             Ok(Solution::Determined(ResolveReport::default()))
         );
         assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::branched(mol_dsl_concrete!(r#"{:atoms ["C" "C#h3" "C#h3" "O#h1#n2" "F#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
+    #[case::ring(mol_dsl_concrete!(r#"{:atoms ["C#h2" "C#h2" "O#n2"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#))]
+    #[case::nitrile(mol_dsl_concrete!(r#"{:atoms ["C#h3" "C" "N#n1"] :bonds [[0 1 "1"] [1 2 "3"]]}"#))]
+    #[case::amide(mol_dsl_concrete!(r#"{:atoms ["C#h3" "C" "O#n2" "N#h2#n1"] :bonds [[0 1 "1"] [1 2 "2"] [1 3 "1"]]}"#))]
+    #[case::sulfoxide(mol_dsl_concrete!(r#"{:atoms ["C#h3" "S#n1" "O#n2" "C#h3"] :bonds [[0 1 "1"] [1 2 "2"] [1 3 "1"]]}"#))]
+    #[case::zwitterion(mol_dsl_concrete!(r#"{:atoms ["N#c+#h3" "C#h2" "C" "O#n2" "O#c-#n3"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "2"] [2 4 "1"]]}"#))]
+    #[case::components(mol_dsl_concrete!(r#"{:atoms ["N#c+#h4" "Cl#c-#n4" "C#i13#h3#u1#s2"]}"#))]
+    fn test_valence_resolver_project_roundtrip(
+        #[values(ValenceModel::smiles(), ValenceModel::default())] mut valence: ValenceModel,
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
+        tie_break: ValenceTieBreak,
+        #[case] mut molecule: Molecule,
+    ) {
+        valence.tie_break = tie_break;
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let resolver = Resolver::new(&model);
+        let original = molecule.clone();
+        assert_eq!(
+            resolver.valence.project(&mut molecule, tie_break),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
+        assert_eq!(
+            resolver.resolve(&mut molecule),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
@@ -603,22 +635,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(
-        ValenceModel::smiles(),
-        Ok(Solution::Determined(ResolveReport::default()))
-    )]
-    #[case::default_registry(
-        ValenceModel::default(),
-        Ok(Solution::Determined(ResolveReport::default()))
-    )]
-    #[case::custom_registry(ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#i*#c0#h4#n0#u0#s")]))), Ok(Solution::Determined(ResolveReport::default())))]
-    fn test_valence_resolver_project_isotope(
-        #[case] valence: ValenceModel,
-        #[case] expected: Result<
-            Solution<ResolveReport, ValenceContradiction>,
-            ValenceProjectError,
-        >,
-    ) {
+    #[case::counts(ValenceModel::smiles())]
+    #[case::default_registry(ValenceModel::default())]
+    #[case::custom_registry(ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4#n0#u0#s")]))))]
+    fn test_valence_resolver_project_isotope(#[case] valence: ValenceModel) {
         let model = ChemistryModel {
             valence,
             ..Default::default()
@@ -626,15 +646,15 @@ mod tests {
         let resolver = Resolver::new(&model);
         let mut molecule = mol_dsl_concrete!(r#"{:atoms ["C#i13#h4"]}"#);
         let original = molecule.clone();
-        let outcome = resolver.valence.project(&mut molecule, resolver.tie_break);
-        assert_eq!(outcome, expected);
-        if matches!(outcome, Ok(Solution::Determined(_))) {
-            assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i13#c0#h4"]}"#));
-            assert_eq!(
-                resolver.resolve(&mut molecule),
-                Ok(Solution::Determined(ResolveReport::default()))
-            );
-        }
+        assert_eq!(
+            resolver.valence.project(&mut molecule, resolver.tie_break),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
+        assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i13#c0#h4"]}"#));
+        assert_eq!(
+            resolver.resolve(&mut molecule),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
         assert_eq!(molecule, original);
     }
 
