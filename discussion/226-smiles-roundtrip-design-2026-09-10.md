@@ -1282,7 +1282,7 @@ The plan below sequences the work; S0–S2 are complete.
 ## Staged implementation plan
 
 S0–S2 and S3a–S3c are complete. S3d's functional migration is implemented; its allocation
-closeout requires S3d1–S3d7 below. S3d1–S3d2 are complete; S3d3–S3d7, S3e, and later subitems are pending.
+closeout requires S3d1–S3d7 below. S3d1–S3d3 are complete; S3d4–S3d7, S3e, and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1451,7 +1451,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   implementation must not require copied tables, dynamic dispatch, or new public adapter types.
   Use bond_stereo_assertions for the code-bearing list. Migrate all affected private callers in
   this subitem. Verify basic/extended V2000, property processing, CX indices, and exact frames.
-- **S3d3 — SMILES finalization without full-bond scratch copies.** Modules: smiles/parser/builder.rs
+- **S3d3 — SMILES finalization without full-bond scratch copies (completed 2026-09-11).** Modules: smiles/parser/builder.rs
   and smiles/parser/stereo.rs. **Refactor (green).** [dep: S3d]
   Remove the completed intermediate and lexical copied bond table. Read the pending/final bond
   storage directly during derivation and perform only the necessary ownership transfer to the
@@ -1519,6 +1519,11 @@ with its affected tests green. S3d1 and S3d2 are independent of S3d3. The depend
 at S3d5, then S3d6 and S3e; S3d7 depends only on S3d3. All remain required S3 closeout work.
 The allocation policies are settled; private factoring and capacity tuning remain implementation
 choices within the recorded constraints.
+
+After each allocation subitem, assess whether its measurements support the rationale, what
+concrete costs remain for downstream improvements, and whether the change should be retained.
+Separate measured allocation savings from runtime evidence and future expectations; mixed timings
+are not grounds for an open-ended local tuning campaign.
 
 For each affected path, review the resulting allocation/ownership flow and reuse the existing
 bounded inline fixtures and allocation probe. Account for in-place reuse by owning Vec collections;
@@ -3073,6 +3078,97 @@ cargo run --release --manifest-path scratch/s3d2-parser-bench/Cargo.toml --offli
 
 Raw results are scratch/s3d2-{before,after}-{allocations,timings}.csv, with corresponding build
 logs. Verification logs use scratch/s3d2-{gate,bond-tests,clippy,fmt}.log. S3d3 is next.
+
+
+### S3d3 implementation and measurements (2026-09-11)
+
+SMILES finalization derives bond frames directly from the builder's bond table after the existing
+unclosed-ring/branch checks. One consuming collection then moves the final bonds into table order.
+The completed intermediate and copied lexical bond table are removed. The statically dispatched
+field callback reads original bonds and borrows their transient markers; it creates no adapter
+collection or dynamic-dispatch boundary.
+
+DirectionMarker is a private parser value containing a direction and a Cell<bool> participation
+flag. Both ordinary bond insertion and ring completion create fresh markers. Derivation reads
+the direction unchanged at every sharing site, marks participation, then rejects dangling markers
+after the full scan. Cell permits participation updates while topology and marker values remain
+borrowed; it requires no separate bond-sized flag vector. Markers are discarded with the temporary
+builder storage, and the derivation contract requires fresh markers. No public type, constructor,
+conversion, signature, error, or Python surface changed. Existing ring-slot completion establishes
+the internal expect precondition; no new public checks or acceptance rules were introduced.
+
+Atom-stereo incidence order, normalized endpoint viewpoints, ring-opening bond-table order,
+CX completion-index remapping, partial/conflicting-marker handling, and frame reference selection
+are preserved. Existing exact, exhaustive 81-assignment, and generated remapping tests retain
+their assertions and domains. A new basic/extended regression checks a later conflict after a
+shared marker has already participated at an earlier double bond. Neighbor construction and
+per-endpoint substituent vectors remain for the later subitems.
+
+The standalone scratch/s3d3-parser-bench uses the S3d2 measurement method: separate release builds
+for allocation counting and normal-allocator timing, 64 warm-ups, then one allocation observation
+or 11 batches of 512 parses. Parsing results remain alive until measurement ends; input/config
+construction, output-vector allocation, verification, and result destruction are outside timing.
+One before and one after run use the same six inline inputs through basic and extended parsing:
+a bare 64-atom chain, a 42-atom chain with 20 marked double bonds, a triene, a shared branch,
+a ring with atom and bond stereo, and a CX cis ring without lexical direction markers. The longer
+directional string is built inline before timing. No fixture files are read. Tests and other
+compilation were excluded from the measurement runs. The baseline includes S3d2; affected source
+files are retained under scratch/s3d3-before.
+
+Allocation calls include reallocations. Requested bytes sum full allocation/reallocation requests;
+peak added live bytes are allocator-tracked above the pre-parse baseline, not RSS. Timing ranges
+are batch-mean ranges, not confidence intervals.
+
+| Case | Allocation calls before → after | Requested bytes before → after | Peak added live bytes before → after | Median µs before → after | Before / after batch-mean ranges µs |
+| --- | ---: | ---: | ---: | ---: | --- |
+| chain_64_basic | 3 → 3 | 12,188 → 12,188 | 9,428 → 9,428 | 0.998 → 0.994 | 0.942–1.683 / 0.979–1.828 |
+| chain_64_extended | 3 → 3 | 31,512 → 31,512 | 24,984 → 24,984 | 3.182 → 2.935 | 2.877–4.194 / 2.549–3.579 |
+| directional_42_basic | 92 → 90 | 20,325 → 19,792 | 15,669 → 15,136 | 2.915 → 3.046 | 2.826–3.675 / 2.862–3.849 |
+| directional_42_extended | 92 → 90 | 45,365 → 44,832 | 35,861 → 35,328 | 5.972 → 5.244 | 4.722–6.582 / 5.111–5.895 |
+| triene_basic | 21 → 19 | 3,475 → 3,384 | 2,811 → 2,720 | 0.674 → 0.642 | 0.660–0.825 / 0.634–0.804 |
+| triene_extended | 21 → 19 | 7,915 → 7,824 | 6,411 → 6,320 | 0.810 → 0.763 | 0.804–1.166 / 0.752–1.300 |
+| shared_branch_basic | 21 → 19 | 3,839 → 3,748 | 3,151 → 3,060 | 0.665 → 0.696 | 0.651–0.875 / 0.631–0.816 |
+| shared_branch_extended | 21 → 19 | 8,579 → 8,488 | 6,995 → 6,904 | 0.886 → 0.732 | 0.789–1.323 / 0.728–0.811 |
+| stereo_ring_basic | 19 → 17 | 3,959 → 3,868 | 3,287 → 3,196 | 0.613 → 0.610 | 0.604–0.774 / 0.583–0.757 |
+| stereo_ring_extended | 19 → 17 | 8,699 → 8,608 | 7,131 → 7,040 | 0.760 → 0.734 | 0.748–0.836 / 0.686–1.074 |
+| cx_ring_basic | 30 → 30 | 10,086 → 10,086 | 7,656 → 7,656 | 1.294 → 1.352 | 1.217–1.468 / 1.208–1.587 |
+| cx_ring_extended | 30 → 30 | 18,182 → 18,182 | 14,192 → 14,192 | 1.412 → 1.352 | 1.379–1.878 / 1.330–1.918 |
+
+The directional cases remove two allocations: the lexical table and participation vector. Their
+requested and peak bytes fall by 13 bytes per bond on this build: 533 bytes for the 41-bond chain
+and 91 bytes for the seven-bond cases. The completed collection had already reused its input
+buffer; removing it does not eliminate an allocation call. Unmarked controls have identical
+allocation counts and requested/peak bytes. Reallocation counts are unchanged in all cases.
+
+Assessment against the three continuing questions:
+
+- **Does the evidence support the case?** It supports removing redundant work, but the memory
+  reduction here is modest and there is no uniform runtime improvement. For example, the longer
+  basic directional case changes from 2.915 to 3.046 µs, while its extended counterpart changes
+  from 5.972 to 5.244 µs. The before/after ranges overlap. These observations do not establish a
+  general parser speedup, and fewer intermediate collections must not be counted as independent
+  allocation savings when they reuse storage.
+- **What can later subitems improve?** S3d4 can skip entire stereo derivations for irrelevant CX
+  changes. S3d5 still targets two endpoint-vector allocations per considered double bond: forty
+  such vectors in this 20-double-bond chain, compared with the two allocations removed here.
+  S3e targets unnecessary neighbor construction on other paths, including raise, which this probe
+  does not measure. These are concrete remaining costs, not demonstrated future speedups.
+- **Should S3d3 be retained?** Yes. It removes a whole copied table, a separate participation
+  allocation, and an intermediate collection pass. The replacement is limited to private marker
+  bookkeeping and borrowed field access; it preserves the ordinary path's measured allocation
+  footprint. The benefit is bounded, and the mixed timings do not justify further local tuning.
+
+Verification: the focused parser suite passes 1,963 tests; the IO/graph gate passes 3,817 IO
+and 1,066 graph unit tests with proptest enabled, all 10,223 SMILES / 2,253 MOL / 407 SDF
+conformance cases, and the remaining integration/property suites. One existing graph doctest
+remains ignored. Strict IO/graph Clippy passes for all targets with these features. Formatting
+and diff checks pass. The complete incremental source/test diff was reviewed against S3d3;
+pre-existing changes and later subitem scope were preserved.
+
+Raw results are scratch/s3d3-{before,after}-{allocations,timings}.csv, with corresponding build
+logs; the probe commands are the S3d2 commands with s3d3-parser-bench as the manifest directory.
+Verification logs are scratch/s3d3-{focused-tests,gate,clippy,fmt}.log. The incremental review is
+saved in scratch/s3d3-incremental.diff. S3d4 is next; no later subitem was implemented here.
 
 
 ## Staged specification updates

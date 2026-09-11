@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 use umol_chem::element::Element;
 
 use super::super::error::ParseError;
-use super::stereo::derive_stereo_bonds;
+use super::stereo::{derive_stereo_bonds, DirectionMarker};
 use super::utils::{invalid_ring_context, make_bond, make_extended_bond, Frame};
 use crate::table_ir::{
     Atom, AtomPair, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality,
@@ -295,7 +295,7 @@ impl Target for Extended {
 
 pub(super) struct Builder<'a, T: Target> {
     atoms: Vec<T::Atom>,
-    bond_table: Vec<Option<(T::Bond, Option<BondDirection>)>>,
+    bond_table: Vec<Option<(T::Bond, Option<DirectionMarker>)>>,
     ring_table: Vec<Option<OpenRing>>,
     ring_bonds: Vec<(usize, usize)>,
     open_rings: usize,
@@ -587,7 +587,9 @@ impl<'a, T: Target> Builder<'a, T> {
     #[inline]
     fn append_bond(&mut self, bond: (T::Bond, Option<BondDirection>)) -> usize {
         let index = self.bond_table.len();
-        self.bond_table.push(Some(bond));
+        let (bond, direction) = bond;
+        self.bond_table
+            .push(Some((bond, direction.map(DirectionMarker::new))));
         index
     }
 
@@ -600,7 +602,8 @@ impl<'a, T: Target> Builder<'a, T> {
 
     #[inline]
     fn complete_bond(&mut self, index: usize, bond: (T::Bond, Option<BondDirection>)) {
-        self.bond_table[index] = Some(bond);
+        let (bond, direction) = bond;
+        self.bond_table[index] = Some((bond, direction.map(DirectionMarker::new)));
     }
 
     pub(super) fn on_ring_bond(
@@ -765,24 +768,17 @@ impl<'a, T: Target> Builder<'a, T> {
                 open_pos: offset + open_pos,
             });
         }
-        let completed: Vec<_> = self
+        let stereo_bonds = derive_stereo_bonds(self.atoms.len(), &self.bond_table, |entry| {
+            let (bond, direction) = entry.as_ref().expect("all ring slots completed");
+            let (a, b) = T::bond_atoms(bond);
+            (AtomPair::new(a, b), T::bond_order(bond), direction.as_ref())
+        })
+        .map_err(ParseError::from)?;
+        let bonds: Vec<_> = self
             .bond_table
             .into_iter()
-            .map(|bond| bond.expect("all ring slots completed"))
+            .map(|entry| entry.expect("all ring slots completed").0)
             .collect();
-        let stereo_bonds = if completed.iter().any(|(_, direction)| direction.is_some()) {
-            let lexical: Vec<_> = completed
-                .iter()
-                .map(|(bond, direction)| {
-                    let (a, b) = T::bond_atoms(bond);
-                    (AtomPair::new(a, b), T::bond_order(bond), *direction)
-                })
-                .collect();
-            derive_stereo_bonds(self.atoms.len(), &lexical).map_err(ParseError::from)?
-        } else {
-            Vec::new()
-        };
-        let bonds: Vec<_> = completed.into_iter().map(|(bond, _)| bond).collect();
         let stereo = self
             .stereo
             .into_iter()

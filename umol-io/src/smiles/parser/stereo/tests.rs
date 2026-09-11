@@ -1,6 +1,6 @@
 use rstest::rstest;
 
-use super::{derive_stereo_bonds, DirectionError};
+use super::{derive_stereo_bonds, DirectionError, DirectionMarker};
 use crate::smiles::{parse_extended_smiles_bytes, ParseError, Smiles};
 use crate::table_ir::BondDirection::{Falling, Rising};
 use crate::table_ir::BondOrder::{Double, Single};
@@ -80,6 +80,7 @@ fn test_parse_molecule_stereo_bonds(
 }
 
 #[rstest]
+#[case::later_shared_site("C/C=C/C=C(/F)/C", DirectionError::CisTransConflict { atom: 4 })]
 #[case::complete("F/C(\\Cl)=C/Br", DirectionError::CisTransConflict { atom: 1 })]
 #[case::partial("F/C(\\Cl)=CBr", DirectionError::CisTransConflict { atom: 1 })]
 #[case::second_partial("FC=C(/Br)/I", DirectionError::CisTransConflict { atom: 2 })]
@@ -133,8 +134,12 @@ fn test_derive_stereo_bonds_order(
     #[case] bonds: Vec<(AtomPair, BondOrder, Option<BondDirection>)>,
     #[case] bond: u32,
 ) {
+    let bonds: Vec<_> = bonds
+        .into_iter()
+        .map(|(atoms, order, direction)| (atoms, order, direction.map(DirectionMarker::new)))
+        .collect();
     assert_eq!(
-        derive_stereo_bonds(5, &bonds),
+        derive_stereo_bonds(5, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())),
         Ok(vec![StereoBond {
             bond,
             configuration: BondConfiguration::Framed {
@@ -164,7 +169,14 @@ fn test_derive_stereo_bonds_incidence_error(
     #[case] bonds: Vec<(AtomPair, BondOrder, Option<BondDirection>)>,
     #[case] expected: DirectionError,
 ) {
-    assert_eq!(derive_stereo_bonds(atom_count, &bonds), Err(expected));
+    let bonds: Vec<_> = bonds
+        .into_iter()
+        .map(|(atoms, order, direction)| (atoms, order, direction.map(DirectionMarker::new)))
+        .collect();
+    assert_eq!(
+        derive_stereo_bonds(atom_count, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())),
+        Err(expected)
+    );
 }
 
 #[rstest]
@@ -196,7 +208,8 @@ fn test_derive_stereo_bonds_exhaustive() {
             (AtomPair::new(1, 2), Single, markers[1]),
             (AtomPair::new(3, 4), Single, markers[2]),
             (AtomPair::new(4, 5), Single, markers[3]),
-        ];
+        ]
+        .map(|(atoms, order, direction)| (atoms, order, direction.map(DirectionMarker::new)));
         let compatible = |arrangement: [bool; 4], indices: &[usize]| {
             let rising = [
                 !arrangement[0],
@@ -238,7 +251,7 @@ fn test_derive_stereo_bonds_exhaustive() {
             Ok(vec![])
         };
         assert_eq!(
-            derive_stereo_bonds(6, &bonds),
+            derive_stereo_bonds(6, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())),
             expected,
             "marker assignment {code}"
         );

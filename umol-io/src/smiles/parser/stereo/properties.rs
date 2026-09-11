@@ -1,6 +1,6 @@
 use proptest::prelude::*;
 
-use super::derive_stereo_bonds;
+use super::{derive_stereo_bonds, DirectionMarker};
 use crate::table_ir::BondDirection::{Falling, Rising};
 use crate::table_ir::BondOrder::{Double, Single};
 use crate::table_ir::BondRelation::{OppositeSide, SameSide};
@@ -39,7 +39,7 @@ proptest! {
         }).into_iter().enumerate().collect::<Vec<_>>();
         bonds.sort_by_key(|&(old, _)| bond_keys[old]);
         let site = bonds.iter().position(|&(old, _)| old == 0).unwrap() as u32;
-        let bonds = bonds.into_iter().map(|(_, bond)| bond).collect::<Vec<_>>();
+        let bonds = bonds.into_iter().map(|(_, (atoms, order, marker))| (atoms, order, marker.map(DirectionMarker::new))).collect::<Vec<_>>();
 
         let expected = if (marked[0] || marked[1]) && (marked[2] || marked[3]) {
             let first = if image[0] < image[2] { 0 } else { 2 };
@@ -56,6 +56,6 @@ proptest! {
         } else {
             vec![]
         };
-        prop_assert_eq!(derive_stereo_bonds(6, &bonds), Ok(expected));
+        prop_assert_eq!(derive_stereo_bonds(6, &bonds, |bond| (bond.0, bond.1, bond.2.as_ref())), Ok(expected));
     }
 }
