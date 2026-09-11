@@ -671,7 +671,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        assert_eq!((&table).try_into_ir(&()), Ok(expected));
+        assert_eq!(table.try_into_ir(&()), Ok(expected));
     }
 
     #[rstest]
@@ -702,7 +702,7 @@ mod tests {
         if atom != 1 {
             table.bonds.iter_mut().for_each(|bond| bond.wedge = None);
         }
-        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        let result: Result<Molecule, _> = table.try_into_ir(&());
         assert_eq!(result, Err(RaiseError::MoleculeEntries(expected)));
     }
 
@@ -712,10 +712,10 @@ mod tests {
     #[case::unknown(SourceFormat::UNKNOWN)]
     fn test_table_molecule_try_into_ir_parity(#[case] source_format: SourceFormat) {
         let mut table = parse_mol_bytes_to_table_ir(METHANE_MOL.as_bytes()).unwrap();
-        let expected: Molecule = (&table).try_into_ir(&()).unwrap();
+        let expected: Molecule = table.try_into_ir(&()).unwrap();
         table.source_format = source_format;
         table.atoms[0].chirality = Some(Chirality::Clockwise);
-        assert_eq!((&table).try_into_ir(&()), Ok(expected));
+        assert_eq!(table.try_into_ir(&()), Ok(expected));
     }
 
     #[rstest]
@@ -1054,7 +1054,7 @@ mod tests {
         } else {
             Smiles::parse(input).unwrap().into_table_ir()
         };
-        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let molecule: Molecule = table.try_into_ir(&()).unwrap();
 
         assert_eq!(
             molecule.atom(AtomId(0)).attributes,
@@ -1278,7 +1278,7 @@ mod tests {
             TableMolecule::try_from(ExtendedMolecule::from(reordered.clone())).unwrap(),
             reordered
         );
-        let first: Molecule = (&table).try_into_ir(&()).unwrap();
+        let first: Molecule = table.try_into_ir(&()).unwrap();
         let second: Molecule = (&reordered).try_into_ir(&()).unwrap();
         let mapping = MoleculeRemapping::new(
             GraphRemapping::new(Remapping::identity(table.atoms.len()), edges),
@@ -1324,7 +1324,7 @@ mod tests {
             let converted = TableMolecule::try_from(extended).unwrap();
             assert_eq!(converted, basic);
             for table in [basic, converted] {
-                let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+                let molecule: Molecule = table.try_into_ir(&()).unwrap();
                 let actual: Vec<_> = table
                     .bonds
                     .iter()
@@ -1364,7 +1364,7 @@ mod tests {
             .unwrap()
             .into_table_ir();
         assert_eq!(table.atoms[0].class, Some(7));
-        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let molecule: Molecule = table.try_into_ir(&()).unwrap();
         assert_eq!(
             molecule
                 .bond(BondId(1))
@@ -1410,7 +1410,7 @@ mod tests {
             let second = atoms.map(NodeId(bond.atoms.second())).0;
             bond.atoms = AtomPair::new(first, second);
         }
-        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let molecule: Molecule = table.try_into_ir(&()).unwrap();
         let actual: Vec<_> = table
             .bonds
             .iter()
@@ -1453,7 +1453,7 @@ mod tests {
                 relation,
             },
         }];
-        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let molecule: Molecule = table.try_into_ir(&()).unwrap();
         assert_eq!(
             molecule
                 .bond(BondId(2))
@@ -1476,7 +1476,7 @@ mod tests {
     ) {
         let mut table = Smiles::parse("FC=CF").unwrap().into_table_ir();
         table.stereo_bonds = frames;
-        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        let result: Result<Molecule, _> = table.try_into_ir(&());
         assert_eq!(result, Err(expected));
     }
 
@@ -1550,7 +1550,7 @@ mod tests {
             ..Default::default()
         });
         let original = table.clone();
-        assert_eq!((&table).try_into_ir(&()), Ok(expected));
+        assert_eq!(table.try_into_ir(&()), Ok(expected));
         assert_eq!(table, original);
     }
 
@@ -1571,7 +1571,7 @@ mod tests {
             })
             .collect();
         let original = table.clone();
-        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        let result: Result<Molecule, _> = table.try_into_ir(&());
         assert_eq!(result, Err(expected));
         assert_eq!(table, original);
     }
@@ -1589,7 +1589,7 @@ mod tests {
                 relation: BondRelation::OppositeSide,
             },
         }];
-        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let molecule: Molecule = table.try_into_ir(&()).unwrap();
         assert_eq!(
             molecule
                 .bond(BondId(1))
@@ -1599,7 +1599,7 @@ mod tests {
             Some(&CisTransStereoForm::stereo(StereoCoset::Lit(1)))
         );
         table.stereo_bonds[0].bond = 0;
-        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        let result: Result<Molecule, _> = table.try_into_ir(&());
         assert_eq!(result, Err(RaiseError::UnsupportedStereoBond { bond: 0 }));
     }
 
@@ -1619,7 +1619,7 @@ mod tests {
             bond: 1,
             configuration: BondConfiguration::Either,
         }];
-        let result: Result<Molecule, _> = (&table).try_into_ir(&());
+        let result: Result<Molecule, _> = table.try_into_ir(&());
         assert_eq!(result, Err(RaiseError::UnsupportedStereoBond { bond: 1 }));
     }
 

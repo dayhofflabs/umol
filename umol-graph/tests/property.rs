@@ -21,3 +21,6 @@ mod resolve;
 
 #[path = "property/project.rs"]
 mod project;
+
+#[path = "property/atom_typing.rs"]
+mod atom_typing;

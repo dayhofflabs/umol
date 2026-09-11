@@ -158,9 +158,6 @@ pub(super) fn derive_stereo_bonds<B>(
 #[cfg(test)]
 mod tests;
 
-#[cfg(all(test, feature = "proptest"))]
-mod properties;
-
 impl From<DirectionError> for ParseError {
     fn from(error: DirectionError) -> Self {
         match error {

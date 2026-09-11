@@ -1357,7 +1357,7 @@ The plan below sequences the work; S0–S3 are complete.
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
 S4 is complete, including S4a0a–S4a0c and the S4a–S4b corrections.
-S5a is complete; S5b and later subitems are pending.
+S5a–S5b are complete; S5c and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1432,7 +1432,7 @@ implemented behavior, future assertions, and independent outstanding validation.
 
 ### S1 — Shared graph-core traversal, additive APIs
 
-- **S1a — DFS events, callback kernel, and Graph visitor (completed 2026-09-10).** Module:
+- **S1a — DFS events, callback function, and Graph visitor (completed 2026-09-10).** Module:
   umol-graph-core/src/algorithms/traversal.rs. **Additive (green).** [dep: S0a, S0b]
   Add DepthFirstEvent and visit_depth_first with the settled callback contract, bounds, ordered
   candidate roots, suspended neighbor iterators, edge identity tracking, and FinishTree. Add the
@@ -1441,7 +1441,7 @@ implemented behavior, future assertions, and independent outstanding validation.
   roots, supplied order, loops, parallel edges, isolated nodes, and immediate Break at every event
   kind. Malformed finite callbacks exercise panic-free internal handling without asserting useful
   output. Callback panics/hangs remain caller behavior. Include a long-chain case for no recursion.
-- **S1b — BFS events, callback kernel, and Graph visitor (completed 2026-09-10).** Same module.
+- **S1b — BFS events, callback function, and Graph visitor (completed 2026-09-10).** Same module.
   **Additive (green).** [dep: S0a, S0b]
   Add BreadthFirstEvent and visit_breadth_first with FIFO discovery, sequential candidate roots,
   usize depth/limit, per-node Finish, and FinishTree before the next root. Verify shortest distances
@@ -1548,7 +1548,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   bonds, and Either still suppresses geometry at its site. Verify all combinations of existing
   direction frames, repeated codes, Either, geometry, wavy evidence, and reaction-section remapping;
   include labels-only CX input with existing frames. No reinterpretation or acceptance expansion.
-- **S3d5 — Bounded local stereo scratch (completed 2026-09-11).** Modules: both stereo derivation kernels and
+- **S3d5 — Bounded local stereo scratch (completed 2026-09-11).** Modules: both stereo derivation functions and
   table_ir/raise.rs. **Refactor (green).** [dep: S3d3, S3d4]
   Replace per-endpoint substituent vectors and raise's two-element blocks vector with bounded
   local storage for the supported two-substituent-per-endpoint domain. Check site relevance before
@@ -2139,7 +2139,7 @@ atomic publication without runtime reconstruction. Establish bounded baselines f
 projection operations; historical reconstruction timings describe different work. No re-resolution
 measurement or tuning campaign is required.
 
-### S5 — IO traversal and direction assignment kernels
+### S5 — IO traversal and direction assignment functions
 
 - **S5a — Output traversal (completed 2026-09-11).** Module: umol-io/src/smiles/render/traversal.rs.
   **Additive (green).** [dep: S1a, S1c, S3d, S3e]
@@ -2148,7 +2148,7 @@ measurement or tuning campaign is required.
   Pin deterministic TableIR ordering and ring-label allocation with exact fixtures. Retain the
   traversal only within the operation. Verify branches, disconnected/empty molecules, rings,
   multiple closures at one atom, and reference transport under changed traversal.
-- **S5b — Marker-assignment components.** Module: smiles::render stereo functions.
+- **S5b — Marker-assignment components (completed 2026-09-11).** Module: smiles::render stereo functions.
   **Additive (green).** [dep: S3a, S3d, S1c]
   Implement structural site/candidate eligibility and auxiliary connectivity, retaining per-endpoint
   candidate membership and table bond IDs. Include unspecified coupling sites, branches and cycles;
@@ -2173,7 +2173,7 @@ measurement or tuning campaign is required.
   parsed boundary normalization must preserve its separate H-ownership semantics. Test exact
   spellings where policy determines them and independent configurations where spelling is flexible.
 
-**Gate:** kernel tests and exhaustive bounded assignment comparison pass; emitted fixtures parse
+**Gate:** function tests and exhaustive bounded assignment comparison pass; emitted fixtures parse
 under the intended IO configuration and preserve independent stereo expectations. Formatting and
 marker-search benchmarks use S0 fixtures without making optimization a gate to semantic progress.
 
@@ -2202,7 +2202,7 @@ array and neighbor index are dropped after construction.
 
 Actual stereo encounter order is parent, rings, then children. Exact fixtures cover changed incoming
 ring/tree bonds, branch-before-closure input, multiple ring openings/closures, explicit H nodes,
-and both even and odd tetrahedral frame permutations. The kernel does not read or change chemistry,
+and both even and odd tetrahedral frame permutations. The function does not read or change chemistry,
 stereo assertions, or virtual ligands. Virtual-ligand placement, configuration transport, and token
 emission remain S5d. It also does not certify format representability: malformed endpoint rows inherit
 AtomNeighbors' omission behavior without panicking, while loops and parallel bonds stay identifiable.
@@ -2239,17 +2239,106 @@ destruction; parsing is excluded. The standalone scratch/s5a-traversal-bench har
 SMILES and imports the private source by path, without a benchmark-only public API. Run its release
 binary with --bench --sample-size 10 --warm-up-time 0.5 --measurement-time 1 --noplot. Full output:
 scratch/s5a-benchmark.log. These are baseline costs, not comparisons with a replaced implementation.
-The module's temporary dead-code expectation is removed when boundary methods consume the kernels.
-S5b is next; token emission and the complete S5 gate remain pending.
+The module's temporary dead-code expectation is removed when boundary methods consume the functions.
+Token emission and the complete S5 gate remain pending.
+
+#### S5b completion — 2026-09-11
+
+smiles::render::stereo::derive_marker_components now constructs candidate connectivity before
+selection. Its private result contains sorted candidate bond-row indices and ordered MarkerSite
+values. Each site retains its bond index, two endpoint candidate blocks, and the original
+Option<BondConfiguration>, including the distinction between Either and absence. Reference choices
+and relations are preserved verbatim; their transport and marker signs belong to S5c. The new
+function, MarkerComponent, MarkerSite, and MarkerComponentError are confined to smiles::render;
+there are no public symbols, reexports, or boundary payload changes.
+
+Local eligibility uses the actual ordinary-bond neighbor blocks: one or two substituents at each
+endpoint, with cumulated axes, self-incidence, and shared actual substituents outside this local
+frame domain. Candidates are ordinary single bonds. Aromatic, double, triple, donation-bearing,
+and noncovalent bonds do not become candidates. Ring closure is immaterial to eligibility. Definite
+sites outside the local domain fail; eligible definite sites without a candidate on either side
+report MissingCandidate with the site and endpoint. Unasserted or Either sites lacking candidates
+on one side do not connect groups. There is no additional neighboring-site candidate ban or
+chemical ranking in component construction.
+
+An auxiliary graph uses candidate bonds as its vertices and a spanning star per eligible site's
+candidate group. Graph::visit_breadth_first starts from definite-site candidates, so components
+without definite assertions are not collected. Shared candidates merge groups across definite,
+Either, and unasserted sites, including branches and cycles. Candidates, sites, and components are
+sorted by their table indices; component order uses the minimum candidate index. Sites are moved
+into their components, and collected member vectors are moved into the result.
+
+With no definite assertion, the function returns an empty result before allocating lookup or graph
+state. Otherwise it builds the temporary AtomNeighbors index, a sparse assertion map, and arrays
+sized by eligible sites/candidates. Endpoint blocks use inline SmallVec storage for the supported
+two-substituent domain. The auxiliary graph and lookup remain operation-local; TableIR still owns
+only its tables. Index and duplicate-site errors occur where component derivation consumes those
+relationships. Reference validation, marker selection, parity feasibility, and complete notation
+representability are not certified by this result.
+
+Verification adds 28 exact cases and one generated property. Fixtures cover four substituents,
+shared chains, unasserted and Either coupling, branches, cycles, separate candidate components in
+one molecule, discarded unasserted components, side-bond exclusions, missing candidates, and
+malformed sites. Nonminimal stored references remain unchanged. The property generates simple
+tables with disjoint double-bond sites and mixed side-bond kinds, derives eligibility using direct
+bond-row sets, and compares the full result against pairwise candidate-clique transitive closure.
+Its oracle does not use AtomNeighbors, the production eligibility helper, spanning stars, or BFS.
+
+PROPTEST_CASES=256 cargo test -p umol-io --features conformance,proptest --offline passes with
+3,974 unit/property cases, 2,253 MOL, 407 SDF, and 10,223 SMILES conformance cases, six layout cases,
+and ten SMILES property cases. All-target IO Clippy with the same features and -D warnings passes.
+Formatting and git diff --check pass. Logs: scratch/s5b-unit.log, scratch/s5b-gate.log, and
+scratch/s5b-clippy.log. Existing parsing, traversal, TableIR, raising, and resolution are unchanged.
+
+Test removal (2026-09-11): removed the property tests added under src for parser stereo,
+TableIR stereo derivation, neighbor lookup, atom-typing duplicate admission, and rendering
+traversal and marker components, including the attempted relocation of the rendering tests.
+The ordinary unit tests remain.
+
+Public-API coverage: tests/smiles_property.rs now checks branched/partial direction markers,
+global marker reversal, redundant CX assertions, and coordinate transformations through Smiles.
+tests/mol_property.rs checks coordinate transformations and reversed atom/bond rows through the
+MOL parser. tests/table_ir_property.rs checks public AtomNeighbors incidences and degrees;
+umol-graph/tests/property/atom_typing.rs checks duplicate registry entries through public admission.
+Rendering properties are deferred to S6a, where construction and rendering become public.
+
+Component-construction baseline, central estimates in microseconds, with 10 samples, 0.5-second
+warmup, and 1-second measurement per input:
+
+| Input | Component construction |
+| --- | ---: |
+| 64-atom chain without definite stereo | 0.0037925 |
+| Four-substituent alkene | 0.49353 |
+| Shared chain | 0.50697 |
+| Unasserted site coupling two definite sites | 0.61385 |
+| Shared branch | 0.59744 |
+| Ring-containing system | 0.51414 |
+| Separate components | 0.55121 |
+
+The scratch/s5b-components-bench harness uses inline inputs and imports the private function by
+source path. Measurements include temporary incidence, auxiliary graph construction, component
+collection, and result destruction; parsing and assertion setup are excluded. The release binary
+uses --bench --sample-size 10 --warm-up-time 0.5 --measurement-time 1 --noplot. Full output is in
+scratch/s5b-benchmark.log. These establish baseline costs for S5b. S5c is next; selection and parity
+are still pending, so component construction alone does not establish a renderable assignment.
 
 ### S6 — Checked SMILES boundaries and rendering
 
 - **S6a — Smiles construction/rendering contract.** Modules: smiles/molecule.rs, config.rs,
-  error.rs, writer. **Additive (green).** [dep: S5d]
+  error.rs, render. **Additive (green).** [dep: S5d]
   Add checked from_table_ir(table, config), render, and render_with. Keep private payloads and
   existing read/consume accessors. Validate the supplied open table's required integrity and
   establish actual format representability, including assignment feasibility, at construction.
   Share the operative checks/formatting logic with rendering; do not cache traversal or markers.
+  Add property tests in the external test target through the public construction, rendering,
+  and parsing APIs. Cover connectivity preservation across branches, disconnected components,
+  and ring closures; deterministic output in TableIR order; and atom/bond stereo preservation.
+  Exercise coupled double bonds in chains, branches, and cycles: definite assertions survive,
+  unspecified sites acquire no assertion, and unrepresentable assignments fail. For small cases,
+  compare acceptance with exhaustive marker/sign assignments expressed as SMILES and parsed
+  through the public API. These replace the removed S5a/S5b internal property tests. Internal
+  traversal arrays and marker-component membership are not public properties. Do not import
+  source modules into tests or expose private implementation details for testing.
   Return distinct construction/render diagnostics backed by shared representability reasons.
   Test successful construction implies same-config rendering, narrower-config failures, and
   preservation of parsed boundary semantics. Unsupported Either/annotations must fail in a
@@ -2404,7 +2493,7 @@ inventing extra public seams.
 | Owner and symbols | Planned change and contract | Consumers/migration |
 | --- | --- | --- |
 | graph-core traversal: DepthFirstEvent, BreadthFirstEvent | New public event enums with Discover/Finish/FinishTree; DFS also NonTreeEdge. Values are traversal output, not graph handles or persistent correspondence witnesses. | New visitors and event collectors; IO writer consumes node/edge identities. |
-| traversal::visit_depth_first, traversal::visit_breadth_first | New public callback kernels with the bound/root/iterator/ControlFlow signatures above. No validation Result; correctness assumes consistent connectivity, internal handling remains panic-free. | Graph methods supply CSR access; IO supplies temporary table incidence. |
+| traversal::visit_depth_first, traversal::visit_breadth_first | New public callback functions with the bound/root/iterator/ControlFlow signatures above. No validation Result; correctness assumes consistent connectivity, internal handling remains panic-free. | Graph methods supply CSR access; IO supplies temporary table incidence. |
 | Graph::visit_depth_first, Graph::visit_breadth_first | New inherent methods omit the free functions' bounds/neighbor arguments; borrow Graph and retain explicit roots, BFS depth limit, and visitor. | Event collectors, component visitor, neighborhood. |
 | Graph::enumerate_depth_first_events, enumerate_breadth_first_events | New inherent collectors return the corresponding Vec<Event>, retaining root order and BFS depth limit. | Tests, callers needing retained traversal descriptions. No new persistent traversal type. |
 | Graph::visit_connected_components | New ControlFlow visitor over one sorted borrowed node slice, with ConnectedComponentsAlgorithm. | Existing enumerate_connected_components becomes its collector; FinishTree owns completion/early-exit boundary. |
@@ -2819,7 +2908,7 @@ crate root), and Graph::visit_depth_first. DepthFirstEvent is an open descriptiv
 NodeId and EdgeId fields do not certify membership in a particular graph. There are no new
 constructors, conversions, validators, stored graph views, or Python bindings.
 
-For fixed, consistent undirected connectivity, the callback kernel preserves candidate-root
+For fixed, consistent undirected connectivity, the callback function preserves candidate-root
 and neighbor order, emits nested discovery/finish events, reports each non-tree edge once by
 identity, and emits FinishTree after each completed root. Discover's parent names the parent
 node and connecting edge. Graph supplies its existing CSR. Bounds are usize; ids retain their
@@ -2835,12 +2924,12 @@ long path. Benchmarks extend the existing inline traversal examples.
 
 Implemented against source commit 71bf6a8f66c98902de62c25aa0e7b7fddb2a64be. Public-surface
 reconciliation matches the three additions above, including enum fields, Fn neighbor callbacks,
-usize bounds, and ControlFlow return values. No other public symbols changed. The kernel uses
+usize bounds, and ControlFlow return values. No other public symbols changed. The function uses
 node/edge visitation arrays and a stack retaining each active neighbor iterator; Graph supplies
 borrowed CSR iterators directly.
 
 Twelve new unit cases cover exact events and early termination, including a 100,000-node path.
-Three new properties compare the kernel and Graph adapter against recursive DFS with set-based
+Three new properties compare the function and Graph adapter against recursive DFS with set-based
 visitation, check early-break prefixes, and exercise raw finite callback tables with invalid and
 reused ids. Valid generated multigraphs have at most eight nodes and twenty edges; roots can be
 subsets or duplicates, incidence order can reverse, and edge ids can remain sparse. These are
@@ -2894,7 +2983,7 @@ node ids, an optional parent node/edge pair, and usize depths. Its construction 
 relationship to a particular graph. There are no new constructors, conversions, validators,
 transformations, or Python bindings.
 
-For fixed, consistent undirected connectivity, the kernel preserves candidate-root and neighbor
+For fixed, consistent undirected connectivity, the function preserves candidate-root and neighbor
 order, discovers each node once when enqueued, finishes each node after its permitted expansion,
 and emits FinishTree when that root's queue empties. Roots are sequential, not simultaneous
 sources. Previously visited nodes remain visited across roots; shortest distances for a later
@@ -2902,7 +2991,7 @@ depth-limited tree are therefore measured in the remaining unvisited graph. At t
 nodes receive Discover and Finish without a neighbor callback. A limited tree need not be a
 whole connected component. Graph supplies its existing CSR directly.
 
-The kernel accepts usize node bounds and Option<usize> maximum depth, uses Fn neighbor callbacks,
+The function accepts usize node bounds and Option<usize> maximum depth, uses Fn neighbor callbacks,
 and returns ControlFlow. It needs no edge visitation state or edge bound. Consistency is a caller
 precondition for correctness, not a validation pass. Internal indexing remains panic-free for
 inconsistent finite inputs; callback and iterator panics or nontermination remain caller-owned.
@@ -2921,7 +3010,7 @@ successive trees. Depth-limit tests observe neighbor callback calls directly; Br
 all later callback and iterator execution, including when other nodes remain queued. A limited
 successive-tree case preserves previously visited nodes as a barrier to a later root's shortcut.
 
-Three new properties cover the kernel, Graph adapter, and malformed finite callback tables.
+Three new properties cover the function, Graph adapter, and malformed finite callback tables.
 Valid generated multigraphs have at most eight nodes and twenty edges. A layer-by-layer reference
 checks exact events and early-break prefixes; independent repeated edge relaxation checks each
 tree's reached set and shortest distances after excluding earlier trees. This is bounded
@@ -3058,7 +3147,7 @@ The public selector becomes NeighborhoodAlgorithm::Bfs, without a TraversalAlgor
 Graph::neighborhood takes max_depth: usize and returns Vec<(NodeId, usize)> by collecting Discover
 events from one-root BFS with that limit. It preserves CSR neighbor order within equal-distance
 shells, shortest distances, the source at depth zero, and exclusion of disconnected nodes.
-Invalid source ids inherit the traversal kernel's panic-free handling. No new validator or error
+Invalid source ids inherit the traversal function's panic-free handling. No new validator or error
 type is introduced; Graph already owns consistent connectivity.
 
 The related public size changes are CircularRefinementAlgorithm::Ec::radius,
@@ -3222,7 +3311,7 @@ normalization is next.
 
 ## S3b source direction normalization — 2026-09-10
 
-The derivation kernel stays private to the SMILES parser. Its input is a borrowed sequence of
+The derivation function stays private to the SMILES parser. Its input is a borrowed sequence of
 completed source bonds (ordered AtomPair, order, optional lexical direction) and an atom count;
 its output is StereoBond records in table-bond order. Directions are viewed from AtomPair::first,
 as established by the existing builder's ring reconciliation and bond construction. Input markers
@@ -3238,16 +3327,16 @@ local two-ligand-per-endpoint domain fails explicitly rather than discarding evi
 two ligands from a larger set. Marked cumulated axes likewise fail rather than being treated as
 redundant local partial notation. This is frame representability, not chemical valence resolution.
 
-S3b tests the kernel before publication. Parser acceptance, CX updates, and raise remain unchanged;
+S3b tests the function before publication. Parser acceptance, CX updates, and raise remain unchanged;
 S3c handles annotation/geometry derivation and S3d wires producers and maps failures into boundary
 diagnostics. The temporary dead-code expectation is confined to this unconnected parser module
 and is removed when it is wired. Benchmarks use inline examples in scratch to call this private
-kernel without adding a public benchmark-only API.
+function without adding a public benchmark-only API.
 
 Implemented against source commit d9950f36e51c36f12013f8489365c0765df8902a in
 smiles/parser/stereo.rs, with separate unit and property modules. The builder's opening-order
 bond slots, ring direction reconciliation, basic/extended conversion, CX application, and existing
-raise functions are unchanged. The kernel borrows transient source triples; it adds no second
+raise functions are unchanged. The function borrows transient source triples; it adds no second
 persistent direction authority and does not assign H, lone pairs, coordinates, or molecular states.
 
 The final focused run passes 92 tests. Exact-frame fixtures cover the recorded direction examples
@@ -3277,10 +3366,10 @@ SMILES properties, and dependent graph unit/integration/property tests. The fina
 Clippy runs also include the cumulene checks added during diff review. No existing assertion or
 property law was weakened, and no production acceptance/error-layer change is published here.
 
-The standalone scratch harness borrows the private kernel by source path and contains eight
+The standalone scratch harness borrows the private function by source path and contains eight
 inline SMILES examples. Parsing and source-triple adaptation occur outside the timed loop;
 temporary incidence construction, frame derivation, and result destruction are measured.
-These are kernel measurements, not end-to-end parser timings or an optimization gate. Median
+These are function measurements, not end-to-end parser timings or an optimization gate. Median
 microseconds per call over seven batches of 10,000 calls:
 
 | Example | Time (µs) | Frames |
@@ -3304,7 +3393,7 @@ frame derivation is next; publication and retirement of duplicate fields remain 
 
 ## S3c CTfile and annotation frame derivation — 2026-09-10
 
-Contract: a private shared IO kernel consumes completed bond endpoints/orders/wedges, optional
+Contract: a private shared IO function consumes completed bond endpoints/orders/wedges, optional
 borrowed positions, and the ordered list of explicit bond-code annotations. It produces the
 existing StereoBond vocabulary in table-bond order. No public constructor, conversion, error,
 or additional persistent field is introduced. The producer remains unconnected until S3d.
@@ -3324,7 +3413,7 @@ site-only. The local RDKit CXSmilesOps.cpp parse_doublebond_stereo path requests
 cxsmiles_test.cpp's regression cases around lines 1547–1597 pin lowest-index references for both
 ring and acyclic examples. Current umol stores Cis/Trans but raise only interprets Either and
 geometry/directions. S3c implements their explicit frame meaning without changing current parse
-acceptance. CX completion-order bond ids must be remapped before invoking the kernel.
+acceptance. CX completion-order bond ids must be remapped before invoking the function.
 
 Annotations are consumed as a list so conflicting repeated codes cannot disappear through field
 overwrite. Repeated equal evidence is redundant; conflicting explicit evidence fails with the
@@ -3334,7 +3423,7 @@ annotation. Contextual index/position checks occur where their values are requir
 are generated or changed, and no chemistry, CIP ranking, or stereogenicity judgment is added.
 
 Implemented in table_ir/stereo/derive.rs, with exact-frame tests and a generated similarity law
-beside the kernel. Tests cover two, three, and four actual substituents; supplied 2D/3D positions;
+beside the function. Tests cover two, three, and four actual substituents; supplied 2D/3D positions;
 absent, zero, degenerate, non-finite, and very large coordinates; annotation conflicts; narrow-end
 wavy evidence; and contextual index errors. Temporary coordinate scaling bounds intermediate
 products before invoking the existing geometric predicate. Basic and extended V2000/CX readers
@@ -3350,9 +3439,9 @@ Verification on base 30e1ce58e2e1a571d48ad5b375d68a08f72c5e53:
 - Strict Clippy for both crates and all targets with the same features passes, as do formatting
   and diff checks. The public-symbol review confirms no added public API or carrier field.
 
-The release-mode kernel baseline uses eight inline inputs in scratch/s3c-stereo-bench, with seven
+The release-mode function baseline uses eight inline inputs in scratch/s3c-stereo-bench, with seven
 batches of 10,000 calls per input. Median times include temporary lookup allocation and result
-destruction, excluding input construction; these are kernel measurements, not parser throughput.
+destruction, excluding input construction; these are function measurements, not parser throughput.
 
 | Input | Frames | Median µs/call |
 | --- | --- | --- |
@@ -3642,7 +3731,7 @@ apply properties, then derive stereo from the resulting bond storage. Neither bl
 full vector of bond/code tuples, and neither builder recollects the bonds.
 
 CTfile and CX basic/extended callers now pass borrowed bond slices into the existing derivation
-kernel. A statically dispatched field callback reads each bond's endpoints, order, and wedge;
+function. A statically dispatched field callback reads each bond's endpoints, order, and wedge;
 there is no copied records vector, dynamic dispatch, or adapter type. The four production
 callbacks read those three fields directly. CX's existing frame-to-code reconciliation remains
 unchanged, and its code-bearing lists also use the name bond_stereo_assertions. The dense codes
@@ -3810,14 +3899,14 @@ saved in scratch/s3d3-incremental.diff. S3d4 is next; no later subitem was imple
 
 ### S3d4 implementation and measurements (2026-09-11)
 
-The CTfile/CX derivation kernel now consumes the existing bond_stereo_assertions vector, validates
+The CTfile/CX derivation function now consumes the existing bond_stereo_assertions vector, validates
 its sites, adds wavy evidence, sorts by bond index, checks conflicting repeats, and deduplicates
 in place. An ordered iterator replaces the dense codes array. CX retains the earlier wavy
 assertions when later entries overwrite the wedge field, so consolidation cannot discard that
 evidence. Grouping may change which of several independent invalid assertions is diagnosed first;
 the error variants and accepted source semantics are unchanged.
 
-The kernel consumes and reuses the existing frame vector. It compares new codes and supplied
+The function consumes and reuses the existing frame vector. It compares new codes and supplied
 geometry against a retained frame after accounting for complementary reference choices at either
 endpoint, without changing the retained references or relation. Existing Either suppresses geometry
 and conflicts with definite codes; incoming Either conflicts with an existing definite frame.
@@ -3831,7 +3920,7 @@ bond stereo assertions also trigger derivation. The trigger is conservative for 
 entries. Labels, values, radicals, atom properties, groups, and other unchanged bond-frame inputs
 do not cause an extra stereo pass. Relevant changes still check site order, references, missing
 positions, and contradictory evidence at derivation. The redundant finish_stereo_bonds helper is
-removed. CTfile builders transfer their owned assertion vectors into the same kernel.
+removed. CTfile builders transfer their owned assertion vectors into the same function.
 
 No externally public Rust/Python type, constructor, conversion, signature, visibility, or error
 variant changed. TableIR remains an open table carrier. The source interpretation uses supplied
@@ -3944,7 +4033,7 @@ scratch/s3d4-incremental.diff. S3d5 is next.
 
 ### S3d5 implementation and measurements (2026-09-11)
 
-Both bond-stereo derivation kernels now gather at most two distinct substituents per endpoint
+Both bond-stereo derivation functions now gather at most two distinct substituents per endpoint
 in inline SmallVec storage, using the existing dependency. Every push is guarded by the two-entry
 limit; excess incidences never spill onto the heap. Duplicate incidences do not count toward that
 limit. The retained entries are sorted to preserve the minimum table-index reference. SMILES

@@ -272,6 +272,3 @@ fn relation_from_positions(
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(all(test, feature = "proptest"))]
-mod properties;

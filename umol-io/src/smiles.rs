@@ -9,7 +9,7 @@ mod reaction;
     not(test),
     expect(
         dead_code,
-        reason = "rendering kernels are wired into boundary methods in a later stage"
+        reason = "boundary render methods are added in a later stage"
     )
 )]
 mod render;

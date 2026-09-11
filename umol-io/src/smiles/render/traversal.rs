@@ -45,7 +45,7 @@ impl Traversal {
     /// placement and configuration transport belong to atom formatting.
     ///
     /// Correct molecular output requires in-range endpoints and simple connectivity. This
-    /// topology kernel does not certify an open table's integrity or format representability.
+    /// traversal does not certify an open table's integrity or format representability.
     /// Malformed endpoint rows inherit AtomNeighbors' omission behavior without panicking;
     /// loops and parallel bonds remain present for the format boundary to reject.
     pub(super) fn new(molecule: &Molecule) -> Self {
@@ -193,6 +193,3 @@ impl Traversal {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(all(test, feature = "proptest"))]
-mod properties;

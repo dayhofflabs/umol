@@ -1,5 +1,6 @@
 //! Property-based coverage for the SMILES parser.
 
+use std::array;
 use std::panic::catch_unwind;
 
 use proptest::collection::vec;
@@ -290,6 +291,65 @@ proptest! {
 }
 
 proptest! {
+    // Branch choices, redundant markers, and global reversal preserve the same stereo.
+    #[test]
+    fn test_smiles_parse_branched_stereo(
+        marked in any::<[bool; 4]>(), same in any::<bool>(),
+        swap_left in any::<bool>(), swap_right in any::<bool>(), reverse in any::<bool>(),
+    ) {
+        let glyph = |present: bool, forward: bool| {
+            if !present { "" } else if forward ^ reverse { "/" } else { "\\" }
+        };
+        let (left, branch_left) = if swap_left { ("Cl", "F") } else { ("F", "Cl") };
+        let (branch_right, right) = if swap_right { ("I", "Br") } else { ("Br", "I") };
+        let orientation = same ^ swap_left ^ swap_right;
+        let input = format!("{left}{}C({}{branch_left})=C({}{branch_right}){}{right}",
+            glyph(marked[0], true), glyph(marked[1], true),
+            glyph(marked[2], !orientation), glyph(marked[3], orientation));
+        let table = Smiles::parse(&input).unwrap().into_table_ir();
+        let expected = if (marked[0] || marked[1]) && (marked[2] || marked[3]) {
+            vec![StereoBond { bond: 2, configuration: BondConfiguration::Framed {
+                references: [0, 4],
+                relation: if orientation { BondRelation::SameSide } else { BondRelation::OppositeSide },
+            }}]
+        } else { vec![] };
+        prop_assert_eq!(table.stereo_bonds, expected);
+    }
+
+    #[test]
+    fn test_smiles_parse_with_redundant_stereo(
+        same in any::<bool>(), reverse in any::<bool>(), copies in 1_usize..32,
+    ) {
+        let first = if reverse { '\\' } else { '/' };
+        let last = if same ^ reverse { '\\' } else { '/' };
+        let input = format!("F{first}C=C{last}F");
+        let annotation = if same { "c:1" } else { "t:1" };
+        let extended = format!("{input} |{}|", vec![annotation; copies].join(","));
+        let expected = Smiles::parse(&input).unwrap();
+        let actual = Smiles::parse_with(&extended, &SmilesIoConfig::chemaxon()).unwrap();
+        prop_assert_eq!(actual.as_table_ir().stereo_bonds.as_slice(), expected.as_table_ir().stereo_bonds.as_slice());
+    }
+
+    #[test]
+    fn test_smiles_parse_with_coordinates(
+        offset in any::<[i16; 3]>(), signs in any::<[bool; 3]>(),
+        cycle in 0_usize..3, scale in 1_u16..1000, same in any::<bool>(),
+    ) {
+        let points = [[0.,1.,0.], [0.,0.,0.], [2.,0.,0.], [2.,if same {1.} else {-1.},0.]];
+        let coordinates = points.map(|p| {
+            let q: [f64; 3] = array::from_fn(|i| f64::from(offset[i])
+                + f64::from(scale) * p[(i + cycle) % 3] * if signs[i] {1.} else {-1.});
+            format!("{},{},{}", q[0], q[1], q[2])
+        }).join(";");
+        let input = format!("FC=CF |({coordinates})|");
+        let table = Smiles::parse_with(&input, &SmilesIoConfig::chemaxon()).unwrap().into_table_ir();
+        prop_assert_eq!(table.stereo_bonds, vec![StereoBond { bond: 1,
+            configuration: BondConfiguration::Framed { references: [0, 3],
+                relation: if same { BondRelation::SameSide } else { BondRelation::OppositeSide },
+            },
+        }]);
+    }
+
     // Frame transport and basic/extended preservation; coordinates are not a second
     // authority for an already published bond frame.
     #[test]
