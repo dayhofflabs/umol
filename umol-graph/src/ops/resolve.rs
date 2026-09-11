@@ -6,6 +6,7 @@
 
 pub mod aromaticity;
 pub mod bonds;
+pub mod isotope;
 pub mod multicenter;
 pub mod stereo;
 pub mod valence;
@@ -18,6 +19,7 @@ pub use aromaticity::{
     AromaticityResolveConfig, AromaticityResolver,
 };
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
+pub use isotope::{IsotopeContradiction, IsotopeError, IsotopePolicy, IsotopeResolver};
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };

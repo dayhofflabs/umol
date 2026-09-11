@@ -1628,7 +1628,7 @@ required.
   Natural, preserving what their tests exercise. Rewrite duplicate-admission regressions using
   admissible non-isotope overlaps. Leave general DSL defaults and IntoIr/FromIr unchanged.
 - **S4a0b — Standalone isotope resolver and policies.** Module: ops/resolve/isotope.rs and
-  the phase's configuration/error vocabulary. **Additive (green).** [dep: S0a]
+  the phase's configuration/error vocabulary. **Additive (green); completed 2026-09-11.** [dep: S0a]
   Implement IsotopeResolver with independent Strict and Natural policies, defaulting to Strict.
   Strict preserves an
   unresolved isotope; Natural fills only Undetermined. Preserve supplied Natural, masses, sets,
@@ -1685,6 +1685,27 @@ The full graph conformance run has 23 passed and 660 snapshot failures after rem
 registry's isotope default. The corpus and snapshots remain unchanged; S4a0b/c must supply the
 explicit isotope phase and configure the intended Natural policy for this corpus. This gate is
 pending, so S4a0a is an implementation checkpoint rather than a completed green subitem.
+
+S4a0b completion (2026-09-11): ops::resolve::isotope defines IsotopePolicy and IsotopeResolver,
+with new(policy), Default (Strict), plan, resolve, and project. IsotopeContradiction is empty;
+IsotopeError carries transaction failures, and IsotopeProjectError additionally identifies the
+first atom with a non-ground isotope. The resolve facade re-exports the resolver, policy, and
+resolution errors; the projection error remains module-qualified, as for valence projection.
+
+Planning retains proposed Natural defaults even when another atom's isotope is unresolved.
+Direct resolve publishes only determined plans. Project requires ground isotope fields but does
+not require completed valence or other fields. It elides Natural only under Natural and retains
+explicit masses under both policies. Sets and variables are preserved without normalization or
+selection. Both operations apply edits atomically and skip the editor's molecule clone when no
+edits are needed. No composite configuration, valence behavior, or format defaults changed.
+
+Verification: all 52 isotope unit cases pass within the general module, including exact plans,
+stale-plan transaction rollback, partial-result nonpublication, and projection failures. All
+1,237 graph library tests and all nine graph properties pass (256 cases per property); the two new
+properties cover exact projection/recovery under both policies and resolution idempotence with
+plan/application agreement. Graph all-target clippy with conformance and proptest enabled passes
+with warnings denied; formatting and diff checks pass. S4a0c remains next, including the pending
+full conformance gate.
 
 - **S4a — Ordinary valence reconstruction.** Modules: resolve/valence.rs and valence
   atom_typing/counts/registry as needed. **Additive (green).** [dep: S0a, S0b, S4a0c]

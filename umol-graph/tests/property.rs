@@ -12,6 +12,8 @@ const REGRESSION_FILE: &str = concat!(
 #[path = "property/strategies.rs"]
 mod strategies;
 
+#[path = "property/isotope.rs"]
+mod isotope;
 #[path = "property/publication.rs"]
 mod publication;
 #[path = "property/resolve.rs"]
