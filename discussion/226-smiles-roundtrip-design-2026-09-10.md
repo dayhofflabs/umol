@@ -1281,7 +1281,7 @@ The plan below sequences the work; S0–S2 are complete.
 
 ## Staged implementation plan
 
-S0–S2 and S3a–S3b are complete; S3c and later subitems are pending.
+S0–S2 and S3a–S3c are complete; S3d and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1416,7 +1416,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   and produce no assertion for consistent partial notation. Keep lexical directions in parser
   working state; do not create another persistent authority. Verify all recorded equivalence and
   rejection cases, including conflicts when the other endpoint is unmarked and the doc 224 order.
-- **S3c — CTfile and annotation frame derivation.** Modules: CTfile readers and CX bond annotation
+- **S3c — CTfile and annotation frame derivation (completed 2026-09-10).** Modules: CTfile readers and CX bond annotation
   producers. **Additive (green).** [dep: S3a]
   Reuse supported geometry interpretation to derive definite frames, and preserve site-only Either
   without inventing reference atoms. Treat adjacent wavy-bond effects under the existing convention;
@@ -1730,7 +1730,8 @@ owning module and the repository's established public reexport surface, not from
   orientation, while parser.rs constructs basic/extended tables with supplied positions. Current
   definite double-bond geometry is interpreted later in table_ir/raise.rs and raise/utils.rs.
   S3 moves the appropriate interpretation to frame production while preserving wedge responsibility.
-  V2000/V3000, accumulator overrides, and basic/extended conversion must all reach the same result.
+  V2000 readers, accumulator overrides, and basic/extended conversion must all reach the same
+  result. A future V3000 reader must follow the same contract; no V3000 parser exists currently.
 - **Table conversions:** table_ir/molecule.rs implements From<Molecule> for ExtendedMolecule and
   TryFrom<ExtendedMolecule> for Molecule. ExtendedBond has both fields being retired, not merely
   Bond. Reaction and ExtendedReaction contain three corresponding molecule carriers and derived
@@ -2572,6 +2573,80 @@ cargo run --release --manifest-path scratch/s3b-direction-bench/Cargo.toml --off
 Final surface/diff review confirms one private derivation function and its private diagnostic
 enum, without a public helper or changes to the atom-stereo vocabulary. S3c CTfile and annotation
 frame derivation is next; publication and retirement of duplicate fields remain S3d.
+
+## S3c CTfile and annotation frame derivation — 2026-09-10
+
+Contract: a private shared IO kernel consumes completed bond endpoints/orders/wedges, optional
+borrowed positions, and the ordered list of explicit bond-code annotations. It produces the
+existing StereoBond vocabulary in table-bond order. No public constructor, conversion, error,
+or additional persistent field is introduced. The producer remains unconnected until S3d.
+
+CTfile code 0 supplies geometry evidence; code 3 (V2000) or CFG=2 (V3000) supplies site-only Either.
+The latter is a format contract, not implemented reader coverage: current counts parsing accepts
+V2000 only. S3c tests the existing V2000 readers and decoded annotation semantics; it does not
+introduce a V3000 parser.
+Either requires no references or positions and suppresses coordinate interpretation at that site.
+The existing narrow-end wavy-bond convention supplies Either only when that endpoint has exactly
+one double-bond partner. Definite Up/Down wedges remain atom-stereo data. Missing or unusable
+geometry supplies no assertion. Local definite frames use minimum-index actual references and
+the existing same_side_of_axis predicate, including its 3D and relative-tolerance convention.
+
+CX Cis/Trans become SameSide/OppositeSide in the same selected reference frame; Either remains
+site-only. The local RDKit CXSmilesOps.cpp parse_doublebond_stereo path requests CX ordering;
+cxsmiles_test.cpp's regression cases around lines 1547–1597 pin lowest-index references for both
+ring and acyclic examples. Current umol stores Cis/Trans but raise only interprets Either and
+geometry/directions. S3c implements their explicit frame meaning without changing current parse
+acceptance. CX completion-order bond ids must be remapped before invoking the kernel.
+
+Annotations are consumed as a list so conflicting repeated codes cannot disappear through field
+overwrite. Repeated equal evidence is redundant; conflicting explicit evidence fails with the
+site id. Explicit definite evidence requires a representable local frame. Usable geometry must
+agree with a definite annotation; absent/degenerate geometry does not invalidate that independent
+annotation. Contextual index/position checks occur where their values are required. No coordinates
+are generated or changed, and no chemistry, CIP ranking, or stereogenicity judgment is added.
+
+Implemented in table_ir/stereo/derive.rs, with exact-frame tests and a generated similarity law
+beside the kernel. Tests cover two, three, and four actual substituents; supplied 2D/3D positions;
+absent, zero, degenerate, non-finite, and very large coordinates; annotation conflicts; narrow-end
+wavy evidence; and contextual index errors. Temporary coordinate scaling bounds intermediate
+products before invoking the existing geometric predicate. Basic and extended V2000/CX readers
+are exercised through their decoded tables, including CX ring-completion bond-index remapping.
+
+Verification on base 30e1ce58e2e1a571d48ad5b375d68a08f72c5e53:
+
+- All 67 focused derivation tests pass, including the generated law for signed coordinate
+  permutations, translation, positive scaling, and atom/bond reordering.
+- The IO/graph gate passes with properties and IO conformance enabled: 3,799 IO unit tests,
+  1,066 graph unit tests, 10,223 SMILES conformance cases, 2,253 MOL cases, 407 SDF cases,
+  and the remaining integration/property suites. One existing graph doctest remains ignored.
+- Strict Clippy for both crates and all targets with the same features passes, as do formatting
+  and diff checks. The public-symbol review confirms no added public API or carrier field.
+
+The release-mode kernel baseline uses eight inline inputs in scratch/s3c-stereo-bench, with seven
+batches of 10,000 calls per input. Median times include temporary lookup allocation and result
+destruction, excluding input construction; these are kernel measurements, not parser throughput.
+
+| Input | Frames | Median µs/call |
+| --- | --- | --- |
+| Absent positions | 0 | 0.1409 |
+| All-zero positions | 0 | 0.2840 |
+| Same-side 2D | 1 | 0.3456 |
+| Opposite-side 2D | 1 | 0.3510 |
+| Opposite-side 3D | 1 | 0.3289 |
+| Explicit Either | 1 | 0.2210 |
+| Explicit Cis | 1 | 0.2832 |
+| Adjacent wavy bond | 1 | 0.2041 |
+
+Commands and logs are retained under scratch/s3c-*. The principal gate is:
+
+```sh
+cargo test -p umol-io -p umol-graph --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline
+cargo clippy -p umol-io -p umol-graph --all-targets --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline -- -D warnings
+cargo run --release --manifest-path scratch/s3c-stereo-bench/Cargo.toml --offline
+```
+
+S3d is next: publish the frame collections, wire producers, preserve repeated annotation evidence
+before current field overwrites, and migrate raise/consumers while retiring duplicate fields.
 
 ## Staged specification updates
 

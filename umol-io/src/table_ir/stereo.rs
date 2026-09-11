@@ -1,5 +1,8 @@
 //! Stereochemistry records and metadata for TableIR.
 
+#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) mod derive;
+
 /// Whether the molecule's stereo descriptors fix the absolute configuration or
 /// only the relative one. Populated from format-specific flags:
 /// - CTFile counts chiral flag (`ccc`)
