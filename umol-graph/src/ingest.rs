@@ -716,7 +716,7 @@ mod tests {
         "c1ccccc1>>",
         ChemistryModel {
             valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
-                    "C#i=#c0#h0#n0#u0#s#v2#a2"
+                    "C#c0#h0#n0#u0#s#v2#a2"
                 )]))),
             aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
@@ -733,7 +733,7 @@ mod tests {
         ">>c1ccccc1",
         ChemistryModel {
             valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
-                    "C#i=#c0#h0#n0#u0#s#v2#a2"
+                    "C#c0#h0#n0#u0#s#v2#a2"
                 )]))),
             aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()

@@ -43,6 +43,7 @@ impl<'a> AtomTypingValence<'a> {
 
     /// Admission: determine candidate sets for each atom under resolution,
     /// Underdetermined if any atom is non-literal, empty if no atoms are admitted.
+    /// Exactly equal post-meet forms occur once, in first-occurrence order.
     pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, AtomTypingError> {
         for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {
@@ -86,7 +87,8 @@ impl<'a> AtomTypingValence<'a> {
         };
         let charge = atom.charge().as_lit().map(|n| n as i8);
         let constraints = atom.constraints();
-        let admitted: SmallVec<[AtomForm; 1]> = self
+        let mut admitted = SmallVec::<[AtomForm; 1]>::new();
+        for candidate in self
             .registry
             .lookup(element, charge)
             .iter()
@@ -134,7 +136,11 @@ impl<'a> AtomTypingValence<'a> {
                     .meet(row)
                     .expect("admission implies the meet exists")
             })
-            .collect();
+        {
+            if !admitted.contains(&candidate) {
+                admitted.push(candidate);
+            }
+        }
         if admitted.is_empty() {
             return Err(AtomTypingError::NoMatch {
                 atom_id: id,
@@ -203,7 +209,7 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use smallvec::smallvec;
-    use umol_graph_ir::ir::MoleculeEntries;
+    use umol_graph_ir::ir::{IsotopeMassForm, MoleculeEntries};
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
@@ -230,6 +236,50 @@ mod tests {
         let mut expected = AtomCompletions::new();
         expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4#D1")]);
         assert_eq!(resolver.admit(&molecule), Solution::Determined(expected));
+    }
+
+    #[rstest]
+    #[case::overlapping(vec![atom_dsl!("C#c0#h*#n0#u0#s"), atom_dsl!("C#c0#h4#n0#u0#s")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s")])]
+    #[case::reversed(vec![atom_dsl!("C#c0#h4#n0#u0#s"), atom_dsl!("C#c0#h*#n0#u0#s")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s")])]
+    #[case::distinct_constraints(vec![atom_dsl!("C#i*#c0#h4#n0#u0#s"), atom_dsl!("C#i*#c0#h4#n0#u0#s#v0")], smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s"), atom_dsl!("C#i=#c0#h4#n0#u0#s#v0")])]
+    fn test_atom_typing_valence_admit_overlap(
+        #[case] rows: Vec<AtomForm>,
+        #[case] expected: SmallVec<[AtomForm; 1]>,
+    ) {
+        let registry = AtomTypeRegistry::from_atoms(rows);
+        let molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4"]}"#);
+        assert_eq!(
+            AtomTypingValence::new(&registry).admit(&molecule),
+            Solution::Determined(AtomCompletions::from_iter([(AtomId(0), expected)]))
+        );
+    }
+
+    #[rstest]
+    #[case::undetermined(IsotopeMassForm::Undetermined)]
+    #[case::natural(IsotopeMassForm::Natural)]
+    #[case::mass(IsotopeMassForm::Lit(13))]
+    #[case::set(IsotopeMassForm::lit_set([12, 13]))]
+    #[case::variable(IsotopeMassForm::var("mass"))]
+    fn test_atom_typing_valence_admit_isotope(#[case] isotope: IsotopeMassForm) {
+        let source = AtomForm {
+            isotope_mass: isotope.clone(),
+            ..atom_dsl!("C#c0#h4")
+        };
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![source],
+            ..Default::default()
+        });
+        let expected = AtomForm {
+            isotope_mass: isotope,
+            ..atom_dsl!("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")
+        };
+        assert_eq!(
+            AtomTypingValence::new(AtomTypeRegistry::default_registry()).admit(&molecule),
+            Solution::Determined(AtomCompletions::from_iter([(
+                AtomId(0),
+                smallvec![expected]
+            )])),
+        );
     }
 
     #[rstest]
@@ -356,6 +406,7 @@ mod tests {
 
     #[rstest]
     #[case::carbon_conforms("C#i=#c0#h4#n0#u0#s#v0#a!", Solution::Determined(()))]
+    #[case::carbon_isotope("C#i13#c0#h4#n0#u0#s#v0#a!", Solution::Determined(()))]
     #[case::wrong_carbon(
         "C#i=#c0#h3#n0#u#s2#v0#a!",
         Solution::Contradictory(AtomTypingMismatch {
@@ -378,5 +429,25 @@ mod tests {
             resolver.classify_molecule_atom(&molecule, AtomId(0)),
             expected
         );
+    }
+}
+
+#[cfg(all(test, feature = "proptest"))]
+mod properties {
+    use proptest::prelude::*;
+    use umol_graph_ir::{atom_dsl, mol_dsl};
+
+    use super::*;
+
+    proptest! {
+        // Repeating any registry row preserves the admitted set and its first-occurrence order.
+        #[test]
+        fn test_atom_typing_valence_admit_duplicates(copies in 1usize..12) {
+            let rows = [atom_dsl!("C#i*#c0#h2#n1#u0#s#v0#a!"), atom_dsl!("C#i*#c0#h2#n0#u2#s3#v0#a!")];
+            let registry = AtomTypeRegistry::from_atoms(rows.clone());
+            let repeated = AtomTypeRegistry::from_atoms((0..copies).flat_map(|_| rows.clone()));
+            let molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h2"]}"#);
+            prop_assert_eq!(AtomTypingValence::new(&repeated).admit(&molecule), AtomTypingValence::new(&registry).admit(&molecule));
+        }
     }
 }

@@ -941,6 +941,67 @@ matching the source; multiple rows yielding the same state need not imply ambigu
 the proposed retained properties, not the fully ground source atom, which admission may skip.
 These are initial reconstruction criteria to verify, not completed roundtrip coverage.
 
+### Isotope resolution and registry raising (settled during S4a)
+
+The isotope rejection exposed during S4a is a resolution inconsistency to repair, not an
+unsupported projection category. Before S4a0a, registry raise inherited Natural from concrete atom
+defaults, while counts admission independently filled an undetermined isotope with Natural.
+Consequently an explicit isotope could conflict with an otherwise applicable default registry row.
+
+IsotopeResolver is a separate phase, after assertion placement and before valence admission.
+Its configuration is independent of valence's Strict/MostSaturated policy. The isotope policies
+are Strict, which leaves Undetermined unchanged, and Natural, which completes Undetermined with
+Natural. Both preserve supplied Natural and explicit isotope values; neither selects a mass
+from an isotope set or overrides a variable. The isotope policy therefore takes effect before
+custom registry patterns are considered. Format-owned interpretation already present in GraphIR
+is preserved. Strict is the general default isotope policy. The SMILES defaults select Natural,
+independently of their MostSaturated valence policy. Explicitly supplied resolver configuration
+remains authoritative.
+
+IsotopeResolver::project uses the same policy as resolve, analogous to omitting defaults during
+lowering. Under Natural, project replaces Natural with Undetermined because resolution restores
+Natural. Under Strict, project retains Natural because resolution would not restore an omitted
+value. Both policies retain explicit isotope masses. No separate projection policy or provenance
+distinguishing supplied Natural from defaulted Natural is needed: the inverse law recovers the
+resolved state, not its original input spelling. This operation stays within GraphIR; boundary
+conversion and rendering own the output notation.
+
+Valence resolution must stop supplying isotope defaults. It may complete its own fields while
+isotope information remains undetermined; the composite resolver retains its final completeness
+check and atomic publication semantics. Aromaticity remains directly after valence.
+
+Registry raise uses concrete defaults for inherent fields other than isotope, together with its
+existing valence-related constraint defaults. Override isotope with the existing Required policy,
+which leaves an omitted isotope Undetermined. Every stored AtomTypeRegistry entry must have
+isotope Undetermined. Enforce this invariant at every construction and insertion boundary,
+including programmatic AtomForms, TOML loading, the registry macro, and Python construction.
+Reject supplied Natural, masses, sets, variables, and every other non-Undetermined isotope form;
+do not strip information to make an entry admissible. Validate before insertion so rejection
+leaves the registry's contents and hash unchanged. Private storage and read-only accessors preserve
+the invariant after construction; lookup and resolution need no repeated checks.
+
+Programmatic construction and insertion have checked try_from_atoms and try_add methods returning
+ConfigError, with from_atoms and add as asserted counterparts using the same entry check. TOML
+loading and Python construction use the checked gate; Python reports ValueError. The gate also
+owns literal element/charge requirements and the i8 charge-key range check already used by Python.
+
+The broader RequireUndetermined DSL policy and fallible raise/lower migration are dropped.
+IntoIr, FromIr, and general molecule/reaction defaults keep their existing contracts. The
+restriction belongs to the registry that requires it. ValenceTable stores numeric states rather
+than AtomForms, so it needs no corresponding isotope validation after counts admission's
+programmatic isotope completion is removed.
+
+Exact post-meet duplicate elimination is also settled: AtomTypingValence admission retains one
+copy of each exactly equal AtomForm, including constraints, in existing first-occurrence order.
+This is independent of isotope policy and valence tie-breaking. Distinct completed states remain
+distinct. Custom overlapping registry patterns supplied the motivating reproduction. Its isotope
+variants become inadmissible under the registry invariant; regressions must exercise admissible
+non-isotope overlaps instead, preserving the exact-equality law.
+
+S4a has an uncommitted implementation draft, but is not complete. S4a0a revises its temporary
+default-registry isotope-rejection expectations and its isotope-asserting custom registry fixtures.
+The remaining isotope resolution integration still precedes S4a completion.
+
 ### Aromatic reconstruction and the inverse check
 
 Projection fails for nonzero charge or `#u > 0` on any bond or aromatic system; it does not
@@ -1282,7 +1343,8 @@ The plan below sequences the work; S0–S3 are complete.
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-S4 and later stages are pending.
+S4a has an implementation draft; its S4a0 prerequisites and the remaining S4 work are pending.
+S5 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1538,10 +1600,97 @@ changes are reviewed for semantic preservation, not accepted solely because test
 
 ### S4 — GraphIR-only inverse projection
 
+S4a0 groups three isotope-repair prerequisites. Keep the existing S4a draft unfinished until they
+are complete; the draft's default-registry isotope rejection is not an accepted support boundary.
+S4a0a has its registry implementation; its conformance gate remains pending S4a0b/c. Removing
+registry isotope defaults exposes the dependency on isotope resolution, so S4a0a cannot be an
+independent green milestone as originally planned. Preserve the existing conformance inputs and
+snapshots and run the full gate after integration; do not default isotope in the test harness to
+hide this dependency.
+The phase order, Strict/Natural behaviors, Strict as the general default, Natural for SMILES, and
+the registry's isotope-Undetermined invariant are settled. No general DSL conversion change is
+required.
+
+- **S4a0a — Secure the atom-type registry's isotope invariant.** Modules: ops/valence/registry,
+  its Rust callers/macros, and umol-py/model/valence.
+  **Breaking (green milestone with S4a0c).** [dep: S0a]
+  Require isotope Undetermined in every stored row. Set registry raise's isotope default to
+  Required while retaining its other concrete and valence-constraint defaults. Cover from_atoms,
+  add, TOML string/file loading, the registry macro, built-in/default construction, and Python
+  producers. TOML currently builds storage directly, so securing add alone is insufficient.
+  Establish one authoritative entry check at construction/insertion; preserve the invariant through
+  cloning and read-only access without checking again in admission or lookup. Add try_from_atoms
+  and try_add returning ConfigError; from_atoms and add assert the same checks. Fallible loaders
+  and Python report invalid input as errors. Reject before changing contents or content_hash.
+  Test all producer routes, acceptance of Undetermined, rejection of Natural, masses, sets,
+  variables and other non-Undetermined forms, failed-insertion atomicity, and built-in row/hash
+  consistency. Migrate callers and fixtures that previously inherited or explicitly asserted
+  Natural, preserving what their tests exercise. Rewrite duplicate-admission regressions using
+  admissible non-isotope overlaps. Leave general DSL defaults and IntoIr/FromIr unchanged.
+- **S4a0b — Standalone isotope resolver and policies.** Module: ops/resolve/isotope.rs and
+  the phase's configuration/error vocabulary. **Additive (green).** [dep: S0a]
+  Implement IsotopeResolver with independent Strict and Natural policies, defaulting to Strict.
+  Strict preserves an
+  unresolved isotope; Natural fills only Undetermined. Preserve supplied Natural, masses, sets,
+  and variables. Report unresolved isotope information without requiring valence completion or
+  modifying unrelated atom fields. Follow the existing phase planning and atomic application
+  contracts, with the exact public symbols reconciled before implementation.
+  Implement project under that same policy: Natural becomes Undetermined only under Natural;
+  Strict retains Natural, and both retain explicit masses. No separate projection setting.
+  Test exact edits/results, explicit-value preservation, policy differences, idempotence, and
+  failure/underdetermination behavior. Add inverse-law properties for resolve(project(source))
+  under each policy over resolved isotope values, preserving unrelated fields. Do not wire it
+  into the composite pipeline yet.
+- **S4a0c — Integrate isotope resolution and remove valence defaults.** Modules: composite
+  resolve/config, valence counts/registry/admission consumers, and umol-py resolve/model bindings.
+  **Breaking/refactor (red→green within subitem).** [dep: S4a0a, S4a0b]
+  Run isotope resolution after assertion placement and before valence admission; aromaticity
+  remains directly after valence. Expose the independent isotope setting through ResolveConfig
+  and its existing Python configuration surface. Keep Strict as the general default and select
+  Natural in the molecular and reaction SMILES default entry points; preserve supplied settings.
+  Remove counts admission's isotope completion. ValenceTable has no AtomForms and needs no
+  isotope validation. Atom typing consumes the registry invariant established in S4a0a without
+  revalidating entries; molecule AtomForms may still carry explicit isotope information.
+  Audit phase progress so an unresolved isotope does not prevent determination of valence-owned
+  fields; retain final composite completeness and atomic publication. Test natural and explicit
+  isotope input with both valence sources, Strict/Natural crossed with both valence tie-breaks,
+  isotope preservation through registry meets and counts completion, stereo ordering, and
+  composite nonpublication when isotope remains unresolved. Update Rust/Python docs and tests
+  together. Apply the staged isotope-composition spec correction in this subitem, alongside the
+  SMILES Natural preset; the remaining specification updates retain their later stage. Use a
+  bounded inline benchmark comparison for default resolve/ingest paths; no fixture
+  files or tuning campaign. Revise the S4a draft tests that encoded isotope rejection as a limitation.
+
+S4a0a and S4a0b are independent foundations; both precede S4a0c, which precedes S4a. None is
+deferrable for S4a completion. Each subitem includes its own tests and caller migration; run the
+affected graph-IR/IO/graph suites and Python checks where bindings change. The S4a0 integration gate
+includes graph conformance and property suites for both valence sources and both isotope policies.
+
+S4a0a implementation checkpoint (2026-09-11): try_from_atoms and try_add enforce the registry
+invariant, with asserted counterparts and one shared entry check for programmatic and TOML paths.
+Python delegates to checked Rust construction. Registry raise leaves isotope Undetermined; failed
+insertion preserves contents and hash. The shared check also retains Python's charge-range
+rejection for all producers. No isotope checks were added to lookup or admission, and no general
+DSL defaults, conversion traits, or counts behavior changed.
+
+Focused verification: 1,186 graph library tests and the whitepaper test pass; all seven graph
+property tests pass, including projection with carbon-13 under both valence sources. Rust binding
+tests pass (1,642 passed, two ignored); after rebuilding with Python 3.13, all 145 Python model
+tests pass. Graph/Python all-target clippy passes with warnings denied. The complete Python suite
+has 1,523 passed, two skipped, and four failures in stereo-error expectations for F/C=C and
+conflicting directional markers. Those parser and Python error paths are unchanged from HEAD;
+their error-layer expectations are separate from the registry work.
+
+The full graph conformance run has 23 passed and 660 snapshot failures after removal of the
+registry's isotope default. The corpus and snapshots remain unchanged; S4a0b/c must supply the
+explicit isotope phase and configure the intended Natural policy for this corpus. This gate is
+pending, so S4a0a is an implementation checkpoint rather than a completed green subitem.
+
 - **S4a — Ordinary valence reconstruction.** Modules: resolve/valence.rs and valence
-  atom_typing/counts/registry as needed. **Additive (green).** [dep: S0a, S0b]
+  atom_typing/counts/registry as needed. **Additive (green).** [dep: S0a, S0b, S4a0c]
   Implement reconstruction from retained GraphIR properties for the initial non-aromatic domain.
-  Reuse candidate admission and compare completed states, deduplicating equivalent completions;
+  Reuse candidate admission and compare completed states; admission deduplicates exactly equal
+  post-meet AtomForms, including constraints, independently of isotope policy and valence tie-break;
   do not check the already-ground source through the admission fast path. For counts, start with
   fixed H and the established electron pairing/multiplicity reconstruction. Retain enough evidence
   rather than search for a minimum encoding. No registry public pruning API is added without its
@@ -3662,6 +3811,13 @@ This is the separate staging list for changes to `umol-io/spec/opensmiles-spec.m
 It records specification content, not implementation tasks or roundtrip guarantees.
 The specification defines interpretation and equivalence; the roundtrip design consumes
 that equivalence relation. The specification itself has not yet been edited.
+
+### Isotope composition
+
+- Correct the Numeric and Bracket Fields and Organic Subset sections: an omitted isotope
+  specification denotes naturally occurring isotopic composition, not an undetermined isotope
+  composition. Natural composition does not select one mass number. This follows OpenSMILES
+  section 3.1.4 and is implemented with the isotope repair in S4a0c.
 
 ### Implicit hydrogen section
 

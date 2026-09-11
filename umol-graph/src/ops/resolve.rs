@@ -1118,7 +1118,7 @@ mod tests {
     #[rstest]
     #[case::counts(ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())))]
     #[case::atom_typing(ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
-            "C#i=#c0#h4#n0#u0#s#v0#a!"
+            "C#c0#h4#n0#u0#s#v0#a!"
         )]))))]
     fn test_resolver_resolve(#[case] valence: ValenceModel) {
         let model = ChemistryModel {
@@ -1133,7 +1133,7 @@ mod tests {
             },
             stereo: StereoModel::default(),
         };
-        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0#a!"]}"#);
+        let mut molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#v0#a!"]}"#);
         assert_eq!(
             Resolver::new(&model).resolve(&mut molecule),
             Ok(Solution::Determined(ResolveReport::default()))
@@ -1435,14 +1435,14 @@ mod tests {
     #[case::aromaticity_setup(
         ChemistryModel {
             valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
-                    "C#i=#c0#h0#n0#u0#s#v2#a2"
+                    "C#c0#h0#n0#u0#s#v2#a2"
                 )]))),
             aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         mol_dsl!(r#"{
-            :atoms ["C#i*#v2#a2" "C#v2#a2" "C#v2#a2"
-                    "C#v2#a2" "C#v2#a2" "C#v2#a2"]
+            :atoms ["C#i=#v2#a2" "C#i=#v2#a2" "C#i=#v2#a2"
+                    "C#i=#v2#a2" "C#i=#v2#a2" "C#i=#v2#a2"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
                     [3 4 "1"] [4 5 "1"] [5 0 "1"]]
         }"#),
@@ -1465,7 +1465,7 @@ mod tests {
     #[rstest]
     #[case::underdetermined(
         mol_dsl!(r#"{
-            :atoms ["C#i*#c0#h0#n0#u0#s#v0#a!#m1"
+            :atoms ["C#i=#c0#h0#n*#u0#s#v0#a!#m1"
                     "C#i=#c0#h0#n0#u0#s#v0#a!#m1"
                     "C#i=#c0#h0#n0#u0#s#v0#a!#m1"]
             :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]
@@ -1474,7 +1474,7 @@ mod tests {
     )]
     #[case::contradiction(
         mol_dsl!(r#"{
-            :atoms ["C#i*#c0#h0#n0#u0#s#v0#a!#m1"]
+            :atoms ["C#i=#c0#h0#n*#u0#s#v0#a!#m1"]
         }"#),
         Solution::Contradictory(ResolveContradiction::MulticenterBonds(
             MulticenterBondsContradiction::Constraint(
@@ -1493,7 +1493,7 @@ mod tests {
     ) {
         let model = ChemistryModel {
             valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([
-                atom_dsl!("C#i=#c0#h0#n0#u0#s#v0#a!#m1"),
+                atom_dsl!("C#c0#h0#n0#u0#s#v0#a!#m1"),
             ]))),
             ..ChemistryModel::default()
         };

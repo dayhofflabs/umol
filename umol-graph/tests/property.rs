@@ -16,3 +16,6 @@ mod strategies;
 mod publication;
 #[path = "property/resolve.rs"]
 mod resolve;
+
+#[path = "property/project.rs"]
+mod project;

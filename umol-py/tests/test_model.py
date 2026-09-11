@@ -52,6 +52,7 @@ def test_atom_type_registry_from_atoms():
     assert registry != AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4")])
 
     atom.charge = 1
+    atom.isotope_mass = 13
     assert registry.patterns_for_element_and_charge(Element("C"), 0) == [
         AtomForm.parse("C#c0#v4")
     ]
@@ -62,15 +63,35 @@ def test_atom_type_registry_from_atoms():
     [
         (
             AtomForm.parse("*#c0"),
-            "atom type registry entry 0 must have a literal element",
+            "invalid atom type registry: registry entries must have literal elements",
         ),
         (
             AtomForm.parse("C"),
-            "atom type registry entry 0 must have a literal charge",
+            "invalid atom type registry: registry entries must have literal charges",
         ),
         (
             AtomForm.parse("C#c128"),
-            "atom type registry entry 0 charge 128 is outside -128..=127",
+            "invalid atom type registry: registry entry charge 128 is outside -128..=127",
+        ),
+        (
+            AtomForm.parse("C#i=#c0"),
+            "invalid atom type registry: registry entries must have undetermined isotopes",
+        ),
+        (
+            AtomForm.parse("C#i13#c0"),
+            "invalid atom type registry: registry entries must have undetermined isotopes",
+        ),
+        (
+            AtomForm.parse("C#i{12,13}#c0"),
+            "invalid atom type registry: registry entries must have undetermined isotopes",
+        ),
+        (
+            AtomForm.parse("C#i?mass#c0"),
+            "invalid atom type registry: registry entries must have undetermined isotopes",
+        ),
+        (
+            AtomForm.parse("C#i?mass :: {12,13}#c0"),
+            "invalid atom type registry: registry entries must have undetermined isotopes",
         ),
     ],
 )
@@ -85,20 +106,32 @@ def test_atom_type_registry_from_toml():
     )
 
     assert registry.patterns_for_element(Element("C")) == [
-        AtomForm.parse("C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!"),
-        AtomForm.parse("C#i=#c+#h0#n0#u0#s#v3#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h0#n0#u0#s#v4#d0#t0#a!#m!"),
+        AtomForm.parse("C#c+#h0#n0#u0#s#v3#d0#t0#a!#m!"),
     ]
     assert registry.patterns_for_element_and_charge(Element("O"), 0) == [
-        AtomForm.parse("O#i=#c0#h0#n0#u0#s#v2#d0#t0#a!#m!")
+        AtomForm.parse("O#c0#h0#n0#u0#s#v2#d0#t0#a!#m!")
     ]
 
 
-def test_atom_type_registry_from_toml_error():
-    with pytest.raises(
-        ValueError,
-        match="^invalid atom type registry: unknown element: X$",
-    ):
-        AtomTypeRegistry.from_toml('[X]\n0 = ["X#c0"]')
+@pytest.mark.parametrize(
+    ("input", "message"),
+    [
+        ('[X]\n0 = ["X#c0"]', "invalid atom type registry: unknown element: X"),
+        *[
+            (
+                f'[C]\n0 = ["{atom}"]',
+                "invalid atom type registry: registry entries must have undetermined isotopes",
+            )
+            for atom in (
+                "C#i=", "C#i13", "C#i{12,13}", "C#i?mass", "C#i?mass :: {12,13}"
+            )
+        ],
+    ],
+)
+def test_atom_type_registry_from_toml_error(input, message):
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        AtomTypeRegistry.from_toml(input)
 
 
 def test_atom_type_registry_patterns():
@@ -108,6 +141,7 @@ def test_atom_type_registry_patterns():
     patterns = registry.patterns_for_element(Element("C"))
 
     patterns[0].charge = -1
+    patterns[0].isotope_mass = 13
     patterns.pop()
 
     assert registry.patterns_for_element(Element("C")) == [

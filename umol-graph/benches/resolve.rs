@@ -87,5 +87,80 @@ fn bench_resolve(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(resolve, bench_ingest_smiles, bench_resolve);
+fn bench_valence_project(c: &mut Criterion) {
+    for (label, valence) in [
+        ("counts", ValenceModel::smiles()),
+        ("atom_typing", ValenceModel::default()),
+    ] {
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let resolver = Resolver::new(&model);
+        let mut group = c.benchmark_group(format!("smiles_roundtrip/valence_project/{label}"));
+        for (name, input) in [
+            ("methane", "C"),
+            (
+                "chain_64",
+                "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+            ),
+            ("methyl", "[CH3]"),
+            ("ammonium", "[NH4+]"),
+        ] {
+            let table = Smiles::parse(input).unwrap().into_table_ir();
+            let mut source: Molecule = (&table).try_into_ir(&()).unwrap();
+            assert!(matches!(
+                resolver.resolve(&mut source).unwrap(),
+                Solution::Determined(_)
+            ));
+            let mut checked = source.clone();
+            assert!(matches!(
+                resolver
+                    .valence
+                    .project(&mut checked, resolver.tie_break)
+                    .unwrap(),
+                Solution::Determined(_)
+            ));
+            assert!(matches!(
+                resolver.resolve(&mut checked).unwrap(),
+                Solution::Determined(_)
+            ));
+            assert_eq!(checked, source);
+            group.bench_function(name, |b| {
+                b.iter_batched_ref(
+                    || source.clone(),
+                    |molecule| {
+                        resolver
+                            .valence
+                            .project(black_box(molecule), resolver.tie_break)
+                            .unwrap()
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(format!("{name}_and_resolve"), |b| {
+                b.iter_batched_ref(
+                    || source.clone(),
+                    |molecule| {
+                        let projected = resolver
+                            .valence
+                            .project(black_box(molecule), resolver.tie_break)
+                            .unwrap();
+                        let resolved = resolver.resolve(molecule).unwrap();
+                        black_box((projected, resolved))
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+        }
+        group.finish();
+    }
+}
+
+criterion_group!(
+    resolve,
+    bench_ingest_smiles,
+    bench_resolve,
+    bench_valence_project
+);
 criterion_main!(resolve);
