@@ -151,11 +151,48 @@ fn bench_stereo_project(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_project(c: &mut Criterion) {
+    let model = ChemistryModel::default();
+    let resolver = Resolver::with_config(
+        &model,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
+    );
+    let mut group = c.benchmark_group("smiles_roundtrip/project");
+    for (name, input) in [
+        ("octane", "CCCCCCCC"),
+        ("benzene", "c1ccccc1"),
+        ("naphthalene", "c1ccc2ccccc2c1"),
+        ("stereo", "N[C@H](F)/C=C/C"),
+        ("combined", "[13CH3][C@H](F)/C=C/c1ccccc1"),
+    ] {
+        let source = ingest_smiles(input).unwrap();
+        let mut checked = source.clone();
+        assert_eq!(resolver.project(&mut checked), Ok(Solution::Determined(())));
+        assert!(
+            !checked.has_stereo_atoms()
+                && !checked.has_stereo_bonds()
+                && !checked.has_aromatic_systems()
+        );
+        group.bench_function(name, |b| {
+            b.iter_batched_ref(
+                || source.clone(),
+                |molecule| resolver.project(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     resolve,
     bench_ingest_smiles,
     bench_resolve,
     bench_aromaticity_project,
-    bench_stereo_project
+    bench_stereo_project,
+    bench_project
 );
 criterion_main!(resolve);

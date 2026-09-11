@@ -4,12 +4,14 @@
 //! check projection of successfully ingested SMILES under both valence sources.
 //! Stereo projection is checked against independent tetrahedral permutation parity and
 //! cis-trans side-swap parity, preserving virtual-ligand kinds and open configurations.
+//! Composite projection of supported SMILES is compared with independent complete graph-IR
+//! expectations, including aromatic contributions, both stereo assertions, and isotope elision.
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles_with;
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
-use umol_graph::ops::resolve::{ResolveConfig, Resolver};
+use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
     BondConstraintForm, BondForm, BondId, BooleanForm, CisTransStereoForm, ElectronCountsForm,
@@ -22,6 +24,46 @@ use umol_io::smiles::SmilesIoConfig;
 use umol_utils::solution::Solution;
 
 proptest! {
+    #[test]
+    fn test_resolver_project_input(
+        mass in prop::sample::select(vec![None, Some(13u32), Some(14u32)]),
+        clockwise in any::<bool>(), trans in any::<bool>(),
+        natural in any::<bool>(), typing in any::<bool>(),
+    ) {
+        let isotope = mass.map(|mass| mass.to_string()).unwrap_or_default();
+        let chirality = if clockwise { "@@" } else { "@" };
+        let direction = if trans { "/" } else { "\\" };
+        let input = format!("[{isotope}CH3][C{chirality}H](F)/[CH]=[CH]{direction}[c]1[cH][cH][cH][cH][cH]1");
+        let model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            ..Default::default()
+        };
+        let config = ResolveConfig {
+            isotope: if natural { IsotopePolicy::Natural } else { IsotopePolicy::Strict },
+            ..Default::default()
+        };
+        let mut molecule = ingest_smiles_with(&input, &SmilesIoConfig::opensmiles(), &model, &config).unwrap();
+        let base = mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h1" "F#n3" "C#h1" "C#h1" "C#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+            :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [3 4 "2"] [4 5 "1"]
+                [5 10 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"]]}"#);
+        let mut editor = base.edit();
+        if natural {
+            for atom in base.atoms().ids() {
+                editor.atom_mut(atom).attributes.isotope_mass = IsotopeMassForm::Undetermined;
+            }
+        }
+        if let Some(mass) = mass {
+            editor.atom_mut(AtomId(0)).attributes.isotope_mass = IsotopeMassForm::Lit(mass);
+        }
+        editor.atom_mut(AtomId(1)).attributes.constraints.set(AtomConstraintForm::TetrahedralStereo(
+            TetrahedralStereoForm::Stereo(StereoCoset::Lit(u32::from(clockwise)))));
+        editor.bond_mut(BondId(3)).attributes.constraints.set(BondConstraintForm::CisTransStereo(
+            CisTransStereoForm::Stereo(StereoCoset::Lit(u32::from(trans)))));
+        let expected = editor.build();
+        prop_assert_eq!(Resolver::with_config(&model, config).project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(molecule, expected);
+    }
+
     #[test]
     fn test_aromaticity_resolver_project(
         rings in prop::collection::vec((0u8..5, 0usize..6, any::<bool>()), 1..5),

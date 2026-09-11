@@ -1356,7 +1356,7 @@ The plan below sequences the work; S0–S3 are complete.
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-S4a0a–S4a0c, the S4a–S4b corrections, and S4c are complete. S4d remains pending.
+S4 is complete, including S4a0a–S4a0c and the S4a–S4b corrections.
 S5 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
@@ -1804,7 +1804,7 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   Unsupported extended kinds fail rather than partially projecting. No runtime re-resolution
   or comparison of recovered configurations is added.
 - **S4d — Atomic Resolver::project composition.** Module: resolve.rs and related
-  error/report vocabulary. **Additive (green).** [dep: S4a, S4b, S4c]
+  error/report vocabulary. **Additive (green); completed 2026-09-11.** [dep: S4a, S4b, S4c]
   Compose the projection plans with resolve's Result/Solution and commit semantics. Reject nonzero
   charge or #u > 0 on bonds and aromatic systems. Preserve non-elidable information on other
   unsupported structures for explicit failure. Only successful projection publishes the candidate;
@@ -1967,14 +1967,68 @@ from 10 samples, 0.5 s warmup, and 1 s measurement:
 | Tetrahedral atom and cis-trans bond | 2.2873 |
 
 All benchmark input checks and measured cases pass. Full output: scratch/s4c-benchmark.log.
-S4d is next.
+
+#### S4d completion — 2026-09-11
+
+Resolver::project takes &mut Molecule and returns
+Result<Solution<(), ProjectContradiction>, ProjectError>. It checks localized and multicenter
+bond charge/spin, then composes stereo, aromatic, and isotope projection on a private candidate.
+Only Determined publishes that candidate. The composite forwards phase underdetermination and
+contradictions without publication; current phase implementations return Determined or an error.
+No valence phase, placement/discharge pass, global groundness gate, or recovery comparison is
+part of projection. A successfully projected molecule can contain elided isotope defaults.
+
+The new public symbols are Resolver::project, ProjectError, and ProjectContradiction in
+ops::resolve. ProjectError has BondCharge and BondSpin variants carrying the entity and offending
+form, plus Stereo, Aromaticity, and Isotope variants wrapping the owning phase errors.
+ProjectContradiction wraps the existing aromaticity and stereo contradiction types. Both error
+types implement UmolError. There is no projection report: projection makes no candidate selection
+or tie-break decision. No additional reexports, configuration, or public helper types were added.
+
+Bond charge must be concrete zero and bond spin concrete closed-shell singlet; undetermined
+fields cannot stand for these values. Both localized and multicenter bonds carry these fields
+and receive the same checks through borrowed iteration. Aromatic-system checks remain in the
+aromatic projection phase. Atom electron fields and localized charge are retained. Dative,
+multicenter, noncovalent, and other unprojected information remains for Convey and its capacity
+checks; success here does not establish SMILES representability.
+
+Exact fixtures cover isotope elision with preserved atom charge/radicals/lone pairs, retained
+relations and unresolved ordinary fields, bond charge/spin failures, and error propagation from
+each phase. Late isotope failure preserves the original stereo entities and aromatic systems,
+even after earlier candidate transformations. The generated supported-input property combines
+tetrahedral stereo, cis-trans stereo, an aromatic ring, Natural/13C/14C isotope inputs, and both
+isotope policies, comparing the entire projected graph IR with independent expected values.
+Bracket H counts keep the inputs determined under unchanged counts and atom-typing models.
+The property does not require arbitrary GraphIR reverse reconstruction.
+
+Verification: PROPTEST_CASES=256 cargo test -p umol-graph --features conformance,proptest --offline
+passes with 1,489 unit cases, 683 conformance cases, 14 property tests, and integration tests.
+All-target graph Clippy with the same features and -D warnings passes. All existing composite
+resolution methods and helpers are unchanged. Formatting and git diff --check pass. Logs:
+scratch/s4d-gate.log and scratch/s4d-clippy.log.
+
+Composite projection baseline, central estimates in microseconds, with 10 samples, 0.5-second
+warmup, and 1-second measurement per input:
+
+| Input | Composite project |
+| --- | ---: |
+| Octane | 1.5365 |
+| Benzene | 2.9276 |
+| Naphthalene | 4.5282 |
+| Tetrahedral atom and cis-trans bond | 3.4562 |
+| Isotope, tetrahedral atom, cis-trans bond, and aromatic ring | 7.3222 |
+
+The measurements include internal candidate cloning and phase work; ingestion, resolver
+construction, and the caller's setup clone are excluded. These establish the cost of the current
+composite operation. All inline benchmark input checks and measured cases pass. Full output:
+scratch/s4d-benchmark.log. S4 is complete; S5a is next.
 
 #### Historical S4a/S4b implementation and measurements — 2026-09-11
 
 The following records describe the implementation before the contract correction. Its runtime
 reconstruction checks and the tests enforcing them are superseded by the corrected subitems above;
-passing those checks does not complete the corrected work. Retain the measurements for a bounded
-before/after comparison. Projection-plus-resolve measurements are historical diagnostics, not a
+passing those checks does not complete the corrected work. Retain the measurements as costs of
+the discarded operation. Projection-plus-resolve measurements are historical diagnostics, not a
 required output-pipeline benchmark or deliverable.
 
 S4a prior implementation (2026-09-11): ValenceResolver::project retains element, isotope, charge, fixed
@@ -2079,10 +2133,11 @@ Central estimates in microseconds from 10 samples, 0.5 s warmup, and 1 s measure
 These establish initial costs, not a before/after performance claim. All benchmark input checks
 and measured cases pass. Full output: scratch/s4b-benchmark.log.
 
-**Corrected S4 gate:** graph unit, conformance, and property suites pass for both valence strategies.
+**Corrected S4 gate (completed 2026-09-11):** graph unit, conformance, and property suites pass for both valence strategies.
 Record the supported input domain and concrete unsupported values. Verify direct projection and
-atomic publication without runtime reconstruction. Run a bounded projection benchmark comparison
-against the historical measurements; no re-resolution measurement or tuning campaign is required.
+atomic publication without runtime reconstruction. Establish bounded baselines for the corrected
+projection operations; historical reconstruction timings describe different work. No re-resolution
+measurement or tuning campaign is required.
 
 ### S5 — IO traversal and direction assignment kernels
 
@@ -2298,7 +2353,7 @@ inventing extra public seams.
 | StereoAtom, StereoLigand, Winding, ConfigurationScope | Retain public layout and the implicit-H/LP participant convention. | Doc 224 parser finalizer, raise, future writer. No LP-removal migration. |
 | AtomNeighbors and table_ir::Neighbor; both molecule atom_neighbors methods | Remain operation-local lookup; no new foundational graph field or adjacency trait. Eliminate unnecessary allocation at callers without assuming final Graph connectivity matches the table. | Raise helpers, table tests; future parser/writer incidence access. Retirement/replacement of the public helper itself is not approved. |
 | TryIntoIr<Molecule> for &table_ir::Molecule; RaiseError | Raise explicit frames instead of interpreting retained directions; preserve model-independent representation errors at the owning conversion. | Interpret, parser/raise fixtures, fuzz target. Source marker conflicts move with their producer; do not erase diagnostics. |
-| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation, same mutation/publication semantics as resolve; no TableIR or IO-config parameters. Ordinary valence has no projection phase; S4a removed ValenceResolver::project and ValenceProjectError. S4b reconciled aromatic projection's signature and five diagnostics in its completion record above. | Convey; supported-input roundtrip properties and projection benchmarks. |
+| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation, same mutation/publication semantics as resolve; no TableIR or IO-config parameters. Ordinary valence has no projection phase; S4a removed ValenceResolver::project and ValenceProjectError. S4b–S4d completion records specify the implemented signatures and diagnostics. | Convey; supported-input roundtrip properties and projection benchmarks. |
 | Resolver::resolve, ResolveConfig, ResolveState and existing reports/errors | Retain forward semantics, including completed isotope corrections. Project does not invoke resolution for validation. | Existing ingestion and resolution tests; supported-input projection properties. |
 | AtomTypeRegistry lookup/admission operations | Retain forward admission and completed registry invariants/deduplication; no projection candidate filtering or new pruning API. | Forward atom typing. |
 | Smiles/ReactionSmiles::from_table_ir | New checked owned-table constructors with &SmilesIoConfig; Result establishes renderability. Private table fields remain private. | Convey across the crate boundary; tests of independent open tables. |
@@ -2309,7 +2364,7 @@ inventing extra public seams.
 | Convey::{Input, Config, Error, convey} | New local trait in umol-graph, implemented on output boundary types with the settled signature; Config = SmilesIoConfig here. | Molecular/reaction export. No Export trait or generic format target on Molecule. |
 | ingest_smiles and ingest_reaction_smiles families | All eight existing text/bytes/default/explicit-IO functions receive a supplied Resolver; remove separate model/resolve-config arguments. | Full caller list below, including benches and Python adapters. Default variants retain only default IO selection. |
 | export_smiles/export_reaction_smiles and their _with variants | New four functions return text through convey + render, taking a Resolver and default/explicit IO config. | Rust output callers. No additional sink/byte family or Python wrapper is inferred. |
-| ProjectError, construction/convey/render/output diagnostics | Operation boundaries and proposed names are settled; exact variants, report types, reaction names and shared-reason placement remain for their cohesive implementation subitems. | Error source chains, section context and exact failure fixtures. No catch-all silent fallback. |
+| ProjectError, ProjectContradiction, construction/convey/render/output diagnostics | S4d defines the composite projection diagnostics and unit success value. Exact boundary variants, reaction names and shared-reason placement remain for their cohesive implementation subitems. | Error source chains, section context and exact failure fixtures. No catch-all silent fallback. |
 
 Argument ordering not explicitly shown in the approved signatures, error enum layout, and
 per-resolver helper signatures must be reconciled at their owning subitems; the inventory does
