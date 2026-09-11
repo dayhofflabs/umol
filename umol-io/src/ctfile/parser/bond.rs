@@ -13,16 +13,18 @@ use super::utils::{
 };
 use crate::ctfile::config::CtabParseFlags;
 use crate::ctfile::error::ParseError;
-use crate::table_ir::bond::{Bond, BondOrder, BondTaper, BondWedge, ExtendedBond};
+use crate::table_ir::bond::{Bond, BondOrder, BondStereo, BondTaper, BondWedge, ExtendedBond};
 
 /// Parse bond block (basic bonds only)
+#[allow(clippy::type_complexity)]
 pub(super) fn bond_block(
     input: &mut &[u8],
     bond_count: u32,
     line_offset: u32,
     flags: CtabParseFlags,
-) -> ModalResult<(Vec<Bond>, u32), ParseError> {
+) -> ModalResult<(Vec<Bond>, Vec<(u32, BondStereo)>, u32), ParseError> {
     let mut bonds = Vec::with_capacity(bond_count as usize);
+    let mut bond_stereo_assertions = Vec::new();
     for line_index in 0..bond_count {
         let physical_line = line_offset + line_index;
         let mut line = next_line(input).map_err(|_| {
@@ -35,25 +37,30 @@ pub(super) fn bond_block(
             finish_line(&mut line)?;
             Ok(value)
         });
-        let bond = result.map_err(|error| {
+        let (bond, stereo) = result.map_err(|error| {
             ErrMode::Cut(ParseError::InvalidBondLine {
                 line: physical_line,
                 col: input_error_column(error, &line),
             })
         })?;
         bonds.push(bond);
+        if let Some(stereo) = stereo {
+            bond_stereo_assertions.push((line_index, stereo));
+        }
     }
-    Ok((bonds, line_offset + bond_count))
+    Ok((bonds, bond_stereo_assertions, line_offset + bond_count))
 }
 
 /// Parse extended bond block
+#[allow(clippy::type_complexity)]
 pub(super) fn extended_bond_block(
     input: &mut &[u8],
     bond_count: u32,
     line_offset: u32,
     flags: CtabParseFlags,
-) -> ModalResult<(Vec<ExtendedBond>, u32), ParseError> {
+) -> ModalResult<(Vec<ExtendedBond>, Vec<(u32, BondStereo)>, u32), ParseError> {
     let mut bonds = Vec::with_capacity(bond_count as usize);
+    let mut bond_stereo_assertions = Vec::new();
     for line_index in 0..bond_count {
         let physical_line = line_offset + line_index;
         let mut line = next_line(input).map_err(|_| {
@@ -68,15 +75,18 @@ pub(super) fn extended_bond_block(
                 finish_line(&mut line)?;
                 Ok(value)
             });
-        let bond = result.map_err(|error| {
+        let (bond, stereo) = result.map_err(|error| {
             ErrMode::Cut(ParseError::InvalidBondLine {
                 line: physical_line,
                 col: input_error_column(error, &line),
             })
         })?;
         bonds.push(bond);
+        if let Some(stereo) = stereo {
+            bond_stereo_assertions.push((line_index, stereo));
+        }
     }
-    Ok((bonds, line_offset + bond_count))
+    Ok((bonds, bond_stereo_assertions, line_offset + bond_count))
 }
 
 /// Parse bond input (optimized for performance)
@@ -112,7 +122,7 @@ pub(super) fn extended_bond_block(
 ///
 fn bond_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<Input<'inp>, Bond, ErrMode<InputError>> + use<'inp> {
+) -> impl Parser<Input<'inp>, (Bond, Option<BondStereo>), ErrMode<InputError>> + use<'inp> {
     move |input: &mut Input<'inp>| {
         let bytes: &[u8] = input.as_ref();
         if bytes.len() < 9 {
@@ -174,7 +184,6 @@ fn bond_input<'inp>(
 
         let mut bond = Bond::new(first_atom, second_atom, order);
         // The source first atom is the wedge's narrow end.
-        bond.stereo = stereo;
         bond.wedge = orientation.map(|orientation| BondWedge {
             orientation,
             taper: if first_atom <= second_atom {
@@ -185,7 +194,7 @@ fn bond_input<'inp>(
         });
 
         let _: &[u8] = take(offset).parse_next(input)?;
-        Ok(bond)
+        Ok((bond, stereo))
     }
 }
 
@@ -210,7 +219,7 @@ fn bond_input<'inp>(
 ///
 fn extended_bond_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<Input<'inp>, ExtendedBond, ErrMode<InputError>> + use<'inp> {
+) -> impl Parser<Input<'inp>, (ExtendedBond, Option<BondStereo>), ErrMode<InputError>> + use<'inp> {
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     let allow_wildcards = flags.contains(CtabParseFlags::WILDCARDS);
@@ -286,7 +295,6 @@ fn extended_bond_input<'inp>(
 
         let mut bond = ExtendedBond::new(first_atom, second_atom, order);
         // The source first atom is the wedge's narrow end.
-        bond.stereo = stereo;
         bond.wedge = orientation.map(|orientation| BondWedge {
             orientation,
             taper: if first_atom <= second_atom {
@@ -299,7 +307,7 @@ fn extended_bond_input<'inp>(
         bond.reacting_center = reacting_center;
 
         let _: &[u8] = take(offset).parse_next(input)?;
-        Ok(bond)
+        Ok((bond, stereo))
     }
 }
 

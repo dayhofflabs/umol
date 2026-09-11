@@ -7,11 +7,12 @@ use smallvec::SmallVec;
 use umol_chem::element::Element;
 
 use super::super::error::ParseError;
+use super::stereo::derive_stereo_bonds;
 use super::utils::{invalid_ring_context, make_bond, make_extended_bond, Frame};
 use crate::table_ir::{
-    Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ExtendedAtom,
-    ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, StereoAtom, StereoLigand,
-    WildcardAtom, Winding,
+    Atom, AtomPair, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality,
+    ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, StereoAtom,
+    StereoBond, StereoLigand, WildcardAtom, Winding,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -99,11 +100,13 @@ pub(super) trait Target {
     fn wildcard(span: Option<Span>) -> Self::Atom;
     fn bond(start: usize, end: usize, data: BondData) -> Self::Bond;
     fn bond_atoms(bond: &Self::Bond) -> (u32, u32);
+    fn bond_order(bond: &Self::Bond) -> BondOrder;
     fn hydrogens(atom: &Self::Atom) -> u8;
     fn molecule(
         atoms: Vec<Self::Atom>,
         bonds: Vec<Self::Bond>,
         stereo: Vec<StereoAtom>,
+        stereo_bonds: Vec<StereoBond>,
     ) -> Self::Molecule;
 }
 
@@ -169,6 +172,10 @@ impl Target for Basic {
         (bond.atoms.first(), bond.atoms.second())
     }
 
+    fn bond_order(bond: &Self::Bond) -> BondOrder {
+        bond.order
+    }
+
     fn hydrogens(atom: &Self::Atom) -> u8 {
         atom.implicit_hydrogens.unwrap_or(0)
     }
@@ -177,6 +184,7 @@ impl Target for Basic {
         atoms: Vec<Self::Atom>,
         bonds: Vec<Self::Bond>,
         stereo: Vec<StereoAtom>,
+        stereo_bonds: Vec<StereoBond>,
     ) -> Self::Molecule {
         let mut mol = Molecule::empty();
         if !atoms.is_empty() {
@@ -185,6 +193,7 @@ impl Target for Basic {
         mol.atoms = atoms;
         mol.bonds = bonds;
         mol.stereo_atoms = stereo;
+        mol.stereo_bonds = stereo_bonds;
         mol
     }
 }
@@ -258,6 +267,10 @@ impl Target for Extended {
         (bond.atoms.first(), bond.atoms.second())
     }
 
+    fn bond_order(bond: &Self::Bond) -> BondOrder {
+        bond.order
+    }
+
     fn hydrogens(atom: &Self::Atom) -> u8 {
         atom.implicit_hydrogens.unwrap_or(0)
     }
@@ -266,6 +279,7 @@ impl Target for Extended {
         atoms: Vec<Self::Atom>,
         bonds: Vec<Self::Bond>,
         stereo: Vec<StereoAtom>,
+        stereo_bonds: Vec<StereoBond>,
     ) -> Self::Molecule {
         let mut mol = ExtendedMolecule::empty();
         if !atoms.is_empty() {
@@ -274,13 +288,14 @@ impl Target for Extended {
         mol.atoms = atoms;
         mol.bonds = bonds;
         mol.stereo_atoms = stereo;
+        mol.stereo_bonds = stereo_bonds;
         mol
     }
 }
 
 pub(super) struct Builder<'a, T: Target> {
     atoms: Vec<T::Atom>,
-    bond_table: Vec<Option<T::Bond>>,
+    bond_table: Vec<Option<(T::Bond, Option<BondDirection>)>>,
     ring_table: Vec<Option<OpenRing>>,
     ring_bonds: Vec<(usize, usize)>,
     open_rings: usize,
@@ -560,7 +575,8 @@ impl<'a, T: Target> Builder<'a, T> {
                     span,
                 },
             };
-            let bond = self.append_bond(T::bond(previous.atom, current.atom, data));
+            let direction = data.direction;
+            let bond = self.append_bond((T::bond(previous.atom, current.atom, data), direction));
             self.incidence(previous, bond);
             self.incidence(current, bond);
         }
@@ -569,7 +585,7 @@ impl<'a, T: Target> Builder<'a, T> {
     }
 
     #[inline]
-    fn append_bond(&mut self, bond: T::Bond) -> usize {
+    fn append_bond(&mut self, bond: (T::Bond, Option<BondDirection>)) -> usize {
         let index = self.bond_table.len();
         self.bond_table.push(Some(bond));
         index
@@ -583,7 +599,7 @@ impl<'a, T: Target> Builder<'a, T> {
     }
 
     #[inline]
-    fn complete_bond(&mut self, index: usize, bond: T::Bond) {
+    fn complete_bond(&mut self, index: usize, bond: (T::Bond, Option<BondDirection>)) {
         self.bond_table[index] = Some(bond);
     }
 
@@ -691,17 +707,24 @@ impl<'a, T: Target> Builder<'a, T> {
                 }
                 self.complete_bond(
                     open.bond_idx,
-                    T::bond(
-                        a,
-                        b,
-                        BondData {
-                            order: final_order,
-                            direction: final_direction,
-                            donation: final_donation,
-                            span: Span::from_bytes_opt(
-                                Some(open.open_pos as u32),
-                                Some(open.open_end as u32),
-                            ),
+                    (
+                        T::bond(
+                            a,
+                            b,
+                            BondData {
+                                order: final_order,
+                                direction: final_direction,
+                                donation: final_donation,
+                                span: Span::from_bytes_opt(
+                                    Some(open.open_pos as u32),
+                                    Some(open.open_end as u32),
+                                ),
+                            },
+                        ),
+                        if a > b {
+                            final_direction.map(|d| d.flip())
+                        } else {
+                            final_direction
                         },
                     ),
                 );
@@ -742,11 +765,24 @@ impl<'a, T: Target> Builder<'a, T> {
                 open_pos: offset + open_pos,
             });
         }
-        let bonds: Vec<_> = self
+        let completed: Vec<_> = self
             .bond_table
             .into_iter()
             .map(|bond| bond.expect("all ring slots completed"))
             .collect();
+        let stereo_bonds = if completed.iter().any(|(_, direction)| direction.is_some()) {
+            let lexical: Vec<_> = completed
+                .iter()
+                .map(|(bond, direction)| {
+                    let (a, b) = T::bond_atoms(bond);
+                    (AtomPair::new(a, b), T::bond_order(bond), *direction)
+                })
+                .collect();
+            derive_stereo_bonds(self.atoms.len(), &lexical).map_err(ParseError::from)?
+        } else {
+            Vec::new()
+        };
+        let bonds: Vec<_> = completed.into_iter().map(|(bond, _)| bond).collect();
         let stereo = self
             .stereo
             .into_iter()
@@ -777,7 +813,10 @@ impl<'a, T: Target> Builder<'a, T> {
                 }
             })
             .collect();
-        Ok((T::molecule(self.atoms, bonds, stereo), self.ring_bonds))
+        Ok((
+            T::molecule(self.atoms, bonds, stereo, stereo_bonds),
+            self.ring_bonds,
+        ))
     }
 }
 

@@ -8,8 +8,8 @@ use regex::Regex;
 use umol_chem::element::Element;
 
 use crate::table_ir::{
-    Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ExtendedAtom,
-    ExtendedBond, ExtendedMolecule, Molecule, SourceFormat, Span, WildcardAtom,
+    Atom, AtomSymbol, Bond, BondDonation, BondOrder, Chirality, ExtendedAtom, ExtendedBond,
+    ExtendedMolecule, Molecule, SourceFormat, Span, WildcardAtom,
 };
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
@@ -70,30 +70,6 @@ pub fn find_extended_chiral_center(
     None
 }
 
-/// Finds the first bond with stereo direction in a Molecule.
-/// Returns (atom1, atom2, direction) or None if no stereo bond found.
-pub fn find_stereo_bond(mol: &Molecule) -> Option<(u32, u32, BondDirection)> {
-    for bond in &mol.bonds {
-        if let Some(direction) = bond.direction {
-            let (a, b) = bond.atoms.as_tuple();
-            return Some((a, b, direction));
-        }
-    }
-    None
-}
-
-/// Finds the first bond with stereo direction in an ExtendedMolecule.
-/// Returns (atom1, atom2, direction) or None if no stereo bond found.
-pub fn find_extended_stereo_bond(mol: &ExtendedMolecule) -> Option<(u32, u32, BondDirection)> {
-    for bond in &mol.bonds {
-        if let Some(direction) = bond.direction {
-            let (a, b) = bond.atoms.as_tuple();
-            return Some((a, b, direction));
-        }
-    }
-    None
-}
-
 fn parse_atom_token(tok: &str) -> (Element, bool, Option<u32>, Option<u32>) {
     // Underscore denotes aromatic variant of the organic subset: C_, N_, O_, P_, S_, B_, ...
     // Optional '@<start>' or '@<start>..<end>' sets span positions.
@@ -142,7 +118,6 @@ fn parse_bond_token(
     usize,
     usize,
     BondOrder,
-    Option<BondDirection>,
     Option<BondDonation>,
     Option<u32>,
     Option<u32>,
@@ -191,26 +166,24 @@ fn parse_bond_token(
         spec_part // no colon prefix
     };
 
-    let (order, direction, donation) = match spec_norm {
-        "-" => (BondOrder::Single, None, None),
-        "=" => (BondOrder::Double, None, None),
-        "#" => (BondOrder::Triple, None, None),
-        "$" => (BondOrder::Quadruple, None, None),
-        ":" => (BondOrder::Aromatic, None, None),
-        "/" => (BondOrder::Single, Some(BondDirection::Rising), None),
-        "\\" => (BondOrder::Single, Some(BondDirection::Falling), None),
-        "~" => (BondOrder::Any, None, None),
-        "->" => (BondOrder::Single, None, Some(BondDonation::Donating)),
-        "<-" => (BondOrder::Single, None, Some(BondDonation::Accepting)),
+    let (order, donation) = match spec_norm {
+        "-" => (BondOrder::Single, None),
+        "=" => (BondOrder::Double, None),
+        "#" => (BondOrder::Triple, None),
+        "$" => (BondOrder::Quadruple, None),
+        ":" => (BondOrder::Aromatic, None),
+        "~" => (BondOrder::Any, None),
+        "->" => (BondOrder::Single, Some(BondDonation::Donating)),
+        "<-" => (BondOrder::Single, Some(BondDonation::Accepting)),
         other => panic!("unknown bond spec: {}", other),
     };
-    (i, j, order, direction, donation, span_start, span_end)
+    (i, j, order, donation, span_start, span_end)
 }
 
 pub fn build_from_graph(spec: &str) -> Molecule {
     // Format: "atoms... | bonds..."
     // atoms: tokens like "C", "Cl", optional aromatic '_' and optional span "@<pos>": e.g. "C_@5"
-    // bonds: tokens like "i-j" or with type/direction: "i-j:=" "/" "\\" etc., optional span "@<pos>"
+    // bonds: tokens like "i-j" or "i-j:=", with optional span "@<pos>"
     let (atoms_s, bonds_s) = spec
         .split_once('|')
         .map(|(a, b)| (a.trim(), b.trim()))
@@ -248,14 +221,13 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         }
     }
     for btok in bonds {
-        let (i, j, order, direction, donation, span_start, mut span_end) = parse_bond_token(btok);
+        let (i, j, order, donation, span_start, mut span_end) = parse_bond_token(btok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
             }
         }
         let mut bond = Bond::new(i as u32, j as u32, order);
-        bond.direction = direction.map(|value| if i > j { value.flip() } else { value });
         bond.donation = donation.map(|value| if i > j { value.flip() } else { value });
         bond.span = Span::from_bytes_opt(span_start, span_end);
         mol.bonds.push(bond);
@@ -268,7 +240,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
 pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     // Format: "atoms... | bonds..."
     // atoms: tokens like "C", "Cl", "*" (wildcard), optional aromatic '_' and span "@<pos>"
-    // bonds: tokens like "i-j" or with type/direction: "i-j:=" "/" "\\" etc., optional span "@<pos>"
+    // bonds: tokens like "i-j" or "i-j:=", with optional span "@<pos>"
     let (atoms_s, bonds_s) = spec
         .split_once('|')
         .map(|(a, b)| (a.trim(), b.trim()))
@@ -312,14 +284,13 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
         }
     }
     for btok in bonds {
-        let (i, j, order, direction, donation, span_start, mut span_end) = parse_bond_token(btok);
+        let (i, j, order, donation, span_start, mut span_end) = parse_bond_token(btok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
             }
         }
         let mut bond = ExtendedBond::new(i as u32, j as u32, order);
-        bond.direction = direction.map(|value| if i > j { value.flip() } else { value });
         bond.donation = donation.map(|value| if i > j { value.flip() } else { value });
         bond.span = Span::from_bytes_opt(span_start, span_end);
         mol.bonds.push(bond);

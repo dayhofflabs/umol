@@ -1,5 +1,6 @@
 //! Double-bond frames derived from completed lexical direction markers.
 
+use super::super::error::ParseError;
 use crate::table_ir::{
     AtomNeighbors, AtomPair, BondConfiguration, BondDirection, BondOrder, BondRelation, StereoBond,
 };
@@ -130,3 +131,16 @@ mod tests;
 
 #[cfg(all(test, feature = "proptest"))]
 mod properties;
+
+impl From<DirectionError> for ParseError {
+    fn from(error: DirectionError) -> Self {
+        match error {
+            DirectionError::AtomIndexOutOfBounds { atom } => {
+                Self::AtomIndexOutOfBounds { atom_idx: atom }
+            }
+            DirectionError::DanglingBondDirection { bond } => Self::DanglingBondDirection { bond },
+            DirectionError::CisTransConflict { atom } => Self::CisTransConflict { atom },
+            DirectionError::UnsupportedSite { bond } => Self::UnsupportedStereoBond { bond },
+        }
+    }
+}

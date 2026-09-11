@@ -30,7 +30,7 @@ proptest! {
         if reverse_atoms { points.reverse(); }
         if reverse_bonds { bonds.reverse(); }
         let references = [0,3];
-        prop_assert_eq!(derive_stereo_bonds(4,&bonds,Some(&points),&[]), Ok(vec![StereoBond {
+        prop_assert_eq!(derive_stereo_bonds(4,&bonds,|bond| *bond,Some(&points),&[]), Ok(vec![StereoBond {
             bond:1, configuration:BondConfiguration::Framed {
                 references, relation:if same { BondRelation::SameSide } else { BondRelation::OppositeSide },
             },

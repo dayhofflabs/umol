@@ -290,7 +290,7 @@ mod tests {
         StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
-    use umol_io::table_ir::AtomPair;
+    use umol_io::table_ir::{AtomPair, BondConfiguration};
 
     use super::*;
     use crate::ops::aromaticity::{
@@ -781,8 +781,15 @@ mod tests {
             let mut reordered = table.clone();
             if is_reverse {
                 reordered.bonds.reverse();
+                for frame in &mut reordered.stereo_bonds {
+                    frame.bond = reordered.bonds.len() as u32 - 1 - frame.bond;
+                }
             } else {
                 reordered.bonds.rotate_left(1);
+                for frame in &mut reordered.stereo_bonds {
+                    frame.bond = (frame.bond + reordered.bonds.len() as u32 - 1)
+                        % reordered.bonds.len() as u32;
+                }
             }
             let actual = interpret_molecule(&reordered, &model, &ResolveConfig::default()).unwrap();
             assert!(actual.canonical_eq(&expected, &context));
@@ -796,14 +803,20 @@ mod tests {
         let mut table = Smiles::parse(input).unwrap().into_table_ir();
         let expected = ingest_smiles(input).unwrap();
         let atoms = Remapping::new(atoms.into_iter().map(NodeId::from).collect()).unwrap();
+        for frame in &mut table.stereo_bonds {
+            if let BondConfiguration::Framed { references, .. } = &mut frame.configuration {
+                let pair = table.bonds[frame.bond as usize].atoms;
+                *references = references.map(|atom| atoms.map(NodeId(atom)).0);
+                if atoms.map(NodeId(pair.first())) > atoms.map(NodeId(pair.second())) {
+                    references.swap(0, 1);
+                }
+            }
+        }
         table.atoms = atoms.remap_vec(table.atoms);
         for bond in &mut table.bonds {
             let first = atoms.map(NodeId(bond.atoms.first())).0;
             let second = atoms.map(NodeId(bond.atoms.second())).0;
             bond.atoms = AtomPair::new(first, second);
-            if first > second {
-                bond.direction = bond.direction.map(|direction| direction.flip());
-            }
         }
         let model = ChemistryModel {
             valence: ValenceModel::smiles(),
@@ -919,8 +932,8 @@ mod tests {
             ),
         ))
     )]
-    #[case::dangling_direction("F/C=C", SmilesInputError::ModelConversion(RaiseError::DanglingBondDirection { bond: 0 }))]
-    #[case::conflicting_direction("F/C(\\Cl)=CF", SmilesInputError::ModelConversion(RaiseError::CisTransConflict { atom: 1 }))]
+    #[case::dangling_direction("F/C=C", SmilesInputError::Syntax(SmilesParseError::DanglingBondDirection { bond: 0 }))]
+    #[case::conflicting_direction("F/C(\\Cl)=CF", SmilesInputError::Syntax(SmilesParseError::CisTransConflict { atom: 1 }))]
     #[case::ring_direction("C/1CC/1", SmilesInputError::Syntax(SmilesParseError::MismatchedRingBondDirections { pos: 6, open_pos: 2 }))]
     fn test_ingest_smiles_error(#[case] input: &str, #[case] expected: SmilesInputError) {
         assert_eq!(ingest_smiles(input), Err(expected));
@@ -1742,8 +1755,8 @@ mod tests {
             MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
         ),)
     )]
-    #[case::reactant_direction("F/C=C>>C", ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(MoleculeInterpretationError::ModelConversion(RaiseError::DanglingBondDirection { bond: 0 }))))]
-    #[case::product_direction("C>>F/C=C", ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Products(MoleculeInterpretationError::ModelConversion(RaiseError::DanglingBondDirection { bond: 0 }))))]
+    #[case::reactant_direction("F/C=C>>C", ReactionSmilesInputError::Syntax(SmilesParseError::DanglingBondDirection { bond: 0 }))]
+    #[case::product_direction("C>>F/C=C", ReactionSmilesInputError::Syntax(SmilesParseError::DanglingBondDirection { bond: 0 }))]
     fn test_ingest_reaction_smiles_error(
         #[case] input: &str,
         #[case] expected: ReactionSmilesInputError,

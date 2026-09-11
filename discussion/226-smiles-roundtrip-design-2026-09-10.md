@@ -1281,7 +1281,8 @@ The plan below sequences the work; S0–S2 are complete.
 
 ## Staged implementation plan
 
-S0–S2 and S3a–S3c are complete; S3d and later subitems are pending.
+S0–S2 and S3a–S3c are complete. S3d's functional migration is implemented; its allocation
+closeout requires S3d1–S3d7 below. S3d1–S3d2 are complete; S3d3–S3d7, S3e, and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1422,7 +1423,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   without inventing reference atoms. Treat adjacent wavy-bond effects under the existing convention;
   wedges remain separate. Verify usable 2D/3D, absent/all-zero/degenerate geometry, explicit Either,
   and supported Cis/Trans annotations with exact frames. No coordinate generation or CTfile output.
-- **S3d — Publish frames and retire duplicate fields.** Modules: TableIR Molecule/ExtendedMolecule,
+- **S3d — Publish frames and retire duplicate fields (implemented 2026-09-10; allocation closeout pending).** Modules: TableIR Molecule/ExtendedMolecule,
   Bond/ExtendedBond, parser targets/conversions, raise, all affected consumers/tests.
   **Breaking (red→green).** [dep: S3a, S3b, S3c]
   Add the stereo_bonds collection consistently to applicable carriers, wire every producer, and
@@ -1432,14 +1433,99 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   incidence, and conflicting-annotation failures at their owning boundary. Move source interpretation
   out of raise once frames own its result. Update struct literals, fixtures, conversions, and
   benchmarks together; no consumer may silently prefer one of two operative stereo encodings.
+- **S3d1 — Move storage through consuming table conversion (completed 2026-09-11).** Module: table_ir/molecule.rs.
+  **Refactor (green).** [dep: S3d]
+  Consume ExtendedMolecule atom/bond vectors in the existing fallible conversion; move positions,
+  stereo frames, multicenter bonds, comments, and properties into the result. Preserve the existing
+  public signature, feature rejection, and complete basic/extended preservation law. Do not add a
+  borrowed conversion or compatibility wrapper. Verify success and rejection plus preservation of
+  nonempty frame/position collections; inspect ownership and allocations rather than treating value
+  equality alone as proof that cloning was removed.
+- **S3d2 — Direct CTfile bond construction and borrowed derivation input (completed 2026-09-11).** Modules: CTfile bond
+  readers/builders, table_ir/stereo/derive.rs, and CX derivation callers.
+  **Refactor (green).** [dep: S3d]
+  Have each CTfile bond block accumulate final Bond/ExtendedBond storage and a separate list of
+  bond-indexed stereo assertions. Move the bond vector into its table; apply properties before
+  deriving configurations. Remove the records vectors from CTfile and CX callers and read the
+  original bonds directly. Separate basic/extended derivation functions are acceptable; a shared
+  implementation must not require copied tables, dynamic dispatch, or new public adapter types.
+  Use bond_stereo_assertions for the code-bearing list. Migrate all affected private callers in
+  this subitem. Verify basic/extended V2000, property processing, CX indices, and exact frames.
+- **S3d3 — SMILES finalization without full-bond scratch copies.** Modules: smiles/parser/builder.rs
+  and smiles/parser/stereo.rs. **Refactor (green).** [dep: S3d]
+  Remove the completed intermediate and lexical copied bond table. Read the pending/final bond
+  storage directly during derivation and perform only the necessary ownership transfer to the
+  published table. Keep marker participation with transient marker bookkeeping rather than in a
+  separately allocated vector covering every bond. Preserve marker values until every sharing
+  site has been checked; do not consume a direction on first use. Retain ring-opening table order,
+  endpoint viewpoint, atom-stereo incidence order, and CX completion-index remapping. No redesign
+  of unrelated parser factoring is included. Verify shared/branched/cyclic markers, partial and
+  conflicting notation, ring spelling, and the existing atom/bond remapping laws.
+- **S3d4 — Sparse stereo assertion processing and CX frame updates.** Modules:
+  table_ir/stereo/derive.rs and smiles/parser/cx.rs. **Refactor (green).** [dep: S3d2]
+  Replace the bond-sized codes array with processing proportional to explicit assertions; group
+  assertions by bond using their owned storage and check repeated evidence before consolidation.
+  Retain wavy evidence across later wedge overwrites. Merge/check incoming evidence against
+  existing frames without expanding every frame back into a code list and rebuilding unchanged
+  output. Preserve the reference frame when comparing configurations. Skip stereo work when CX
+  changes nothing relevant to it; topology-affecting entries, wedges, and supplied positions must
+  be considered explicitly. Geometry-derived frames still cover applicable unannotated double
+  bonds, and Either still suppresses geometry at its site. Verify all combinations of existing
+  direction frames, repeated codes, Either, geometry, wavy evidence, and reaction-section remapping;
+  include labels-only CX input with existing frames. No reinterpretation or acceptance expansion.
+- **S3d5 — Bounded local stereo scratch.** Modules: both stereo derivation kernels and
+  table_ir/raise.rs. **Refactor (green).** [dep: S3d3, S3d4]
+  Replace per-endpoint substituent vectors and raise's two-element blocks vector with bounded
+  local storage for the supported two-substituent-per-endpoint domain. Check site relevance before
+  gathering ligands. Detect excess distinct incidences without allocating to accommodate them;
+  preserve duplicate-incidence treatment, canonical reference selection, unsupported-site checks,
+  and frame transport. Verify zero/one/two/excess substituents, shared ligands, cumulated axes,
+  and single/both reference swaps. Persistent StereoAtom ligand vectors and wedge-algorithm
+  redesign are not part of this scratch-storage change.
+- **S3d6 — Apply bond frames without a constraint HashMap.** Module: table_ir/raise.rs.
+  **Refactor (green).** [dep: S3d5]
+  Order borrowed frame references by their table-bond index and consume them alongside the bond
+  construction loop. Construct each constraint at its destination instead of retaining all
+  constraints in a HashMap. Do not sort/mutate the input collection or substitute a dense
+  all-bond mapping. Preserve arbitrary input frame order, duplicate-site and contextual failures,
+  and the localized/dative/noncovalent partition. Verify unsorted frames, duplicate and invalid
+  sites, and relation bonds preceding/between framed localized bonds. Allocation scales with the
+  frame ordering actually required, not every table bond.
+- **S3d7 — Initial SMILES table capacity.** Modules: both SMILES inner parsers and builder
+  initialization. **Refactor (green).** [dep: S3d3]
+  Retain one-pass parsing and grow atom/bond tables as entries are produced; do not add a
+  preliminary counting pass. Initial reservation is a tunable implementation estimate, not a
+  requirement to start at zero capacity. Reduce the current overestimation, including reservations
+  inflated by CX text and later reaction sections. Preserve parsing and diagnostic semantics;
+  check long annotations, bracket-heavy input, and uneven reaction sections using inline examples.
+  Capacity estimates must not become acceptance limits. Further tuning does not block the other
+  allocation corrections or require an open-ended benchmark campaign.
 - **S3e — Operation-local neighbor lookup.** Modules: TableIR raise and parser normalization.
-  **Additive/refactor (green).** [dep: S3d]
+  **Additive/refactor (green).** [dep: S3d3, S3d4, S3d6]
   Remove unconditional adjacency construction where frame-based raise needs none; derive temporary
   lookup only for remaining operations that require it. Preserve all-table-bond indices and the
   partition into localized edges versus relations. TableIR remains tables. Use iterator adaptation
   to graph-core Neighbor for traversal rather than adding Graph storage or an adjacency trait.
   Verify ordinary/stereo/mixed-bond raising and malformed-index behavior; use the bounded raise
   fixtures to report allocation changes without opening a benchmark-driven redesign.
+  This remains the owner of the audit's neighbor-allocation work: skip lookup where unused and
+  share one temporary lookup across the phases that need the same unchanged table. Preserve the
+  public AtomNeighbors/Neighbor surface and table order; contiguous private storage may replace
+  the nested vectors without introducing a foundational adjacency type or storing a graph in
+  TableIR. Final Graph adjacency cannot generally replace the all-table incidence index.
+
+The allocation follow-ups preserve the existing representation and source semantics; each closes
+with its affected tests green. S3d1 and S3d2 are independent of S3d3. The dependency paths converge
+at S3d5, then S3d6 and S3e; S3d7 depends only on S3d3. All remain required S3 closeout work.
+The allocation policies are settled; private factoring and capacity tuning remain implementation
+choices within the recorded constraints.
+
+For each affected path, review the resulting allocation/ownership flow and reuse the existing
+bounded inline fixtures and allocation probe. Account for in-place reuse by owning Vec collections;
+counting collect expressions is not an allocation audit. Verify removal of identified copies and
+unnecessary allocations, retain the established semantic/property suites, and run the S3 gate.
+Measurements provide evidence of the final change, not a search for the design or an invitation to
+extend the benchmark campaign. No fixture files are introduced into benchmarks.
 
 **Gate:** IO unit/property/CTfile suites and dependent graph interpretation tests pass. Every former
 raw-direction/stereo-field producer and consumer is accounted for. Parser acceptance and error-layer
@@ -2647,6 +2733,347 @@ cargo run --release --manifest-path scratch/s3c-stereo-bench/Cargo.toml --offlin
 
 S3d is next: publish the frame collections, wire producers, preserve repeated annotation evidence
 before current field overwrites, and migrate raise/consumers while retiring duplicate fields.
+
+## S3d implementation record — published bond frames (2026-09-10)
+
+### Contract and public surface
+
+Molecule and ExtendedMolecule now carry a stereo_bonds collection of StereoBond records. They remain open tables;
+empty construction initializes an empty collection, basic-to-extended conversion preserves it,
+and extended-to-basic conversion copies it without reinterpreting coordinates. No arbitrary-parts
+constructor for Smiles or ReactionSmiles was added. The S3a StereoBond, BondConfiguration, and
+BondRelation vocabulary is unchanged.
+
+Bond and ExtendedBond no longer have direction or stereo fields. BondDirection and BondStereo
+remain source vocabulary used by parsers; they are not a second persistent configuration authority.
+Wedges, StereoAtom, Winding, and LonePair retain their separate existing roles. TableIR stores no
+Graph or adjacency structure.
+
+SMILES ParseError now owns DanglingBondDirection and CisTransConflict, previously raise errors,
+and adds UnsupportedStereoBond, ConflictingBondConfiguration, and MissingPosition. CTfile
+ParseError adds the latter three variants. Existing boundary index errors carry derivation index
+failures. RaiseError adds StereoBondIndexOutOfBounds, UnsupportedStereoBond,
+InvalidStereoBondReference, and DuplicateStereoBond for independently supplied open frames.
+These checks occur when source evidence is interpreted or a frame is consumed, respectively;
+construction and mutation do not validate the entire table.
+
+### Producer and consumer migration
+
+- The SMILES builder holds directional markers beside pending bond records until ring slots are
+  complete, normalizes endpoint viewpoints, and publishes the S3b-derived frames. Consistent
+  partial markers leave no assertion. Marker spellings are then discarded.
+- The V2000 readers retain bond codes beside decoded records, apply property records, and derive
+  frames from the completed tables and supplied coordinates. SDF follows the same molecule
+  construction. This does not add V3000 parsing or coordinate generation.
+- CX processing preserves repeated Cis/Trans/Either annotations as evidence rather than
+  overwriting a bond field. Parser-produced direction frames use the same minimum-index
+  references as CX codes, allowing the two sources to be checked together with geometry.
+  Wavy-bond evidence is retained even if a later entry overwrites that wedge. Reaction CX splitting
+  remaps indices before each section is normalized.
+- Raise consumes the frame collection. Framed transports the selected references into the sorted
+  endpoint blocks with the existing cis/trans permutation action; Either produces an undetermined
+  #C assertion. It does not interpret coordinates or direction markers for bond stereo. Frame sites
+  retain all-table-bond indices while localized graph bonds and relations are partitioned.
+  Complementary virtual slots are not assigned a hydrogen or lone-pair identity by this step.
+- Parser targets, empty tables, conversions, ingest tests, table-remapping tests, and benchmark
+  inputs now use frames. Expected-table test builders describe bond orders and assign expected
+  frames explicitly; they no longer accept a direction that is silently ignored.
+
+### Reviewed acceptance changes
+
+The existing 10,223-case SMILES corpus has eleven changed classifications. Inputs and source
+comments are preserved byte-for-byte; only outcome categories and their reviewed snapshots change.
+The corpus category invalid denotes rejection by the current parser, including unsupported stereo,
+not a claim that every rejected string is universally invalid SMILES.
+
+| Source cases | New outcome | Reason |
+| --- | --- | --- |
+| NextMove 0007, 0008 | chemaxon_invalid | CX Either conflicts with definite direction evidence at bond 3. OpenSMILES parsing still succeeds when CX is not selected. |
+| OpenBabel 0105 | invalid | Direction at bond 1 has no supported local double-bond frame. |
+| Indigo 2163 | invalid | Contradictory endpoint markers at atom 9. |
+| Indigo 0173, 1442; RDKit 0528, 0611, 0637, 0654, 0704 | invalid | Marked cumulated local axes are outside the S3b-supported domain. |
+
+The cumulated-axis group includes shared markers that also touch an ordinary alkene. This follows
+the explicit S3b rejection rule; the unsupported interpretation is not silently dropped. The exact
+inputs and diagnostics are retained in scratch/s3d-corpus-changes.tsv and the corpus snapshots.
+
+### Verification and measurements
+
+Exact-frame tests cover basic/extended SMILES, V2000 and CX producers, reaction sections,
+ring-completion remapping, repeated and contradictory annotations, wavy evidence, and source
+errors. Raise tests cover reference swaps, endpoint/atom/bond remapping, site-only Either,
+malformed indices and incidences, duplicates, and all-table indices with a preceding dative bond.
+Generated laws exercise reference-swap transport, exact basic/extended preservation, and coordinate
+edits leaving published bond configurations unchanged. Arbitrary open bond frames are checked for
+absence of panics. Existing atom-stereo coverage remains in place.
+
+On base 4d3366bed05c71953b60ad5ad687291c8ea2210a plus S3d:
+
+- The IO/graph gate passes with proptest and IO conformance enabled: 1,066 graph unit tests,
+  10,223 SMILES cases, 2,253 MOL cases, 407 SDF cases, and the remaining integration/property
+  suites. The final IO unit run has 3,800 passing tests. One existing graph doctest is ignored.
+- Strict Clippy passes for both crates, all targets, and those features. Formatting and diff checks
+  pass. The fuzz_parse_opensmiles target builds; no additional timed fuzz campaign was run here.
+- Every smiles_parsing benchmark passes Criterion's test mode. Three old inputs with dangling
+  directions are retained as explicit basic/extended rejection benchmarks; success groups use
+  supported inline replacements. No fixture files were introduced into benchmarks.
+
+```sh
+cargo test -p umol-io -p umol-graph --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline
+cargo clippy -p umol-io -p umol-graph --all-targets --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline -- -D warnings
+cargo check --manifest-path umol-io/fuzz/Cargo.toml --bin fuzz_parse_opensmiles --offline
+cargo bench -p umol-io --bench smiles_parsing --offline -- --test
+cargo bench -p umol-io --bench smiles_parsing --offline -- smiles_roundtrip --sample-size 20 --warm-up-time 0.1 --measurement-time 0.2 --nresamples 1000 --noplot
+```
+
+The final bounded run uses the same sixteen inline S0c inputs and timing boundaries, with
+20 samples, 0.1-second warm-up, 0.2-second measurement, and 1,000 resamples. Compilation and
+other verification completed before measurement. Criterion point estimates are shown below;
+intervals are retained in scratch/s3d-timings.csv and scratch/s3d-bench-final.log.
+
+| Example | Parse µs | Raise µs |
+| --- | ---: | ---: |
+| chain_64 | 1.029 | 12.484 |
+| branched | 0.296 | 1.909 |
+| components | 0.207 | 1.018 |
+| aromatic_fused | 0.346 | 2.889 |
+| aromatic_lone_pair | 0.266 | 1.677 |
+| charged | 0.169 | 0.584 |
+| radical | 0.166 | 0.570 |
+| tetra_four | 0.327 | 2.200 |
+| tetra_ring | 0.450 | 2.576 |
+| tetra_explicit_h | 0.411 | 2.886 |
+| tetra_lone_pair | 0.288 | 2.204 |
+| alkene_four | 0.545 | 1.938 |
+| shared_chain | 0.533 | 2.136 |
+| partial_triene | 0.688 | 2.206 |
+| shared_branch | 0.689 | 2.404 |
+| shared_cycle | 0.679 | 2.645 |
+
+Source normalization now runs during parsing; raise transports the published frames. These short
+measurements describe that division of work and do not establish fine performance rankings.
+
+### Allocation review and revised closeout (2026-09-11)
+
+The S3d correctness gate passed, but its completion claim was premature: the implementation added
+full-bond copies to fit shared signatures and retained avoidable allocation in the connected paths.
+S3d1–S3d7 now follow S3d in the plan; S3e continues to own conditional temporary neighbor lookup.
+The earlier test and timing results describe the implementation reviewed, not acceptance of its
+allocation design. No allocation corrections have been implemented by this plan update.
+
+The settled constraints are direct borrowed access or separate basic/extended methods, acceptance
+of deliberate duplication, movement of consumed storage, and no persistent graph in TableIR.
+Choosing how to factor private functions is an implementation responsibility within those
+constraints; it is not an open question that requires another abstract API design. Existing public
+boundary types, methods, stereo semantics, and failure ownership remain unchanged.
+
+| Audit finding | Disposition/owner |
+| --- | --- |
+| Clones in consuming extended-to-basic conversion, including stereo_bonds | S3d1: move fields and consume elements. |
+| CTfile tuple staging and CTfile/CX records copies | S3d2: accumulate final bonds plus stereo assertions; derive through borrowed access. |
+| SMILES completed/lexical intermediates and bond-sized participation flags | S3d3: remove copies and consolidate transient marker bookkeeping. |
+| Dense code array and expansion/reconstruction of existing CX frames | S3d4: group sparse assertions and update/check existing frames directly. |
+| Repeated endpoint and blocks heap vectors | S3d5: bounded local scratch for the supported frame domain. |
+| Raise's temporary constraint HashMap | S3d6: ordered borrowed frames consumed at bond construction. |
+| Reservations proportional to unrelated trailing input | S3d7: one-pass growth with a tunable initial reservation. |
+| Nested/repeated/unconditional AtomNeighbors allocation | S3e: conditional operation-local lookup, retaining table incidence semantics. |
+| Final table atoms/bonds, supplied positions, published frames, and GraphIR result | Retain required output storage; eliminate redundant copies, not the representation. |
+
+### Capacity policy for S3d7 (settled 2026-09-11)
+
+Use one-pass parsing and let the owned atom/bond tables grow as entries are produced. Initial
+reservation remains a tunable implementation estimate; zero initial capacity is not required.
+The current reservation overestimates entry counts by using the remaining input's byte length,
+including bracket syntax, CX annotations, and subsequent reaction sections. Improve that estimate
+without making exact capacity prediction a prerequisite for parsing or the other allocation fixes.
+
+A preliminary atom/bond counting pass is not selected. Growth reallocations are an accepted
+tradeoff, and tuning can refine the initial reservation later. This policy introduces no input-size
+limit, algorithm selector, or public configuration. Specification edits remain separately staged
+below.
+
+### S3d1 pre-change measurements (2026-09-11)
+
+The baseline measures the existing consuming ExtendedMolecule-to-Molecule conversion, before
+S3d1 code changes. The standalone probe is scratch/s3d1-conversion-bench; its four examples are
+inline and use the public conversion. stereo_positions has six supplied positions, one atom
+frame, and one bond frame. stereo_metadata adds atom labels/values, a comment, and a property to
+that case. multicenter contains two multicenter bonds. Preparation verifies complete equality
+against the basic input; every measured result is checked outside the measurement boundary.
+
+Allocation measurement reuses the S0c counting System allocator, enabled only by the scratch
+crate's allocations feature. After warm-up, input cloning/preparation occurs before counters reset;
+conversion consumes that input, and the result remains alive while counters are read. Calls include
+successful alloc, alloc_zeroed, and realloc; requested bytes include the full new size for every
+reallocation. Peak added live bytes are above the operation-entry baseline, which already includes
+the input. They exclude allocator overhead and are not process RSS.
+
+Timing is a separate build with the normal allocator, using eleven batches of 1,024 conversions
+per case after 64 warm-up conversions. Input batches and output vector capacity are prepared
+outside timing; the timed loop converts inputs and stores outputs. Input destruction intrinsic
+to conversion is included; result destruction, result verification, and batch-buffer destruction
+are excluded. The table reports the median of batch means and their observed range, not a
+statistical confidence interval. No timing repeats or tuning campaign were performed.
+
+| Inline case | Atoms / bonds | Allocation calls (reallocations) | Requested bytes | Peak added live bytes | Median µs / conversion | Batch-mean range µs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| chain_64 | 64 / 63 | 10 (8) | 17,856 | 9,216 | 4.742 | 4.583–5.228 |
+| stereo_positions | 6 / 5 | 8 (2) | 1,952 | 1,376 | 0.669 | 0.660–0.734 |
+| stereo_metadata | 6 / 5 | 26 (2) | 2,330 | 1,754 | 0.998 | 0.988–1.040 |
+| multicenter | 11 / 11 | 7 (4) | 4,448 | 2,720 | 1.094 | 1.088–1.119 |
+
+The chain's ten calls consist of two initial output-vector allocations and eight growth
+reallocations. The additional calls for positions, stereo, and metadata expose the clone work
+that S3d1 is intended to remove. These numbers are the baseline, not an after-change claim.
+
+Environment: rustc 1.96.0 (ac68faa20), arm64 macOS 15.7.3, standalone Cargo release profile.
+Base revision: 4d3366bed05c71953b60ad5ad687291c8ea2210a plus the uncommitted S3d work.
+Measured table_ir/molecule.rs SHA-256:
+6d79906050d9cd410e2edbec7d267e147b3003c09fb24e1924bd2f653c9fb5d6.
+Raw output is scratch/s3d1-before-allocations.csv and scratch/s3d1-before-timings.csv; corresponding
+build logs use the same prefixes. Reuse this probe unchanged for the S3d1 after measurement.
+
+```sh
+cargo run --release --manifest-path scratch/s3d1-conversion-bench/Cargo.toml --offline --features allocations
+cargo run --release --manifest-path scratch/s3d1-conversion-bench/Cargo.toml --offline
+```
+
+### S3d1 implementation and after measurements (2026-09-11)
+
+Molecule::try_from(ExtendedMolecule) now consumes the atom and bond vectors through their existing
+fallible element conversions. Positions, multicenter bonds, both stereo collections, comments,
+and properties move into the result. The signature, ConversionError, atom/bond rejection rules,
+open-table semantics, and basic/extended preservation law are unchanged. No constructor, borrowed
+conversion, helper type, or other public symbol was added. CTfile/CX-only fields retain their
+existing conversion treatment.
+
+The exact conversion tests retain atom-feature rejection and now cover bond-feature rejection.
+The roundtrip case additionally carries nonempty positions, a bond frame, multicenter data,
+comments, and properties. Existing atom-frame cases and generated frame/coordinate preservation
+laws remain in place. The code review confirms that the conversion contains no field or element
+cloning; allocation measurements below verify the ownership change independently of value equality.
+
+The same four inline inputs and measurement boundaries were used for one after allocation run
+and one normal-allocator timing run. Preparation and verification remain outside measurement.
+
+| Case | Allocation calls before → after | Requested bytes before → after | Peak added live bytes before → after | Median µs before → after | After batch-mean range µs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| chain_64 | 10 → 6 | 17,856 → 23,368 | 9,216 → 2,536 | 4.742 → 1.831 | 1.679–2.108 |
+| stereo_positions | 8 → 3 | 1,952 → 2,144 | 1,376 → 256 | 0.669 → 0.267 | 0.262–0.288 |
+| stereo_metadata | 26 → 3 | 2,330 → 2,144 | 1,754 → 256 | 0.998 → 0.267 | 0.262–0.280 |
+| multicenter | 7 → 4 | 4,448 → 4,240 | 2,720 → 592 | 1.094 → 0.448 | 0.418–0.541 |
+
+After-run reallocations are 5, 2, 2, and 3 respectively; the remaining one call per case is a
+fresh allocation. The metadata case now has the same allocation cost as the coordinate/stereo
+case. The short timing run shows lower conversion time for all four inputs, without establishing
+performance across arbitrary molecule sizes or metadata distributions.
+
+There is a capacity tradeoff: the owning atom conversion reuses the larger ExtendedAtom buffer.
+A single diagnostic trace of the 64-atom case shows input atom capacity 64 at 288 bytes per element
+and output atom capacity 177 at 104 bytes per element. The allocator receives a shrink request
+from 18,432 to 18,408 bytes. The bond result grows through 160, 320, 640, 1,280, and 2,560 bytes.
+This explains the larger cumulative requested-byte total despite fewer calls and a smaller
+additional live-memory peak. It also means the result retains more spare atom capacity; the
+smaller peak-above-input metric must not be read as a smaller retained result. No shrink-to-fit
+policy or alternative collection strategy is introduced in S3d1. The trace is recorded in
+scratch/s3d1-allocation-trace.log and its separate allocation_trace binary; the comparison probe's
+measurement code is unchanged.
+
+Verification passes: 32 focused molecule tests; the IO/graph gate with proptest and IO conformance
+(3,801 IO unit tests, 1,066 graph unit tests, 10,223 SMILES cases, 2,253 MOL cases, 407 SDF cases,
+and the remaining integration/property suites); and strict Clippy for both crates/all targets with
+those features. One existing graph doctest remains ignored. Formatting and diff checks pass.
+The incremental source/test diff was reviewed against S3d1; other S3d work was preserved.
+
+After raw results are scratch/s3d1-after-allocations.csv and scratch/s3d1-after-timings.csv.
+The measured table_ir/molecule.rs SHA-256 is
+bb26ebc70a7bdd6b7037d7ef01bb87d99a52df30fb2ba8f87d4ccd9819866bb9.
+S3d2 is next; no other allocation subitem was implemented here.
+
+
+### S3d2 implementation and measurements (2026-09-11)
+
+Both V2000 bond blocks accumulate final Bond/ExtendedBond vectors plus separate
+bond_stereo_assertions lists. Each assertion carries its original table-bond index and source
+stereo code; absent codes add no entry. The builders move those vectors into their tables,
+apply properties, then derive stereo from the resulting bond storage. Neither block stages a
+full vector of bond/code tuples, and neither builder recollects the bonds.
+
+CTfile and CX basic/extended callers now pass borrowed bond slices into the existing derivation
+kernel. A statically dispatched field callback reads each bond's endpoints, order, and wedge;
+there is no copied records vector, dynamic dispatch, or adapter type. The four production
+callbacks read those three fields directly. CX's existing frame-to-code reconciliation remains
+unchanged, and its code-bearing lists also use the name bond_stereo_assertions. The dense codes
+array, local substituent allocations, and temporary neighbor storage remain for their owning
+follow-ups; this subitem does not claim to eliminate all derivation allocations.
+
+Public-symbol reconciliation: no public type, constructor, conversion, signature, visibility,
+error variant, or Python surface changed. TableIR remains an open table carrier. Parser ordering,
+property precedence, wedge viewpoint, CX completion-index remapping, frame reference selection,
+and derivation failure behavior are preserved. Only private bond-block/builder and derivation
+signatures changed. Existing property assertions and generated domains are unchanged.
+
+Exact tests now cover sparse assertions at bond indices 1 and 3, an empty bond block, Either
+codes, and full basic/extended bond values. Additional end-to-end V2000 cases show that ZBO
+promotion/demotion changes geometry-derived frames, unchanged double-bond order preserves Either,
+and demotion with an explicit Either code reports UnsupportedStereoBond. Those cases also check
+charge/isotope property preservation. Existing CX ring/completion-index, wavy, geometry, conflict,
+and coordinate-similarity tests continue to exercise the borrowed path.
+
+One before and one after run use scratch/s3d2-parser-bench with four inline examples, each through
+basic and extended parsing: a 64-atom V2000 chain; a four-atom V2000 alkene with Either, CHG, and
+ISO properties; a 64-atom CX chain with an atom label; and a CX ring with an explicit cis code.
+V2000 text is generated inline before measurement; no fixture files are loaded. Each run uses
+64 warm-ups. Allocation counting covers one complete parse while retaining the result. Timings
+use the normal allocator and 11 batches of 512 parses, retaining results in preallocated output
+vectors until after timing. Input/configuration construction, verification, result destruction,
+and output-vector allocation are excluded. This measures parsing into TableIR, not raise/resolve.
+The probe is unchanged between the two runs, which ran separately from tests and compilation of
+other targets. The source baseline includes completed S3d1 and the existing uncommitted S3d work;
+its affected files are retained under scratch/s3d2-before.
+
+Allocation calls include reallocations; requested bytes sum complete new allocation sizes,
+including realloc requests. Peak added live bytes are tracked relative to the pre-parse baseline,
+not RSS or retained-result size. Ranges below are batch-mean ranges, not confidence intervals.
+
+| Case | Allocation calls before → after | Requested bytes before → after | Peak added live bytes before → after | Median µs before → after | Before / after batch-mean ranges µs |
+| --- | ---: | ---: | ---: | ---: | --- |
+| mol_chain_64_basic | 72 → 70 | 18,199 → 14,431 | 15,427 → 14,431 | 10.565 → 11.281 | 10.502–11.978 / 10.854–12.068 |
+| mol_chain_64_extended | 72 → 70 | 37,523 → 29,735 | 30,971 → 29,735 | 13.433 → 13.583 | 12.269–14.624 / 12.511–14.161 |
+| mol_stereo_properties_basic | 18 → 16 | 3,531 → 3,363 | 3,072 → 3,072 | 1.187 → 1.145 | 1.147–1.329 / 1.119–1.181 |
+| mol_stereo_properties_extended | 18 → 16 | 4,615 → 4,267 | 3,976 → 3,976 | 1.243 → 1.231 | 1.233–1.401 / 1.194–1.359 |
+| cx_chain_64_basic | 74 → 73 | 18,709 → 17,953 | 14,869 → 14,242 | 2.993 → 2.773 | 2.828–3.392 / 2.692–3.392 |
+| cx_chain_64_extended | 75 → 74 | 43,173 → 42,417 | 32,053 → 31,426 | 4.894 → 4.948 | 4.465–5.540 / 4.177–5.768 |
+| cx_ring_basic | 31 → 30 | 10,254 → 10,086 | 7,656 → 7,656 | 1.240 → 1.263 | 1.211–1.430 / 1.198–1.623 |
+| cx_ring_extended | 31 → 30 | 18,350 → 18,182 | 14,192 → 14,192 | 1.453 → 1.393 | 1.422–1.934 / 1.378–1.530 |
+
+CTfile removes two allocation calls in each case: the tuple-to-bond collection's realloc and
+the copied derivation table allocation. CX removes one copied-table allocation. Requested bytes
+fall in every case; peaks fall for the chains and are unchanged for the smaller examples.
+Runtime results are mixed: the basic 64-atom MOL median increases about 6.8%, while several
+small/CX cases improve. The short runs and overlapping ranges do not establish a general speedup
+or a stable regression. No further tuning or benchmark campaign was undertaken.
+
+Verification passes: 3,815 IO unit tests and 1,066 graph unit tests with proptest enabled;
+10,223 SMILES, 2,253 MOL, and 407 SDF conformance cases; the remaining integration/property suites;
+and strict IO/graph Clippy for all targets with those features. One existing graph doctest is
+ignored. The final bond-test assertion review was followed by a focused run of all 115 CTfile
+bond tests. Formatting and diff checks pass. The incremental diff was reviewed against S3d2;
+pre-existing S3d/S3d1 work was preserved.
+
+Commands:
+
+```sh
+cargo test -p umol-io -p umol-graph --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline
+cargo test -p umol-io --lib ctfile::parser::bond --offline
+cargo clippy -p umol-io -p umol-graph --all-targets --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline -- -D warnings
+cargo run --release --manifest-path scratch/s3d2-parser-bench/Cargo.toml --offline --features allocations
+cargo run --release --manifest-path scratch/s3d2-parser-bench/Cargo.toml --offline
+```
+
+Raw results are scratch/s3d2-{before,after}-{allocations,timings}.csv, with corresponding build
+logs. Verification logs use scratch/s3d2-{gate,bond-tests,clippy,fmt}.log. S3d3 is next.
+
 
 ## Staged specification updates
 

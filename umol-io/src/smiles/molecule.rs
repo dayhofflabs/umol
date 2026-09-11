@@ -17,6 +17,13 @@ pub struct Smiles {
 
 impl Smiles {
     /// Parse SMILES text with the OpenSMILES configuration.
+    ///
+    /// Directional evidence is normalized into explicit bond frames.
+    ///
+    /// # Errors
+    ///
+    /// Rejects invalid syntax, conflicting direction markers, and markers outside the
+    /// supported local double-bond domain. Consistent incomplete evidence adds no frame.
     pub fn parse(input: &str) -> Result<Self, ParseError> {
         Self::parse_bytes(input.as_bytes())
     }
@@ -79,6 +86,7 @@ mod tests {
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
             stereo_atoms: Vec::new(),
+            stereo_bonds: Vec::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
             source_format: SourceFormat::SMILES,
@@ -93,6 +101,7 @@ mod tests {
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
             stereo_atoms: Vec::new(),
+            stereo_bonds: Vec::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
             source_format: SourceFormat::SMILES,

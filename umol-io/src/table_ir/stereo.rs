@@ -1,6 +1,5 @@
 //! Stereochemistry records and metadata for TableIR.
 
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) mod derive;
 
 /// Whether the molecule's stereo descriptors fix the absolute configuration or

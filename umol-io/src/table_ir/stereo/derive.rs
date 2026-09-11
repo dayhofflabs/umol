@@ -17,18 +17,19 @@ pub(crate) enum StereoDerivationError {
 }
 
 /// Derive frames in table order, using supplied geometry only where no Either code applies.
-pub(crate) fn derive_stereo_bonds(
+pub(crate) fn derive_stereo_bonds<B>(
     atom_count: usize,
-    bonds: &[(AtomPair, BondOrder, Option<BondWedge>)],
+    bonds: &[B],
+    bond_fields: impl Fn(&B) -> (AtomPair, BondOrder, Option<BondWedge>),
     positions: Option<&[Point3D]>,
-    annotations: &[(u32, BondStereo)],
+    bond_stereo_assertions: &[(u32, BondStereo)],
 ) -> Result<Vec<StereoBond>, StereoDerivationError> {
     let mut codes = vec![None; bonds.len()];
-    for &(bond, code) in annotations {
-        let Some((_, order, _)) = bonds.get(bond as usize) else {
+    for &(bond, code) in bond_stereo_assertions {
+        let Some((_, order, _)) = bonds.get(bond as usize).map(&bond_fields) else {
             return Err(StereoDerivationError::BondIndexOutOfBounds { bond });
         };
-        if *order != BondOrder::Double {
+        if order != BondOrder::Double {
             return Err(StereoDerivationError::UnsupportedSite { bond });
         }
         if codes[bond as usize].is_some_and(|previous| previous != code) {
@@ -36,8 +37,8 @@ pub(crate) fn derive_stereo_bonds(
         }
         codes[bond as usize] = Some(code);
     }
-    let neighbors = AtomNeighbors::new(atom_count, bonds.iter().map(|(atoms, _, _)| *atoms));
-    for &(atoms, _, wedge) in bonds {
+    let neighbors = AtomNeighbors::new(atom_count, bonds.iter().map(|bond| bond_fields(bond).0));
+    for (atoms, _, wedge) in bonds.iter().map(&bond_fields) {
         let Some(wedge) = wedge.filter(|wedge| {
             matches!(
                 wedge.orientation,
@@ -56,7 +57,7 @@ pub(crate) fn derive_stereo_bonds(
         let mut partners = neighbors
             .neighbors(atom)
             .iter()
-            .filter(|neighbor| bonds[neighbor.bond as usize].1 == BondOrder::Double);
+            .filter(|neighbor| bond_fields(&bonds[neighbor.bond as usize]).1 == BondOrder::Double);
         if let (Some(partner), None) = (partners.next(), partners.next()) {
             let bond = partner.bond;
             if codes[bond as usize].is_some_and(|code| code != BondStereo::Either) {
@@ -66,7 +67,7 @@ pub(crate) fn derive_stereo_bonds(
         }
     }
     let mut frames = Vec::new();
-    for (bond, &(atoms, order, _)) in bonds.iter().enumerate() {
+    for (bond, (atoms, order, _)) in bonds.iter().map(&bond_fields).enumerate() {
         if order != BondOrder::Double {
             continue;
         }
@@ -102,7 +103,7 @@ pub(crate) fn derive_stereo_bonds(
         let cumulated = |endpoint| {
             neighbors.neighbors(endpoint).iter().any(|neighbor| {
                 neighbor.bond as usize != bond
-                    && bonds[neighbor.bond as usize].1 == BondOrder::Double
+                    && bond_fields(&bonds[neighbor.bond as usize]).1 == BondOrder::Double
             })
         };
         if first.is_empty()

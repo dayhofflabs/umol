@@ -23,6 +23,8 @@ use super::super::config::SmilesSyntaxFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::table_ir::bond::BondNoncovalent;
+use crate::table_ir::stereo::derive::{derive_stereo_bonds, StereoDerivationError};
+use crate::table_ir::{AtomPair, BondConfiguration, BondRelation, StereoBond};
 use crate::table_ir::{
     BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondOrientation, BondStereo,
     BondTaper, BondWedge, ConfigurationScope, CxAnnotationData, ExtendedMolecule, ExtendedReaction,
@@ -248,6 +250,7 @@ pub fn remap_cx_bond_indices(
 /// Update Molecule with parsed CX entries
 /// TODO: Add FragmentGroups, StereoGroups, RelativeStereo, LigandOrder to Molecule?
 pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), ParseError> {
+    let mut bond_stereo_assertions = Vec::new();
     for entry in entries {
         match entry {
             CxEntry::Coordinates(coords) => {
@@ -303,31 +306,26 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                             BondTaper::Narrowing
                         },
                     });
+                    let mut partners = mol.bonds.iter().enumerate().filter(|(_, b)| {
+                        b.order == BondOrder::Double
+                            && (b.atoms.first() == atom_idx || b.atoms.second() == atom_idx)
+                    });
+                    if let (Some((site, _)), None) = (partners.next(), partners.next()) {
+                        bond_stereo_assertions.push((site as u32, BondStereo::Either));
+                    }
                 }
             }
             CxEntry::CisBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Cis);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Cis)));
             }
             CxEntry::TransBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Trans);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Trans)));
             }
             CxEntry::UnspecBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Either);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Either)));
             }
             CxEntry::LonePairs(pairs) => {
                 for (idx, count) in pairs {
@@ -402,6 +400,14 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
         }
     }
 
+    mol.stereo_bonds = finish_stereo_bonds(
+        mol.atoms.len(),
+        &mol.bonds,
+        |bond| (bond.atoms, bond.order, bond.wedge),
+        mol.positions.as_deref(),
+        &mol.stereo_bonds,
+        bond_stereo_assertions,
+    )?;
     Ok(())
 }
 
@@ -417,6 +423,7 @@ pub fn update_extended_molecule(
     let mut sgroup_index: u32 = 0;
     let mut bicyclo_stereo: Vec<BicycloStereo> = vec![];
 
+    let mut bond_stereo_assertions = Vec::new();
     for entry in entries {
         match entry {
             CxEntry::Coordinates(coords) => {
@@ -472,31 +479,26 @@ pub fn update_extended_molecule(
                             BondTaper::Narrowing
                         },
                     });
+                    let mut partners = mol.bonds.iter().enumerate().filter(|(_, b)| {
+                        b.order == BondOrder::Double
+                            && (b.atoms.first() == atom_idx || b.atoms.second() == atom_idx)
+                    });
+                    if let (Some((site, _)), None) = (partners.next(), partners.next()) {
+                        bond_stereo_assertions.push((site as u32, BondStereo::Either));
+                    }
                 }
             }
             CxEntry::CisBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Cis);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Cis)));
             }
             CxEntry::TransBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Trans);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Trans)));
             }
             CxEntry::UnspecBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Either);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Either)));
             }
             CxEntry::LonePairs(pairs) => {
                 for (idx, count) in pairs {
@@ -740,7 +742,68 @@ pub fn update_extended_molecule(
         });
     }
 
+    mol.stereo_bonds = finish_stereo_bonds(
+        mol.atoms.len(),
+        &mol.bonds,
+        |bond| (bond.atoms, bond.order, bond.wedge),
+        mol.positions.as_deref(),
+        &mol.stereo_bonds,
+        bond_stereo_assertions,
+    )?;
     Ok(())
+}
+
+fn finish_stereo_bonds<B>(
+    atom_count: usize,
+    bonds: &[B],
+    bond_fields: impl Fn(&B) -> (AtomPair, BondOrder, Option<BondWedge>),
+    positions: Option<&[Point3D]>,
+    frames: &[StereoBond],
+    mut bond_stereo_assertions: Vec<(u32, BondStereo)>,
+) -> Result<Vec<StereoBond>, ParseError> {
+    // Parser-produced frames use the same minimum-index references as CX annotations.
+    bond_stereo_assertions.extend(frames.iter().map(|frame| {
+        (
+            frame.bond,
+            match frame.configuration {
+                BondConfiguration::Either => BondStereo::Either,
+                BondConfiguration::Framed {
+                    relation: BondRelation::SameSide,
+                    ..
+                } => BondStereo::Cis,
+                BondConfiguration::Framed {
+                    relation: BondRelation::OppositeSide,
+                    ..
+                } => BondStereo::Trans,
+            },
+        )
+    }));
+    derive_stereo_bonds(
+        atom_count,
+        bonds,
+        bond_fields,
+        positions,
+        &bond_stereo_assertions,
+    )
+    .map_err(Into::into)
+}
+
+impl From<StereoDerivationError> for ParseError {
+    fn from(error: StereoDerivationError) -> Self {
+        match error {
+            StereoDerivationError::BondIndexOutOfBounds { bond } => {
+                Self::BondIndexOutOfBounds { bond_idx: bond }
+            }
+            StereoDerivationError::AtomIndexOutOfBounds { atom } => {
+                Self::AtomIndexOutOfBounds { atom_idx: atom }
+            }
+            StereoDerivationError::MissingPosition { atom } => Self::MissingPosition { atom },
+            StereoDerivationError::UnsupportedSite { bond } => Self::UnsupportedStereoBond { bond },
+            StereoDerivationError::ConflictingConfiguration { bond } => {
+                Self::ConflictingBondConfiguration { bond }
+            }
+        }
+    }
 }
 
 pub fn update_reaction(
@@ -2675,8 +2738,6 @@ mod tests {
     #[case::radicals(vec![CxEntry::Radicals(vec![(0, (1, None))])],
         |mol: &Molecule| mol.atoms[0].unpaired_electrons == Some(1) && mol.atoms[0].multiplicity.is_none())]
     #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(0, 0, BondOrientation::Either)])], |mol: &Molecule| mol.bonds[0].wedge == Some(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Widening }))]
-    #[case::cis_bonds(vec![CxEntry::CisBonds(vec![0])], |mol: &Molecule| mol.bonds[0].stereo == Some(BondStereo::Cis))]
-    #[case::trans_bonds(vec![CxEntry::TransBonds(vec![1])], |mol: &Molecule| mol.bonds[1].stereo == Some(BondStereo::Trans))]
     #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].donation == Some(BondDonation::Donating))]
     #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].noncovalent == Some(BondNoncovalent::Hydrogen) && mol.bonds[0].order == BondOrder::Zero)]
     #[case::multicenter_bonds(vec![CxEntry::MulticenterBonds(vec![(0, vec![1, 2]), (2, vec![0, 1])])],
@@ -2703,8 +2764,6 @@ mod tests {
     #[case::radicals(vec![CxEntry::Radicals(vec![(2, (2, None))])],
         |mol: &ExtendedMolecule| mol.atoms[2].unpaired_electrons == Some(2) && mol.atoms[2].multiplicity.is_none())]
     #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(1, 0, BondOrientation::Either)])], |mol: &ExtendedMolecule| mol.bonds[0].wedge == Some(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Narrowing }))]
-    #[case::cis_bonds(vec![CxEntry::CisBonds(vec![1])], |mol: &ExtendedMolecule| mol.bonds[1].stereo == Some(BondStereo::Cis))]
-    #[case::trans_bonds(vec![CxEntry::TransBonds(vec![0])], |mol: &ExtendedMolecule| mol.bonds[0].stereo == Some(BondStereo::Trans))]
     #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(1, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].donation == Some(BondDonation::Accepting))]
     #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].noncovalent == Some(BondNoncovalent::Hydrogen) && mol.bonds[0].order == BondOrder::Zero)]
     #[case::fragment_groups(vec![CxEntry::FragmentGroups(vec![vec![0, 1], vec![2]])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| d.components.as_ref()) == Some(Some(&vec![vec![0, 1], vec![2]])))]

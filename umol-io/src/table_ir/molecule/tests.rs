@@ -8,10 +8,10 @@ use umol_chem::spin::SpinMultiplicity;
 
 use super::*;
 use crate::table_ir::{
-    Atom, AtomStereoCare, AtomSymbol, Bond, BondOrder, Chirality, ConversionError, CtfileData,
-    CxAnnotationData, ExtendedAtom, ExtendedBond, MulticenterBond, MulticenterSet, Neighbor,
-    RGroup, RGroupOccurrence, SGroup, SGroupType, SourceFormat, Span, StereoLigand, WildcardAtom,
-    Winding,
+    Atom, AtomStereoCare, AtomSymbol, Bond, BondConfiguration, BondOrder, Chirality,
+    ConversionError, CtfileData, CxAnnotationData, ExtendedAtom, ExtendedBond, MulticenterBond,
+    MulticenterSet, Neighbor, RGroup, RGroupOccurrence, SGroup, SGroupType, SourceFormat, Span,
+    StereoLigand, WildcardAtom, Winding,
 };
 
 #[rstest]
@@ -25,6 +25,7 @@ fn test_molecule_empty() {
             multicenter_bonds: vec![],
             configuration_scope: None,
             stereo_atoms: vec![],
+            stereo_bonds: vec![],
             comments: vec![],
             properties: IndexMap::new(),
             source_format: SourceFormat::UNKNOWN,
@@ -180,6 +181,7 @@ fn test_extended_molecule_empty() {
             multicenter_bonds: vec![],
             configuration_scope: None,
             stereo_atoms: vec![],
+            stereo_bonds: vec![],
             comments: vec![],
             properties: IndexMap::new(),
             ctfile_data: None,
@@ -522,14 +524,19 @@ fn test_molecule_try_from() {
 }
 
 #[rstest]
-fn test_molecule_try_from_error() {
-    let extended = ExtendedMolecule {
-        atoms: vec![ExtendedAtom {
-            stereo_care: Some(AtomStereoCare::Care),
-            ..ExtendedAtom::from_element(Element::C)
-        }],
-        ..ExtendedMolecule::empty()
-    };
+#[case::atom(ExtendedMolecule {
+    atoms: vec![ExtendedAtom {
+        stereo_care: Some(AtomStereoCare::Care),
+        ..ExtendedAtom::from_element(Element::C)
+    }],
+    ..ExtendedMolecule::empty()
+})]
+#[case::bond(ExtendedMolecule {
+    atoms: vec![ExtendedAtom::from_element(Element::C), ExtendedAtom::from_element(Element::O)],
+    bonds: vec![ExtendedBond::new(0, 1, BondOrder::Any)],
+    ..ExtendedMolecule::empty()
+})]
+fn test_molecule_try_from_error(#[case] extended: ExtendedMolecule) {
     assert_eq!(
         Molecule::try_from(extended),
         Err(ConversionError::HasExtendedFeatures)
@@ -559,6 +566,17 @@ fn test_molecule_try_from_roundtrip() {
             },
         ],
         bonds: vec![Bond::new(0, 1, BondOrder::Single)],
+        positions: Some(vec![Point3D::zero(), Point3D::new(1.0, 0.0, 0.0)]),
+        multicenter_bonds: vec![MulticenterBond::new(vec![
+            MulticenterSet::single(0),
+            MulticenterSet::single(1),
+        ])],
+        stereo_bonds: vec![StereoBond {
+            bond: 0,
+            configuration: BondConfiguration::Either,
+        }],
+        comments: vec!["boundary metadata".to_owned()],
+        properties: IndexMap::from([("source".to_owned(), "conversion".to_owned())]),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     };

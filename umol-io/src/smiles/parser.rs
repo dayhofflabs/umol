@@ -7,7 +7,6 @@ use umol_chem::element::Element;
 
 mod builder;
 mod cx;
-#[cfg_attr(not(test), expect(dead_code))]
 mod stereo;
 mod utils;
 

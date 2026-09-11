@@ -1,14 +1,11 @@
-//! Raise-time stereo helpers for `super`: ligand orderings, directional-bond faces, and the
-//! capability/validation predicates the `raise_*` functions build on.
+//! Wedge-based atom stereo interpretation and neighbor ordering for raise.
 
-use umol_geometric_core::{
-    complementary_direction, same_side_of_axis, signed_volume, Point3D, AXIS_SIDE_TOLERANCE,
-};
+use umol_geometric_core::{complementary_direction, signed_volume, Point3D, AXIS_SIDE_TOLERANCE};
 use umol_graph_ir::ir::NoncovalentBondKind;
 
 use super::RaiseError;
 use crate::table_ir::bond::{BondNoncovalent as TableNoncovalent, BondOrder as TableBondOrder};
-use crate::table_ir::{AtomNeighbors, BondDirection, BondOrientation, Molecule as TableMolecule};
+use crate::table_ir::{AtomNeighbors, BondOrientation, Molecule as TableMolecule};
 
 pub(super) fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
     match kind {
@@ -24,36 +21,11 @@ pub(super) enum StereoLigand {
     Virtual(usize),
 }
 
-/// Halfplane of the plane of the double bond, split by the bond axis.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum StereoHalfplane {
-    Top,
-    Bottom,
-}
-
-impl StereoHalfplane {
-    fn flip(self) -> Self {
-        match self {
-            Self::Top => Self::Bottom,
-            Self::Bottom => Self::Top,
-        }
-    }
-}
-
 /// Out-of-plane direction.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum StereoOutofPlane {
     Front,
     Back,
-}
-
-/// Atom adjacent to stereogenic double bond. Second virtual ligand is
-/// added if atom has one substituent. Halfplane of the second ligand is
-/// flipped from the first.
-pub(super) struct StereoBondAtom {
-    pub(super) first_ligand: StereoLigand,
-    pub(super) second_ligand: StereoLigand,
-    pub(super) first_halfplane: StereoHalfplane,
 }
 
 /// Neighbor atom ordering of `atom_idx`, by ascending atom index.
@@ -221,195 +193,4 @@ pub(super) fn validate_tetrahedral_geometry(
             count,
         })
     }
-}
-
-/// Validate that a directional bond (`/`,`\`) is adjacent to a cis/trans-capable double bond.
-/// Returns `Ok(())` for any non-directional bond.
-pub(super) fn validate_bond_direction(
-    mol: &TableMolecule,
-    neighbors: &AtomNeighbors,
-    bond_idx: usize,
-) -> Result<(), RaiseError> {
-    let bond = &mol.bonds[bond_idx];
-    if bond.order != TableBondOrder::Single || bond.direction.is_none() {
-        return Ok(());
-    }
-    let flanks_capable = [bond.start_atom(), bond.end_atom()]
-        .into_iter()
-        .any(|atom| {
-            neighbors.neighbors(atom).iter().any(|neighbor| {
-                mol.bonds[neighbor.bond as usize].order == TableBondOrder::Double
-                    && cis_trans_capable(neighbors, atom as usize, neighbor.atom as usize)
-            })
-        });
-    if flanks_capable {
-        Ok(())
-    } else {
-        Err(RaiseError::DanglingBondDirection { bond: bond_idx })
-    }
-}
-
-/// Double bond is cis-trans capable iff both ends have distinct substituents.
-pub(super) fn cis_trans_capable(neighbors: &AtomNeighbors, atom_1: usize, atom_2: usize) -> bool {
-    let side_1: Vec<_> = atom_ordering(neighbors, atom_1)
-        .into_iter()
-        .filter(|&atom| atom != atom_2)
-        .collect();
-    let side_2: Vec<_> = atom_ordering(neighbors, atom_2)
-        .into_iter()
-        .filter(|&atom| atom != atom_1)
-        .collect();
-    !side_1.is_empty() && !side_2.is_empty() && side_1.iter().all(|atom| !side_2.contains(atom))
-}
-
-/// Arrangement of the bond atom `atom_idx` of stereogenic double bond. Errors when its markers disagree.
-pub(super) fn cis_trans_side(
-    mol: &TableMolecule,
-    neighbors: &AtomNeighbors,
-    atom_idx: usize,
-    other_atom_idx: usize,
-) -> Result<Option<StereoBondAtom>, RaiseError> {
-    let substituents: Vec<usize> = atom_ordering(neighbors, atom_idx)
-        .into_iter()
-        .filter(|&n| n != other_atom_idx)
-        .collect();
-    let Some(&first) = substituents.first() else {
-        return Ok(None);
-    };
-    let first_ligand = StereoLigand::Atom(first);
-    let second_ligand = substituents
-        .get(1)
-        .map_or(StereoLigand::Virtual(atom_idx), |&second| {
-            StereoLigand::Atom(second)
-        });
-    // The first ligand's face: from the bond toward it, or the flipped bond toward the geminal second.
-    let toward_first = direction(mol, neighbors, atom_idx, first);
-    let toward_second = substituents
-        .get(1)
-        .and_then(|&second| direction(mol, neighbors, atom_idx, second))
-        .map(StereoHalfplane::flip);
-    let first_halfplane = match (toward_first, toward_second) {
-        (Some(a), Some(b)) if a != b => {
-            return Err(RaiseError::CisTransConflict { atom: atom_idx })
-        }
-        (Some(halfplane), _) | (_, Some(halfplane)) => halfplane,
-        (None, None) => return Ok(None),
-    };
-    Ok(Some(StereoBondAtom {
-        first_ligand,
-        second_ligand,
-        first_halfplane,
-    }))
-}
-
-/// Arrangements of both atoms of the double bond read from coordinates, as the specification
-/// prescribes for stereo code 0. `None` when either atom has no substituent or is a cumulated
-/// center, whose only other bond is a second double bond and which therefore has no plane of
-/// substituents, and whenever the drawing does not settle the configuration: coincident bond
-/// atoms, a substituent on the bond axis, or both substituents of one atom on one side of it. The
-/// coordinates are supplementary and assert nothing they do not show.
-pub(super) fn cis_trans_sides_from_positions(
-    mol: &TableMolecule,
-    neighbors: &AtomNeighbors,
-    atom_1_idx: usize,
-    atom_2_idx: usize,
-    positions: &[Point3D],
-) -> Option<(StereoBondAtom, StereoBondAtom)> {
-    let substituents = |atom_idx: usize, other_atom_idx: usize| {
-        let mut substituents: Vec<(usize, TableBondOrder)> = neighbors
-            .neighbors(atom_idx as u32)
-            .iter()
-            .filter(|neighbor| neighbor.atom as usize != other_atom_idx)
-            .map(|neighbor| {
-                (
-                    neighbor.atom as usize,
-                    mol.bonds[neighbor.bond as usize].order,
-                )
-            })
-            .collect();
-        substituents.sort_unstable_by_key(|&(neighbor, _)| neighbor);
-        substituents.dedup_by_key(|&mut (neighbor, _)| neighbor);
-        substituents
-    };
-    let substituents_1 = substituents(atom_1_idx, atom_2_idx);
-    let substituents_2 = substituents(atom_2_idx, atom_1_idx);
-    let cumulated = |substituents: &[(usize, TableBondOrder)]| {
-        matches!(substituents, [(_, TableBondOrder::Double)])
-    };
-    if substituents_1.is_empty()
-        || substituents_2.is_empty()
-        || cumulated(&substituents_1)
-        || cumulated(&substituents_2)
-    {
-        return None;
-    }
-    let same_side = |first: usize, second: usize| {
-        same_side_of_axis(
-            positions[atom_1_idx],
-            positions[atom_2_idx],
-            positions[first],
-            positions[second],
-        )
-    };
-    // Two substituents of one atom must lie on opposite sides of the axis.
-    for substituents in [&substituents_1, &substituents_2] {
-        if let &[(first, _), (second, _)] = substituents.as_slice() {
-            if same_side(first, second)? {
-                return None;
-            }
-        }
-    }
-    let cis = same_side(substituents_1[0].0, substituents_2[0].0)?;
-    let arrangement = |atom_idx: usize,
-                       substituents: &[(usize, TableBondOrder)],
-                       first_halfplane: StereoHalfplane| StereoBondAtom {
-        first_ligand: StereoLigand::Atom(substituents[0].0),
-        second_ligand: match substituents.get(1) {
-            Some(&(second, _)) => StereoLigand::Atom(second),
-            None => StereoLigand::Virtual(atom_idx),
-        },
-        first_halfplane,
-    };
-    Some((
-        arrangement(atom_1_idx, &substituents_1, StereoHalfplane::Top),
-        arrangement(
-            atom_2_idx,
-            &substituents_2,
-            if cis {
-                StereoHalfplane::Top
-            } else {
-                StereoHalfplane::Bottom
-            },
-        ),
-    ))
-}
-
-/// Halfplane (top/bottom) of `other_atom_idx` viewed from `atom_idx`.
-fn direction(
-    mol: &TableMolecule,
-    neighbors: &AtomNeighbors,
-    atom_idx: usize,
-    other_atom_idx: usize,
-) -> Option<StereoHalfplane> {
-    neighbors
-        .neighbors(atom_idx as u32)
-        .iter()
-        .find_map(|neighbor| {
-            if neighbor.atom as usize != other_atom_idx {
-                return None;
-            }
-            let bond = &mol.bonds[neighbor.bond as usize];
-            if bond.order != TableBondOrder::Single {
-                return None;
-            }
-            let face = match bond.direction? {
-                BondDirection::Rising => StereoHalfplane::Top,
-                BondDirection::Falling => StereoHalfplane::Bottom,
-            };
-            Some(if bond.start_atom() as usize == atom_idx {
-                face
-            } else {
-                face.flip()
-            })
-        })
 }

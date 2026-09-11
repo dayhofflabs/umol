@@ -2,11 +2,10 @@
 source: umol-io/tests/smiles_parsing/mod.rs
 expression: results
 ---
-expected_category: opensmiles
-category: opensmiles
+expected_category: invalid
+category: invalid
 opensmiles:
-  success: true
-  summary:
-    sum_formula: C14H20
-    atom_count: 34
-    bond_count: 33
+  success: false
+  error:
+    error_type: CisTransConflict
+    message: contradictory cis/trans markers at atom 9

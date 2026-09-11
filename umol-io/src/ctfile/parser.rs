@@ -23,7 +23,10 @@ use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::ParseError;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
-use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
+use crate::table_ir::stereo::derive::{derive_stereo_bonds, StereoDerivationError};
+use crate::table_ir::{
+    Atom, AtomSymbol, BondStereo, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule,
+};
 use crate::utils::normalize_whitespace;
 
 mod accumulator;
@@ -68,7 +71,8 @@ fn ctab_block(
     }
 
     let (atoms, positions, line_offset) = atom_block(input, atom_count, line_offset, flags)?;
-    let (bonds, line_offset) = bond_block(input, bond_count, line_offset, flags)?;
+    let (bonds, bond_stereo_assertions, line_offset) =
+        bond_block(input, bond_count, line_offset, flags)?;
     let (legacy_properties, line_offset) =
         legacy_atom_list_block(input, atom_list_count, line_offset, flags)?;
     let (properties, line_offset) = properties_block(line_offset, flags).parse_next(input)?;
@@ -83,8 +87,15 @@ fn ctab_block(
         properties
     };
 
-    let molecule =
-        build_molecule(atoms, bonds, positions, properties, flags).map_err(ErrMode::Cut)?;
+    let molecule = build_molecule(
+        atoms,
+        bonds,
+        bond_stereo_assertions,
+        positions,
+        properties,
+        flags,
+    )
+    .map_err(ErrMode::Cut)?;
     Ok((molecule, line_offset))
 }
 
@@ -111,7 +122,8 @@ fn extended_ctab_block(
 
     let (atoms, positions, line_offset) =
         extended_atom_block(input, atom_count, line_offset, flags)?;
-    let (bonds, line_offset) = extended_bond_block(input, bond_count, line_offset, flags)?;
+    let (bonds, bond_stereo_assertions, line_offset) =
+        extended_bond_block(input, bond_count, line_offset, flags)?;
     let (legacy_properties, line_offset) = if legacy_atom_lists {
         legacy_atom_list_block(input, atom_list_count, line_offset, flags)?
     } else {
@@ -130,8 +142,15 @@ fn extended_ctab_block(
         properties
     };
 
-    let extended = build_extended_molecule(atoms, bonds, positions, properties, flags)
-        .map_err(ErrMode::Cut)?;
+    let extended = build_extended_molecule(
+        atoms,
+        bonds,
+        bond_stereo_assertions,
+        positions,
+        properties,
+        flags,
+    )
+    .map_err(ErrMode::Cut)?;
     Ok((extended, line_offset))
 }
 
@@ -146,6 +165,7 @@ fn parse_error(error: ErrMode<ParseError>, line: u32, block: &'static str) -> Pa
 fn build_molecule(
     atoms: Vec<Atom>,
     bonds: Vec<Bond>,
+    bond_stereo_assertions: Vec<(u32, BondStereo)>,
     positions: Option<Vec<Point3D>>,
     properties: Vec<PropertyEntries>,
     flags: CtabParseFlags,
@@ -159,6 +179,7 @@ fn build_molecule(
         properties: IndexMap::new(),
         configuration_scope: None,
         stereo_atoms: Vec::new(),
+        stereo_bonds: Vec::new(),
         source_format: SourceFormat::MOL,
     };
 
@@ -168,6 +189,13 @@ fn build_molecule(
     }
     acc.update_molecule(&mut molecule, flags)?;
 
+    molecule.stereo_bonds = derive_stereo_bonds(
+        molecule.atoms.len(),
+        &molecule.bonds,
+        |bond| (bond.atoms, bond.order, bond.wedge),
+        molecule.positions.as_deref(),
+        &bond_stereo_assertions,
+    )?;
     Ok(molecule)
 }
 
@@ -175,6 +203,7 @@ fn build_molecule(
 fn build_extended_molecule(
     atoms: Vec<ExtendedAtom>,
     bonds: Vec<ExtendedBond>,
+    bond_stereo_assertions: Vec<(u32, BondStereo)>,
     positions: Option<Vec<Point3D>>,
     properties: Vec<PropertyEntries>,
     flags: CtabParseFlags,
@@ -190,6 +219,7 @@ fn build_extended_molecule(
         ctfile_data: None,
         cx_data: None,
         stereo_atoms: Vec::new(),
+        stereo_bonds: Vec::new(),
         source_format: SourceFormat::MOL,
     };
 
@@ -200,6 +230,13 @@ fn build_extended_molecule(
 
     acc.update_extended_molecule(&mut molecule, flags)?;
 
+    molecule.stereo_bonds = derive_stereo_bonds(
+        molecule.atoms.len(),
+        &molecule.bonds,
+        |bond| (bond.atoms, bond.order, bond.wedge),
+        molecule.positions.as_deref(),
+        &bond_stereo_assertions,
+    )?;
     Ok(molecule)
 }
 
@@ -470,3 +507,21 @@ pub fn parse_extended_sdf(input: &str) -> Result<Vec<ExtendedMolecule>, ParseErr
 
 #[cfg(test)]
 mod tests;
+
+impl From<StereoDerivationError> for ParseError {
+    fn from(error: StereoDerivationError) -> Self {
+        match error {
+            StereoDerivationError::BondIndexOutOfBounds { bond } => {
+                Self::BondIndexOutOfBounds(bond)
+            }
+            StereoDerivationError::AtomIndexOutOfBounds { atom } => {
+                Self::AtomIndexOutOfBounds(atom)
+            }
+            StereoDerivationError::MissingPosition { atom } => Self::MissingPosition { atom },
+            StereoDerivationError::UnsupportedSite { bond } => Self::UnsupportedStereoBond { bond },
+            StereoDerivationError::ConflictingConfiguration { bond } => {
+                Self::ConflictingBondConfiguration { bond }
+            }
+        }
+    }
+}

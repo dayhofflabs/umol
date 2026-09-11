@@ -2,7 +2,12 @@ use rstest::{fixture, rstest};
 use umol_geometric_core::Point3D;
 
 use super::{derive_stereo_bonds, StereoDerivationError};
-use crate::ctfile::parser::{parse_extended_mol_bytes, parse_mol_bytes_to_table_ir};
+use crate::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use crate::ctfile::error::ParseError as CtfileParseError;
+use crate::ctfile::parser::{
+    parse_extended_mol_bytes, parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir,
+    parse_mol_bytes_to_table_ir_with,
+};
 use crate::smiles::{parse_extended_smiles_bytes_with, Smiles, SmilesIoConfig};
 use crate::table_ir::BondConfiguration::{Either, Framed};
 use crate::table_ir::BondOrder::{Double, Single};
@@ -46,7 +51,7 @@ fn test_derive_stereo_bonds_geometry(
             .collect::<Vec<_>>()
     });
     assert_eq!(
-        derive_stereo_bonds(4, &alkene, positions.as_deref(), &[]),
+        derive_stereo_bonds(4, &alkene, |bond| *bond, positions.as_deref(), &[]),
         Ok(expected
             .into_iter()
             .map(|configuration| StereoBond {
@@ -87,7 +92,7 @@ fn test_derive_stereo_bonds_substituents(
     ]
     .map(|[x, y, z]| Point3D::new(x, y, z));
     assert_eq!(
-        derive_stereo_bonds(6, &bonds, Some(&positions), &[]),
+        derive_stereo_bonds(6, &bonds, |bond| *bond, Some(&positions), &[]),
         Ok(expected
             .into_iter()
             .map(|configuration| StereoBond {
@@ -118,7 +123,7 @@ fn test_derive_stereo_bonds_annotations(
             .collect::<Vec<_>>()
     });
     assert_eq!(
-        derive_stereo_bonds(4, &alkene, positions.as_deref(), &annotations),
+        derive_stereo_bonds(4, &alkene, |bond| *bond, positions.as_deref(), &annotations),
         expected
     );
 }
@@ -141,7 +146,7 @@ fn test_derive_stereo_bonds_annotations_error(
             .collect::<Vec<_>>()
     });
     assert_eq!(
-        derive_stereo_bonds(4, &alkene, positions.as_deref(), &annotations),
+        derive_stereo_bonds(4, &alkene, |bond| *bond, positions.as_deref(), &annotations),
         expected
     );
 }
@@ -160,7 +165,10 @@ fn test_derive_stereo_bonds_wavy(
     #[case] expected: Vec<StereoBond>,
 ) {
     alkene[0].2 = Some(BondWedge { orientation, taper });
-    assert_eq!(derive_stereo_bonds(4, &alkene, None, &[]), Ok(expected));
+    assert_eq!(
+        derive_stereo_bonds(4, &alkene, |bond| *bond, None, &[]),
+        Ok(expected)
+    );
 }
 
 #[rstest]
@@ -178,7 +186,10 @@ fn test_derive_stereo_bonds_context(
     #[case] annotations: Vec<(u32, BondStereo)>,
     #[case] expected: Result<Vec<StereoBond>, StereoDerivationError>,
 ) {
-    assert_eq!(derive_stereo_bonds(4, &bonds, None, &annotations), expected);
+    assert_eq!(
+        derive_stereo_bonds(4, &bonds, |bond| *bond, None, &annotations),
+        expected
+    );
 }
 
 #[rstest]
@@ -192,7 +203,10 @@ fn test_derive_stereo_bonds_context_error(
     #[case] annotations: Vec<(u32, BondStereo)>,
     #[case] expected: Result<Vec<StereoBond>, StereoDerivationError>,
 ) {
-    assert_eq!(derive_stereo_bonds(4, &bonds, None, &annotations), expected);
+    assert_eq!(
+        derive_stereo_bonds(4, &bonds, |bond| *bond, None, &annotations),
+        expected
+    );
 }
 
 #[rstest]
@@ -203,7 +217,7 @@ fn test_derive_stereo_bonds_positions_error(alkene: Vec<(AtomPair, BondOrder, Op
         Point3D::new(2., 0., 0.),
     ];
     assert_eq!(
-        derive_stereo_bonds(4, &alkene, Some(&points), &[]),
+        derive_stereo_bonds(4, &alkene, |bond| *bond, Some(&points), &[]),
         Err(StereoDerivationError::MissingPosition { atom: 3 })
     );
 }
@@ -211,7 +225,13 @@ fn test_derive_stereo_bonds_positions_error(alkene: Vec<(AtomPair, BondOrder, Op
 #[rstest]
 fn test_derive_stereo_bonds_index_error() {
     assert_eq!(
-        derive_stereo_bonds(2, &[(AtomPair::new(0, 2), Double, None)], Some(&[]), &[]),
+        derive_stereo_bonds(
+            2,
+            &[(AtomPair::new(0, 2), Double, None)],
+            |bond| *bond,
+            Some(&[]),
+            &[]
+        ),
         Err(StereoDerivationError::AtomIndexOutOfBounds { atom: 2 })
     );
 }
@@ -223,58 +243,30 @@ fn test_derive_stereo_bonds_index_error() {
 #[case::ring("FC1(=C(F)CCCCCCCCCC1) |c:1|", vec![StereoBond { bond: 2, configuration: Framed { references: [0,3], relation: SameSide }}])]
 #[case::closure_site("C1CCCCCCCCCC=1 |t:10|", vec![StereoBond { bond: 0, configuration: Framed { references: [1,9], relation: OppositeSide }}])]
 #[case::wavy("CC=CC |w:1.0|", vec![StereoBond { bond: 1, configuration: Either }])]
-fn test_derive_stereo_bonds_cx(
+fn test_parse_molecule_cx_stereo_bonds(
     #[case] input: &str,
     #[case] expected: Vec<StereoBond>,
     #[values(false, true)] extended: bool,
 ) {
     let config = SmilesIoConfig::chemaxon();
-    let (count, bonds, positions, annotations) = if extended {
-        let mol = parse_extended_smiles_bytes_with(input.as_bytes(), &config).unwrap();
-        let annotations = mol
-            .bonds
-            .iter()
-            .enumerate()
-            .filter_map(|(i, b)| b.stereo.map(|s| (i as u32, s)))
-            .collect::<Vec<_>>();
-        (
-            mol.atoms.len(),
-            mol.bonds
-                .iter()
-                .map(|b| (b.atoms, b.order, b.wedge))
-                .collect::<Vec<_>>(),
-            mol.positions,
-            annotations,
-        )
+    let actual = if extended {
+        parse_extended_smiles_bytes_with(input.as_bytes(), &config)
+            .unwrap()
+            .stereo_bonds
     } else {
-        let mol = Smiles::parse_with(input, &config).unwrap().into_table_ir();
-        let annotations = mol
-            .bonds
-            .iter()
-            .enumerate()
-            .filter_map(|(i, b)| b.stereo.map(|s| (i as u32, s)))
-            .collect::<Vec<_>>();
-        (
-            mol.atoms.len(),
-            mol.bonds
-                .iter()
-                .map(|b| (b.atoms, b.order, b.wedge))
-                .collect::<Vec<_>>(),
-            mol.positions,
-            annotations,
-        )
+        Smiles::parse_with(input, &config)
+            .unwrap()
+            .into_table_ir()
+            .stereo_bonds
     };
-    assert_eq!(
-        derive_stereo_bonds(count, &bonds, positions.as_deref(), &annotations),
-        Ok(expected)
-    );
+    assert_eq!(actual, expected);
 }
 
 #[rstest]
 #[case::same(1., false, Framed { references: [0,3], relation: SameSide })]
 #[case::opposite(-1., false, Framed { references: [0,3], relation: OppositeSide })]
 #[case::either(1., true, Either)]
-fn test_derive_stereo_bonds_ctfile(
+fn test_parse_mol_bytes_to_table_ir_stereo_bonds(
     #[case] y: f64,
     #[case] either: bool,
     #[case] configuration: BondConfiguration,
@@ -286,46 +278,82 @@ fn test_derive_stereo_bonds_ctfile(
         let code = if either { 3 } else { 0 };
         format!("\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    1.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000{y:10.4}    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n{a:3}{b:3}  2{code:3}        0\n  3  4  1  0        0\nM  END\n")
     };
-    let (count, bonds, positions, annotations) = if extended {
-        let mol = parse_extended_mol_bytes(input.as_bytes()).unwrap();
-        let annotations = mol
-            .bonds
-            .iter()
-            .enumerate()
-            .filter_map(|(i, b)| b.stereo.map(|s| (i as u32, s)))
-            .collect::<Vec<_>>();
+    let actual = if extended {
+        parse_extended_mol_bytes(input.as_bytes())
+            .unwrap()
+            .stereo_bonds
+    } else {
+        parse_mol_bytes_to_table_ir(input.as_bytes())
+            .unwrap()
+            .stereo_bonds
+    };
+    assert_eq!(
+        actual,
+        vec![StereoBond {
+            bond: 1,
+            configuration
+        }]
+    );
+}
+
+#[rstest]
+#[case::promote(1, 0, "M  ZBO  1   2   2\n", Double, vec![StereoBond { bond: 1, configuration: Framed { references: [0,3], relation: SameSide }}])]
+#[case::demote(2, 0, "M  ZBO  1   2   1\n", Single, vec![])]
+#[case::retain_either(2, 3, "M  ZBO  1   2   2\n", Double, vec![StereoBond { bond: 1, configuration: Either }])]
+fn test_parse_mol_bytes_to_table_ir_stereo_properties(
+    #[case] order: u8,
+    #[case] code: u8,
+    #[case] property: &str,
+    #[case] expected_order: BondOrder,
+    #[case] expected_frames: Vec<StereoBond>,
+    #[values(false, true)] extended: bool,
+) {
+    let input = format!("\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1\n  2  3{order:3}{code:3}\n  3  4  1\n{property}M  CHG  1   1  -1\nM  ISO  1   4  13\nM  END\n");
+    let mut config = if extended {
+        CtfileIoConfig::extended()
+    } else {
+        CtfileIoConfig::basic()
+    };
+    config.parse_flags |= CtabParseFlags::CLARK_EXTENSIONS;
+    let actual = if extended {
+        let mol = parse_extended_mol_bytes_with(input.as_bytes(), &config).unwrap();
         (
-            mol.atoms.len(),
-            mol.bonds
-                .iter()
-                .map(|b| (b.atoms, b.order, b.wedge))
-                .collect::<Vec<_>>(),
-            mol.positions,
-            annotations,
+            mol.bonds[1].order,
+            mol.stereo_bonds,
+            mol.atoms[0].charge,
+            mol.atoms[3].isotope_mass,
         )
     } else {
-        let mol = parse_mol_bytes_to_table_ir(input.as_bytes()).unwrap();
-        let annotations = mol
-            .bonds
-            .iter()
-            .enumerate()
-            .filter_map(|(i, b)| b.stereo.map(|s| (i as u32, s)))
-            .collect::<Vec<_>>();
+        let mol = parse_mol_bytes_to_table_ir_with(input.as_bytes(), &config).unwrap();
         (
-            mol.atoms.len(),
-            mol.bonds
-                .iter()
-                .map(|b| (b.atoms, b.order, b.wedge))
-                .collect::<Vec<_>>(),
-            mol.positions,
-            annotations,
+            mol.bonds[1].order,
+            mol.stereo_bonds,
+            mol.atoms[0].charge,
+            mol.atoms[3].isotope_mass,
         )
     };
     assert_eq!(
-        derive_stereo_bonds(count, &bonds, positions.as_deref(), &annotations),
-        Ok(vec![StereoBond {
-            bond: 1,
-            configuration
-        }])
+        actual,
+        (expected_order, expected_frames, Some(-1), Some(13))
+    );
+}
+
+#[rstest]
+fn test_parse_mol_bytes_to_table_ir_stereo_properties_error(#[values(false, true)] extended: bool) {
+    let input = b"\n\n\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  2  3\nM  ZBO  1   1   1\nM  END\n";
+    let mut config = if extended {
+        CtfileIoConfig::extended()
+    } else {
+        CtfileIoConfig::basic()
+    };
+    config.parse_flags |= CtabParseFlags::CLARK_EXTENSIONS;
+    let actual = if extended {
+        parse_extended_mol_bytes_with(input, &config).map(|_| ())
+    } else {
+        parse_mol_bytes_to_table_ir_with(input, &config).map(|_| ())
+    };
+    assert_eq!(
+        actual,
+        Err(CtfileParseError::UnsupportedStereoBond { bond: 0 })
     );
 }

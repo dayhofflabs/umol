@@ -17,6 +17,7 @@ use crate::table_ir::{
 #[case::opposite("F/C=C/F", vec![(1, [0, 3], OppositeSide)])]
 #[case::reversed("F\\C=C\\F", vec![(1, [0, 3], OppositeSide)])]
 #[case::same("F/C=C\\F", vec![(1, [0, 3], SameSide)])]
+#[case::same_reversed("F\\C=C/F", vec![(1, [0, 3], SameSide)])]
 #[case::branch("C(/F)=C/F", vec![(1, [1, 3], SameSide)])]
 #[case::four_substituents("F/C(Cl)=C(/Br)I", vec![(2, [0, 4], OppositeSide)])]
 #[case::redundant("F/C(/Cl)=C(/Br)\\I", vec![(2, [0, 4], OppositeSide)])]
@@ -43,35 +44,29 @@ use crate::table_ir::{
 #[case::shared_cycle("C1/C=C/C=C/CCC1", vec![(2, [0, 3], OppositeSide), (4, [2, 5], OppositeSide)])]
 #[case::tetrahedral_ring("C[C@H]1/C=C/CCO1", vec![(3, [1, 4], OppositeSide)])]
 #[case::components("F/C=C/F.CC.F/C=C\\Cl", vec![(1, [0, 3], OppositeSide), (5, [6, 9], SameSide)])]
-fn test_derive_stereo_bonds(
+#[case::reverse_branch(r"C(\F)=C/F", vec![(1,[1,3],OppositeSide)])]
+#[case::substituted_cis_1(r"C/C(/F)=C(\F)/C", vec![(2,[0,4],SameSide)])]
+#[case::substituted_cis_2(r"C/C(/F)=C(/C)\F", vec![(2,[0,4],OppositeSide)])]
+#[case::substituted_cis_3(r"C/C(F)=C(/C)F", vec![(2,[0,4],OppositeSide)])]
+#[case::substituted_cis_4(r"CC(/F)=C(/C)F", vec![(2,[0,4],OppositeSide)])]
+#[case::substituted_cis_5(r"C/C(F)=C(C)\F", vec![(2,[0,4],OppositeSide)])]
+#[case::substituted_cis_6(r"CC(/F)=C(C)\F", vec![(2,[0,4],OppositeSide)])]
+#[case::separate_double_bonds(r"F/C=C/C/C=C\C", vec![(1,[0,3],OppositeSide),(4,[3,6],SameSide)])]
+fn test_parse_molecule_stereo_bonds(
     #[case] input: &str,
     #[case] expected: Vec<(u32, [u32; 2], BondRelation)>,
     #[values(false, true)] extended: bool,
 ) {
-    let (atom_count, bonds) = if extended {
-        let table = parse_extended_smiles_bytes(input.as_bytes()).unwrap();
-        (
-            table.atoms.len(),
-            table
-                .bonds
-                .into_iter()
-                .map(|bond| (bond.atoms, bond.order, bond.direction))
-                .collect::<Vec<_>>(),
-        )
+    let frames = if extended {
+        parse_extended_smiles_bytes(input.as_bytes())
+            .unwrap()
+            .stereo_bonds
     } else {
-        let table = Smiles::parse(input).unwrap().into_table_ir();
-        (
-            table.atoms.len(),
-            table
-                .bonds
-                .into_iter()
-                .map(|bond| (bond.atoms, bond.order, bond.direction))
-                .collect::<Vec<_>>(),
-        )
+        Smiles::parse(input).unwrap().into_table_ir().stereo_bonds
     };
     assert_eq!(
-        derive_stereo_bonds(atom_count, &bonds),
-        Ok(expected
+        frames,
+        expected
             .into_iter()
             .map(|(bond, references, relation)| StereoBond {
                 bond,
@@ -80,7 +75,7 @@ fn test_derive_stereo_bonds(
                     relation
                 },
             })
-            .collect()),
+            .collect::<Vec<_>>()
     );
 }
 
@@ -95,33 +90,21 @@ fn test_derive_stereo_bonds(
 #[case::odd_cumulene("F/C=C=C=C/F", DirectionError::UnsupportedSite { bond: 1 })]
 #[case::even_cumulene("F/C=C=C/F", DirectionError::UnsupportedSite { bond: 1 })]
 #[case::partial_cumulene("FC=C=C=C/F", DirectionError::UnsupportedSite { bond: 3 })]
-fn test_derive_stereo_bonds_error(
+#[case::long_cumulene(r"F/C=C=C=C=C=C/F", DirectionError::UnsupportedSite { bond:1 })]
+#[case::long_cumulene_opposite(r"F/C=C=C=C=C=C\F", DirectionError::UnsupportedSite { bond:1 })]
+#[case::cumulene_opposite(r"F/C=C=C=C\F", DirectionError::UnsupportedSite { bond:1 })]
+#[case::shared_cis_trans_ligand(r"SSC=S1CC1\2C=112", DirectionError::UnsupportedSite { bond:8 })]
+fn test_parse_molecule_stereo_bonds_error(
     #[case] input: &str,
     #[case] expected: DirectionError,
     #[values(false, true)] extended: bool,
 ) {
-    let (atom_count, bonds) = if extended {
-        let table = parse_extended_smiles_bytes(input.as_bytes()).unwrap();
-        (
-            table.atoms.len(),
-            table
-                .bonds
-                .into_iter()
-                .map(|bond| (bond.atoms, bond.order, bond.direction))
-                .collect::<Vec<_>>(),
-        )
+    let result = if extended {
+        parse_extended_smiles_bytes(input.as_bytes()).map(|_| ())
     } else {
-        let table = Smiles::parse(input).unwrap().into_table_ir();
-        (
-            table.atoms.len(),
-            table
-                .bonds
-                .into_iter()
-                .map(|bond| (bond.atoms, bond.order, bond.direction))
-                .collect::<Vec<_>>(),
-        )
+        Smiles::parse(input).map(|_| ())
     };
-    assert_eq!(derive_stereo_bonds(atom_count, &bonds), Err(expected));
+    assert_eq!(result, Err(ParseError::from(expected)));
 }
 
 #[rstest]

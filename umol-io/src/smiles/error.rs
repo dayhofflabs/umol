@@ -5,6 +5,16 @@ use umol_utils::error::UmolError;
 
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
+    #[error("directional bond {bond} is not adjacent to a supported double bond")]
+    DanglingBondDirection { bond: u32 },
+    #[error("contradictory cis/trans markers at atom {atom}")]
+    CisTransConflict { atom: u32 },
+    #[error("unsupported stereo bond {bond}")]
+    UnsupportedStereoBond { bond: u32 },
+    #[error("conflicting configurations at bond {bond}")]
+    ConflictingBondConfiguration { bond: u32 },
+    #[error("missing position for atom {atom}")]
+    MissingPosition { atom: u32 },
     #[error("Leading whitespace")]
     LeadingWhitespace,
     #[error("Invalid element at position {pos}")]

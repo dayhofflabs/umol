@@ -7,10 +7,10 @@ use umol_geometric_core::Point3D;
 use super::super::*;
 use crate::table_ir::bond::BondNoncovalent;
 use crate::table_ir::{
-    BondDonation, BondOrder, BondOrientation, BondStereo, BondTaper, BondWedge, ConfigurationScope,
-    LinkAtom, RingBondCount, SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle,
-    SGroupConnectivity, SGroupDataType, SGroupType, StereoSet, StereoSetRelation,
-    SubstitutionCount, UnsaturatedAtom,
+    BondConfiguration, BondDonation, BondOrder, BondOrientation, BondTaper, BondWedge,
+    ConfigurationScope, LinkAtom, RingBondCount, SGroupBracketCoords, SGroupBracketOrientation,
+    SGroupBracketStyle, SGroupConnectivity, SGroupDataType, SGroupType, StereoBond, StereoSet,
+    StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
 };
 
 fn parse_basic_cxsmiles(input: &[u8]) -> Result<Molecule, ParseError> {
@@ -276,29 +276,10 @@ fn test_cx_wiggly_bonds_invalid(#[case] input: &[u8], #[case] expected: ParseErr
 }
 
 #[rstest]
-#[case::cis(b"C=C |c:0|", 0usize)]
-fn test_cx_cis_bonds(#[case] input: &[u8], #[case] bond_idx: usize) {
-    let input_str = input.to_str_lossy();
-
-    let res = parse_basic_cxsmiles(input);
-    assert!(
-        res.is_ok(),
-        "{:?} should have succeeded: {:?}",
-        input_str,
-        res
-    );
-    let mol = res.unwrap();
-    assert_eq!(mol.bonds[bond_idx].stereo, Some(BondStereo::Cis));
-
-    let res = parse_extended_cxsmiles(input);
-    assert!(
-        res.is_ok(),
-        "{:?} should have succeeded: {:?}",
-        input_str,
-        res
-    );
-    let mol = res.unwrap();
-    assert_eq!(mol.bonds[bond_idx].stereo, Some(BondStereo::Cis));
+#[case::terminal(b"C=C |c:0|", ParseError::UnsupportedStereoBond { bond: 0 })]
+fn test_parse_molecule_cx_cis_error(#[case] input: &[u8], #[case] expected: ParseError) {
+    assert_eq!(parse_basic_cxsmiles(input), Err(expected.clone()));
+    assert_eq!(parse_extended_cxsmiles(input), Err(expected));
 }
 
 #[rstest]
@@ -326,29 +307,10 @@ fn test_cx_cis_bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError)
 }
 
 #[rstest]
-#[case::trans(b"C=C |t:0|", 0usize)]
-fn test_cx_trans_bonds(#[case] input: &[u8], #[case] bond_idx: usize) {
-    let input_str = input.to_str_lossy();
-
-    let res = parse_basic_cxsmiles(input);
-    assert!(
-        res.is_ok(),
-        "{:?} should have succeeded: {:?}",
-        input_str,
-        res
-    );
-    let mol = res.unwrap();
-    assert_eq!(mol.bonds[bond_idx].stereo, Some(BondStereo::Trans));
-
-    let res = parse_extended_cxsmiles(input);
-    assert!(
-        res.is_ok(),
-        "{:?} should have succeeded: {:?}",
-        input_str,
-        res
-    );
-    let mol = res.unwrap();
-    assert_eq!(mol.bonds[bond_idx].stereo, Some(BondStereo::Trans));
+#[case::terminal(b"C=C |t:0|", ParseError::UnsupportedStereoBond { bond: 0 })]
+fn test_parse_molecule_cx_trans_error(#[case] input: &[u8], #[case] expected: ParseError) {
+    assert_eq!(parse_basic_cxsmiles(input), Err(expected.clone()));
+    assert_eq!(parse_extended_cxsmiles(input), Err(expected));
 }
 
 #[rstest]
@@ -364,7 +326,13 @@ fn test_cx_unspec_bonds(#[case] input: &[u8], #[case] bond_idx: usize) {
         res
     );
     let mol = res.unwrap();
-    assert_eq!(mol.bonds[bond_idx].stereo, Some(BondStereo::Either));
+    assert_eq!(
+        mol.stereo_bonds,
+        vec![StereoBond {
+            bond: bond_idx as u32,
+            configuration: BondConfiguration::Either
+        }]
+    );
 
     let res = parse_extended_cxsmiles(input);
     assert!(
@@ -374,7 +342,13 @@ fn test_cx_unspec_bonds(#[case] input: &[u8], #[case] bond_idx: usize) {
         res
     );
     let mol = res.unwrap();
-    assert_eq!(mol.bonds[bond_idx].stereo, Some(BondStereo::Either));
+    assert_eq!(
+        mol.stereo_bonds,
+        vec![StereoBond {
+            bond: bond_idx as u32,
+            configuration: BondConfiguration::Either
+        }]
+    );
 }
 
 #[rstest]

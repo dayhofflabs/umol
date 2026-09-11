@@ -7,12 +7,16 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
+use umol_geometric_core::Point3D;
 use umol_graph_ir::ir::{
     BondId, CisTransStereoForm, ElementForm, Molecule, StereoCoset, TryIntoIr,
 };
 use umol_io::smiles::config::SmilesIoConfig;
 use umol_io::smiles::{parse_extended_smiles_bytes, ParseError, Smiles};
-use umol_io::table_ir::{ExtendedMolecule, Span, StereoAtom, StereoLigand, Winding};
+use umol_io::table_ir::{
+    BondConfiguration, BondRelation, ExtendedMolecule, Molecule as TableMolecule, Span, StereoAtom,
+    StereoBond, StereoLigand, Winding,
+};
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".
@@ -75,7 +79,12 @@ proptest! {
         if let Err(err) = res {
             let len = input.len();
             let ok = match err {
-                ParseError::LeadingWhitespace => true,
+                ParseError::DanglingBondDirection { .. }
+                | ParseError::CisTransConflict { .. }
+                | ParseError::UnsupportedStereoBond { .. }
+                | ParseError::ConflictingBondConfiguration { .. }
+                | ParseError::MissingPosition { .. }
+                | ParseError::LeadingWhitespace => true,
                 | ParseError::InvalidElement { pos } => pos < len,
                 | ParseError::InvalidToken { pos } => pos < len,
                 | ParseError::UnbalancedOpenParen { pos } => pos < len,
@@ -277,5 +286,46 @@ proptest! {
         }]);
         prop_assert_eq!(table.atoms[1].class, Some(class));
         prop_assert_eq!(table.atoms[1].implicit_hydrogens, Some(1));
+    }
+}
+
+proptest! {
+    // Frame transport and basic/extended preservation; coordinates are not a second
+    // authority for an already published bond frame.
+    #[test]
+    fn test_table_molecule_try_into_ir_bond_frames(
+        first_swap in any::<bool>(), second_swap in any::<bool>(), same in any::<bool>(),
+        positions in any::<[[i16; 3]; 6]>(),
+    ) {
+        let mut table = Smiles::parse("FC(Cl)=C(Br)I").unwrap().into_table_ir();
+        table.stereo_bonds = vec![StereoBond {
+            bond: 2,
+            configuration: BondConfiguration::Framed {
+                references: [if first_swap { 2 } else { 0 }, if second_swap { 5 } else { 4 }],
+                relation: if same { BondRelation::SameSide } else { BondRelation::OppositeSide },
+            },
+        }];
+        let expected = u32::from(!same ^ first_swap ^ second_swap);
+        let raised: Molecule = (&table).try_into_ir(&()).unwrap();
+        prop_assert_eq!(raised.bond(BondId(2)).attributes.constraints.cis_trans_stereo(),
+            Some(&CisTransStereoForm::stereo(StereoCoset::Lit(expected))));
+        table.positions = Some(positions.map(|[x,y,z]| Point3D::new(f64::from(x),f64::from(y),f64::from(z))).to_vec());
+        let converted = TableMolecule::try_from(ExtendedMolecule::from(table.clone())).unwrap();
+        prop_assert_eq!(&converted, &table);
+        prop_assert_eq!((&converted).try_into_ir(&()), Ok(raised));
+    }
+
+    #[test]
+    fn test_table_molecule_try_into_ir_open_frames(
+        bond in 0_u32..8, references in any::<[u32; 2]>(), either in any::<bool>(), duplicate in any::<bool>(),
+    ) {
+        let mut table = Smiles::parse("FC=CF").unwrap().into_table_ir();
+        let frame = StereoBond { bond, configuration: if either { BondConfiguration::Either } else {
+            BondConfiguration::Framed { references, relation: BondRelation::SameSide }
+        }};
+        table.stereo_bonds.push(frame.clone());
+        if duplicate { table.stereo_bonds.push(frame); }
+        let result = catch_unwind(|| { let result: Result<Molecule, _> = (&table).try_into_ir(&()); result });
+        prop_assert!(result.is_ok());
     }
 }

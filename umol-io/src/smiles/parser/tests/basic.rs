@@ -6,10 +6,11 @@ use rstest::*;
 use umol_chem::element::Element;
 
 use super::super::*;
-use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
+use super::utils::{build_from_graph, find_chiral_center};
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    Atom, Bond, BondDirection, BondOrder, SourceFormat, Span, StereoAtom, StereoLigand, Winding,
+    Atom, Bond, BondConfiguration, BondOrder, BondRelation, SourceFormat, Span, StereoAtom,
+    StereoBond, StereoLigand, Winding,
 };
 
 #[rstest]
@@ -211,25 +212,19 @@ fn test_ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) 
 #[case::triple_bond(b"C#C", build_from_graph("C@0 C@2 | 0-1:#@1"))]
 #[case::quadruple_bond(b"C$C", build_from_graph("C@0 C@2 | 0-1:$@1"))]
 #[case::aromatic_bond(b"C:C", build_from_graph("C@0 C@2 | 0-1::@1"))]
-#[case::rising_bond(b"C/C", build_from_graph("C@0 C@2 | 0-1:/@1"))]
-#[case::falling_bond(b"C\\C", build_from_graph("C@0 C@2 | 0-1:\\@1"))]
 #[case::single_bond_aromatic(b"c-c", build_from_graph("C_@0 C_@2 | 0-1:-@1"))]
 #[case::double_bond_aromatic(b"c=c", build_from_graph("C_@0 C_@2 | 0-1:=@1"))]
 #[case::triple_bond_aromatic(b"c#c", build_from_graph("C_@0 C_@2 | 0-1:#@1"))]
 #[case::quadruple_bond_aromatic(b"c$c", build_from_graph("C_@0 C_@2 | 0-1:$@1"))]
 #[case::aromatic_bond_aromatic(b"c:c", build_from_graph("C_@0 C_@2 | 0-1::@1"))]
-#[case::rising_bond_aromatic(b"c/c", build_from_graph("C_@0 C_@2 | 0-1:/@1"))]
-#[case::falling_bond_aromatic(b"c\\c", build_from_graph("C_@0 C_@2 | 0-1:\\@1"))]
 #[case::allene_bonds(b"C=C=C", build_from_graph("C@0 C@2 C@4 | 0-1:=@1 1-2:=@3"))]
 #[case::conjugated_bonds(b"C=CC=C", build_from_graph("C@0 C@2 C@3 C@5 | 0-1:=@1 1-2:-@3 2-3:=@4"))]
 #[case::cumulene_bonds(b"C=C=C=C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:=@1 1-2:=@3 2-3:=@5"))]
 #[case::allene_bonds_aromatic(b"c=c=c", build_from_graph("C_@0 C_@2 C_@4 | 0-1:=@1 1-2:=@3"))]
-#[case::trans_bonds_1(b"C/C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:/@5"))]
-#[case::trans_bonds_2(b"C\\C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:\\@5"))]
-#[case::cis_bonds_1(b"C\\C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:/@5"))]
-#[case::cis_bonds_2(b"C/C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:\\@5"))]
-#[case::trans_cumulene_bonds(b"F/C=C=C=C/F", build_from_graph("F@0 C@2 C@4 C@6 C@8 F@10 | 0-1:/@1 1-2:=@3 2-3:=@5 3-4:=@7 4-5:/@9"))]
-#[case::cis_cumulene_bonds(b"F/C=C=C=C\\F", build_from_graph("F@0 C@2 C@4 C@6 C@8 F@10 | 0-1:/@1 1-2:=@3 2-3:=@5 3-4:=@7 4-5:\\@9"))]
+#[case::trans_bonds_1(b"C/C=C/C", { let mut expected = build_from_graph("C@0 C@2 C@4 C@6 | 0-1:-@1 1-2:=@3 2-3:-@5"); expected.stereo_bonds = vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0, 3], relation: BondRelation::OppositeSide } }]; expected })]
+#[case::trans_bonds_2(b"C\\C=C\\C", { let mut expected = build_from_graph("C@0 C@2 C@4 C@6 | 0-1:-@1 1-2:=@3 2-3:-@5"); expected.stereo_bonds = vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0, 3], relation: BondRelation::OppositeSide } }]; expected })]
+#[case::cis_bonds_1(b"C\\C=C/C", { let mut expected = build_from_graph("C@0 C@2 C@4 C@6 | 0-1:-@1 1-2:=@3 2-3:-@5"); expected.stereo_bonds = vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0, 3], relation: BondRelation::SameSide } }]; expected })]
+#[case::cis_bonds_2(b"C/C=C\\C", { let mut expected = build_from_graph("C@0 C@2 C@4 C@6 | 0-1:-@1 1-2:=@3 2-3:-@5"); expected.stereo_bonds = vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0, 3], relation: BondRelation::SameSide } }]; expected })]
 #[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C_@0 C_@2 C_@4 C_@6 | 0-1:=@1 1-2:-@3 2-3:=@5"))]
 #[case::branch_leading_single_bond(b"CC(-C)C", build_from_graph("C@0 C@1 C@4 C@6 | 0-1@1 1-2@3 1-3@6"))]
 #[case::branch_leading_single_bond_multiple(b"CC(-C)(-C)C", build_from_graph("C@0 C@1 C@4 C@8 C@10 | 0-1@1 1-2@3 1-3@7 1-4@10"))]
@@ -242,10 +237,10 @@ fn test_ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) 
 #[case::branch_leading_bond_aromatic(b"cc(:c)c", build_from_graph("C_@0 C_@1 C_@4 C_@6 | 0-1:@1 1-2:@3 1-3:@6"))]
 #[case::branch_internal_bond_aromatic(b"cc(c:c)c", build_from_graph("C_@0 C_@1 C_@3 C_@5 C_@7 | 0-1:@1 1-2:@3 2-3:@4 1-4:@7"))]
 #[case::branch_followed_by_bond_aromatic(b"cc(c):c", build_from_graph("C_@0 C_@1 C_@3 C_@6 | 0-1:@1 1-2:@3 1-3:@5"))]
-#[case::branch_trans_double_bond_1(b"C/C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:/@5"))]
-#[case::branch_trans_double_bond_2(b"C\\C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:\\@5"))]
-#[case::branch_cis_double_bond_1(b"C\\C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:/@5"))]
-#[case::branch_cis_double_bond_2(b"C/C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:\\@5"))]
+#[case::branch_trans_double_bond_1(b"C/C=C/C", { let mut expected = build_from_graph("C@0 C@2 C@4 C@6 | 0-1:-@1 1-2:=@3 2-3:-@5"); expected.stereo_bonds = vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0, 3], relation: BondRelation::OppositeSide } }]; expected })]
+#[case::branch_trans_double_bond_2(b"C\\C=C\\C", { let mut expected = build_from_graph("C@0 C@2 C@4 C@6 | 0-1:-@1 1-2:=@3 2-3:-@5"); expected.stereo_bonds = vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0, 3], relation: BondRelation::OppositeSide } }]; expected })]
+#[case::branch_cis_double_bond_1(b"C\\C=C/C", { let mut expected = build_from_graph("C@0 C@2 C@4 C@6 | 0-1:-@1 1-2:=@3 2-3:-@5"); expected.stereo_bonds = vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0, 3], relation: BondRelation::SameSide } }]; expected })]
+#[case::branch_cis_double_bond_2(b"C/C=C\\C", { let mut expected = build_from_graph("C@0 C@2 C@4 C@6 | 0-1:-@1 1-2:=@3 2-3:-@5"); expected.stereo_bonds = vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0, 3], relation: BondRelation::SameSide } }]; expected })]
 #[case::ring_single_bond(b"C-1-C-C-1", build_from_graph("C@0 C@4 C@6 | 0-2@2 0-1@3 1-2@5"))]
 #[case::ring_single_bond_percent(b"C-%12-C-C-%12", build_from_graph("C@0 C@6 C@8 | 0-2@2 0-1@5 1-2@7"))]
 #[case::ring_double_bond_1(b"C1-C=C1", build_from_graph("C@0 C@3 C@5 | 0-2@1 0-1@2 1-2:=@4"))]
@@ -261,15 +256,6 @@ fn test_ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) 
 #[case::ring_quadruple_bond(b"C1-C-C$1", build_from_graph("C@0 C@3 C@5 | 0-2:$@1 0-1@2 1-2@4"))]
 #[case::ring_aromatic_bond(b"c1:c:c:1", build_from_graph("C_@0 C_@3 C_@5 | 0-2:@1 0-1:@2 1-2:@4"))]
 #[case::ring_aromatic_single_bond(b"c1ccccc1-c2ccccc2", build_from_graph("C_@0 C_@2 C_@3 C_@4 C_@5 C_@6 C_@9 C_@11 C_@12 C_@13 C_@14 C_@15 | 0-5:@1 0-1:@2 1-2:@3 2-3:@4 3-4:@5 4-5:@6 5-6@8 6-11:@10 6-7:@11 7-8:@12 8-9:@13 9-10:@14 10-11:@15"))]
-#[case::ring_rising_bond_1(b"C1CC/1", build_from_graph("C@0 C@2 C@3 | 0-2:\\@1 0-1@2 1-2@3"))]
-#[case::ring_rising_bond_2(b"C/1CC1", build_from_graph("C@0 C@3 C@4 | 0-2:/@2 0-1@3 1-2@4"))]
-#[case::ring_falling_bond(b"C1CC\\1", build_from_graph("C@0 C@2 C@3 | 0-2:/@1 0-1@2 1-2@3"))]
-#[case::ring_rising_bond_percent_open(b"C/%12CC%12", build_from_graph("C@0 C@5 C@6 | 0-2:/@2 0-1@5 1-2@6"))]
-#[case::ring_rising_bond_percent_close(b"C%12CC/%12", build_from_graph("C@0 C@4 C@5 | 0-2:\\@1 0-1@4 1-2@5"))]
-#[case::ring_rising_falling(b"C/1CC\\1", build_from_graph("C@0 C@3 C@4 | 0-2:/@2 0-1@3 1-2@4"))]
-#[case::ring_falling_rising(b"C\\1CC/1", build_from_graph("C@0 C@3 C@4 | 0-2:\\@2 0-1@3 1-2@4"))]
-#[case::ring_rising_falling_percent(b"C/%12CC\\%12", build_from_graph("C@0 C@5 C@6 | 0-2:/@2 0-1@5 1-2@6"))]
-#[case::ring_falling_rising_percent(b"C\\%12CC/%12", build_from_graph("C@0 C@5 C@6 | 0-2:\\@2 0-1@5 1-2@6"))]
 #[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C@0 C@2 C@3 C@7 | 0-2@1 0-1@2 1-2@3 2-3@6"))]
 #[case::aromatic_aliphatic_branch(b"cc(C)c", build_from_graph("C_@0 C_@1 C@3 C_@5 | 0-1:@1 1-2@3 1-3:@5"))]
 #[case::aromatic_ring_aliphatic_branch(b"c1ccc(C)cc1", build_from_graph("C_@0 C_@2 C_@3 C_@4 C@6 C_@8 C_@9 | 0-6:@1 0-1:@2 1-2:@3 2-3:@4 3-4@6 3-5:@8 5-6:@9"))]
@@ -440,9 +426,6 @@ fn test_bonds_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError
 #[case::rings_across_multiple_dots_percent(b"C%12.C.CC%12", build_from_graph("C@0 C@5 C@7 C@8 | 0-3@1 2-3@8"))]
 #[case::ring_double_unilateral_open(b"C=1.CC1", build_from_graph("C@0 C@4 C@5 | 0-2:=@2 1-2@5"))]
 #[case::ring_double_unilateral_close(b"C1.CC=1", build_from_graph("C@0 C@3 C@4 | 0-2:=@1 1-2@4"))]
-#[case::ring_rising_falling_dot(b"C/1.CC\\1", build_from_graph("C@0 C@4 C@5 | 0-2:/@2 1-2@5"))]
-#[case::ring_rising_falling_dot_percent(b"C/%12.CC\\%12", build_from_graph("C@0 C@6 C@7 | 0-2:/@2 1-2@7"))]
-#[case::ring_rising_falling_dot_aromatic(b"c/1.cc\\1", build_from_graph("C_@0 C_@4 C_@5 | 0-2:/@2 1-2:@5"))]
 #[case::branch_multiple_components(b"C(.C.C)", build_from_graph("C@0 C@3 C@5 |"))]
 fn test_components(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_molecule(input, &SmilesIoConfig::opensmiles());
@@ -745,78 +728,77 @@ fn test_bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aro
 
 #[rustfmt::skip]
 #[rstest]
-#[case::aliphatic_before(b"C[C]", Some(BondOrder::Single), None)]
-#[case::aliphatic_before_single(b"C-[C]", Some(BondOrder::Single), None)]
-#[case::aliphatic_before_double(b"C=[C]", Some(BondOrder::Double), None)]
-#[case::aliphatic_before_triple(b"C#[C]", Some(BondOrder::Triple), None)]
-#[case::aliphatic_before_quadruple(b"C$[C]", Some(BondOrder::Quadruple), None)]
-#[case::aliphatic_before_aromatic(b"C:[C]", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondDirection::Rising))]
-#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondDirection::Falling))]
-#[case::aliphatic_after(b"[C]C", Some(BondOrder::Single), None)]
-#[case::aliphatic_after_single(b"[C]-C", Some(BondOrder::Single), None)]
-#[case::aliphatic_after_double(b"[C]=C", Some(BondOrder::Double), None)]
-#[case::aliphatic_after_triple(b"[C]#C", Some(BondOrder::Triple), None)]
-#[case::aliphatic_after_quadruple(b"[C]$C", Some(BondOrder::Quadruple), None)]
-#[case::aliphatic_after_aromatic(b"[C]:C", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondDirection::Rising))]
-#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondDirection::Falling))]
-#[case::aromatic_before(b"c[c]", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_before_single(b"c-[c]", Some(BondOrder::Single), None)]
-#[case::aromatic_before_aromatic(b"c:[c]", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after(b"[c]c", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after_single(b"[c]-c", Some(BondOrder::Single), None)]
-#[case::aromatic_after_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_before_aromatic(b"C[c]", Some(BondOrder::Single), None)]
-#[case::aliphatic_single_before_aromatic(b"C-[c]", Some(BondOrder::Single), None)]
-#[case::aliphatic_aromatic_before_aromatic(b"C:[c]", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_after_aromatic(b"[c]C", Some(BondOrder::Single), None)]
-#[case::aromatic_after_aliphatic(b"[C]c", Some(BondOrder::Single), None)]
-#[case::aromatic_after_aliphatic_single(b"[C]-c", Some(BondOrder::Single), None)]
-#[case::aromatic_after_aliphatic_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondDirection::Rising))]
-#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondDirection::Falling))]
-#[case::bracket_branch_1(b"[C](C)", Some(BondOrder::Single), None)]
-#[case::bracket_branch_2(b"C([C])", Some(BondOrder::Single), None)]
-#[case::bracket_branch_single(b"C(-[C])", Some(BondOrder::Single), None)]
-#[case::bracket_branch_double(b"C(=[C])", Some(BondOrder::Double), None)]
-#[case::bracket_branch_triple(b"C(#[C])", Some(BondOrder::Triple), None)]
-#[case::bracket_branch_quadruple(b"C($[C])", Some(BondOrder::Quadruple), None)]
-#[case::bracket_branch_aromatic(b"C(:[C])", Some(BondOrder::Aromatic), None)]
-#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondDirection::Rising))]
-#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondDirection::Falling))]
-#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondDirection::Falling))]
-#[case::bracket_group_1(b"([C]C)", Some(BondOrder::Single), None)]
-#[case::bracket_group_1(b"(C[C])", Some(BondOrder::Single), None)]
-#[case::bracket_ring_1(b"[C]1CC1", Some(BondOrder::Single), None)]
-#[case::bracket_ring_2(b"[C]1cc1", Some(BondOrder::Single), None)]
-#[case::bracket_ring_double_1(b"[C]1=cc1", Some(BondOrder::Single), None)]
-#[case::bracket_ring_double_2(b"[C]=1cc1", Some(BondOrder::Double), None)]
-#[case::bracket_aromatic_ring(b"[c]1cc1", Some(BondOrder::Aromatic), None)]
-#[case::two_brackets_h2(b"[H][H]", Some(BondOrder::Single), None)]
-#[case::two_brackets_hcl(b"[Cl][H]", Some(BondOrder::Single), None)]
-#[case::two_brackets_ch4(b"[CH3][H]", Some(BondOrder::Single), None)]
-#[case::two_brackets_double_bond(b"[CH2]=[O]", Some(BondOrder::Double), None)]
-#[case::two_brackets_triple_bond(b"[C-]#[O+]", Some(BondOrder::Triple), None)]
-#[case::two_brackets_quadruple_bond(b"[C]$[C]", Some(BondOrder::Quadruple), None)]
-#[case::two_brackets_aromatic_bond(b"[CH]:[CH]", Some(BondOrder::Aromatic), None)]
-#[case::two_brackets_rising_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondDirection::Rising))]
-#[case::two_brackets_falling_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondDirection::Falling))]
-#[case::bracket_before_dot(b"[Na+].[Cl-]", None, None)]
+#[case::aliphatic_before(b"C[C]", Some(BondOrder::Single))]
+#[case::aliphatic_before_single(b"C-[C]", Some(BondOrder::Single))]
+#[case::aliphatic_before_double(b"C=[C]", Some(BondOrder::Double))]
+#[case::aliphatic_before_triple(b"C#[C]", Some(BondOrder::Triple))]
+#[case::aliphatic_before_quadruple(b"C$[C]", Some(BondOrder::Quadruple))]
+#[case::aliphatic_before_aromatic(b"C:[C]", Some(BondOrder::Aromatic))]
+#[case::aliphatic_after(b"[C]C", Some(BondOrder::Single))]
+#[case::aliphatic_after_single(b"[C]-C", Some(BondOrder::Single))]
+#[case::aliphatic_after_double(b"[C]=C", Some(BondOrder::Double))]
+#[case::aliphatic_after_triple(b"[C]#C", Some(BondOrder::Triple))]
+#[case::aliphatic_after_quadruple(b"[C]$C", Some(BondOrder::Quadruple))]
+#[case::aliphatic_after_aromatic(b"[C]:C", Some(BondOrder::Aromatic))]
+#[case::aromatic_before(b"c[c]", Some(BondOrder::Aromatic))]
+#[case::aromatic_before_single(b"c-[c]", Some(BondOrder::Single))]
+#[case::aromatic_before_aromatic(b"c:[c]", Some(BondOrder::Aromatic))]
+#[case::aromatic_after(b"[c]c", Some(BondOrder::Aromatic))]
+#[case::aromatic_after_single(b"[c]-c", Some(BondOrder::Single))]
+#[case::aromatic_after_aromatic(b"[c]:c", Some(BondOrder::Aromatic))]
+#[case::aliphatic_before_aromatic(b"C[c]", Some(BondOrder::Single))]
+#[case::aliphatic_single_before_aromatic(b"C-[c]", Some(BondOrder::Single))]
+#[case::aliphatic_aromatic_before_aromatic(b"C:[c]", Some(BondOrder::Aromatic))]
+#[case::aliphatic_after_aromatic(b"[c]C", Some(BondOrder::Single))]
+#[case::aromatic_after_aliphatic(b"[C]c", Some(BondOrder::Single))]
+#[case::aromatic_after_aliphatic_single(b"[C]-c", Some(BondOrder::Single))]
+#[case::aromatic_after_aliphatic_aromatic(b"[c]:c", Some(BondOrder::Aromatic))]
+#[case::bracket_branch_1(b"[C](C)", Some(BondOrder::Single))]
+#[case::bracket_branch_2(b"C([C])", Some(BondOrder::Single))]
+#[case::bracket_branch_single(b"C(-[C])", Some(BondOrder::Single))]
+#[case::bracket_branch_double(b"C(=[C])", Some(BondOrder::Double))]
+#[case::bracket_branch_triple(b"C(#[C])", Some(BondOrder::Triple))]
+#[case::bracket_branch_quadruple(b"C($[C])", Some(BondOrder::Quadruple))]
+#[case::bracket_branch_aromatic(b"C(:[C])", Some(BondOrder::Aromatic))]
+#[case::bracket_group_1(b"([C]C)", Some(BondOrder::Single))]
+#[case::bracket_group_1(b"(C[C])", Some(BondOrder::Single))]
+#[case::bracket_ring_1(b"[C]1CC1", Some(BondOrder::Single))]
+#[case::bracket_ring_2(b"[C]1cc1", Some(BondOrder::Single))]
+#[case::bracket_ring_double_1(b"[C]1=cc1", Some(BondOrder::Single))]
+#[case::bracket_ring_double_2(b"[C]=1cc1", Some(BondOrder::Double))]
+#[case::bracket_aromatic_ring(b"[c]1cc1", Some(BondOrder::Aromatic))]
+#[case::two_brackets_h2(b"[H][H]", Some(BondOrder::Single))]
+#[case::two_brackets_hcl(b"[Cl][H]", Some(BondOrder::Single))]
+#[case::two_brackets_ch4(b"[CH3][H]", Some(BondOrder::Single))]
+#[case::two_brackets_double_bond(b"[CH2]=[O]", Some(BondOrder::Double))]
+#[case::two_brackets_triple_bond(b"[C-]#[O+]", Some(BondOrder::Triple))]
+#[case::two_brackets_quadruple_bond(b"[C]$[C]", Some(BondOrder::Quadruple))]
+#[case::two_brackets_aromatic_bond(b"[CH]:[CH]", Some(BondOrder::Aromatic))]
+#[case::bracket_before_dot(b"[Na+].[Cl-]", None)]
 fn test_bracket_bonds(
     #[case] input: &[u8],
     #[case] expected_order: Option<BondOrder>,
-    #[case] expected_direction: Option<BondDirection>,
 ) {
-    let res = parse_molecule(input, &SmilesIoConfig::opensmiles());
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
-    let mol = res.unwrap();
-    if let Some(bond1) = mol.bonds.first() {
-        if let Some(expected_order) = expected_order {
-            assert_eq!(bond1.order, expected_order);
-        }
-        assert_eq!(bond1.direction, expected_direction);
-    }
+    let mol = parse_molecule(input, &SmilesIoConfig::opensmiles()).unwrap();
+    assert_eq!(mol.bonds.first().map(|bond| bond.order), expected_order);
+}
+
+#[rstest]
+#[case::aliphatic_before_up(b"C/[C]")]
+#[case::aliphatic_before_down(b"C\\[C]")]
+#[case::aliphatic_after_up(b"[C]/C")]
+#[case::aliphatic_after_down(b"[C]\\C")]
+#[case::aromatic_after_aliphatic_up(b"[C]/c")]
+#[case::aromatic_after_aliphatic_down(b"[C]\\c")]
+#[case::bracket_branch_up(b"C(/[C])")]
+#[case::bracket_branch_down(b"C(\\[C])")]
+#[case::two_brackets_rising_bond(b"[CH]/[OH]")]
+#[case::two_brackets_falling_bond(b"[CH]\\[OH]")]
+fn test_parse_molecule_bracket_direction_error(#[case] input: &[u8]) {
+    assert_eq!(
+        parse_molecule(input, &SmilesIoConfig::opensmiles()).map(|_| ()),
+        Err(ParseError::DanglingBondDirection { bond: 0 })
+    );
 }
 
 #[rustfmt::skip]
@@ -894,56 +876,6 @@ fn test_stereo_chiral(
 }
 
 #[rstest]
-// Double bond stereo - trans
-#[case::trans_1_eq_1(b"F/C=C/F", 0, 1, BondDirection::Rising)]
-#[case::trans_1_eq_2(b"F\\C=C\\F", 0, 1, BondDirection::Falling)]
-#[case::trans_1_eq_3(b"C(\\F)=C/F", 0, 1, BondDirection::Falling)]
-// Double bond stereo - cis
-#[case::cis_1_eq_1(b"F\\C=C/F", 0, 1, BondDirection::Falling)]
-#[case::cis_1_eq_2(b"F/C=C\\F", 0, 1, BondDirection::Rising)]
-#[case::cis_1_eq_3(b"C(/F)=C/F", 0, 1, BondDirection::Rising)]
-// Cis with substituents
-#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 0, 1, BondDirection::Rising)]
-#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 0, 1, BondDirection::Rising)]
-#[case::cis_2_eq_3(b"C/C(F)=C(/C)F", 0, 1, BondDirection::Rising)]
-#[case::cis_2_eq_4(b"CC(/F)=C(/C)F", 1, 2, BondDirection::Rising)]
-#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F", 0, 1, BondDirection::Rising)]
-#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F", 1, 2, BondDirection::Rising)]
-// Partial stereo specification
-#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondDirection::Rising)]
-#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondDirection::Rising)]
-// Extended cis/trans for cumulenes (3 double bonds - odd)
-#[case::cumulene_3_trans(b"F/C=C=C=C/F", 0, 1, BondDirection::Rising)]
-#[case::cumulene_3_cis(b"F/C=C=C=C\\F", 0, 1, BondDirection::Rising)]
-// Extended cis/trans for cumulenes (5 double bonds - odd)
-#[case::cumulene_5_trans(b"F/C=C=C=C=C=C/F", 0, 1, BondDirection::Rising)]
-#[case::cumulene_5_cis(b"F/C=C=C=C=C=C\\F", 0, 1, BondDirection::Rising)]
-fn test_stereo_bonds(
-    #[case] input: &[u8],
-    #[case] exp_a: u32,
-    #[case] exp_b: u32,
-    #[case] exp_direction: BondDirection,
-) {
-    let res = parse_molecule(input, &SmilesIoConfig::opensmiles());
-    let input_str = input.to_str_lossy();
-    assert!(
-        res.is_ok(),
-        "{:?} should have succeeded: {:?}",
-        input_str,
-        res
-    );
-    let mol = res.unwrap();
-    let (a, b, direction) = find_stereo_bond(&mol).expect("expected a stereo bond");
-    assert_eq!(a, exp_a, "atom1 mismatch for {:?}", input_str);
-    assert_eq!(b, exp_b, "atom2 mismatch for {:?}", input_str);
-    assert_eq!(
-        direction, exp_direction,
-        "direction mismatch for {:?}",
-        input_str
-    );
-}
-
-#[rstest]
 #[case::chirality_no_element_1(b"[@]", ParseError::InvalidBracket { pos: 1 })]
 #[case::chirality_no_element_2(b"[@@]", ParseError::InvalidBracket { pos: 1 })]
 #[case::chirality_no_element_3(b"[@TH1]", ParseError::InvalidBracket { pos: 1 })]
@@ -968,17 +900,6 @@ fn test_stereo_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::conflicting_stereo_bonds( b"C/C(\\F)=C/FC", build_from_graph("C@0 C@2 F@5 C@8 F@10 C@11 | 0-1:/@1 1-2:\\@4 1-3:=@7 3-4:/@9 4-5@11"))]
-fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecule) {
-    // Expected to pass here, but should fail semantics post-parse
-    let res = parse_molecule(input, &SmilesIoConfig::opensmiles());
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
-    let mol = res.unwrap();
-    assert_eq!(mol, expected);
 }
 
 #[rustfmt::skip]
@@ -1185,7 +1106,6 @@ fn test_token_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::redundant_top_level_parens(b"(N1CCCC1)", 5, 5)]
 #[case::aromatic_atoms_in_chain_1(b"CccccC", 6, 5)]
 #[case::aromatic_atoms_in_chain_2(b"Ccc", 3, 2)]
-#[case::incomplete_stereo_1(b"C/C=C", 3, 2)]
 #[case::incomplete_stereo_2(b"C/C=CC", 4, 3)]
 fn test_style_warnings(#[case] input: &[u8], #[case] atoms: usize, #[case] bonds: usize) {
     // Verify that parse succeeds, should trigger style warnings in post-parse
@@ -1273,4 +1193,32 @@ fn test_cx_annotations(#[case] input: &[u8], #[case] expected: Molecule) {
     assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
+}
+
+#[rstest]
+#[case::rising_bond(b"C/C", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::falling_bond(b"C\\C", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::rising_bond_aromatic(b"c/c", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::falling_bond_aromatic(b"c\\c", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::trans_cumulene_bonds(b"F/C=C=C=C/F", ParseError::UnsupportedStereoBond { bond: 1 })]
+#[case::cis_cumulene_bonds(b"F/C=C=C=C\\F", ParseError::UnsupportedStereoBond { bond: 1 })]
+#[case::ring_rising_bond_1(b"C1CC/1", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_rising_bond_2(b"C/1CC1", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_falling_bond(b"C1CC\\1", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_rising_bond_percent_open(b"C/%12CC%12", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_rising_bond_percent_close(b"C%12CC/%12", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_rising_falling(b"C/1CC\\1", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_falling_rising(b"C\\1CC/1", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_rising_falling_percent(b"C/%12CC\\%12", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_falling_rising_percent(b"C\\%12CC/%12", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_rising_falling_dot(b"C/1.CC\\1", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_rising_falling_dot_percent(b"C/%12.CC\\%12", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::ring_rising_falling_dot_aromatic(b"c/1.cc\\1", ParseError::DanglingBondDirection { bond: 0 })]
+#[case::conflicting_stereo_bonds(b"C/C(\\F)=C/FC", ParseError::CisTransConflict { atom: 1 })]
+#[case::incomplete_stereo_1(b"C/C=C", ParseError::DanglingBondDirection { bond: 0 })]
+fn test_parse_molecule_direction_error(#[case] input: &[u8], #[case] expected: ParseError) {
+    assert_eq!(
+        parse_molecule(input, &SmilesIoConfig::opensmiles()).map(|_| ()),
+        Err(expected)
+    );
 }
