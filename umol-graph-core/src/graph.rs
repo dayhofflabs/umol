@@ -153,8 +153,7 @@ impl Graph {
         self.csr.edge_count
     }
 
-    /// Neighbors sorted by `NodeId`. Enables binary search in `find_edge`
-    /// and set-intersection in `induced_edges`.
+    /// Neighbors sorted by `NodeId`. Enables binary search in `find_edge`.
     pub fn neighbors(&self, id: NodeId) -> &[Neighbor] {
         let start = self.csr.offsets[id.index()] as usize;
         let end = self.csr.offsets[id.index() + 1] as usize;
@@ -178,17 +177,16 @@ impl Graph {
             .map(|i| nbrs[i].edge)
     }
 
-    /// Edges whose both endpoints are in `nodes`. The slice must be sorted.
-    /// Yields each edge exactly once; iteration order is unspecified.
+    /// Edges whose both endpoints belong to the node subset given by `nodes`.
+    ///
+    /// Node order and repetitions do not affect the selected edges. Yields each edge ID
+    /// exactly once, retaining self-loops and parallel edges; iteration order is unspecified.
+    /// Builds a subset-sized membership set and scans the graph's edges once.
     pub fn induced_edges<'a>(&'a self, nodes: &'a [NodeId]) -> impl Iterator<Item = EdgeId> + 'a {
-        nodes.iter().flat_map(move |&node| {
-            self.neighbors(node).iter().filter_map(move |n| {
-                if nodes.binary_search(&n.node).is_ok() && self.edge_endpoints(n.edge)[0] == node {
-                    Some(n.edge)
-                } else {
-                    None
-                }
-            })
+        let nodes: HashSet<NodeId> = nodes.iter().copied().collect();
+        self.edge_ids().filter(move |&edge| {
+            let [first, second] = self.edge_endpoints(edge);
+            nodes.contains(&first) && nodes.contains(&second)
         })
     }
 
@@ -796,6 +794,12 @@ mod tests {
     #[case::triangle_all(&[[0, 1], [1, 2], [0, 2]], &[0, 1, 2], vec![EdgeId(0), EdgeId(1), EdgeId(2)])]
     #[case::no_internal_edges(&[[0, 1], [1, 2]], &[0, 2], vec![])]
     #[case::empty_nodes(&[[0, 1]], &[], vec![])]
+    #[case::reversed_pair(&[[0, 1], [1, 2], [0, 2]], &[1, 0], vec![EdgeId(0)])]
+    #[case::rotated_ring(&[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], &[1, 2, 3, 4, 5, 0], vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3), EdgeId(4), EdgeId(5)])]
+    #[case::unordered_subset(&[[0, 1], [1, 2], [2, 3], [3, 0], [0, 2]], &[2, 0, 3], vec![EdgeId(2), EdgeId(3), EdgeId(4)])]
+    #[case::repeated_nodes(&[[0, 1], [1, 2], [0, 2]], &[2, 0, 2, 1, 0], vec![EdgeId(0), EdgeId(1), EdgeId(2)])]
+    #[case::self_loops(&[[0, 0], [0, 1], [1, 1], [0, 0]], &[0, 0], vec![EdgeId(0), EdgeId(3)])]
+    #[case::parallel_edges(&[[0, 1], [1, 0], [1, 2]], &[1, 0, 1], vec![EdgeId(0), EdgeId(1)])]
     fn test_graph_induced_edges(
         #[case] edges: &[[u32; 2]],
         #[case] nodes: &[u32],
@@ -803,8 +807,8 @@ mod tests {
     ) {
         let node_count = edges.iter().flat_map(|e| e.iter()).max().unwrap() + 1;
         let g = Graph::new(node_count as usize, edges);
-        let sorted_nodes: Vec<NodeId> = nodes.iter().map(|&n| NodeId(n)).collect();
-        let mut result: Vec<EdgeId> = g.induced_edges(&sorted_nodes).collect();
+        let nodes: Vec<NodeId> = nodes.iter().map(|&n| NodeId(n)).collect();
+        let mut result: Vec<EdgeId> = g.induced_edges(&nodes).collect();
         result.sort_unstable();
         assert_eq!(result, expected);
     }

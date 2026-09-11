@@ -1479,6 +1479,25 @@ fn mutation(c: &mut Criterion) {
     group.finish();
 }
 
+fn induced_edges(c: &mut Criterion) {
+    let mut group = c.benchmark_group("induced_edges");
+    for (name, size, selected, expected) in [
+        ("ring_6", 6, 6, 6),
+        ("ring_64", 64, 64, 64),
+        ("ring_1024", 1024, 1024, 1024),
+        ("ring_4096_subset_6", 4096, 6, 5),
+    ] {
+        let edges: Vec<[u32; 2]> = (0..size).map(|node| [node, (node + 1) % size]).collect();
+        let graph = Graph::new(size as usize, &edges);
+        let nodes: Vec<NodeId> = (0..selected).rev().map(NodeId).collect();
+        assert_eq!(graph.induced_edges(&nodes).count(), expected);
+        group.bench_function(name, |b| {
+            b.iter(|| black_box(graph.induced_edges(black_box(&nodes)).count()))
+        });
+    }
+    group.finish();
+}
+
 fn correspondence_updates(c: &mut Criterion) {
     let mut group = c.benchmark_group("correspondence_updates");
     for size in [256usize, 4096, 65536] {
@@ -1501,6 +1520,7 @@ fn correspondence_updates(c: &mut Criterion) {
 
 criterion_group!(
     benches,
+    induced_edges,
     correspondence_updates,
     mutation,
     relevant_cycle_enumeration,

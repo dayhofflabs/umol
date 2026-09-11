@@ -9,6 +9,10 @@ Relates: [155](155-smiles-io-and-resolve-configuration-2026-07-19.md),
 [224](224-smiles-ring-closure-frame-2026-09-08.md),
 [data type contracts](../docs/development/data-types.md)
 
+Correction (2026-09-11): the projection contract and S4 plan below replace the runtime
+reconstruction requirement. The S4a and S4b corrections are complete. Their earlier
+implementation and timing records are retained as historical evidence. S4a0a–S4a0c remain complete.
+
 ## Scope
 
 Design the reverse molecular-format path: resolver-owned projection within graph IR, followed by
@@ -121,10 +125,9 @@ authorize treating undetermined values as zero or singlet.
 
 This needs coordinated atom and bond information, but not necessarily separate SMILES and CTfile
 copies of an aromatic system. A CTfile writer can consume aromatic bond orders; output requiring a
-localized Kekulé representation introduces a separate selection question. We must not assume that
-an arbitrary localized assignment preserves every graph-IR aromatic electron-count, charge, or
-spin distinction. The projection contract must identify which states the notation can reconstruct
-under the selected model and reject unsupported distinctions rather than silently erase them.
+localized Kekulé representation introduces a separate selection question outside this writer's
+scope. Projection uses the existing systems and their electron contributions directly; it does
+not search for a reconstructible assignment.
 
 ### Stereo atoms and bonds
 
@@ -625,11 +628,11 @@ There are two laws, with different domains and equality relations:
 1. Boundary parse/render follows doc 155: preserve the ordered boundary meaning, accept the result
    under the same IO configuration, and make syntax normalization idempotent. Source spans and
    arbitrary original spelling are not reconstructed. Raw TableIR equality is not this law.
-2. Convey/render/parse/interpret preserves the supported graph-IR molecular meaning under the
-   same chemistry model and interpretation settings, allowing entity renumbering and stereo-frame
-   transport. This requires a declared representable domain, including retained constraints,
-   electron accounting, hydrogen conventions, and stereo state. Being concrete alone is not a
-   sufficient representability condition. Boundary metadata absent from graph IR is outside this law.
+2. For supported, successfully ingested foreign input, exporting the ingested result preserves
+   the input's molecular meaning under the agreed equivalences, allowing entity renumbering and
+   stereo-frame transport. At the resolver layer this is project(resolve(input)) ≡ input.
+   Boundary metadata absent from graph IR is outside this law. A general inverse for arbitrary
+   constructed GraphIR is not required, nor is runtime re-resolution to verify projection.
 
 A parser and writer can agree on the same mistake. Verification therefore needs independent known
 configurations and semantic comparisons, including changed traversals at ring-closing stereo sites,
@@ -885,62 +888,57 @@ rendering share representability diagnostics. Successful construction precludes 
 representability failure under the same configuration. Exact variants and reaction error names
 remain implementation-design details. No production implementation is authorized yet.
 
-## Resolver projection: inverse target and initial scope
+## Resolver projection: roundtrip target and initial scope
 
-The desired law, under the same resolver, is:
+The required law, under the same resolver, is:
 
 ```text
-resolve(project(resolved_molecule)) ≡ resolved_molecule
+project(resolve(input)) ≡ input
 ```
 
-Equivalence accounts for representation ordering and stereo-frame transport. This is recovery
-of the resolved state, not recovery of the original unresolved input or its discarded assertions.
-The full roundtrip is the target, but initial support may cover a small, explicit feature domain
-and expand incrementally. Project must return an error where faithful reconstruction cannot be
-established; it must not guess a different state or silently discard information.
+Its domain is supported, successfully ingested SMILES/MOL input. At the GraphIR layer, input means
+the raised representation; equivalence allows the already agreed defaults, redundant notation,
+ordering, and stereo-frame transport. It does not require raw GraphIR or source-text equality.
+Convey/render/parse tests establish the corresponding boundary law. Implicit H and explicit H
+atoms remain distinct. CTfile inputs inform projection coverage; a CTfile writer remains separate.
 
-Finding a minimum set of retained properties that selects the original valence state is not an
-initial requirement. Retain enough information to recover that state. For atom typing, investigate
-narrowing the candidate list against retained properties, potentially through a registry pruning
-operation; no registry method or signature is settled yet. Counts-based valence reconstruction
-requires separate analysis of the reverse algorithm and need not have a general solution in the
-initial scope.
+The opposite law, resolve(project(molecule)) ≡ molecule for arbitrary constructed GraphIR, is
+not a required deliverable. Experiments in that direction on ingestion-produced values may help
+find defects, but do not expand the contract. No provenance tracking or runtime test of ingestion
+origin is needed.
 
-For aromaticity, the starting approach is to set atom and bond `#a` assertions in projected graph
-IR. Establish the domain in which those assertions, together with retained properties, reconstruct
-the original resolved systems and atom states under the same resolver. This is a proposed starting
-encoding, not a claim that aromatic flags suffice for every system. If the required properties
-cannot be set unambiguously for faithful reconstruction, fail rather than approximate.
+Projection translates the existing state directly. It does not re-admit valence candidates,
+apply tie-breaks, rediscover rings, select aromatic assignments, or resolve a copy to verify its
+answer. Uncertainty about reconstruction, a hypothetical different partition, or a solver search
+limit is not an export failure category.
 
-Use property tests of the inverse law over each supported domain, alongside the full
-convey/render/parse/interpret roundtrip properties. Broaden support as reconstruction rules become
-established; neither general inversion nor minimal encodings block an initially useful subset.
+The lowering rule is simple: lower a projected value if TableIR can carry it; otherwise return
+an error. The SMILES boundary rejects TableIR features that its supported notation/configuration
+cannot encode. These checks belong to the first operation requiring the corresponding property.
+Resolver projection remains GraphIR-only; Convey owns GraphIR-to-TableIR conversion. A failure
+identifies a concrete unsupported property or value, not a failed reconstruction proof. Start
+with a useful writable subset and expand it through concrete cases; minimum encodings and general
+valence inversion are not prerequisites.
+
+Use property tests of the required input-domain law and boundary roundtrips, backed by independent
+expected outputs and required-success cases. Runtime projection does not perform these tests.
 
 ### Ordinary atom valence
 
-Start reconstruction analysis with non-aromatic atoms, localized bonds, and explicit bracket H
-counts. Preserve element, isotope, charge, H count, and bond orders. Bracket H counts remain
-implicit hydrogen participants, not explicit hydrogen atoms. Avoid arbitrary element restrictions:
-the initial domain should be useful for ordinary molecules, charges, and reconstructible radicals.
-Compact unbracketed H-inference spelling can follow once its reconstruction rule is established.
+Preserve element, isotope subject to its settled default policy, charge, H count, and bond orders.
+Bracket H counts remain implicit hydrogen participants, not explicit hydrogen atoms. Apply the
+TableIR-capacity rule to atom electron fields and the supported-notation rule at the SMILES
+boundary. Do not clear lone pairs, unpaired electrons, or multiplicity merely to test whether a
+valence resolver would derive them again. Do not infer unrestricted SMILES support from a numeric
+storage field: radical/spin encodings have a limited set of supported states, with extensions
+depending on configuration. A concrete unencodable value fails at its owning conversion.
 
-TableIR can retain lone-pair, unpaired-electron, and multiplicity fields that ordinary SMILES
-cannot explicitly carry. Their presence in TableIR alone is not a roundtrip proof. Candidate
-reconstruction must use properties that actually survive the selected notation.
-
-For non-aromatic counts resolution with fixed H, the current algorithm derives nonbonding
-electrons from element valence electrons minus charge, bond valence, and H count. With lone pairs
-and unpaired electrons unspecified, it pairs the remainder except for its parity. Compare the
-resulting state, including multiplicity, against the source; differing pairing or spin fails
-unless another supported encoding preserves it. This handles a useful initial domain without
-solving the general counts inverse.
-
-Atom typing already filters registry rows by element, charge, retained properties, and
-asserted/derived incidence constraints. A conservative initial criterion is one completed state
-matching the source; multiple rows yielding the same state need not imply ambiguity. Evaluate
-the proposed retained properties, not the fully ground source atom, which admission may skip.
-These criteria establish ordinary valence reconstruction; the full molecular and external-format
-roundtrip checks remain separate work.
+S4a removed the implemented candidate reconstruction and comparison machinery, including clearing
+done solely for that check. With atom fields retained, there is no ordinary valence projection
+operation: ValenceResolver::project and ValenceProjectError are removed rather than replaced by
+an empty method. Forward valence resolution, registry invariants, and exact post-meet duplicate
+elimination retain their own contracts. Neither a registry pruning API nor a reverse counts
+algorithm is needed for this work.
 
 ### Isotope resolution and registry raising (settled during S4a)
 
@@ -963,8 +961,8 @@ IsotopeResolver::project uses the same policy as resolve, analogous to omitting 
 lowering. Under Natural, project replaces Natural with Undetermined because resolution restores
 Natural. Under Strict, project retains Natural because resolution would not restore an omitted
 value. Both policies retain explicit isotope masses. No separate projection policy or provenance
-distinguishing supplied Natural from defaulted Natural is needed: the inverse law recovers the
-resolved state, not its original input spelling. This operation stays within GraphIR; boundary
+distinguishing supplied Natural from defaulted Natural is needed: the agreed default equivalence
+does not preserve that distinction. This operation stays within GraphIR; boundary
 conversion and rendering own the output notation.
 
 Valence resolution must stop supplying isotope defaults. It may complete its own fields while
@@ -999,29 +997,41 @@ distinct. Custom overlapping registry patterns supplied the motivating reproduct
 variants become inadmissible under the registry invariant; regressions must exercise admissible
 non-isotope overlaps instead, preserving the exact-equality law.
 
-S4a is complete after the isotope prerequisites. S4a0a replaced its temporary default-registry
-isotope-rejection expectations and isotope-asserting custom registry fixtures; S4a0c integrated
-the isotope phase. Ordinary valence reconstruction now preserves Natural and explicit masses
-under both candidate sources without a valence-specific isotope policy.
+S4a0a–S4a0c remain complete. Their registry and isotope corrections are independent of the
+S4a projection correction. Natural and explicit masses remain supported under both
+candidate sources without a valence-specific isotope policy.
 
-### Aromatic reconstruction and the inverse check
+### Direct aromatic projection
 
 Projection fails for nonzero charge or `#u > 0` on any bond or aromatic system; it does not
 discard or implicitly localize them. This projection restriction complements the general export
 representability rule above.
 
-Use the existing joint aromaticity selection machinery, not a second selection algorithm.
-Individual atoms may have multiple candidates while the system has one selected assignment.
-Removing stored aromatic systems also removes the selector's requirement to reproduce their
-member sets; `#a` assertions and retained properties must reconstruct the original grouping,
-atom states, and electron contributions rather than merely some accepted aromatic assignment.
+Read each existing system's members and their electron contributions. Write concrete atom
+`#a<n>` using each member's contribution n, mark that system's bonds `#a`, and remove the system
+entity. Preserve localized connections between systems. This phase preserves ordinary atom
+lone-pair, unpaired-electron, and multiplicity fields. No valence source, tie-break, ring discovery,
+or joint selection is involved; a molecule without aromatic systems needs no aromatic edit.
 
-For the initial implementation, construct a proposed projected GraphIR value, resolve a copy
-under the same resolver, and require determined success and equivalence to the source. Changed
-assignments, changed grouping, unresolved ambiguity, or an existing search limit cause projection
-failure. This reconstruction check establishes the inverse guarantee rather than defensively
-revalidating representation integrity. Convey must separately establish that the required
-information survives the boundary notation; a successful GraphIR check does not prove that.
+Convey marks participating TableIR atoms aromatic and encodes the systems' bonds as aromatic
+bonds. SMILES/MOL cannot explicitly encode contribution n; their inputs did not supply that
+quantity directly. This does not justify a runtime reconstruction check or a blanket export
+failure for aromatic molecules.
+
+The information accounting is:
+
+| Source information | Projection or boundary treatment |
+| --- | --- |
+| System members and member electron contributions | Concrete atom `#a<n>`; aromatic marking at the boundary |
+| Bonds belonging to the system | Bond #a; aromatic bond order at the boundary |
+| Localized links and atom-localized charge | Preserve |
+| Nonzero system or bond charge, #u > 0, or non-singlet system spin | Error; no implicit localization or redistribution |
+| Other projected values and bond kinds | Lower if TableIR supports them; otherwise error. The SMILES boundary separately enforces its supported notation. |
+
+Do not retain blanket SystemConstraints/MoleculeConstraints rejection merely to enforce an
+arbitrary-GraphIR inverse. Forward resolution discharges the system ElectronCount assertion when
+its derived value is ground. General preservation of independently constructed assertions about
+deleted system IDs is not an additional deliverable for the supported ingestion domain.
 
 ### Stereo projection
 
@@ -1034,13 +1044,14 @@ StereoPerception::derive_stereo_atom and derive_stereo_bond in
 - The `#C` frame follows the bond's ordered endpoints, each with its actual substituent neighbors
   excluding the opposite endpoint and a virtual participant when needed to complete that side.
 
-Obtain the frame the same stereo model would reconstruct, use coset_for to transport the stored
+Obtain the frame the same stereo model derives, use coset_for to transport the stored
 entity configuration into it, write the corresponding `#T` or `#C` assertion, and remove the
-entity. The resolve-and-compare check must recover the original stereo. Failure to construct a
-frame, incompatible ligand identities, or unrepresentable configuration causes projection failure.
+entity. Failure to construct a frame, incompatible ligand identities, or unrepresentable
+configuration causes projection failure.
 Do not relabel lone pairs as hydrogen, fold or expand hydrogen atoms, or silently drop stereo
-under permissive failure policies. Configured scope and perception exclusions are also subject
-to the reconstruction check. TableIR frame construction remains entirely with Convey.
+under permissive failure policies. Use configured perception where needed to derive the frame;
+do not run forward stereo resolution as an export check. TableIR frame construction remains
+entirely with Convey.
 
 ## Marker-assignment design
 
@@ -1338,14 +1349,14 @@ that redesign; no production implementation is authorized by this design record.
 The initial semantic scope, responsibility boundaries, traversal API, and marker-assignment
 algorithm are settled above. Exact diagnostic variants and cohesive helper signatures must be
 reconciled with the public contract before their implementing subitem; this is not permission to
-introduce new wrappers, strategies, or chemistry transformations. Implement the supported inverse
-domain with explicit failures, not a promise of general valence inversion or minimum encodings.
+introduce new wrappers, strategies, or chemistry transformations. Implement direct projection
+and the supported boundary encodings with explicit failures for unrepresentable values.
 The plan below sequences the work; S0–S3 are complete.
 
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-S4a0, S4a, and S4b are complete; S4c–S4d remain pending.
+S4a0a–S4a0c and the S4a–S4b corrections are complete. S4c–S4d remain pending.
 S5 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
@@ -1360,7 +1371,7 @@ The consumer requirements determine these work groups; the stages order them fou
 | umol-graph ingest/export | Interpret with a supplied Resolver; Convey on boundary types; text-returning export conveniences and reaction composition |
 | umol-io smiles boundaries | Checked from_table_ir construction, render/render_with, shared representability diagnostics, same-config guarantee |
 | umol-io smiles writer | Deterministic traversal, atom/ring/branch spelling, stereo-frame transport, component-wide marker selection and parity |
-| umol-graph resolver | GraphIR-only project, reconstructible atom-state reductions, aromatic/stereo assertion recovery, atomic inverse verification |
+| umol-graph resolver | Direct GraphIR-only project, isotope default elision, aromatic/stereo assertion recovery, atomic publication |
 | umol-io TableIR and readers | Explicit stereo-bond frames; transient source markers; SMILES/CX/CTfile producers and raise migration; temporary neighbor access |
 | umol-graph-core | Iterator-producing connectivity callback, DFS/BFS visitors and collectors, component visitor, semantic renames and usize depth |
 | Tests/specification/consumers | Independent correctness cases and properties, existing Python ingestion migration, separate spec updates and bounded performance evidence |
@@ -1404,8 +1415,8 @@ the shared graph-core implementation and a separate decision.
   regressions as independent expected configurations where relevant. Define boundary equivalence
   excluding spans/spelling but preserving explicit versus implicit H, definite versus Either versus
   absence, labels, and stereo-frame action. Use existing molecular equivalence/remapping machinery
-  for the GraphIR law; compare atom states, system members/contributions, and stereo explicitly
-  rather than formula or entity counts. Add named successful ordinary, charged, radical, aromatic,
+  for independent GraphIR expectations; compare atom states, system members/contributions, and
+  stereo explicitly rather than formula or entity counts. Add named successful ordinary, charged, radical, aromatic,
   tetrahedral, and cis/trans cases without claiming unimplemented output support.
 - **S0c — Evidence fixtures and independent fuzz follow-up (completed 2026-09-10).** Modules: existing benches and
   umol-io/fuzz. **Additive (green).** [dep: S0a]
@@ -1600,7 +1611,7 @@ extend the benchmark campaign. No fixture files are introduced into benchmarks.
 raw-direction/stereo-field producer and consumer is accounted for. Parser acceptance and error-layer
 changes are reviewed for semantic preservation, not accepted solely because tests were rewritten.
 
-### S4 — GraphIR-only inverse projection
+### S4 — Direct GraphIR-only projection
 
 S4a0 grouped three isotope-repair prerequisites, completed before S4a. The draft's default-registry
 isotope rejection was repaired rather than retained as a support boundary.
@@ -1756,42 +1767,163 @@ before either candidate-source projection; preparation remains outside timing. T
 benchmark target passes in Criterion test mode. Logs and the full comparison are in
 scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.csv.
 
-- **S4a — Ordinary valence reconstruction.** Modules: resolve/valence.rs and valence
-  atom_typing/counts/registry as needed. **Additive (green); completed 2026-09-11.** [dep: S0a, S0b, S4a0c]
-  Implement reconstruction from retained GraphIR properties for the initial non-aromatic domain.
-  Reuse candidate admission and compare completed states; admission deduplicates exactly equal
-  post-meet AtomForms, including constraints, independently of isotope policy and valence tie-break;
-  do not check the already-ground source through the admission fast path. For counts, start with
-  fixed H and the established electron pairing/multiplicity reconstruction. Retain enough evidence
-  rather than search for a minimum encoding. No registry public pruning API is added without its
-  contract review; reuse existing capabilities where sufficient. Cover useful ordinary atoms,
-  charges and radicals across both candidate sources, model/tie-break differences, and exact
-  rejection of unreconstructible pairing/spin. This code knows no TableIR or SmilesIoConfig.
-- **S4b — Aromatic assertion recovery.** Module: resolve/aromaticity.rs.
-  **Additive (green); completed 2026-09-11.** [dep: S4a]
-  Produce atom/bond #a assertions while removing the corresponding system entities and retaining
-  reconstruction evidence. Use existing joint selection to recover atom contributions and system
-  grouping. Test benzene, heteroaromatics, localized links between aromatic systems, fused systems
-  within the supported domain, atom-localized charge, and differing admissible partitions. Reject
-  nonzero system charge or #u > 0 and undetermined unsupported attributes; do not localize them.
+- **S4a — Correct ordinary atom projection.** Module: resolve/valence.rs and its projection
+  callers/tests/benchmarks. **Breaking/refactor (red→green); correction completed 2026-09-11.** [dep: S0a, S0b, S4a0c]
+  Remove candidate re-admission, tie-breaking, state comparison, and field clearing performed only
+  for reconstruction. Retain direct GraphIR field handling under the settled capacity rule;
+  actual TableIR narrowing belongs to Convey and notation support to the SMILES boundary. No
+  ordinary atom projection operation remains; remove ValenceResolver::project and its error type
+  rather than add an identity stub. Do not replace reconstruction with unchecked clearing.
+  Remove projection-only dependencies and errors
+  that exist solely for admission ambiguity or mismatch; migrate affected callers in this subitem.
+  This code knows no TableIR or SmilesIoConfig. Retain forward atom-typing/counts behavior, the
+  registry isotope invariant, exact post-meet duplicate elimination, and isotope default elision.
+  Preserve useful ordinary atom/charge/radical cases as independent forward-resolution and
+  supported-input fixtures. Test exact preservation in the aromatic caller's no-system path.
+  Replace arbitrary-state inverse rejection expectations with the corrected contract; field
+  lowering and its errors are tested with the actual conversion in S7a.
+- **S4b — Aromatic assertion recovery.** Modules: resolve/aromaticity.rs and graph-core induced edges.
+  **Breaking/refactor (red→green); correction completed 2026-09-11.** [dep: S4a]
+  Replace reconstruction with direct atom `#a<n>` and bond #a assertions from existing systems,
+  then remove those systems. Preserve atom electron fields and localized links. Remove the
+  ValenceResolver/ValenceTieBreak dependency, candidate
+  admission, joint selection/ring discovery, and recovered-state comparison. Remove errors and
+  blanket assertion checks justified only by the arbitrary-GraphIR inverse. Migrate the public
+  signature, callers, tests, and benchmarks together. Reject nonzero system charge, #u > 0, and
+  non-singlet spin; do not localize them or treat undetermined required values as defaults.
+  Test exact `#a<n>`/#a output and retained fields for benzene, heteroaromatics, localized links,
+  fused systems, and atom-localized charge. Retain independent input expectations and frame-order
+  variations. Remove required rejection cases based solely on alternative partitions, candidate
+  ambiguity, scope/selection differences, or search bounds.
 - **S4c — Stereo assertion recovery.** Module: resolve/stereo.rs, reusing ops/stereo.rs and
   graph-IR coset transport. **Additive (green).** [dep: S4a]
   Recover #T/#C assertions in the frames that the same model derives, remove entities after
   transporting their configurations, and preserve typed virtual participants. Test reordered
   actual ligands, implicit versus explicit H, LP frames, endpoint flips, Either where in domain,
-  model scope exclusions, and permissive resolver policies that would otherwise lose stereo.
-  Unsupported extended kinds fail rather than partially projecting.
-- **S4d — Atomic Resolver::project and inverse verification.** Module: resolve.rs and related
+  required frame-derivation failures, and preservation under permissive resolver policies.
+  Unsupported extended kinds fail rather than partially projecting. No runtime re-resolution
+  or comparison of recovered configurations is added.
+- **S4d — Atomic Resolver::project composition.** Module: resolve.rs and related
   error/report vocabulary. **Additive (green).** [dep: S4a, S4b, S4c]
   Compose the projection plans with resolve's Result/Solution and commit semantics. Reject nonzero
   charge or #u > 0 on bonds and aromatic systems. Preserve non-elidable information on other
-  unsupported structures for explicit failure, never erase it to make the inverse pass. Resolve
-  a copy of the candidate with the same resolver and compare the recovered molecular meaning,
-  including aromatic partitions and transported stereo. Only determined matching success publishes
-  the projected value; all other outcomes leave the caller unchanged. Test the inverse law and
-  atomic failure independently, including candidate ambiguity and configured search limits.
+  unsupported structures for explicit failure. Only successful projection publishes the candidate;
+  every other outcome leaves the caller unchanged. Do not resolve a copy or compare a recovered
+  molecule. Test project(resolve(input)) under the agreed equivalence for supported raised foreign
+  inputs, direct field/frame expectations, and atomic failure independently. Reverse-direction
+  experiments are optional evidence, not a gate for arbitrary GraphIR.
 
-S4a completion (2026-09-11): ValenceResolver::project retains element, isotope, charge, fixed
+#### S4a correction completion — 2026-09-11
+
+ValenceResolver::project and ValenceProjectError are removed. This eliminates the private molecule
+clone, whole-atom field clearing, candidate admission, tie-breaking, and exact recovery comparison
+from ordinary valence projection. No replacement phase or empty method is introduced. Ordinary
+atom values remain for Convey's later TableIR conversion; isotope default elision remains with
+IsotopeResolver. Forward resolution and the registry invariant/deduplication implementation are
+unchanged.
+
+The only production caller was AromaticityResolver::project. Its no-system path now returns
+Determined with an empty report and preserves the entire molecule, including non-ground fields.
+The six diagnostics still used by its existing system reconstruction moved from the removed
+ValenceProjectError wrapper directly into AromaticityProjectError: NonConcreteAtom,
+NonLiteralBondOrder, DativeBonds, MulticenterBonds, IncompleteAtom, and AtomMismatch. This is caller
+migration, not completion of S4b: aromatic candidate admission, ring discovery/selection, and
+recovery comparisons still await removal there. No other public consumers or Python bindings used
+the removed valence projection surface.
+
+Fourteen independent atom expectations and the custom-registry overlap regression now exercise
+Resolver::resolve directly. Seven molecular fixtures now start from SMILES with fixed bracket H
+counts, preserving the original determined-input domain under both valence sources and tie-breaks.
+Their complete expected molecules cover branches, a ring, nitrile, amide, sulfoxide, zwitterion,
+and disconnected charged/isotopic components. Carbon/radical/isotope and mixed-element generated
+cases retain their independent expected states as forward-completion properties. The obsolete
+projection mismatch, candidate ambiguity, and pairing-rejection tests are removed. Existing
+isotope, registry, electron-pairing, and aromatic projection coverage remains.
+
+Verification: PROPTEST_CASES=256 cargo test -p umol-graph --features conformance,proptest --offline
+passes, including 1,411 unit cases, 683 conformance cases, 11 property tests, and integration tests.
+All-target graph Clippy with the same features and -D warnings passes. Logs:
+scratch/s4a-correction-gate.log and scratch/s4a-correction-clippy.log. Formatting was run, with
+unrelated formatter-only changes removed from the diff. The remaining resolve benchmark target
+passes in Criterion test mode (scratch/s4a-correction-bench.log); git diff --check passes.
+
+The valence projection and projection-plus-resolve benchmark groups are removed with the operation.
+There is no replacement operation to time or new speedup estimate to report. Retain the historical
+costs below; the next bounded timing comparison belongs to S4b's actual aromatic transformation.
+
+#### S4b correction completion — 2026-09-11
+
+AromaticityResolver::project now takes only the mutable molecule and returns
+Result<Solution<(), AromaticityContradiction>, AromaticityProjectError>. It reads each existing
+system's member-aligned contributions into atom `#a<n>` assertions, marks the system's induced
+bonds #a, and removes the system. Atom electron fields and links between systems are preserved.
+Edits are published together; errors preserve the caller's molecule. System removal uses the
+editor's existing constraint-compaction semantics.
+
+Projection no longer performs valence admission, candidate selection, ring discovery, or a recovery
+comparison. It does not depend on valence policy or aromatic perception scope. The remaining
+diagnostics are NonConcreteSystem, ChargedSystem, SystemSpin, AtomAssertion, and BondAssertion:
+required contributions/charge/spin must be concrete, system charge must be zero, system spin must
+be closed-shell singlet, and existing atom/bond assertions must admit the projected assertions.
+The temporary reconstruction diagnostics described in the S4a completion record are removed.
+Forward aromatic resolution methods and helpers are unchanged from the S4a closeout.
+
+Exact fixtures cover contributions 0, 1, and 2, preserved lone-pair fields, localized charge,
+heteroaromatics, fused rings, and links between separate systems. Identity cases include non-ground
+ordinary atoms. Failure cases check exact errors and atomic publication. The property suite checks
+direct mapping, idempotence, rotated/reversed member frames with transported contributions, and
+projection of independently expected SMILES inputs under both valence sources. It does not enforce
+arbitrary GraphIR reconstruction.
+
+The frame-order property exposed the sorted-input restriction in Graph::induced_edges: the valid
+benzene frame [1,2,3,4,5,0] omitted two bonds. The corrected method implements endpoint membership
+for arbitrary node order and repetitions, yielding each edge ID once, including self-loops and
+parallel edges. Its signature is unchanged. It builds a subset-sized HashSet and scans stored
+edges once; expected work is O(|nodes| + |E|), with no graph-sized membership allocation. This
+also corrects aromatic-system bond views without a local workaround. Exact core regressions and
+a generated multigraph property compare against the endpoint definition. Kekulizer plan tests
+now compare exact matched/unmatched bond sets independently of unspecified iteration order,
+while retaining repeatability checks; no kekulization implementation changes were needed.
+
+Inline core benchmarks include reversed node lists. With 10 samples, 0.5 s warmup, and 1 s
+measurement, full rings of 6, 64, and 1,024 nodes take 0.2020, 1.6827, and 26.660 microseconds.
+Selecting six adjacent nodes from a 4,096-node ring takes 31.837 microseconds: the whole-edge
+scan remains visible for small subsets of large graphs. These are current implementation costs,
+not before/after comparisons. Log: scratch/induced-edges-bench.log.
+
+Verification: 1,013 graph-core unit cases, the generated induced-edge property and related graph
+properties at PROPTEST_CASES=256, and 6,816 graph-IR unit cases pass (three existing ignored cases).
+The graph gate with features conformance,proptest and PROPTEST_CASES=256 passes: 1,355 unit cases,
+683 conformance cases, 11 property tests, and integration tests. All-target Clippy for graph-core
+and graph with those features and -D warnings passes. Formatting and git diff --check pass.
+Logs: scratch/induced-edges-{core-gate,property-gate,ir-gate}.log,
+scratch/s4b-correction-gate.log, and scratch/s4b-correction-clippy.log.
+
+The inline aromatic projection benchmark retains the four prior inputs and excludes parsing,
+source construction, and caller cloning. Projection now has one policy-independent measurement;
+the projection-plus-resolve benchmark is removed. Central estimates in microseconds, using
+10 samples, 0.5 s warmup, and 1 s measurement:
+
+| Input | Previous counts project | Previous atom-typing project | Direct project |
+| --- | ---: | ---: | ---: |
+| Benzene | 12.487 | 35.008 | 1.6204 |
+| Pyrrole | 11.873 | 28.182 | 1.4085 |
+| Naphthalene | 23.632 | 61.803 | 2.3157 |
+| Biphenyl | 26.002 | 72.129 | 2.9099 |
+
+These bounded results support the expected reduction from removing reconstruction; they do not
+establish scaling for large collections of systems. Full output:
+scratch/s4b-correction-benchmark.log. S4c is next.
+
+#### Historical S4a/S4b implementation and measurements — 2026-09-11
+
+The following records describe the implementation before the contract correction. Its runtime
+reconstruction checks and the tests enforcing them are superseded by the corrected subitems above;
+passing those checks does not complete the corrected work. Retain the measurements for a bounded
+before/after comparison. Projection-plus-resolve measurements are historical diagnostics, not a
+required output-pipeline benchmark or deliverable.
+
+S4a prior implementation (2026-09-11): ValenceResolver::project retains element, isotope, charge, fixed
 implicit H, bonds, entities, and assertions. It opens lone pairs and both unpaired-electron fields
 on a private molecule, admits that reduced input, applies the supplied existing tie-break, and
 publishes only when the selected inherent atom fields exactly match the source. Candidate
@@ -1834,7 +1966,7 @@ input clone are outside timing. Full results: scratch/s4a-benchmark.log.
 | Methyl radical | 0.431 | 2.018 | 3.794 | 9.427 |
 | Ammonium | 0.401 | 2.030 | 2.121 | 5.911 |
 
-S4b completion (2026-09-11): AromaticityResolver::project takes the mutable molecule, a borrowed
+S4b prior implementation (2026-09-11): AromaticityResolver::project takes the mutable molecule, a borrowed
 ValenceResolver, and the existing ValenceTieBreak. Its result is
 Result<Solution<ResolveReport, ResolveContradiction>, AromaticityProjectError>. The new error
 type stays in resolve::aromaticity; no facade re-export, registry API, or boundary type is added.
@@ -1893,9 +2025,10 @@ Central estimates in microseconds from 10 samples, 0.5 s warmup, and 1 s measure
 These establish initial costs, not a before/after performance claim. All benchmark input checks
 and measured cases pass. Full output: scratch/s4b-benchmark.log.
 
-**Gate:** graph unit, conformance, and property suites pass for both valence strategies. Record the
-supported domain and exact unsupported categories. Projection benchmarks include candidate building
-and the deliberate re-resolution cost; do not replace the latter with an unproven shortcut.
+**Corrected S4 gate:** graph unit, conformance, and property suites pass for both valence strategies.
+Record the supported input domain and concrete unsupported values. Verify direct projection and
+atomic publication without runtime reconstruction. Run a bounded projection benchmark comparison
+against the historical measurements; no re-resolution measurement or tuning campaign is required.
 
 ### S5 — IO traversal and direction assignment kernels
 
@@ -1966,11 +2099,12 @@ A parser/writer agreement alone is not enough: independent frame fixtures from S
   its owning conversion functions. **Additive (green).** [dep: S4d, S6a]
   Add Convey with associated Input/Config/Error and implement it for Smiles. Clone source GraphIR,
   invoke Resolver::project, and convert the projected GraphIR fields/assertions into TableIR.
-  Build StereoAtom/StereoBond frames here, not in the resolver. Check narrowing ranges and every
-  nondefault property/constraint that the boundary cannot preserve; unsupported information errors
-  rather than disappearing. Use the checked boundary constructor. Verify the graph inverse and
-  the stronger conveyed/rendered/parsed/interpreted law separately so retained internal electron
-  fields cannot hide loss in text. Tests include original-input immutability on success/failure.
+  Build StereoAtom/StereoBond frames here, not in the resolver. Lower projected values that TableIR
+  can carry and reject concrete unsupported values/ranges. The checked boundary constructor owns
+  SMILES notation/configuration support. Do not add reconstruction checks at either boundary.
+  Test the supported foreign-input roundtrip through convey/render/parse under the agreed
+  equivalences, with required-success fixtures. Include original-input immutability on success
+  and failure and exact diagnostics for unsupported encodings.
 - **S7b — Reaction convey.** Same module, ReactionSmiles implementation.
   **Additive (green).** [dep: S7a, S6b]
   Materialize reaction sides through existing ReactionSpan/correspondence operations, then convey
@@ -2017,10 +2151,12 @@ consumer may be treated as completion.
 
 - **S9a — Full property/conformance coverage.** Modules: IO and graph property/conformance targets.
   **Additive (green).** [dep: S2a, S3e, S7c, S8b]
-  Run the separate laws for GraphIR inverse projection, boundary normalization, same-config
-  construction/rendering, and graph export/ingest. Include both valence strategies, supported
-  model policies, source-order variations, explicit/implicit H distinctions, aromatic grouping,
-  marker-selection impossibility and alternatives, reactions and correspondence. Add retained
+  Run project(resolve(input)) for supported raised foreign inputs, boundary normalization,
+  same-config construction/rendering, and ingestion-to-export preservation under the agreed
+  equivalences. No arbitrary-GraphIR resolve(project(molecule)) law is required. Include both
+  valence strategies, supported model policies, source-order variations, explicit/implicit H
+  distinctions, aromatic grouping, marker-selection impossibility and alternatives, reactions
+  and correspondence. Add retained
   regression cases for discovered defects. A success-conditional property must be paired with
   required-success fixtures; no shrinking the feature domain merely to pass tests.
 - **S9b — Specification and public documentation.** Modules: umol-io/spec/opensmiles-spec.md,
@@ -2071,11 +2207,12 @@ migration before final integration. S8 restores the complete ingest/export symme
 Python consumers; S9 supplies the acceptance evidence. No stage may leave public invariants
 unfinished behind temporary visibility or compatibility layers.
 
-Deferred and not prerequisites for the Rust roundtrip: minimum-information projection, general
-counts inversion beyond established support, early parity pruning, minimum-marker optimization,
-canonical output, cached traversal/markers, new Python boundary/output surface, CTfile writing,
-extended stereo, coordinate generation, and depiction wedge policy. Expanding the chemistry domain
-requires demonstrated reconstruction rules, not automatic acceptance. No separate optimization
+Deferred and not prerequisites for the Rust roundtrip: minimum-information projection, early
+parity pruning, minimum-marker optimization, canonical output, cached traversal/markers,
+new Python boundary/output surface, CTfile writing,
+extended stereo, coordinate generation, and depiction wedge policy. Expand writable coverage
+through concrete supported encodings and tests. A general counts inverse or a proof of arbitrary
+GraphIR reconstruction is not a prerequisite or planned deliverable. No separate optimization
 implementation stages are approved by this plan.
 
 ## S0a inventory and verification — 2026-09-10
@@ -2107,9 +2244,9 @@ inventing extra public seams.
 | StereoAtom, StereoLigand, Winding, ConfigurationScope | Retain public layout and the implicit-H/LP participant convention. | Doc 224 parser finalizer, raise, future writer. No LP-removal migration. |
 | AtomNeighbors and table_ir::Neighbor; both molecule atom_neighbors methods | Remain operation-local lookup; no new foundational graph field or adjacency trait. Eliminate unnecessary allocation at callers without assuming final Graph connectivity matches the table. | Raise helpers, table tests; future parser/writer incidence access. Retirement/replacement of the public helper itself is not approved. |
 | TryIntoIr<Molecule> for &table_ir::Molecule; RaiseError | Raise explicit frames instead of interpreting retained directions; preserve model-independent representation errors at the owning conversion. | Interpret, parser/raise fixtures, fuzz target. Source marker conflicts move with their producer; do not erase diagnostics. |
-| Resolver::project and per-resolver project functions | New GraphIR-only inverse transformation, same mutation/publication semantics as resolve; no TableIR or IO-config parameters. | Convey; inverse-law properties and projection benchmarks. Concrete report/contradiction types are not yet named by the design. |
-| Resolver::resolve, ResolveConfig, ResolveState and existing reports/errors | Retain existing semantics. Project's validation uses the same resolver; do not change resolution or its chemistry defaults to force roundtrips. | Existing ingestion and resolution tests; new projection check. |
-| AtomTypeRegistry lookup/admission operations | Reuse candidate filtering initially; no approved new registry pruning signature. | Inverse valence analysis. Any new invariant-bearing public operation needs its own contract within S4a. |
+| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation, same mutation/publication semantics as resolve; no TableIR or IO-config parameters. Ordinary valence has no projection phase; S4a removed ValenceResolver::project and ValenceProjectError. S4b reconciled aromatic projection's signature and five diagnostics in its completion record above. | Convey; supported-input roundtrip properties and projection benchmarks. |
+| Resolver::resolve, ResolveConfig, ResolveState and existing reports/errors | Retain forward semantics, including completed isotope corrections. Project does not invoke resolution for validation. | Existing ingestion and resolution tests; supported-input projection properties. |
+| AtomTypeRegistry lookup/admission operations | Retain forward admission and completed registry invariants/deduplication; no projection candidate filtering or new pruning API. | Forward atom typing. |
 | Smiles/ReactionSmiles::from_table_ir | New checked owned-table constructors with &SmilesIoConfig; Result establishes renderability. Private table fields remain private. | Convey across the crate boundary; tests of independent open tables. |
 | Smiles/ReactionSmiles::render, render_with | New String-returning Result methods; OpenSMILES default or explicit IO config. Recompute traversal/assignment. | export conveniences; boundary normalization properties. No Display or unchecked formatter is approved. |
 | Smiles/ReactionSmiles::parse, parse_bytes, parse_with, parse_bytes_with, FromStr | Retain parse surface and syntax-config defaults; frame normalization changes their produced internal tables. | Existing ingestion, direct boundary users, properties and fuzzing. Parsing does not become chemistry resolution. |
@@ -2186,13 +2323,14 @@ owning module and the repository's established public reexport surface, not from
 | Open TableIR and temporary index | Tables remain authoritative. Index construction establishes its own storage; later table edits promise no index/table correspondence. | No stale-index repair or general validation wrapper. Operations needing table references first establish their required properties; no chemistry inference in parse. |
 | Explicit stereo frames | Site and references belong to the table; endpoint ordering and frame action are fixed. Either has no references. | Source interpretation checks marker consistency; raise/checked construction enforce required references. Do not silently pad, retag virtual ligands, or downgrade configuration. |
 | Checked SMILES boundary | Private payload plus successful construction under IO config establishes representability; parse retains its existing acceptance contract. | Mutable fields are not exposed. Same-config rendering succeeds; other-config rendering may fail. No invented coordinates or lost annotations. |
-| Resolver::project | Caller supplies GraphIR; work is GraphIR throughout, on an intermediate candidate. | Result/Solution follows resolve; only matching determined reconstruction publishes. Failure preserves caller input. |
-| Convey and text export | Convey clones, projects, translates, and calls checked construction. Export composes convey/render. | Preserve source graph and supported semantics; reject unrepresentable fields/constraints. A GraphIR inverse check alone does not prove text preservation. |
+| Resolver::project | Caller supplies GraphIR; work is GraphIR throughout, on an intermediate candidate. | Result/Solution follows resolve; successful projection publishes atomically, without re-resolution. Failure preserves caller input. |
+| Convey and text export | Convey clones, projects, lowers values supported by TableIR, and calls checked construction for notation support. Export composes convey/render. | Preserve source graph and supported input semantics; reject concrete unrepresentable values. No runtime roundtrip verification. |
 | Reaction boundary construction | A supplied table may have independently assembled labels/index; the constructor owns the required consistency check. | Preserve label semantics including parsed repeats/agents where representable; GraphIR convey produces its index from correspondence labels. |
 
 The laws to verify in later subitems are traversal visitor/collector equivalence and completion,
-projection inverse plus atomic failure, boundary normalization and same-config renderability,
-and molecular/reaction export-ingest equivalence with explicit/implicit H and stereo-frame action.
+project(resolve(input)) for supported foreign input plus atomic failure, boundary normalization
+and same-config renderability, and molecular/reaction ingestion-to-export preservation with
+explicit/implicit H and stereo-frame action.
 These are distinct operational domains; no structural count comparison substitutes for them.
 
 ### Migration findings to retain in later stages
@@ -2319,7 +2457,11 @@ parse/render agreement when output becomes available.
   raise does not retain all boundary data. A general boundary comparator follows the explicit
   stereo-bond representation in S3; S0b records concrete expected semantic observations without
   introducing a helper that erases fields from today's mixed source representation.
-- **GraphIR inverse law:** use Molecule::framed_eq when entity IDs are retained,
+- **GraphIR comparison tools:** the corrected required law is project(resolve(input)) ≡ input
+  over supported raised foreign inputs, under the agreed representation equivalences. It is not
+  raw equality of the raised and projected molecules. For comparisons of complete molecular states
+  in independent ingestion fixtures or optional reverse-direction experiments, use
+  Molecule::framed_eq when entity IDs are retained,
   framed_eq_under when an explicit remapping is supplied, and aggregate canonical_eq when text
   traversal changes IDs. Compare the complete molecule, including atom states, localized bond
   states, aromatic system members and electron contributions, and stereo entities/configurations.

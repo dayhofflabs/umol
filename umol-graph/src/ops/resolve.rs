@@ -1005,7 +1005,8 @@ mod tests {
     use rstest::{fixture, rstest};
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AtomConstraintForm, AtomId, MoleculeConstraint, MulticenterValenceForm, NumForm,
+        AtomConstraintForm, AtomForm, AtomId, MoleculeConstraint, MoleculeEntries,
+        MulticenterValenceForm, NumForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -1158,6 +1159,75 @@ mod tests {
         let mut molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#v0#a!"]}"#);
         assert_eq!(
             Resolver::new(&model).resolve(&mut molecule),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
+        assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#));
+    }
+
+    #[rstest]
+    #[case::methane(atom_dsl!("C#i=#c0#h4#n0#u0#s"), atom_dsl!("C#i=#c0#h4"))]
+    #[case::methyl(atom_dsl!("C#i=#c0#h3#n0#u1#s2"), atom_dsl!("C#i=#c0#h3"))]
+    #[case::carbanion(atom_dsl!("C#i=#c-#h3#n1#u0#s"), atom_dsl!("C#i=#c-#h3"))]
+    #[case::carbocation(atom_dsl!("C#i=#c+#h3#n0#u0#s"), atom_dsl!("C#i=#c+#h3"))]
+    #[case::ammonia(atom_dsl!("N#i=#c0#h3#n1#u0#s"), atom_dsl!("N#i=#c0#h3"))]
+    #[case::ammonium(atom_dsl!("N#i=#c+#h4#n0#u0#s"), atom_dsl!("N#i=#c+#h4"))]
+    #[case::water(atom_dsl!("O#i=#c0#h2#n2#u0#s"), atom_dsl!("O#i=#c0#h2"))]
+    #[case::hydroxide(atom_dsl!("O#i=#c-#h1#n3#u0#s"), atom_dsl!("O#i=#c-#h1"))]
+    #[case::fluorane(atom_dsl!("F#i=#c0#h1#n3#u0#s"), atom_dsl!("F#i=#c0#h1"))]
+    #[case::chloride(atom_dsl!("Cl#i=#c-#h0#n4#u0#s"), atom_dsl!("Cl#i=#c-#h0"))]
+    #[case::phosphonium(atom_dsl!("P#i=#c+#h4#n0#u0#s"), atom_dsl!("P#i=#c+#h4"))]
+    #[case::sulfane(atom_dsl!("S#i=#c0#h2#n2#u0#s"), atom_dsl!("S#i=#c0#h2"))]
+    #[case::borane(atom_dsl!("B#i=#c0#h3#n0#u0#s"), atom_dsl!("B#i=#c0#h3"))]
+    #[case::silane(atom_dsl!("Si#i=#c0#h4#n0#u0#s"), atom_dsl!("Si#i=#c0#h4"))]
+    fn test_resolver_resolve_atoms(
+        #[values(ValenceModel::smiles(), ValenceModel::default())] mut valence: ValenceModel,
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
+        tie_break: ValenceTieBreak,
+        #[case] expected: AtomForm,
+        #[case] input: AtomForm,
+    ) {
+        valence.tie_break = tie_break;
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![input],
+            ..Default::default()
+        });
+        assert_eq!(
+            Resolver::new(&model).resolve(&mut molecule),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
+        assert_eq!(
+            molecule,
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![expected],
+                ..Default::default()
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_resolver_resolve_overlap(
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
+        tie_break: ValenceTieBreak,
+    ) {
+        let model = ChemistryModel {
+            valence: ValenceModel {
+                candidates: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([
+                    atom_dsl!("C#c0#h*#n0#u0#s"),
+                    atom_dsl!("C#c0#h4#n0#u0#s"),
+                ])))
+                .candidates,
+                tie_break,
+            },
+            ..Default::default()
+        };
+        let resolver = Resolver::new(&model);
+        let mut molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4"]}"#);
+        assert_eq!(
+            resolver.resolve(&mut molecule),
             Ok(Solution::Determined(ResolveReport::default()))
         );
         assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#));

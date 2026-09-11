@@ -299,7 +299,7 @@ mod tests {
         Entity, MoleculeEntries, MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm,
         StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     };
-    use umol_graph_ir::{atom_dsl, mol_dsl};
+    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
     use umol_io::table_ir::{AtomPair, BondConfiguration};
 
     use super::*;
@@ -1443,6 +1443,37 @@ mod tests {
     )]
     fn test_ingest_smiles_resolution(#[case] input: &str, #[case] expected: Molecule) {
         assert_eq!(ingest_smiles(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::branched("[C]([CH3])([CH3])([OH])[F]", mol_dsl_concrete!(r#"{:atoms ["C" "C#h3" "C#h3" "O#h1#n2" "F#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
+    #[case::ring("[CH2]1[CH2][O]1", mol_dsl_concrete!(r#"{:atoms ["C#h2" "C#h2" "O#n2"] :bonds [[0 2 "1"] [0 1 "1"] [1 2 "1"]]}"#))]
+    #[case::nitrile("[CH3][C]#[N]", mol_dsl_concrete!(r#"{:atoms ["C#h3" "C" "N#n1"] :bonds [[0 1 "1"] [1 2 "3"]]}"#))]
+    #[case::amide("[CH3][C](=[O])[NH2]", mol_dsl_concrete!(r#"{:atoms ["C#h3" "C" "O#n2" "N#h2#n1"] :bonds [[0 1 "1"] [1 2 "2"] [1 3 "1"]]}"#))]
+    #[case::sulfoxide("[CH3][S](=[O])[CH3]", mol_dsl_concrete!(r#"{:atoms ["C#h3" "S#n1" "O#n2" "C#h3"] :bonds [[0 1 "1"] [1 2 "2"] [1 3 "1"]]}"#))]
+    #[case::zwitterion("[NH3+][CH2][C](=[O])[O-]", mol_dsl_concrete!(r#"{:atoms ["N#c+#h3" "C#h2" "C" "O#n2" "O#c-#n3"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "2"] [2 4 "1"]]}"#))]
+    #[case::components("[NH4+].[Cl-].[13CH3]", mol_dsl_concrete!(r#"{:atoms ["N#c+#h4" "Cl#c-#n4" "C#i13#h3#u1#s2"]}"#))]
+    fn test_ingest_smiles_with_resolution(
+        #[values(ValenceModel::smiles(), ValenceModel::default())] mut valence: ValenceModel,
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
+        tie_break: ValenceTieBreak,
+        #[case] input: &str,
+        #[case] expected: Molecule,
+    ) {
+        valence.tie_break = tie_break;
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        assert_eq!(
+            ingest_smiles_with(
+                input,
+                &SmilesIoConfig::default(),
+                &model,
+                &ResolveConfig::default()
+            ),
+            Ok(expected)
+        );
     }
 
     #[rstest]
