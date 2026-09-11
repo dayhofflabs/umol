@@ -1281,7 +1281,7 @@ The plan below sequences the work; S0–S2 are complete.
 
 ## Staged implementation plan
 
-S0–S2 and S3a are complete; S3b and later subitems are pending.
+S0–S2 and S3a–S3b are complete; S3c and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1408,7 +1408,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   correspondence with existing permutation/coset operations. Verify one-reference swap, both swaps,
   endpoint exchange, and transport through atom/bond remapping with independent expected frames.
   Preserve StereoAtom, Winding, and LonePair; no generic placeholder or extra Either relation.
-- **S3b — Source direction normalization.** Modules: smiles parser builder and existing annotation
+- **S3b — Source direction normalization (completed 2026-09-10).** Modules: smiles parser builder and existing annotation
   processing. **Additive (green).** [dep: S3a]
   Implement the cohesive derivation functions with direct unit tests before switching producers.
   Consume all source markers in endpoint viewpoint, including ring-opening/closing spelling and
@@ -2490,6 +2490,88 @@ SMILES property, SMILES/MOL/SDF conformance, and dependent graph unit/integratio
 Full diff review confirms only the agreed vocabulary, documentation, and contract tests changed;
 the existing atom-stereo types and parser/raise paths are unchanged. S3b source direction
 normalization is next.
+
+## S3b source direction normalization — 2026-09-10
+
+The derivation kernel stays private to the SMILES parser. Its input is a borrowed sequence of
+completed source bonds (ordered AtomPair, order, optional lexical direction) and an atom count;
+its output is StereoBond records in table-bond order. Directions are viewed from AtomPair::first,
+as established by the existing builder's ring reconciliation and bond construction. Input markers
+are not changed. No new persistent table field, public constructor, or public conversion is added.
+
+Temporary incidence lookup belongs to this operation. It selects the minimum actual reference
+at each endpoint, consumes every incident single-bond marker, and checks endpoint agreement before
+deciding whether both endpoints determine a frame. Consistent partial input supplies no assertion.
+Each marker must belong to an eligible local double-bond site; shared markers can participate in
+several sites. Failures retain the responsible atom or bond id in private derivation diagnostics.
+Malformed indices are checked before accessing endpoint neighborhoods. A marked site outside the
+local two-ligand-per-endpoint domain fails explicitly rather than discarding evidence or selecting
+two ligands from a larger set. Marked cumulated axes likewise fail rather than being treated as
+redundant local partial notation. This is frame representability, not chemical valence resolution.
+
+S3b tests the kernel before publication. Parser acceptance, CX updates, and raise remain unchanged;
+S3c handles annotation/geometry derivation and S3d wires producers and maps failures into boundary
+diagnostics. The temporary dead-code expectation is confined to this unconnected parser module
+and is removed when it is wired. Benchmarks use inline examples in scratch to call this private
+kernel without adding a public benchmark-only API.
+
+Implemented against source commit d9950f36e51c36f12013f8489365c0765df8902a in
+smiles/parser/stereo.rs, with separate unit and property modules. The builder's opening-order
+bond slots, ring direction reconciliation, basic/extended conversion, CX application, and existing
+raise functions are unchanged. The kernel borrows transient source triples; it adds no second
+persistent direction authority and does not assign H, lone pairs, coordinates, or molecular states.
+
+The final focused run passes 92 tests. Exact-frame fixtures cover the recorded direction examples
+through both parser targets, complementary references, shared chains/branches/cycles, partial
+trienes, explicit-H markers, and opening/closing/both-end ring spellings. Raw source fixtures check
+opening versus completion order and reversed bond storage, invalid endpoints, self-incidence,
+and conflicting parallel markers. Unsupported marked cumulenes fail explicitly. An independent
+half-plane oracle exhausts all 81 absent/rising/falling assignments on four substituent bonds,
+including contradictory and partial assignments. A generated property checks atom/bond
+renumbering, new minimum references, endpoint reversal, global marker reversal, and partiality
+against physical side assignments.
+
+Validation passed:
+
+```text
+cargo test -p umol-io -p umol-graph
+    --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline
+cargo test -p umol-io --lib smiles::parser::stereo --features proptest --offline
+cargo clippy -p umol-io -p umol-graph --all-targets
+    --features umol-io/proptest,umol-io/conformance,umol-graph/proptest --offline -- -D warnings
+cargo fmt --all -- --check
+git diff --check
+```
+
+The broad gate includes 10,223 SMILES, 2,253 MOL, and 407 SDF conformance cases, the existing
+SMILES properties, and dependent graph unit/integration/property tests. The final focused and
+Clippy runs also include the cumulene checks added during diff review. No existing assertion or
+property law was weakened, and no production acceptance/error-layer change is published here.
+
+The standalone scratch harness borrows the private kernel by source path and contains eight
+inline SMILES examples. Parsing and source-triple adaptation occur outside the timed loop;
+temporary incidence construction, frame derivation, and result destruction are measured.
+These are kernel measurements, not end-to-end parser timings or an optimization gate. Median
+microseconds per call over seven batches of 10,000 calls:
+
+| Example | Time (µs) | Frames |
+| --- | ---: | ---: |
+| chain_64 | 0.0231 | 0 |
+| alkene_four | 0.2472 | 1 |
+| shared_chain | 0.2770 | 2 |
+| partial_triene | 0.3726 | 1 |
+| shared_branch | 0.3562 | 2 |
+| shared_cycle | 0.3357 | 2 |
+| ring_closure | 0.2139 | 1 |
+| redundant | 0.2426 | 1 |
+
+```text
+cargo run --release --manifest-path scratch/s3b-direction-bench/Cargo.toml --offline
+```
+
+Final surface/diff review confirms one private derivation function and its private diagnostic
+enum, without a public helper or changes to the atom-stereo vocabulary. S3c CTfile and annotation
+frame derivation is next; publication and retirement of duplicate fields remain S3d.
 
 ## Staged specification updates
 
