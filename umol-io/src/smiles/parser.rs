@@ -26,6 +26,8 @@ use super::config::{SmilesIoConfig, SmilesSyntaxFlags};
 use super::error::ParseError;
 use crate::table_ir::{ExtendedMolecule, ExtendedReaction, Molecule, Reaction, SourceFormat, Span};
 
+const MAX_INITIAL_TABLE_CAPACITY: usize = 64;
+
 /// Parse a molecular SMILES byte slice into `table_ir::Molecule`.
 pub(crate) fn parse_molecule(
     input: &[u8],
@@ -185,8 +187,12 @@ fn parse_smiles_inner<'a>(
     let extended_bonds = flags.contains(SmilesSyntaxFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
-    let mut builder =
-        MoleculeEditor::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings, mapping);
+    let mut builder = MoleculeEditor::with_capacity(
+        n.min(MAX_INITIAL_TABLE_CAPACITY),
+        n.saturating_sub(1).min(MAX_INITIAL_TABLE_CAPACITY),
+        store_rings,
+        mapping,
+    );
     while i < n {
         let b0 = input[i];
 
@@ -526,8 +532,8 @@ fn parse_extended_smiles_inner<'a>(
     let mut i = 0usize;
     let n = input.len();
     let mut builder = ExtendedMoleculeBuilder::with_capacity(
-        n.max(1),
-        n.max(1).saturating_sub(1),
+        n.min(MAX_INITIAL_TABLE_CAPACITY),
+        n.saturating_sub(1).min(MAX_INITIAL_TABLE_CAPACITY),
         store_rings,
         mapping,
     );

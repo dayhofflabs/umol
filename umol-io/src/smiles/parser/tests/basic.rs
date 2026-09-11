@@ -1222,3 +1222,53 @@ fn test_parse_molecule_direction_error(#[case] input: &[u8], #[case] expected: P
         Err(expected)
     );
 }
+
+#[rstest]
+#[case::organic("C", None, None)]
+#[case::bracketed("[13CH2]", Some(13), Some(2))]
+fn test_parse_molecule_growth(
+    #[case] token: &str,
+    #[case] isotope: Option<u32>,
+    #[case] hydrogens: Option<u8>,
+    #[values(1, 33, 257)] count: usize,
+    #[values(false, true)] annotated: bool,
+) {
+    let mut input = token.repeat(count);
+    let mut expected = Molecule {
+        atoms: (0..count)
+            .map(|i| Atom {
+                isotope_mass: isotope,
+                implicit_hydrogens: hydrogens,
+                ..Atom::aliphatic_atom_with_span(
+                    Element::C,
+                    Span::bytes((i * token.len()) as u32, ((i + 1) * token.len()) as u32),
+                )
+            })
+            .collect(),
+        bonds: (1..count)
+            .map(|i| Bond {
+                span: Some(Span::bytes(
+                    (i * token.len()) as u32,
+                    ((i + 1) * token.len()) as u32,
+                )),
+                ..Bond::new((i - 1) as u32, i as u32, BondOrder::Single)
+            })
+            .collect(),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    };
+    if annotated {
+        let label = "label".repeat(256);
+        input.push_str(&format!(" |${label}$|"));
+        expected.atoms[0].label = Some(label);
+    }
+    let config = SmilesIoConfig::chemaxon();
+    assert_eq!(
+        parse_molecule(input.as_bytes(), &config),
+        Ok(expected.clone())
+    );
+    assert_eq!(
+        parse_extended_smiles_bytes_with(input.as_bytes(), &config),
+        Ok(ExtendedMolecule::from(expected))
+    );
+}

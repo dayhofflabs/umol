@@ -1281,8 +1281,8 @@ The plan below sequences the work; S0–S2 are complete.
 
 ## Staged implementation plan
 
-S0–S2 and S3a–S3c are complete. S3d's functional migration is implemented; its allocation
-closeout requires S3d1–S3d7 below. S3d1–S3d6 are complete; S3d7, S3e, and later subitems are pending.
+S0–S2 and S3a–S3d, including allocation follow-ups S3d1–S3d7, are complete.
+S3e and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1423,7 +1423,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   without inventing reference atoms. Treat adjacent wavy-bond effects under the existing convention;
   wedges remain separate. Verify usable 2D/3D, absent/all-zero/degenerate geometry, explicit Either,
   and supported Cis/Trans annotations with exact frames. No coordinate generation or CTfile output.
-- **S3d — Publish frames and retire duplicate fields (implemented 2026-09-10; allocation closeout pending).** Modules: TableIR Molecule/ExtendedMolecule,
+- **S3d — Publish frames and retire duplicate fields (implemented 2026-09-10; allocation closeout completed 2026-09-11).** Modules: TableIR Molecule/ExtendedMolecule,
   Bond/ExtendedBond, parser targets/conversions, raise, all affected consumers/tests.
   **Breaking (red→green).** [dep: S3a, S3b, S3c]
   Add the stereo_bonds collection consistently to applicable carriers, wire every producer, and
@@ -1491,7 +1491,7 @@ changed public signature against S0a, without sweeping unrelated numeric fields 
   and the localized/dative/noncovalent partition. Verify unsorted frames, duplicate and invalid
   sites, and relation bonds preceding/between framed localized bonds. Allocation scales with the
   frame ordering actually required, not every table bond.
-- **S3d7 — Initial SMILES table capacity.** Modules: both SMILES inner parsers and builder
+- **S3d7 — Initial SMILES table capacity (completed 2026-09-11).** Modules: both SMILES inner parsers and builder
   initialization. **Refactor (green).** [dep: S3d3]
   Retain one-pass parsing and grow atom/bond tables as entries are produced; do not add a
   preliminary counting pass. Initial reservation is a tunable implementation estimate, not a
@@ -3460,6 +3460,116 @@ Raw results/build logs are scratch/s3d6-{before,after}-{allocations,timings}.*;
 the full measurement table is scratch/s3d6-comparison.md. Verification logs use
 scratch/s3d6-{focused-tests,gate,clippy,fmt}.log. The reviewed diff is
 scratch/s3d6-incremental.diff. S3d7 is next.
+
+
+### S3d7 implementation and measurements (2026-09-11)
+
+Both SMILES inner parsers now cap their initial atom and bond reservations at 64 entries.
+For short input, atom reservation remains the byte length and bond reservation remains its
+saturating predecessor. Empty inner-parser input reserves zero. The existing builder receives
+these bounded estimates; normal Vec growth accommodates arbitrarily larger tables. No counting
+pass, grammar change, new configuration, or builder abstraction is introduced.
+
+This bounds over-reservation caused by bracket syntax, CX text, and subsequent reaction sections.
+It does not predict their exact entry counts or eliminate every surplus slot: trailing input can
+still inflate a short section's reservation up to the cap. Geometric growth can also leave more
+spare capacity than the former byte-length reservation on dense input just beyond a growth boundary.
+Those are allocation tradeoffs, not acceptance limits. Public symbols, constructors, conversions,
+visibility, diagnostics, source spans, and stereo semantics are unchanged.
+
+A first measurement with a 32-entry cap reduced sparse-input reservations but introduced growth
+for the 64-atom and 42-atom controls. One adjustment to 64 removes those growth reallocations while
+retaining the major over-reservation reductions. No threshold sweep was performed; 64 is a bounded
+initial policy, not a claim of an optimal or representative molecular size.
+
+The inline scratch/s3d7-parser-bench probe uses the previous method: 64 warmups, eleven batches of
+512 operations, results retained and checked/dropped outside the timed region, and separate normal-
+and counting-allocator builds. Inputs and configuration are prepared outside measurement. It covers
+basic/extended molecules and reactions, 64/256-atom chains, a 64-atom [13CH2] chain, twenty directional
+double bonds, ring/atom stereo, a 1,280-character label on CC or C>>C, and reactions with a 256-atom
+section preceding/following small or empty sections. No fixture files are loaded; tests/builds do
+not run concurrently with timings. These are batch medians, not confidence intervals.
+
+| Case | Calls before → after | Requested bytes before → after | Peak live bytes before → after | Median ns before → after | Change |
+| --- | --- | --- | --- | --- | --- |
+| empty_basic | 0 → 0 | 0 → 0 | 0 → 0 | 23.1 → 23.0 | -0.4% |
+| empty_extended | 0 → 0 | 0 → 0 | 0 → 0 | 26.0 → 25.9 | -0.6% |
+| small_basic | 4 → 4 | 1424 → 1424 | 1184 → 1184 | 244.5 → 250.2 | +2.3% |
+| small_extended | 4 → 4 | 3408 → 3408 | 2832 → 2832 | 288.2 → 301.3 | +4.5% |
+| bare_chain_64_basic | 3 → 3 | 12188 → 12188 | 9428 → 9428 | 995.0 → 1051.9 | +5.7% |
+| bare_chain_64_extended | 3 → 3 | 31512 → 31512 | 24984 → 24984 | 2664.3 → 3335.5 | +25.2% |
+| bare_chain_256_basic | 3 → 7 | 49044 → 77544 | 37844 → 37888 | 5450.2 → 7277.9 | +33.5% |
+| bare_chain_256_extended | 3 → 7 | 126744 → 202208 | 100248 → 100352 | 14258.0 → 15182.5 | +6.5% |
+| brackets_64_basic | 3 → 3 | 85900 → 12272 | 66260 → 9472 | 4257.6 → 1932.5 | -54.6% |
+| brackets_64_extended | 3 → 3 | 221976 → 31712 | 175512 → 25088 | 6277.1 → 3968.3 | -36.8% |
+| directional_42_basic | 50 → 50 | 19152 → 15584 | 15104 → 12336 | 2588.5 → 2670.3 | +3.2% |
+| directional_42_extended | 50 → 50 | 44192 → 35024 | 35296 → 27952 | 4900.6 → 4436.2 | -9.5% |
+| ring_stereo_basic | 15 → 15 | 3836 → 3836 | 3164 → 3164 | 594.4 → 622.2 | +4.7% |
+| ring_stereo_extended | 15 → 15 | 8576 → 8576 | 7008 → 7008 | 708.7 → 714.0 | +0.7% |
+| long_label_basic | 8 → 8 | 252112 → 17392 | 195464 → 14512 | 4150.0 → 2497.9 | -39.8% |
+| long_label_extended | 8 → 8 | 643248 → 36832 | 509440 → 30112 | 4692.1 → 3518.5 | -25.0% |
+| empty_reaction_basic | 4 → 3 | 396 → 292 | 352 → 252 | 238.6 → 261.7 | +9.7% |
+| empty_reaction_extended | 4 → 3 | 1064 → 776 | 960 → 680 | 334.6 → 317.0 | -5.3% |
+| long_product_basic | 6 → 10 | 98652 → 89816 | 76100 → 47344 | 7669.6 → 7117.9 | -7.2% |
+| long_product_extended | 6 → 10 | 254952 → 233920 | 201624 → 125408 | 16525.6 → 17838.5 | +7.9% |
+| long_agent_basic | 7 → 11 | 99320 → 89920 | 76616 → 47424 | 7335.7 → 7751.4 | +5.7% |
+| long_agent_extended | 7 → 11 | 256704 → 234208 | 203040 → 125664 | 16163.3 → 17192.7 | +6.4% |
+| long_reactant_basic | 4 → 8 | 49712 → 77648 | 38360 → 37968 | 5411.3 → 6770.9 | +25.1% |
+| long_reactant_extended | 4 → 8 | 128496 → 202496 | 101664 → 100608 | 13903.7 → 14887.1 | +7.1% |
+| reaction_label_basic | 13 → 13 | 501244 → 31616 | 386016 → 23968 | 4539.6 → 3630.7 | -20.0% |
+| reaction_label_extended | 13 → 13 | 1283816 → 70496 | 1014208 → 55168 | 4940.8 → 5495.2 | +11.2% |
+
+The long-label molecule requests 252,112 → 17,392 bytes in the basic parser and
+643,248 → 36,832 in the extended parser (93–94% lower). Label-heavy reactions request
+501,244 → 31,616 and 1,283,816 → 70,496 bytes, also about 94% lower. Peak added live memory falls
+by a similar proportion. The bracket-heavy chain's requested bytes and peak fall about 86% with
+no extra allocation calls. Uneven reactions with the large section later reduce peaks about 38%.
+
+Conversely, the plain 256-atom chain gains four growth reallocations; requested bytes rise roughly
+58–60% and its measured peak remains nearly unchanged. The large-reactant-first reaction has the
+same growth cost with little peak reduction. These costs are real: bounding the reservation trades
+away the previous exact estimate for dense single-character chains. Small controls and the plain
+64-atom chain retain their allocation metrics. The empty reaction loses one allocation.
+
+One unchanged-code timing confirmation was run after verification. The bracket-heavy chain
+improves 55–57% basic and 37–45% extended across the two after runs; the long-label molecule
+improves 40–48% basic and 25–37% extended. The 256-atom plain chain instead slows 17–34% basic
+and 3–6% extended; the large-reactant-first reaction slows 18–25% basic and about 7% extended.
+The label-heavy extended reaction remains slower by 11–13%, despite its large memory saving.
+The unchanged-allocation 64-atom extended control varies from +25% to +14%, so timing shifts
+cannot be assigned wholly to reallocations. These are observed ranges across two runs, not
+confidence bounds. This closes the bounded measurement round without further tuning.
+
+Assessment against the continuing questions:
+
+- **Does the evidence support the case?** Yes for bounding surplus storage. The savings are large
+  for long labels and bracket-heavy input, and uneven reactions with large later sections retain
+  much less memory. Timing benefits are workload-dependent; larger plain chains gain reallocations
+  and can become slower. The unchanged-code confirmation below retains both improvements and
+  regressions; it does not support a universal speedup.
+- **What remains for downstream improvement?** S3e still owns unnecessary/repeated neighbor
+  construction and the nested neighbor allocations. This stage changes reservations, not those
+  costs. Capacity tuning can be revisited separately; it is not required before S3e.
+- **Should S3d7 be retained?** The bounded reservation is worth retaining for its large reductions
+  in surplus storage, with the dense-input growth cost reported explicitly. It is not a universal
+  speed optimization, and no further threshold tuning is part of this subitem.
+
+Verification passes: 3,909 IO and 1,066 graph unit tests with properties; 10,223 SMILES, 2,253 MOL,
+and 407 SDF conformance cases; remaining integration/property suites; and strict IO/graph Clippy
+for all targets with those features. One existing graph doctest remains ignored. Formatting and
+diff checks pass. The full diff was reviewed against S3d7, including the unchanged builder contract
+and both parser call sites. No later subitem was implemented. Twenty new exact cases compare complete
+basic and extended outputs, including spans and labels, for organic/bracketed chains of 1, 33, and
+257 atoms and uneven reaction sections, with and without long labels. They verify growth without
+pinning Vec capacities. Existing stereo properties, diagnostic tests, and conformance suites are
+unchanged.
+
+Raw results/build logs are scratch/s3d7-{before,after}-{allocations,timings}.*;
+the first candidate uses scratch/s3d7-cap32-* and the final table is scratch/s3d7-comparison.md.
+The unchanged-code confirmation is scratch/s3d7-after-confirmation-timings.csv with its build log;
+its table is scratch/s3d7-confirmation-comparison.md. Verification logs use
+scratch/s3d7-{focused-tests,gate,clippy,fmt}.log. The reviewed diff is scratch/s3d7-incremental.diff.
+S3e is next.
 
 
 ## Staged specification updates
