@@ -6,13 +6,73 @@
 //! these include unnormalized singleton sets and unconstrained variables.
 
 use proptest::prelude::*;
-use umol_graph::ops::resolve::{IsotopePolicy, IsotopeResolver};
+use umol_chem::element::Element;
+use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
+use umol_graph::ops::resolve::{IsotopePolicy, IsotopeResolver, ResolveConfig, Resolver};
+use umol_graph::ops::valence::ResolveReport;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm,
+    AtomForm, AtomId, BondForm, ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm,
+    UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
 proptest! {
+    // Fixed-H carbon chains separate isotope policy from valence selection. Exact
+    // publication/nonpublication and idempotence are checked for every policy/model pair.
+    #[test]
+    fn test_resolver_resolve_isotope(
+        isotopes in prop::collection::vec(prop_oneof![
+            Just(IsotopeMassForm::Undetermined), Just(IsotopeMassForm::Natural),
+            (12u32..15).prop_map(IsotopeMassForm::Lit),
+        ], 1..16),
+    ) {
+        let size = isotopes.len();
+        let omitted = isotopes.contains(&IsotopeMassForm::Undetermined);
+        let source = Molecule::from_entries(MoleculeEntries {
+            atoms: isotopes.into_iter().enumerate().map(|(i, isotope_mass)| AtomForm {
+                element: ElementForm::Lit(Element::C), isotope_mass, charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Lit(4 - i64::from(i > 0) - i64::from(i + 1 < size)),
+                ..Default::default()
+            }).collect(),
+            bonds: (1..size).map(|i| (AtomId((i - 1) as u32), AtomId(i as u32), BondForm {
+                order: NumForm::Lit(1), charge: NumForm::Lit(0),
+                unpaired_electrons: UnpairedElectronsForm::closed_shell(), ..Default::default()
+            })).collect(),
+            ..Default::default()
+        });
+        let mut expected = source.clone();
+        expected.modify_atoms(|atom| AtomForm {
+            isotope_mass: match atom.isotope_mass {
+                IsotopeMassForm::Undetermined => IsotopeMassForm::Natural,
+                value => value,
+            },
+            lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+            ..atom
+        });
+        for valence in [ValenceModel::smiles(), ValenceModel::default()] {
+            for tie_break in [ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated] {
+                let model = ChemistryModel {
+                    valence: ValenceModel { tie_break, ..valence.clone() }, ..Default::default()
+                };
+                for isotope in [IsotopePolicy::Strict, IsotopePolicy::Natural] {
+                    let resolver = Resolver::with_config(&model, ResolveConfig { isotope, ..Default::default() });
+                    let mut molecule = source.clone();
+                    let result = resolver.resolve(&mut molecule).unwrap();
+                    if isotope == IsotopePolicy::Strict && omitted {
+                        prop_assert_eq!(&result, &Solution::Underdetermined(ResolveReport::default()));
+                        prop_assert_eq!(&molecule, &source);
+                    } else {
+                        prop_assert_eq!(&result, &Solution::Determined(ResolveReport::default()));
+                        prop_assert_eq!(&molecule, &expected);
+                    }
+                    let once = molecule.clone();
+                    prop_assert_eq!(resolver.resolve(&mut molecule), Ok(result));
+                    prop_assert_eq!(molecule, once);
+                }
+            }
+        }
+    }
+
     #[test]
     fn test_isotope_resolver_project_roundtrip(
         fields in prop::collection::vec((

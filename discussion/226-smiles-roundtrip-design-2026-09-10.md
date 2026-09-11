@@ -998,9 +998,9 @@ distinct. Custom overlapping registry patterns supplied the motivating reproduct
 variants become inadmissible under the registry invariant; regressions must exercise admissible
 non-isotope overlaps instead, preserving the exact-equality law.
 
-S4a has an uncommitted implementation draft, but is not complete. S4a0a revises its temporary
+S4a has an implementation draft, but is not complete. S4a0a revised its temporary
 default-registry isotope-rejection expectations and its isotope-asserting custom registry fixtures.
-The remaining isotope resolution integration still precedes S4a completion.
+S4a0c completed isotope integration; S4a can now resume against the corrected resolution pipeline.
 
 ### Aromatic reconstruction and the inverse check
 
@@ -1602,18 +1602,17 @@ changes are reviewed for semantic preservation, not accepted solely because test
 
 S4a0 groups three isotope-repair prerequisites. Keep the existing S4a draft unfinished until they
 are complete; the draft's default-registry isotope rejection is not an accepted support boundary.
-S4a0a has its registry implementation; its conformance gate remains pending S4a0b/c. Removing
-registry isotope defaults exposes the dependency on isotope resolution, so S4a0a cannot be an
-independent green milestone as originally planned. Preserve the existing conformance inputs and
-snapshots and run the full gate after integration; do not default isotope in the test harness to
-hide this dependency.
+S4a0a's registry change exposed its dependency on isotope resolution and was not an independent
+green milestone. S4a0c has restored the conformance gate through the isotope phase with Natural
+resolver policy; the test harness does not fill isotope fields, and the corpus inputs and
+snapshots remain unchanged.
 The phase order, Strict/Natural behaviors, Strict as the general default, Natural for SMILES, and
 the registry's isotope-Undetermined invariant are settled. No general DSL conversion change is
 required.
 
 - **S4a0a — Secure the atom-type registry's isotope invariant.** Modules: ops/valence/registry,
   its Rust callers/macros, and umol-py/model/valence.
-  **Breaking (green milestone with S4a0c).** [dep: S0a]
+  **Breaking (green milestone with S4a0c); completed 2026-09-11.** [dep: S0a]
   Require isotope Undetermined in every stored row. Set registry raise's isotope default to
   Required while retaining its other concrete and valence-constraint defaults. Cover from_atoms,
   add, TOML string/file loading, the registry macro, built-in/default construction, and Python
@@ -1643,7 +1642,7 @@ required.
   into the composite pipeline yet.
 - **S4a0c — Integrate isotope resolution and remove valence defaults.** Modules: composite
   resolve/config, valence counts/registry/admission consumers, and umol-py resolve/model bindings.
-  **Breaking/refactor (red→green within subitem).** [dep: S4a0a, S4a0b]
+  **Breaking/refactor (red→green within subitem); completed 2026-09-11.** [dep: S4a0a, S4a0b]
   Run isotope resolution after assertion placement and before valence admission; aromaticity
   remains directly after valence. Expose the independent isotope setting through ResolveConfig
   and its existing Python configuration surface. Keep Strict as the general default and select
@@ -1681,10 +1680,9 @@ has 1,523 passed, two skipped, and four failures in stereo-error expectations fo
 conflicting directional markers. Those parser and Python error paths are unchanged from HEAD;
 their error-layer expectations are separate from the registry work.
 
-The full graph conformance run has 23 passed and 660 snapshot failures after removal of the
-registry's isotope default. The corpus and snapshots remain unchanged; S4a0b/c must supply the
-explicit isotope phase and configure the intended Natural policy for this corpus. This gate is
-pending, so S4a0a is an implementation checkpoint rather than a completed green subitem.
+At the S4a0a checkpoint, the full graph conformance run had 23 passed and 660 snapshot failures
+after removal of the registry's isotope default. The corpus and snapshots remained unchanged;
+the gate awaited the explicit isotope phase and Natural resolver policy in S4a0c.
 
 S4a0b completion (2026-09-11): ops::resolve::isotope defines IsotopePolicy and IsotopeResolver,
 with new(policy), Default (Strict), plan, resolve, and project. IsotopeContradiction is empty;
@@ -1704,8 +1702,57 @@ stale-plan transaction rollback, partial-result nonpublication, and projection f
 1,237 graph library tests and all nine graph properties pass (256 cases per property); the two new
 properties cover exact projection/recovery under both policies and resolution idempotence with
 plan/application agreement. Graph all-target clippy with conformance and proptest enabled passes
-with warnings denied; formatting and diff checks pass. S4a0c remains next, including the pending
-full conformance gate.
+with warnings denied; formatting and diff checks pass.
+
+S4a0c completion (2026-09-11): ResolveConfig.isotope and Resolver.isotope integrate the standalone
+phase before valence admission. Placement edits affect assertions only, so its editor also applies
+the isotope plan against the unchanged inherent fields; no extra molecule clone is introduced.
+Both determined and underdetermined isotope plans continue through the remaining phases. The final
+completeness check and atomic publication remain intact. ResolveError::Isotope reports edit
+application failure. Counts admission no longer supplies Natural, and both candidate sources
+preserve unresolved isotope forms while determining valence fields. The completion documentation
+now explicitly distinguishes phase-owned fields from still-unresolved fields.
+
+The Python surface includes IsotopePolicy and ResolveConfig's isotope keyword, getter, equality,
+and representation. General defaults remain Strict; Rust string/byte and Python molecule/reaction
+SMILES convenience entry points select Natural when configuration is omitted. Explicit configs
+remain authoritative. TableIR raise already supplies Natural for an omitted SMILES isotope, so
+Strict preserves that format-owned value too; it does not undo input interpretation. The isotope
+composition correction is applied to the SMILES specification. No general DSL defaults or
+conversions changed.
+
+Verification: the combined graph-IR/IO/graph/Python Rust gate passes, including 1,295 graph,
+6,816 graph-IR, 3,916 IO, and 1,646 binding unit tests. All 683 resolution conformance cases pass
+with unchanged snapshots; all ten graph properties pass with 256 cases each. New cases cover
+both isotope policies, both valence sources and tie-breaks, exact isotope preservation, partial
+nonpublication, and reaching stereo contradictions despite unresolved isotopes. The composite
+property checks exact results and idempotence across those configurations. Graph/Python all-target
+clippy passes with warnings denied. The rebuilt Python 3.13 suite has 1,541 passed, two skipped,
+and the same four previously recorded stereo-error expectation failures; those expectations and
+parser/error paths are unchanged by S4a0c.
+
+The bounded Criterion comparison against 24d9b51a8 uses the existing inline cases, ten samples,
+0.5 s warm-up and 1 s measurement per case. All seven ingest and sixteen isolated resolve
+measurements completed before and after integration. Ingest point estimates increased 0.5–4.1%; isolated resolve changes
+ranged from −1.5% to +6.1%. These results cover SMILES-raised inputs, whose isotope fields are
+already Natural or explicit; no tuning campaign was undertaken. Selected point estimates in
+microseconds:
+
+| Case | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Ingest methane | 3.291 | 3.425 | +4.1% |
+| Ingest octane | 15.226 | 15.295 | +0.5% |
+| Ingest benzene | 22.328 | 22.685 | +1.6% |
+| Ingest purine | 59.263 | 59.583 | +0.5% |
+| Resolve chain of 64 carbons | 98.781 | 100.970 | +2.2% |
+| Resolve branched molecule | 11.344 | 12.036 | +6.1% |
+| Resolve shared-marker cycle | 33.340 | 33.500 | +0.5% |
+
+Both timing processes subsequently encountered the existing atom-typing projection benchmark's
+unresolved-source setup assertion. Its setup now obtains a resolved source through ingest_smiles
+before either candidate-source projection; preparation remains outside timing. The complete
+benchmark target passes in Criterion test mode. Logs and the full comparison are in
+scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.csv.
 
 - **S4a — Ordinary valence reconstruction.** Modules: resolve/valence.rs and valence
   atom_typing/counts/registry as needed. **Additive (green).** [dep: S0a, S0b, S4a0c]
@@ -3831,14 +3878,14 @@ scratch/s3e-incremental.diff. S3 is complete; S4a is next.
 This is the separate staging list for changes to `umol-io/spec/opensmiles-spec.md`.
 It records specification content, not implementation tasks or roundtrip guarantees.
 The specification defines interpretation and equivalence; the roundtrip design consumes
-that equivalence relation. The specification itself has not yet been edited.
+that equivalence relation. The isotope correction below is applied; the remaining changes are staged.
 
 ### Isotope composition
 
-- Correct the Numeric and Bracket Fields and Organic Subset sections: an omitted isotope
-  specification denotes naturally occurring isotopic composition, not an undetermined isotope
-  composition. Natural composition does not select one mass number. This follows OpenSMILES
-  section 3.1.4 and is implemented with the isotope repair in S4a0c.
+- Applied in S4a0c (2026-09-11) to the Numeric and Bracket Fields and Organic Subset sections:
+  an omitted isotope specification denotes naturally occurring isotopic composition, not an
+  undetermined isotope composition. Natural composition does not select one mass number. This follows OpenSMILES
+  section 3.1.4.
 
 ### Implicit hydrogen section
 

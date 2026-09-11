@@ -44,6 +44,7 @@ impl<'a> AtomTypingValence<'a> {
     /// Admission: determine candidate sets for each atom under resolution,
     /// Underdetermined if any atom is non-literal, empty if no atoms are admitted.
     /// Exactly equal post-meet forms occur once, in first-occurrence order.
+    /// Registry patterns leave isotope information unchanged, including unresolved forms.
     pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, AtomTypingError> {
         for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {

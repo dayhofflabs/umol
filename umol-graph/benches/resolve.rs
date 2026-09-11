@@ -13,7 +13,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use umol_graph::ingest::ingest_smiles;
 use umol_graph::ops::model::{ChemistryModel, ValenceModel};
-use umol_graph::ops::resolve::Resolver;
+use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
 use umol_graph_ir::ir::{Molecule, TryIntoIr};
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
@@ -43,7 +43,13 @@ fn bench_resolve(c: &mut Criterion) {
         valence: ValenceModel::smiles(),
         ..ChemistryModel::default()
     };
-    let resolver = Resolver::new(&model);
+    let resolver = Resolver::with_config(
+        &model,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
+    );
     let mut group = c.benchmark_group("smiles_roundtrip/resolve");
     for (name, input) in [
         (
@@ -96,7 +102,13 @@ fn bench_valence_project(c: &mut Criterion) {
             valence,
             ..Default::default()
         };
-        let resolver = Resolver::new(&model);
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                isotope: IsotopePolicy::Natural,
+                ..Default::default()
+            },
+        );
         let mut group = c.benchmark_group(format!("smiles_roundtrip/valence_project/{label}"));
         for (name, input) in [
             ("methane", "C"),
@@ -107,8 +119,7 @@ fn bench_valence_project(c: &mut Criterion) {
             ("methyl", "[CH3]"),
             ("ammonium", "[NH4+]"),
         ] {
-            let table = Smiles::parse(input).unwrap().into_table_ir();
-            let mut source: Molecule = (&table).try_into_ir(&()).unwrap();
+            let mut source = ingest_smiles(input).unwrap();
             assert!(matches!(
                 resolver.resolve(&mut source).unwrap(),
                 Solution::Determined(_)

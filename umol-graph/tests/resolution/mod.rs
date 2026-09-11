@@ -14,7 +14,7 @@ use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ops::model::{
     AromaticityModel, ChemistryModel, StereoModel, ValenceModel, ValenceTieBreak,
 };
-use umol_graph::ops::resolve::Resolver;
+use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
 use umol_graph::ops::valence::{ResolveReport, ValenceTable};
 use umol_graph::ops::validate::ConnectivityModel;
 use umol_graph_ir::dsl::{AtomDefaults, AtomDsl, MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
@@ -68,7 +68,15 @@ fn resolve_test(
     defaults: &MoleculeDefaults,
 ) -> ResolveResult {
     let mut molecule = raise(input, defaults);
-    match Resolver::new(chemistry).resolve(&mut molecule) {
+    match Resolver::with_config(
+        chemistry,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
+    )
+    .resolve(&mut molecule)
+    {
         Ok(Solution::Determined(report)) => ResolveResult {
             success: true,
             output: Some(lower(&molecule)),

@@ -32,6 +32,7 @@ from umol import (
     MaximumIndependentSetAlgorithm,
     MetadataError,
     ModelConversionError,
+    IsotopePolicy,
     Molecule,
     MoleculeCompaction,
     MoleculeConstraint,
@@ -584,7 +585,14 @@ def _counts_strict_model():
 def test_molecule_resolve():
     molecule = Molecule.parse('{:atoms ["C#c0"]}')
 
-    solution = molecule.resolve(chemistry_model=_smiles_valence_model())
+    solution = molecule.resolve(
+        chemistry_model=_smiles_valence_model(),
+        resolve_config=ResolveConfig(
+            isotope=IsotopePolicy.Natural,
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(),
+        ),
+    )
 
     assert isinstance(solution, Solution.Determined)
     assert solution.molecule == Molecule.parse(

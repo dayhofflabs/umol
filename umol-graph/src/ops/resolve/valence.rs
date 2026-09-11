@@ -285,7 +285,7 @@ mod tests {
     #[rstest]
     #[case::counts(
         ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
-        atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#a!"),
+        atom_dsl!("C#c0#h4#n0#u0#s#v0#a!"),
     )]
     #[case::atom_typing(
         ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(

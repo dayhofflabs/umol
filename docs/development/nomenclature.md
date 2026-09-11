@@ -377,19 +377,20 @@ remapping, which gives every source id an image and never expresses removal.
 
 ### Completion
 
-A **completion** is one admissible ground assignment for an entity's underdetermined attributes,
-produced by a resolution phase from the chemistry model. It is represented by the entity's form in
-its ground state — completion is a role a ground `AtomForm` plays, as pattern is a role a
-`Molecule` plays — never by a dedicated primitive-valued type, which would reintroduce the retired
-ground/pattern type split. The disjunction of completions for one atom is extensional, a vector of
-forms; a single non-ground form would denote the Cartesian product of its fields and lose the
-coupling between them. A phase emits the set of completions that survive narrowing; a later phase
-selects among them, and an underdetermined verdict reports the survivors.
+A **completion** is one admissible assignment for the attributes owned by a resolution phase,
+produced from the chemistry model. Other fields are preserved and may remain unresolved: a valence
+completion does not determine isotope composition. It is represented by the entity's form —
+completion is a role an `AtomForm` plays, as pattern is a role a `Molecule` plays — never by a
+dedicated primitive-valued type, which would reintroduce the retired ground/pattern type split.
+The disjunction of completions for one atom is extensional, a vector of
+forms; collapsing distinct completions into one form can introduce a Cartesian product of
+field values and lose the coupling between them. A phase emits the set of completions that survive
+narrowing; a later phase selects among them, and an underdetermined verdict reports the survivors.
 
 **Not:** a stored assertion — completions live in solver state and are never written to the
 constraint channel; not the resolution result, which is the committed outcome; not a struct of
 primitive fields.
-**In code:** ground `AtomForm` members of `AtomCompletions`, the keyed carrier.
+**In code:** `AtomForm` members of `AtomCompletions`, the keyed carrier.
 
 ### Concrete
 

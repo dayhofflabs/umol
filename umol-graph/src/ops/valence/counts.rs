@@ -13,8 +13,8 @@ use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm,
-    AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId, IsotopeMassForm, Lattice, Molecule,
-    NumForm, UnpairedElectronsForm,
+    AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId, Lattice, Molecule, NumForm,
+    UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -85,6 +85,7 @@ impl<'a> CountsValence<'a> {
     /// the counts enumeration per atom — and no edits are produced. A
     /// non-literal element makes the whole admission underdetermined and
     /// empty; plurality is state, not a solution.
+    /// Isotope information is preserved without defaulting or selection.
     pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, CountsError> {
         for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {
@@ -160,12 +161,7 @@ impl<'a> CountsValence<'a> {
             return Ok(None);
         }
         let input = CountsInput::for_molecule_atom(molecule, atom_id);
-        let mut candidates = self.candidate_states(atom.attributes, input)?;
-        for candidate in &mut candidates {
-            if candidate.isotope_mass.is_undetermined() {
-                candidate.isotope_mass = IsotopeMassForm::Natural;
-            }
-        }
+        let candidates = self.candidate_states(atom.attributes, input)?;
         Ok(Some(candidates))
     }
 
@@ -452,7 +448,7 @@ fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsForm, count: i64) -
 mod tests {
     use rstest::rstest;
     use smallvec::smallvec;
-    use umol_graph_ir::ir::AromaticSystemForm;
+    use umol_graph_ir::ir::{AromaticSystemForm, IsotopeMassForm};
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
@@ -515,7 +511,7 @@ mod tests {
             let mut completions = AtomCompletions::new();
             completions.insert(
                 AtomId(0),
-                smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#a!")],
+                smallvec![atom_dsl!("C#c0#h4#n0#u0#s#v0#a!")],
             );
             completions
         })
@@ -527,11 +523,11 @@ mod tests {
             completions.insert(
                 AtomId(0),
                 smallvec![
-                    atom_dsl!("C#i=#c0#h0#n2#u0#s#v0#a!"),
-                    atom_dsl!("C#i=#c0#h#n#u#s2#v0#a!"),
-                    atom_dsl!("C#i=#c0#h2#n#u0#s#v0#a!"),
-                    atom_dsl!("C#i=#c0#h3#n0#u#s2#v0#a!"),
-                    atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#a!"),
+                    atom_dsl!("C#c0#h0#n2#u0#s#v0#a!"),
+                    atom_dsl!("C#c0#h#n#u#s2#v0#a!"),
+                    atom_dsl!("C#c0#h2#n#u0#s#v0#a!"),
+                    atom_dsl!("C#c0#h3#n0#u#s2#v0#a!"),
+                    atom_dsl!("C#c0#h4#n0#u0#s#v0#a!"),
                 ],
             );
             completions
@@ -543,12 +539,12 @@ mod tests {
             let mut completions = AtomCompletions::new();
             completions.insert(
                 AtomId(0),
-                smallvec![atom_dsl!("O#i=#c0#h0#n2#u0#s#v2#a!")],
+                smallvec![atom_dsl!("O#c0#h0#n2#u0#s#v2#a!")],
             );
             for atom in 1..3 {
                 completions.insert(
                     AtomId(atom),
-                    smallvec![atom_dsl!("H#i=#c0#h0#n0#u0#s#v#a!")],
+                    smallvec![atom_dsl!("H#c0#h0#n0#u0#s#v#a!")],
                 );
             }
             completions
@@ -559,10 +555,10 @@ mod tests {
         Solution::Determined({
             let mut completions = AtomCompletions::new();
             let disjuncts: SmallVec<[AtomForm; 1]> = smallvec![
-                atom_dsl!("C#i=#c0#h0#n#u#s2#v#a!"),
-                atom_dsl!("C#i=#c0#h#n#u0#s#v#a!"),
-                atom_dsl!("C#i=#c0#h2#n0#u#s2#v#a!"),
-                atom_dsl!("C#i=#c0#h3#n0#u0#s#v#a!"),
+                atom_dsl!("C#c0#h0#n#u#s2#v#a!"),
+                atom_dsl!("C#c0#h#n#u0#s#v#a!"),
+                atom_dsl!("C#c0#h2#n0#u#s2#v#a!"),
+                atom_dsl!("C#c0#h3#n0#u0#s#v#a!"),
             ];
             completions.insert(AtomId(0), disjuncts.clone());
             completions.insert(AtomId(1), disjuncts);
@@ -575,6 +571,32 @@ mod tests {
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(resolver.admit(&molecule), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(IsotopeMassForm::Undetermined)]
+    #[case::natural(IsotopeMassForm::Natural)]
+    #[case::mass(IsotopeMassForm::Lit(13))]
+    #[case::set(IsotopeMassForm::lit_set([12, 13]))]
+    #[case::variable(IsotopeMassForm::var("mass"))]
+    fn test_counts_valence_admit_isotope(#[case] isotope: IsotopeMassForm) {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm {
+                isotope_mass: isotope.clone(),
+                ..atom_dsl!("C#c0#h4")
+            }],
+            ..Default::default()
+        });
+        assert_eq!(
+            CountsValence::new(ValenceTable::default_table()).admit(&molecule),
+            Solution::Determined(AtomCompletions::from_iter([(
+                AtomId(0),
+                smallvec![AtomForm {
+                    isotope_mass: isotope,
+                    ..atom_dsl!("C#c0#h4#n0#u0#s#v0#a!")
+                }]
+            )]))
+        );
     }
 
     #[rustfmt::skip]

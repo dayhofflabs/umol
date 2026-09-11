@@ -185,7 +185,7 @@ Parentheses introduce a branch attached at the current node. Inside a branch, do
 
 ### Numeric and Bracket Fields
 
-In a bracket atom, the isotope field is a non-negative decimal integer; zero is permitted and SHALL NOT alter the element identity. The parser SHALL NOT validate chemical plausibility of isotopes. If the isotope field is absent, the isotope composition SHALL be considered undetermined (no specific isotope is implied).
+In a bracket atom, the isotope field is a non-negative decimal integer; zero is permitted and SHALL NOT alter the element identity. The parser SHALL NOT validate chemical plausibility of isotopes. If the isotope field is absent, the atom SHALL have naturally occurring isotopic composition. Natural composition does not select a single mass number.
 
 **Deviation from OpenSMILES:** The chiral, hydrogen-count, charge, and class fields MAY appear in any order, at most once each. The OpenSMILES specification mandates a fixed field order; this specification relaxes that constraint.
 
@@ -201,7 +201,7 @@ The class field consists of ':' followed by a non-negative integer; leading zero
 
 Only atoms B, C, N, O, P, S, F, Cl, Br, and I MAY appear without brackets. For these atoms:
 
-- Isotope composition SHALL be considered undetermined (no specific isotope is implied).
+- Isotope composition SHALL be naturally occurring; no single mass number is selected.
 - Charge SHALL default to 0.
 - No chiral specification SHALL be assumed.
 - No class SHALL be assigned.

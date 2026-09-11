@@ -10,7 +10,9 @@ use umol_graph::ingest::ingest_reaction_smiles_with;
 use umol_graph::ops::model::{
     ChemistryModel as GraphChemistryModel, ValenceModel as GraphValenceModel,
 };
-use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
+use umol_graph::ops::resolve::{
+    IsotopePolicy as GraphIsotopePolicy, ResolveConfig as GraphResolveConfig,
+};
 use umol_graph_core::CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm;
 #[cfg(test)]
 use umol_graph_core::{
@@ -326,6 +328,8 @@ impl Reaction {
 
     /// Ingest a determined reaction from reaction SMILES under explicit IO,
     /// chemistry, and resolution policies.
+    /// Omitted options select OpenSMILES, SMILES valence, and Natural isotope policy.
+    /// An explicitly supplied resolve_config is preserved.
     #[staticmethod]
     #[pyo3(signature = (
         source,
@@ -350,8 +354,13 @@ impl Reaction {
             },
             |model| model.to_rust(),
         );
-        let resolve_config =
-            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        let resolve_config = resolve_config.map_or_else(
+            || GraphResolveConfig {
+                isotope: GraphIsotopePolicy::Natural,
+                ..Default::default()
+            },
+            ResolveConfig::to_rust,
+        );
         let reaction =
             ingest_reaction_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
                 .map_err(reaction_smiles_input_error)?;

@@ -13,7 +13,8 @@ use umol_utils::solution::Solution;
 
 use crate::ops::model::{ChemistryModel, ValenceModel};
 use crate::ops::resolve::{
-    ResolveConfig, ResolveContradiction, ResolveError, ResolveUnderdetermined, Resolver,
+    IsotopePolicy, ResolveConfig, ResolveContradiction, ResolveError, ResolveUnderdetermined,
+    Resolver,
 };
 
 /// Convert a parsed external-format value into a graph model.
@@ -22,6 +23,9 @@ pub trait Interpret {
     type Error;
 
     /// Interpret this format value under the semantic model and resolve policy.
+    ///
+    /// Format-owned values survive resolution: SMILES with an omitted isotope
+    /// raises to Natural composition, which Strict also preserves.
     fn interpret(
         &self,
         model: &ChemistryModel,
@@ -189,13 +193,13 @@ impl Interpret for ReactionSmiles {
 }
 
 /// Ingest SMILES text with the OpenSMILES configuration and the SMILES
-/// valence preset — the reader carries its format's convention.
+/// valence preset and Natural isotope policy.
 pub fn ingest_smiles(input: &str) -> Result<Molecule, SmilesInputError> {
     ingest_smiles_bytes(input.as_bytes())
 }
 
 /// Ingest SMILES bytes with the OpenSMILES configuration and the SMILES
-/// valence preset — the reader carries its format's convention.
+/// valence preset and Natural isotope policy.
 pub fn ingest_smiles_bytes(input: &[u8]) -> Result<Molecule, SmilesInputError> {
     ingest_smiles_bytes_with(
         input,
@@ -204,7 +208,10 @@ pub fn ingest_smiles_bytes(input: &[u8]) -> Result<Molecule, SmilesInputError> {
             valence: ValenceModel::smiles(),
             ..ChemistryModel::default()
         },
-        &ResolveConfig::default(),
+        &ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
     )
 }
 
@@ -232,13 +239,13 @@ pub fn ingest_smiles_bytes_with(
 }
 
 /// Ingest reaction SMILES text with the OpenSMILES configuration and the
-/// SMILES valence preset — the reader carries its format's convention.
+/// SMILES valence preset and Natural isotope policy.
 pub fn ingest_reaction_smiles(input: &str) -> Result<Reaction, ReactionSmilesInputError> {
     ingest_reaction_smiles_bytes(input.as_bytes())
 }
 
 /// Ingest reaction SMILES bytes with the OpenSMILES configuration and the
-/// SMILES valence preset — the reader carries its format's convention.
+/// SMILES valence preset and Natural isotope policy.
 pub fn ingest_reaction_smiles_bytes(input: &[u8]) -> Result<Reaction, ReactionSmilesInputError> {
     ingest_reaction_smiles_bytes_with(
         input,
@@ -247,7 +254,10 @@ pub fn ingest_reaction_smiles_bytes(input: &[u8]) -> Result<Reaction, ReactionSm
             valence: ValenceModel::smiles(),
             ..ChemistryModel::default()
         },
-        &ResolveConfig::default(),
+        &ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
     )
 }
 
@@ -286,8 +296,8 @@ mod tests {
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceForm, AtomForm, AtomId, BondConstraintForm, BondId,
         BooleanForm, Canonicalize, CanonicalizeContext, Constraint, Deltas, ElectronCountsForm,
-        Entity, MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm, StereoCoset,
-        StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
+        Entity, MoleculeEntries, MoleculeIntegrityError, NumForm, StereoAtomId, StereoBondForm,
+        StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
     use umol_io::table_ir::{AtomPair, BondConfiguration};
@@ -553,6 +563,44 @@ mod tests {
     }
 
     #[rstest]
+    #[case::omitted("[CH4]", mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))]
+    #[case::mass("[13CH4]", mol_dsl!(r#"{:atoms ["C#i13#c0#h4#n0#u0#s"]}"#))]
+    fn test_smiles_interpret_isotope(
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
+        #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
+        #[case] source: &str,
+        #[case] molecule: Molecule,
+    ) {
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let config = ResolveConfig {
+            isotope,
+            ..Default::default()
+        };
+        let expected: Result<_, MoleculeInterpretationError> = Ok(molecule);
+        assert_eq!(
+            Smiles::parse(source).unwrap().interpret(&model, &config),
+            expected
+        );
+        let expected = expected.map_err(SmilesInputError::from);
+        assert_eq!(
+            ingest_smiles_with(source, &SmilesIoConfig::opensmiles(), &model, &config),
+            expected
+        );
+        assert_eq!(
+            ingest_smiles_bytes_with(
+                source.as_bytes(),
+                &SmilesIoConfig::opensmiles(),
+                &model,
+                &config
+            ),
+            expected
+        );
+    }
+
+    #[rstest]
     #[case::wildcard("*", ChemistryModel::default(), ResolveConfig::default())]
     fn test_smiles_interpret_error(
         #[case] input: &str,
@@ -612,6 +660,51 @@ mod tests {
         assert_eq!(
             reaction.interpret(&model, &ResolveConfig::default()),
             Ok(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::omitted("[CH4:1]>>[CH4:1]", "C#i=#c0#h4#n0#u0#s")]
+    #[case::mass("[13CH4:1]>>[13CH4:1]", "C#i13#c0#h4#n0#u0#s")]
+    fn test_reaction_smiles_interpret_isotope(
+        #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
+        #[case] source: &str,
+        #[case] atom: &str,
+    ) {
+        let model = ChemistryModel {
+            valence: ValenceModel::smiles(),
+            ..Default::default()
+        };
+        let config = ResolveConfig {
+            isotope,
+            ..Default::default()
+        };
+        let expected: Result<_, ReactionInterpretationError> = Ok(Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![atom.parse().unwrap()],
+                ..Default::default()
+            }),
+            Deltas::default(),
+        ));
+        assert_eq!(
+            ReactionSmiles::parse(source)
+                .unwrap()
+                .interpret(&model, &config),
+            expected
+        );
+        let expected = expected.map_err(ReactionSmilesInputError::from);
+        assert_eq!(
+            ingest_reaction_smiles_with(source, &SmilesIoConfig::opensmiles(), &model, &config),
+            expected
+        );
+        assert_eq!(
+            ingest_reaction_smiles_bytes_with(
+                source.as_bytes(),
+                &SmilesIoConfig::opensmiles(),
+                &model,
+                &config
+            ),
+            expected
         );
     }
 
@@ -1063,6 +1156,7 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig {
+            isotope: IsotopePolicy::Strict,
             aromaticity: AromaticityResolveConfig {
                 reset_aromatic_valence: true,
                 ..AromaticityResolveConfig::default()
@@ -1530,6 +1624,7 @@ mod tests {
             &SmilesIoConfig::opensmiles(),
             &model,
             &ResolveConfig {
+                isotope: IsotopePolicy::Strict,
                 aromaticity: AromaticityResolveConfig {
                     aromatic_valence_failure: AromaticityFailurePolicy::Keep,
                     ..AromaticityResolveConfig::default()
@@ -1584,6 +1679,7 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig {
+            isotope: IsotopePolicy::Strict,
             aromaticity: AromaticityResolveConfig::default(),
             stereo: StereoResolveConfig {
                 reset_stereo_constraints: true,
@@ -1998,6 +2094,7 @@ mod tests {
             &SmilesIoConfig::opensmiles(),
             &model,
             &ResolveConfig {
+                isotope: IsotopePolicy::Strict,
                 aromaticity: AromaticityResolveConfig {
                     aromatic_valence_failure: AromaticityFailurePolicy::Keep,
                     ..AromaticityResolveConfig::default()

@@ -168,6 +168,7 @@ mod tests {
         CtfileIoConfig::basic(),
         ChemistryModel::default(),
         ResolveConfig {
+            isotope: Default::default(),
             aromaticity: AromaticityResolveConfig {
                 reset_aromatic_valence: true,
                 ..AromaticityResolveConfig::default()

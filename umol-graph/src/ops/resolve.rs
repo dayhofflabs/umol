@@ -1,4 +1,4 @@
-//! Composite resolver: chains the per-entity resolvers (valence,
+//! Composite resolver: chains the per-entity resolvers (isotope, valence,
 //! aromaticity, stereo, bonds, multicenter bonds) on a single `Molecule`.
 //!
 //! `Determined` requires every entity (atoms, bonds, dative bonds, aromatic
@@ -55,8 +55,11 @@ use crate::ops::validate::{
     ConstraintValidateConfig, DerivedKind,
 };
 
+/// Operational policies for resolution; unspecified isotope composition remains unresolved by default.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ResolveConfig {
+    /// Completion of unspecified isotope composition; Strict by default.
+    pub isotope: IsotopePolicy,
     pub aromaticity: AromaticityResolveConfig,
     pub stereo: StereoResolveConfig,
 }
@@ -90,6 +93,7 @@ impl ResolveState {
 
 #[derive(Clone, Debug)]
 pub struct Resolver<'a> {
+    pub isotope: IsotopeResolver,
     pub valence: ValenceResolver<'a>,
     pub aromaticity: AromaticityResolver,
     pub stereo: StereoResolver,
@@ -139,6 +143,8 @@ pub enum DischargeContradiction {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ResolveError {
+    #[error("isotope commit failed: {0}")]
+    Isotope(TransactionError),
     #[error(transparent)]
     Valence(#[from] ValenceError),
     #[error(transparent)]
@@ -193,6 +199,7 @@ impl<'a> Resolver<'a> {
 
     pub fn with_config(model: &'a ChemistryModel, config: ResolveConfig) -> Self {
         Self {
+            isotope: IsotopeResolver::new(config.isotope),
             valence: ValenceResolver::new(&model.valence),
             aromaticity: AromaticityResolver::with_config(&model.aromaticity, config.aromaticity),
             stereo: StereoResolver::with_config(&model.stereo, config.stereo),
@@ -203,6 +210,10 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Resolves isotope composition before valence and aromaticity, then stereo and bonds.
+    ///
+    /// An unresolved isotope does not stop later phases. Only a completely determined
+    /// result replaces the caller's molecule; every other outcome preserves it exactly.
     pub fn resolve(
         &self,
         molecule: &mut Molecule,
@@ -219,6 +230,12 @@ impl<'a> Resolver<'a> {
             .edit()
             .apply(placement)
             .map_err(ResolveError::Placement)?;
+        // Placement changes assertions only, so the isotope fields still match this plan.
+        let isotope_edits = match self.isotope.plan(molecule) {
+            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
+            Solution::Contradictory(contradiction) => match contradiction {},
+        };
+        let editor = editor.apply(isotope_edits).map_err(ResolveError::Isotope)?;
         let placed = editor.build();
         let editor = placed.edit();
 
@@ -1039,6 +1056,7 @@ mod tests {
         assert_eq!(
             ResolveConfig::default(),
             ResolveConfig {
+                isotope: IsotopePolicy::Strict,
                 aromaticity: AromaticityResolveConfig {
                     reset_aromatic_valence: false,
                     ..AromaticityResolveConfig::default()
@@ -1072,6 +1090,7 @@ mod tests {
 
     #[rstest]
     #[case::reset_aromatic_valence(ResolveConfig {
+        isotope: IsotopePolicy::Strict,
         aromaticity: AromaticityResolveConfig {
             reset_aromatic_valence: true,
             ..AromaticityResolveConfig::default()
@@ -1079,6 +1098,7 @@ mod tests {
         stereo: StereoResolveConfig::default(),
     })]
     #[case::reset_stereo_constraints(ResolveConfig {
+        isotope: IsotopePolicy::Strict,
         aromaticity: AromaticityResolveConfig::default(),
         stereo: StereoResolveConfig {
             reset_stereo_constraints: true,
@@ -1210,10 +1230,114 @@ mod tests {
         #[case] expected: Molecule,
     ) {
         assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Resolver::with_config(
+                &chemistry_model,
+                ResolveConfig {
+                    isotope: IsotopePolicy::Natural,
+                    ..Default::default()
+                }
+            )
+            .resolve(&mut molecule),
             Ok(Solution::Determined(ResolveReport::default()))
         );
         assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::omitted(mol_dsl!(r#"{:atoms ["C#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#), true)]
+    #[case::natural(mol_dsl!(r#"{:atoms ["C#i=#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#), false)]
+    #[case::mass(mol_dsl!(r#"{:atoms ["C#i13#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i13#c0#h4#n0#u0#s"]}"#), false)]
+    fn test_resolver_resolve_isotope(
+        #[values(ValenceModel::smiles(), ValenceModel::default())] mut valence: ValenceModel,
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
+        tie_break: ValenceTieBreak,
+        #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
+        #[case] omitted: bool,
+    ) {
+        valence.tie_break = tie_break;
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                isotope,
+                ..Default::default()
+            },
+        );
+        let original = molecule.clone();
+        let actual = resolver.resolve(&mut molecule);
+        if omitted && isotope == IsotopePolicy::Strict {
+            assert_eq!(
+                actual,
+                Ok(Solution::Underdetermined(ResolveReport::default()))
+            );
+            assert_eq!(molecule, original);
+        } else {
+            assert_eq!(actual, Ok(Solution::Determined(ResolveReport::default())));
+            assert_eq!(molecule, expected);
+        }
+    }
+
+    #[rstest]
+    #[case::set(mol_dsl!(r#"{:atoms ["C#c0#h4" "C#i{12,13}#c0#h4"]}"#))]
+    #[case::variable(mol_dsl!(r#"{:atoms ["C#c0#h4" "C#i?mass#c0#h4"]}"#))]
+    fn test_resolver_resolve_isotope_partial(
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
+        #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
+        #[case] mut molecule: Molecule,
+    ) {
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let original = molecule.clone();
+        assert_eq!(
+            Resolver::with_config(
+                &model,
+                ResolveConfig {
+                    isotope,
+                    ..Default::default()
+                }
+            )
+            .resolve(&mut molecule),
+            Ok(Solution::Underdetermined(ResolveReport::default()))
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::undetermined(mol_dsl!(r#"{:atoms ["C#c0#h4#T1"]}"#))]
+    #[case::variable(mol_dsl!(r#"{:atoms ["C#i?mass#c0#h4#T1"]}"#))]
+    fn test_resolver_resolve_isotope_stereo(
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
+        #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
+        #[case] mut molecule: Molecule,
+    ) {
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let original = molecule.clone();
+        assert_eq!(
+            Resolver::with_config(
+                &model,
+                ResolveConfig {
+                    isotope,
+                    ..Default::default()
+                }
+            )
+            .resolve(&mut molecule),
+            Ok(Solution::Contradictory(ResolveContradiction::Stereo(
+                StereoContradiction::Inconsistency(StereoInconsistency::TetrahedralStereoFailure {
+                    atom: AtomId(0)
+                })
+            )))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
@@ -1232,7 +1356,14 @@ mod tests {
             .expect("the test constraint references the molecule");
 
         assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Resolver::with_config(
+                &chemistry_model,
+                ResolveConfig {
+                    isotope: IsotopePolicy::Natural,
+                    ..Default::default()
+                }
+            )
+            .resolve(&mut molecule),
             Ok(Solution::Determined(ResolveReport::default()))
         );
         assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#));
@@ -1305,7 +1436,14 @@ mod tests {
             .expect("the test constraint references the molecule");
 
         assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Resolver::with_config(
+                &chemistry_model,
+                ResolveConfig {
+                    isotope: IsotopePolicy::Natural,
+                    ..Default::default()
+                }
+            )
+            .resolve(&mut molecule),
             expected
         );
         assert!(molecule.constraints().is_empty());
@@ -1381,7 +1519,14 @@ mod tests {
         }"#
         );
         assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Resolver::with_config(
+                &chemistry_model,
+                ResolveConfig {
+                    isotope: IsotopePolicy::Natural,
+                    ..Default::default()
+                }
+            )
+            .resolve(&mut molecule),
             Ok(Solution::Underdetermined(ResolveReport::default()))
         );
         assert_eq!(
@@ -1427,7 +1572,14 @@ mod tests {
         let original = molecule.clone();
 
         assert_eq!(
-            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Resolver::with_config(
+                &chemistry_model,
+                ResolveConfig {
+                    isotope: IsotopePolicy::Natural,
+                    ..Default::default()
+                }
+            )
+            .resolve(&mut molecule),
             Ok(Solution::Underdetermined(ResolveReport::default()))
         );
         assert_eq!(molecule, original);

@@ -25,6 +25,7 @@ from umol import (
     InvalidStructureError,
     MetadataError,
     ModelConversionError,
+    IsotopePolicy,
     Molecule,
     MoleculeCorrespondence,
     ParseError,
@@ -818,6 +819,25 @@ def test_reaction_from_sides_error():
 )
 def test_reaction_from_reaction_smiles(source, expected):
     assert Reaction.from_reaction_smiles(source) == Reaction.parse(expected)
+
+
+@pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
+@pytest.mark.parametrize(
+    ("source", "atom"),
+    [
+        ("[CH4:1]>>[CH4:1]", "C#i=#c0#h4#n0#u0#s"),
+        ("[13CH4:1]>>[13CH4:1]", "C#i13#c0#h4#n0#u0#s"),
+    ],
+)
+def test_reaction_from_reaction_smiles_isotope(isotope, source, atom):
+    config = ResolveConfig(
+        isotope=isotope,
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+    )
+    assert Reaction.from_reaction_smiles(source, resolve_config=config) == Reaction(
+        Molecule.from_entries([AtomForm.parse(atom)]), Deltas([])
+    )
 
 
 def test_reaction_from_reaction_smiles_io_config():
