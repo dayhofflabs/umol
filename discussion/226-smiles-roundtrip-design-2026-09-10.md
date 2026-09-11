@@ -1357,7 +1357,7 @@ The plan below sequences the work; S0–S3 are complete.
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
 S4 is complete, including S4a0a–S4a0c and the S4a–S4b corrections.
-S5a–S5b are complete; S5c and later subitems are pending.
+S5a–S5c are complete; S5d and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -2155,14 +2155,14 @@ measurement or tuning campaign is required.
   retain components requiring definite output. Definite sites with no candidate on an endpoint fail.
   Check membership against a direct connectivity definition, including separate systems, shared
   candidates, localized links, rings, Either, and rejected unsupported side-bond types.
-- **S5c — Boolean selection and parity assignment.** Same module.
+- **S5c — Boolean selection and parity assignment (completed 2026-09-11).** Same module.
   **Additive (green).** [dep: S5a, S5b]
   Implement required endpoint coverage, forbidden double coverage at unspecified sites, forced
   propagation, lowest-index branching with unmarked first, and complete backtracking. Check parity
   after a complete selection; seed each selected constraint group with `/` at its lowest-index
   marker in output orientation. On conflict continue search; only exhaustive failure means no
-  assignment. Use a small exhaustive marker/sign oracle independent of the production propagation
-  to test soundness and completeness, plus chain/branch/cycle conflicts and alternative solutions.
+  assignment. Test exact chain/branch/cycle conflicts and alternative solutions here. The small
+  exhaustive marker/sign comparison belongs to S6a's public rendering tests, not src tests.
   Do not minimize marker count or adopt the reviewed incomplete cleanup/conservative-ban policies.
 - **S5d — Token and atom-stereo formatting.** Module: smiles::render.
   **Additive (green).** [dep: S5a, S5c]
@@ -2173,8 +2173,9 @@ measurement or tuning campaign is required.
   parsed boundary normalization must preserve its separate H-ownership semantics. Test exact
   spellings where policy determines them and independent configurations where spelling is flexible.
 
-**Gate:** function tests and exhaustive bounded assignment comparison pass; emitted fixtures parse
-under the intended IO configuration and preserve independent stereo expectations. Formatting and
+**Gate:** ordinary unit tests pass; emitted fixtures parse under the intended IO configuration and
+preserve independent stereo expectations. Public assignment properties and the bounded exhaustive
+comparison follow in S6a when rendering is exposed. Formatting and
 marker-search benchmarks use S0 fixtures without making optimization a gate to semantic progress.
 
 #### S5a completion — 2026-09-11
@@ -2321,6 +2322,54 @@ collection, and result destruction; parsing and assertion setup are excluded. Th
 uses --bench --sample-size 10 --warm-up-time 0.5 --measurement-time 1 --noplot. Full output is in
 scratch/s5b-benchmark.log. These establish baseline costs for S5b. S5c is next; selection and parity
 are still pending, so component construction alone does not establish a renderable assignment.
+
+#### S5c completion — 2026-09-11
+
+assign_markers derives candidate components and returns a sparse, bond-ordered list of directions
+relative to each bond row's first endpoint. Each selected constraint group starts with `/` in
+its lowest-index bond's output orientation. Reference substitutions and endpoint reversals are
+included in the parity equations; two marked substituents on the same side must agree on the
+represented frame. Either and unasserted sites forbid coverage on both ends. Either's notation
+support remains a rendering decision.
+
+Selection uses iterative propagation and backtracking with an undo list. It tries unmarked
+first in bond order, checks parity after complete selections, and resumes selection search on
+parity conflict. NoAssignment identifies the lowest-index definite site in an unsatisfiable
+component. InvalidReference reports a reference that is not a substituent at its stated endpoint.
+Component-derivation errors are preserved. No public API, chemistry policy, or parser changed.
+
+Ordinary unit cases cover cis/trans, substituted references, a reference on a noncandidate bond,
+shared chains, Either, forced double marking at a branched endpoint, separate groups, reversed
+output orientation, coverage conflicts, cycle parity conflicts, and an alternative selection
+that breaks a cycle conflict. Search fixtures also exercise rollback after coverage/parity
+failure and exhaustion. Property tests remain outside src and will use public rendering in S6a.
+
+Assignment storage scales with candidates and sites. There is no full bond-direction array and
+the no-stereo path returns immediately. References on candidate bonds need no additional neighbor
+index; other references lazily obtain one for membership checks. Traversal is supplied from the
+same unchanged table and is not rebuilt by assignment.
+
+Initial assignment timings include component derivation, with parsing and traversal outside the
+measurement. Ten samples, 0.5-second warmup, and 1-second measurement per input gave these central
+estimates; these are initial costs, not speedups over S5b's smaller operation:
+
+| Input | Assignment (µs) |
+| --- | ---: |
+| 64-atom chain without stereo | 0.012 |
+| Four-substituent alkene | 1.189 |
+| Shared chain | 0.909 |
+| Unasserted coupling, rejected | 1.099 |
+| Shared branch | 1.126 |
+| Shared cycle | 0.928 |
+| Separate components | 1.098 |
+
+Benchmark inputs are inline in scratch/s5c-assignment-bench/src/main.rs; results are in
+scratch/s5c-benchmark.log. S5d token and atom-stereo formatting is next.
+
+Validation: all 55 focused stereo unit cases pass, including 27 added for assignment. The full
+IO suite passes with conformance and proptest enabled and PROPTEST_CASES=256. All-target IO
+Clippy with those features and -D warnings, cargo fmt, and git diff --check pass. Logs:
+scratch/s5c-unit.log, scratch/s5c-gate.log, and scratch/s5c-clippy.log.
 
 ### S6 — Checked SMILES boundaries and rendering
 
