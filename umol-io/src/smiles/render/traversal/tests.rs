@@ -21,11 +21,11 @@ use crate::table_ir::{Atom, Bond, BondOrder, Molecule, Neighbor, StereoLigand};
     AtomVisit { atom: 4, parent: Some(Neighbor { atom: 3, bond: 3 }), subtree_end: 5, rings: 0..0 },
     AtomVisit { atom: 5, parent: Some(Neighbor { atom: 0, bond: 4 }), subtree_end: 6, rings: 0..0 },
 ], vec![])]
-#[case::table_order(4, vec![(2,3), (0,2), (0,1)], vec![
+#[case::atom_order(4, vec![(2,3), (0,2), (0,1)], vec![
     AtomVisit { atom: 0, parent: None, subtree_end: 4, rings: 0..0 },
-    AtomVisit { atom: 2, parent: Some(Neighbor { atom: 0, bond: 1 }), subtree_end: 3, rings: 0..0 },
-    AtomVisit { atom: 3, parent: Some(Neighbor { atom: 2, bond: 0 }), subtree_end: 3, rings: 0..0 },
-    AtomVisit { atom: 1, parent: Some(Neighbor { atom: 0, bond: 2 }), subtree_end: 4, rings: 0..0 },
+    AtomVisit { atom: 1, parent: Some(Neighbor { atom: 0, bond: 2 }), subtree_end: 2, rings: 0..0 },
+    AtomVisit { atom: 2, parent: Some(Neighbor { atom: 0, bond: 1 }), subtree_end: 4, rings: 0..0 },
+    AtomVisit { atom: 3, parent: Some(Neighbor { atom: 2, bond: 0 }), subtree_end: 4, rings: 0..0 },
 ], vec![])]
 #[case::ring(3, vec![(0,1), (1,2), (0,2)], vec![
     AtomVisit { atom: 0, parent: None, subtree_end: 3, rings: 0..1 },
@@ -125,11 +125,11 @@ fn test_traversal_children(
 
 #[rstest]
 #[case::root("[C@](F)(Cl)(Br)I", 0, vec![1, 2, 3, 4], 0)]
-#[case::branch_before_closure("O1CCC[C@](F)1Cl", 4, vec![0, 3, 5, 6], 0)]
-#[case::ring_root("[C@]12(CCC1)CCC2", 0, vec![1, 4, 3, 6], 0)]
-#[case::mixed_closures("O1CCC[C@]21CCCC2", 4, vec![0, 5, 3, 8], 0)]
+#[case::branch_before_closure("O1CCC[C@](F)1Cl", 4, vec![3, 0, 5, 6], 1)]
+#[case::ring_root("[C@]12(CCC1)CCC2", 0, vec![3, 6, 1, 4], 0)]
+#[case::mixed_closures("O1CCC[C@]21CCCC2", 4, vec![3, 0, 8, 5], 1)]
 #[case::branch_return("[C@](CCC1)(F)(Cl)1", 0, vec![3, 1, 4, 5], 1)]
-#[case::explicit_hydrogen("C[C@]1([H])CCCCO1", 1, vec![0, 3, 7, 2], 0)]
+#[case::explicit_hydrogen("C[C@]1([H])CCCCO1", 1, vec![0, 7, 2, 3], 0)]
 fn test_traversal_neighbors(
     #[case] input: &str,
     #[case] site: u32,

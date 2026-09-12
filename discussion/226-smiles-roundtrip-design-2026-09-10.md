@@ -2432,6 +2432,32 @@ passes with conformance and proptest enabled and PROPTEST_CASES=256: 4,073 unit 
 Clippy with -D warnings, cargo fmt, and git diff --check pass. Logs: scratch/s5d-unit.log,
 scratch/s5d-gate.log, and scratch/s5d-clippy.log.
 
+#### Neighbor ordering correction — 2026-09-11
+
+AtomNeighbors construction now sorts each CSR slice by `(neighbor atom index, bond index)`
+in place. This replaces the bond-ordered slice contract retained in S3e and consumed in S5a.
+The public surface and allocation count are unchanged. Bond indices, duplicate incidences,
+self-incidences, and invalid-endpoint omission are preserved.
+
+Parser and raise stereo consumers do not require bond-ordered neighbors: reference and ligand
+selection already sorts atom indices, while consistency and membership checks are independent
+of incidence order. Conflicting/degenerate wedge inputs may expose a different first error.
+Marker components retain bond-index ordering for component candidates and selection; per-side
+candidate lists follow neighbor atom order.
+
+The existing DFS and ring-encounter loops consume the new slices directly. No renderer algorithm
+change was needed. Biphenyl now renders as `c1ccccc1-c1ccccc1` instead of
+`c1c(cccc1)-c1ccccc1`. The fixtures `C[C@H]1CCCCO1`, `[C@H]1(F)CCCCO1`,
+`N[C@]12CCCC1CCC2`, and `C1/C=C/C=C/CCC1` retain their input traversal spelling.
+Ring labels remain independently allocated. Exact traversal fixtures include the changed
+encounter frames and corresponding tetrahedral parity.
+
+Validation: the full IO suite passes with conformance and proptest enabled and
+PROPTEST_CASES=256, including parser/raise stereo and external stereo properties. The added CSR
+ordering case also passes. IO all-target Clippy with -D warnings, formatting, and diff checks
+pass. Logs: scratch/neighbor-order-gate.log, scratch/neighbor-order-unit.log, and
+scratch/neighbor-order-clippy.log.
+
 ### S6 — Checked SMILES boundaries and rendering
 
 - **S6a — Smiles construction/rendering contract.** Modules: smiles/molecule.rs, config.rs,

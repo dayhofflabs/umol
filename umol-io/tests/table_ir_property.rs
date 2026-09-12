@@ -15,7 +15,7 @@ proptest! {
     ) {
         let table = AtomNeighbors::new(atom_count, pairs.iter().map(|&(a,b)| AtomPair::new(a,b)));
         for atom in 0..atom_count as u32 {
-            let expected: Vec<_> = pairs.iter().enumerate().filter_map(|(bond, &(a,b))| {
+            let mut expected: Vec<_> = pairs.iter().enumerate().filter_map(|(bond, &(a,b))| {
                 if a as usize >= atom_count || b as usize >= atom_count {
                     None
                 } else if a == atom {
@@ -26,6 +26,7 @@ proptest! {
                     None
                 }
             }).collect();
+            expected.sort_unstable_by_key(|neighbor| (neighbor.atom, neighbor.bond));
             let degree = expected.iter().map(|neighbor| neighbor.atom).collect::<BTreeSet<_>>().len();
             prop_assert_eq!(table.neighbors(atom), expected.as_slice());
             prop_assert_eq!(table.degree(atom), degree);

@@ -45,7 +45,8 @@ pub(super) enum MarkerComponentError {
 /// candidates at both ends do not couple groups; definite ones report MissingCandidate.
 /// No element, chemical-equivalence, ring-size, or direction-preference rule is applied.
 ///
-/// Candidate, site, and component order follow bond-table indices. Frames are retained as
+/// Component candidates, sites, and components follow bond-table indices.
+/// Per-side candidates follow neighbor atom order. Frames are retained as
 /// supplied; reference validation and parity transport belong to assignment. No markers,
 /// molecular paths, ring openings, or preferred reference substituents are selected here.
 /// This result belongs to the unchanged input table; it does not certify renderability.

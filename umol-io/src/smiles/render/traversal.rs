@@ -1,4 +1,4 @@
-//! Operation-local SMILES traversal in atom-root and bond-neighbor table order.
+//! Operation-local SMILES traversal in atom-index order.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -36,10 +36,10 @@ pub(super) struct RingVisit {
 }
 
 impl Traversal {
-    /// Visits all atoms by DFS with roots in atom order and neighbors in bond order.
+    /// Visits all atoms by DFS with roots and neighbors in atom-index order.
     ///
     /// Roots have no parent. Children occur in preorder; all but the last are branches.
-    /// Ring encounters precede children and follow bond order at each atom. Labels use the
+    /// Ring encounters precede children and follow neighbor atom order at each atom. Labels use the
     /// smallest available positive integer and become reusable after the closing atom.
     /// Actual stereo-ligand encounter order is parent, rings, then children; virtual-ligand
     /// placement and configuration transport belong to atom formatting.

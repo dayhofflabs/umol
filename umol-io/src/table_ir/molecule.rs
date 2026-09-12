@@ -75,7 +75,7 @@ impl Molecule {
         self.bonds.len()
     }
 
-    /// Bonds at each atom in bond order, computed from the current bond list.
+    /// Bonds at each atom ordered by neighbor atom index, then bond index.
     pub fn atom_neighbors(&self) -> AtomNeighbors {
         AtomNeighbors::new(self.atoms.len(), self.bonds.iter().map(|bond| bond.atoms))
     }
@@ -171,7 +171,7 @@ impl ExtendedMolecule {
         self.bonds.len()
     }
 
-    /// Bonds at each atom in bond order, computed from the current bond list.
+    /// Bonds at each atom ordered by neighbor atom index, then bond index.
     pub fn atom_neighbors(&self) -> AtomNeighbors {
         AtomNeighbors::new(self.atoms.len(), self.bonds.iter().map(|bond| bond.atoms))
     }

@@ -9,7 +9,7 @@ pub struct Neighbor {
     pub bond: u32,
 }
 
-/// Bonds at each atom of a TableIR record, in bond order, with the atom at the other end.
+/// Bonds at each atom of a TableIR record, ordered by neighboring atom index, then bond index.
 /// Computed from the bond list on request; the record's fields stay authoritative, so a value is
 /// held only while atom count, bond-table indices, and endpoints stay unchanged.
 ///
@@ -63,10 +63,14 @@ impl AtomNeighbors {
                 };
             }
         }
+        for range in offsets.windows(2) {
+            neighbors[range[0]..range[1]]
+                .sort_unstable_by_key(|neighbor| (neighbor.atom, neighbor.bond));
+        }
         Self { offsets, neighbors }
     }
 
-    /// Neighbors of `atom` in bond order.
+    /// Neighbors of `atom` ordered by atom index, then bond index.
     pub fn neighbors(&self, atom: u32) -> &[Neighbor] {
         &self.neighbors[self.offsets[atom as usize]..self.offsets[atom as usize + 1]]
     }
@@ -96,7 +100,12 @@ mod tests {
     #[case::ring_closure_last(3, vec![AtomPair::new(0, 1), AtomPair::new(1, 2), AtomPair::new(0, 2)], vec![
         vec![Neighbor { atom: 1, bond: 0 }, Neighbor { atom: 2, bond: 2 }],
         vec![Neighbor { atom: 0, bond: 0 }, Neighbor { atom: 2, bond: 1 }],
-        vec![Neighbor { atom: 1, bond: 1 }, Neighbor { atom: 0, bond: 2 }],
+        vec![Neighbor { atom: 0, bond: 2 }, Neighbor { atom: 1, bond: 1 }],
+    ])]
+    #[case::atom_order(3, vec![AtomPair::new(0, 2), AtomPair::new(1, 0), AtomPair::new(2, 0)], vec![
+        vec![Neighbor { atom: 1, bond: 1 }, Neighbor { atom: 2, bond: 0 }, Neighbor { atom: 2, bond: 2 }],
+        vec![Neighbor { atom: 0, bond: 1 }],
+        vec![Neighbor { atom: 0, bond: 0 }, Neighbor { atom: 0, bond: 2 }],
     ])]
     #[case::duplicate_bond(2, vec![AtomPair::new(0, 1), AtomPair::new(1, 0)], vec![
         vec![Neighbor { atom: 1, bond: 0 }, Neighbor { atom: 1, bond: 1 }],
