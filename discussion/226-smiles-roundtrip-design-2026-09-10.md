@@ -1357,7 +1357,7 @@ The plan below sequences the work; S0–S3 are complete.
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
 S4 is complete, including S4a0a–S4a0c and the S4a–S4b corrections.
-S5a–S5c are complete; S5d and later subitems are pending.
+S5 is complete; S6a and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -2164,7 +2164,7 @@ measurement or tuning campaign is required.
   assignment. Test exact chain/branch/cycle conflicts and alternative solutions here. The small
   exhaustive marker/sign comparison belongs to S6a's public rendering tests, not src tests.
   Do not minimize marker count or adopt the reviewed incomplete cleanup/conservative-ban policies.
-- **S5d — Token and atom-stereo formatting.** Module: smiles::render.
+- **S5d — Token and atom-stereo formatting (completed 2026-09-11).** Module: smiles::render.
   **Additive (green).** [dep: S5a, S5c]
   Emit atom/bracket fields, preserved implicit-H counts, isotope/charge/class, bonds, aromatic
   tokens, components, branches, and ring labels. Transport StereoAtom into emitted encounter order
@@ -2370,6 +2370,67 @@ Validation: all 55 focused stereo unit cases pass, including 27 added for assign
 IO suite passes with conformance and proptest enabled and PROPTEST_CASES=256. All-target IO
 Clippy with those features and -D warnings, cargo fmt, and git diff --check pass. Logs:
 scratch/s5c-unit.log, scratch/s5c-gate.log, and scratch/s5c-clippy.log.
+
+#### S5d completion — 2026-09-11
+
+The private render function consumes the table and IO configuration and returns a String or a
+specific failure. It combines the existing traversal and marker assignment with iterative token
+emission. Branch closing uses subtree boundaries; ring tokens are emitted at both encounters,
+with bond notation at opening. Markers and dative arrows reverse when the output direction
+reverses. Single bonds between aromatic atoms remain explicit, while aromatic bonds between
+aromatic atoms use the implicit aromatic token. Ring labels above 99 fail.
+
+Fixed hydrogen counts use brackets, including H0 written by omitting H inside the brackets.
+Inferred counts remain unbracketed; if another field requires brackets, an inferred count causes
+an error rather than an inferred-to-fixed conversion. Explicit H atoms remain separate atoms.
+Isotope, charge, atom class, aromatic symbols, and supported bond symbols are emitted directly.
+The current lexical limits are H0–H9 and charges -99 through +99. Extended aromatic Si/Te and
+dative/any bonds require the corresponding syntax flags.
+
+Tetrahedral output uses the stored StereoAtom frame. Its actual ligands are reordered into
+parent/ring/child encounter order, with bracket H or the lone-pair participant inserted at the
+root/nonroot position. umol-perm supplies permutation parity for @/@@. This performs no atom
+typing, valence inference, or coordinate-based stereo derivation. Unsupported chirality classes,
+malformed frames, and mismatched virtual ligands fail.
+
+This initial formatter does not emit CX annotation blocks. Coordinates, molecule metadata and
+configuration scope, multicenter bonds, atom labels/values and explicit electron/valence fields,
+wedges, and Either assertions therefore fail rather than disappear. Unsupported bond orders,
+donation forms, and nonzero bond charge/spin also fail. Spans, source-format identifiers, and
+stored ring-label spelling are not output semantics. The formatter checks endpoints and simple
+connectivity where token emission requires them; it does not run chemical validation or parse its
+own output. Public boundary construction and render methods remain S6a.
+
+The 78 new ordinary unit cases cover exact token spelling, nested branches and components,
+aromatic links, isotope/charge/class fields, fixed/inferred/explicit H, tetrahedral H and lone-pair
+frames, one and two stereo ring closures, direction reversal, ring dative arrows, percent labels,
+and representability failures. Emitted success fixtures also pass the public parser. Property
+tests remain deferred to S6a's public API; no property tests or source-import workaround were added.
+
+Initial full-render timings include traversal, marker assignment, and output allocation, with
+parsing outside measurement. Ten samples, 0.5-second warmup, and 1-second measurement per input:
+
+| Input | Render (µs) |
+| --- | ---: |
+| 64-atom chain | 3.627 |
+| Benzene | 0.625 |
+| Eight-atom bracket chain | 0.790 |
+| Tetrahedral amino acid | 0.589 |
+| Tetrahedral ring | 0.805 |
+| Four-substituent alkene | 1.468 |
+| Shared double-bond chain | 1.376 |
+| Shared double-bond cycle | 1.687 |
+
+Inputs are inline in scratch/s5d-render-bench/src/main.rs. This temporary benchmark builds copies
+of the current private render modules without changing production visibility. Results are in
+scratch/s5d-benchmark.log. These are initial formatting costs, not comparisons with the smaller
+S5a/S5b/S5c operations. S6a is next.
+
+Validation: all 157 focused rendering tests pass, including the 78 new cases. The full IO suite
+passes with conformance and proptest enabled and PROPTEST_CASES=256: 4,073 unit tests, 2,253 MOL,
+407 SDF, and 10,223 SMILES conformance cases, plus the integration/property targets. All-target IO
+Clippy with -D warnings, cargo fmt, and git diff --check pass. Logs: scratch/s5d-unit.log,
+scratch/s5d-gate.log, and scratch/s5d-clippy.log.
 
 ### S6 — Checked SMILES boundaries and rendering
 
