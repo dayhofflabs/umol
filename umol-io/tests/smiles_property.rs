@@ -15,7 +15,9 @@ use umol_graph_ir::ir::{
     BondId, CisTransStereoForm, ElementForm, Molecule, StereoCoset, TryIntoIr,
 };
 use umol_io::smiles::config::SmilesIoConfig;
-use umol_io::smiles::{parse_extended_smiles_bytes, ParseError, Smiles, SmilesRenderError};
+use umol_io::smiles::{
+    parse_extended_smiles_bytes, ParseError, ReactionSmiles, Smiles, SmilesRenderError,
+};
 use umol_io::table_ir::{
     Atom, Bond, BondConfiguration, BondOrder, BondRelation, ExtendedMolecule,
     Molecule as TableMolecule, Span, StereoAtom, StereoBond, StereoLigand, Winding,
@@ -697,5 +699,31 @@ fn test_smiles_render_idempotence(#[case] input: &str, #[case] expected: &str) {
                 .collect::<Vec<_>>(),
             vec![Some(1), Some(8), Some(6), Some(11), Some(9), Some(12)]
         );
+    }
+}
+
+proptest! {
+    #[test]
+    fn test_reaction_smiles_render_roundtrip(
+        sections in vec(vec(select(vec!["C", "N", "c1ccccc1", "F/C=C/F", "F/C=C\\F", "N[C@H](F)Cl", "[C:7]", "[O:19]", "[H]C"]), 0..5), 3),
+    ) {
+        let input = sections.iter().map(|section| section.join(".")).collect::<Vec<_>>().join(">");
+        let parsed = ReactionSmiles::parse(&input).unwrap();
+        let output = parsed.render().unwrap();
+        prop_assert_eq!(&parsed.render().unwrap(), &output);
+        let reparsed = ReactionSmiles::parse(&output).unwrap();
+        prop_assert_eq!(reparsed.render().unwrap(), output);
+        let original = parsed.as_table_ir();
+        let result = reparsed.as_table_ir();
+        prop_assert_eq!(&original.atom_mapping, &result.atom_mapping);
+        for (before, after) in [(&original.reactants, &result.reactants), (&original.agents, &result.agents), (&original.products, &result.products)] {
+            prop_assert_eq!(
+                before.atoms.iter().map(|atom| (atom.element, atom.class, atom.implicit_hydrogens, atom.aromatic)).collect::<Vec<_>>(),
+                after.atoms.iter().map(|atom| (atom.element, atom.class, atom.implicit_hydrogens, atom.aromatic)).collect::<Vec<_>>(),
+            );
+            prop_assert_eq!(bonds(before), bonds(after));
+            prop_assert_eq!(atom_stereo(before), atom_stereo(after));
+            prop_assert_eq!(bond_stereo(before), bond_stereo(after));
+        }
     }
 }

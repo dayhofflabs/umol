@@ -50,6 +50,16 @@ impl From<MarkerAssignmentError> for RenderError {
 
 /// Formats the supported table fields without chemical resolution or source-spelling recovery.
 pub(super) fn render(molecule: &Molecule, config: &SmilesIoConfig) -> Result<String, RenderError> {
+    let mut output = String::with_capacity(molecule.atoms.len());
+    append_molecule(&mut output, molecule, config)?;
+    Ok(output)
+}
+
+pub(super) fn append_molecule(
+    output: &mut String,
+    molecule: &Molecule,
+    config: &SmilesIoConfig,
+) -> Result<(), RenderError> {
     for (present, field) in [
         (molecule.positions.is_some(), "positions"),
         (!molecule.multicenter_bonds.is_empty(), "multicenter_bonds"),
@@ -115,7 +125,6 @@ pub(super) fn render(molecule: &Molecule, config: &SmilesIoConfig) -> Result<Str
     }
     let traversal = Traversal::new(molecule);
     let markers = assign_markers(molecule, &traversal)?;
-    let mut output = String::with_capacity(molecule.atoms.len());
     let mut ends = Vec::new();
     for (position, visit) in traversal.atoms.iter().enumerate() {
         while ends.last() == Some(&position) {
@@ -134,14 +143,7 @@ pub(super) fn render(molecule: &Molecule, config: &SmilesIoConfig) -> Result<Str
             ends.push(visit.subtree_end);
         }
         if let Some(parent) = visit.parent {
-            append_bond(
-                &mut output,
-                molecule,
-                parent.bond,
-                parent.atom,
-                &markers,
-                config,
-            )?;
+            append_bond(output, molecule, parent.bond, parent.atom, &markers, config)?;
         }
         let mut neighbors = SmallVec::<[u32; 4]>::new();
         for neighbor in traversal.neighbors(position) {
@@ -164,7 +166,7 @@ pub(super) fn render(molecule: &Molecule, config: &SmilesIoConfig) -> Result<Str
             })
             .transpose()?;
         append_atom(
-            &mut output,
+            output,
             visit.atom,
             &molecule.atoms[visit.atom as usize],
             winding,
@@ -173,7 +175,7 @@ pub(super) fn render(molecule: &Molecule, config: &SmilesIoConfig) -> Result<Str
         for ring in &traversal.rings[visit.rings.clone()] {
             if ring.opening {
                 append_bond(
-                    &mut output,
+                    output,
                     molecule,
                     ring.neighbor.bond,
                     visit.atom,
@@ -195,7 +197,7 @@ pub(super) fn render(molecule: &Molecule, config: &SmilesIoConfig) -> Result<Str
             output.push(')');
         }
     }
-    Ok(output)
+    Ok(())
 }
 
 fn atom_winding(

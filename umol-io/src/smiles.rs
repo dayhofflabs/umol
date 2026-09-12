@@ -8,7 +8,7 @@ mod reaction;
 mod render;
 
 pub use config::SmilesIoConfig;
-pub use error::{ParseError, SmilesRenderError};
+pub use error::{ParseError, ReactionSmilesRenderError, SmilesRenderError};
 pub use molecule::Smiles;
 pub use parser::{
     parse_extended_reaction_smiles, parse_extended_reaction_smiles_bytes,

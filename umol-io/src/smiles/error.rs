@@ -139,3 +139,22 @@ impl UmolError for SmilesRenderError {
         self
     }
 }
+
+/// Failure to render reaction SMILES, with molecular section context.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ReactionSmilesRenderError {
+    #[error("reactants: {0}")]
+    Reactants(#[source] SmilesRenderError),
+    #[error("agents: {0}")]
+    Agents(#[source] SmilesRenderError),
+    #[error("products: {0}")]
+    Products(#[source] SmilesRenderError),
+    #[error("unsupported reaction field {field}")]
+    UnsupportedReaction { field: &'static str },
+}
+
+impl UmolError for ReactionSmilesRenderError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}

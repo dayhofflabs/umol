@@ -1346,7 +1346,7 @@ The plan below sequences the work; S0–S3 are complete.
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
 S4 is complete, including S4a0a–S4a0c and the S4a–S4b corrections.
-S5 and S6a are complete; S6b and later subitems are pending.
+S5 and S6 are complete; S7 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -2469,7 +2469,7 @@ scratch/neighbor-order-clippy.log.
   preservation of parsed boundary semantics. Unsupported Either/annotations must fail in a
   notation that cannot express them, never become mere absence. Do not add Display with weaker
   guarantees or an arbitrary-parts shortcut.
-- **S6b — ReactionSmiles construction/rendering.** Module: smiles/reaction.rs and shared smiles::render functions.
+- **S6b — ReactionSmiles construction/rendering (completed 2026-09-11).** Module: smiles/reaction.rs and shared smiles::render functions.
   **Additive (green).** [dep: S6a]
   Add the corresponding ownership-transfer constructor and render methods. Compose three ordered sections
   and molecular components. Preserve parsed Atom.class values, repeated classes, and agents;
@@ -2485,8 +2485,8 @@ A parser/writer agreement alone is not enough: independent frame fixtures from S
 
 Smiles now exposes infallible from_table_ir(Molecule), render(), and render_with(config).
 Wrapping and unwrapping are ownership transfers, with from_table_ir and into_table_ir grouped
-at the beginning of the impl. There is no constructor validation, IO configuration, lookup,
-traversal, marker assignment, or output allocation. The owned table stays private and unchanged.
+after parsing and rendering, followed by as_table_ir. There is no constructor validation, IO
+configuration, lookup, traversal, marker assignment, or output allocation. The owned table stays private and unchanged.
 
 Rendering checks the properties it needs and performs traversal, marker assignment, and formatting
 once. SmilesRenderError directly reports integrity and format-support failures; the construction
@@ -2518,7 +2518,32 @@ parsing/rendering.
 Validation: the full IO unit, integration, conformance, and property suites pass with
 PROPTEST_CASES=256 and features conformance,proptest; the final focused external suite also
 passes all five generated properties, five exhaustive cases, and the ring-label idempotence test. All-target IO Clippy with
--D warnings, formatting, and git diff --check pass. Logs: scratch/s6a-ownership-gate.log, scratch/s6a-ownership-focused.log, and scratch/s6a-ownership-clippy.log. S6b is next.
+-D warnings, formatting, and git diff --check pass. Logs: scratch/s6a-ownership-gate.log, scratch/s6a-ownership-focused.log, and scratch/s6a-ownership-clippy.log. S6b completion is recorded below.
+
+#### S6b completion — 2026-09-11
+
+ReactionSmiles exposes infallible from_table_ir(Reaction), render(), and render_with(config),
+in the same method order as Smiles: parsing, rendering, then TableIR ownership and access.
+Wrapping preserves the table unchanged. Rendering appends reactants, agents, and products to
+one String, running molecular traversal and marker assignment once per section. No preflight,
+construction validation, or temporary section strings are introduced.
+
+Atom.class supplies labels, including repeated labels and agent labels. Rendering neither uses
+nor validates the derived atom_mapping index. ReactionSmilesRenderError identifies molecular
+failures by section and rejects unsupported reaction comments and properties at rendering.
+
+Unit cases cover empty sections, components, repeated/agent labels, preservation of a stale mapping
+index, invalid references in each section, reaction metadata, and narrower output configuration.
+The external reaction property in smiles_property.rs varies all three sections and their components,
+checking atom fields, connectivity, atom/bond stereo, mapping, deterministic output, and text
+idempotence through the public API. Existing independent molecular frame fixtures remain in the gate.
+
+Validation: the full IO unit, integration, conformance, and property suites pass with
+PROPTEST_CASES=256 and features conformance,proptest. All-target IO Clippy with -D warnings,
+formatting, and git diff --check pass. Logs: scratch/s6b-gate.log, scratch/s6b-property.log,
+and scratch/s6b-clippy.log.
+
+S7a is next.
 
 ### S7 — Convey and text export
 
