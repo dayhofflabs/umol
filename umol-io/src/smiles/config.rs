@@ -1,11 +1,11 @@
-//! SMILES parsing configuration
+//! SMILES parsing and rendering configuration
 
 use std::fmt;
 
 use bitflags::bitflags;
 
 bitflags! {
-    /// Flags selecting accepted SMILES syntax.
+    /// Flags selecting accepted and emitted SMILES syntax.
     #[derive(Debug, Clone, Copy, PartialEq, Default)]
     pub struct SmilesSyntaxFlags: u32 {
         // Format extensions
@@ -121,7 +121,10 @@ impl fmt::Display for SmilesLintConfig {
     }
 }
 
-/// Configuration for SMILES parsing/writing
+/// Configuration for SMILES parsing and rendering.
+///
+/// Rendering uses syntax flags to select supported notation. Lint settings do not
+/// trigger chemical validation during construction or rendering.
 #[derive(Debug, Clone)]
 pub struct SmilesIoConfig {
     pub syntax_flags: SmilesSyntaxFlags,

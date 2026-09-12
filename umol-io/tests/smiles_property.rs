@@ -1,22 +1,24 @@
-//! Property-based coverage for the SMILES parser.
+//! Property-based coverage for SMILES parsing and rendering.
 
 use std::array;
+use std::collections::{BTreeMap, BTreeSet};
 use std::panic::catch_unwind;
 
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
+use rstest::rstest;
 use umol_chem::element::Element;
 use umol_geometric_core::Point3D;
 use umol_graph_ir::ir::{
     BondId, CisTransStereoForm, ElementForm, Molecule, StereoCoset, TryIntoIr,
 };
 use umol_io::smiles::config::SmilesIoConfig;
-use umol_io::smiles::{parse_extended_smiles_bytes, ParseError, Smiles};
+use umol_io::smiles::{parse_extended_smiles_bytes, ParseError, Smiles, SmilesRenderError};
 use umol_io::table_ir::{
-    BondConfiguration, BondRelation, ExtendedMolecule, Molecule as TableMolecule, Span, StereoAtom,
-    StereoBond, StereoLigand, Winding,
+    Atom, Bond, BondConfiguration, BondOrder, BondRelation, ExtendedMolecule,
+    Molecule as TableMolecule, Span, StereoAtom, StereoBond, StereoLigand, Winding,
 };
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
@@ -387,5 +389,313 @@ proptest! {
         if duplicate { table.stereo_bonds.push(frame); }
         let result = catch_unwind(|| { let result: Result<Molecule, _> = (&table).try_into_ir(&()); result });
         prop_assert!(result.is_ok());
+    }
+}
+
+fn atom_label(table: &TableMolecule, atom: u32) -> u32 {
+    table.atoms[atom as usize].class.unwrap_or(atom + 1)
+}
+
+fn bonds(table: &TableMolecule) -> BTreeMap<(u32, u32), BondOrder> {
+    table
+        .bonds
+        .iter()
+        .map(|bond| {
+            let mut endpoints = [
+                atom_label(table, bond.atoms.first()),
+                atom_label(table, bond.atoms.second()),
+            ];
+            endpoints.sort_unstable();
+            ((endpoints[0], endpoints[1]), bond.order)
+        })
+        .collect()
+}
+
+fn bond_stereo(table: &TableMolecule) -> BTreeMap<(u32, u32), bool> {
+    table
+        .stereo_bonds
+        .iter()
+        .map(|frame| {
+            let bond = &table.bonds[frame.bond as usize];
+            let endpoints = [bond.atoms.first(), bond.atoms.second()];
+            let BondConfiguration::Framed {
+                references,
+                relation,
+            } = frame.configuration
+            else {
+                panic!("generated definite frame")
+            };
+            let mut opposite = relation == BondRelation::OppositeSide;
+            for side in 0..2 {
+                let lowest = table
+                    .bonds
+                    .iter()
+                    .filter_map(|bond| bond.atoms.other(endpoints[side]))
+                    .filter(|&atom| atom != endpoints[1 - side])
+                    .map(|atom| atom_label(table, atom))
+                    .min()
+                    .unwrap();
+                opposite ^= atom_label(table, references[side]) != lowest;
+            }
+            let mut labels = endpoints.map(|atom| atom_label(table, atom));
+            labels.sort_unstable();
+            ((labels[0], labels[1]), opposite)
+        })
+        .collect()
+}
+
+fn atom_stereo(table: &TableMolecule) -> BTreeMap<u32, bool> {
+    table
+        .stereo_atoms
+        .iter()
+        .map(|frame| {
+            let labels: Vec<_> = frame
+                .ligands
+                .iter()
+                .map(|ligand| match ligand {
+                    StereoLigand::Atom(atom) => u64::from(atom_label(table, *atom)),
+                    StereoLigand::ImplicitHydrogen => 0,
+                    StereoLigand::LonePair => u64::MAX,
+                })
+                .collect();
+            let inversions = (0..labels.len())
+                .map(|i| {
+                    labels[i + 1..]
+                        .iter()
+                        .filter(|&&label| label < labels[i])
+                        .count()
+                })
+                .sum::<usize>();
+            (
+                atom_label(table, frame.atom),
+                (frame.winding == Winding::Clockwise) ^ (inversions % 2 != 0),
+            )
+        })
+        .collect()
+}
+
+proptest! {
+    // Independent simple edge sets cover arbitrary branches, components, and cycles.
+    #[test]
+    fn test_smiles_render_connectivity(
+        count in 0_usize..16, pairs in prop::collection::vec((0_usize..16, 0_usize..16), 0..45),
+        reverse_bonds in any::<bool>(),
+    ) {
+        let pairs: BTreeSet<_> = pairs.into_iter().filter(|&(a,b)| a < count && b < count && a != b)
+            .map(|(a,b)| (a.min(b), a.max(b))).collect();
+        let mut table = TableMolecule {
+            atoms: (0..count).map(|i| Atom {
+                class: Some(i as u32 + 1), implicit_hydrogens: Some(0),
+                ..Atom::aliphatic_atom(Element::C)
+            }).collect(),
+            bonds: pairs.iter().map(|&(a,b)| Bond::new(a as u32,b as u32,BondOrder::Single)).collect(),
+            ..TableMolecule::empty()
+        };
+        if reverse_bonds { table.bonds.reverse(); }
+        let smiles = Smiles::from_table_ir(table.clone());
+        prop_assert_eq!(smiles.as_table_ir(), &table);
+        let text = smiles.render().unwrap();
+        prop_assert_eq!(smiles.render().unwrap(), text.clone());
+        let parsed = Smiles::parse(&text).unwrap();
+        prop_assert_eq!(bonds(parsed.as_table_ir()), bonds(&table));
+        prop_assert_eq!(parsed.as_table_ir().bonds.len(), table.bonds.len());
+        prop_assert_eq!(parsed.as_table_ir().atoms.len(), table.atoms.len());
+        let labels: BTreeSet<_> = parsed.as_table_ir().atoms.iter().map(|atom| atom.class.unwrap()).collect();
+        prop_assert_eq!(labels, (1..=count as u32).collect::<BTreeSet<_>>());
+        let normalized = parsed.render().unwrap();
+        let rerendered = Smiles::parse(&normalized).unwrap();
+        prop_assert_eq!(bonds(rerendered.as_table_ir()), bonds(&table));
+        prop_assert_eq!(rerendered.render().unwrap(), normalized);
+        prop_assert_eq!(
+            parsed.as_table_ir().atoms.iter().map(|atom| atom.class).collect::<Vec<_>>(),
+            rerendered.as_table_ir().atoms.iter().map(|atom| atom.class).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn test_smiles_render_atom_stereo(
+        input in prop::sample::select(vec!["[C@](F)(Cl)(Br)I", "[C@H](F)(Cl)Br",
+            "[H][C@@](F)(Cl)Br", "C[S@](=O)CC", "C[C@H]1CCCCO1",
+            "O1CCC[C@](F)1Cl", "[C@]12(CCC1)CCC2", "O1CCC[C@]21CCCC2"]),
+        flip in any::<bool>(), rotation in 0_usize..4,
+    ) {
+        let mut table = Smiles::parse(input).unwrap().into_table_ir();
+        for (i, atom) in table.atoms.iter_mut().enumerate() {
+            // A class requires brackets, so keep inferred-H atoms unlabelled; these fixtures
+            // preserve atom discovery order. Label only atoms already carrying fixed H.
+            if atom.implicit_hydrogens.is_some() { atom.class = Some(i as u32 + 1); }
+        }
+        for frame in &mut table.stereo_atoms {
+            frame.ligands.rotate_left(rotation);
+            if flip { frame.winding = Winding::Clockwise; }
+        }
+        let expected = atom_stereo(&table);
+        let smiles = Smiles::from_table_ir(table.clone());
+        let text = smiles.render().unwrap();
+        let parsed = Smiles::parse(&text).unwrap();
+        prop_assert_eq!(atom_stereo(parsed.as_table_ir()), expected);
+        prop_assert_eq!(bonds(parsed.as_table_ir()), bonds(&table));
+        prop_assert_eq!(parsed.render().unwrap(), text);
+    }
+
+    #[test]
+    fn test_smiles_render_bond_chain(
+        markers in prop::collection::vec(prop::option::of(any::<bool>()), 2..12),
+    ) {
+        let mut input = String::from("F");
+        for (i, marker) in markers.iter().enumerate() {
+            input.push_str(match marker { None => "", Some(true) => "/", Some(false) => "\\" });
+            input.push_str(if i+1 == markers.len() { "F" } else { "C=C" });
+        }
+        let table = Smiles::parse(&input).unwrap().into_table_ir();
+        let expected = bond_stereo(&table);
+        let smiles = Smiles::from_table_ir(table);
+        let text = smiles.render().unwrap();
+        let parsed = Smiles::parse(&text).unwrap();
+        prop_assert_eq!(bond_stereo(parsed.as_table_ir()), expected);
+        prop_assert_eq!(parsed.render().unwrap(), text);
+    }
+
+    #[test]
+    fn test_smiles_render_with(
+        input in prop::sample::select(vec!["N->[Cu]", "C~C", "[te]", "[siH]", "[seH]", "CCO"]),
+    ) {
+        let config = SmilesIoConfig::lenient();
+        let table = Smiles::parse_with(input, &config).unwrap().into_table_ir();
+        let smiles = Smiles::from_table_ir(table.clone());
+        let text = smiles.render_with(&config).unwrap();
+        prop_assert_eq!(Smiles::parse_with(&text, &config).unwrap().render_with(&config).unwrap(), text);
+        prop_assert_eq!(smiles.as_table_ir(), &table);
+    }
+
+    #[test]
+    fn test_smiles_render_atom_fields(
+        mass in prop::option::of(0_u32..1000), charge in -99_i8..100,
+        hydrogens in 0_u8..10, class in any::<u32>(),
+    ) {
+        let atom = Atom { isotope_mass: mass, charge: Some(charge), implicit_hydrogens: Some(hydrogens),
+            class: Some(class), ..Atom::aliphatic_atom(Element::C) };
+        let smiles = Smiles::from_table_ir(TableMolecule { atoms: vec![atom.clone()], ..TableMolecule::empty() });
+        let text = smiles.render().unwrap();
+        let parsed = Smiles::parse(&text).unwrap();
+        let actual = &parsed.as_table_ir().atoms[0];
+        prop_assert_eq!((actual.element, actual.isotope_mass, actual.charge.unwrap_or(0), actual.implicit_hydrogens, actual.class),
+            (atom.element, mass, charge, Some(hydrogens), Some(class)));
+    }
+}
+
+// Every possible absent/slash/backslash assignment on the written single bonds is parsed.
+// The oracle contains no production marker-selection or parity-constraint implementation.
+#[rstest]
+#[case::chain("C{}C=C{}C=C{}C=C{}C")]
+#[case::branched("F{}C({}Cl)=C({}F){}C({}F)=C({}Cl){}Br")]
+#[case::branched_system("C{}C=C({}C=C{}C){}C=C{}C")]
+#[case::cycle("C1=C{}C=C{}C=C{}1")]
+#[case::substituted_cycle("C1=C({}F){}C=C({}Cl){}C=C{}1")]
+fn test_smiles_render_bond_stereo(#[case] template: &str) {
+    let parts: Vec<_> = template.split("{}").collect();
+    let candidates = parts.len() - 1;
+    let mut accepted = BTreeSet::new();
+    for assignment in 0..3_usize.pow(candidates as u32) {
+        let mut assignment = assignment;
+        let mut text = parts[0].to_owned();
+        for part in &parts[1..] {
+            text.push_str(["", "/", "\\"][assignment % 3]);
+            assignment /= 3;
+            text.push_str(part);
+        }
+        if let Ok(smiles) = Smiles::parse(&text) {
+            accepted.insert(bond_stereo(smiles.as_table_ir()));
+        }
+    }
+    let base = Smiles::parse(&parts.concat()).unwrap().into_table_ir();
+    let sites: Vec<_> = base
+        .bonds
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| b.order == BondOrder::Double)
+        .map(|(i, b)| {
+            let endpoints = [b.atoms.first(), b.atoms.second()];
+            let references = [0, 1].map(|side| {
+                base.bonds
+                    .iter()
+                    .filter_map(|b| b.atoms.other(endpoints[side]))
+                    .filter(|&a| a != endpoints[1 - side])
+                    .min()
+                    .unwrap()
+            });
+            (i as u32, references)
+        })
+        .collect();
+    for states in 0..3_usize.pow(sites.len() as u32) {
+        let mut states = states;
+        let mut table = base.clone();
+        for &(bond, references) in &sites {
+            let state = states % 3;
+            states /= 3;
+            if state != 0 {
+                table.stereo_bonds.push(StereoBond {
+                    bond,
+                    configuration: BondConfiguration::Framed {
+                        references,
+                        relation: if state == 1 {
+                            BondRelation::SameSide
+                        } else {
+                            BondRelation::OppositeSide
+                        },
+                    },
+                });
+            }
+        }
+        let expected = bond_stereo(&table);
+        let result = Smiles::from_table_ir(table).render();
+        assert_eq!(
+            result.is_ok(),
+            accepted.contains(&expected),
+            "{template}: {expected:?}"
+        );
+        match result {
+            Ok(text) => {
+                let parsed = Smiles::parse(&text).unwrap();
+                assert_eq!(bond_stereo(parsed.as_table_ir()), expected, "{text}");
+            }
+            Err(error) => assert_eq!(
+                error,
+                SmilesRenderError::NoMarkerAssignment {
+                    bond: sites
+                        .iter()
+                        .find(|(bond, _)| {
+                            let endpoints = base.bonds[*bond as usize].atoms;
+                            expected.contains_key(&(endpoints.first() + 1, endpoints.second() + 1))
+                        })
+                        .unwrap()
+                        .0,
+                }
+            ),
+        }
+    }
+}
+
+#[rstest]
+#[case::ring_labels(
+    "[C:1][C:8]12[C:6][C:11]2[C:9]1[C:12]",
+    "[C:1][C:8]12[C:6][C:11]1[C:9]2[C:12]"
+)]
+fn test_smiles_render_idempotence(#[case] input: &str, #[case] expected: &str) {
+    let parsed = Smiles::parse(input).unwrap();
+    let output = parsed.render().unwrap();
+    assert_eq!(output, expected);
+    let reparsed = Smiles::parse(&output).unwrap();
+    assert_eq!(reparsed.render().unwrap(), expected);
+    assert_eq!(bonds(reparsed.as_table_ir()), bonds(parsed.as_table_ir()));
+    for table in [parsed.as_table_ir(), reparsed.as_table_ir()] {
+        assert_eq!(
+            table
+                .atoms
+                .iter()
+                .map(|atom| atom.class)
+                .collect::<Vec<_>>(),
+            vec![Some(1), Some(8), Some(6), Some(11), Some(9), Some(12)]
+        );
     }
 }

@@ -11,6 +11,7 @@ use umol_perm::Permutation;
 use self::stereo::{assign_markers, MarkerAssignmentError, MarkerComponentError};
 use self::traversal::Traversal;
 use super::config::{SmilesIoConfig, SmilesSyntaxFlags};
+use super::error::SmilesRenderError as RenderError;
 use crate::table_ir::{
     Atom, BondConfiguration, BondDirection, BondDonation, BondOrder, Chirality, Molecule,
     StereoAtom, StereoLigand, Winding,
@@ -18,26 +19,6 @@ use crate::table_ir::{
 
 mod stereo;
 mod traversal;
-
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum RenderError {
-    AtomIndexOutOfBounds { atom: u32 },
-    BondIndexOutOfBounds { bond: u32 },
-    SelfBond { bond: u32 },
-    DuplicateBond { bond: u32 },
-    UnsupportedMolecule { field: &'static str },
-    UnsupportedAtom { atom: u32, field: &'static str },
-    UnsupportedBond { bond: u32, field: &'static str },
-    InferredHydrogens { atom: u32 },
-    DuplicateStereoAtom { atom: u32 },
-    InvalidStereoAtom { atom: u32 },
-    RingLabel { label: usize },
-    DuplicateStereoBond { bond: u32 },
-    UnsupportedStereoBond { bond: u32 },
-    MissingMarkerCandidate { bond: u32, atom: u32 },
-    InvalidStereoBondReference { bond: u32, atom: u32 },
-    NoMarkerAssignment { bond: u32 },
-}
 
 impl From<MarkerAssignmentError> for RenderError {
     fn from(error: MarkerAssignmentError) -> Self {

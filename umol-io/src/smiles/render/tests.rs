@@ -102,7 +102,6 @@ fn test_atom_winding(
 }
 
 #[rstest]
-#[case::missing_atom(vec![Bond::new(0,2,BondOrder::Single)], RenderError::AtomIndexOutOfBounds { atom: 2 })]
 #[case::self_bond(vec![Bond::new(0,0,BondOrder::Single)], RenderError::SelfBond { bond: 0 })]
 #[case::parallel(vec![Bond::new(0,1,BondOrder::Single),Bond::new(0,1,BondOrder::Single)], RenderError::DuplicateBond { bond: 0 })]
 #[case::zero(vec![Bond::new(0,1,BondOrder::Zero)], RenderError::UnsupportedBond { bond: 0, field: "order" })]
@@ -205,20 +204,6 @@ fn test_render_molecule_error(#[case] molecule: Molecule, #[case] field: &'stati
     assert_eq!(
         render(&molecule, &SmilesIoConfig::opensmiles()),
         Err(RenderError::UnsupportedMolecule { field })
-    );
-}
-
-#[rstest]
-#[case::missing(5, RenderError::AtomIndexOutOfBounds { atom: 5 })]
-#[case::duplicate(1, RenderError::DuplicateStereoAtom { atom: 1 })]
-fn test_render_stereo_atom_error(#[case] atom: u32, #[case] expected: RenderError) {
-    let mut molecule = Smiles::parse("F[C@](Cl)(Br)I").unwrap().into_table_ir();
-    let mut frame = molecule.stereo_atoms[0].clone();
-    frame.atom = atom;
-    molecule.stereo_atoms.push(frame);
-    assert_eq!(
-        render(&molecule, &SmilesIoConfig::opensmiles()),
-        Err(expected)
     );
 }
 

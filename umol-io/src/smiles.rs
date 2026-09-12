@@ -5,17 +5,10 @@ pub mod error;
 mod molecule;
 mod parser;
 mod reaction;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "boundary render methods are added in a later stage"
-    )
-)]
 mod render;
 
 pub use config::SmilesIoConfig;
-pub use error::ParseError;
+pub use error::{ParseError, SmilesRenderError};
 pub use molecule::Smiles;
 pub use parser::{
     parse_extended_reaction_smiles, parse_extended_reaction_smiles_bytes,

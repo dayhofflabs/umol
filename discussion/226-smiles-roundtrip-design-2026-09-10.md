@@ -571,25 +571,18 @@ promise preservation of source coordinates; a boundary-level roundtrip must reta
 
 ## Smiles and ReactionSmiles as output boundaries
 
-Keep their private payloads. Convey returns Smiles or ReactionSmiles, using
-TableIR as its internal conversion intermediate. Checked from_table_ir constructors
-on those boundary types accept a table and IO configuration and establish renderability.
-This supersedes the earlier rejection of public TableIR-to-boundary conversion. Existing
-as_table_ir and into_table_ir accessors remain unchanged.
+Keep their private payloads. Convey returns Smiles or ReactionSmiles, using TableIR as its
+internal conversion intermediate. The infallible from_table_ir constructors take ownership
+without checking or transforming the table. They do not take an IO configuration. Existing as_table_ir and into_table_ir accessors remain unchanged.
 
-The boundary guarantee is settled: successful convey or from_table_ir construction guarantees
-rendering under the same SmilesIoConfig, following the DSL/defaults precedent. Construction establishes
-representability, including feasibility of coordinated stereo-marker assignment;
-rendering under that configuration cannot subsequently report an unsupported
-representation. Writing to an external sink may still fail with an I/O error.
-Rendering under another configuration may fail if that configuration cannot
-express the value. Neither operation performs implicit chemical transformations.
+Construction does not establish format representability. Rendering owns output-specific checks,
+traversal, marker assignment, and formatting, performing each operation when its result is needed.
+Unsupported fields or impossible marker assignments therefore fail during rendering. Construction
+must not rehearse rendering, solve marker assignments, or build a traversal to promise later
+success. This replaces the earlier same-config construction guarantee.
 
-Rendering recomputes traversal and marker assignment for now. The guarantee does
-not itself prescribe cached data, a stored configuration, or another public type.
-It applies to exported values and
-does not silently strengthen the existing parser's acceptance contract. Exact
-export and rendering names and error types remain to be specified.
+Properties establish semantic preservation, deterministic output, and correct output failures.
+The existing parser acceptance contract remains unchanged. No traversal or marker cache is added.
 
 ReactionSmiles composes the molecular writer over the three ordered sections.
 Rendering a parsed boundary value writes Atom.class, preserving input labels,
@@ -641,9 +634,9 @@ These are evidence requirements, not new test edits or an implementation sequenc
 and resolver benchmarks are starting points; projection and formatting need their own measurements
 when algorithm work begins.
 
-Property coverage must enforce the construction boundary guarantee for both Smiles
-and ReactionSmiles: every successful convey or from_table_ir under an IO configuration renders
-successfully under that same configuration. Include coupled stereo-marker cases.
+Property coverage must exercise construction followed by rendering for both Smiles and
+ReactionSmiles: supported values preserve semantics, and unrepresentable values fail when
+rendered. Include coupled stereo-marker cases; do not use runtime preflight as verification.
 
 ### Independent parser-validation follow-up from doc 224
 
@@ -869,24 +862,20 @@ pub trait Convey: Sized {
 
 Smiles uses Molecule as Input; ReactionSmiles uses Reaction. Both use SmilesIoConfig as Config.
 Interpret retains associated Output and Error and takes `&self` and `&Resolver`.
-Convey uses checked from_table_ir constructors owned by umol-io; the payload fields stay private.
-These constructors establish representability under the supplied IO configuration, including
-marker-assignment feasibility. They provide the construction counterpart to as_table_ir and
-into_table_ir without exposing unchecked fields or direct TableIR formatting.
+Convey uses infallible from_table_ir constructors owned by umol-io; the payload fields stay private.
+Wrapping and unwrapping transfer ownership. Rendering checks each required property at its point
+of use. There is no preflight, construction validator, or public direct TableIR formatter.
 
 export_smiles and export_reaction_smiles return text, composing convey and render, opposite to
 ingestion from text. Ingest/export take a supplied Resolver; their default forms use the default
 OpenSMILES IO configuration, and `_with` forms additionally accept an explicit IO configuration.
 Parse/render and from_table_ir require no resolver.
 
-Error responsibilities follow the operations: ProjectError covers operational projection failure,
-with the result structure following resolve; SmilesConstructionError covers boundary
-unrepresentability; ConveyError distinguishes projection from construction failure;
-SmilesRenderError covers rendering under the requested configuration; SmilesOutputError composes
-convey and render failures. Reaction errors add side context where appropriate. Construction and
-rendering share representability diagnostics. Successful construction precludes a later
-representability failure under the same configuration. Exact variants and reaction error names
-remain implementation-design details. No production implementation is authorized yet.
+Error responsibilities follow the operations: ProjectError covers projection failure;
+ConveyError covers projection and graph-to-table conversion failures. SmilesRenderError covers
+required integrity and format-support failures during rendering. SmilesOutputError composes
+convey and render failures. Reaction errors add section context where needed. Wrapping TableIR
+is infallible; there is no SmilesConstructionError or separate shared representation-error layer.
 
 ## Resolver projection: roundtrip target and initial scope
 
@@ -1357,7 +1346,7 @@ The plan below sequences the work; S0–S3 are complete.
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
 S4 is complete, including S4a0a–S4a0c and the S4a–S4b corrections.
-S5 is complete; S6a and later subitems are pending.
+S5 and S6a are complete; S6b and later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1369,7 +1358,7 @@ The consumer requirements determine these work groups; the stages order them fou
 | Consumer/module | Required work |
 | --- | --- |
 | umol-graph ingest/export | Interpret with a supplied Resolver; Convey on boundary types; text-returning export conveniences and reaction composition |
-| umol-io smiles boundaries | Checked from_table_ir construction, render/render_with, shared representability diagnostics, same-config guarantee |
+| umol-io smiles boundaries | Infallible from_table_ir ownership transfer, render/render_with, operation-specific rendering failures |
 | umol-io smiles::render | Deterministic traversal, atom/ring/branch spelling, stereo-frame transport, component-wide marker selection and parity |
 | umol-graph resolver | Direct GraphIR-only project, isotope default elision, aromatic/stereo assertion recovery, atomic publication |
 | umol-io TableIR and readers | Explicit stereo-bond frames; transient source markers; SMILES/CX/CTfile producers and raise migration; temporary neighbor access |
@@ -2458,14 +2447,14 @@ ordering case also passes. IO all-target Clippy with -D warnings, formatting, an
 pass. Logs: scratch/neighbor-order-gate.log, scratch/neighbor-order-unit.log, and
 scratch/neighbor-order-clippy.log.
 
-### S6 — Checked SMILES boundaries and rendering
+### S6 — SMILES boundaries and rendering
 
-- **S6a — Smiles construction/rendering contract.** Modules: smiles/molecule.rs, config.rs,
+- **S6a — Smiles construction/rendering contract (completed 2026-09-11).** Modules: smiles/molecule.rs, config.rs,
   error.rs, render. **Additive (green).** [dep: S5d]
-  Add checked from_table_ir(table, config), render, and render_with. Keep private payloads and
-  existing read/consume accessors. Validate the supplied open table's required integrity and
-  establish actual format representability, including assignment feasibility, at construction.
-  Share the operative checks/formatting logic with rendering; do not cache traversal or markers.
+  Add infallible from_table_ir(table), render, and render_with. Keep private payloads and
+  existing read/consume accessors. Wrapping transfers ownership without validation. Rendering
+  checks required integrity, format support, and assignment feasibility when needed. Construction
+  performs no traversal or marker assignment. Do not cache traversal or markers.
   Add property tests in the external test target through the public construction, rendering,
   and parsing APIs. Cover connectivity preservation across branches, disconnected components,
   and ring closures; deterministic output in TableIR order; and atom/bond stereo preservation.
@@ -2475,22 +2464,61 @@ scratch/neighbor-order-clippy.log.
   through the public API. These replace the removed S5a/S5b internal property tests. Internal
   traversal arrays and marker-component membership are not public properties. Do not import
   source modules into tests or expose private implementation details for testing.
-  Return distinct construction/render diagnostics backed by shared representability reasons.
-  Test successful construction implies same-config rendering, narrower-config failures, and
+  Return rendering diagnostics for the property that prevents output.
+  Test supported output, output-specific failures under narrower configurations, and
   preservation of parsed boundary semantics. Unsupported Either/annotations must fail in a
   notation that cannot express them, never become mere absence. Do not add Display with weaker
   guarantees or an arbitrary-parts shortcut.
 - **S6b — ReactionSmiles construction/rendering.** Module: smiles/reaction.rs and shared smiles::render functions.
   **Additive (green).** [dep: S6a]
-  Add the corresponding checked constructor and render methods. Compose three ordered sections
+  Add the corresponding ownership-transfer constructor and render methods. Compose three ordered sections
   and molecular components. Preserve parsed Atom.class values, repeated classes, and agents;
-  establish consistency of the supplied table's derived mapping index at the constructor boundary.
+  check mapping-index consistency only if an operation consumes that index.
   Test empty sections, multiple components, repeated labels, agent-only labels, molecular errors
-  with section context, and the same-config construction guarantee.
+  with section context and failures at the rendering operation.
 
 **Gate:** molecular/reaction boundary roundtrip properties and normalization idempotence pass under
 supported IO configurations. No public direct TableIR formatter or stored marker assignment exists.
 A parser/writer agreement alone is not enough: independent frame fixtures from S0 remain required.
+
+#### S6a completion — 2026-09-11
+
+Smiles now exposes infallible from_table_ir(Molecule), render(), and render_with(config).
+Wrapping and unwrapping are ownership transfers, with from_table_ir and into_table_ir grouped
+at the beginning of the impl. There is no constructor validation, IO configuration, lookup,
+traversal, marker assignment, or output allocation. The owned table stays private and unchanged.
+
+Rendering checks the properties it needs and performs traversal, marker assignment, and formatting
+once. SmilesRenderError directly reports integrity and format-support failures; the construction
+error and shared-error wrapper were removed. Parsing retains its existing acceptance contract.
+The discarded-text path and both replacement construction preflights are gone.
+
+Ordinary boundary tests exercise payload preservation and rendering failures for malformed
+references/frames, incompatible stereo incidence, unsupported fields, and ring-label limits.
+All external properties and exhaustive rendering cases are in smiles_property.rs, alongside the
+existing parser properties, without a separate render module or source imports.
+Five external properties cover generated simple connectivity with branches/components/cycles,
+tetrahedral frame transport, atom fields, variable-length partial/definite conjugated chains,
+and explicit IO configurations. Five exhaustive cases enumerate every absent/slash/backslash
+assignment for a chain, substituted alkene pair, branched conjugated system, cycle, and substituted
+cycle. Public parsing supplies the attainable configurations; rendering is compared
+against every absent/same-side/opposite-side assertion combination on those sites. Successful
+rendering is then checked for the complete set of bond configurations, including absence.
+No property test accesses private implementation or imports source files.
+
+Same-table output is deterministic. The first rendering of an arbitrarily numbered table can
+allocate ring labels differently from a subsequent parse/render pass, because parsing assigns atom
+indices in encounter order. The normalized spelling is then stable. An explicit idempotence test
+checks the observed ring-label swap and unchanged atom order; the generated connectivity test also
+checks exact spelling idempotence after this initial pass, alongside connectivity preservation.
+Preserving original ring-label spelling would require retained representation information and is
+not a storage requirement. Source-ordered stereo fixtures and chains also check stable text after
+parsing/rendering.
+
+Validation: the full IO unit, integration, conformance, and property suites pass with
+PROPTEST_CASES=256 and features conformance,proptest; the final focused external suite also
+passes all five generated properties, five exhaustive cases, and the ring-label idempotence test. All-target IO Clippy with
+-D warnings, formatting, and git diff --check pass. Logs: scratch/s6a-ownership-gate.log, scratch/s6a-ownership-focused.log, and scratch/s6a-ownership-clippy.log. S6b is next.
 
 ### S7 — Convey and text export
 
@@ -2499,8 +2527,8 @@ A parser/writer agreement alone is not enough: independent frame fixtures from S
   Add Convey with associated Input/Config/Error and implement it for Smiles. Clone source GraphIR,
   invoke Resolver::project, and convert the projected GraphIR fields/assertions into TableIR.
   Build StereoAtom/StereoBond frames here, not in the resolver. Lower projected values that TableIR
-  can carry and reject concrete unsupported values/ranges. The checked boundary constructor owns
-  SMILES notation/configuration support. Do not add reconstruction checks at either boundary.
+  can carry and reject concrete unsupported values/ranges. Rendering owns SMILES
+  notation/configuration support. Do not add reconstruction checks at either boundary.
   Test the supported foreign-input roundtrip through convey/render/parse under the agreed
   equivalences, with required-success fixtures. Include original-input immutability on success
   and failure and exact diagnostics for unsupported encodings.
@@ -2517,7 +2545,7 @@ A parser/writer agreement alone is not enough: independent frame fixtures from S
   Add export_smiles/export_reaction_smiles and explicit-IO `_with` variants taking a supplied
   Resolver and returning text by convey then render. Compose projection, construction, rendering,
   and reaction-side errors with source chains. Verify equality with the explicit composition,
-  same-config guarantees, deterministic repeated output, and failure without mutation. Do not add
+  output failures, deterministic repeated output, and failure without mutation. Do not add
   redundant byte-output or sink APIs without a concrete approved contract.
 
 **Gate:** a useful molecular and reaction text roundtrip works through the public output API,
@@ -2551,7 +2579,7 @@ consumer may be treated as completion.
 - **S9a — Full property/conformance coverage.** Modules: IO and graph property/conformance targets.
   **Additive (green).** [dep: S2a, S3e, S7c, S8b]
   Run project(resolve(input)) for supported raised foreign inputs, boundary normalization,
-  same-config construction/rendering, and ingestion-to-export preservation under the agreed
+  ownership transfer and rendering failures, and ingestion-to-export preservation under the agreed
   equivalences. No arbitrary-GraphIR resolve(project(molecule)) law is required. Include both
   valence strategies, supported model policies, source-order variations, explicit/implicit H
   distinctions, aromatic grouping, marker-selection impossibility and alternatives, reactions
@@ -2646,7 +2674,7 @@ inventing extra public seams.
 | Resolver::project and per-resolver project functions | Direct GraphIR-only transformation, same mutation/publication semantics as resolve; no TableIR or IO-config parameters. Ordinary valence has no projection phase; S4a removed ValenceResolver::project and ValenceProjectError. S4b–S4d completion records specify the implemented signatures and diagnostics. | Convey; supported-input roundtrip properties and projection benchmarks. |
 | Resolver::resolve, ResolveConfig, ResolveState and existing reports/errors | Retain forward semantics, including completed isotope corrections. Project does not invoke resolution for validation. | Existing ingestion and resolution tests; supported-input projection properties. |
 | AtomTypeRegistry lookup/admission operations | Retain forward admission and completed registry invariants/deduplication; no projection candidate filtering or new pruning API. | Forward atom typing. |
-| Smiles/ReactionSmiles::from_table_ir | New checked owned-table constructors with &SmilesIoConfig; Result establishes renderability. Private table fields remain private. | Convey across the crate boundary; tests of independent open tables. |
+| Smiles/ReactionSmiles::from_table_ir | Infallible owned-table constructors without IO config or validation. Private table fields remain private. | Convey across the crate boundary; tests of independent open tables. |
 | Smiles/ReactionSmiles::render, render_with | New String-returning Result methods; OpenSMILES default or explicit IO config. Recompute traversal/assignment. | export conveniences; boundary normalization properties. No Display or unchecked formatter is approved. |
 | Smiles/ReactionSmiles::parse, parse_bytes, parse_with, parse_bytes_with, FromStr | Retain parse surface and syntax-config defaults; frame normalization changes their produced internal tables. | Existing ingestion, direct boundary users, properties and fuzzing. Parsing does not become chemistry resolution. |
 | Smiles/ReactionSmiles::as_table_ir, into_table_ir | Retain signatures; borrow/consume private payload, no mutable accessor. | Interpret is the actual production consumer. |
@@ -2684,7 +2712,7 @@ owning module and the repository's established public reexport surface, not from
   TryFrom<ExtendedMolecule> for Molecule. ExtendedBond has both fields being retired, not merely
   Bond. Reaction and ExtendedReaction contain three corresponding molecule carriers and derived
   mapping indexes. Their from_molecules/from_extended_molecules constructors currently initialize
-  that index empty; checked boundary construction must not assume an independently assembled
+  that index empty; an operation consuming the index must not assume an independently assembled
   table carries a valid index.
 - **Raise:** table_ir/raise.rs unconditionally builds AtomNeighbors, constructs atoms/bonds,
   partitions donating/noncovalent records into relations, copies explicit atom frames, and invokes
@@ -2720,15 +2748,15 @@ owning module and the repository's established public reexport surface, not from
 | --- | --- | --- |
 | Graph and traversal callback | Graph establishes its stored connectivity. An arbitrary callback carries the consistency precondition; traversal does not certify it. | No defensive validation Result; inconsistent finite values have no correctness promise, internal processing must avoid panics. Callback execution is caller-owned. |
 | Open TableIR and temporary index | Tables remain authoritative. Index construction establishes its own storage; later table edits promise no index/table correspondence. | No stale-index repair or general validation wrapper. Operations needing table references first establish their required properties; no chemistry inference in parse. |
-| Explicit stereo frames | Site and references belong to the table; endpoint ordering and frame action are fixed. Either has no references. | Source interpretation checks marker consistency; raise/checked construction enforce required references. Do not silently pad, retag virtual ligands, or downgrade configuration. |
-| Checked SMILES boundary | Private payload plus successful construction under IO config establishes representability; parse retains its existing acceptance contract. | Mutable fields are not exposed. Same-config rendering succeeds; other-config rendering may fail. No invented coordinates or lost annotations. |
+| Explicit stereo frames | Site and references belong to the table; endpoint ordering and frame action are fixed. Either has no references. | Source interpretation checks marker consistency; raise/rendering check references when required. Do not silently pad, retag virtual ligands, or downgrade configuration. |
+| SMILES boundary | Private owned table; all required integrity, format support, and marker feasibility checks belong to rendering. | Mutable fields are not exposed. Successful construction does not promise renderability. No invented coordinates or lost annotations. |
 | Resolver::project | Caller supplies GraphIR; work is GraphIR throughout, on an intermediate candidate. | Result/Solution follows resolve; successful projection publishes atomically, without re-resolution. Failure preserves caller input. |
-| Convey and text export | Convey clones, projects, lowers values supported by TableIR, and calls checked construction for notation support. Export composes convey/render. | Preserve source graph and supported input semantics; reject concrete unrepresentable values. No runtime roundtrip verification. |
+| Convey and text export | Convey clones, projects, lowers values supported by TableIR, and wraps the resulting table. Export composes convey/render. | Preserve source graph and supported input semantics; reject concrete unrepresentable values. No runtime roundtrip verification. |
 | Reaction boundary construction | A supplied table may have independently assembled labels/index; the constructor owns the required consistency check. | Preserve label semantics including parsed repeats/agents where representable; GraphIR convey produces its index from correspondence labels. |
 
 The laws to verify in later subitems are traversal visitor/collector equivalence and completion,
 project(resolve(input)) for supported foreign input plus atomic failure, boundary normalization
-and same-config renderability, and molecular/reaction ingestion-to-export preservation with
+and output-specific failures, and molecular/reaction ingestion-to-export preservation with
 explicit/implicit H and stereo-frame action.
 These are distinct operational domains; no structural count comparison substitutes for them.
 
