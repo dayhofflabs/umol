@@ -15,23 +15,57 @@ use std::borrow::Cow;
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
+use umol_graph::export::Convey;
 use umol_graph::ingest::{ingest_smiles, ingest_smiles_with};
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::valence::ValenceResolver;
 use umol_graph::ops::resolve::{IsotopePolicy, ProjectFlags, ResolveConfig, Resolver};
 use umol_graph::ops::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable};
+use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
-    BondConstraintForm, BondForm, BondId, BooleanForm, CisTransStereoForm, ElectronCountsForm,
-    ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, StereoAtomForm,
-    StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
-    UnpairedElectronsForm,
+    BondConstraintForm, BondForm, BondId, BooleanForm, Canonicalize, CanonicalizeContext,
+    CisTransStereoForm, ElectronCountsForm, ElementForm, IsotopeMassForm, Molecule,
+    MoleculeEntries, NumForm, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
+    StereoLigand, StereoLigandKind, TetrahedralStereoForm, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, mol_dsl_concrete};
-use umol_io::smiles::SmilesIoConfig;
+use umol_io::smiles::{Smiles, SmilesIoConfig};
 use umol_utils::solution::Solution;
 
 proptest! {
+    #[test]
+    fn test_smiles_convey_roundtrip(
+        chain in 1usize..10, clockwise in any::<bool>(), trans in any::<bool>(),
+        typing in any::<bool>(), explicit_h in any::<bool>(),
+        ring in prop::sample::select(vec!["c1ccccc1", "c1cc[nH]c1"]),
+    ) {
+        let chirality = if clockwise { "@@" } else { "@" };
+        let direction = if trans { "/" } else { "\\" };
+        let hydrogen = if explicit_h { "[H]" } else { "" };
+        let input = format!("{hydrogen}{}[C{chirality}H](F)/C=C{direction}{ring}", "C".repeat(chain));
+        let mut model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            ..Default::default()
+        };
+        model.valence.tie_break = ValenceTieBreak::MostSaturated;
+        let config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
+        let io = SmilesIoConfig::opensmiles();
+        let source = ingest_smiles_with(&input, &io, &model, &config).unwrap();
+        let original = source.clone();
+        let resolver = Resolver::with_config(&model, config);
+        let boundary = Smiles::convey(&source, &resolver, &io).unwrap();
+        prop_assert_eq!(&source, &original);
+        let text = boundary.render_with(&io).unwrap();
+        let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
+        let context = CanonicalizeContext {
+            para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        };
+        prop_assert!(source.canonical_eq(&restored, &context));
+        let repeated = Smiles::convey(&restored, &resolver, &io).unwrap().render_with(&io).unwrap();
+        prop_assert_eq!(text, repeated);
+    }
+
     #[test]
     fn test_valence_resolver_project_input(
         atoms in 2usize..25, mass in any::<bool>(), typing in any::<bool>(),
@@ -60,13 +94,14 @@ proptest! {
         entries in prop::collection::vec((0i64..5, 0i64..5, 0i64..3), 0..24),
         valence in 0i64..5, aromatic in 0i64..3,
         stored_h in 0i64..5, stored_lp in 0i64..5,
-        copies in 1usize..5, natural in any::<bool>(),
+        copies in 1usize..5, natural in any::<bool>(), is_aromatic in any::<bool>(),
     ) {
-        let rows = entries.iter().map(|&(h, v, a)| {
+        let aromatic = if is_aromatic { aromatic } else { 0 };
+        let rows = entries.iter().filter(|&&(_, _, a)| is_aromatic || a == 0).map(|&(h, v, a)| {
             let mut row = atom_dsl!("C#c0#u0#s");
             row.implicit_hydrogens = NumForm::Lit(h);
             row.constraints.set(AtomConstraintForm::valence(v));
-            row.constraints.set(AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(a)));
+            row.constraints.set(AtomConstraintForm::aromatic_valence(if is_aromatic { AromaticValenceForm::aromatic(a) } else { AromaticValenceForm::NotAromatic }));
             row
         }).collect::<Vec<_>>();
         let models = [
@@ -90,9 +125,9 @@ proptest! {
                 atom.implicit_hydrogens = NumForm::Lit(stored_h);
                 atom.lone_pairs = NumForm::Lit(lp);
                 atom.constraints.set(AtomConstraintForm::valence(valence));
-                atom.constraints.set(AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(aromatic)));
+                atom.constraints.set(AtomConstraintForm::aromatic_valence(if is_aromatic { AromaticValenceForm::aromatic(aromatic) } else { AromaticValenceForm::NotAromatic }));
                 let original = Molecule::from_entries(MoleculeEntries { atoms: vec![atom.clone()], ..Default::default() });
-                if natural && selected == Some(stored_h) {
+                if natural && (!is_aromatic || stored_h == 0) && selected == Some(stored_h) {
                     atom.implicit_hydrogens = NumForm::Undetermined;
                 }
                 let expected = Molecule::from_entries(MoleculeEntries { atoms: vec![atom], ..Default::default() });
@@ -113,8 +148,9 @@ proptest! {
         targets in prop::collection::vec(0u8..7, 0..5),
         valence in 0i64..5, aromatic in 0i64..3,
         stored_h in 0i64..5, stored_lp in 0i64..5,
-        natural in any::<bool>(),
+        natural in any::<bool>(), is_aromatic in any::<bool>(),
     ) {
+        let aromatic = if is_aromatic { aromatic } else { 0 };
         let mut table = ValenceTable::empty();
         table.insert(Element::C, ValenceEntry {
             target_covalences: targets.clone(),
@@ -144,9 +180,9 @@ proptest! {
             atom.implicit_hydrogens = NumForm::Lit(stored_h);
             atom.lone_pairs = NumForm::Lit(stored_lp);
             atom.constraints.set(AtomConstraintForm::valence(valence));
-            atom.constraints.set(AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(aromatic)));
+            atom.constraints.set(AtomConstraintForm::aromatic_valence(if is_aromatic { AromaticValenceForm::aromatic(aromatic) } else { AromaticValenceForm::NotAromatic }));
             let mut molecule = Molecule::from_entries(MoleculeEntries { atoms: vec![atom.clone()], ..Default::default() });
-            if natural && selected == Some(stored_h) {
+            if natural && (!is_aromatic || stored_h == 0) && selected == Some(stored_h) {
                 atom.implicit_hydrogens = NumForm::Undetermined;
             }
             let expected = Molecule::from_entries(MoleculeEntries { atoms: vec![atom], ..Default::default() });
@@ -229,7 +265,7 @@ proptest! {
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [3 4 "2"] [4 5 "1"]
                 [5 10 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"]]}"#);
         let mut editor = base.edit();
-        for index in 2..11 {
+        for index in 2..6 {
             editor.atom_mut(AtomId(index)).attributes.implicit_hydrogens = NumForm::Undetermined;
         }
         if saturated && mass.is_none() {

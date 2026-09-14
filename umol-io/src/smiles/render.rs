@@ -322,9 +322,11 @@ fn append_atom(
         output.push_str(symbol);
         return Ok(());
     }
-    let hydrogens = atom
-        .implicit_hydrogens
-        .ok_or(RenderError::InferredHydrogens { atom: index })?;
+    let hydrogens = match atom.implicit_hydrogens {
+        Some(count) => count,
+        None if atom.element == Some(Element::H) => 0,
+        None => return Err(RenderError::InferredHydrogens { atom: index }),
+    };
     output.push('[');
     if let Some(mass) = atom.isotope_mass {
         write!(output, "{mass}").expect("String write");

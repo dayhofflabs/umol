@@ -17,7 +17,7 @@ Correction (2026-09-13): removing ValenceResolver::project also removed implicit
 The ordinary atom valence design below restores that responsibility after aromatic projection
 and before isotope projection, in reverse resolution order.
 The lookup and Natural-isotope retention rules are settled. S4a1–S4a5 are complete;
-S7a has not started. Ad hoc atom-electron
+S7a is complete. Ad hoc atom-electron
 rejections and bracket rules have been removed from rendering; H decisions belong to projection.
 
 Correction (2026-09-14): S4a5 now preserves H at tetrahedral assertion sites and provides explicit
@@ -964,6 +964,8 @@ counts to elide. Rendering must not perform a second chemical inference of the H
 
 For an atom with a concrete H count:
 
+- Preserve positive H on aromatic atoms, including carbon. Read asserted aromaticity when
+  present, otherwise use aromatic-system membership. Zero H remains eligible for elision.
 - Preserve H at tetrahedral assertion sites, including H=0. Stereo projection has already
   written #T before valence projection runs. Decide retention before the inference lookup:
   no #v derivation or #a lookup is needed when the count will be kept. This preserves the count
@@ -1469,7 +1471,7 @@ S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
 S4a1–S4a5 and the S4 gate are complete, including the 2026-09-14 correction.
 S4a0a–S4a0c and the recorded S4a–S4d changes remain implemented.
 S4a3's Natural-isotope H-retention condition is settled.
-S5 and S6 are complete; S7 and later stages are pending.
+S5, S6, and S7a are complete; later subitems are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -3058,13 +3060,13 @@ PROPTEST_CASES=256 and features conformance,proptest. All-target IO Clippy with 
 formatting, and git diff --check pass. Logs: scratch/s6b-gate.log, scratch/s6b-property.log,
 and scratch/s6b-clippy.log.
 
-S4a5 and the corrected S4 gate are complete. S7a is next; its remaining boundary limitations
-are recorded in the S4a5 handoff above.
+S4a5, the corrected S4 gate, and S7a are complete. The two H-handling corrections
+are recorded in the S7a implementation status below; S7b is next.
 
 ### S7 — Convey and text export
 
 - **S7a — Convey trait and molecular conversion.** Module: new umol-graph export module and
-  its owning conversion functions. **Additive (green).** [dep: S4d, S4a5, S6a]
+  its owning conversion functions. **Additive (green); complete.** [dep: S4d, S4a5, S6a]
   Add Convey with associated Input/Config/Error and implement it for Smiles. Clone source GraphIR,
   invoke Resolver::project with ProjectFlags::all(), and convert the projected GraphIR
   fields/assertions into TableIR.
@@ -3097,6 +3099,66 @@ are recorded in the S4a5 handoff above.
 **Gate:** a useful molecular and reaction text roundtrip works through the public output API,
 including ordinary atoms, supported aromatic systems, tetrahedral sites, and coupled cis/trans
 cases. Assert successful coverage in each category; document actual limitations precisely.
+
+#### S7a implementation status — 2026-09-14
+
+umol-graph/src/export.rs adds Convey and ConveyError and implements Convey for
+Smiles. It projects a private copy with all ProjectFlags, lowers atom values and localized bonds
+in their existing order, builds tetrahedral frames from #T and retained ligand counts, and
+selects the lowest-index actual reference at each #C endpoint. GraphIR's ascending neighbor
+order makes those references the first actual ligands of the assertion frame; no H completion
+is needed for the smaller bond frame. Undetermined bond configuration becomes site-only Either.
+Single-donor dative bonds and hydrogen-bond interactions have direct TableIR encodings; other
+unsupported entity data and constraints produce conversion errors. Numeric narrowing reports
+the entity, field, and value. There is no render preflight or new public TableIR conversion.
+
+Initial required-success tests exposed two cases, corrected below:
+
+| Input | Initial output or failure | Projected evidence |
+| --- | --- | --- |
+| `[nH]1cccc1` | Renders as `n1cccc1` instead of retaining the pyrrolyl H notation | N retains #a2, but H=1 becomes Undetermined |
+| `[H][C@](F)(Cl)Br` | Rendering fails with InferredHydrogens at atom 0 | The explicit H atom's H=0 becomes Undetermined; its atom and bond remain present |
+
+Both elisions occur under atom typing and counts, with Strict and MostSaturated. In the pyrrole
+case, current umol ingestion recovers pyrrole even from `n1cccc1`, masking the format problem
+in an internal semantic roundtrip. The repository's
+[Daylight reference](../materials/formats/daylight/theory.smiles.html), section 3.4.3, explicitly
+distinguishes pyrrolyl `[nH]` from pyridyl `n`. The
+[OpenSMILES reference](../materials/formats/opensmiles/OpenSMILES%20specification.pdf), sections
+3.1.5 and 3.6, confines unbracketed H inference to the organic subset, which excludes H itself.
+The agreed corrections are:
+
+- Valence projection retains a positive implicit-H count on every aromatic atom, including
+  carbon. Use the asserted aromatic state when present, otherwise aromatic-system membership
+  for standalone valence projection. Zero H remains eligible for elision.
+- Rendering permits an absent implicit-H count for element H and emits its mandatory brackets
+  without an H-count suffix. A supplied count retains its existing rendering. This is a syntax
+  exception for element H, not a general interpretation of an absent count as zero.
+
+Convey continues to copy projected counts directly. No H is recovered from the source molecule.
+
+Both corrections are implemented. The required-success examples now render as
+`[nH]1[cH][cH][cH][cH]1` and `[H][C@](F)(Cl)Br`. Aromatic carbons with retained positive H
+use bracket notation too. Zero-H aromatic atoms still permit elision. Renderer tests cover absent
+and explicit zero H counts on element H, isotope and charge notation, and the existing rejection
+of a positive implicit-H count on element H. Other bracketed elements retain their existing
+missing-count errors.
+
+Valence tests cover asserted aromaticity and standalone aromatic-system membership under both
+valence sources and both tie-break policies. The external projection properties retain their
+independent allowed-H comparisons and add nonaromatic cases alongside aromatic retention.
+The Convey/render/ingest equivalence and text-idempotency property now generates explicit H atoms
+and pyrrole as well as alkyl, tetrahedral, alkene, and benzene combinations. Exact fixtures cover
+atom fields, stereo frames, ordinary and aromatic text, radicals, isotopes, indefinite bond stereo,
+numeric capacity, unsupported constraints, and projection errors, including source immutability.
+
+Verification passes: cargo test -p umol-graph -p umol-io --features conformance,proptest
+with PROPTEST_CASES=256, including 1,792 graph unit cases, 4,131 IO unit cases, all external
+properties, conformance suites, and doctests. All-target Clippy for both crates with the same
+features and -D warnings, cargo fmt --all --check, and git diff --check pass.
+Evidence: scratch/s7a-gate.log and scratch/s7a-clippy.log. Initial projection diagnostics remain in scratch/s7a-h-projection.log
+and scratch/stereo-valence-scan/src/bin/check_h_projection.rs. S7b/S7c and the Interpret migration
+have not started.
 
 ### S8 — Interpret/ingest resolver migration and existing consumers
 

@@ -56,6 +56,8 @@ impl Smiles {
 
     /// Render under an explicit IO configuration, recomputing traversal and stereo markers.
     ///
+    /// Element H always uses brackets and permits an absent implicit-H count without a suffix.
+    ///
     /// # Errors
     ///
     /// Fails for unsupported fields or unrepresentable stereo. Parsed CX annotations can
@@ -187,6 +189,10 @@ mod tests {
 
     #[rstest]
     #[case::inferred(Atom::aliphatic_atom(Element::C), "C")]
+    #[case::hydrogen(Atom::aliphatic_atom(Element::H), "[H]")]
+    #[case::hydrogen_zero(Atom { implicit_hydrogens: Some(0), ..Atom::aliphatic_atom(Element::H) }, "[H]")]
+    #[case::hydrogen_isotope(Atom { isotope_mass: Some(2), ..Atom::aliphatic_atom(Element::H) }, "[2H]")]
+    #[case::hydrogen_charge(Atom { charge: Some(1), ..Atom::aliphatic_atom(Element::H) }, "[H+]")]
     #[case::zero(Atom { implicit_hydrogens: Some(0), ..Atom::aliphatic_atom(Element::C) }, "[C]")]
     #[case::saturated(Atom { implicit_hydrogens: Some(4), ..Atom::aliphatic_atom(Element::C) }, "[CH4]")]
     #[case::lone_pairs(Atom { lone_pairs: Some(2), unpaired_electrons: Some(0), multiplicity: Some(SpinMultiplicity::SINGLET), ..Atom::aliphatic_atom(Element::O) }, "O")]
@@ -206,20 +212,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::isotope(Atom { isotope_mass: Some(13), ..Atom::aliphatic_atom(Element::C) })]
-    #[case::charge(Atom { charge: Some(1), ..Atom::aliphatic_atom(Element::N) })]
-    #[case::class(Atom { class: Some(1), ..Atom::aliphatic_atom(Element::C) })]
-    #[case::nonorganic(Atom::aliphatic_atom(Element::He))]
-    fn test_smiles_render_atom_error(#[case] atom: Atom) {
+    #[case::isotope(Atom { isotope_mass: Some(13), ..Atom::aliphatic_atom(Element::C) }, SmilesRenderError::InferredHydrogens { atom: 0 })]
+    #[case::charge(Atom { charge: Some(1), ..Atom::aliphatic_atom(Element::N) }, SmilesRenderError::InferredHydrogens { atom: 0 })]
+    #[case::class(Atom { class: Some(1), ..Atom::aliphatic_atom(Element::C) }, SmilesRenderError::InferredHydrogens { atom: 0 })]
+    #[case::nonorganic(Atom::aliphatic_atom(Element::He), SmilesRenderError::InferredHydrogens { atom: 0 })]
+    #[case::hydrogen_count(Atom { implicit_hydrogens: Some(1), ..Atom::aliphatic_atom(Element::H) }, SmilesRenderError::UnsupportedAtom { atom: 0, field: "implicit_hydrogens" })]
+    fn test_smiles_render_atom_error(#[case] atom: Atom, #[case] expected: SmilesRenderError) {
         let table = Molecule {
             atoms: vec![atom],
             ..Molecule::empty()
         };
         let smiles = Smiles::from_table_ir(table.clone());
-        assert_eq!(
-            smiles.render(),
-            Err(SmilesRenderError::InferredHydrogens { atom: 0 })
-        );
+        assert_eq!(smiles.render(), Err(expected));
         assert_eq!(smiles.into_table_ir(), table);
     }
 
