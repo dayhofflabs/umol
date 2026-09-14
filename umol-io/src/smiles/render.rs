@@ -235,9 +235,6 @@ fn append_atom(
     let unsupported = |field| RenderError::UnsupportedAtom { atom: index, field };
     for (present, field) in [
         (atom.valence.is_some(), "valence"),
-        (atom.lone_pairs.is_some(), "lone_pairs"),
-        (atom.unpaired_electrons.is_some(), "unpaired_electrons"),
-        (atom.multiplicity.is_some(), "multiplicity"),
         (atom.label.is_some(), "label"),
         (atom.value.is_some(), "value"),
     ] {

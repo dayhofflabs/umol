@@ -124,7 +124,6 @@ fn test_render_bond_error(#[case] bonds: Vec<Bond>, #[case] expected: RenderErro
 #[case::isotope_inferred_h(Atom { isotope_mass: Some(13), ..Atom::aliphatic_atom(Element::C) }, RenderError::InferredHydrogens { atom: 0 })]
 #[case::h_count(Atom { implicit_hydrogens: Some(10), ..Atom::aliphatic_atom(Element::C) }, RenderError::UnsupportedAtom { atom: 0, field: "implicit_hydrogens" })]
 #[case::charge(Atom { charge: Some(-128), ..Atom::aliphatic_atom(Element::C) }, RenderError::UnsupportedAtom { atom: 0, field: "charge" })]
-#[case::electron_count(Atom { lone_pairs: Some(1), ..Atom::aliphatic_atom(Element::C) }, RenderError::UnsupportedAtom { atom: 0, field: "lone_pairs" })]
 #[case::aromatic(Atom::aromatic_atom(Element::Fe), RenderError::UnsupportedAtom { atom: 0, field: "aromatic" })]
 fn test_render_atom_error(#[case] atom: Atom, #[case] expected: RenderError) {
     let molecule = Molecule {
