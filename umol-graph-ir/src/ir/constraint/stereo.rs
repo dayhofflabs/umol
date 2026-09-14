@@ -663,6 +663,33 @@ macro_rules! relation_form {
                 matches!(self, Self::Lit(_))
             }
 
+            fn is_compatible(&self, other: &Self) -> bool {
+                match (self, other) {
+                    (Self::Undetermined, Self::Undetermined | Self::Lit(_))
+                    | (Self::Lit(_), Self::Undetermined) => true,
+                    (Self::Undetermined, Self::LitSet(s))
+                    | (Self::LitSet(s), Self::Undetermined) => !s.is_empty(),
+                    (Self::Undetermined, Self::NotSet(s))
+                    | (Self::NotSet(s), Self::Undetermined) => {
+                        s.len() < <$domain as VariantArray>::VARIANTS.len()
+                    }
+                    (Self::Lit(a), Self::Lit(b)) => a == b,
+                    (Self::Lit(value), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(value)) => {
+                        s.contains(value)
+                    }
+                    (Self::Lit(value), Self::NotSet(s)) | (Self::NotSet(s), Self::Lit(value)) => {
+                        !s.contains(value)
+                    }
+                    (Self::LitSet(a), Self::LitSet(b)) => !a.is_disjoint(b),
+                    (Self::LitSet(a), Self::NotSet(b)) | (Self::NotSet(b), Self::LitSet(a)) => {
+                        a.iter().any(|value| !b.contains(value))
+                    }
+                    (Self::NotSet(a), Self::NotSet(b)) => <$domain as VariantArray>::VARIANTS
+                        .iter()
+                        .any(|value| !a.contains(value) && !b.contains(value)),
+                }
+            }
+
             /// Intersection of the admissible sets, folded by `normalize` (∅ → `None`).
             fn meet(&self, other: &Self) -> Option<Self> {
                 Self::LitSet(

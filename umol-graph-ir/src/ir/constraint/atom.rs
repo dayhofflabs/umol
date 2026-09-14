@@ -847,6 +847,19 @@ impl Lattice for AromaticValenceForm {
         }
     }
 
+    fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined, Self::Undetermined | Self::NotAromatic)
+            | (Self::NotAromatic, Self::Undetermined) => true,
+            (Self::Undetermined, Self::Aromatic(v)) | (Self::Aromatic(v), Self::Undetermined) => {
+                v.is_compatible(&NumForm::Undetermined)
+            }
+            (Self::NotAromatic, Self::NotAromatic) => true,
+            (Self::Aromatic(a), Self::Aromatic(b)) => a.is_compatible(b),
+            _ => false,
+        }
+    }
+
     /// Greatest lower bound, canonicalizing operands and output.
     fn meet(&self, other: &Self) -> Option<Self> {
         let a = self.normalized().ok()?;
@@ -1001,6 +1014,18 @@ impl Lattice for MulticenterValenceForm {
             Self::Undetermined => false,
             Self::NotMulticenter => true,
             Self::Multicenter(v) => v.is_ground(),
+        }
+    }
+
+    fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined, Self::Undetermined | Self::NotMulticenter)
+            | (Self::NotMulticenter, Self::Undetermined) => true,
+            (Self::Undetermined, Self::Multicenter(v))
+            | (Self::Multicenter(v), Self::Undetermined) => v.is_compatible(&NumForm::Undetermined),
+            (Self::NotMulticenter, Self::NotMulticenter) => true,
+            (Self::Multicenter(a), Self::Multicenter(b)) => a.is_compatible(b),
+            _ => false,
         }
     }
 

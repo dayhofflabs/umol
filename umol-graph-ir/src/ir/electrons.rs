@@ -96,6 +96,13 @@ impl Lattice for ElectronCountsForm {
         matches!(self, Self::Lit(_))
     }
 
+    fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => true,
+            (Self::Lit(a), Self::Lit(b)) => a == b,
+        }
+    }
+
     /// Atomic exact-match: the whole vector meets only an equal vector (both
     /// length and contents); any mismatch is `None`.
     fn meet(&self, other: &Self) -> Option<Self> {

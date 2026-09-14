@@ -2108,6 +2108,109 @@ additional allocation volume; it does not attribute every timing difference to a
 Harness: scratch/stereo-valence-scan/src/bin/s4a4_allocations.rs; results:
 scratch/s4a4-allocations.csv. Performance work is separate from S4a5.
 
+#### Projection profile — 2026-09-13
+
+Transaction/publication optimization is deferred. An optimized build with debug information was
+sampled with samply at 2,000 Hz for 12 seconds per case, using MostSaturated and Natural isotope
+projection. The inputs were the existing inline 64-carbon chain and
+[13CH3][C@H](F)/C=C/c1ccccc1. Percentages below include only stacks inside projection; parsing,
+resolver construction, caller input cloning, and caller output disposal are excluded.
+
+| Input / source | Transaction application | Build/publication | Atom edit construction |
+| --- | ---: | ---: | ---: |
+| 64-atom chain / atom typing | 18.2% | 15.2% | 6.7% |
+| 64-atom chain / counts | 36.0% | 31.8% | 13.2% |
+| Stereo/aromatic combination / atom typing | 37.6% | 14.9% | 6.0% |
+| Stereo/aromatic combination / counts | 49.3% | 19.3% | 7.0% |
+
+Each nonempty phase constructs an editor, applies a transaction, and publishes a molecule.
+The chain performs two such sequences (valence and isotope); the combined input performs four.
+Transactions allocate initial handle tables and an undo journal and clone the editor's
+correspondence. Projection immediately drops the returned journal. Each editor initially shares
+the current molecule's arrays, so its first mutation copies the affected array; valence and
+isotope therefore copy the atom array separately.
+
+Build calls try_build → Molecule::try_from_arcs → check_integrity. Almost all chain build time is
+the integrity scan (15.0% of total projection samples for typing, 31.3% for counts), dominated by
+constructing and populating the HashSet of bond endpoint pairs used to detect parallel bonds.
+This repeats despite the chain phases changing atom fields only.
+
+Transaction application includes actual field writes and copy-on-write cloning; its whole share
+is not removable overhead. The existing consuming MoleculeEditor::apply avoids the undo journal
+and correspondence backup but retains handle processing, copying, and publication checks. No
+alternative was implemented or timed. These profiles do not establish a speedup for changing the
+application method or combining phases.
+
+Atom typing has an additional lookup cost: NumForm::meet accounts for 25.1% of typing-chain
+samples and AtomConstraintsForm::find for 10.6%. This is separate from the deferred
+transaction/publication work. Detailed profiles, symbol sidecars, folded stacks, analysis script,
+and reproduction commands are recorded in scratch/projection-profile/report.md and the
+scratch/projection-{typing,counts}-{chain,combined} artifacts.
+
+Inspection of the default neutral-carbon bucket finds 23 rows. On an ordinary chain atom,
+11 survive spin filtering; 2 terminal or 3 internal rows survive valence filtering, and 2
+survive aromatic filtering. MostSaturated scans the complete bucket to choose between the
+remaining H counts (terminal: 3 or 1; internal: 2 or 0). Thus the 64-atom chain visits 1,472
+rows. With the present filter order, each atom invokes 23 unpaired-count, 11 multiplicity, and
+11 valence compatibility checks: 2,880 numeric compatibility checks over the chain.
+
+At profiling time, NumForm and AromaticValenceForm inherited Lattice::is_compatible, which computes meet(...).is_some().
+The spin derive combines the two component compatibility checks. These literal cases allocate
+no heap storage, but still call the general normalization/meet machinery and construct/discard
+the result. Each admitted spin row also binary-searches its five-entry constraint list for #v;
+the valence survivors search again for #a. The registry's BTreeMap::get subtree is only 1.1% of
+typing-chain projection samples. The expensive work is repeated candidate testing, not locating
+the bucket or allocating a candidate collection. NumForm::matches already had direct literal
+cases; is_compatible had no corresponding shortcut. These were diagnostic findings, not approval
+to change comparison semantics or registry storage. Scan output: scratch/projection-profile/typing-lookup.txt.
+
+#### Compatibility overrides — 2026-09-14
+
+The subsequent authorized change adds is_compatible overrides in priority order:
+
+1. NumForm, AromaticValenceForm, and MulticenterValenceForm: direct numeric/set/range tests and
+   delegation from the valence wrappers, addressing the measured H-inference path.
+2. ElementForm, IsotopeMassForm, and ElectronCountsForm: borrowed set membership/intersection
+   and vector equality instead of constructing meet results.
+3. StereoConfigurationForm, TetrahedralStereoForm, CisTransStereoForm, TopicityRelationForm,
+   StereogenicityForm, BooleanForm, and NoncovalentBondKindForm: direct compatibility of their
+   stored alternatives. A private coset_is_compatible function serves the existing stereo forms.
+
+Every hand-written or macro-generated Lattice implementation now overrides is_compatible;
+the other constraint containers and derived structs already delegated to component checks.
+New matches put Undetermined first, then literals, then the remaining alternatives, with the
+meet fallback last. Symbolic numeric expressions, element/isotope variables, and stereo terms
+retain the canonicalizing fallback. Empty sets and contradictory forms preserve the original
+meet-based result. No registry, resolver, transaction, publication, or public API change is made.
+
+The existing external lattice-law sweep now asserts is_compatible(a, b) == meet(a, b).is_some()
+in both directions for leaf and composite forms. Additional exact cases and generated comparisons
+cover empty sets, complements, ranges, contradictory numeric forms, and raw stereo cosets.
+Property tests remain outside src; the default meet implementation remains their reference.
+
+Verification passes for graph-IR, graph, and IO with conformance,proptest and PROPTEST_CASES=256,
+including the full external suites. Affected all-target Clippy with -D warnings, formatting,
+and git diff --check pass. Logs: scratch/lattice-compatibility-gate.log and
+scratch/lattice-compatibility-clippy.log. The source review confirms that the comparison
+overrides and their private stereo helper are the only production changes.
+
+A paired three-second driver run per case compares the unchanged pre-edit release binary with
+the final release build (both with debug information). These wall-time/iteration figures include
+the driver's input preparation and output disposal, unlike the earlier stack-filtered sample
+percentages. They are bounded throughput evidence, not a Criterion confidence interval.
+
+| Input / source | Before (µs) | After (µs) |
+| --- | ---: | ---: |
+| 64-atom chain / atom typing | 55.036 | 42.459 |
+| Stereo/aromatic combination / atom typing | 19.493 | 17.582 |
+| 64-atom chain / counts | 26.544 | 26.634 |
+| Stereo/aromatic combination / counts | 15.017 | 15.084 |
+
+Atom-typing time falls by approximately 23% and 10% respectively; counts controls change by less
+than 0.5%. Driver and raw results: scratch/stereo-valence-scan/src/bin/profile_projection.rs and
+scratch/projection-profile/compatibility-comparison.csv. Transaction/publication optimization
+remains deferred.
+
 #### S4a5 completion — 2026-09-13
 
 The existing renderer already implements the settled boundary behavior after the earlier

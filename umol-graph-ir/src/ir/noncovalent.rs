@@ -543,6 +543,13 @@ impl Lattice for NoncovalentBondKindForm {
         matches!(self, Self::Lit(_))
     }
 
+    fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => true,
+            (Self::Lit(a), Self::Lit(b)) => a == b,
+        }
+    }
+
     fn meet(&self, other: &Self) -> Option<Self> {
         match (self, other) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),

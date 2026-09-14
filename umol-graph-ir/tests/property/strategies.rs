@@ -1188,6 +1188,8 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     c: &L,
 ) -> Result<(), TestCaseError> {
     prop_assert_eq!(a.meet(b), b.meet(a));
+    prop_assert_eq!(a.is_compatible(b), a.meet(b).is_some());
+    prop_assert_eq!(b.is_compatible(a), b.meet(a).is_some());
     prop_assert_eq!(a.join(b), b.join(a));
     prop_assert_eq!(
         a.meet(b).and_then(|ab| ab.meet(c)),
