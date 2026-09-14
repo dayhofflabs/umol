@@ -13,7 +13,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_graph::ingest::ingest_smiles;
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
-use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
+use umol_graph::ops::resolve::{IsotopePolicy, ProjectFlags, ResolveConfig, Resolver};
 use umol_graph_ir::ir::{Molecule, TryIntoIr};
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
@@ -188,7 +188,10 @@ fn bench_project(c: &mut Criterion) {
             ] {
                 let source = ingest_smiles(input).unwrap();
                 let mut checked = source.clone();
-                assert_eq!(resolver.project(&mut checked), Ok(Solution::Determined(())));
+                assert_eq!(
+                    resolver.project(&mut checked, ProjectFlags::all()),
+                    Ok(Solution::Determined(()))
+                );
                 assert!(
                     !checked.has_stereo_atoms()
                         && !checked.has_stereo_bonds()
@@ -199,7 +202,11 @@ fn bench_project(c: &mut Criterion) {
                     |b| {
                         b.iter_batched_ref(
                             || source.clone(),
-                            |molecule| resolver.project(black_box(molecule)).unwrap(),
+                            |molecule| {
+                                resolver
+                                    .project(black_box(molecule), ProjectFlags::all())
+                                    .unwrap()
+                            },
                             BatchSize::SmallInput,
                         );
                     },

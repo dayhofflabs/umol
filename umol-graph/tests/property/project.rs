@@ -8,15 +8,17 @@
 //! expectations, including aromatic contributions, both stereo assertions, and isotope elision.
 //! Valence projection compares H elision with independent allowed-H sets for custom registries
 //! and bounded counts tables, including isotope retention, field preservation, and idempotence.
+//! Stage selection is compared with standalone composition for every flag combination on
+//! ingested stereo/aromatic molecules; omitting valence must preserve every H count.
 
 use std::borrow::Cow;
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
-use umol_graph::ingest::ingest_smiles_with;
+use umol_graph::ingest::{ingest_smiles, ingest_smiles_with};
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::valence::ValenceResolver;
-use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
+use umol_graph::ops::resolve::{IsotopePolicy, ProjectFlags, ResolveConfig, Resolver};
 use umol_graph::ops::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
@@ -159,6 +161,50 @@ proptest! {
 
 proptest! {
     #[test]
+    fn test_resolver_project_composition(
+        chain in 1usize..12, clockwise in any::<bool>(), typing in any::<bool>(),
+        saturated in any::<bool>(), natural in any::<bool>(),
+    ) {
+        let chirality = if clockwise { "@@" } else { "@" };
+        let input = format!("[13CH3][C{chirality}H](F)/C=C/c1ccccc1.C[S{chirality}](=O){}", "C".repeat(chain));
+        let mut model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            ..Default::default()
+        };
+        model.valence.tie_break = if saturated { ValenceTieBreak::MostSaturated } else { ValenceTieBreak::Strict };
+        let config = ResolveConfig {
+            isotope: if natural { IsotopePolicy::Natural } else { IsotopePolicy::Strict },
+            ..Default::default()
+        };
+        let original = ingest_smiles(&input).unwrap();
+        let hydrogens = original.atoms().iter().map(|atom| atom.implicit_hydrogens().clone()).collect::<Vec<_>>();
+        let resolver = Resolver::with_config(&model, config);
+        for bits in 0..=ProjectFlags::all().bits() {
+            let flags = ProjectFlags::from_bits_retain(bits);
+            let mut expected = original.clone();
+            if flags.contains(ProjectFlags::STEREO) {
+                prop_assert_eq!(resolver.stereo.project(&mut expected), Ok(Solution::Determined(())));
+            }
+            if flags.contains(ProjectFlags::AROMATICITY) {
+                prop_assert_eq!(resolver.aromaticity.project(&mut expected), Ok(Solution::Determined(())));
+            }
+            if flags.contains(ProjectFlags::VALENCE) {
+                prop_assert_eq!(resolver.valence.project(&mut expected, model.valence.tie_break), Ok(Solution::Determined(())));
+            }
+            if flags.contains(ProjectFlags::ISOTOPE) {
+                prop_assert_eq!(resolver.isotope.project(&mut expected), Ok(Solution::Determined(())));
+            }
+            let mut projected = original.clone();
+            prop_assert_eq!(resolver.project(&mut projected, flags), Ok(Solution::Determined(())));
+            prop_assert_eq!(&projected, &expected);
+            if !flags.contains(ProjectFlags::VALENCE) {
+                let retained = projected.atoms().iter().map(|atom| atom.implicit_hydrogens().clone()).collect::<Vec<_>>();
+                prop_assert_eq!(&retained, &hydrogens);
+            }
+        }
+    }
+
+    #[test]
     fn test_resolver_project_input(
         mass in prop::sample::select(vec![None, Some(13u32), Some(14u32)]),
         clockwise in any::<bool>(), trans in any::<bool>(),
@@ -183,7 +229,7 @@ proptest! {
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [3 4 "2"] [4 5 "1"]
                 [5 10 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"]]}"#);
         let mut editor = base.edit();
-        for index in 1..11 {
+        for index in 2..11 {
             editor.atom_mut(AtomId(index)).attributes.implicit_hydrogens = NumForm::Undetermined;
         }
         if saturated && mass.is_none() {
@@ -202,7 +248,7 @@ proptest! {
         editor.bond_mut(BondId(3)).attributes.constraints.set(BondConstraintForm::CisTransStereo(
             CisTransStereoForm::Stereo(StereoCoset::Lit(u32::from(trans)))));
         let expected = editor.build();
-        prop_assert_eq!(Resolver::with_config(&model, config).project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(Resolver::with_config(&model, config).project(&mut molecule, ProjectFlags::all()), Ok(Solution::Determined(())));
         prop_assert_eq!(molecule, expected);
     }
 

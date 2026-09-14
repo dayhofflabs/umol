@@ -19,6 +19,7 @@ pub use aromaticity::{
     AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
     AromaticityResolveConfig, AromaticityResolver,
 };
+use bitflags::bitflags;
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 use isotope::IsotopeProjectError;
 pub use isotope::{IsotopeContradiction, IsotopeError, IsotopePolicy, IsotopeResolver};
@@ -67,6 +68,21 @@ pub struct ResolveConfig {
     pub isotope: IsotopePolicy,
     pub aromaticity: AromaticityResolveConfig,
     pub stereo: StereoResolveConfig,
+}
+
+bitflags! {
+    /// Stages selected for [`Resolver::project`], executed in declaration order.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct ProjectFlags: u8 {
+        /// Replace stereo entities with fixed-frame assertions.
+        const STEREO = 1 << 0;
+        /// Replace aromatic systems with atom and bond assertions.
+        const AROMATICITY = 1 << 1;
+        /// Elide recoverable implicit-H counts.
+        const VALENCE = 1 << 2;
+        /// Elide isotope defaults under the isotope policy.
+        const ISOTOPE = 1 << 3;
+    }
 }
 
 /// Solver state threaded through the constitution round: the per-atom
@@ -458,11 +474,13 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Projects stereo, aromatic systems, implicit H, and isotope defaults within graph IR atomically.
+    /// Projects selected stages within graph IR atomically.
     ///
     /// Recovers fixed-frame #T/#C assertions, writes member-aligned #a contributions and
     /// aromatic bond assertions, elides recoverable H under the valence policy, then elides
-    /// isotope defaults. This order retains Natural isotope evidence for H projection.
+    /// isotope defaults. Only stages selected by `flags` run, in that order. This order
+    /// retains Natural isotope evidence for H projection. Omitting VALENCE preserves all H
+    /// counts; use all flags for ordinary projection.
     /// Other fields and structures remain for the eventual format conversion. Successful
     /// projection does not establish format representability or require a concrete result:
     /// isotope default elision can leave isotope fields undetermined.
@@ -472,6 +490,8 @@ impl<'a> Resolver<'a> {
     /// Only Determined publishes the candidate. Errors, contradictions, and underdetermination
     /// leave the caller's molecule unchanged. Projection uses local H inference without invoking
     /// resolution or recovery comparisons. Atom electron fields and localized charge are preserved.
+    /// For inputs meeting the bond charge/spin requirements, the result agrees with executing
+    /// the selected standalone projections in order. Empty flags leave such inputs unchanged.
     ///
     /// # Errors
     ///
@@ -482,6 +502,7 @@ impl<'a> Resolver<'a> {
     pub fn project(
         &self,
         molecule: &mut Molecule,
+        flags: ProjectFlags,
     ) -> Result<Solution<(), ProjectContradiction>, ProjectError> {
         let bonds = molecule
             .bonds()
@@ -522,31 +543,39 @@ impl<'a> Resolver<'a> {
         }
 
         let mut candidate = molecule.clone();
-        match self.stereo.project(&mut candidate)? {
-            Solution::Determined(()) => {}
-            Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-            Solution::Contradictory(contradiction) => {
-                return Ok(Solution::Contradictory(contradiction.into()))
+        if flags.contains(ProjectFlags::STEREO) {
+            match self.stereo.project(&mut candidate)? {
+                Solution::Determined(()) => {}
+                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
+                Solution::Contradictory(contradiction) => {
+                    return Ok(Solution::Contradictory(contradiction.into()))
+                }
             }
         }
-        match self.aromaticity.project(&mut candidate)? {
-            Solution::Determined(()) => {}
-            Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-            Solution::Contradictory(contradiction) => {
-                return Ok(Solution::Contradictory(contradiction.into()))
+        if flags.contains(ProjectFlags::AROMATICITY) {
+            match self.aromaticity.project(&mut candidate)? {
+                Solution::Determined(()) => {}
+                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
+                Solution::Contradictory(contradiction) => {
+                    return Ok(Solution::Contradictory(contradiction.into()))
+                }
             }
         }
-        match self.valence.project(&mut candidate, self.tie_break)? {
-            Solution::Determined(()) => {}
-            Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-            Solution::Contradictory(contradiction) => {
-                return Ok(Solution::Contradictory(contradiction.into()))
+        if flags.contains(ProjectFlags::VALENCE) {
+            match self.valence.project(&mut candidate, self.tie_break)? {
+                Solution::Determined(()) => {}
+                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
+                Solution::Contradictory(contradiction) => {
+                    return Ok(Solution::Contradictory(contradiction.into()))
+                }
             }
         }
-        match self.isotope.project(&mut candidate)? {
-            Solution::Determined(()) => {}
-            Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-            Solution::Contradictory(contradiction) => match contradiction {},
+        if flags.contains(ProjectFlags::ISOTOPE) {
+            match self.isotope.project(&mut candidate)? {
+                Solution::Determined(()) => {}
+                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
+                Solution::Contradictory(contradiction) => match contradiction {},
+            }
         }
         *molecule = candidate;
         Ok(Solution::Determined(()))
@@ -1148,17 +1177,19 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
         AtomConstraintForm, AtomForm, AtomId, IsotopeMassForm, MoleculeConstraint, MoleculeEntries,
-        MulticenterValenceForm, NumForm, StereoConfigurationForm,
+        MulticenterValenceForm, NumForm, StereoConfigurationForm, StereoCoset, StereoLigand,
+        StereoLigandKind,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
+    use crate::ingest::ingest_smiles;
     use crate::ops::aromaticity::{AromaticityError, AromaticityInconsistency};
     use crate::ops::model::{
         AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
         RingLimits, StereoModel, ValenceModel,
     };
-    use crate::ops::stereo::StereoInconsistency;
+    use crate::ops::stereo::{StereoInconsistency, StereoPerception};
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
     use crate::ops::validate::{ConnectivityModel, IncidenceConstraintInvariantsContradiction};
 
@@ -1957,7 +1988,7 @@ mod tests {
             },
         );
         assert_eq!(
-            resolver.project(&mut molecule),
+            resolver.project(&mut molecule, ProjectFlags::all()),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
@@ -2008,10 +2039,70 @@ mod tests {
                     ..Default::default()
                 }
             )
-            .project(&mut molecule),
+            .project(&mut molecule, ProjectFlags::all()),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, mol_dsl!(expected));
+    }
+
+    #[rstest]
+    #[case::hydrogen("F[C@H](Cl)Br", 1, vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    ])]
+    #[case::atoms("F[C@](Cl)(Br)I", 0, vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+    ])]
+    #[case::lone_pair("C[S@](=O)CC", 0, vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+    ])]
+    fn test_resolver_project_stereo(
+        #[case] input: &str,
+        #[case] hydrogens: i64,
+        #[case] ligands: Vec<StereoLigand>,
+        #[values(false, true)] typing: bool,
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)] policy: ValenceTieBreak,
+    ) {
+        let mut model = ChemistryModel {
+            valence: if typing {
+                ValenceModel::default()
+            } else {
+                ValenceModel::smiles()
+            },
+            ..Default::default()
+        };
+        model.valence.tie_break = policy;
+        let config = ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        };
+        let mut molecule = ingest_smiles(input).unwrap();
+        assert_eq!(
+            Resolver::with_config(&model, config).project(&mut molecule, ProjectFlags::all()),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(
+            molecule.atom(AtomId(1)).implicit_hydrogens(),
+            &NumForm::Lit(hydrogens)
+        );
+        assert_eq!(
+            molecule.atom(AtomId(1)).constraints().tetrahedral_stereo(),
+            Some(&TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))
+        );
+        assert_eq!(
+            StereoPerception::new(&model.stereo)
+                .derive_stereo_atom(&molecule, AtomId(1), &StereoCoset::Lit(0))
+                .map(|(ligands, _)| ligands),
+            Some(ligands)
+        );
     }
 
     #[rstest]
@@ -2026,7 +2117,7 @@ mod tests {
         let model = ChemistryModel::default();
         let original = molecule.clone();
         assert_eq!(
-            Resolver::new(&model).project(&mut molecule),
+            Resolver::new(&model).project(&mut molecule, ProjectFlags::all()),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, original);
@@ -2062,7 +2153,10 @@ mod tests {
             },
         );
         let original = molecule.clone();
-        assert_eq!(resolver.project(&mut molecule), Err(expected));
+        assert_eq!(
+            resolver.project(&mut molecule, ProjectFlags::all()),
+            Err(expected)
+        );
         assert_eq!(molecule, original);
     }
 
@@ -2081,6 +2175,8 @@ mod tests {
         #[case] spin: UnpairedElectronsForm,
         #[case] isotope: IsotopeMassForm,
         #[case] expected: ProjectError,
+        #[values(ProjectFlags::all(), ProjectFlags::all() - ProjectFlags::VALENCE)]
+        flags: ProjectFlags,
     ) {
         let source = mol_dsl_concrete!(
             r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "F" "Cl" "Br"]
@@ -2112,7 +2208,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(resolver.project(&mut molecule), Err(expected));
+        assert_eq!(resolver.project(&mut molecule, flags), Err(expected));
         assert_eq!(molecule, original);
     }
 }

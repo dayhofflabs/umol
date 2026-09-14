@@ -70,6 +70,7 @@ conformance = []
 proptest = []
 
 [dependencies]
+bitflags = "2.9.4"
 bitvec = "1.0.1"
 clap = { version = "4", features = ["derive"] }
 murmur3 = "0.5"

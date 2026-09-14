@@ -16,9 +16,13 @@ implementation and timing records are retained as historical evidence. S4a0a–S
 Correction (2026-09-13): removing ValenceResolver::project also removed implicit-H elision.
 The ordinary atom valence design below restores that responsibility after aromatic projection
 and before isotope projection, in reverse resolution order.
-The lookup and Natural-isotope retention rules are settled. Reopened S4, including
-S4a1–S4a5, is complete. S7a has not started. Ad hoc atom-electron
+The lookup and Natural-isotope retention rules are settled. S4a1–S4a5 are complete;
+S7a has not started. Ad hoc atom-electron
 rejections and bracket rules have been removed from rendering; H decisions belong to projection.
+
+Correction (2026-09-14): S4a5 now preserves H at tetrahedral assertion sites and provides explicit
+projection stage selection through ProjectFlags. Implementation and the corrected S4 gate are
+complete. Mapped export will select all stages except valence to retain H counts.
 
 ## Scope
 
@@ -928,6 +932,22 @@ resolution's phase order. The phase stays within GraphIR and uses the same valen
 Strict/MostSaturated policy as resolution. Only successful composite projection publishes the
 candidate; this does not change the existing mutation/failure contract.
 
+#### Projection stage selection (settled 2026-09-14)
+
+Resolver::project takes a per-call ProjectFlags bitflags argument with STEREO, AROMATICITY,
+VALENCE, and ISOTOPE. Selected stages run in that fixed reverse order; the flags do not change
+ordering or chemistry policies. An omitted stage does not run. Individual resolver project
+methods remain direct operations with their existing arguments.
+
+Ordinary molecular convey selects ProjectFlags::all(). Convey that will assign atom-map labels
+selects all stages except VALENCE. The current valence projection only elides implicit H, so
+omitting it preserves every atom's H count without performing the #v/#a lookup. This includes
+unmapped atoms in a partial correspondence; extra brackets on those atoms are an accepted output
+tradeoff. No per-atom selection allocation or separate H-preservation boolean is introduced.
+Convey owns the reason for stage selection; the resolver receives neither atom maps nor IO config.
+The flags are an operation argument, not part of persistent ResolveConfig. Existing publication
+and failure semantics remain unchanged.
+
 Preserve element, isotope subject to isotope projection, charge, unpaired-electron count,
 multiplicity, lone-pair count, and bond orders. Bracket H counts remain implicit hydrogen
 participants; explicit hydrogen atoms remain explicit. TableIR can retain lone pairs even though
@@ -944,6 +964,10 @@ counts to elide. Rendering must not perform a second chemical inference of the H
 
 For an atom with a concrete H count:
 
+- Preserve H at tetrahedral assertion sites, including H=0. Stereo projection has already
+  written #T before valence projection runs. Decide retention before the inference lookup:
+  no #v derivation or #a lookup is needed when the count will be kept. This preserves the count
+  needed by frame derivation and bracket notation without adding chemistry inference downstream.
 - Preserve H unless isotope composition is Natural. Explicit masses, isotope sets/variables,
   and Undetermined do not permit elision. This is an explicit external-format accommodation:
   an isotope label forces SMILES bracket notation, which needs a concrete H count. Valence
@@ -1016,8 +1040,9 @@ rendering contract: Some(n), including zero, is a retained bracket H count; None
 unbracketed notation but cannot supply the H count required by brackets. Retained atom electron
 fields neither force brackets nor cause rejection on presence alone. The ad hoc atom-electron
 rejections and extra bracket-selection conditions have been removed. Projection now owns H
-elision; rendering performs no chemical inference. The remaining bracket-required cases after
-projection are recorded in the S7a handoff below.
+elision; rendering performs no chemical inference. Tetrahedral H retention and per-call stage
+flags are implemented in corrected S4a5. Other concrete boundary limitations
+remain recorded in the S7a handoff below.
 
 Required verification will cover both sources and policies, duplicate patterns giving the same
 H, distinct H alternatives, charged/radical retention, unchanged stored electron fields, and
@@ -1441,7 +1466,7 @@ The plan below sequences the work; S0–S3 are complete.
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-Reopened S4a1–S4a5 and their gate are complete under the 2026-09-13 design.
+S4a1–S4a5 and the S4 gate are complete, including the 2026-09-14 correction.
 S4a0a–S4a0c and the recorded S4a–S4d changes remain implemented.
 S4a3's Natural-isotope H-retention condition is settled.
 S5 and S6 are complete; S7 and later stages are pending.
@@ -1700,7 +1725,8 @@ changes are reviewed for semantic preservation, not accepted solely because test
 
 ### S4 — Direct GraphIR-only projection
 
-**Reopened and completed 2026-09-13.** S4a1–S4a5 restore valence projection and reconcile its consumers.
+**Correction completed 2026-09-14.** S4a1–S4a5 and the S4 gate are complete, including
+tetrahedral H retention and projection stage flags.
 The ordinary atom valence section owns the design, including the settled Natural-isotope
 H-retention condition for S4a3.
 Earlier completion records remain historical. S7a depends on completion of the reopened S4 gate.
@@ -1938,18 +1964,29 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   stereo preservation under the settled H rule, and source immutability on failure. Extend the
   existing inline-input projection benchmarks for bounded cost/allocation evidence; no fixture
   files or tuning campaign.
-- **S4a5 — Reconcile H lowering and render changes.** Modules: umol-io/src/smiles/render.rs,
-  existing Smiles boundary tests and smiles_property.rs; S7a handoff in this document.
-  **Correction/refactor (green); completed 2026-09-13.** [dep: S4a4, S6a, S6b]
-  The ad hoc atom-electron exclusions and bracket rules were removed on 2026-09-13; this
-  preliminary cleanup does not complete S4a5. Reconcile rendering with the completed projection.
-  Keep the distinction between retained TableIR electron fields and the notation that expresses
-  them indirectly. Implement only the boundary consequences of the settled bracket/H decision;
-  no second valence inference or H elision in rendering. Update exact public boundary cases for
-  ordinary atoms, radicals, isotopes, tetrahedral sites, and preserved TableIR fields. Keep
-  properties in smiles_property.rs. S7a will lower Lit(n) to Some(n), including zero, and
-  Undetermined to None; the complete Convey/render roundtrip belongs to S7a, not a substitute
-  conversion introduced here.
+- **S4a5 — Reconcile H projection, lowering, and rendering.** Modules: umol-graph resolve.rs,
+  resolve/valence.rs and projection callers/tests/benchmarks; S7 handoff in this document.
+  **Breaking/refactor (red→green); correction completed 2026-09-14.** [dep: S4a4, S6a, S6b]
+  In ValenceResolver::project, preserve concrete H at tetrahedral assertion sites, including zero,
+  before invoking either H-inference method. Retained atoms require no #v derivation or #a lookup.
+  The atom-typing and counts inference algorithms remain unchanged.
+
+  Add ProjectFlags and its per-call argument to Resolver::project. Conditionally execute STEREO,
+  AROMATICITY, VALENCE, and ISOTOPE in that order, preserving atomic publication and failure
+  behavior. Migrate existing composite-projection callers in tests and benchmarks to all flags
+  in the same subitem. Standalone resolver projection signatures remain unchanged.
+
+  Cover both valence sources and policies with F[C@H](Cl)Br, F[C@](Cl)(Br)I, and C[S@](=O)CC;
+  assert retained H and derivable frames for implicit-H, four-actual-ligand, and lone-pair cases.
+  Exercise stage combinations through public results and compare composition with the selected
+  standalone operations. Cover preservation of every H count, including zero, when VALENCE is
+  omitted. Extend the existing external projection property suite.
+
+  The renderer cleanup and its public boundary tests were completed on 2026-09-13. These
+  projection decisions require no additional rendering change or downstream H inference.
+  S7a molecular Convey selects all stages and lowers Lit(n) to Some(n), including zero, and
+  Undetermined to None. S7b mapped reaction Convey omits VALENCE before assigning labels.
+  The complete Convey/render/parse roundtrip remains in S7; no substitute conversion is added here.
 
 The restoration path is S4a1/S4a2 → S4a3 → S4a4 → S4a5 → the reopened S4 gate → S7a.
 All five subitems are required. Method signatures/visibility and the bracket/H decision must be
@@ -2227,13 +2264,15 @@ S7a must lower Lit(n) to Some(n), including zero, and Undetermined to None direc
 projected molecule. No recovery from the original molecule or second H inference belongs in
 Convey/render. The full projection/convey/render/parse tests remain in S7a.
 
-There is a concrete remaining limitation for that integration: projection can elide H at neutral
-natural-isotope tetrahedral sites, but their bracket notation still needs a count. For example,
-the frame in F[C@H](Cl)Br with TableIR H=None fails with InvalidStereoAtom; the same applies to
-the zero-H four-atom and lone-pair frames. Atom classes and non-organic elements also require
-brackets and fail with InferredHydrogens when H=None. These are tested existing failures, not a
-completed stereo/reaction export solution. S7a must account for them before claiming its required
-successful roundtrips. This subitem does not add format predicates to valence projection.
+Correction (2026-09-14): the boundary checks above did not establish a complete projection
+contract. A scratch experiment with both valence sources and both tie-break policies confirmed
+that projection erased H at F[C@H](Cl)Br, F[C@](Cl)(Br)I, and C[S@](=O)CC. The three-neighbor
+frames then could not be derived; the four-neighbor frame remained derivable but rendering needed H=0.
+Corrected S4a5 retains H at tetrahedral assertion sites and introduces ProjectFlags as specified
+above. Mapped convey will omit VALENCE rather than recover H after projection. These are
+projection corrections, not additional render inference. Non-organic elements also require
+brackets and fail with InferredHydrogens when H=None; no further element-specific rule is settled
+here. The complete required-success boundary roundtrips remain in S7a.
 
 The reopened S4 gate passes: graph has 1,716 unit cases, 683 conformance cases, and 18 external
 properties; IO has 4,126 unit cases, its MOL/SDF/SMILES conformance suites, and all three external
@@ -2241,6 +2280,31 @@ property suites (26 cases in smiles_property.rs). Both crates ran with conforman
 PROPTEST_CASES=256. Affected all-target Clippy with -D warnings, formatting, and git diff --check
 pass. Logs: scratch/s4a5-graph-gate.log, scratch/s4a5-io-gate.log, scratch/s4a5-clippy.log.
 The public API and production behavior are unchanged by S4a5. Performance was not revisited.
+
+#### S4a5 correction completion — 2026-09-14
+
+ValenceResolver::project retains concrete H, including zero, at #T assertion sites before
+calling either inference method. The atom-typing and counts algorithms are unchanged.
+Resolver::project now takes ProjectFlags and runs only the selected stages, in stereo →
+aromaticity → valence → isotope order. Existing bond charge/spin requirements and atomic
+publication remain unchanged. Standalone projection signatures are unchanged. Composite callers
+and benchmarks pass all flags; mapped Convey will omit VALENCE in S7b.
+
+Exact cases cover implicit-H, four-actual-ligand, and lone-pair tetrahedral frames under both
+valence sources and policies. Inputs are resolved through default ingestion before selecting the
+projection policy; Strict ingestion of unbracketed substituents can itself remain underdetermined.
+The existing composite property now expects retained H at its tetrahedral site. A new property in
+the existing external projection suite compares all 16 stage combinations with standalone
+composition on generated stereo/aromatic inputs and checks every H count when VALENCE is omitted.
+Phase-error cases cover both all stages and all-except-VALENCE, with unchanged input on failure.
+
+The graph/IO gate passes with conformance,proptest and PROPTEST_CASES=256, including all resolution,
+SMILES/MOL/SDF conformance and external property suites. Final targeted composite cases, affected
+all-target Clippy with -D warnings, formatting, and git diff --check pass. Logs:
+scratch/s4a5-correction-gate.log, scratch/s4a5-final-projection-tests.log, and
+scratch/s4a5-correction-clippy.log. No rendering changes or new performance measurements were made.
+The final diff contains only the settled projection changes, their dependency/caller migration,
+tests, and this record. S4 is complete; S7a is next.
 
 #### S4a correction completion — 2026-09-11
 
@@ -2571,7 +2635,7 @@ atomic publication without runtime reconstruction. Establish bounded baselines f
 projection operations; historical reconstruction timings describe different work. No re-resolution
 measurement or tuning campaign is required.
 
-**Reopened S4 gate (completed 2026-09-13):** S4a1–S4a5 pass their exact cases and external
+**Reopened S4 gate (correction completed 2026-09-14):** S4a1–S4a5 pass their exact cases and external
 properties for both candidate sources and policies. Graph/IO unit, conformance, and feature-gated
 property suites pass; formatting, affected all-target Clippy, and git diff --check pass. Confirm
 that projection alone decides H elision, preserves the other atom fields, and uses #v/#a without
@@ -2994,20 +3058,21 @@ PROPTEST_CASES=256 and features conformance,proptest. All-target IO Clippy with 
 formatting, and git diff --check pass. Logs: scratch/s6b-gate.log, scratch/s6b-property.log,
 and scratch/s6b-clippy.log.
 
-Reopened S4 is complete. S7a has not started; its bracket-required H-count limitation is recorded
-in the S4a5 handoff above.
+S4a5 and the corrected S4 gate are complete. S7a is next; its remaining boundary limitations
+are recorded in the S4a5 handoff above.
 
 ### S7 — Convey and text export
 
 - **S7a — Convey trait and molecular conversion.** Module: new umol-graph export module and
   its owning conversion functions. **Additive (green).** [dep: S4d, S4a5, S6a]
   Add Convey with associated Input/Config/Error and implement it for Smiles. Clone source GraphIR,
-  invoke Resolver::project, and convert the projected GraphIR fields/assertions into TableIR.
+  invoke Resolver::project with ProjectFlags::all(), and convert the projected GraphIR
+  fields/assertions into TableIR.
   Build StereoAtom/StereoBond frames here, not in the resolver. Lower projected values that TableIR
   can carry and reject concrete unsupported values/ranges. Rendering owns SMILES
   notation/configuration support. Do not add reconstruction checks at either boundary.
-  Account for H elision at bracket-required sites before claiming successful stereo/reaction
-  output; see the concrete cases in the S4a5 handoff. Lower Lit(n) to Some(n), including zero,
+  Use the corrected tetrahedral H retention from S4a5 and test required successful stereo
+  output; see the concrete cases in its handoff. Lower Lit(n) to Some(n), including zero,
   and Undetermined to None; do not recover H from the original molecule or infer it in rendering.
   Test the supported foreign-input roundtrip through convey/render/parse under the agreed
   equivalences, with required-success fixtures. Include original-input immutability on success
@@ -3015,7 +3080,8 @@ in the S4a5 handoff above.
 - **S7b — Reaction convey.** Same module, ReactionSmiles implementation.
   **Additive (green).** [dep: S7a, S6b]
   Materialize reaction sides through existing ReactionSpan/correspondence operations, then convey
-  both sides. Assign paired atoms label i + 1 in existing matched-pair order; derive atom_mapping
+  both sides with all ProjectFlags except VALENCE, preserving H before labels are applied.
+  Assign paired atoms label i + 1 in existing matched-pair order; derive atom_mapping
   from Atom.class and leave the agent section empty for GraphIR export. Do not infer correspondence
   or recover discarded source labels. Preserve the correspondence through any entity remapping.
   Test creation/deletion, nontrivial pair ordering, disconnected sides, materialization failure,
@@ -3151,7 +3217,8 @@ inventing extra public seams.
 | StereoAtom, StereoLigand, Winding, ConfigurationScope | Retain public layout and the implicit-H/LP participant convention. | Doc 224 parser finalizer, raise, future writer. No LP-removal migration. |
 | AtomNeighbors and table_ir::Neighbor; both molecule atom_neighbors methods | Remain operation-local lookup; no new foundational graph field or adjacency trait. Eliminate unnecessary allocation at callers without assuming final Graph connectivity matches the table. | Raise helpers, table tests; future parser/writer incidence access. Retirement/replacement of the public helper itself is not approved. |
 | TryIntoIr<Molecule> for &table_ir::Molecule; RaiseError | Raise explicit frames instead of interpreting retained directions; preserve model-independent representation errors at the owning conversion. | Interpret, parser/raise fixtures, fuzz target. Source marker conflicts move with their producer; do not erase diagnostics. |
-| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation; no TableIR or IO-config parameters. ValenceResolver::project(&mut Molecule, ValenceTieBreak) returns Result<Solution<(), ValenceContradiction>, ValenceProjectError>, with Transaction as its only operational error. AromaticityProjectError and StereoProjectError also carry Transaction. Composite order is stereo → aromaticity → valence → isotope; ProjectError and ProjectContradiction include Valence. | Convey; public projection properties and projection benchmarks. |
+| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation; no TableIR or IO-config parameters. Composite project takes &mut Molecule and per-call ProjectFlags. ValenceResolver::project(&mut Molecule, ValenceTieBreak) retains its signature and returns Result<Solution<(), ValenceContradiction>, ValenceProjectError>, with Transaction as its only operational error. AromaticityProjectError and StereoProjectError also carry Transaction. Selected stages run stereo → aromaticity → valence → isotope; ProjectError and ProjectContradiction include Valence. | Convey; public projection properties and projection benchmarks. |
+| ProjectFlags | Public bitflags STEREO, AROMATICITY, VALENCE, ISOTOPE selecting composite projection stages. Ordinary convey selects all; mapped convey selects all except VALENCE. No atom-map input or H-preservation boolean in the resolver. | Resolver::project argument; existing callers migrate to all stages. Reaction convey retains H on both sides before labeling. |
 | Resolver::resolve, ResolveConfig, ResolveState and existing reports/errors | Retain forward semantics, including completed isotope corrections. Project does not invoke resolution for validation. | Existing ingestion and resolution tests; supported-input projection properties. |
 | AtomTypeRegistry lookup/admission operations | Retain forward admission and completed registry invariants/deduplication. Projection scans element/charge lookup results with #v/#a filtering and analyzes H alternatives without an intermediate collection or registry mutation. | Forward atom typing and pending H-elision projection. |
 | Smiles/ReactionSmiles::from_table_ir | Infallible owned-table constructors without IO config or validation. Private table fields remain private. | Convey across the crate boundary; tests of independent open tables. |

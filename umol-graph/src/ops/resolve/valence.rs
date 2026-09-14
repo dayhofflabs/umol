@@ -4,7 +4,7 @@
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AsLit, AtomConstraintKey, AtomHandle, AtomUpdate, Edits, IsotopeMassForm, Molecule, NumForm,
-    TransactionError,
+    TetrahedralStereoForm, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -109,6 +109,7 @@ impl<'a> ValenceResolver<'a> {
     /// elision. A literal H count becomes Undetermined when inference selects that count;
     /// missing or ambiguous evidence leaves it unchanged. Isotope projection follows this
     /// operation so that Natural is still available for this external-format requirement.
+    /// Tetrahedral assertions retain H, including zero, before any inference lookup.
     ///
     /// # Semantic properties
     ///
@@ -126,7 +127,10 @@ impl<'a> ValenceResolver<'a> {
     ) -> Result<Solution<(), ValenceContradiction>, ValenceProjectError> {
         let mut edits = Edits::new();
         for atom in molecule.atoms().iter() {
-            if !matches!(atom.attributes.isotope_mass, IsotopeMassForm::Natural)
+            if matches!(
+                atom.constraints().tetrahedral_stereo(),
+                Some(TetrahedralStereoForm::Stereo(_))
+            ) || !matches!(atom.attributes.isotope_mass, IsotopeMassForm::Natural)
                 || atom.charge().as_lit() != Some(0)
                 || atom.unpaired_electrons().count.as_lit() != Some(0)
             {
@@ -415,6 +419,9 @@ mod tests {
     #[case::nonliteral_h("C#i=#c0#h{2,4}#u0#s")]
     #[case::no_match("C#i=#c0#h0#u0#s#v5")]
     #[case::open_aromatic("C#i=#c0#h1#u0#s#a+")]
+    #[case::tetrahedral_h("C#i=#c0#h1#n0#u0#s#v3#T0")]
+    #[case::tetrahedral_zero_h("C#i=#c0#h0#n0#u0#s#v4#T1")]
+    #[case::tetrahedral_lone_pair("S#i=#c0#h0#n1#u0#s#v4#T0")]
     fn test_valence_resolver_project_identity(
         #[case] input: &str,
         #[values(false, true)] typing: bool,
