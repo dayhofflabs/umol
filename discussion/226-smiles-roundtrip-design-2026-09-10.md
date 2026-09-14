@@ -995,6 +995,15 @@ to the allowable alternatives. Do not replace this with a highest-table-valence 
 whole-molecule admission/resolution. A later direct arithmetic optimization must preserve this
 calculation's result; it is not a prerequisite for restoring projection.
 
+CountsValence::infer_implicit_hydrogens has the same crate-visible signature and absence
+semantics as the atom-typing query. With concrete #a, counts uses that value directly, as forward
+candidate enumeration does; it does not search the table's primary/fallback aromatic lists.
+An unresolved stored #a produces no inferred H count. Forward primary/fallback selection remains
+unchanged, and projected #a0 is accepted directly even when it originated from a fallback row.
+The query scans H counts within the first-target bonding budget, checking electron balance,
+lone-pair capacity, and retained spin without constructing candidate atom forms. Actual accepted
+dative pairs enter the existing isoelectronic table lookup; unrelated asserted constraints do not.
+
 #### Remaining design and implementation status
 
 Chemical recoverability alone does not settle H omission for atoms whose notation requires
@@ -1878,18 +1887,20 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   atom fields and the registry are unchanged. Keep ordinary unit tests here; property tests
   exercise ValenceResolver::project once restored in S4a3, not this internal query.
 - **S4a2 — Counts H alternatives.** Module: ops/valence/counts.rs and its existing per-atom
-  calculation. **Additive/refactor (green); pending.** [dep: S4a]
-  Add the corresponding query using the existing first-target-covalence rule, H/aromatic-covalence
+  calculation. **Additive (green); completed 2026-09-13.** [dep: S4a]
+  Add the corresponding crate-visible query using the existing first-target-covalence rule, H/aromatic-covalence
   budget, electron balance, lone-pair capacity, and aromatic primary/fallback behavior. H and lone
   pairs are unspecified only for the query. Determine whether Strict or MostSaturated recovers
   the stored H; preserve H otherwise. Do not run whole-molecule admission or introduce a different
   saturation rule. Include independent cases for unique/plural H, maximum selection, target
   boundaries, #v/#a filtering, fallback behavior, and no alternatives. Retain forward counts
-  fixtures unchanged. S4a1 and S4a2 are independent foundations.
+  fixtures unchanged. Direct use of concrete #a includes fallback-origin contributions; unresolved
+  #a leaves H uninferred. Keep ordinary unit cases here and test projection properties through
+  S4a3's public consumer. S4a1 and S4a2 are independent foundations.
 - **S4a3 — Restore ValenceResolver::project.** Module: ops/resolve/valence.rs and its owning
   diagnostics. **Additive (green); pending.** [dep: S4a1, S4a2, S4a0c]
   Dispatch to the source-specific H queries under the supplied resolver's valence policy.
-  Remove the temporary unused-code expectation on the atom-typing query when adding its caller.
+  Remove the temporary unused-code expectations on both H queries when adding their callers.
   Require concrete zero charge and unpaired-electron count for elision; preserve H otherwise.
   Replace only recoverable literal H counts with Undetermined, subject to the bracket/H decision
   settled before implementation. Preserve charge, electron counts, multiplicity, lone pairs,
@@ -1902,6 +1913,8 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   maximum H, and independence from stored lone pairs when deciding H elision. Verify stored H
   is elided only when equal to the inferred count; otherwise it is preserved. These properties
   are pending this public consumer; do not expose internal queries for testing.
+  For counts, cover first-target selection, H/aromatic budget, electron balance, lone-pair
+  capacity, and table-dependent H elision through the same public operation.
 - **S4a4 — Compose projection in reverse phase order.** Module: ops/resolve.rs,
   existing projection tests, and benchmarks. **Additive (green); pending.** [dep: S4a3, S4d]
   Call ValenceResolver::project after aromatic projection and before isotope projection on the
@@ -1978,7 +1991,31 @@ Verification: PROPTEST_CASES=256 cargo test -p umol-graph --features conformance
 passes (1,554 unit cases, 683 conformance cases, 15 existing property tests, and integration tests).
 All-target graph Clippy with the same features and -D warnings, formatting, and git diff --check
 pass. Logs: scratch/s4a1-gate.log and scratch/s4a1-clippy.log. Forward admission is unchanged.
-S4a2 is next; projection composition and H mutation remain pending.
+Projection composition and H mutation remain pending.
+
+#### S4a2 completion — 2026-09-13
+
+CountsValence::infer_implicit_hydrogens takes &Molecule, AtomId, and ValenceTieBreak and is
+crate-visible. It uses stored #v/#a first, derives absent values, and scans H counts without
+candidate atom forms or intermediate collections. The first target at or above #v sets the
+bonding budget; past the last target or without a table entry, only H=0 is considered. The
+existing aromatic covalence budget, electron balance, lone-pair capacity, and spin derivation
+select allowable counts. Strict requires a unique H value; MostSaturated selects the maximum.
+Concrete #a bypasses aromatic-list selection exactly as in forward counts enumeration.
+
+The 80 new unit cases cover both policies, stored H/LP independence, charge/spin, #v/#a
+precedence and derivation, aromatic contributions including #a0, saturation-target boundaries,
+missing table entries, lone-pair capacity, accepted dative pairs, and differences between the
+SMILES, MDL, and general tables. Molecule/table preservation is checked. Forward counts code
+and its fixtures are unchanged. Public projection properties remain recorded under S4a3;
+both internal queries retain temporary unused-code expectations until that consumer is added.
+
+Verification: PROPTEST_CASES=256 cargo test -p umol-graph --features conformance,proptest --offline
+passes (1,634 unit cases, 683 conformance cases, 15 existing property tests, and integration tests).
+All-target graph Clippy with the same features and -D warnings, formatting, and git diff --check
+pass. Logs: scratch/s4a2-gate.log and scratch/s4a2-clippy.log. Bounded projection measurements
+remain assigned to S4a4 when the composite consumer is restored. S4a3 is next, after settling
+the bracket-required H rule.
 
 #### S4a correction completion — 2026-09-11
 

@@ -19,6 +19,7 @@ use umol_graph_ir::ir::{
 use umol_utils::solution::Solution;
 
 use super::{AtomCompletions, ValenceEntry, ValenceTable};
+use crate::ops::model::ValenceTieBreak;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum CountsError {
@@ -165,34 +166,6 @@ impl<'a> CountsValence<'a> {
         Ok(Some(candidates))
     }
 
-    /// Classify molecule atom (including ground atoms) against valence table:
-    /// - `Determined` if some state admits it.
-    /// - `Contradictory` if no consistent state exists.
-    /// - `Underdetermined` if atom is not ground.
-    pub fn classify_molecule_atom(
-        &self,
-        molecule: &Molecule,
-        atom_id: AtomId,
-    ) -> Solution<(), CountsMismatch> {
-        let atom = molecule.atom(atom_id);
-        if !atom.is_ground() {
-            return Solution::Underdetermined(());
-        }
-        let Some(element) = atom.element().as_lit() else {
-            return Solution::Underdetermined(());
-        };
-        let charge = atom.charge().as_lit().unwrap_or(0);
-        let input = CountsInput::for_molecule_atom(molecule, atom_id);
-        match self.candidate_states(atom.attributes, input) {
-            Ok(_) => Solution::Determined(()),
-            Err(_) => Solution::Contradictory(CountsMismatch {
-                element,
-                charge,
-                valence: input.valence,
-            }),
-        }
-    }
-
     /// Every candidate state admitted by the table and the atom's literals,
     /// in enumeration order (implicit hydrogens ascending, then the table's
     /// aromatic valences). The fallback aromatic-valence list is consulted
@@ -307,6 +280,110 @@ impl<'a> CountsValence<'a> {
             return Err(CountsError::NoMatch);
         }
         Ok(candidates)
+    }
+
+    /// Classify molecule atom (including ground atoms) against valence table:
+    /// - `Determined` if some state admits it.
+    /// - `Contradictory` if no consistent state exists.
+    /// - `Underdetermined` if atom is not ground.
+    pub fn classify_molecule_atom(
+        &self,
+        molecule: &Molecule,
+        atom_id: AtomId,
+    ) -> Solution<(), CountsMismatch> {
+        let atom = molecule.atom(atom_id);
+        if !atom.is_ground() {
+            return Solution::Underdetermined(());
+        }
+        let Some(element) = atom.element().as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let charge = atom.charge().as_lit().unwrap_or(0);
+        let input = CountsInput::for_molecule_atom(molecule, atom_id);
+        match self.candidate_states(atom.attributes, input) {
+            Ok(_) => Solution::Determined(()),
+            Err(_) => Solution::Contradictory(CountsMismatch {
+                element,
+                charge,
+                valence: input.valence,
+            }),
+        }
+    }
+
+    /// Infer implicit H under the valence policy, ignoring stored H and lone pairs.
+    /// Stored #v and #a take precedence over derivation from bonds and aromatic systems.
+    /// Uses the first table covalence at or above #v and retains charge/spin evidence.
+    /// Returns None for missing concrete evidence, no admissible H count, or distinct H
+    /// counts under Strict. MostSaturated selects the greatest admissible count.
+    /// Neither the molecule nor the table is modified.
+    pub fn infer_implicit_hydrogens(
+        &self,
+        molecule: &Molecule,
+        atom_id: AtomId,
+        policy: ValenceTieBreak,
+    ) -> Option<i64> {
+        let atom = molecule.atoms().get(atom_id)?;
+        let element = atom.element().as_lit()?;
+        let charge = atom.charge().as_lit()?;
+        let constraints = atom.constraints();
+        let valence = match constraints.valence() {
+            Some(asserted) => asserted.as_lit()?,
+            None => atom.valence().as_lit()?,
+        };
+        let aromatic = match constraints.aromatic_valence() {
+            Some(asserted) => asserted.as_lit()?.valence_count(),
+            None => atom.aromatic_valence().as_lit()?,
+        };
+        let accepted_pairs = atom.accepted_pairs().as_lit()?;
+        let shifted_number = i64::from(element.atomic_number())
+            .checked_add(accepted_pairs.checked_mul(2)?)?
+            .checked_sub(charge)?;
+        let entry = u8::try_from(shifted_number)
+            .ok()
+            .and_then(Element::from_atomic_number)
+            .and_then(|shifted| self.table.entry(shifted));
+        let bonding_budget = entry
+            .and_then(|entry| {
+                entry
+                    .target_covalences
+                    .iter()
+                    .map(|&c| i64::from(c))
+                    .find(|&c| c >= valence)
+            })
+            .map(|c| c.checked_sub(valence))
+            .unwrap_or(Some(0))?;
+        let nonbonding_budget = i64::from(element.valence_electrons())
+            .checked_sub(charge)?
+            .checked_sub(valence)?
+            .checked_sub(aromatic)?;
+        let spin = atom.unpaired_electrons();
+        let unpaired_count = spin.count.as_lit();
+        let max_lone_pairs = i64::from(element.valence_capacity()) / 2;
+        let mut hydrogens = None;
+        for h in 0..=bonding_budget {
+            if entry.is_some() && h.checked_add(aromatic_covalence(aromatic))? > bonding_budget {
+                continue;
+            }
+            let nonbonding = nonbonding_budget.checked_sub(h)?;
+            if nonbonding < 0 {
+                continue;
+            }
+            let unpaired = unpaired_count.unwrap_or(nonbonding % 2);
+            let remaining = nonbonding.checked_sub(unpaired)?;
+            if remaining < 0
+                || remaining % 2 != 0
+                || remaining / 2 > max_lone_pairs
+                || !spin.count.matches(&NumForm::Lit(unpaired))
+                || derive_multiplicity(spin, unpaired).is_none()
+            {
+                continue;
+            }
+            hydrogens = Some(match (hydrogens, policy) {
+                (Some(previous), ValenceTieBreak::Strict) if previous != h => return None,
+                _ => h,
+            });
+        }
+        hydrogens
     }
 }
 
@@ -667,6 +744,104 @@ mod tests {
     fn test_counts_valence_admit_error(#[case] molecule: Molecule, #[case] expected: CountsError) {
         let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(resolver.admit(&molecule), Solution::Contradictory(expected));
+    }
+
+    #[rstest]
+    #[case::methane(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#, None, Some(4))]
+    #[case::different_stored_h(r#"{:atoms ["C#c0#h2#n1#u0#s"]}"#, None, Some(4))]
+    #[case::unresolved_h_lp(r#"{:atoms ["C#c0#u0#s"]}"#, None, Some(4))]
+    #[case::methyl(r#"{:atoms ["C#c0#h3#u1#s2"]}"#, None, Some(3))]
+    #[case::triplet(r#"{:atoms ["C#c0#h2#u2#s3"]}"#, None, Some(2))]
+    #[case::open_shell_singlet(r#"{:atoms ["C#c0#h2#u2#s"]}"#, None, Some(2))]
+    #[case::incompatible_spin(r#"{:atoms ["C#c0#u2#s2"]}"#, None, None)]
+    #[case::open_spin(r#"{:atoms ["C#c0"]}"#, None, Some(4))]
+    #[case::water(r#"{:atoms ["O#c0#h2#n2#u0#s"]}"#, None, Some(2))]
+    #[case::fluorine(r#"{:atoms ["F#c0#h1#n3#u0#s"]}"#, Some(1), Some(1))]
+    #[case::anion(r#"{:atoms ["C#c-#h3#u0#s"]}"#, None, Some(3))]
+    #[case::cation(r#"{:atoms ["C#c+#h3#u0#s"]}"#, None, Some(3))]
+    #[case::derived_valence(r#"{:atoms ["C#c0#h3#u0#s" "C"] :bonds [[0 1 "1"]]}"#, None, Some(3))]
+    #[case::stored_valence(r#"{:atoms ["C#c0#h1#u0#s#v3"]}"#, Some(1), Some(1))]
+    #[case::other_constraints(r#"{:atoms ["C#c0#h4#u0#s#x2#y3#V8#H6#D7"]}"#, None, Some(4))]
+    #[case::aromatic_carbon(r#"{:atoms ["C#c0#u0#s#v2#a1"]}"#, Some(1), Some(1))]
+    #[case::pyridine_nitrogen(r#"{:atoms ["N#c0#u0#s#v2#a1"]}"#, Some(0), Some(0))]
+    #[case::pyrrole_nitrogen(r#"{:atoms ["N#c0#u0#s#v2#a2"]}"#, Some(1), Some(1))]
+    #[case::aromatic_zero(r#"{:atoms ["C#c0#u0#s#v4#a0"]}"#, Some(0), Some(0))]
+    #[case::aromatic_zero_h(r#"{:atoms ["C#c0#u0#s#v2#a0"]}"#, None, Some(2))]
+    #[case::aromatic_budget(r#"{:atoms ["C#c0#u0#s#v4#a1"]}"#, None, None)]
+    #[case::first_target(r#"{:atoms ["S#c0#u0#s#v0"]}"#, None, Some(2))]
+    #[case::at_first_target(r#"{:atoms ["S#c0#u0#s#v2"]}"#, Some(0), Some(0))]
+    #[case::between_targets(r#"{:atoms ["S#c0#u0#s#v3"]}"#, Some(1), Some(1))]
+    #[case::at_second_target(r#"{:atoms ["S#c0#u0#s#v4"]}"#, Some(0), Some(0))]
+    #[case::last_target(r#"{:atoms ["S#c0#u0#s#v5"]}"#, Some(1), Some(1))]
+    #[case::above_targets(r#"{:atoms ["Cl#c0#u0#s#v3"]}"#, Some(0), Some(0))]
+    #[case::no_electron_budget(r#"{:atoms ["C#c0#u0#s#v5"]}"#, None, None)]
+    #[case::no_table_entry(r#"{:atoms ["Fe#c0#u0#s"]}"#, Some(0), Some(0))]
+    #[case::lone_pair_capacity(r#"{:atoms ["O#c-4#u0#s"]}"#, Some(2), Some(2))]
+    #[case::excess_lone_pairs(r#"{:atoms ["O#c-8#u0#s"]}"#, None, None)]
+    #[case::accepted_pairs(
+        r#"{:atoms ["C#c0#u0#s" "N"] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#,
+        None,
+        Some(2)
+    )]
+    #[case::open_charge(r#"{:atoms ["C#u0#s"]}"#, None, None)]
+    #[case::open_valence(r#"{:atoms ["C#c0#u0#s#v*"]}"#, None, None)]
+    #[case::open_aromatic(r#"{:atoms ["C#c0#u0#s#a+"]}"#, None, None)]
+    #[case::aromatic_system(
+        r#"{:atoms ["C#c0#h1#u0#s" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#,
+        Some(1),
+        Some(1)
+    )]
+    #[case::stored_aromatic(
+        r#"{:atoms ["C#c0#h1#u0#s#a0" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#,
+        None,
+        Some(2)
+    )]
+    fn test_counts_valence_infer_implicit_hydrogens(
+        #[case] input: &str,
+        #[case] strict: Option<i64>,
+        #[case] most_saturated: Option<i64>,
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)] policy: ValenceTieBreak,
+    ) {
+        let molecule = mol_dsl!(input);
+        let original = molecule.clone();
+        let table = ValenceTable::smiles_table();
+        let original_table = table.clone();
+        let expected = match policy {
+            ValenceTieBreak::Strict => strict,
+            ValenceTieBreak::MostSaturated => most_saturated,
+        };
+        assert_eq!(
+            CountsValence::new(table).infer_implicit_hydrogens(&molecule, AtomId(0), policy),
+            expected,
+        );
+        assert_eq!(molecule, original);
+        assert_eq!(table, &original_table);
+        assert_eq!(table.content_hash(), original_table.content_hash());
+    }
+
+    #[rstest]
+    #[case::smiles(ValenceTable::smiles_table(), None, None)]
+    #[case::mdl(ValenceTable::mdl_table(), Some(1), Some(1))]
+    #[case::general(ValenceTable::default_table(), Some(1), Some(1))]
+    fn test_counts_valence_infer_implicit_hydrogens_table(
+        #[case] table: &ValenceTable,
+        #[case] strict: Option<i64>,
+        #[case] most_saturated: Option<i64>,
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)] policy: ValenceTieBreak,
+    ) {
+        let molecule = mol_dsl!(r#"{:atoms ["Cl#c0#u0#s#v2"]}"#);
+        let expected = match policy {
+            ValenceTieBreak::Strict => strict,
+            ValenceTieBreak::MostSaturated => most_saturated,
+        };
+        assert_eq!(
+            CountsValence::new(table).infer_implicit_hydrogens(&molecule, AtomId(0), policy),
+            expected,
+        );
     }
 
     #[rustfmt::skip]

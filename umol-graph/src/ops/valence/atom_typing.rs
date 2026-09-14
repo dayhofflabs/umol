@@ -153,68 +153,6 @@ impl<'a> AtomTypingValence<'a> {
         Ok(Some(admitted))
     }
 
-    /// Infer an implicit-H count under the valence policy, without using stored H or lone pairs.
-    ///
-    /// Filters element/charge lookup results by localized valence, aromatic contribution,
-    /// and retained unpaired-electron count/multiplicity. Other atom constraints do not enter
-    /// this calculation. Stored valence and aromatic assertions take precedence; absent values
-    /// are derived from bonds and aromatic systems. Returns None for an absent atom, missing
-    /// concrete lookup evidence, no admissible row, a non-literal admitted H count, or distinct
-    /// H counts under Strict.
-    /// MostSaturated returns the greatest admitted H count.
-    ///
-    /// # Semantic properties
-    ///
-    /// Does not modify the molecule or registry. Reordering or repeating rows does not change
-    /// the result. Strict requires agreement on H, not on complete atom forms. The caller
-    /// decides whether the inferred count permits eliding the stored count.
-    pub fn infer_implicit_hydrogens(
-        &self,
-        molecule: &Molecule,
-        atom_id: AtomId,
-        policy: ValenceTieBreak,
-    ) -> Option<i64> {
-        let atom = molecule.atoms().get(atom_id)?;
-        let element = atom.element().as_lit()?;
-        let charge = i8::try_from(atom.charge().as_lit()?).ok()?;
-        let constraints = atom.constraints();
-        let valence = NumForm::Lit(match constraints.valence() {
-            Some(asserted) => asserted.as_lit()?,
-            None => atom.valence().as_lit()?,
-        });
-        let aromatic = match constraints.aromatic_valence() {
-            Some(asserted) => AromaticValenceForm::from(asserted.as_lit()?),
-            None if atom.is_in_aromatic_system() => {
-                AromaticValenceForm::aromatic(atom.aromatic_valence().as_lit()?)
-            }
-            None => AromaticValenceForm::NotAromatic,
-        };
-        let mut hydrogens = None;
-        for row in self.registry.lookup(element, Some(charge)) {
-            if !atom
-                .unpaired_electrons()
-                .is_compatible(&row.unpaired_electrons)
-                || row
-                    .constraints
-                    .valence()
-                    .is_some_and(|v| !v.is_compatible(&valence))
-                || row
-                    .constraints
-                    .aromatic_valence()
-                    .is_some_and(|a| !a.is_compatible(&aromatic))
-            {
-                continue;
-            }
-            let count = row.implicit_hydrogens.as_lit()?;
-            hydrogens = Some(match (hydrogens, policy) {
-                (None, _) => count,
-                (Some(previous), ValenceTieBreak::Strict) if previous != count => return None,
-                (Some(previous), _) => count.max(previous),
-            });
-        }
-        hydrogens
-    }
-
     /// Classify a molecule atom against the registry: `Determined` if some
     /// pattern admits it, `Contradictory` if none does, and `Underdetermined`
     /// if the atom is not ground.
@@ -264,6 +202,69 @@ impl<'a> AtomTypingValence<'a> {
         } else {
             Solution::Contradictory(AtomTypingMismatch { element, charge })
         }
+    }
+
+    /// Infer an implicit-H count under the valence policy, without using stored H or lone pairs.
+    ///
+    /// Filters element/charge lookup results by localized valence, aromatic contribution,
+    /// and retained unpaired-electron count/multiplicity. Other atom constraints do not enter
+    /// this calculation. Stored valence and aromatic assertions take precedence; absent values
+    /// are derived from bonds and aromatic systems. Returns None for an absent atom, missing
+    /// concrete lookup evidence, no admissible row, a non-literal admitted H count, or distinct
+    /// H counts under Strict.
+    /// MostSaturated returns the greatest admitted H count.
+    ///
+    /// # Semantic properties
+    ///
+    /// Does not modify the molecule or registry. Reordering or repeating rows does not change
+    /// the result. Strict requires agreement on H, not on complete atom forms. The caller
+    /// decides whether the inferred count permits eliding the stored count.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn infer_implicit_hydrogens(
+        &self,
+        molecule: &Molecule,
+        atom_id: AtomId,
+        policy: ValenceTieBreak,
+    ) -> Option<i64> {
+        let atom = molecule.atoms().get(atom_id)?;
+        let element = atom.element().as_lit()?;
+        let charge = i8::try_from(atom.charge().as_lit()?).ok()?;
+        let constraints = atom.constraints();
+        let valence = NumForm::Lit(match constraints.valence() {
+            Some(asserted) => asserted.as_lit()?,
+            None => atom.valence().as_lit()?,
+        });
+        let aromatic = match constraints.aromatic_valence() {
+            Some(asserted) => AromaticValenceForm::from(asserted.as_lit()?),
+            None if atom.is_in_aromatic_system() => {
+                AromaticValenceForm::aromatic(atom.aromatic_valence().as_lit()?)
+            }
+            None => AromaticValenceForm::NotAromatic,
+        };
+        let mut hydrogens = None;
+        for row in self.registry.lookup(element, Some(charge)) {
+            if !atom
+                .unpaired_electrons()
+                .is_compatible(&row.unpaired_electrons)
+                || row
+                    .constraints
+                    .valence()
+                    .is_some_and(|v| !v.is_compatible(&valence))
+                || row
+                    .constraints
+                    .aromatic_valence()
+                    .is_some_and(|a| !a.is_compatible(&aromatic))
+            {
+                continue;
+            }
+            let count = row.implicit_hydrogens.as_lit()?;
+            hydrogens = Some(match (hydrogens, policy) {
+                (None, _) => count,
+                (Some(previous), ValenceTieBreak::Strict) if previous != count => return None,
+                (Some(previous), _) => count.max(previous),
+            });
+        }
+        hydrogens
     }
 }
 
