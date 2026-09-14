@@ -5715,3 +5715,19 @@ were applied in S9b (2026-09-14). The list is retained as the specification scop
 - Conflicting markers remain errors, even if another endpoint is unmarked. Equivalence
   and normalization do not erase conflicts. The Direction-marker examples above supply
   concrete equivalence and rejection cases; they are evidence for this separate list.
+
+## Addendum — Rust 1.87 verification correction, 2026-09-14
+
+S9c omitted the CI minimum-Rust check. PR 23 exposed E0716 in the TableIR bond-frame property:
+the assertion borrowed a temporary expected stereo form. Binding that form before the assertion
+fixes compilation on Rust 1.87 without changing the property or its generated inputs.
+The same gate reported seven unused-assignment warnings from define_ref. Its error-message
+selection now occurs directly in macro expansion, preserving both diagnostic strings without
+an overwritten assignment or warning suppression.
+
+The CI command cargo +1.87.0 check --locked --workspace --all-targets --all-features passed
+locally with Python 3.13.15 active and --offline; the log contains no warnings. The 32 existing
+reference-parser tests and the affected external property at PROPTEST_CASES=256 passed.
+Graph-IR/IO all-target/all-feature Clippy with warnings denied, formatting with CI's pinned
+nightly-2026-06-04, and git diff --check also passed. The earlier closeout's stable-toolchain
+results remain valid but did not establish Rust 1.87 compatibility. Evidence: scratch/pr23-msrv.
