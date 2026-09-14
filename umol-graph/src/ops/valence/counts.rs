@@ -316,7 +316,7 @@ impl<'a> CountsValence<'a> {
     /// Returns None for missing concrete evidence, no admissible H count, or distinct H
     /// counts under Strict. MostSaturated selects the greatest admissible count.
     /// Neither the molecule nor the table is modified.
-    pub fn infer_implicit_hydrogens(
+    pub(crate) fn infer_implicit_hydrogens(
         &self,
         molecule: &Molecule,
         atom_id: AtomId,

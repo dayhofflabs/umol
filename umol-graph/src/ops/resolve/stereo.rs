@@ -92,6 +92,8 @@ pub enum StereoProjectError {
     AtomAssertion { atom: AtomId },
     #[error("bond {bond:?} has an assertion incompatible with its stereo configuration")]
     BondAssertion { bond: BondId },
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
 }
 
 impl StereoResolver {
@@ -415,6 +417,7 @@ impl StereoResolver {
     ///
     /// Rejects unsupported or undetermined kinds, unavailable model reference frames, ligand
     /// frames that cannot transport to those references, and conflicting existing assertions.
+    /// Transaction reports a failure applying the accumulated assertion and removal edits.
     pub fn project(
         &self,
         molecule: &mut Molecule,
@@ -422,7 +425,7 @@ impl StereoResolver {
         if !molecule.has_stereo_atoms() && !molecule.has_stereo_bonds() {
             return Ok(Solution::Determined(()));
         }
-        let mut editor = molecule.edit();
+        let mut edits = Edits::new();
         for stereo in molecule.stereo_atoms().iter() {
             let stereo_atom = stereo.id;
             if stereo.attributes.configuration.kind() != Some(StereoKind::Tetrahedral) {
@@ -437,16 +440,18 @@ impl StereoResolver {
                 .coset_for(ligands)
                 .ok_or(StereoProjectError::StereoAtomFrame { stereo_atom })?;
             let projected = TetrahedralStereoForm::Stereo(coset);
-            let attributes = editor.atom_mut(atom).attributes;
+            let attributes = molecule.atom(atom).attributes;
             let assertion = match attributes.constraints.tetrahedral_stereo() {
                 Some(existing) => existing
                     .meet(&projected)
                     .ok_or(StereoProjectError::AtomAssertion { atom })?,
                 None => projected,
             };
-            attributes
+            let mut update = AtomUpdate::default();
+            update
                 .constraints
                 .set(AtomConstraintForm::TetrahedralStereo(assertion));
+            edits.update_atom(AtomHandle::Id(atom), attributes, &update);
         }
         for stereo in molecule.stereo_bonds().iter() {
             let stereo_bond = stereo.id;
@@ -462,23 +467,59 @@ impl StereoResolver {
                 .coset_for(ligands)
                 .ok_or(StereoProjectError::StereoBondFrame { stereo_bond })?;
             let projected = CisTransStereoForm::Stereo(coset);
-            let attributes = editor.bond_mut(bond).attributes;
+            let attributes = molecule.bond(bond).attributes;
             let assertion = match attributes.constraints.cis_trans_stereo() {
                 Some(existing) => existing
                     .meet(&projected)
                     .ok_or(StereoProjectError::BondAssertion { bond })?,
                 None => projected,
             };
-            attributes
+            let mut update = BondUpdate::default();
+            update
                 .constraints
                 .set(BondConstraintForm::CisTransStereo(assertion));
+            edits.update_bond(BondHandle::Id(bond), attributes, &update);
         }
         if molecule.has_stereo_atoms() {
-            editor.remove_stereo_atoms(&molecule.stereo_atoms().ids().collect::<Vec<_>>());
+            edits.remove_stereo_atoms(
+                molecule
+                    .stereo_atoms()
+                    .iter()
+                    .map(|stereo| {
+                        (
+                            StereoAtomHandle::Id(stereo.id),
+                            AtomHandle::Id(stereo.site_id()),
+                            stereo
+                                .ligands()
+                                .map(|ligand| (AtomHandle::Id(ligand.atom_id()), ligand.kind()))
+                                .collect(),
+                            stereo.attributes.clone(),
+                        )
+                    })
+                    .collect(),
+            );
         }
         if molecule.has_stereo_bonds() {
-            editor.remove_stereo_bonds(&molecule.stereo_bonds().ids().collect::<Vec<_>>());
+            edits.remove_stereo_bonds(
+                molecule
+                    .stereo_bonds()
+                    .iter()
+                    .map(|stereo| {
+                        (
+                            StereoBondHandle::Id(stereo.id),
+                            BondHandle::Id(stereo.site_id()),
+                            stereo
+                                .ligands()
+                                .map(|ligand| (AtomHandle::Id(ligand.atom_id()), ligand.kind()))
+                                .collect(),
+                            stereo.attributes.clone(),
+                        )
+                    })
+                    .collect(),
+            );
         }
+        let mut editor = molecule.edit();
+        editor.transact(edits)?;
         *molecule = editor.build();
         Ok(Solution::Determined(()))
     }

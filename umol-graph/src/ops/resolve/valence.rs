@@ -2,10 +2,13 @@
 //! defined in [`crate::ops::valence`].
 
 use thiserror::Error;
-use umol_graph_ir::ir::{AtomConstraintKey, Molecule};
+use umol_graph_ir::ir::{
+    AsLit, AtomConstraintKey, AtomHandle, AtomUpdate, Edits, IsotopeMassForm, Molecule, NumForm,
+    TransactionError,
+};
 use umol_utils::solution::Solution;
 
-use crate::ops::model::{ValenceCandidateSource, ValenceModel};
+use crate::ops::model::{ValenceCandidateSource, ValenceModel, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
 use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
 use crate::ops::validate::{
@@ -32,6 +35,13 @@ pub enum ValenceContradiction {
 /// admission produces no edits and runs no transactions.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceError {}
+
+/// Operational failures applying implicit-H projection.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ValenceProjectError {
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
+}
 
 impl<'a> ValenceResolver<'a> {
     pub fn new(model: &'a ValenceModel) -> Self {
@@ -92,6 +102,65 @@ impl<'a> ValenceResolver<'a> {
             tie_breaks: Vec::new(),
         }))
     }
+
+    /// Elide recoverable implicit H under the supplied valence policy.
+    ///
+    /// Only Natural isotope composition, zero charge, and zero unpaired electrons permit
+    /// elision. A literal H count becomes Undetermined when inference selects that count;
+    /// missing or ambiguous evidence leaves it unchanged. Isotope projection follows this
+    /// operation so that Natural is still available for this external-format requirement.
+    ///
+    /// # Semantic properties
+    ///
+    /// Projection is idempotent and changes only implicit-H fields. Stored lone pairs do
+    /// not affect elision. Atom-typing row reordering or repetition preserves the result.
+    /// Successful projection returns Determined even when some H counts remain unresolved.
+    ///
+    /// # Errors
+    ///
+    /// Returns Transaction if applying H edits fails. Errors preserve the molecule exactly.
+    pub fn project(
+        &self,
+        molecule: &mut Molecule,
+        policy: ValenceTieBreak,
+    ) -> Result<Solution<(), ValenceContradiction>, ValenceProjectError> {
+        let mut edits = Edits::new();
+        for atom in molecule.atoms().iter() {
+            if !matches!(atom.attributes.isotope_mass, IsotopeMassForm::Natural)
+                || atom.charge().as_lit() != Some(0)
+                || atom.unpaired_electrons().count.as_lit() != Some(0)
+            {
+                continue;
+            }
+            let Some(hydrogens) = atom.implicit_hydrogens().as_lit() else {
+                continue;
+            };
+            let inferred = match self {
+                Self::AtomTyping(resolver) => {
+                    resolver.infer_implicit_hydrogens(molecule, atom.id, policy)
+                }
+                Self::Counts(resolver) => {
+                    resolver.infer_implicit_hydrogens(molecule, atom.id, policy)
+                }
+            };
+            if inferred == Some(hydrogens) {
+                edits.update_atom(
+                    AtomHandle::Id(atom.id),
+                    atom.attributes,
+                    &AtomUpdate {
+                        implicit_hydrogens: Some(NumForm::Undetermined),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+        if !edits.is_empty() {
+            let mut editor = molecule.edit();
+            editor.transact(edits)?;
+            *molecule = editor.build();
+        }
+        Ok(Solution::Determined(()))
+    }
 }
 
 #[cfg(test)]
@@ -101,7 +170,7 @@ mod tests {
     use rstest::rstest;
     use smallvec::smallvec;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AtomConstraintForm, AtomForm, AtomId};
+    use umol_graph_ir::ir::{AtomConstraintForm, AtomForm, AtomId, MoleculeEntries};
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
@@ -266,5 +335,105 @@ mod tests {
             ValenceResolver::new(&model).admit(&molecule),
             Ok(Solution::Contradictory(expected))
         );
+    }
+
+    #[rstest]
+    #[case::methane(
+        ValenceTieBreak::MostSaturated,
+        r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#,
+        r#"{:atoms ["C#i=#c0#n0#u0#s"]}"#
+    )]
+    #[case::fluorine(
+        ValenceTieBreak::Strict,
+        r#"{:atoms ["F#i=#c0#h1#n3#u0#s"]}"#,
+        r#"{:atoms ["F#i=#c0#n3#u0#s"]}"#
+    )]
+    #[case::zero_h(
+        ValenceTieBreak::Strict,
+        r#"{:atoms ["C#i=#c0#h0#n0#u0#s#v4"]}"#,
+        r#"{:atoms ["C#i=#c0#n0#u0#s#v4"]}"#
+    )]
+    #[case::aromatic(
+        ValenceTieBreak::Strict,
+        r#"{:atoms ["C#i=#c0#h1#n0#u0#s#v2#a1"]}"#,
+        r#"{:atoms ["C#i=#c0#n0#u0#s#v2#a1"]}"#
+    )]
+    #[case::lone_pairs(
+        ValenceTieBreak::MostSaturated,
+        r#"{:atoms ["C#i=#c0#h4#n2#u0#s"]}"#,
+        r#"{:atoms ["C#i=#c0#n2#u0#s"]}"#
+    )]
+    #[case::ethane(
+        ValenceTieBreak::MostSaturated,
+        r#"{:atoms ["C#i=#c0#h3#n0#u0#s" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 1 "1"]]}"#,
+        r#"{:atoms ["C#i=#c0#n0#u0#s" "C#i=#c0#n0#u0#s"] :bonds [[0 1 "1"]]}"#
+    )]
+    #[case::mixed(
+        ValenceTieBreak::MostSaturated,
+        r#"{:atoms ["C#i=#c0#h4#u0#s" "C#i13#c0#h4#u0#s" "C#i=#c-#h3#u0#s" "C#i=#c0#h3#u1#s2"]}"#,
+        r#"{:atoms ["C#i=#c0#u0#s" "C#i13#c0#h4#u0#s" "C#i=#c-#h3#u0#s" "C#i=#c0#h3#u1#s2"]}"#
+    )]
+    fn test_valence_resolver_project(
+        #[case] policy: ValenceTieBreak,
+        #[case] input: &str,
+        #[case] expected: &str,
+        #[values(false, true)] typing: bool,
+    ) {
+        let model = if typing {
+            ValenceModel::default()
+        } else {
+            ValenceModel::smiles()
+        };
+        let resolver = ValenceResolver::new(&model);
+        let mut molecule = mol_dsl!(input);
+        assert_eq!(
+            resolver.project(&mut molecule, policy),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, mol_dsl!(expected));
+        let projected = molecule.clone();
+        assert_eq!(
+            resolver.project(&mut molecule, policy),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, projected);
+    }
+
+    #[rstest]
+    #[case::charge("C#i=#c+#h3#u0#s")]
+    #[case::radical("C#i=#c0#h3#u1#s2")]
+    #[case::open_shell_singlet("C#i=#c0#h2#u2#s")]
+    #[case::mass("C#i13#c0#h4#u0#s")]
+    #[case::mass_zero_h("C#i13#c0#h0#u0#s#v4")]
+    #[case::open_isotope("C#c0#h4#u0#s")]
+    #[case::isotope_set("C#i{12,13}#c0#h4#u0#s")]
+    #[case::isotope_variable("C#i?mass#c0#h4#u0#s")]
+    #[case::open_charge("C#i=#h4#u0#s")]
+    #[case::open_spin("C#i=#c0#h4")]
+    #[case::different_h("C#i=#c0#h2#n1#u0#s")]
+    #[case::open_h("C#i=#c0#u0#s")]
+    #[case::nonliteral_h("C#i=#c0#h{2,4}#u0#s")]
+    #[case::no_match("C#i=#c0#h0#u0#s#v5")]
+    #[case::open_aromatic("C#i=#c0#h1#u0#s#a+")]
+    fn test_valence_resolver_project_identity(
+        #[case] input: &str,
+        #[values(false, true)] typing: bool,
+        #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)] policy: ValenceTieBreak,
+    ) {
+        let model = if typing {
+            ValenceModel::default()
+        } else {
+            ValenceModel::smiles()
+        };
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom_dsl!(input)],
+            ..Default::default()
+        });
+        let original = molecule.clone();
+        assert_eq!(
+            ValenceResolver::new(&model).project(&mut molecule, policy),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, original);
     }
 }

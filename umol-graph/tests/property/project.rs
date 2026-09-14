@@ -6,12 +6,18 @@
 //! cis-trans side-swap parity, preserving virtual-ligand kinds and open configurations.
 //! Composite projection of supported SMILES is compared with independent complete graph-IR
 //! expectations, including aromatic contributions, both stereo assertions, and isotope elision.
+//! Valence projection compares H elision with independent allowed-H sets for custom registries
+//! and bounded counts tables, including isotope retention, field preservation, and idempotence.
+
+use std::borrow::Cow;
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles_with;
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
+use umol_graph::ops::resolve::valence::ValenceResolver;
 use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
+use umol_graph::ops::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
     BondConstraintForm, BondForm, BondId, BooleanForm, CisTransStereoForm, ElectronCountsForm,
@@ -19,9 +25,137 @@ use umol_graph_ir::ir::{
     StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoForm,
     UnpairedElectronsForm,
 };
-use umol_graph_ir::mol_dsl_concrete;
+use umol_graph_ir::{atom_dsl, mol_dsl_concrete};
 use umol_io::smiles::SmilesIoConfig;
 use umol_utils::solution::Solution;
+
+proptest! {
+    #[test]
+    fn test_valence_resolver_project_input(
+        atoms in 2usize..25, mass in any::<bool>(), typing in any::<bool>(),
+    ) {
+        let input = format!("{}{}[CH3]", if mass { "[13CH3]" } else { "[CH3]" }, "[CH2]".repeat(atoms - 2));
+        let model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            ..Default::default()
+        };
+        let original = ingest_smiles_with(&input, &SmilesIoConfig::opensmiles(), &model, &ResolveConfig::default()).unwrap();
+        for policy in [ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated] {
+            let mut expected = original.clone();
+            if policy == ValenceTieBreak::MostSaturated {
+                for index in usize::from(mass)..atoms {
+                    expected.atom_mut(AtomId(index as u32)).attributes.implicit_hydrogens = NumForm::Undetermined;
+                }
+            }
+            let mut molecule = original.clone();
+            prop_assert_eq!(ValenceResolver::new(&model.valence).project(&mut molecule, policy), Ok(Solution::Determined(())));
+            prop_assert_eq!(molecule, expected);
+        }
+    }
+
+    #[test]
+    fn test_valence_resolver_project_atom_typing(
+        entries in prop::collection::vec((0i64..5, 0i64..5, 0i64..3), 0..24),
+        valence in 0i64..5, aromatic in 0i64..3,
+        stored_h in 0i64..5, stored_lp in 0i64..5,
+        copies in 1usize..5, natural in any::<bool>(),
+    ) {
+        let rows = entries.iter().map(|&(h, v, a)| {
+            let mut row = atom_dsl!("C#c0#u0#s");
+            row.implicit_hydrogens = NumForm::Lit(h);
+            row.constraints.set(AtomConstraintForm::valence(v));
+            row.constraints.set(AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(a)));
+            row
+        }).collect::<Vec<_>>();
+        let models = [
+            ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms(rows.clone()))),
+            ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms(
+                (0..copies).flat_map(|_| rows.iter().rev().cloned()),
+            ))),
+        ];
+        let mut allowed = entries.iter().filter(|(_, v, a)| *v == valence && *a == aromatic)
+            .map(|(h, _, _)| *h).collect::<Vec<_>>();
+        allowed.sort_unstable();
+        allowed.dedup();
+        for policy in [ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated] {
+            let selected = match policy {
+                ValenceTieBreak::Strict => match allowed.as_slice() { [h] => Some(*h), _ => None },
+                ValenceTieBreak::MostSaturated => allowed.last().copied(),
+            };
+            for lp in [0, stored_lp] {
+                let mut atom = atom_dsl!("C#c0#u0#s");
+                atom.isotope_mass = if natural { IsotopeMassForm::Natural } else { IsotopeMassForm::Lit(13) };
+                atom.implicit_hydrogens = NumForm::Lit(stored_h);
+                atom.lone_pairs = NumForm::Lit(lp);
+                atom.constraints.set(AtomConstraintForm::valence(valence));
+                atom.constraints.set(AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(aromatic)));
+                let original = Molecule::from_entries(MoleculeEntries { atoms: vec![atom.clone()], ..Default::default() });
+                if natural && selected == Some(stored_h) {
+                    atom.implicit_hydrogens = NumForm::Undetermined;
+                }
+                let expected = Molecule::from_entries(MoleculeEntries { atoms: vec![atom], ..Default::default() });
+                for model in &models {
+                    let resolver = ValenceResolver::new(model);
+                    let mut molecule = original.clone();
+                    prop_assert_eq!(resolver.project(&mut molecule, policy), Ok(Solution::Determined(())));
+                    prop_assert_eq!(&molecule, &expected);
+                    prop_assert_eq!(resolver.project(&mut molecule, policy), Ok(Solution::Determined(())));
+                    prop_assert_eq!(&molecule, &expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_valence_resolver_project_counts(
+        targets in prop::collection::vec(0u8..7, 0..5),
+        valence in 0i64..5, aromatic in 0i64..3,
+        stored_h in 0i64..5, stored_lp in 0i64..5,
+        natural in any::<bool>(),
+    ) {
+        let mut table = ValenceTable::empty();
+        table.insert(Element::C, ValenceEntry {
+            target_covalences: targets.clone(),
+            aromatic_valences: vec![1], fallback_aromatic_valences: vec![0],
+        });
+        let model = ValenceModel::counts(Cow::Owned(table));
+        let target = targets.iter().map(|&v| i64::from(v)).filter(|&v| v >= valence)
+            .min().unwrap_or(valence);
+        // Enumerate H/LP pairs satisfying electron balance and the first-target bound.
+        let mut allowed = Vec::new();
+        for h in 0..=4 {
+            for lp in 0..=4 {
+                if valence + aromatic + h + 2 * lp == 4
+                    && valence + h + i64::from(aromatic == 1) <= target
+                {
+                    allowed.push(h);
+                }
+            }
+        }
+        for policy in [ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated] {
+            let selected = match policy {
+                ValenceTieBreak::Strict => match allowed.as_slice() { [h] => Some(*h), _ => None },
+                ValenceTieBreak::MostSaturated => allowed.last().copied(),
+            };
+            let mut atom = atom_dsl!("C#c0#u0#s");
+            atom.isotope_mass = if natural { IsotopeMassForm::Natural } else { IsotopeMassForm::Lit(13) };
+            atom.implicit_hydrogens = NumForm::Lit(stored_h);
+            atom.lone_pairs = NumForm::Lit(stored_lp);
+            atom.constraints.set(AtomConstraintForm::valence(valence));
+            atom.constraints.set(AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(aromatic)));
+            let mut molecule = Molecule::from_entries(MoleculeEntries { atoms: vec![atom.clone()], ..Default::default() });
+            if natural && selected == Some(stored_h) {
+                atom.implicit_hydrogens = NumForm::Undetermined;
+            }
+            let expected = Molecule::from_entries(MoleculeEntries { atoms: vec![atom], ..Default::default() });
+            let resolver = ValenceResolver::new(&model);
+            prop_assert_eq!(resolver.project(&mut molecule, policy), Ok(Solution::Determined(())));
+            prop_assert_eq!(&molecule, &expected);
+            prop_assert_eq!(resolver.project(&mut molecule, policy), Ok(Solution::Determined(())));
+            prop_assert_eq!(&molecule, &expected);
+        }
+    }
+}
 
 proptest! {
     #[test]

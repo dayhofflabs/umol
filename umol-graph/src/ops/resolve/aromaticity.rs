@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
     BondId, BondUpdate, BooleanForm, Edits, ElectronCountsForm, Lattice, Molecule, NumForm,
-    RingSet, UnpairedElectronsForm,
+    RingSet, TransactionError, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -97,6 +97,8 @@ pub enum AromaticityProjectError {
     AtomAssertion { atom: AtomId },
     #[error("bond {bond:?} has an assertion incompatible with aromaticity")]
     BondAssertion { bond: BondId },
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
 }
 
 impl AromaticityResolver {
@@ -308,6 +310,7 @@ impl AromaticityResolver {
     ///
     /// Rejects non-concrete system contributions, charge, or spin; nonzero system charge;
     /// non-singlet or nonzero-unpaired system spin; and incompatible atom or bond assertions.
+    /// Transaction reports a failure applying the accumulated assertion and removal edits.
     pub fn project(
         &self,
         molecule: &mut Molecule,
@@ -315,7 +318,7 @@ impl AromaticityResolver {
         if !molecule.has_aromatic_systems() {
             return Ok(Solution::Determined(()));
         }
-        let mut editor = molecule.edit();
+        let mut edits = Edits::new();
         for system in molecule.aromatic_systems().iter() {
             let AromaticSystemForm {
                 electrons: ElectronCountsForm::Lit(electrons),
@@ -337,7 +340,7 @@ impl AromaticityResolver {
                 return Err(AromaticityProjectError::SystemSpin { system: system.id });
             }
             for (atom, &electrons) in system.atom_ids().zip(electrons) {
-                let attributes = editor.atom_mut(atom).attributes;
+                let attributes = molecule.atom(atom).attributes;
                 let aromatic = AromaticValenceForm::aromatic(NumForm::Lit(electrons));
                 let assertion = match attributes.constraints.aromatic_valence() {
                     Some(existing) => existing
@@ -345,23 +348,41 @@ impl AromaticityResolver {
                         .ok_or(AromaticityProjectError::AtomAssertion { atom })?,
                     None => aromatic,
                 };
-                attributes
+                let mut update = AtomUpdate::default();
+                update
                     .constraints
                     .set(AtomConstraintForm::aromatic_valence(assertion));
+                edits.update_atom(AtomHandle::Id(atom), attributes, &update);
             }
             for bond in system.bond_ids() {
-                let attributes = editor.bond_mut(bond).attributes;
+                let attributes = molecule.bond(bond).attributes;
                 let assertion = attributes
                     .constraints
                     .aromatic()
                     .meet(&BooleanForm::Lit(true))
                     .ok_or(AromaticityProjectError::BondAssertion { bond })?;
-                attributes
+                let mut update = BondUpdate::default();
+                update
                     .constraints
                     .set(BondConstraintForm::Aromatic(assertion));
+                edits.update_bond(BondHandle::Id(bond), attributes, &update);
             }
         }
-        editor.remove_aromatic_systems(&molecule.aromatic_systems().ids().collect::<Vec<_>>());
+        edits.remove_aromatic_systems(
+            molecule
+                .aromatic_systems()
+                .iter()
+                .map(|system| {
+                    (
+                        AromaticSystemHandle::Id(system.id),
+                        system.atom_ids().map(AtomHandle::Id).collect(),
+                        system.attributes.clone(),
+                    )
+                })
+                .collect(),
+        );
+        let mut editor = molecule.edit();
+        editor.transact(edits)?;
         *molecule = editor.build();
         Ok(Solution::Determined(()))
     }

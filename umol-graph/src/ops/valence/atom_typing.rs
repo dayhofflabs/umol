@@ -219,7 +219,6 @@ impl<'a> AtomTypingValence<'a> {
     /// Does not modify the molecule or registry. Reordering or repeating rows does not change
     /// the result. Strict requires agreement on H, not on complete atom forms. The caller
     /// decides whether the inferred count permits eliding the stored count.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn infer_implicit_hydrogens(
         &self,
         molecule: &Molecule,
