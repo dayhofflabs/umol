@@ -1,4 +1,62 @@
-//! Conversion of graph models into external-format boundary values.
+//! Conversion of graph models into external-format boundary values and text.
+//!
+//! [`Convey`] constructs a resolver from the supplied chemistry model and resolve configuration,
+//! projects a private GraphIR copy, and converts it to the output boundary. The boundary's renderer
+//! then formats its table. [`export_smiles`] and [`export_reaction_smiles`] compose those operations
+//! with the same OpenSMILES, SMILES-valence, and Natural-isotope defaults as ingestion. Their
+//! `_with` variants take `(input, io_config, model, resolve_config)`, matching ingestion.
+//!
+//! Supported output includes ordinary atoms, isotopes and charges, radicals encoded through
+//! bracket H counts, neutral closed-shell aromatic systems, tetrahedral stereo, and local
+//! double-bond stereo with a consistent slash assignment. Projection preserves H counts; Convey
+//! can omit a table H count when notation permits and inference under the supplied model and
+//! policy reproduces it. Rendering performs no chemical resolution.
+//!
+//! Projection rejects nonzero bond/aromatic-system charge and non-singlet or unpaired spin there.
+//! Conversion rejects values outside TableIR capacity and unsupported entities or constraints.
+//! Rendering owns narrower syntax limits, including Either, cumulene stereo, unsupported bond
+//! orders, and configurations with no slash assignment. Atom lone-pair counts remain in TableIR
+//! but have no independent ordinary-SMILES token. No coordinates are generated.
+//!
+//! # Examples
+//!
+//! Default text ingestion and export:
+//!
+//! ```
+//! use umol_graph::export::{export_reaction_smiles, export_smiles};
+//! use umol_graph::ingest::{ingest_reaction_smiles, ingest_smiles};
+//!
+//! let molecule = ingest_smiles("F/C=C/F")?;
+//! assert_eq!(export_smiles(&molecule)?, "F/C=C/F");
+//! let reaction = ingest_reaction_smiles("[CH4:9]>>[CH4:9]")?;
+//! assert_eq!(export_reaction_smiles(&reaction)?, "[CH4:1]>>[CH4:1]");
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! Explicit parsing, interpretation, conversion, and rendering use the same configurations:
+//!
+//! ```
+//! use umol_graph::export::{export_smiles_with, Convey};
+//! use umol_graph::ingest::{ingest_smiles_with, Interpret};
+//! use umol_graph::ops::model::{ChemistryModel, ValenceModel};
+//! use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig};
+//! use umol_io::smiles::{Smiles, SmilesIoConfig};
+//!
+//! let io_config = SmilesIoConfig::opensmiles();
+//! let model = ChemistryModel { valence: ValenceModel::smiles(), ..Default::default() };
+//! let resolve_config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
+//! let parsed = Smiles::parse_with("F[C@H](Cl)Br", &io_config)?;
+//! let molecule = parsed.interpret(&model, &resolve_config)?;
+//! let output = Smiles::convey(&molecule, &model, &resolve_config, &io_config)?;
+//! let text = output.render_with(&io_config)?;
+//! assert_eq!(text, "F[C@H](Cl)Br");
+//! assert_eq!(
+//!     ingest_smiles_with("F[C@H](Cl)Br", &io_config, &model, &resolve_config)?,
+//!     molecule,
+//! );
+//! assert_eq!(export_smiles_with(&molecule, &io_config, &model, &resolve_config)?, text);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use std::any::Any;
 use std::iter;
@@ -140,8 +198,9 @@ impl Convey for Smiles {
     ///
     /// Success and failure leave the input unchanged. Atom and localized-bond order are
     /// preserved. Actual H atoms, implicit H, and lone-pair stereo ligands remain distinct.
-    /// Supported ingested structures survive convey, render, parse, and interpretation under
-    /// the same resolver policy, up to molecular equivalence and permitted notation changes.
+    /// For the supported ingested domain, convey, render, parse, and interpretation under
+    /// the same model and policy recover a molecule equal under Molecule::canonical_eq with
+    /// para_stereo=false. Source spelling, ring labels, and redundant slash markers may change.
     /// H omission uses joint valence/aromatic evidence: Strict requires one allowed count,
     /// MostSaturated selects the greatest. Missing or ambiguous evidence retains the count.
     /// Stored lone pairs and atom-typing row order or repetition do not change that decision.
@@ -170,8 +229,8 @@ impl Convey for ReactionSmiles {
     ///
     /// Constructs one resolver for both sides and runs all projection stages on private copies.
     /// Surviving atom pairs receive one-based labels in the materialized correspondence's order.
-    /// Unmatched atoms
-    /// remain unlabeled. The atom_mapping index is populated alongside the Atom.class labels.
+    /// Unmatched atoms remain unlabeled. The atom_mapping index is populated alongside the
+    /// Atom.class labels.
     /// Agents and source-only labels or metadata are not available from graph IR.
     ///
     /// # Semantic properties
@@ -179,8 +238,10 @@ impl Convey for ReactionSmiles {
     /// Success and failure leave the source unchanged. The boundary preserves supported side
     /// semantics and atom correspondence through side compaction, including creation and deletion.
     /// Mapped atoms retain their H counts. Unmatched atoms use the same omission decision as
-    /// molecular conversion. Repeated convey produces the same boundary. Rendering still owns
-    /// format-specific support failures.
+    /// molecular conversion. Repeated convey produces the same boundary. For the supported
+    /// ingested domain, convey/render followed by parse/interpret under the same model and policy
+    /// recovers a reaction equal under Reaction::canonical_eq with para_stereo=false, including
+    /// correspondence. Rendering still owns format-specific support failures.
     ///
     /// # Errors
     ///
@@ -254,7 +315,12 @@ pub fn export_smiles(input: &Molecule) -> Result<String, SmilesOutputError> {
 /// Export a molecule as SMILES text with explicit IO, chemistry, and resolve configuration.
 ///
 /// Composes Smiles::convey and Smiles::render_with using the same IO configuration.
-/// The input is unchanged on success and failure.
+///
+/// # Semantic properties
+///
+/// The input is unchanged on success and failure. Repeated output is text-identical for the
+/// same input and configurations. Supported ingested molecules survive export and ingestion
+/// under the same configurations with canonical GraphIR equality (para_stereo=false).
 ///
 /// # Errors
 ///
@@ -294,7 +360,13 @@ pub fn export_reaction_smiles(input: &Reaction) -> Result<String, ReactionSmiles
 /// Export a reaction as SMILES text with explicit IO, chemistry, and resolve configuration.
 ///
 /// Composes ReactionSmiles::convey and ReactionSmiles::render_with using the same IO configuration.
-/// The input is unchanged on success and failure.
+///
+/// # Semantic properties
+///
+/// The input is unchanged on success and failure. Repeated output is text-identical for the
+/// same input and configurations. Supported ingested reactions survive export and ingestion
+/// under the same configurations with canonical GraphIR equality (para_stereo=false), including
+/// atom correspondence. Original numeric map labels are not retained.
 ///
 /// # Errors
 ///

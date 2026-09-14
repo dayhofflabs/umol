@@ -151,7 +151,20 @@ Lowercase aromatic atom tokens designate aromatic atoms. The '*' token MAY appea
 
 ### Double-Bond Stereochemistry
 
-Directional markers '/' and '\' attached to single bonds adjacent to a double bond encode relative geometry. The parser SHALL collect such markers and classify double-bond geometry when it is unambiguous; otherwise the geometry SHALL remain unknown ("either"). In ring-directed closures where only one side supplies a determinative marker, the geometry SHALL be recorded as unknown/either.
+Directional markers '/' and '\' attached to single bonds adjacent to a double bond encode relative geometry. All markers SHALL be checked for consistency before their configuration assertions are interpreted. A definite double-bond configuration requires directional evidence at both double-bond endpoints. Consistent incomplete evidence SHALL assert no configuration at that site; it SHALL NOT assert Either.
+
+A ring-closure marker describes the ring bond from the endpoint where it is written. A marker at either ring-closure endpoint can therefore supply the same directional evidence after accounting for viewpoint. Whether the adjacent double bond has a definite configuration depends on the evidence at both double-bond endpoints, not on whether the ring marker was written at opening, closing, or both.
+
+The following notation changes preserve double-bond configuration assertions:
+
+- Consistent partial markers that establish no configuration are redundant: `F/C=CF`, `F\C=CF`, and `FC=CF` assert no configuration.
+- Additional consistent markers that restate an established configuration are redundant: `F/C(Cl)=C(/Br)I` and `F/C(/Cl)=C(/Br)\I` assert the same configuration.
+- Reversing every marker in a connected directional assignment preserves its configurations: `F/C=C/F` and `F\C=C\F` assert the same configuration.
+- Different substituent bonds or ring-closure endpoints MAY carry the markers, provided direction changes account for the changed reference and endpoint viewpoint.
+
+These equivalences SHALL be assessed over the complete directional system. They preserve exactly the sites with definite configurations and the configurations asserted at those sites. Shared markers in conjugated systems MUST NOT be changed independently when that changes another site's assertion. These notation choices do not create or remove explicit hydrogen atoms.
+
+An explicit Either assertion, where supported by an extension or another boundary format, is distinct from absence of an assertion. Ordinary partial slash notation does not express Either. Conflicting markers MUST be rejected even when another double-bond endpoint is unmarked; for example, `F/C(\Cl)=CF` is conflicting. Redundancy MUST NOT be used to discard a conflict.
 
 Cumulenes (consecutive double bonds) follow the same stereochemistry rules extended across the chain:
 
@@ -159,6 +172,30 @@ Cumulenes (consecutive double bonds) follow the same stereochemistry rules exten
 - **Even number of double bonds** (2, 4, 6, ...): Extended tetrahedral (axial) chirality applies. The '@AL1' and '@AL2' markers on the central atom of the cumulene system specify the configuration; the "neighbor" atoms to which chirality refers are at the ends of the allene system. For simple allenes (2 double bonds), '@' and '@@' are aliased to '@AL1' and '@AL2' when the center has exactly two incident double bonds. Example: `NC(Br)=[C@]=C(O)C`.
 
 Validation of cumulene stereochemistry SHALL be performed in the semantic pass.
+
+### Tetrahedral Stereochemistry
+
+A bracket tetrahedral descriptor asserts an ordered four-participant frame. A bracket H count
+contributes the indicated implicit-hydrogen participants; an explicit `[H]` neighbor contributes
+an actual atom participant. The descriptor SHALL NOT change the bracket hydrogen count or
+invoke implicit hydrogen calculation.
+
+With exactly three actual incident ligands and bracket H0, the fourth participant of the
+supported tetrahedral frame SHALL be a lone pair. This participant is asserted by the descriptor;
+it does not determine that the atom has a chemically valid lone pair and SHALL NOT set molecular
+lone-pair or unpaired-electron counts. Molecular interpretation SHALL check whether the resolved
+atom state supports the asserted frame.
+
+Actual ligands SHALL retain their written incidence order, including ring-closure encounters.
+Bracket-H participants, or the lone-pair participant in the three-ligand H0 case, SHALL be inserted
+before the first actual ligand at a traversal root and immediately after the incoming ligand
+otherwise. Lone-pair placement is the umol convention; it is not claimed to be fully specified
+by OpenSMILES.
+
+No other participants SHALL be added to pad an incomplete frame. A descriptor does not authorize
+inventing an atom or hydrogen, or distinct occurrences of an identical virtual participant.
+Unsupported frame arity and repeated participants MUST NOT be repaired by normalization.
+These rules introduce no additional equivalences between stereo-atom descriptions.
 
 ### Top-Level Structure
 
@@ -219,6 +256,16 @@ This implicit hydrogen calculation applies exclusively to organic subset atoms. 
 | S         | 2, 4, 6         |
 | F,Cl,Br,I | 1               |
 
+### Implicit Hydrogens
+
+An implicit hydrogen, including a bracket H-count participant, and an explicit hydrogen atom
+connected by a bond SHALL remain distinct representations. They MUST NOT be treated as equivalent
+even when the descriptions denote the same chemistry.
+
+The Organic Subset rules determine implicit H only for unbracketed organic-subset atoms. Inside
+brackets the H count is exactly the stated value, or zero when omitted. A stereo descriptor does
+not change this rule.
+
 ### Unknown Atom
 
 The '*' token denotes an unknown atom without element assignment and does not imply aromaticity. It is permitted anywhere a normal atom may appear, including in aromatic rings. No implicit hydrogens SHALL be inferred for '*' outside brackets. Inside a bracket atom, '*' MAY carry fields (isotope, chirality, hydrogen count, charge, class) subject to the same syntax as elements.
@@ -257,7 +304,7 @@ _To be specified. Validation of implicit hydrogen counts, valence limits, and ch
 
 _To be specified. Validation of chiral center neighbor counts, allene geometry, and cis/trans bond consistency._
 
-Note: cis/trans bond consistency — two substituents on the same double-bond atom marked on the same face (e.g. `C/C(\F)=C/F`) — is currently enforced at raise time as `RaiseError::CisTransConflict`, not in a dedicated validation pass. It SHOULD be incorporated into this semantic step with its own diagnostic code once this section is specified.
+Directional consistency and redundant notation are defined in Double-Bond Stereochemistry above. Chemical support for an asserted tetrahedral frame is checked separately, as described in Tetrahedral Stereochemistry.
 
 ### Aromaticity Validation
 

@@ -28,7 +28,7 @@ Correction (2026-09-14, H omission at the format boundary): the working design b
 H elision during GraphIR projection. The joint S4a7/S7a1/S7b1 migration now preserves H through
 projection and decides TableIR omission in Convey. Earlier implementations and their passing
 checks remain historical evidence. S4a6 is complete; the migration gate is recorded below.
-S7c and S9a are complete; S9b specification and public documentation are next.
+S7c, S9a, and S9b are complete; S9c final gates and evidence reconciliation are next.
 
 ## Scope
 
@@ -3316,7 +3316,7 @@ and scratch/s6b-clippy.log.
 
 S4a5, the corrected S4 gate, and S7a are complete. The two H-handling corrections
 are recorded in the S7a implementation status below. S4a7/S7a1/S7b1 supersede that H handling;
-their migration and S7b2 gate are complete. S7c and S9a are also complete; S9b is next.
+their migration and S7b2 gate are complete. S7c, S9a, and S9b are also complete; S9c is next.
 
 ### S7 — Convey and text export
 
@@ -3497,7 +3497,7 @@ migration for this change. New Python output exposure remains deferred.
   and correspondence. Add retained
   regression cases for discovered defects. A success-conditional property must be paired with
   required-success fixtures; no shrinking the feature domain merely to pass tests.
-- **S9b — Specification and public documentation.** Modules: umol-io/spec/opensmiles-spec.md,
+- **S9b — Specification and public documentation (complete).** Modules: umol-io/spec/opensmiles-spec.md,
   affected public rustdoc and usage examples. **Documentation (green).** [dep: S9a]
   Apply only the separate Staged specification updates list below to the spec: interpretation and
   equivalence, not pipeline/roundtrip promises. State constructor, traversal, projection, and
@@ -3550,6 +3550,26 @@ and warnings denied passed, as did nightly formatting and git diff --check. Fina
 scratch/s9a/graph-gate.log, scratch/s9a/io-gate.log, and scratch/s9a/clippy.log.
 Only the existing external property module and this record/index changed. S9b is next; the
 workspace/Python/performance/fuzz accounting remains S9c work.
+
+#### S9b implementation status — 2026-09-14
+
+The staged specification list is applied to umol-io/spec/opensmiles-spec.md: implicit versus
+actual H, bracket H0, tetrahedral participant kinds and incidence ordering, the umol lone-pair
+placement convention, no frame padding or repair, and whole-system direction-marker equivalences.
+Incomplete direction information no longer denotes Either. The stale raise-time conflict note is
+removed. These are interpretation rules; no pipeline or roundtrip requirements were added to the spec.
+
+Public output documentation now states canonical GraphIR equality with para_stereo=false,
+source preservation, configuration symmetry with ingestion, and the implemented output limits.
+Boundary docs state ownership identity, deterministic traversal/output, parsed-text normalization,
+and rendering failures including Either and unsupported coordinates/CX data. Existing graph-core
+traversal and resolver projection docs already state their ordering, preservation, and failure laws.
+Two executable examples in the export module show default molecular/reaction ingest/export and
+explicit parse/interpret/convey/render alongside configured conveniences. No API or runtime logic changed.
+
+Verification: both new doctests passed; graph/IO rustdoc built with warnings denied; nightly
+format checking and git diff --check passed. Logs: scratch/s9b/doctest.log,
+scratch/s9b/rustdoc.log, and scratch/s9b/fmt-check.log. S9c is next.
 
 ### Final verification commands
 
@@ -5503,7 +5523,8 @@ scratch/s3e-incremental.diff. S3 is complete; S4a is next.
 This is the separate staging list for changes to `umol-io/spec/opensmiles-spec.md`.
 It records specification content, not implementation tasks or roundtrip guarantees.
 The specification defines interpretation and equivalence; the roundtrip design consumes
-that equivalence relation. The isotope correction below is applied; the remaining changes are staged.
+that equivalence relation. The isotope correction was applied in S4a0c; the remaining changes
+were applied in S9b (2026-09-14). The list is retained as the specification scope record.
 
 ### Isotope composition
 

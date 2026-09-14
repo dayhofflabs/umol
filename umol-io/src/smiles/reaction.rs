@@ -53,14 +53,17 @@ impl ReactionSmiles {
     ///
     /// # Errors
     ///
-    /// Reports molecular failures with section context. Unsupported reaction metadata fails
-    /// rather than being omitted.
+    /// Reports molecular failures from [Smiles::render_with](super::Smiles::render_with) with
+    /// section context, including Either and unsupported CX annotations. Unsupported reaction
+    /// metadata fails rather than being omitted.
     ///
     /// # Semantic properties
     ///
-    /// Preserves supported molecular semantics, section order, and every atom-class label,
-    /// including repeated labels and labels on agents. Output is deterministic for the
-    /// table and configuration; source spelling and ring labels need not be preserved.
+    /// Each section follows [Smiles::render_with](super::Smiles::render_with). Section order and
+    /// every atom-class label are preserved, including repeated labels and labels on agents.
+    /// Output is deterministic for the table and configuration; the table is unchanged on
+    /// success and failure. For supported parsed reaction SMILES, rendering, reparsing, and
+    /// rendering again produces identical text. Source spelling and ring labels may change.
     pub fn render_with(
         &self,
         config: &SmilesIoConfig,
@@ -89,6 +92,9 @@ impl ReactionSmiles {
     }
 
     /// Take ownership of a TableIR for reaction SMILES rendering.
+    ///
+    /// The table is retained unchanged. Rendering checks the properties it requires.
+    /// Consuming the result with into_table_ir returns exactly the supplied table.
     pub fn from_table_ir(table_ir: Reaction) -> Self {
         Self { table_ir }
     }

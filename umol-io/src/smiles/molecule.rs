@@ -57,17 +57,26 @@ impl Smiles {
     /// Render under an explicit IO configuration, recomputing traversal and stereo markers.
     ///
     /// Element H always uses brackets and permits an absent implicit-H count without a suffix.
+    /// Atom lone-pair and spin counts have no independent output tokens. The supplied H count
+    /// controls bracket hydrogen notation; rendering does not derive an atom's electron state.
+    /// Components start at the first unreached atom row. Depth-first traversal visits neighbors
+    /// in atom-index order; ring labels and slash assignments are chosen during rendering.
     ///
     /// # Errors
     ///
-    /// Fails for unsupported fields or unrepresentable stereo. Parsed CX annotations can
-    /// fail even under the configuration that accepted them; CX output is not implemented.
+    /// Fails for invalid table references, unsupported fields, or unrepresentable stereo,
+    /// including an explicit Either assertion or the absence of a consistent slash assignment.
+    /// Supplied coordinates and parsed CX annotations can fail even under the configuration
+    /// that accepted them; coordinate and CX output are not implemented. Extended dative bonds
+    /// and aromatic element spellings require the corresponding syntax flags.
     ///
     /// # Semantic properties
     ///
-    /// Output is deterministic for the table and configuration. It preserves supported
-    /// molecular semantics, including fixed versus inferred H counts and stereo assertions,
-    /// but need not preserve source spelling, ring labels, or redundant direction markers.
+    /// Output is deterministic for the table and configuration, and the table is unchanged on
+    /// success and failure. For supported parsed SMILES, rendering, reparsing, and rendering
+    /// again produces identical text. Parsing the output preserves SMILES atom/bond fields,
+    /// fixed versus inferred H counts, and stereo configurations after participant-frame
+    /// transport. Source spelling, ring labels, and redundant direction markers may change.
     pub fn render_with(&self, config: &SmilesIoConfig) -> Result<String, SmilesRenderError> {
         render::render(&self.table_ir, config)
     }
@@ -75,6 +84,7 @@ impl Smiles {
     /// Take ownership of a TableIR for SMILES rendering.
     ///
     /// The table is retained unchanged. Rendering checks the properties it requires.
+    /// Consuming the result with into_table_ir returns exactly the supplied table.
     pub fn from_table_ir(table_ir: Molecule) -> Self {
         Self { table_ir }
     }
