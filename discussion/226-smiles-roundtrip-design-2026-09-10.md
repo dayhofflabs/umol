@@ -16,8 +16,8 @@ implementation and timing records are retained as historical evidence. S4a0a–S
 Correction (2026-09-13): removing ValenceResolver::project also removed implicit-H elision.
 The ordinary atom valence design below restores that responsibility after aromatic projection
 and before isotope projection, in reverse resolution order.
-The lookup and Natural-isotope retention rules are settled. S4 is reopened for
-S4a1–S4a5; S4a1–S4a3 are complete. Composite integration is pending and S7a has not started. Ad hoc atom-electron
+The lookup and Natural-isotope retention rules are settled. Reopened S4, including
+S4a1–S4a5, is complete. S7a has not started. Ad hoc atom-electron
 rejections and bracket rules have been removed from rendering; H decisions belong to projection.
 
 ## Scope
@@ -1011,18 +1011,19 @@ dative pairs enter the existing isoelectronic table lookup; unrelated asserted c
 
 #### Remaining design and implementation status
 
-The Natural-isotope requirement settles S4a3's additional H-retention condition. Other
-bracket/encoding consequences remain with the downstream S4a5/S7a work; they are not new
-format predicates in this valence step. The ad hoc atom-electron rejections and extra
-bracket-selection conditions, together with tests that encoded them, have been removed from
-rendering (2026-09-13). Further boundary changes follow the projection design in S4a5; this cleanup
-does not implement H elision or settle its remaining design.
+The Natural-isotope requirement settles S4a3's additional H-retention condition. S4a5 pins the
+rendering contract: Some(n), including zero, is a retained bracket H count; None permits ordinary
+unbracketed notation but cannot supply the H count required by brackets. Retained atom electron
+fields neither force brackets nor cause rejection on presence alone. The ad hoc atom-electron
+rejections and extra bracket-selection conditions have been removed. Projection now owns H
+elision; rendering performs no chemical inference. The remaining bracket-required cases after
+projection are recorded in the S7a handoff below.
 
 Required verification will cover both sources and policies, duplicate patterns giving the same
 H, distinct H alternatives, charged/radical retention, unchanged stored electron fields, and
 filtering by both #v<n> and #a<m>. Use supported foreign-input roundtrip properties and independent
 expected H-elision cases. Do not introduce runtime roundtrip verification. The earlier removal
-and timing records below remain historical; restoration is still outstanding before S7a.
+and timing records below remain historical; the restoration subitems are complete.
 
 ### Isotope resolution and registry raising (settled during S4a)
 
@@ -1440,8 +1441,8 @@ The plan below sequences the work; S0–S3 are complete.
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-S4 is reopened for S4a1–S4a5 under the 2026-09-13 design. S4a0a–S4a0c and the recorded
-S4a–S4d changes remain implemented; their prior completion does not complete the reopened stage.
+Reopened S4a1–S4a5 and their gate are complete under the 2026-09-13 design.
+S4a0a–S4a0c and the recorded S4a–S4d changes remain implemented.
 S4a3's Natural-isotope H-retention condition is settled.
 S5 and S6 are complete; S7 and later stages are pending.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
@@ -1699,7 +1700,7 @@ changes are reviewed for semantic preservation, not accepted solely because test
 
 ### S4 — Direct GraphIR-only projection
 
-**Reopened 2026-09-13.** S4a1–S4a5 below restore valence projection and reconcile its consumers.
+**Reopened and completed 2026-09-13.** S4a1–S4a5 restore valence projection and reconcile its consumers.
 The ordinary atom valence section owns the design, including the settled Natural-isotope
 H-retention condition for S4a3.
 Earlier completion records remain historical. S7a depends on completion of the reopened S4 gate.
@@ -1928,7 +1929,7 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   and transact assertion updates plus entity removals once. Their existing ProjectError enums
   gain Transaction; chemical diagnostics and all-or-nothing publication remain unchanged.
 - **S4a4 — Compose projection in reverse phase order.** Module: ops/resolve.rs,
-  existing projection tests, and benchmarks. **Additive (green); pending.** [dep: S4a3, S4d]
+  existing projection tests, and benchmarks. **Additive (green); completed 2026-09-13.** [dep: S4a3, S4d]
   Call ValenceResolver::project after aromatic projection and before isotope projection on the
   composite candidate (stereo → aromaticity → valence → isotope), using the
   same Strict/MostSaturated policy as resolution. Preserve atomic publication and existing
@@ -1939,7 +1940,7 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
   files or tuning campaign.
 - **S4a5 — Reconcile H lowering and render changes.** Modules: umol-io/src/smiles/render.rs,
   existing Smiles boundary tests and smiles_property.rs; S7a handoff in this document.
-  **Correction/refactor (green); pending.** [dep: S4a4, S6a, S6b]
+  **Correction/refactor (green); completed 2026-09-13.** [dep: S4a4, S6a, S6b]
   The ad hoc atom-electron exclusions and bracket rules were removed on 2026-09-13; this
   preliminary cleanup does not complete S4a5. Reconcile rendering with the completed projection.
   Keep the distinction between retained TableIR electron fields and the notation that expresses
@@ -2055,7 +2056,88 @@ bonding budgets. No source-level property tests or internal-query access was int
 Verification: PROPTEST_CASES=256 cargo test -p umol-graph --features conformance,proptest --offline
 passes (1,708 unit cases, 683 conformance cases, 18 property tests, and integration tests).
 All-target graph Clippy with the same features and -D warnings, formatting, and git diff --check
-pass. Logs: scratch/s4a3-gate.log and scratch/s4a3-clippy.log. S4a4 is next.
+pass. Logs: scratch/s4a3-gate.log and scratch/s4a3-clippy.log.
+
+#### S4a4 completion — 2026-09-13
+
+Resolver::project now calls stereo → aromaticity → valence → isotope on its candidate, using
+the same valence policy as resolution. ProjectError and ProjectContradiction gain Valence
+variants; the public method signature is unchanged. Publication still occurs only after all
+phases succeed. No additional reconstruction or validation pass is introduced.
+
+Eight exact cases cover both sources, both valence policies, and both isotope policies. The
+existing mixed aromatic/stereo SMILES property now varies the valence policy independently of
+the source and checks the complete expected projected molecule, including H elision, explicit
+isotope H retention, #a contributions, and #T/#C assertions. Existing late-isotope-error cases
+continue to check complete input preservation after earlier candidate changes.
+
+Verification: PROPTEST_CASES=256 cargo test -p umol-graph --features conformance,proptest --offline
+passes (1,716 unit cases, 683 conformance cases, 18 property tests, and integration tests).
+All-target graph Clippy with the same features and -D warnings, formatting, and git diff --check
+pass. Logs: scratch/s4a4-gate.log and scratch/s4a4-clippy.log.
+
+The existing inline-input composite benchmark now covers both sources/policies and eight inputs.
+One bounded before/after run used 10 samples, 0.1 s warm-up, and 0.3 s measurement per case.
+Parsing, ingestion, resolver construction, and the caller's input clone are outside timing;
+the composite's own candidate clone and phase transactions are inside. The baseline omits
+valence projection, so this measures the cost of added work, not equivalent implementations.
+Selected central estimates, in microseconds:
+
+| Source / policy | Input | Before | After |
+| --- | --- | ---: | ---: |
+| Atom typing / Strict | 64-atom chain | 11.295 | 36.635 |
+| Counts / Strict | 64-atom chain | 11.571 | 14.663 |
+| Atom typing / MostSaturated | 64-atom chain | 11.505 | 53.254 |
+| Counts / MostSaturated | 64-atom chain | 11.536 | 25.943 |
+| Atom typing / MostSaturated | Benzene | 5.489 | 9.801 |
+| Counts / MostSaturated | Benzene | 5.525 | 7.182 |
+| Atom typing / MostSaturated | Isotope/stereo/aromatic combination | 12.115 | 18.776 |
+| Counts / MostSaturated | Isotope/stereo/aromatic combination | 12.006 | 14.683 |
+
+Charged/radical controls remain about 0.4–0.45 µs. Timing logs are scratch/s4a4-before.log and
+scratch/s4a4-after.log; Criterion baseline is s4a4-before. No tuning pass followed these results.
+
+A separate counting-allocator run measured the valence phase after stereo/aromatic projection
+and the full composite, excluding input preparation. Counts and atom typing have identical
+allocation profiles on all six measured inputs. The valence phase allocates nothing for Strict
+octane/64-atom chains and for the charged/radical controls. For MostSaturated, its 64-atom-chain
+H updates and transaction make 20 allocation requests (including 4 reallocations), requesting
+97,564 bytes, with 79,888 peak added live bytes. The full composite makes 40 requests (including
+8 reallocations), requesting 195,128 bytes. This distinguishes registry-processing time from
+additional allocation volume; it does not attribute every timing difference to a specific call.
+Harness: scratch/stereo-valence-scan/src/bin/s4a4_allocations.rs; results:
+scratch/s4a4-allocations.csv. Performance work is separate from S4a5.
+
+#### S4a5 completion — 2026-09-13
+
+The existing renderer already implements the settled boundary behavior after the earlier
+exclusion cleanup. No further production-code change is needed here. Twenty exact public Smiles
+cases cover inferred versus retained H (including zero), saturated bracket atoms, radicals,
+isotopes, charge, tetrahedral H/explicit-atom/lone-pair frames, and preservation of the complete
+TableIR on both successful and failed rendering. An external property in smiles_property.rs
+varies molecular components and the presence of lone-pair, unpaired-electron, and multiplicity
+fields: supplementing the same notation with those fields leaves its text unchanged and preserves
+the original table. This is a boundary rendering law, not an assertion that parsing recovers
+independently supplied spin fields.
+
+S7a must lower Lit(n) to Some(n), including zero, and Undetermined to None directly from the
+projected molecule. No recovery from the original molecule or second H inference belongs in
+Convey/render. The full projection/convey/render/parse tests remain in S7a.
+
+There is a concrete remaining limitation for that integration: projection can elide H at neutral
+natural-isotope tetrahedral sites, but their bracket notation still needs a count. For example,
+the frame in F[C@H](Cl)Br with TableIR H=None fails with InvalidStereoAtom; the same applies to
+the zero-H four-atom and lone-pair frames. Atom classes and non-organic elements also require
+brackets and fail with InferredHydrogens when H=None. These are tested existing failures, not a
+completed stereo/reaction export solution. S7a must account for them before claiming its required
+successful roundtrips. This subitem does not add format predicates to valence projection.
+
+The reopened S4 gate passes: graph has 1,716 unit cases, 683 conformance cases, and 18 external
+properties; IO has 4,126 unit cases, its MOL/SDF/SMILES conformance suites, and all three external
+property suites (26 cases in smiles_property.rs). Both crates ran with conformance,proptest and
+PROPTEST_CASES=256. Affected all-target Clippy with -D warnings, formatting, and git diff --check
+pass. Logs: scratch/s4a5-graph-gate.log, scratch/s4a5-io-gate.log, scratch/s4a5-clippy.log.
+The public API and production behavior are unchanged by S4a5. Performance was not revisited.
 
 #### S4a correction completion — 2026-09-11
 
@@ -2386,7 +2468,7 @@ atomic publication without runtime reconstruction. Establish bounded baselines f
 projection operations; historical reconstruction timings describe different work. No re-resolution
 measurement or tuning campaign is required.
 
-**Reopened S4 gate (pending, 2026-09-13):** S4a1–S4a5 pass their exact cases and external
+**Reopened S4 gate (completed 2026-09-13):** S4a1–S4a5 pass their exact cases and external
 properties for both candidate sources and policies. Graph/IO unit, conformance, and feature-gated
 property suites pass; formatting, affected all-target Clippy, and git diff --check pass. Confirm
 that projection alone decides H elision, preserves the other atom fields, and uses #v/#a without
@@ -2809,8 +2891,8 @@ PROPTEST_CASES=256 and features conformance,proptest. All-target IO Clippy with 
 formatting, and git diff --check pass. Logs: scratch/s6b-gate.log, scratch/s6b-property.log,
 and scratch/s6b-clippy.log.
 
-Before S7a, complete reopened S4, including the remaining S4a4/S4a5 integration and boundary work.
-S7a has not started.
+Reopened S4 is complete. S7a has not started; its bracket-required H-count limitation is recorded
+in the S4a5 handoff above.
 
 ### S7 — Convey and text export
 
@@ -2821,6 +2903,9 @@ S7a has not started.
   Build StereoAtom/StereoBond frames here, not in the resolver. Lower projected values that TableIR
   can carry and reject concrete unsupported values/ranges. Rendering owns SMILES
   notation/configuration support. Do not add reconstruction checks at either boundary.
+  Account for H elision at bracket-required sites before claiming successful stereo/reaction
+  output; see the concrete cases in the S4a5 handoff. Lower Lit(n) to Some(n), including zero,
+  and Undetermined to None; do not recover H from the original molecule or infer it in rendering.
   Test the supported foreign-input roundtrip through convey/render/parse under the agreed
   equivalences, with required-success fixtures. Include original-input immutability on success
   and failure and exact diagnostics for unsupported encodings.
@@ -2963,7 +3048,7 @@ inventing extra public seams.
 | StereoAtom, StereoLigand, Winding, ConfigurationScope | Retain public layout and the implicit-H/LP participant convention. | Doc 224 parser finalizer, raise, future writer. No LP-removal migration. |
 | AtomNeighbors and table_ir::Neighbor; both molecule atom_neighbors methods | Remain operation-local lookup; no new foundational graph field or adjacency trait. Eliminate unnecessary allocation at callers without assuming final Graph connectivity matches the table. | Raise helpers, table tests; future parser/writer incidence access. Retirement/replacement of the public helper itself is not approved. |
 | TryIntoIr<Molecule> for &table_ir::Molecule; RaiseError | Raise explicit frames instead of interpreting retained directions; preserve model-independent representation errors at the owning conversion. | Interpret, parser/raise fixtures, fuzz target. Source marker conflicts move with their producer; do not erase diagnostics. |
-| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation; no TableIR or IO-config parameters. S4a3 restores ValenceResolver::project(&mut Molecule, ValenceTieBreak), with Result<Solution<(), ValenceContradiction>, ValenceProjectError> and Transaction as its only operational error. AromaticityProjectError and StereoProjectError also gain Transaction. S4a4 must insert valence between aromatic and isotope projection in the composite. | Convey; public projection properties and projection benchmarks. |
+| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation; no TableIR or IO-config parameters. ValenceResolver::project(&mut Molecule, ValenceTieBreak) returns Result<Solution<(), ValenceContradiction>, ValenceProjectError>, with Transaction as its only operational error. AromaticityProjectError and StereoProjectError also carry Transaction. Composite order is stereo → aromaticity → valence → isotope; ProjectError and ProjectContradiction include Valence. | Convey; public projection properties and projection benchmarks. |
 | Resolver::resolve, ResolveConfig, ResolveState and existing reports/errors | Retain forward semantics, including completed isotope corrections. Project does not invoke resolution for validation. | Existing ingestion and resolution tests; supported-input projection properties. |
 | AtomTypeRegistry lookup/admission operations | Retain forward admission and completed registry invariants/deduplication. Projection scans element/charge lookup results with #v/#a filtering and analyzes H alternatives without an intermediate collection or registry mutation. | Forward atom typing and pending H-elision projection. |
 | Smiles/ReactionSmiles::from_table_ir | Infallible owned-table constructors without IO config or validation. Private table fields remain private. | Convey across the crate boundary; tests of independent open tables. |

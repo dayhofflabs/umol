@@ -10,6 +10,7 @@ use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use rstest::rstest;
 use umol_chem::element::Element;
+use umol_chem::spin::SpinMultiplicity;
 use umol_geometric_core::Point3D;
 use umol_graph_ir::ir::{
     BondId, CisTransStereoForm, ElementForm, Molecule, StereoCoset, TryIntoIr,
@@ -583,6 +584,37 @@ proptest! {
         let actual = &parsed.as_table_ir().atoms[0];
         prop_assert_eq!((actual.element, actual.isotope_mass, actual.charge.unwrap_or(0), actual.implicit_hydrogens, actual.class),
             (atom.element, mass, charge, Some(hydrogens), Some(class)));
+    }
+
+    #[test]
+    fn test_smiles_render_electrons(
+        components in vec((select(vec![
+            ("C", 0, 0, SpinMultiplicity::SINGLET),
+            ("N", 1, 0, SpinMultiplicity::SINGLET),
+            ("O", 2, 0, SpinMultiplicity::SINGLET),
+            ("[CH4]", 0, 0, SpinMultiplicity::SINGLET),
+            ("[13CH4]", 0, 0, SpinMultiplicity::SINGLET),
+            ("[CH3]", 0, 1, SpinMultiplicity::DOUBLET),
+            ("[CH2]", 0, 2, SpinMultiplicity::TRIPLET),
+            ("[O]", 2, 2, SpinMultiplicity::TRIPLET),
+            ("[NH4+]", 0, 0, SpinMultiplicity::SINGLET),
+            ("[Cl-]", 4, 0, SpinMultiplicity::SINGLET),
+            ("[He]", 1, 0, SpinMultiplicity::SINGLET),
+        ]), any::<[bool; 3]>()), 1..32),
+    ) {
+        let input = components.iter().map(|((text, ..), _)| *text).collect::<Vec<_>>().join(".");
+        let parsed = Smiles::parse(&input).unwrap();
+        let mut table = parsed.clone().into_table_ir();
+        for (atom, ((_, lone_pairs, unpaired, multiplicity), present)) in table.atoms.iter_mut().zip(components) {
+            atom.lone_pairs = present[0].then_some(lone_pairs);
+            atom.unpaired_electrons = present[1].then_some(unpaired);
+            atom.multiplicity = present[2].then_some(multiplicity);
+        }
+        let smiles = Smiles::from_table_ir(table.clone());
+        let text = smiles.render().unwrap();
+        prop_assert_eq!(&text, &input);
+        prop_assert_eq!(Smiles::parse(&text).unwrap(), parsed);
+        prop_assert_eq!(smiles.into_table_ir(), table);
     }
 }
 

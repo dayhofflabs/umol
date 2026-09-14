@@ -163,15 +163,17 @@ proptest! {
         mass in prop::sample::select(vec![None, Some(13u32), Some(14u32)]),
         clockwise in any::<bool>(), trans in any::<bool>(),
         natural in any::<bool>(), typing in any::<bool>(),
+        saturated in any::<bool>(),
     ) {
         let isotope = mass.map(|mass| mass.to_string()).unwrap_or_default();
         let chirality = if clockwise { "@@" } else { "@" };
         let direction = if trans { "/" } else { "\\" };
         let input = format!("[{isotope}CH3][C{chirality}H](F)/[CH]=[CH]{direction}[c]1[cH][cH][cH][cH][cH]1");
-        let model = ChemistryModel {
+        let mut model = ChemistryModel {
             valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
             ..Default::default()
         };
+        model.valence.tie_break = if saturated { ValenceTieBreak::MostSaturated } else { ValenceTieBreak::Strict };
         let config = ResolveConfig {
             isotope: if natural { IsotopePolicy::Natural } else { IsotopePolicy::Strict },
             ..Default::default()
@@ -181,6 +183,12 @@ proptest! {
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [3 4 "2"] [4 5 "1"]
                 [5 10 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"]]}"#);
         let mut editor = base.edit();
+        for index in 1..11 {
+            editor.atom_mut(AtomId(index)).attributes.implicit_hydrogens = NumForm::Undetermined;
+        }
+        if saturated && mass.is_none() {
+            editor.atom_mut(AtomId(0)).attributes.implicit_hydrogens = NumForm::Undetermined;
+        }
         if natural {
             for atom in base.atoms().ids() {
                 editor.atom_mut(atom).attributes.isotope_mass = IsotopeMassForm::Undetermined;

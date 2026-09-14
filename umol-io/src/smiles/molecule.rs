@@ -101,6 +101,7 @@ mod tests {
     use indexmap::IndexMap;
     use rstest::rstest;
     use umol_chem::element::Element;
+    use umol_chem::spin::SpinMultiplicity;
 
     use super::*;
     use crate::table_ir::{
@@ -182,6 +183,78 @@ mod tests {
         let original = smiles.clone();
         assert_eq!(smiles.render(), Ok(expected.to_owned()));
         assert_eq!(smiles, original);
+    }
+
+    #[rstest]
+    #[case::inferred(Atom::aliphatic_atom(Element::C), "C")]
+    #[case::zero(Atom { implicit_hydrogens: Some(0), ..Atom::aliphatic_atom(Element::C) }, "[C]")]
+    #[case::saturated(Atom { implicit_hydrogens: Some(4), ..Atom::aliphatic_atom(Element::C) }, "[CH4]")]
+    #[case::lone_pairs(Atom { lone_pairs: Some(2), unpaired_electrons: Some(0), multiplicity: Some(SpinMultiplicity::SINGLET), ..Atom::aliphatic_atom(Element::O) }, "O")]
+    #[case::radical(Atom { implicit_hydrogens: Some(3), lone_pairs: Some(0), unpaired_electrons: Some(1), multiplicity: Some(SpinMultiplicity::DOUBLET), ..Atom::aliphatic_atom(Element::C) }, "[CH3]")]
+    #[case::triplet(Atom { implicit_hydrogens: Some(0), lone_pairs: Some(2), unpaired_electrons: Some(2), multiplicity: Some(SpinMultiplicity::TRIPLET), ..Atom::aliphatic_atom(Element::O) }, "[O]")]
+    #[case::isotope(Atom { isotope_mass: Some(13), implicit_hydrogens: Some(4), ..Atom::aliphatic_atom(Element::C) }, "[13CH4]")]
+    #[case::isotope_zero(Atom { isotope_mass: Some(13), implicit_hydrogens: Some(0), ..Atom::aliphatic_atom(Element::C) }, "[13C]")]
+    #[case::charged(Atom { charge: Some(1), implicit_hydrogens: Some(4), lone_pairs: Some(0), unpaired_electrons: Some(0), multiplicity: Some(SpinMultiplicity::SINGLET), ..Atom::aliphatic_atom(Element::N) }, "[NH4+]")]
+    fn test_smiles_render_atom(#[case] atom: Atom, #[case] expected: &str) {
+        let table = Molecule {
+            atoms: vec![atom],
+            ..Molecule::empty()
+        };
+        let smiles = Smiles::from_table_ir(table.clone());
+        assert_eq!(smiles.render(), Ok(expected.to_owned()));
+        assert_eq!(smiles.into_table_ir(), table);
+    }
+
+    #[rstest]
+    #[case::isotope(Atom { isotope_mass: Some(13), ..Atom::aliphatic_atom(Element::C) })]
+    #[case::charge(Atom { charge: Some(1), ..Atom::aliphatic_atom(Element::N) })]
+    #[case::class(Atom { class: Some(1), ..Atom::aliphatic_atom(Element::C) })]
+    #[case::nonorganic(Atom::aliphatic_atom(Element::He))]
+    fn test_smiles_render_atom_error(#[case] atom: Atom) {
+        let table = Molecule {
+            atoms: vec![atom],
+            ..Molecule::empty()
+        };
+        let smiles = Smiles::from_table_ir(table.clone());
+        assert_eq!(
+            smiles.render(),
+            Err(SmilesRenderError::InferredHydrogens { atom: 0 })
+        );
+        assert_eq!(smiles.into_table_ir(), table);
+    }
+
+    #[rstest]
+    #[case::explicit("F[C@](Cl)(Br)I", 1, 0)]
+    #[case::implicit_h("F[C@H](Cl)Br", 1, 0)]
+    #[case::explicit_h("[H][C@](F)(Cl)Br", 1, 0)]
+    #[case::lone_pair("C[S@@](=O)CC", 1, 1)]
+    fn test_smiles_render_stereo_electrons(
+        #[case] input: &str,
+        #[case] atom: usize,
+        #[case] lone_pairs: u8,
+    ) {
+        let mut table = Smiles::parse(input).unwrap().into_table_ir();
+        table.atoms[atom].lone_pairs = Some(lone_pairs);
+        table.atoms[atom].unpaired_electrons = Some(0);
+        table.atoms[atom].multiplicity = Some(SpinMultiplicity::SINGLET);
+        let smiles = Smiles::from_table_ir(table.clone());
+        assert_eq!(smiles.render(), Ok(input.to_owned()));
+        assert_eq!(smiles.into_table_ir(), table);
+    }
+
+    #[rstest]
+    #[case::explicit("F[C@](Cl)(Br)I")]
+    #[case::implicit_h("F[C@H](Cl)Br")]
+    #[case::lone_pair("C[S@@](=O)CC")]
+    fn test_smiles_render_stereo_hydrogens_error(#[case] input: &str) {
+        let mut table = Smiles::parse(input).unwrap().into_table_ir();
+        table.atoms[1].implicit_hydrogens = None;
+        let smiles = Smiles::from_table_ir(table.clone());
+        assert_eq!(
+            smiles.render(),
+            Err(SmilesRenderError::InvalidStereoAtom { atom: 1 })
+        );
+        assert_eq!(smiles.into_table_ir(), table);
     }
 
     #[rstest]

@@ -10,9 +10,9 @@
 
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_graph::ingest::ingest_smiles;
-use umol_graph::ops::model::{ChemistryModel, ValenceModel};
+use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{IsotopePolicy, ResolveConfig, Resolver};
 use umol_graph_ir::ir::{Molecule, TryIntoIr};
 use umol_io::smiles::Smiles;
@@ -152,37 +152,60 @@ fn bench_stereo_project(c: &mut Criterion) {
 }
 
 fn bench_project(c: &mut Criterion) {
-    let model = ChemistryModel::default();
-    let resolver = Resolver::with_config(
-        &model,
-        ResolveConfig {
-            isotope: IsotopePolicy::Natural,
-            ..Default::default()
-        },
-    );
     let mut group = c.benchmark_group("smiles_roundtrip/project");
-    for (name, input) in [
-        ("octane", "CCCCCCCC"),
-        ("benzene", "c1ccccc1"),
-        ("naphthalene", "c1ccc2ccccc2c1"),
-        ("stereo", "N[C@H](F)/C=C/C"),
-        ("combined", "[13CH3][C@H](F)/C=C/c1ccccc1"),
+    for (source_name, valence) in [
+        ("typing", ValenceModel::default()),
+        ("counts", ValenceModel::smiles()),
     ] {
-        let source = ingest_smiles(input).unwrap();
-        let mut checked = source.clone();
-        assert_eq!(resolver.project(&mut checked), Ok(Solution::Determined(())));
-        assert!(
-            !checked.has_stereo_atoms()
-                && !checked.has_stereo_bonds()
-                && !checked.has_aromatic_systems()
-        );
-        group.bench_function(name, |b| {
-            b.iter_batched_ref(
-                || source.clone(),
-                |molecule| resolver.project(black_box(molecule)).unwrap(),
-                BatchSize::SmallInput,
+        for (policy_name, policy) in [
+            ("strict", ValenceTieBreak::Strict),
+            ("saturated", ValenceTieBreak::MostSaturated),
+        ] {
+            let mut model = ChemistryModel {
+                valence: valence.clone(),
+                ..Default::default()
+            };
+            model.valence.tie_break = policy;
+            let resolver = Resolver::with_config(
+                &model,
+                ResolveConfig {
+                    isotope: IsotopePolicy::Natural,
+                    ..Default::default()
+                },
             );
-        });
+            for (name, input) in [
+                ("octane", "CCCCCCCC"),
+                (
+                    "chain_64",
+                    "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+                ),
+                ("benzene", "c1ccccc1"),
+                ("naphthalene", "c1ccc2ccccc2c1"),
+                ("stereo", "N[C@H](F)/C=C/C"),
+                ("combined", "[13CH3][C@H](F)/C=C/c1ccccc1"),
+                ("charged", "[NH4+]"),
+                ("radical", "[CH3]"),
+            ] {
+                let source = ingest_smiles(input).unwrap();
+                let mut checked = source.clone();
+                assert_eq!(resolver.project(&mut checked), Ok(Solution::Determined(())));
+                assert!(
+                    !checked.has_stereo_atoms()
+                        && !checked.has_stereo_bonds()
+                        && !checked.has_aromatic_systems()
+                );
+                group.bench_function(
+                    BenchmarkId::new(format!("{source_name}_{policy_name}"), name),
+                    |b| {
+                        b.iter_batched_ref(
+                            || source.clone(),
+                            |molecule| resolver.project(black_box(molecule)).unwrap(),
+                            BatchSize::SmallInput,
+                        );
+                    },
+                );
+            }
+        }
     }
     group.finish();
 }
