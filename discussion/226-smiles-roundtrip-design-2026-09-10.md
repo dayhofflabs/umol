@@ -28,7 +28,7 @@ Correction (2026-09-14, H omission at the format boundary): the working design b
 H elision during GraphIR projection. The joint S4a7/S7a1/S7b1 migration now preserves H through
 projection and decides TableIR omission in Convey. Earlier implementations and their passing
 checks remain historical evidence. S4a6 is complete; the migration gate is recorded below.
-S7c is complete; S9a integration coverage is next.
+S7c and S9a are complete; S9b specification and public documentation are next.
 
 ## Scope
 
@@ -3316,7 +3316,7 @@ and scratch/s6b-clippy.log.
 
 S4a5, the corrected S4 gate, and S7a are complete. The two H-handling corrections
 are recorded in the S7a implementation status below. S4a7/S7a1/S7b1 supersede that H handling;
-their migration and S7b2 gate are complete. S7c is also complete; S9a is next.
+their migration and S7b2 gate are complete. S7c and S9a are also complete; S9b is next.
 
 ### S7 — Convey and text export
 
@@ -3487,7 +3487,7 @@ migration for this change. New Python output exposure remains deferred.
 
 ### S9 — Integration evidence, specification, and closeout
 
-- **S9a — Full property/conformance coverage.** Modules: IO and graph property/conformance targets.
+- **S9a — Full property/conformance coverage (complete).** Modules: IO and graph property/conformance targets.
   **Additive (green).** [dep: S2a, S3e, S7c]
   Run project(resolve(input)) for supported raised foreign inputs, boundary normalization,
   ownership transfer and rendering failures, and ingestion-to-export preservation under the agreed
@@ -3512,13 +3512,52 @@ migration for this change. New Python output exposure remains deferred.
   Record implemented scope, limitations, and deferred decisions here. Update status only when
   required work is complete; do not close outstanding scope by relabeling it a future enhancement.
 
+#### S9a implementation status — 2026-09-14
+
+The audit retained the existing public IO tests for ownership transfer, exact rendering failures,
+normalization, and exhaustive stereo-marker assignments on chains, branches, and cycles. Existing
+GraphIR projection properties compare complete expected fields, flags, aromatic contributions,
+and stereo frames; reaction tests check partial correspondence, compaction, and creation/deletion.
+
+umol-graph/tests/property/project.rs adds 136 required-success cases for 17 pairs of source
+spellings across both valence models, Strict/MostSaturated, and Strict/Natural isotope policies.
+They assert canonical equality of the resolved GraphIR inputs and each export/re-ingestion,
+using CanonicalizeContext with Nauty and para_stereo=false. Repeated export and source preservation
+use exact equality. Eight further cases assert that actual H atoms and implicit H counts remain
+canonically unequal before and after export. The existing molecular generator now includes fused
+and linked aromatic systems. A new reaction property varies mapped tetrahedral/cis-trans stereo,
+product traversal, label permutations, both valence models, and both policy pairs.
+
+A new V2000 MOL property covers coordinate-derived cis/trans, coincident coordinates without
+stereo evidence, atom/bond row reversal, translation, and scaling. Successful resolution and export
+are compared by canonical GraphIR equality against independently specified SMILES. Explicit Either
+instead asserts the current Underdetermined(ResolveReport::default()) outcome and unchanged raised
+input: StereoResolver::plan stops on its non-ground #C assertion. It is not counted as a successful
+ingestion/export case. The existing public IO test separately requires an Either rendering error.
+
+Initial MOL checks had two incorrect expectations, corrected without changing production code:
+reversing bond rows may globally reverse slash signs on the first SMILES roundtrip, and explicit
+Either does not resolve to a concrete molecule. The former preserves canonical GraphIR equality;
+repeat export of the same source remains text-identical. These test-expectation failures did not
+establish production defects. No existing test law or generated domain was reduced.
+
+Verification passed with PROPTEST_CASES=256: the full graph gate (1,934 unit cases, 23 generated
+properties plus 144 fixed cases in the external property target, 683 conformance cases, and the
+remaining integration/doc-test targets) and full IO gate (4,137 unit cases, 2,253 MOL, 407 SDF,
+10,223 SMILES conformance cases, and all property/layout/doc-test targets). The IO parser-robustness
+block retains its explicit 10,000-case setting. Graph/IO all-target Clippy with conformance,proptest
+and warnings denied passed, as did nightly formatting and git diff --check. Final logs are
+scratch/s9a/graph-gate.log, scratch/s9a/io-gate.log, and scratch/s9a/clippy.log.
+Only the existing external property module and this record/index changed. S9b is next; the
+workspace/Python/performance/fuzz accounting remains S9c work.
+
 ### Final verification commands
 
 Activate umol-py/.venv and confirm Python 3.13 before the workspace/Python gates, following
 python-build. Commands are intended gates for implementation, not commands run during planning:
 
 ```text
-cargo fmt --all
+cargo +nightly fmt --all
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p umol-graph-core --features proptest --test property

@@ -12,11 +12,17 @@
 //! ingested stereo/aromatic molecules; every flag combination preserves H counts.
 //! Reaction convey checks selective H omission, compacted atom-map indices, and reaction equivalence
 //! for alcohol oxidation with partial correspondence and optional creation/deletion.
+//! Export fixtures compare source orderings by canonical GraphIR equality across valence and
+//! isotope policies; generated cases cover fused/linked aromatic systems and mapped reaction stereo.
+//! MOL export compares coordinate-derived stereo with independently specified SMILES, including
+//! absent coordinates and the resolver's undetermined Either outcome. Initial marker spelling
+//! may normalize.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use proptest::prelude::*;
+use rstest::rstest;
 use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
 use umol_graph::export::{export_reaction_smiles_with, export_smiles_with, Convey};
@@ -24,7 +30,7 @@ use umol_graph::ingest::{ingest_reaction_smiles_with, ingest_smiles, ingest_smil
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::valence::ValenceResolver;
 use umol_graph::ops::resolve::{IsotopePolicy, ProjectFlags, ResolveConfig, Resolver};
-use umol_graph::ops::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable};
+use umol_graph::ops::valence::{AtomTypeRegistry, ResolveReport, ValenceEntry, ValenceTable};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
@@ -34,6 +40,7 @@ use umol_graph_ir::ir::{
     StereoLigand, StereoLigandKind, TetrahedralStereoForm, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, mol_dsl_concrete};
+use umol_io::ctfile::parser::parse_mol_to_ir;
 use umol_io::smiles::{ReactionSmiles, Smiles, SmilesIoConfig};
 use umol_io::table_ir::{Atom, Molecule as TableMolecule};
 use umol_utils::solution::Solution;
@@ -43,7 +50,7 @@ proptest! {
     fn test_smiles_convey_roundtrip(
         chain in 1usize..10, clockwise in any::<bool>(), trans in any::<bool>(),
         typing in any::<bool>(), explicit_h in any::<bool>(),
-        ring in prop::sample::select(vec!["c1ccccc1", "c1cc[nH]c1"]),
+        ring in prop::sample::select(vec!["c1ccccc1", "c1cc[nH]c1", "c1ccc2ccccc2c1", "c1ccccc1-c1ccccc1"]),
     ) {
         let chirality = if clockwise { "@@" } else { "@" };
         let direction = if trans { "/" } else { "\\" };
@@ -530,4 +537,205 @@ proptest! {
         prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(molecule, expected);
     }
+
+    #[test]
+    fn test_export_smiles_with_mol(
+        state in 0u8..4, typing in any::<bool>(),
+        reverse_atoms in any::<bool>(), reverse_bonds in any::<bool>(),
+        offset in -20i16..20, scale in 1u16..10,
+    ) {
+        let points = if state == 1 || state == 2 {
+            [[0., 1.], [0., 0.], [2., 0.], [2., if state == 1 { 1. } else { -1. }]]
+        } else { [[0., 0.]; 4] };
+        let mut points = points.map(|point| point.map(|value| value * f64::from(scale) + f64::from(offset)));
+        if reverse_atoms { points.reverse(); }
+        let mut input = String::from("stereo\n  umol          2D\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n");
+        for (index, [x, y]) in points.into_iter().enumerate() {
+            input.push_str(&format!("{x:10.4}{y:10.4}{:10.4} {:3} 0  0  0  0  0  0  0  0  0  0  0  0\n",
+                0., if index == 0 || index == 3 { "F" } else { "C" }));
+        }
+        let mut bonds = [(1, 2, 1), (2, 3, 2), (3, 4, 1)];
+        if reverse_bonds { bonds.reverse(); }
+        for (a, b, order) in bonds {
+            let (a, b) = if reverse_atoms { (5 - a, 5 - b) } else { (a, b) };
+            let stereo = if order == 2 && state == 3 { 3 } else { 0 };
+            input.push_str(&format!("{a:3}{b:3}{order:3}{stereo:3}  0  0  0\n"));
+        }
+        input.push_str("M  END\n");
+        let model = ChemistryModel {
+            valence: ValenceModel { tie_break: ValenceTieBreak::MostSaturated,
+                ..if typing { ValenceModel::default() } else { ValenceModel::smiles() } },
+            ..Default::default()
+        };
+        let config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
+        let io = SmilesIoConfig::opensmiles();
+        let mut source = parse_mol_to_ir(&input).unwrap();
+        let raised = source.clone();
+        let result = Resolver::with_config(&model, config).resolve(&mut source).unwrap();
+        if state == 3 {
+            prop_assert_eq!(result, Solution::Underdetermined(ResolveReport::default()));
+            prop_assert_eq!(source, raised);
+        } else {
+            prop_assert!(matches!(result, Solution::Determined(_)), "{result:?}");
+            let original = source.clone();
+            let text = export_smiles_with(&source, &io, &model, &config).unwrap();
+            let expected = match state { 1 => "F/C=C\\F", 2 => "F/C=C/F", _ => "FC=CF" };
+            let expected = ingest_smiles_with(expected, &io, &model, &config).unwrap();
+            let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
+            let context = CanonicalizeContext { para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty };
+            prop_assert!(source.canonical_eq(&expected, &context));
+            prop_assert!(source.canonical_eq(&restored, &context));
+            prop_assert_eq!(export_smiles_with(&source, &io, &model, &config).unwrap(), text);
+            prop_assert_eq!(source, original);
+        }
+    }
+
+    #[test]
+    fn test_export_reaction_smiles_with_stereo(
+        labels in Just(vec![0u32, 1, 2, 3]).prop_shuffle(), start in 1u32..1000,
+        tetrahedral in any::<bool>(), flip in any::<bool>(), typing in any::<bool>(),
+        saturated in any::<bool>(), natural in any::<bool>(),
+    ) {
+        let [a, b, c, d] = [0, 1, 2, 3].map(|index| labels[index] + start);
+        let input = if tetrahedral {
+            let winding = if flip { "@" } else { "@@" };
+            format!("[F:{a}][C@H:{b}]([Cl:{c}])[Br:{d}]>>[Br:{d}][C{winding}H:{b}]([Cl:{c}])[F:{a}]")
+        } else {
+            let marker = if flip { "\\" } else { "/" };
+            format!("[F:{a}]/[CH:{b}]=[CH:{c}]/[Cl:{d}]>>[Cl:{d}]/[CH:{c}]=[CH:{b}]{marker}[F:{a}]")
+        };
+        let model = ChemistryModel {
+            valence: ValenceModel {
+                tie_break: if saturated { ValenceTieBreak::MostSaturated } else { ValenceTieBreak::Strict },
+                ..if typing { ValenceModel::default() } else { ValenceModel::smiles() }
+            },
+            ..Default::default()
+        };
+        let config = ResolveConfig { isotope: if natural { IsotopePolicy::Natural } else { IsotopePolicy::Strict }, ..Default::default() };
+        let io = SmilesIoConfig::opensmiles();
+        let source = ingest_reaction_smiles_with(&input, &io, &model, &config).unwrap();
+        let original = source.clone();
+        let text = export_reaction_smiles_with(&source, &io, &model, &config).unwrap();
+        let restored = ingest_reaction_smiles_with(&text, &io, &model, &config).unwrap();
+        let context = CanonicalizeContext { para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty };
+        prop_assert!(source.canonical_eq(&restored, &context));
+        prop_assert_eq!(export_reaction_smiles_with(&source, &io, &model, &config).unwrap(), text.as_str());
+        prop_assert_eq!(export_reaction_smiles_with(&restored, &io, &model, &config).unwrap(), text);
+        prop_assert_eq!(source, original);
+    }
+}
+
+#[rstest]
+#[case::chain("[CH3][CH2][OH]", "[OH][CH2][CH3]")]
+#[case::components("[NH4+].[Cl-]", "[Cl-].[NH4+]")]
+#[case::isotope("[13CH3][CH2][OH]", "[OH][CH2][13CH3]")]
+#[case::radical("[CH3].[OH]", "[OH].[CH3]")]
+#[case::implicit_h("[F][C@H]([Cl])[Br]", "[Br][C@@H]([Cl])[F]")]
+#[case::actual_h("[H][C@]([F])([Cl])[Br]", "[Br][C@@]([F])([Cl])[H]")]
+#[case::four_ligands("[F][C@]([Cl])([Br])[I]", "[I][C@@]([Cl])([Br])[F]")]
+#[case::lone_pair("[CH3][S@](=[O])[CH2][CH3]", "[CH3][CH2][S@@](=[O])[CH3]")]
+#[case::alkene("[F]/[CH]=[CH]/[Cl]", "[Cl]/[CH]=[CH]/[F]")]
+#[case::four_substituents("[F]/[C]([Cl])=[C]([Br])/[I]", "[I]/[C]([Br])=[C]([Cl])/[F]")]
+#[case::partial("[F]/[CH]=[CH][Cl]", "[F][CH]=[CH][Cl]")]
+#[case::conjugated("[F]/[CH]=[CH]/[CH]=[CH]/[Cl]", "[Cl]\\[CH]=[CH]\\[CH]=[CH]\\[F]")]
+#[case::ring_labels(
+    "[CH2]%12[CH2][CH2][CH2][CH2][CH2]%12",
+    "[CH2]1[CH2][CH2][CH2][CH2][CH2]1"
+)]
+#[case::benzene("[cH]1[cH][cH][cH][cH][cH]1", "[cH]1:[cH]:[cH]:[cH]:[cH]:[cH]:1")]
+#[case::fused(
+    "[cH]1[cH][cH][c]2[cH][cH][cH][cH][c]2[cH]1",
+    "[c]12[cH][cH][cH][cH][c]1[cH][cH][cH][cH]2"
+)]
+#[case::linked(
+    "[cH]1[cH][cH][cH][cH][c]1-[c]2[cH][cH][cH][cH][cH]2",
+    "[cH]1[cH][cH][c](-[c]2[cH][cH][cH][cH][cH]2)[cH][cH]1"
+)]
+#[case::heteroaromatic("[nH]1[cH][cH][cH][cH]1", "[cH]1[cH][nH][cH][cH]1")]
+fn test_export_smiles_with_order(
+    #[case] first: &str,
+    #[case] second: &str,
+    #[values(false, true)] typing: bool,
+    #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)] policy: ValenceTieBreak,
+    #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
+) {
+    let model = ChemistryModel {
+        valence: ValenceModel {
+            tie_break: policy,
+            ..if typing {
+                ValenceModel::default()
+            } else {
+                ValenceModel::smiles()
+            }
+        },
+        ..Default::default()
+    };
+    let config = ResolveConfig {
+        isotope,
+        ..Default::default()
+    };
+    let io = SmilesIoConfig::opensmiles();
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+    };
+    let first = ingest_smiles_with(first, &io, &model, &config).unwrap();
+    let second = ingest_smiles_with(second, &io, &model, &config).unwrap();
+    assert!(first.canonical_eq(&second, &context));
+    for source in [first, second] {
+        let original = source.clone();
+        let text = export_smiles_with(&source, &io, &model, &config).unwrap();
+        let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
+        assert!(source.canonical_eq(&restored, &context), "{text}");
+        assert_eq!(
+            export_smiles_with(&source, &io, &model, &config),
+            Ok(text.clone())
+        );
+        assert_eq!(
+            export_smiles_with(&restored, &io, &model, &config),
+            Ok(text)
+        );
+        assert_eq!(source, original);
+    }
+}
+
+#[rstest]
+#[case::methane("[CH4]", "[H][CH3]")]
+#[case::tetrahedral("[F][C@H]([Cl])[Br]", "[F][C@]([H])([Cl])[Br]")]
+fn test_export_smiles_with_hydrogens(
+    #[case] implicit: &str,
+    #[case] actual: &str,
+    #[values(false, true)] typing: bool,
+    #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)] policy: ValenceTieBreak,
+) {
+    let model = ChemistryModel {
+        valence: ValenceModel {
+            tie_break: policy,
+            ..if typing {
+                ValenceModel::default()
+            } else {
+                ValenceModel::smiles()
+            }
+        },
+        ..Default::default()
+    };
+    let config = ResolveConfig {
+        isotope: IsotopePolicy::Natural,
+        ..Default::default()
+    };
+    let io = SmilesIoConfig::opensmiles();
+    let implicit = ingest_smiles_with(implicit, &io, &model, &config).unwrap();
+    let actual = ingest_smiles_with(actual, &io, &model, &config).unwrap();
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+    };
+    assert!(!implicit.canonical_eq(&actual, &context));
+    let implicit_text = export_smiles_with(&implicit, &io, &model, &config).unwrap();
+    let actual_text = export_smiles_with(&actual, &io, &model, &config).unwrap();
+    let implicit_restored = ingest_smiles_with(&implicit_text, &io, &model, &config).unwrap();
+    let actual_restored = ingest_smiles_with(&actual_text, &io, &model, &config).unwrap();
+    assert!(implicit.canonical_eq(&implicit_restored, &context));
+    assert!(actual.canonical_eq(&actual_restored, &context));
+    assert!(!implicit_restored.canonical_eq(&actual_restored, &context));
 }
