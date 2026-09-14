@@ -1154,16 +1154,16 @@ def test_reaction_from_reaction_smiles_stereo(source, expected):
     [
         (
             "F/C=C>>C",
-            "reactants: directional bond 0 not adjacent to a stereogenic double bond",
+            "directional bond 0 is not adjacent to a supported double bond",
         ),
         (
             "C>>F/C=C",
-            "products: directional bond 0 not adjacent to a stereogenic double bond",
+            "directional bond 0 is not adjacent to a supported double bond",
         ),
     ],
 )
 def test_reaction_from_reaction_smiles_bond_stereo_error(source, message):
-    with pytest.raises(ModelConversionError, match=f"^{re.escape(message)}$"):
+    with pytest.raises(ParseError, match=f"^{re.escape(message)}$"):
         Reaction.from_reaction_smiles(source)
 
 

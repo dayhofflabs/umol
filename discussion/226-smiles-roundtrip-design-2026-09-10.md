@@ -1,8 +1,9 @@
 # 226 — SMILES roundtrip design
 
-Status: In Progress
+Status: Completed
 Date: 2026-09-10
 Relates: [155](155-smiles-io-and-resolve-configuration-2026-07-19.md),
+[148](148-validated-transactions-operations-2026-07-13.md),
 [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
 [166](166-molecule-ops-2026-07-27.md),
 [170](170-reaction-smiles-python-2026-07-28.md),
@@ -28,7 +29,9 @@ Correction (2026-09-14, H omission at the format boundary): the working design b
 H elision during GraphIR projection. The joint S4a7/S7a1/S7b1 migration now preserves H through
 projection and decides TableIR omission in Convey. Earlier implementations and their passing
 checks remain historical evidence. S4a6 is complete; the migration gate is recorded below.
-S7c, S9a, and S9b are complete; S9c final gates and evidence reconciliation are next.
+S7c, S9a, S9b, and S9c are complete. The S9c closeout below records the final gates,
+public-surface audit, and bounded timing/fuzz evidence. Earlier stage-local statements about
+pending work describe their respective snapshots.
 
 ## Scope
 
@@ -3316,7 +3319,7 @@ and scratch/s6b-clippy.log.
 
 S4a5, the corrected S4 gate, and S7a are complete. The two H-handling corrections
 are recorded in the S7a implementation status below. S4a7/S7a1/S7b1 supersede that H handling;
-their migration and S7b2 gate are complete. S7c, S9a, and S9b are also complete; S9c is next.
+their migration and S7b2 gate are complete. S7c and all three S9 subitems are also complete.
 
 ### S7 — Convey and text export
 
@@ -3504,7 +3507,7 @@ migration for this change. New Python output exposure remains deferred.
   rendering laws in their owning public APIs without citing this discussion. Examples show the
   parse/interpret and convey/render pairs and the default/explicit-configuration ingest/export conveniences.
   Describe the supported domain and explicit failure cases, including Either notation limitations.
-- **S9c — Final gates and evidence reconciliation.** Modules: workspace and this record/index.
+- **S9c — Final gates and evidence reconciliation (complete).** Modules: workspace and this record/index.
   **Verification/documentation (green).** [dep: S9a, S9b]
   Run the final commands below, inspect the entire change against the settled symbol inventory,
   and report bounded parser/raise/project/render benchmark evidence. Reconcile the independent
@@ -3571,6 +3574,130 @@ Verification: both new doctests passed; graph/IO rustdoc built with warnings den
 format checking and git diff --check passed. Logs: scratch/s9b/doctest.log,
 scratch/s9b/rustdoc.log, and scratch/s9b/fmt-check.log. S9c is next.
 
+#### S9c closeout — 2026-09-14
+
+The agreed Rust output scope is complete. S0–S7 and S9 are implemented and verified; S8 remains
+withdrawn. The final working design preserves H through GraphIR projection and decides its
+TableIR omission in Convey. Historical H-eliding projection records do not describe current code.
+This subitem changes documentation and four Python test expectations, not production code.
+
+**Public surface audit.** The current source was checked against the S0a inventory and subsequent
+settled revisions, including the implementation diff from the S0a source snapshot through
+bb7b70d08. Unrelated changes in that commit range are not part of this closeout.
+
+| Surface | Final implementation |
+| --- | --- |
+| graph-core traversal | ControlFlow DFS/BFS callbacks, inherent Graph visitors, enumerate_*_events collectors, and component visitor; usize bounds, depths, distances, and refinement rounds. Connected components use FIFO BFS. |
+| TableIR | Tables remain authoritative. Operation-local AtomNeighbors sorts neighbors by atom index, then bond index. StereoBond holds site-only Either or two-reference Framed configuration; stored direction/stereo fields are retired. Stereo-atom implicit H and lone-pair participants remain distinct. |
+| Projection | Resolver::project selects stereo → aromaticity → valence → isotope through ProjectFlags and publishes only Determined. Valence projection is a no-op. Aromaticity/stereo use transactions; projection performs no resolution replay or aromatic ring discovery. |
+| Isotopes and valence | IsotopeResolver owns Strict/Natural policy. Registry construction and insertion enforce undetermined isotopes. The H-inference methods remain pub(crate), take &Molecule and AtomId, and scan alternatives without an intermediate set/map. |
+| Boundaries | Smiles and ReactionSmiles retain private tables with infallible from_table_ir, consuming into_table_ir, and borrowed as_table_ir. render/render_with own required format checks; no check/render_to preflight API remains. |
+| Conversion and text output | Convey has associated Input/Config/Error and model/config arguments, following Interpret. The four export functions return text; defaults and _with argument order match ingestion. Reaction labels precede per-atom H omission. Errors retain conversion/rendering stages and reaction conversion/rendering context. |
+| Tests and bindings | Roundtrip properties exercise public APIs in the existing external suites. No property tests were introduced in src by this work. Python ingestion remains on its existing API; no output binding was added. |
+
+**Final gates.** After cargo clean, the workspace rebuilt under Rust 1.96.0 on arm64 macOS,
+with umol-py/.venv active and Python 3.13.15. One workspace invocation with
+PROPTEST_CASES=256 and --features conformance,proptest covered the ordinary workspace targets
+and the separately named feature gates below. Its test summaries total 31,953 passed,
+zero failed, and ten ignored, including doctests. Explicit per-suite case settings remain in
+effect, including the IO parser's 10,000-case robustness setting. Workspace/all-target Clippy
+with the same features and -D warnings passed. Nightly formatting and git diff --check passed.
+
+maturin develop rebuilt and installed the extension before pytest. The initial Python run found
+four stale assertions: F/C=C and conflicting F/C(\Cl)=CF markers were still expected to fail
+at conversion, although S3 moved their checks into parsing. The same rejected inputs now assert
+ParseError and its exact message. The two reaction cases likewise assert the syntax error, whose
+message has no conversion-side prefix. Existing conversion-side context tests remain unchanged.
+No input was removed or made successful. The final Python run passed 1,545 tests with two skipped.
+The uv cache was redirected to /private/tmp/umol-s9c-uv-cache because its usual cache directory
+was not writable in the sandbox.
+
+Commands actually run:
+
+```text
+cargo +nightly fmt --all -- --check
+# Each workspace/Python command used the activated umol-py/.venv.
+PROPTEST_CASES=256 cargo test --workspace --features conformance,proptest --offline
+cargo clippy --workspace --all-targets --features conformance,proptest --offline -- -D warnings
+UV_CACHE_DIR=/private/tmp/umol-s9c-uv-cache UV_OFFLINE=true maturin develop --manifest-path umol-py/Cargo.toml --offline
+pytest -q umol-py/tests
+git diff --check
+```
+
+Logs are in scratch/s9c: workspace-tests.log, clippy.log, fmt-check.log, maturin.log,
+pytest-before.log, and pytest.log. The interrupted disk-full build was replaced by the successful
+clean rebuild; it is not a passing gate. Older scratch logs compressed during cleanup retain their
+contents under the original name plus .gz.
+
+**Bounded timings.** One release-mode run uses seven inline cases from the existing benchmark
+and output-test domains. Each operation has 64 warmups and eleven samples of 256 calls; the
+tables report median microseconds per call. The harness, sources, and resolved inputs are
+prepared before measurement. Project excludes the caller's input clone; Convey and export
+include their internal resolver construction, copies, projection, and conversion. Render starts
+from a conveyed boundary. Output destruction and exact-result comparisons occur after each timed
+batch. No build or test command was running during measurement.
+
+Counts with MostSaturated and Natural isotopes:
+
+| Input | Parse | Raise | Project | Convey | Render | Export |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 64-atom chain | 0.998 | 9.072 | 11.237 | 15.724 | 3.546 | 19.627 |
+| Benzene | 0.249 | 1.343 | 5.415 | 6.208 | 0.623 | 7.042 |
+| Naphthalene | 0.321 | 2.140 | 8.070 | 9.317 | 1.016 | 10.462 |
+| Tetrahedral ring | 0.318 | 2.028 | 3.902 | 4.745 | 0.795 | 5.701 |
+| Sulfoxide lone pair | 0.274 | 1.750 | 3.481 | 4.135 | 0.528 | 4.766 |
+| Isotope/stereo/aromatic combination | 0.593 | 3.090 | 12.383 | 13.826 | 1.960 | 15.773 |
+| Shared-marker cycle | 0.514 | 2.081 | 5.319 | 6.397 | 1.685 | 8.338 |
+
+Atom typing with the same policies and resolved inputs:
+
+| Input | Project | Convey | Render | Export |
+| --- | ---: | ---: | ---: | ---: |
+| 64-atom chain | 11.304 | 30.604 | 3.547 | 34.627 |
+| Benzene | 5.348 | 7.734 | 0.621 | 8.595 |
+| Naphthalene | 7.983 | 11.758 | 1.030 | 12.873 |
+| Tetrahedral ring | 3.899 | 5.944 | 0.800 | 7.213 |
+| Sulfoxide lone pair | 3.578 | 5.019 | 0.525 | 5.633 |
+| Isotope/stereo/aromatic combination | 12.124 | 15.996 | 1.925 | 17.956 |
+| Shared-marker cycle | 5.395 | 8.245 | 1.690 | 10.514 |
+
+The model-dependent cost now appears in Convey, where H inference runs. Projection costs are
+close across the two models; rendering costs are also close. These wall timings do not attribute
+the remaining projection cost to individual transactions. The earlier S4 profile predates the
+H-omission migration and must not be presented as a current profile. S0c and S3d1–S3e retain their
+paired historical allocation/timing evidence. This run establishes a current output baseline,
+not a before/after speedup: its harness and operation boundaries differ from the historical runs.
+
+Source: scratch/stereo-valence-scan/src/bin/s9c_timings.rs. Raw medians/minima/maxima for all
+70 combinations: scratch/s9c/timings.csv. Build log and compiler/lockfile hashes are in
+scratch/s9c/timings-build.log and environment.txt. The standalone scratch crate uses its own
+lockfile, including nalgebra 0.34.2 rather than the workspace gate's 0.34.0.
+
+```text
+cargo build --release --offline --manifest-path scratch/stereo-valence-scan/Cargo.toml --target-dir /Users/dr/.cargo-target --bin s9c_timings
+/Users/dr/.cargo-target/release/s9c_timings > scratch/s9c/timings.csv
+```
+
+**Fuzz accounting.** The earlier hour-long campaign is user-reported; its original execution
+count/log is unavailable. The controlled panic reproducer established that libfuzzer-sys aborts
+before an inner catch_unwind can discard the panic, so the old target did not make that hour
+meaningless. The redundant catch was removed. The retained mutation log was read again for S9c:
+547,910 executions in 31 seconds, no reported crash. The repository still has 51 named seeds;
+the earlier seed audit reached 41 successful raises, including twelve tetrahedral and eleven
+cis/trans cases. These are robustness/path-reachability observations, not stereo correctness
+claims. The current target still runs parse and raise without a panic catch. No replacement
+hour-long campaign was run or claimed.
+
+**Limits and follow-up.** The acceptance law covers supported ingested representations, with
+canonical GraphIR equality and para_stereo=false, not arbitrary GraphIR reconstruction or exact
+source spelling. Ring numbers, redundant directions, and reaction map numbers can change.
+Either, broader stereo kinds, CX/coordinate output, and unsupported TableIR fields retain explicit
+output failures. Actual H and implicit H remain different representations. The S7b aromatic
+ingestion observation is an input rejection, not a successful output case or a promised new
+aromaticity domain. Transaction/publication optimization is recorded in doc 148, broader formats
+and Python output in doc 153, and the shell-capacity correction in doc 166. No additional
+optimization stage is approved by these measurements.
+
 ### Final verification commands
 
 Activate umol-py/.venv and confirm Python 3.13 before the workspace/Python gates, following
@@ -3611,6 +3738,10 @@ extended stereo, coordinate generation, and depiction wedge policy. Expand writa
 through concrete supported encodings and tests. A general counts inverse or a proof of arbitrary
 GraphIR reconstruction is not a prerequisite or planned deliverable. No separate optimization
 implementation stages are approved by this plan.
+
+Transaction/publication cost follow-up is recorded in doc 148. Broader format coverage and
+Python output exposure remain with doc 153; the counts-resolver shell-capacity correction remains
+with doc 166. These are separate work, not unfinished Rust output stages in this plan.
 
 ## S0a inventory and verification — 2026-09-10
 

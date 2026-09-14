@@ -1075,12 +1075,12 @@ def test_molecule_from_smiles_bond_stereo(source, expected):
     [
         (
             "F/C=C",
-            ModelConversionError,
-            "directional bond 0 not adjacent to a stereogenic double bond",
+            ParseError,
+            "directional bond 0 is not adjacent to a supported double bond",
         ),
         (
             r"F/C(\Cl)=CF",
-            ModelConversionError,
+            ParseError,
             "contradictory cis/trans markers at atom 1",
         ),
     ],
