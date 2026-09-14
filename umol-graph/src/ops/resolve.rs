@@ -78,7 +78,7 @@ bitflags! {
         const STEREO = 1 << 0;
         /// Replace aromatic systems with atom and bond assertions.
         const AROMATICITY = 1 << 1;
-        /// Elide recoverable implicit-H counts.
+        /// Run valence projection, which preserves atom fields.
         const VALENCE = 1 << 2;
         /// Elide isotope defaults under the isotope policy.
         const ISOTOPE = 1 << 3;
@@ -477,10 +477,9 @@ impl<'a> Resolver<'a> {
     /// Projects selected stages within graph IR atomically.
     ///
     /// Recovers fixed-frame #T/#C assertions, writes member-aligned #a contributions and
-    /// aromatic bond assertions, elides recoverable H under the valence policy, then elides
-    /// isotope defaults. Only stages selected by `flags` run, in that order. This order
-    /// retains Natural isotope evidence for H projection. Omitting VALENCE preserves all H
-    /// counts; use all flags for ordinary projection.
+    /// aromatic bond assertions, runs the no-op valence projection, then elides isotope
+    /// defaults. Only stages selected by `flags` run, in that order. All H counts are
+    /// preserved regardless of stage selection; use all flags for ordinary projection.
     /// Other fields and structures remain for the eventual format conversion. Successful
     /// projection does not establish format representability or require a concrete result:
     /// isotope default elision can leave isotope fields undetermined.
@@ -488,8 +487,8 @@ impl<'a> Resolver<'a> {
     /// # Semantic properties
     ///
     /// Only Determined publishes the candidate. Errors, contradictions, and underdetermination
-    /// leave the caller's molecule unchanged. Projection uses local H inference without invoking
-    /// resolution or recovery comparisons. Atom electron fields and localized charge are preserved.
+    /// leave the caller's molecule unchanged. Projection does not invoke resolution or recovery
+    /// comparisons. Implicit-H counts, atom electron fields, and localized charge are preserved.
     /// For inputs meeting the bond charge/spin requirements, the result agrees with executing
     /// the selected standalone projections in order. Empty flags leave such inputs unchanged.
     ///
@@ -497,8 +496,7 @@ impl<'a> Resolver<'a> {
     ///
     /// Localized and multicenter bonds require concrete zero charge and closed-shell singlet
     /// spin. Returns the owning phase's error for unprojectable stereo, aromatic-system fields,
-    /// valence edit application, or isotopes. No charge/spin localization or unsupported-structure
-    /// removal is implicit.
+    /// or isotopes. No charge/spin localization or unsupported-structure removal is implicit.
     pub fn project(
         &self,
         molecule: &mut Molecule,
@@ -1998,22 +1996,22 @@ mod tests {
     #[case::strict_natural(
         ValenceTieBreak::Strict,
         IsotopePolicy::Natural,
-        r#"{:atoms ["C#c0#h4#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#c0#n3#u0#s"]}"#
+        r#"{:atoms ["C#c0#h4#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#c0#h1#n3#u0#s"]}"#
     )]
     #[case::saturated_natural(
         ValenceTieBreak::MostSaturated,
         IsotopePolicy::Natural,
-        r#"{:atoms ["C#c0#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#c0#n3#u0#s"]}"#
+        r#"{:atoms ["C#c0#h4#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#c0#h1#n3#u0#s"]}"#
     )]
     #[case::strict_isotope(
         ValenceTieBreak::Strict,
         IsotopePolicy::Strict,
-        r#"{:atoms ["C#i=#c0#h4#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#i=#c0#n3#u0#s"]}"#
+        r#"{:atoms ["C#i=#c0#h4#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#i=#c0#h1#n3#u0#s"]}"#
     )]
     #[case::saturated_isotope(
         ValenceTieBreak::MostSaturated,
         IsotopePolicy::Strict,
-        r#"{:atoms ["C#i=#c0#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#i=#c0#n3#u0#s"]}"#
+        r#"{:atoms ["C#i=#c0#h4#n0#u0#s" "C#i13#c0#h4#n0#u0#s" "F#i=#c0#h1#n3#u0#s"]}"#
     )]
     fn test_resolver_project_valence(
         #[case] policy: ValenceTieBreak,

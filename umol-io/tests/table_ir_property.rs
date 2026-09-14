@@ -3,7 +3,6 @@
 use std::collections::BTreeSet;
 
 use proptest::prelude::*;
-
 use umol_io::table_ir::{AtomNeighbors, AtomPair, Neighbor};
 
 proptest! {

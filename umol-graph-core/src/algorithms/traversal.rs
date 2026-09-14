@@ -343,9 +343,9 @@ mod tests {
     use std::iter;
 
     use rstest::rstest;
+    use DepthFirstEvent::{Discover, Finish, FinishTree, NonTreeEdge};
 
     use super::*;
-    use DepthFirstEvent::{Discover, Finish, FinishTree, NonTreeEdge};
 
     #[rstest]
     #[case::neighbor_order(

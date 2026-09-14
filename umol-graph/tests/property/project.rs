@@ -6,17 +6,21 @@
 //! cis-trans side-swap parity, preserving virtual-ligand kinds and open configurations.
 //! Composite projection of supported SMILES is compared with independent complete graph-IR
 //! expectations, including aromatic contributions, both stereo assertions, and isotope elision.
-//! Valence projection compares H elision with independent allowed-H sets for custom registries
-//! and bounded counts tables, including isotope retention, field preservation, and idempotence.
+//! Convey compares H omission with independent allowed-H sets for custom registries and bounded
+//! counts tables, including isotope retention, field preservation, and repeated conversion.
 //! Stage selection is compared with standalone composition for every flag combination on
-//! ingested stereo/aromatic molecules; omitting valence must preserve every H count.
+//! ingested stereo/aromatic molecules; every flag combination preserves H counts.
+//! Reaction convey checks selective H omission, compacted atom-map indices, and reaction equivalence
+//! for alcohol oxidation with partial correspondence and optional creation/deletion.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
-use umol_graph::export::Convey;
-use umol_graph::ingest::{ingest_smiles, ingest_smiles_with};
+use umol_chem::spin::SpinMultiplicity;
+use umol_graph::export::{export_reaction_smiles_with, export_smiles_with, Convey};
+use umol_graph::ingest::{ingest_reaction_smiles_with, ingest_smiles, ingest_smiles_with};
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::valence::ValenceResolver;
 use umol_graph::ops::resolve::{IsotopePolicy, ProjectFlags, ResolveConfig, Resolver};
@@ -30,7 +34,8 @@ use umol_graph_ir::ir::{
     StereoLigand, StereoLigandKind, TetrahedralStereoForm, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, mol_dsl_concrete};
-use umol_io::smiles::{Smiles, SmilesIoConfig};
+use umol_io::smiles::{ReactionSmiles, Smiles, SmilesIoConfig};
+use umol_io::table_ir::{Atom, Molecule as TableMolecule};
 use umol_utils::solution::Solution;
 
 proptest! {
@@ -53,16 +58,78 @@ proptest! {
         let io = SmilesIoConfig::opensmiles();
         let source = ingest_smiles_with(&input, &io, &model, &config).unwrap();
         let original = source.clone();
-        let resolver = Resolver::with_config(&model, config);
-        let boundary = Smiles::convey(&source, &resolver, &io).unwrap();
+        let boundary = Smiles::convey(&source, &model, &config, &io).unwrap();
         prop_assert_eq!(&source, &original);
         let text = boundary.render_with(&io).unwrap();
+        prop_assert_eq!(export_smiles_with(&source, &io, &model, &config).unwrap(), text.as_str());
+        prop_assert_eq!(&source, &original);
         let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
         let context = CanonicalizeContext {
             para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         };
         prop_assert!(source.canonical_eq(&restored, &context));
-        let repeated = Smiles::convey(&restored, &resolver, &io).unwrap().render_with(&io).unwrap();
+        let repeated = Smiles::convey(&restored, &model, &config, &io).unwrap().render_with(&io).unwrap();
+        prop_assert_eq!(text, repeated);
+    }
+
+    #[test]
+    fn test_reaction_smiles_convey_roundtrip(
+        mut mapped in prop::collection::vec(any::<bool>(), 2..10),
+        label_start in 1u32..1000, label_step in 1u32..10,
+        components in any::<bool>(), typing in any::<bool>(), saturated in any::<bool>(),
+    ) {
+        let count = mapped.len();
+        let mut left = String::new();
+        let mut right = String::new();
+        let mut left_h = Vec::new();
+        let mut right_h = Vec::new();
+        for (index, &paired) in mapped.iter().enumerate() {
+            let label = if paired { format!(":{}", label_start + index as u32 * label_step) } else { String::new() };
+            let before = if index == 0 { 3 } else { 2 };
+            let after = if index == count - 1 { 1 } else { before };
+            left.push_str(&format!("[CH{before}{label}]"));
+            right.push_str(&format!("[CH{after}{label}]"));
+            left_h.push(if paired || !saturated { Some(before) } else { None });
+            right_h.push(if paired || (!saturated && after != 1) { Some(after) } else { None });
+        }
+        let oxygen_label = label_start + count as u32 * label_step;
+        left.push_str(&format!("[OH:{oxygen_label}]"));
+        right.push_str(&format!("=[O:{oxygen_label}]"));
+        mapped.push(true);
+        left_h.push(Some(1));
+        right_h.push(Some(0));
+        let input = if components { format!("[OH2].{left}>>{right}.[NH3]") } else { format!("{left}>>{right}") };
+        let mut model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            ..Default::default()
+        };
+        model.valence.tie_break = if saturated { ValenceTieBreak::MostSaturated } else { ValenceTieBreak::Strict };
+        let config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
+        let io = SmilesIoConfig::opensmiles();
+        let source = ingest_reaction_smiles_with(&input, &io, &model, &config).unwrap();
+        let original = source.clone();
+        let boundary = ReactionSmiles::convey(&source, &model, &config, &io).unwrap();
+        prop_assert_eq!(&source, &original);
+        let mut expected_mapping = BTreeMap::new();
+        for (rank, (index, _)) in mapped.iter().enumerate().filter(|(_, paired)| **paired).enumerate() {
+            expected_mapping.insert(rank as u32 + 1, (vec![index as u32 + u32::from(components)], vec![rank as u32]));
+        }
+        prop_assert_eq!(&boundary.as_table_ir().atom_mapping, &expected_mapping);
+        let mut expected_right_h = mapped.iter().zip(&right_h).filter(|(paired, _)| **paired).map(|(_, h)| *h)
+            .chain(mapped.iter().zip(&right_h).filter(|(paired, _)| !**paired).map(|(_, h)| *h)).collect::<Vec<_>>();
+        if components {
+            left_h.insert(0, if saturated || typing { None } else { Some(2) });
+            expected_right_h.push(if saturated { None } else { Some(3) });
+        }
+        prop_assert_eq!(boundary.as_table_ir().reactants.atoms.iter().map(|atom| atom.implicit_hydrogens).collect::<Vec<_>>(), left_h);
+        prop_assert_eq!(boundary.as_table_ir().products.atoms.iter().map(|atom| atom.implicit_hydrogens).collect::<Vec<_>>(), expected_right_h);
+        let text = boundary.render().unwrap();
+        prop_assert_eq!(export_reaction_smiles_with(&source, &io, &model, &config).unwrap(), text.as_str());
+        prop_assert_eq!(&source, &original);
+        let restored = ingest_reaction_smiles_with(&text, &io, &model, &config).unwrap();
+        let context = CanonicalizeContext { para_stereo: false, automorphism_algorithm: AutomorphismAlgorithm::Nauty };
+        prop_assert!(source.canonical_eq(&restored, &context));
+        let repeated = ReactionSmiles::convey(&restored, &model, &config, &io).unwrap().render().unwrap();
         prop_assert_eq!(text, repeated);
     }
 
@@ -77,20 +144,14 @@ proptest! {
         };
         let original = ingest_smiles_with(&input, &SmilesIoConfig::opensmiles(), &model, &ResolveConfig::default()).unwrap();
         for policy in [ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated] {
-            let mut expected = original.clone();
-            if policy == ValenceTieBreak::MostSaturated {
-                for index in usize::from(mass)..atoms {
-                    expected.atom_mut(AtomId(index as u32)).attributes.implicit_hydrogens = NumForm::Undetermined;
-                }
-            }
             let mut molecule = original.clone();
             prop_assert_eq!(ValenceResolver::new(&model.valence).project(&mut molecule, policy), Ok(Solution::Determined(())));
-            prop_assert_eq!(molecule, expected);
+            prop_assert_eq!(&molecule, &original);
         }
     }
 
     #[test]
-    fn test_valence_resolver_project_atom_typing(
+    fn test_smiles_convey_atom_typing(
         entries in prop::collection::vec((0i64..5, 0i64..5, 0i64..3), 0..24),
         valence in 0i64..5, aromatic in 0i64..3,
         stored_h in 0i64..5, stored_lp in 0i64..5,
@@ -127,24 +188,32 @@ proptest! {
                 atom.constraints.set(AtomConstraintForm::valence(valence));
                 atom.constraints.set(AtomConstraintForm::aromatic_valence(if is_aromatic { AromaticValenceForm::aromatic(aromatic) } else { AromaticValenceForm::NotAromatic }));
                 let original = Molecule::from_entries(MoleculeEntries { atoms: vec![atom.clone()], ..Default::default() });
-                if natural && (!is_aromatic || stored_h == 0) && selected == Some(stored_h) {
-                    atom.implicit_hydrogens = NumForm::Undetermined;
-                }
-                let expected = Molecule::from_entries(MoleculeEntries { atoms: vec![atom], ..Default::default() });
-                for model in &models {
-                    let resolver = ValenceResolver::new(model);
-                    let mut molecule = original.clone();
-                    prop_assert_eq!(resolver.project(&mut molecule, policy), Ok(Solution::Determined(())));
-                    prop_assert_eq!(&molecule, &expected);
-                    prop_assert_eq!(resolver.project(&mut molecule, policy), Ok(Solution::Determined(())));
-                    prop_assert_eq!(&molecule, &expected);
+                let expected = TableMolecule {
+                    atoms: vec![Atom {
+                        isotope_mass: if natural { None } else { Some(13) },
+                        implicit_hydrogens: if natural && selected == Some(stored_h) { None } else { Some(stored_h as u8) },
+                        charge: Some(0), lone_pairs: Some(lp as u8), unpaired_electrons: Some(0),
+                        multiplicity: Some(SpinMultiplicity::SINGLET), valence: Some(valence as u8),
+                        aromatic: Some(is_aromatic), ..Atom::from_element(Element::C)
+                    }],
+                    ..TableMolecule::empty()
+                };
+                for valence_model in &models {
+                    let mut model = ChemistryModel { valence: valence_model.clone(), ..Default::default() };
+                    model.valence.tie_break = policy;
+                    let config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
+                    let molecule = original.clone();
+                    let conveyed = Smiles::convey(&molecule, &model, &config, &SmilesIoConfig::opensmiles()).unwrap();
+                    prop_assert_eq!(conveyed.as_table_ir(), &expected);
+                    prop_assert_eq!(Smiles::convey(&molecule, &model, &config, &SmilesIoConfig::opensmiles()).unwrap(), conveyed);
+                    prop_assert_eq!(&molecule, &original);
                 }
             }
         }
     }
 
     #[test]
-    fn test_valence_resolver_project_counts(
+    fn test_smiles_convey_counts(
         targets in prop::collection::vec(0u8..7, 0..5),
         valence in 0i64..5, aromatic in 0i64..3,
         stored_h in 0i64..5, stored_lp in 0i64..5,
@@ -156,7 +225,9 @@ proptest! {
             target_covalences: targets.clone(),
             aromatic_valences: vec![1], fallback_aromatic_valences: vec![0],
         });
-        let model = ValenceModel::counts(Cow::Owned(table));
+        let mut model = ChemistryModel {
+            valence: ValenceModel::counts(Cow::Owned(table)), ..Default::default()
+        };
         let target = targets.iter().map(|&v| i64::from(v)).filter(|&v| v >= valence)
             .min().unwrap_or(valence);
         // Enumerate H/LP pairs satisfying electron balance and the first-target bound.
@@ -181,16 +252,24 @@ proptest! {
             atom.lone_pairs = NumForm::Lit(stored_lp);
             atom.constraints.set(AtomConstraintForm::valence(valence));
             atom.constraints.set(AtomConstraintForm::aromatic_valence(if is_aromatic { AromaticValenceForm::aromatic(aromatic) } else { AromaticValenceForm::NotAromatic }));
-            let mut molecule = Molecule::from_entries(MoleculeEntries { atoms: vec![atom.clone()], ..Default::default() });
-            if natural && (!is_aromatic || stored_h == 0) && selected == Some(stored_h) {
-                atom.implicit_hydrogens = NumForm::Undetermined;
-            }
-            let expected = Molecule::from_entries(MoleculeEntries { atoms: vec![atom], ..Default::default() });
-            let resolver = ValenceResolver::new(&model);
-            prop_assert_eq!(resolver.project(&mut molecule, policy), Ok(Solution::Determined(())));
-            prop_assert_eq!(&molecule, &expected);
-            prop_assert_eq!(resolver.project(&mut molecule, policy), Ok(Solution::Determined(())));
-            prop_assert_eq!(&molecule, &expected);
+            let original = Molecule::from_entries(MoleculeEntries { atoms: vec![atom], ..Default::default() });
+            let expected = TableMolecule {
+                atoms: vec![Atom {
+                    isotope_mass: if natural { None } else { Some(13) },
+                    implicit_hydrogens: if natural && selected == Some(stored_h) { None } else { Some(stored_h as u8) },
+                    charge: Some(0), lone_pairs: Some(stored_lp as u8), unpaired_electrons: Some(0),
+                    multiplicity: Some(SpinMultiplicity::SINGLET), valence: Some(valence as u8),
+                    aromatic: Some(is_aromatic), ..Atom::from_element(Element::C)
+                }],
+                ..TableMolecule::empty()
+            };
+            model.valence.tie_break = policy;
+            let config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
+            let molecule = original.clone();
+            let conveyed = Smiles::convey(&molecule, &model, &config, &SmilesIoConfig::opensmiles()).unwrap();
+            prop_assert_eq!(conveyed.as_table_ir(), &expected);
+            prop_assert_eq!(Smiles::convey(&molecule, &model, &config, &SmilesIoConfig::opensmiles()).unwrap(), conveyed);
+            prop_assert_eq!(&molecule, &original);
         }
     }
 }
@@ -233,10 +312,8 @@ proptest! {
             let mut projected = original.clone();
             prop_assert_eq!(resolver.project(&mut projected, flags), Ok(Solution::Determined(())));
             prop_assert_eq!(&projected, &expected);
-            if !flags.contains(ProjectFlags::VALENCE) {
-                let retained = projected.atoms().iter().map(|atom| atom.implicit_hydrogens().clone()).collect::<Vec<_>>();
-                prop_assert_eq!(&retained, &hydrogens);
-            }
+            let retained = projected.atoms().iter().map(|atom| atom.implicit_hydrogens().clone()).collect::<Vec<_>>();
+            prop_assert_eq!(&retained, &hydrogens);
         }
     }
 
@@ -265,12 +342,6 @@ proptest! {
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [3 4 "2"] [4 5 "1"]
                 [5 10 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"]]}"#);
         let mut editor = base.edit();
-        for index in 2..6 {
-            editor.atom_mut(AtomId(index)).attributes.implicit_hydrogens = NumForm::Undetermined;
-        }
-        if saturated && mass.is_none() {
-            editor.atom_mut(AtomId(0)).attributes.implicit_hydrogens = NumForm::Undetermined;
-        }
         if natural {
             for atom in base.atoms().ids() {
                 editor.atom_mut(atom).attributes.isotope_mass = IsotopeMassForm::Undetermined;

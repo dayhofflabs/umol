@@ -321,9 +321,7 @@ static DEFAULT_ATOM_TYPE_REGISTRY: LazyLock<AtomTypeRegistry> = LazyLock::new(||
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-    use std::process;
-    use std::thread;
+    use std::{env, process, thread};
 
     use rstest::rstest;
     use umol_graph_ir::atom_dsl;

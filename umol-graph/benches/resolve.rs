@@ -197,6 +197,9 @@ fn bench_project(c: &mut Criterion) {
                         && !checked.has_stereo_bonds()
                         && !checked.has_aromatic_systems()
                 );
+                for (actual, original) in checked.atoms().iter().zip(source.atoms().iter()) {
+                    assert_eq!(actual.implicit_hydrogens(), original.implicit_hydrogens());
+                }
                 group.bench_function(
                     BenchmarkId::new(format!("{source_name}_{policy_name}"), name),
                     |b| {

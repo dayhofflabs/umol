@@ -17,12 +17,18 @@ Correction (2026-09-13): removing ValenceResolver::project also removed implicit
 The ordinary atom valence design below restores that responsibility after aromatic projection
 and before isotope projection, in reverse resolution order.
 The lookup and Natural-isotope retention rules are settled. S4a1–S4a5 are complete;
-S7a is complete. Ad hoc atom-electron
+S7a and S7b are complete. Ad hoc atom-electron
 rejections and bracket rules have been removed from rendering; H decisions belong to projection.
 
 Correction (2026-09-14): S4a5 now preserves H at tetrahedral assertion sites and provides explicit
 projection stage selection through ProjectFlags. Implementation and the corrected S4 gate are
 complete. Mapped export will select all stages except valence to retain H counts.
+
+Correction (2026-09-14, H omission at the format boundary): the working design below replaces
+H elision during GraphIR projection. The joint S4a7/S7a1/S7b1 migration now preserves H through
+projection and decides TableIR omission in Convey. Earlier implementations and their passing
+checks remain historical evidence. S4a6 is complete; the migration gate is recorded below.
+S7c is complete; S9a integration coverage is next.
 
 ## Scope
 
@@ -838,17 +844,17 @@ a generic Export target on Molecule or Reaction.
 The intended call shapes are:
 
 ```text
-smiles.interpret(&resolver)                    -> Molecule
-Smiles::convey(&molecule, &resolver, io_config) -> Smiles
+smiles.interpret(model, resolve_config)                         -> Molecule
+Smiles::convey(&molecule, model, resolve_config, io_config)       -> Smiles
 
-reaction_smiles.interpret(&resolver)                       -> Reaction
-ReactionSmiles::convey(&reaction, &resolver, io_config)    -> ReactionSmiles
+reaction_smiles.interpret(model, resolve_config)                 -> Reaction
+ReactionSmiles::convey(&reaction, model, resolve_config, io_config) -> ReactionSmiles
 ```
 
-These sketches omit Result and error types. Interpret is to receive a supplied Resolver rather
-than separate chemistry-model and resolve-config arguments. Ingest and export likewise use a
-supplied Resolver. Convey invokes graph-IR projection, converts the resulting graph IR to TableIR,
-and constructs the checked boundary. Resolver::project operates only on graph IR, as does resolve;
+These sketches omit Result and error types. Interpret retains its existing chemistry-model and
+resolve-config arguments and constructs a Resolver internally. Convey follows that prototype;
+it does not take a Resolver. Convey invokes graph-IR projection, converts the resulting graph IR
+to TableIR, and wraps the boundary value. Resolver::project operates only on graph IR, as does resolve;
 neither resolver operation knows about TableIR. Project follows resolve's mutation semantics:
 work on an intermediate result and publish to the supplied molecule only on determined success.
 Convey clones the caller's graph IR before projection. Parse and render
@@ -865,21 +871,25 @@ pub trait Convey: Sized {
 
     fn convey(
         input: &Self::Input,
-        resolver: &Resolver<'_>,
-        config: &Self::Config,
+        model: &ChemistryModel,
+        resolve_config: &ResolveConfig,
+        io_config: &Self::Config,
     ) -> Result<Self, Self::Error>;
 }
 ```
 
 Smiles uses Molecule as Input; ReactionSmiles uses Reaction. Both use SmilesIoConfig as Config.
-Interpret retains associated Output and Error and takes `&self` and `&Resolver`.
+Interpret retains associated Output and Error and takes `&self`, `&ChemistryModel`, and
+`&ResolveConfig`. Its signature and existing ingestion callers do not change.
 Convey uses infallible from_table_ir constructors owned by umol-io; the payload fields stay private.
 Wrapping and unwrapping transfer ownership. Rendering checks each required property at its point
 of use. There is no preflight, construction validator, or public direct TableIR formatter.
 
 export_smiles and export_reaction_smiles return text, composing convey and render, opposite to
-ingestion from text. Ingest/export take a supplied Resolver; their default forms use the default
-OpenSMILES IO configuration, and `_with` forms additionally accept an explicit IO configuration.
+ingestion from text. Default export functions take only `&Molecule` or `&Reaction`, matching
+input-only default ingestion. Both directions select OpenSMILES, ValenceModel::smiles(), and
+IsotopePolicy::Natural. The `_with` functions take `(input, io_config, model, resolve_config)`
+in the same order as ingestion.
 Parse/render and from_table_ir require no resolver.
 
 Error responsibilities follow the operations: ProjectError covers projection failure;
@@ -939,14 +949,12 @@ VALENCE, and ISOTOPE. Selected stages run in that fixed reverse order; the flags
 ordering or chemistry policies. An omitted stage does not run. Individual resolver project
 methods remain direct operations with their existing arguments.
 
-Ordinary molecular convey selects ProjectFlags::all(). Convey that will assign atom-map labels
-selects all stages except VALENCE. The current valence projection only elides implicit H, so
-omitting it preserves every atom's H count without performing the #v/#a lookup. This includes
-unmapped atoms in a partial correspondence; extra brackets on those atoms are an accepted output
-tradeoff. No per-atom selection allocation or separate H-preservation boolean is introduced.
-Convey owns the reason for stage selection; the resolver receives neither atom maps nor IO config.
-The flags are an operation argument, not part of persistent ResolveConfig. Existing publication
-and failure semantics remain unchanged.
+Under the revised design, molecular and reaction Convey both select ProjectFlags::all().
+VALENCE remains a selectable phase and its projection becomes a no-op. Map labels affect the
+per-atom conversion decision, not phase selection. The previous whole-side VALENCE omission is
+superseded. The resolver receives neither atom maps nor IO config. The flags remain an operation
+argument, not persistent ResolveConfig. Existing composite publication and failure semantics
+remain unchanged.
 
 Preserve element, isotope subject to isotope projection, charge, unpaired-electron count,
 multiplicity, lone-pair count, and bond orders. Bracket H counts remain implicit hydrogen
@@ -956,7 +964,151 @@ Atom electron fields being present in TableIR is not itself a SMILES rendering e
 expresses electron occupation indirectly through element, charge, bonds, and hydrogen count.
 The explicit restrictions on bond/system charge and spin remain unchanged.
 
-#### Implicit-H elision (lookup rules settled 2026-09-13)
+#### H omission in Convey — 2026-09-14
+
+GraphIR projection preserves implicit-H counts. ValenceResolver::project remains in the
+composition as a no-op; remove its H-elision edits and notation-specific retention rules.
+Keep the existing policy-aware H inference calculations, including joint #v/#a filtering,
+Strict agreement and MostSaturated selection. Their result remains necessary to establish
+recoverability; a SMILES default-valence rule alone cannot replace the chosen resolver.
+
+Convey decides the TableIR representation while both the projected GraphIR and its internally
+constructed resolver are available. Establish notation requirements, including reaction atom maps,
+before omission. Retain the count when brackets require it: isotope information, nonzero charge or
+unpaired electrons, aromatic heteroatoms, atom maps, stereo notation, and elements whose symbols
+require brackets. Aromatic carbon is not subject to the earlier blanket aromatic-H retention
+rule. Otherwise omit the count only when the selected resolver's inference reproduces it.
+Failure to establish eligibility retains the count. No runtime whole-molecule reconstruction
+check is introduced.
+
+For omitted H, Convey writes None; otherwise it writes the concrete count, including zero.
+Rendering honors that boundary choice without access to a resolver or another H-inference pass.
+Parsing obtains the same distinction from input syntax: unbracketed atoms have an unspecified
+count; bracketed atoms have an explicit count, including zero. Therefore render(parse(X)) is
+preserved for supported syntax modulo the agreed notation equivalences. Convey must establish
+the corresponding representation when the input is GraphIR.
+
+Mapped reaction atoms retain counts. Unmapped atoms receive the ordinary eligibility decision;
+skipping VALENCE for an entire reaction side is replaced by retaining counts through projection
+and making the per-atom decision in Convey. No Normal channel, stored eligibility flags, retained
+resolver, or original-molecule recovery channel is introduced. Convey commits to omission; later
+independent changes to the open table do not regain a discarded count or acquire a consistency
+guarantee with the original GraphIR.
+
+The concrete counterexamples motivating the resolver query are [CH2], [C](F)Cl, and [NH]. Under
+both current valence sources with MostSaturated, all are neutral and have zero unpaired electrons;
+omitting brackets changes their H counts from 2 to 4, 0 to 2, and 1 to 3 respectively. Under
+counts/Strict the bracketed forms resolve but the corresponding bare forms are underdetermined.
+Evidence: scratch/s7b-h-omission.log and
+scratch/stereo-valence-scan/src/bin/check_h_omission.rs. These cases belong in the revised
+conversion tests, alongside mapped/unmapped mixtures and direct parse/render preservation.
+The following design governs the S4a7/S7a1/S7b1 migration.
+
+#### Detailed H-omission design — 2026-09-14
+
+**Resolver surface and semantics.** Retain the public signatures of Resolver::project and
+ValenceResolver::project, including ProjectFlags and ValenceTieBreak. The latter returns
+Ok(Solution::Determined(())) without reading or modifying the molecule, creating Edits, or
+running a transaction. Its ValenceProjectError becomes an empty enum, following the existing
+ValenceError convention; remove its Transaction variant. Keep the phase's existing error and
+solution adapters in composite projection rather than redesigning that interface. Other
+projection phases and their failures are unchanged.
+
+**Inference and elision have distinct names and responsibilities.** Keep
+AtomTypingValence::infer_implicit_hydrogens and CountsValence::infer_implicit_hydrogens for the
+existing model-specific calculation: which H count would the selected policy derive? The free
+function elide_implicit_hydrogens, called from Convey, applies the notation retention conditions
+and uses that inference to decide whether to omit the actual count from TableIR. It retains the
+count unless inference reproduces it. GraphIR keeps its actual H count. Elision reuses the
+existing calculation; it neither duplicates inference nor supplies a new actual count.
+The free function belongs to the private conversion implementation, not the public trait surface.
+
+The inference dispatch is one crate-visible method (implemented in S4a6):
+ValenceResolver::infer_implicit_hydrogens(&self, &Molecule, AtomId, ValenceTieBreak) -> Option<i64>.
+It delegates to the existing source-specific methods. Convey passes resolver.tie_break; there is
+no second chemistry model or lookup policy. No query is made public for tests. No views are
+passed as arguments. Retain the existing #v/#a precedence, missing-evidence behavior,
+allocation-free atom-typing scan, and counts calculation. A missing, ambiguous, or different
+inferred count means retain the actual count; it is not an error or a request to resolve again.
+
+**Per-atom conversion.** Keep the private projected Molecule alive throughout lowering. Lower
+its actual atom fields, including H, and derive stereo frames as before. Call
+elide_implicit_hydrogens in the same atom loop, after the output class and stereo requirement for
+that atom are known. It performs the following decision:
+
+1. Nonliteral H follows existing conversion handling: Undetermined lowers to None; other forms
+   that cannot be lowered fail. Do not infer and fill a missing actual count. Numeric TableIR
+   capacity checks continue to apply when lowering concrete fields.
+2. Retain a concrete count if the projected isotope is not Undetermined, charge or unpaired
+   count is not literal zero, the atom is an aromatic heteroatom, a class label is assigned,
+   tetrahedral notation is required, or the element cannot be written without brackets.
+   For isotope Strict, retained Natural therefore retains H; under Natural policy the isotope
+   phase has already elided Natural. Element H keeps its count in Convey; independently supplied
+   TableIR H with no count still uses the existing renderer exception.
+3. Otherwise call the valence query once. Only an equal inferred count changes the lowered
+   atom's H from Some(n) to None. The projected GraphIR's H remains unchanged.
+
+elide_implicit_hydrogens owns this private conversion decision in umol-graph::export. No new public
+SMILES helper, validation method, preliminary render pass, or generic callback is introduced.
+Renderer syntax checks remain at their existing points of use. Sharing a few element/notation
+conditions does not justify a new cross-crate API. Aromatic carbon may omit eligible H again;
+the settled heteroatom rule keeps pyridyl H=0 as well as pyrrolyl positive H explicit in Convey.
+Parsed bare aromatic heteroatoms keep their existing parse/render behavior.
+
+**Molecular flow.** Smiles::convey adopts the model/config signature above, matching Interpret,
+and constructs its Resolver internally. Its private convey_molecule helper clones and projects
+once through Resolver::project, then lowers while borrowing that projected value and resolver.
+The helper always selects all projection phases; its private flags argument is removed. Instead
+it receives an iterator of (AtomId, u32) labels in ascending atom order. Molecular Convey supplies an empty iterator. This iterator is internal
+producer data, not a public independently assembled mapping API.
+
+**Reaction flow.** ReactionSmiles::convey adopts the same model/config signature and constructs
+one Resolver for both sides. It retains the current materialization/error boundaries. Materialize
+ReactionSpan and obtain its correspondence before lowering either side. The existing
+recover_correspondence traversal increments both side indices monotonically, so its matched pairs are ordered on both sides after compaction. Assign
+label i + 1 in this pair order, checking its u32 capacity once when preparing the label range.
+Supply a borrowed, lazy label iterator for each side to convey_molecule. A peekable iterator in
+the atom loop supplies Some(label) only at matching atom ids. No per-atom label array, hash map,
+sort, inverse correspondence, or second H scan is needed. Both sides use all ProjectFlags.
+
+The output Atom.class is set before deciding H omission. Paired atoms therefore retain H and
+unpaired atoms undergo the same decision as molecular Convey. Populate the existing atom_mapping
+index from the same pair/label assignment; it agrees with the classes by construction. Preserve
+current one-based labels, side compaction, empty agents, source immutability, and reaction error
+context. Do not retain a GraphIR copy or resolver inside the returned boundary.
+
+**Boundary contracts and failure placement.** TableIR, Smiles, and ReactionSmiles gain no fields,
+constructors, or stored Normal/eligibility channel. Existing from_table_ir and render signatures
+remain unchanged. Some(n), including Some(0), requests explicit bracket H semantics; None permits
+the existing inferred-H representation. Parse and render preserve this distinction without a
+resolver. Frame construction and TableIR capacity failures remain Convey errors; unsupported
+notation and required-but-missing H remain rendering errors. H omission never mutates GraphIR,
+changes explicit H atoms, or removes charge, lone pairs, unpaired counts, or multiplicity.
+Subsequent arbitrary table edits receive no new consistency guarantee or recovery mechanism.
+
+**Tests and evidence.** Projection tests now assert exact H preservation for both sources and
+policies, including all flag combinations. Move the existing custom-registry/counts-table H
+properties to the public Smiles::convey result, where omission is observable; preserve their
+independent allowed-H calculations, registry-order/duplication checks, ambiguity cases, and
+field-preservation assertions. Keep source-specific unit tests in their existing modules.
+All property tests remain outside src.
+
+Required conversion examples include eligible methane/alkyl chains; benzene returning to bare c;
+retained [CH2], [C](F)Cl, and [NH]; charged/radical/isotopic atoms; pyridine/pyrrole; tetrahedral H,
+four actual ligands and lone pairs; and explicit H atoms. Exercise Strict and MostSaturated
+without requiring Strict to accept inputs already underdetermined at ingestion. Reaction cases
+must distinguish mapped and unmapped atoms in the same side, including mapped zero H, optional
+creation/deletion, compacted ids, and nonconsecutive original map labels. For example, under
+counts/MostSaturated, [CH3:7][Cl:3]>>[CH3:7][OH:9] should convey/render as
+[CH3:1]Cl>>[CH3:1]O: only the shared carbon needs mapped bracket notation.
+
+Keep direct parse/render tests for bare C versus [CH4], bare aromatic n versus [nH], explicit H,
+stereo, and maps. These tests do not use a resolver. Preserve the existing molecular/reaction
+Convey/render/ingest equivalence and text-idempotency laws, with exact required-success text
+cases so paired implementation errors cannot mask lost H. Existing failures on mixed bracketed
+aromatic input remain recorded separately; this revision does not change forward resolution.
+
+#### Previous H-elision design (implemented; superseded by the working design above)
 
 Elision replaces a literal H count with Undetermined. It does not set Lit(0), which asserts zero H
 and lowers to Some(0). Convey lowers the projected value directly; it does not decide which H
@@ -1468,10 +1620,10 @@ The plan below sequences the work; S0–S3 are complete.
 ## Staged implementation plan
 
 S0–S3, including allocation follow-ups S3d1–S3d7, are complete.
-S4a1–S4a5 and the S4 gate are complete, including the 2026-09-14 correction.
-S4a0a–S4a0c and the recorded S4a–S4d changes remain implemented.
-S4a3's Natural-isotope H-retention condition is settled.
-S5, S6, and S7a are complete; later subitems are pending.
+S4a1–S4a5 and the S4 gate passed under the previous design. S4a6/S4a7 retain the inference
+calculations and replace H elision during projection with preservation; S7a1/S7b1 move omission
+into Convey. S4a0a–S4a0c, the recorded S4a–S4d changes, S5, and S6 remain implemented.
+The migration and S7c gates are recorded below.
 Every stage ends with a green tree; additive subitems remain green individually. Breaking
 subitems include the consumer migration needed to restore green within that subitem or stage.
 Each subitem is a reviewable unit, not an instruction to commit. No commits are authorized.
@@ -1482,7 +1634,7 @@ The consumer requirements determine these work groups; the stages order them fou
 
 | Consumer/module | Required work |
 | --- | --- |
-| umol-graph ingest/export | Interpret with a supplied Resolver; Convey on boundary types; text-returning export conveniences and reaction composition |
+| umol-graph ingest/export | Interpret and Convey take model/resolve config and construct resolvers internally; text-returning export conveniences and reaction composition |
 | umol-io smiles boundaries | Infallible from_table_ir ownership transfer, render/render_with, operation-specific rendering failures |
 | umol-io smiles::render | Deterministic traversal, atom/ring/branch spelling, stereo-frame transport, component-wide marker selection and parity |
 | umol-graph resolver | Direct GraphIR-only project, isotope default elision, aromatic/stereo assertion recovery, atomic publication |
@@ -1993,6 +2145,108 @@ scratch/s4a0c-before.log, scratch/s4a0c-after.log, and scratch/s4a0c-benchmark.c
 The restoration path is S4a1/S4a2 → S4a3 → S4a4 → S4a5 → the reopened S4 gate → S7a.
 All five subitems are required. Method signatures/visibility and the bracket/H decision must be
 settled before the relevant implementation; listing these subitems does not authorize code changes.
+
+#### H-omission revision subitems
+
+These replace the H-ownership parts of S4a3–S4a5 and reopen S7a/S7b. S4a1/S4a2's inference
+algorithms remain implemented. The numbering extends the existing plan; it does not restart S4.
+
+- **S4a6 — Valence query dispatch.** Module: resolve/valence.rs.
+  **Additive (green); complete.** [dep: S4a1, S4a2]
+  Add the crate-visible dispatch method specified above and route the existing projection query
+  through it. No behavior change yet. Existing direct inference tests and public projection
+  properties remain its gate; introduce no temporary public accessor or unused implementation.
+- **S4a7 — H-preserving projection.** Modules: resolve/valence.rs and resolve.rs, their existing
+  tests, projection rustdoc, and benches/resolve.rs expectations.
+  **Breaking/refactor; complete as part of the joint migration.** [dep: S4a6]
+  Make valence projection the specified no-op, remove its edits/transaction path and obsolete
+  error variant, and retain the composite call and flags. Change projection expectations to
+  exact H preservation. Move useful omission assertions to the S7a1 public conversion tests
+  rather than dropping those laws. Keep forward resolution unchanged.
+- **S7a1 — Molecular H omission in Convey.** Module: export.rs and existing boundary/property
+  tests, including IO parse/render tests where coverage is missing.
+  **Breaking/refactor; complete as part of the joint migration.** [dep: S4a6, S4a7, S7a]
+  Correct Convey to take model/resolve config like Interpret and construct the resolver internally;
+  migrate both implementations and all existing Convey callers in this stage. Keep Interpret and
+  ingestion unchanged. Keep the projected molecule available through the atom loop; introduce the
+  internal ordered label input with the empty molecular case. Add the private free function
+  elide_implicit_hydrogens for the retention decision, reusing infer_implicit_hydrogens for the
+  model/policy calculation. Do not erase GraphIR H counts or duplicate the calculation.
+  Update public rustdoc and exact atom/table/text expectations. Move the registry and counts
+  properties from ValenceResolver::project to Smiles::convey, retaining their substantive laws.
+- **S7b1 — Reaction H omission after label assignment.** Module: export.rs and its existing
+  unit/property tests.
+  **Breaking/refactor; complete as part of the joint migration.** [dep: S7a1, S7b]
+  Prepare the existing correspondence before lowering, pass the two lazy label streams, use
+  all projection phases, and set each class before the shared H decision. Preserve current
+  mapping/error behavior and add exact mapped/unmapped H expectations and roundtrips.
+- **S7b2 — Revision gate and documentation reconciliation.** Modules: existing graph/IO test
+  suites, benches/resolve.rs, and this document/index.
+  **Green closeout; complete.** [dep: S4a7, S7a1, S7b1]
+  Run graph and IO unit, conformance, and external property suites with PROPTEST_CASES=256,
+  all-target Clippy for both crates with conformance,proptest and -D warnings, formatting, and
+  diff checks. Keep benchmark examples inline; update the existing projection benchmark setup
+  for H preservation and compile/check the target. Timing/profiling remains separate work.
+  Audit public symbols and the full diff, remove superseded claims of H elision in projection,
+  and close only the revised scopes. S7c follows this gate.
+
+S4a6 is independently green. S4a7, S7a1, and S7b1 form one breaking migration stage and must be
+implemented together before stopping for review: moving ownership changes both callers' output
+expectations, so a no-op projection must not be delivered alone. That stage ends green. S7b2
+provides the broader gate. Critical path: S4a6 -> (S4a7 + S7a1 + S7b1) -> S7b2 -> S7c.
+S4a6 and the joint S4a7/S7a1/S7b1 migration were authorized. Their implementation and
+verification are recorded below.
+
+**S4a6 verification — 2026-09-14.** ValenceResolver::infer_implicit_hydrogens takes &Molecule,
+AtomId, and ValenceTieBreak and delegates directly to the existing atom-typing/counts calculation.
+The current project method calls this dispatch at the same point as before. Neither inference
+algorithm, retention conditions, mutation behavior, nor public signatures changed. No additional
+allocation, validation, or test-only access was introduced. Existing tests and their assertions
+remain unchanged.
+
+All 1,815 graph unit tests pass, including both source-specific inference suites and resolver
+projection cases. All 10 external project-module properties pass with PROPTEST_CASES=256,
+covering custom registries/counts tables, both policies, and molecular/reaction conversion.
+All-target graph Clippy with conformance,proptest and -D warnings passes. cargo fmt --all and
+git diff --check pass. Logs: scratch/s4a6/unit.log, scratch/s4a6/property.log, and
+scratch/s4a6/clippy.log. Review confirms the code diff is limited to the dispatch and its caller;
+existing S7b source/property changes are untouched.
+
+**S4a7/S7a1/S7b1 implementation and S7b2 gate — 2026-09-14.** Valence projection is a no-op;
+its Transaction error variant and all H-elision edits and notation conditions are removed.
+Composite projection still calls it in the same order and preserves H with every flag combination.
+Convey takes model, resolve_config, and io_config; Interpret and ingestion are unchanged. The
+internal resolver supplies both projection and policy-aware inference. elide_implicit_hydrogens
+changes only the lowered TableIR H field. Existing inference calculations are unchanged.
+
+Reaction conversion establishes the correspondence and one-based label range before lowering.
+Borrowed label iterators supply each side's atom classes in the existing atom loop, before H
+omission. Both sides run all projection stages. No label array, sorting pass, or second H scan
+is added. Supported output examples under counts/MostSaturated include c1ccccc1, [n]1ccccc1,
+[nH]1cccc1, and [CH3:1]Cl>>[CH3:1]O. [CH2], [C](F)Cl, and [NH] retain their counts. Explicit H
+atoms retain their own Some(0) even though the renderer could spell [H] without that field.
+
+The custom-registry/counts properties now compare full public Convey tables against the existing
+independent allowed-H calculations, retaining row-order/repetition, ambiguity, isotope and LP
+coverage. Projection tests assert H preservation, including every ProjectFlags combination.
+Reaction properties check selective omission, maps, compaction, source immutability, re-ingestion,
+and text idempotence. Exact tests distinguish Strict typing's unique counts for water/borane from
+counts-model ambiguity. Direct parse/render examples preserve bracket H, bare aromatic n, [nH],
+explicit H, tetrahedral notation, and maps. No property tests were added under src.
+
+Verification passes: the full graph gate (1,905 unit cases, 21 external properties at 256 cases,
+683 conformance cases, other integration suites and doctests), followed by all four additional
+explicit-H table cases; the full IO gate (4,137 unit cases, all conformance suites including 10,223
+SMILES cases, external properties at 256 cases, and doctests). All-target Clippy for both crates
+with conformance,proptest and -D warnings, cargo fmt --all, git diff --check, and compilation of
+the existing resolve benchmark pass. Its inline setup now checks H preservation outside timing;
+no performance measurements were made. Evidence: scratch/s4a7/graph-gate.log, explicit-h.log,
+io-gate.log, clippy.log, and bench-check.log in the same directory.
+
+Public-symbol and diff review: only Convey's agreed argument change and removal of the
+ValenceProjectError::Transaction variant change the public surface in this migration. No new boundary
+fields, constructors, accessors, validators, or renderer behavior are introduced. Forward resolution
+and the valence models/registries are unchanged. S7c remains unimplemented.
 
 - **S4b — Aromatic assertion recovery.** Modules: resolve/aromaticity.rs and graph-core induced edges.
   **Breaking/refactor (red→green); correction completed 2026-09-11.** [dep: S4a]
@@ -3061,38 +3315,46 @@ formatting, and git diff --check pass. Logs: scratch/s6b-gate.log, scratch/s6b-p
 and scratch/s6b-clippy.log.
 
 S4a5, the corrected S4 gate, and S7a are complete. The two H-handling corrections
-are recorded in the S7a implementation status below; S7b is next.
+are recorded in the S7a implementation status below. S4a7/S7a1/S7b1 supersede that H handling;
+their migration and S7b2 gate are complete. S7c is also complete; S9a is next.
 
 ### S7 — Convey and text export
 
 - **S7a — Convey trait and molecular conversion.** Module: new umol-graph export module and
-  its owning conversion functions. **Additive (green); complete.** [dep: S4d, S4a5, S6a]
+  its owning conversion functions. **Additive (green); revised H omission complete.** [dep: S4d, S4a5, S6a]
   Add Convey with associated Input/Config/Error and implement it for Smiles. Clone source GraphIR,
   invoke Resolver::project with ProjectFlags::all(), and convert the projected GraphIR
   fields/assertions into TableIR.
   Build StereoAtom/StereoBond frames here, not in the resolver. Lower projected values that TableIR
   can carry and reject concrete unsupported values/ranges. Rendering owns SMILES
   notation/configuration support. Do not add reconstruction checks at either boundary.
-  Use the corrected tetrahedral H retention from S4a5 and test required successful stereo
-  output; see the concrete cases in its handoff. Lower Lit(n) to Some(n), including zero,
-  and Undetermined to None; do not recover H from the original molecule or infer it in rendering.
+  Under the revised H design, retain counts through projection and decide omission here using
+  notation requirements and the internally constructed resolver's inference. Keep the projected
+  GraphIR evidence available for that decision. Test required successful stereo output and neutral
+  closed-shell cases whose H counts differ from the inferred count. Do not recover H from an
+  original-molecule copy or infer it in rendering.
   Test the supported foreign-input roundtrip through convey/render/parse under the agreed
   equivalences, with required-success fixtures. Include original-input immutability on success
   and failure and exact diagnostics for unsupported encodings.
 - **S7b — Reaction convey.** Same module, ReactionSmiles implementation.
-  **Additive (green).** [dep: S7a, S6b]
-  Materialize reaction sides through existing ReactionSpan/correspondence operations, then convey
-  both sides with all ProjectFlags except VALENCE, preserving H before labels are applied.
+  **Additive (green); revised mapped/unmapped H handling complete.** [dep: S7a, S6b]
+  Materialize reaction sides through existing ReactionSpan/correspondence operations. Establish
+  map-label requirements before the H-omission decision. Projection preserves every count;
+  mapped atoms keep their counts and unmapped atoms receive ordinary Convey eligibility.
   Assign paired atoms label i + 1 in existing matched-pair order; derive atom_mapping
   from Atom.class and leave the agent section empty for GraphIR export. Do not infer correspondence
   or recover discarded source labels. Preserve the correspondence through any entity remapping.
   Test creation/deletion, nontrivial pair ordering, disconnected sides, materialization failure,
   side-specific convey errors, and no accidental preservation claim for source-only metadata.
-- **S7c — Export conveniences and composed errors.** Same module and exports.
+  ReactionConveyError distinguishes Materialization(Contradiction), Reactants(ConveyError),
+  and Products(ConveyError). AtomMapLabel reports a pair index whose one-based label exceeds
+  TableIR's u32 capacity. The source Reaction is unchanged on success and failure.
+- **S7c — Export conveniences and composed errors (complete).** Same module and exports.
   **Additive (green).** [dep: S7a, S7b]
-  Add export_smiles/export_reaction_smiles and explicit-IO `_with` variants taking a supplied
-  Resolver and returning text by convey then render. Compose projection, construction, rendering,
-  and reaction-side errors with source chains. Verify equality with the explicit composition,
+  Add input-only export_smiles/export_reaction_smiles with the same presets as default ingestion,
+  and `_with(input, io_config, model, resolve_config)` variants returning text by convey then render.
+  Compose conversion and rendering errors with their source chains and reaction-side context.
+  Verify equality with the explicit composition,
   output failures, deterministic repeated output, and failure without mutation. Do not add
   redundant byte-output or sink APIs without a concrete approved contract.
 
@@ -3157,35 +3419,76 @@ with PROPTEST_CASES=256, including 1,792 graph unit cases, 4,131 IO unit cases, 
 properties, conformance suites, and doctests. All-target Clippy for both crates with the same
 features and -D warnings, cargo fmt --all --check, and git diff --check pass.
 Evidence: scratch/s7a-gate.log and scratch/s7a-clippy.log. Initial projection diagnostics remain in scratch/s7a-h-projection.log
-and scratch/stereo-valence-scan/src/bin/check_h_projection.rs. S7b/S7c and the Interpret migration
-have not started.
+and scratch/stereo-valence-scan/src/bin/check_h_projection.rs. S7b follows below; S7c and the
+Interpret migration have not started.
 
-### S8 — Interpret/ingest resolver migration and existing consumers
+#### S7b implementation status — 2026-09-14
 
-- **S8a — Supplied-resolver interpretation and ingestion.** Modules: ingest.rs and all Rust
-  callers/tests/examples/benchmarks. **Breaking (red→green).** [dep: S7c]
-  Change Interpret to accept &Resolver and have molecule/reaction interpretation reuse it after
-  raise. Change ingest_smiles/ingest_reaction_smiles and byte/default/`_with` families consistently:
-  chemistry comes from the supplied resolver, default variants select only OpenSMILES IO config.
-  Preserve existing raise, contradiction, underdetermination, and execution diagnostics. Migrate
-  every caller in this subitem; do not silently select a different chemistry preset while replacing
-  model/config arguments. Compare old fixture outcomes and test export/ingest composition directly.
-- **S8b — Existing Python adapters.** Modules: umol-py molecule/reaction ingestion and associated
-  tests. **Breaking caller migration (red→green with S8a).** [dep: S8a]
-  Construct and pass the appropriate Rust Resolver from the existing Python model/config inputs,
-  preserving their semantic defaults and lifetimes. Apply python-build, use Python 3.13, rebuild
-  the native extension, and run affected tests. This required migration adds no new Python boundary
-  or resolver wrapper. New Python export surface is deferred pending its explicit naming/ownership
-  decision; do not pretend existing Python ingestion exposes the new output operations.
+ReactionSmiles now implements Convey with Input = Reaction, Config = SmilesIoConfig, and
+Error = ReactionConveyError. It materializes one ReactionSpan, conveys its lhs/rhs projections
+with ProjectFlags::all() except VALENCE, and assigns each surviving atom pair its correspondence
+index plus one. Atom.class and the matching atom_mapping entry are populated together. No
+original labels are recovered; unpaired source labels disappear, unmatched atoms remain
+unlabeled, and agents remain empty. Span side compaction determines the written atom indices.
+There is no map inference, second validation pass, or new public TableIR conversion.
 
-**Gate:** the whole workspace builds and tests with no stale Interpret/ingest signatures. Python
-uses a freshly rebuilt extension. S8a and S8b form one green stage; no intermediate broken Python
-consumer may be treated as completion.
+Twenty-three new unit cases cover empty sides, creation/deletion, unmatched and partial maps,
+crossing source correspondences, compacted product indices, disconnected fragments, bond-order
+changes, radicals, isotopes, tetrahedral and alkene stereo, explicit H, and aromatic atoms.
+Exact failures cover materialization, conversion on either side, and projection with valence
+omitted. The input remains unchanged on success and failure. The existing external projection
+suite adds a reaction property over alcohol oxidation with partial maps, nonconsecutive original
+labels, optional removed/added fragments, both valence sources, and both tie-break policies.
+Independent expected map indices and H vectors check side compaction and retention; rendered
+re-ingestion must preserve reaction equivalence and repeated rendering must be idempotent.
+
+Input-domain observation, deferred: ingest_reaction_smiles rejects
+`[cH:19]1cccc1>>[cH:19]1cccc1` with reactant AromaticValenceFailure at atom 0. This happens
+before Convey. The fully bracketed version with every aromatic H explicit ingests and passes
+the conversion roundtrip. The initial failure is in scratch/s7b-aromatic-ingestion.log; no
+parser or resolver changes are included in S7b.
+
+Verification passes: all 1,815 graph unit cases, all 21 external properties at
+PROPTEST_CASES=256, graph conformance suites, and doctests with features conformance,proptest.
+All-target graph Clippy with the same features and -D warnings, cargo fmt --all --check, and
+git diff --check pass. Logs: scratch/s7b-unit.log, scratch/s7b-property.log,
+scratch/s7b-gate.log, and scratch/s7b-clippy.log. S7c remains unimplemented.
+
+#### S7c implementation status — 2026-09-14
+
+umol-graph/src/export.rs provides export_smiles and export_reaction_smiles with input-only
+signatures, matching default ingestion. Both use OpenSMILES, ValenceModel::smiles(), and Natural
+isotope policy. Their `_with(input, io_config, model, resolve_config)` variants match ingestion's
+argument order and directly compose Convey with render_with. SmilesOutputError and
+ReactionSmilesOutputError have Convey and Render variants, preserving the original error and
+reaction-side context through Error::source. No resolver, conversion, or rendering algorithm changed.
+
+Twenty-five exact export cases cover ordinary atoms, radicals, isotopes, actual H atoms,
+aromatic systems, tetrahedral stereo, coupled cis/trans assertions, reaction correspondence,
+creation, and empty reactions. They check default/configured equivalence, repeated output,
+conversion and rendering errors, source chains, and source preservation. Extended dative syntax
+succeeds with lenient IO and fails at rendering under OpenSMILES. The existing external molecular
+and reaction roundtrip properties now also compare configured export with explicit Convey/render
+under both valence sources and the existing policy domains.
+
+Verification: the full umol-graph conformance/proptest gate passed with PROPTEST_CASES=256,
+including 1,934 unit cases, 21 property tests, and 683 conformance cases; the remaining integration
+and doc-test targets also passed. All-target Clippy with those features and warnings denied passed.
+Formatting and git diff --check passed. Logs: scratch/s7c/graph-gate.log and scratch/s7c/clippy.log.
+S9a remains next; S8's Interpret/ingest migration remains withdrawn.
+
+### S8 — Interpret/ingest migration withdrawn
+
+The proposed migration to caller-supplied Resolver arguments was incorrect. Interpret and the
+existing ingestion families retain their model/config signatures and internal resolver construction.
+S7a1 corrects Convey to follow that prototype; S7c follows it for export conveniences. S8a/S8b
+therefore have no implementation work. Existing Rust and Python ingestion callers need no
+migration for this change. New Python output exposure remains deferred.
 
 ### S9 — Integration evidence, specification, and closeout
 
 - **S9a — Full property/conformance coverage.** Modules: IO and graph property/conformance targets.
-  **Additive (green).** [dep: S2a, S3e, S7c, S8b]
+  **Additive (green).** [dep: S2a, S3e, S7c]
   Run project(resolve(input)) for supported raised foreign inputs, boundary normalization,
   ownership transfer and rendering failures, and ingestion-to-export preservation under the agreed
   equivalences. No arbitrary-GraphIR resolve(project(molecule)) law is required. Include both
@@ -3199,7 +3502,7 @@ consumer may be treated as completion.
   Apply only the separate Staged specification updates list below to the spec: interpretation and
   equivalence, not pipeline/roundtrip promises. State constructor, traversal, projection, and
   rendering laws in their owning public APIs without citing this discussion. Examples show the
-  parse/interpret and convey/render pairs and ingest/export conveniences with supplied resolvers.
+  parse/interpret and convey/render pairs and the default/explicit-configuration ingest/export conveniences.
   Describe the supported domain and explicit failure cases, including Either notation limitations.
 - **S9c — Final gates and evidence reconciliation.** Modules: workspace and this record/index.
   **Verification/documentation (green).** [dep: S9a, S9b]
@@ -3238,9 +3541,9 @@ with commands and results recorded when actually run.
 
 The writer path is S0 → S1 → S3 → S5 → S6 → S7. Projection S4 can proceed independently of
 TableIR/writer implementation after S0 and joins at S7. S2 is the required traversal-consumer
-migration before final integration. S8 restores the complete ingest/export symmetry and existing
-Python consumers; S9 supplies the acceptance evidence. No stage may leave public invariants
-unfinished behind temporary visibility or compatibility layers.
+migration before final integration. S7 establishes ingest/export symmetry using the existing
+model/config pattern; S8 is withdrawn. S9 supplies the acceptance evidence. No stage may leave
+public invariants unfinished behind temporary visibility or compatibility layers.
 
 Deferred and not prerequisites for the Rust roundtrip: minimum-information projection, early
 parity pruning, minimum-marker optimization, canonical output, cached traversal/markers,
@@ -3279,18 +3582,19 @@ inventing extra public seams.
 | StereoAtom, StereoLigand, Winding, ConfigurationScope | Retain public layout and the implicit-H/LP participant convention. | Doc 224 parser finalizer, raise, future writer. No LP-removal migration. |
 | AtomNeighbors and table_ir::Neighbor; both molecule atom_neighbors methods | Remain operation-local lookup; no new foundational graph field or adjacency trait. Eliminate unnecessary allocation at callers without assuming final Graph connectivity matches the table. | Raise helpers, table tests; future parser/writer incidence access. Retirement/replacement of the public helper itself is not approved. |
 | TryIntoIr<Molecule> for &table_ir::Molecule; RaiseError | Raise explicit frames instead of interpreting retained directions; preserve model-independent representation errors at the owning conversion. | Interpret, parser/raise fixtures, fuzz target. Source marker conflicts move with their producer; do not erase diagnostics. |
-| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation; no TableIR or IO-config parameters. Composite project takes &mut Molecule and per-call ProjectFlags. ValenceResolver::project(&mut Molecule, ValenceTieBreak) retains its signature and returns Result<Solution<(), ValenceContradiction>, ValenceProjectError>, with Transaction as its only operational error. AromaticityProjectError and StereoProjectError also carry Transaction. Selected stages run stereo → aromaticity → valence → isotope; ProjectError and ProjectContradiction include Valence. | Convey; public projection properties and projection benchmarks. |
-| ProjectFlags | Public bitflags STEREO, AROMATICITY, VALENCE, ISOTOPE selecting composite projection stages. Ordinary convey selects all; mapped convey selects all except VALENCE. No atom-map input or H-preservation boolean in the resolver. | Resolver::project argument; existing callers migrate to all stages. Reaction convey retains H on both sides before labeling. |
+| Resolver::project and per-resolver project functions | Direct GraphIR-only transformation; no TableIR or IO-config parameters. Composite project takes &mut Molecule and per-call ProjectFlags. ValenceResolver::project(&mut Molecule, ValenceTieBreak) retains its signature and returns Result<Solution<(), ValenceContradiction>, ValenceProjectError>, with an empty ValenceProjectError and no mutation. AromaticityProjectError and StereoProjectError retain Transaction. Selected stages run stereo → aromaticity → valence → isotope; ProjectError and ProjectContradiction include Valence. | Convey; public projection properties and projection benchmarks. |
+| ProjectFlags | Public bitflags STEREO, AROMATICITY, VALENCE, ISOTOPE selecting composite projection stages. Both molecular and reaction convey select all; VALENCE is a no-op. No atom-map input or H-preservation boolean in the resolver. | Resolver::project argument; all flag combinations preserve H. Convey decides omission after assigning labels. |
 | Resolver::resolve, ResolveConfig, ResolveState and existing reports/errors | Retain forward semantics, including completed isotope corrections. Project does not invoke resolution for validation. | Existing ingestion and resolution tests; supported-input projection properties. |
-| AtomTypeRegistry lookup/admission operations | Retain forward admission and completed registry invariants/deduplication. Projection scans element/charge lookup results with #v/#a filtering and analyzes H alternatives without an intermediate collection or registry mutation. | Forward atom typing and pending H-elision projection. |
+| AtomTypeRegistry lookup/admission operations | Retain forward admission and completed registry invariants/deduplication. Inference scans element/charge lookup results with #v/#a filtering and analyzes H alternatives without an intermediate collection or registry mutation. | Forward atom typing and H omission in Convey. |
 | Smiles/ReactionSmiles::from_table_ir | Infallible owned-table constructors without IO config or validation. Private table fields remain private. | Convey across the crate boundary; tests of independent open tables. |
 | Smiles/ReactionSmiles::render, render_with | New String-returning Result methods; OpenSMILES default or explicit IO config. Recompute traversal/assignment. | export conveniences; boundary normalization properties. No Display or unchecked formatter is approved. |
 | Smiles/ReactionSmiles::parse, parse_bytes, parse_with, parse_bytes_with, FromStr | Retain parse surface and syntax-config defaults; frame normalization changes their produced internal tables. | Existing ingestion, direct boundary users, properties and fuzzing. Parsing does not become chemistry resolution. |
 | Smiles/ReactionSmiles::as_table_ir, into_table_ir | Retain signatures; borrow/consume private payload, no mutable accessor. | Interpret is the actual production consumer. |
-| Interpret::{Output, Error, interpret} | Change method to interpret(&self, &Resolver); keep associated output/error types. | Both boundary implementations in ingest.rs and every ingestion caller. |
-| Convey::{Input, Config, Error, convey} | New local trait in umol-graph, implemented on output boundary types with the settled signature; Config = SmilesIoConfig here. | Molecular/reaction export. No Export trait or generic format target on Molecule. |
-| ingest_smiles and ingest_reaction_smiles families | All eight existing text/bytes/default/explicit-IO functions receive a supplied Resolver; remove separate model/resolve-config arguments. | Full caller list below, including benches and Python adapters. Default variants retain only default IO selection. |
-| export_smiles/export_reaction_smiles and their _with variants | New four functions return text through convey + render, taking a Resolver and default/explicit IO config. | Rust output callers. No additional sink/byte family or Python wrapper is inferred. |
+| Interpret::{Output, Error, interpret} | Retain interpret(&self, &ChemistryModel, &ResolveConfig) and associated output/error types. Resolver construction remains internal. | Both boundary implementations in ingest.rs; no ingestion caller migration. |
+| Convey::{Input, Config, Error, convey} | New local trait in umol-graph, implemented on output boundary types with model/resolve-config arguments and internal Resolver construction; Config = SmilesIoConfig here. | Molecular/reaction export. No Export trait or generic format target on Molecule. |
+| ingest_smiles and ingest_reaction_smiles families | Retain all existing text/bytes/default/explicit-IO signatures and model/resolve-config arguments. | Existing callers, benchmarks, and Python adapters remain unchanged. |
+| export_smiles/export_reaction_smiles and their _with variants | Four functions return text through convey + render. Defaults take only the input and select the same presets as ingest. _with takes input, IO config, model, resolve config in ingestion order. | Rust output callers. No additional sink/byte family or Python wrapper is inferred. |
+| SmilesOutputError, ReactionSmilesOutputError | Convey and Render variants preserve their corresponding conversion/rendering error as source. Reaction errors retain side context. | Export callers; exact error and source-chain tests. |
 | ProjectError, ProjectContradiction, construction/convey/render/output diagnostics | S4d defines the composite projection diagnostics and unit success value. Exact boundary variants, reaction names and shared-reason placement remain for their cohesive implementation subitems. | Error source chains, section context and exact failure fixtures. No catch-all silent fallback. |
 
 Argument ordering not explicitly shown in the approved signatures, error enum layout, and
@@ -3343,8 +3647,8 @@ owning module and the repository's established public reexport surface, not from
   Workspace search found no separate graph/examples directory; executable examples live in the
   declared bin/test targets and must be searched again when signatures change.
 - **Python:** from_smiles/from_reaction_smiles currently accept optional IO/model/resolve configs,
-  construct the SMILES valence preset by default, and call Rust ingestion. S8 preserves that
-  behavior by constructing a Rust Resolver with the required lifetime. There is no existing
+  construct the SMILES valence preset by default, and call Rust ingestion. These adapters stay
+  unchanged; Rust ingestion continues to construct its Resolver internally. There is no existing
   Python Resolver or Smiles boundary wrapper to assume. New Python output exposure is deferred.
 - **Evidence targets:** graph-core benches/algorithms.rs and feature-gated tests/property.rs;
   IO benches/smiles_parsing.rs, tests/smiles_property.rs, parser unit tests and conformance targets;
