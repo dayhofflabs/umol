@@ -1,8 +1,8 @@
 # 222 — Depicting a supplied layout
 
-Status: Proposed
+Status: Completed
 Date: 2026-09-08
-Revised: 2026-09-10
+Revised: 2026-09-15
 Relates: [221](221-depiction-api-2026-09-03.md),
 [225](225-depiction-problems-2026-09-09.md),
 [Python API guide](../docs/development/python-api.md),
@@ -25,8 +25,11 @@ The first revision of this document settled a public free function `depict_molec
 Python `MoleculeLayout` with a functional `with_position`, and left reactions CoordGen-only. Review
 of the implementing pull request asked for a different shape on five points and for the editor's
 requirements to be stated against it before another implementation round. This revision is that
-design. The implementation on the pull request's branch is the reviewed shape and will be replaced
-once the surface below is settled; its frame-check and round-trip tests carry over.
+design; it was accepted on review, and the implementation on the pull request's branch is now the
+surface below. The first revision's frame-check and round-trip tests carried over. Two details were
+settled at implementation and are recorded where they arise: `verify_layout` is a `Depict` trait
+method rather than an inherent `Molecule` method (§ 4), and `ReactionLayout`'s side accessors
+return copies (§ 5).
 
 ## Reversed portion of doc 221
 
@@ -187,15 +190,19 @@ the layout adapter: `cis_trans_bond` (`umol-io/src/layout/coordgen.rs:60`) turns
 with a literal coset into a site bond, one actual ligand per end, and a `SameSide` / `OppositeSide`
 relation (`:40`–`44`).
 
-Proposed: a named verification operation at the depiction boundary,
+Proposed: a named verification operation at the depiction boundary, on the trait of § 1,
 
 ```rust
-impl Molecule {
-    pub fn verify_layout(&self, layout: &MoleculeLayout) -> Result<(), MoleculeDepictionError>;
+pub trait Depict {
+    // ...
+    fn verify_layout(&self, layout: &Self::Layout) -> Result<(), Self::Error>;
 }
 ```
 
-that `depict_layout` runs first and that an editor may call alone. It performs, in order:
+that `depict_layout` runs first and that an editor may call alone. `Molecule` is `umol-graph-ir`'s
+type, so an inherent method cannot live in `umol-io`; a trait method keeps the operation off the
+free-function surface § 1 withdraws and gives `Reaction::verify_layout` — both sides through
+`LhsDepiction` / `RhsDepiction`, then the arrow — for free. For a molecule it performs, in order:
 
 1. **Frame** — `check_frame`, unchanged; `MoleculeDepictionError::LayoutFrame(MoleculeLayoutError)`
    as in the first revision.
@@ -209,14 +216,15 @@ that `depict_layout` runs first and that an editor may call alone. It performs, 
    within tolerance of the axis, so neither relation is drawn. Collinear covers both a ligand on the
    axis line and a zero-length site bond.
 3. **Finite derived geometry** — the quantities the lowering and the SVG writer compute from
-   positions must themselves be finite: bond unit vectors (a zero-length bond has none —
-   `BondGeometry { bond }`), label anchor bounds and the mask rectangles derived from them, wedge
-   polygons (base half-width and tip from the bond direction), and the pair-number offsets of
-   `mapping_index_offset` (unit vectors of every incident bond). Finite input coordinates do not
-   guarantee these: two atoms at `±1e308` give an infinite difference; coincident atoms give a
-   `NaN` direction. The predicates — finite difference, non-zero length, normalizable direction —
-   go in `umol-geometric-core`; `umol-io` names which entity failed
-   (`NonFiniteGeometry { entity }`, with `entity` a bond, stereo atom or atom id).
+   positions must themselves be finite. Finite input coordinates do not guarantee this: two atoms
+   at `±1e308` give an infinite difference; coincident atoms give a `NaN` direction. Two checks
+   cover the derived quantities: every bond must have a normalizable direction (finite difference,
+   non-zero length) — the bond perpendiculars, wedge polygons and the pair-number offsets of
+   `mapping_index_offset` all derive from bond directions — and every atom's offset from the
+   layout's minimum corner must be finite, which is what the drawing extent and the mask
+   rectangles derive from. The predicates — finite difference, non-zero length, normalizable
+   direction — live in `umol-geometric-core`; `umol-io` names which entity failed
+   (`NonFiniteGeometry { entity }`, with `entity` the bond or atom).
 4. **Tetrahedral wedges** — `tetrahedral_wedges` retained as today, `TetrahedralGeometry {
    stereo_atom }` unchanged (`molecule.rs:133`–`135`).
 
@@ -373,8 +381,12 @@ revision's open question, withdrawn); constrained generation (b) now.
 
 - Rust exact tests: `depict_layout` on a generated layout equals `depict` byte for byte, for a
   molecule and for a reaction; the verification cases of § 4; `ReactionLayout::arrange` reproduces
-  the offsets and arrow `compose_sides` produces today (a fixture reaction depicts identically before
-  and after the lift); `try_new` and `set_arrow` rejections.
+  the offsets and arrow `compose_sides` produced before the lift; `try_new` and `set_arrow`
+  rejections. One consequence of lifting the arrangement into the layout: a reaction's sides are
+  now lowered in reaction coordinates rather than lowered at the origin and translated afterwards.
+  Bonds, labels, wedges, pair numbers, arrow and extent are unchanged; the dashed aromatic contour
+  and its annotation centroid, which are computed by line intersection, can differ from the
+  previous output in the last one or two floating-point digits.
 - Python tests: construction, lookup, in-place update and its failures leaving the object unchanged;
   `.positions` is a `tuple`; `hash(layout)` raises `TypeError`; the generator for both types; the
   round trip that generates, moves one atom, depicts, and observes only the incident bond endpoints
@@ -387,8 +399,9 @@ revision's open question, withdrawn); constrained generation (b) now.
 ## Open questions
 
 - Constrained layout generation (fixed atoms, the rest generated) — the editor's (b); not requested.
-- `ReactionLayout.lhs` / `.rhs` as copies with `set_*_position` on the owner (proposed) versus a
-  declared live view.
-- The degeneracy tolerance for the cis/trans predicate — deferred to 225 § 1.
-- Whether `verify_layout` is public or only `depict_layout`'s first step. Proposed public, for (d).
+- The degeneracy tolerance for the cis/trans predicate — deferred to 225 § 1; `verify_layout` calls
+  `same_side_of_axis` as exported, one call site.
 - Whether `depict_layout` should compile without the `coordgen` feature (§ 1).
+
+Settled at implementation: `ReactionLayout.lhs` / `.rhs` are copies with `set_lhs_position` /
+`set_rhs_position` on the owner (§ 5); `verify_layout` is public, as a trait method (§ 4).
