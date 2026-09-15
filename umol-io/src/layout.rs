@@ -9,6 +9,8 @@ use umol_utils::error::UmolError;
 
 #[cfg(feature = "coordgen")]
 mod coordgen;
+#[cfg(feature = "coordgen")]
+pub(crate) mod stereo;
 
 /// Algorithm used to generate a two-dimensional molecule layout.
 ///
@@ -30,7 +32,7 @@ pub enum MoleculeLayoutAlgorithm {
 ///
 /// Returns [`LayoutError::CoordGen`] if the selected backend cannot generate coordinates.
 #[cfg(feature = "coordgen")]
-pub fn layout_molecule(
+pub(crate) fn layout_molecule(
     molecule: &Molecule,
     algorithm: MoleculeLayoutAlgorithm,
 ) -> Result<MoleculeLayout, LayoutError> {
@@ -172,6 +174,180 @@ pub enum MoleculeLayoutError {
 }
 
 impl UmolError for MoleculeLayoutError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+const ARROW_HALF_LENGTH: f64 = 0.75;
+const SIDE_ARROW_GAP: f64 = 1.0;
+
+/// Two side layouts and a reaction arrow in one reaction coordinate system.
+///
+/// Every side position and both arrow endpoints share one coordinate system. Like
+/// [`MoleculeLayout`], the reaction layout carries no chemical attributes and is not bound to a
+/// reaction: its side frames are checked against the materialized sides only when it is depicted.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReactionLayout {
+    lhs: MoleculeLayout,
+    rhs: MoleculeLayout,
+    arrow_start: Point2D,
+    arrow_end: Point2D,
+}
+
+impl ReactionLayout {
+    /// Constructs a layout from two side layouts and explicit arrow endpoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReactionLayoutError::NonFiniteArrow`] if an arrow endpoint contains a NaN or
+    /// infinity, and [`ReactionLayoutError::DegenerateArrow`] if the endpoints coincide.
+    pub fn try_new(
+        lhs: MoleculeLayout,
+        rhs: MoleculeLayout,
+        arrow_start: Point2D,
+        arrow_end: Point2D,
+    ) -> Result<Self, ReactionLayoutError> {
+        check_arrow(arrow_start, arrow_end)?;
+        Ok(Self {
+            lhs,
+            rhs,
+            arrow_start,
+            arrow_end,
+        })
+    }
+
+    /// Places `lhs` left of a horizontal arrow at the origin and `rhs` right of it.
+    ///
+    /// Each side is translated so that it is vertically centered on the arrow and separated from
+    /// the arrow tip by a one-bond gap; the arrow runs from `(-0.75, 0)` to `(0.75, 0)`. An empty
+    /// side is left where it is.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReactionLayoutError::LhsTranslation`] or [`ReactionLayoutError::RhsTranslation`]
+    /// if translating a side produces a non-finite position.
+    pub fn arrange(lhs: MoleculeLayout, rhs: MoleculeLayout) -> Result<Self, ReactionLayoutError> {
+        let lhs = translate_layout(&lhs, side_offset(&lhs, Side::Lhs))
+            .map_err(ReactionLayoutError::LhsTranslation)?;
+        let rhs = translate_layout(&rhs, side_offset(&rhs, Side::Rhs))
+            .map_err(ReactionLayoutError::RhsTranslation)?;
+        Ok(Self {
+            lhs,
+            rhs,
+            arrow_start: Point2D::new(-ARROW_HALF_LENGTH, 0.0),
+            arrow_end: Point2D::new(ARROW_HALF_LENGTH, 0.0),
+        })
+    }
+
+    /// The left-hand side layout.
+    pub fn lhs(&self) -> &MoleculeLayout {
+        &self.lhs
+    }
+
+    /// The right-hand side layout.
+    pub fn rhs(&self) -> &MoleculeLayout {
+        &self.rhs
+    }
+
+    /// Mutable access to the left-hand side layout.
+    pub fn lhs_mut(&mut self) -> &mut MoleculeLayout {
+        &mut self.lhs
+    }
+
+    /// Mutable access to the right-hand side layout.
+    pub fn rhs_mut(&mut self) -> &mut MoleculeLayout {
+        &mut self.rhs
+    }
+
+    /// Tail of the reaction arrow.
+    pub fn arrow_start(&self) -> Point2D {
+        self.arrow_start
+    }
+
+    /// Tip of the reaction arrow.
+    pub fn arrow_end(&self) -> Point2D {
+        self.arrow_end
+    }
+
+    /// Replaces both arrow endpoints.
+    ///
+    /// A failed edit leaves the layout unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReactionLayoutError::NonFiniteArrow`] if an endpoint contains a NaN or infinity,
+    /// and [`ReactionLayoutError::DegenerateArrow`] if the endpoints coincide.
+    pub fn set_arrow(&mut self, start: Point2D, end: Point2D) -> Result<(), ReactionLayoutError> {
+        check_arrow(start, end)?;
+        self.arrow_start = start;
+        self.arrow_end = end;
+        Ok(())
+    }
+}
+
+pub(crate) fn check_arrow(start: Point2D, end: Point2D) -> Result<(), ReactionLayoutError> {
+    if !start.is_finite() || !end.is_finite() {
+        return Err(ReactionLayoutError::NonFiniteArrow { start, end });
+    }
+    if start == end {
+        return Err(ReactionLayoutError::DegenerateArrow { position: start });
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum Side {
+    Lhs,
+    Rhs,
+}
+
+fn side_offset(layout: &MoleculeLayout, side: Side) -> Point2D {
+    let Some(first) = layout.positions().first() else {
+        return Point2D::new(0.0, 0.0);
+    };
+    let mut min = *first;
+    let mut max = *first;
+    for &position in &layout.positions()[1..] {
+        min.x = min.x.min(position.x);
+        min.y = min.y.min(position.y);
+        max.x = max.x.max(position.x);
+        max.y = max.y.max(position.y);
+    }
+    let x = match side {
+        Side::Lhs => -ARROW_HALF_LENGTH - SIDE_ARROW_GAP - max.x,
+        Side::Rhs => ARROW_HALF_LENGTH + SIDE_ARROW_GAP - min.x,
+    };
+    Point2D::new(x, -(min.y + max.y) / 2.0)
+}
+
+fn translate_layout(
+    layout: &MoleculeLayout,
+    offset: Point2D,
+) -> Result<MoleculeLayout, MoleculeLayoutError> {
+    MoleculeLayout::try_new(
+        layout
+            .positions()
+            .iter()
+            .map(|position| Point2D::new(position.x + offset.x, position.y + offset.y))
+            .collect(),
+    )
+}
+
+/// Failures while constructing or editing a [`ReactionLayout`].
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum ReactionLayoutError {
+    #[error("reaction arrow from {start:?} to {end:?} has a non-finite endpoint")]
+    NonFiniteArrow { start: Point2D, end: Point2D },
+    #[error("reaction arrow starts and ends at {position:?}")]
+    DegenerateArrow { position: Point2D },
+    #[error("lhs translation: {0}")]
+    LhsTranslation(#[source] MoleculeLayoutError),
+    #[error("rhs translation: {0}")]
+    RhsTranslation(#[source] MoleculeLayoutError),
+}
+
+impl UmolError for ReactionLayoutError {
     fn as_any(&self) -> &dyn Any {
         self
     }

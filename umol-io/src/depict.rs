@@ -1,15 +1,16 @@
 //! Format-neutral molecule and reaction depiction.
 //!
 //! This module is available with the `depiction` feature. [`Depict`] is implemented for graph-IR
-//! molecules and reactions: `depict` uses [`DepictConfig::default`], while `depict_with` accepts an
-//! explicit configuration. [`depict_molecule`] depicts a molecule in a supplied
-//! [`MoleculeLayout`](crate::layout::MoleculeLayout) instead of generating one. All operations
-//! return an opaque [`Depiction`], whose [`Depiction::render_svg`] method produces SVG text.
+//! molecules and reactions. Layout generation and depiction share one trait: `layout` and
+//! `layout_with` generate a layout, `depict_layout` verifies a supplied layout and lowers it, and
+//! `depict` and `depict_with` are the composition of the two. All depiction operations return an
+//! opaque [`Depiction`], whose [`Depiction::render_svg`] method produces SVG text.
 
 pub(crate) mod molecule;
 mod reaction;
+mod verify;
 
-pub use molecule::{depict_molecule, MoleculeDepictionError};
+pub use molecule::MoleculeDepictionError;
 pub use reaction::ReactionDepictionError;
 use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::Entity;
@@ -37,15 +38,37 @@ impl Default for DepictConfig {
     }
 }
 
-/// Constructs a format-neutral depiction using default or explicitly configured operations.
+/// Lays out and depicts a value with default or explicitly configured operations.
+///
+/// Generated-layout depiction is `layout_with` followed by `depict_layout`; no other lowering
+/// exists, so a supplied layout equal to the generated one depicts identically. `depict_layout`
+/// verifies the supplied layout before lowering it and repairs nothing.
 ///
 /// Graph-IR molecules return [`MoleculeDepictionError`]. Graph-IR reactions return
 /// [`ReactionDepictionError`] and are materialized into their two sides before either side is laid
-/// out or depicted.
+/// out, verified, or depicted.
 #[cfg(feature = "coordgen")]
 pub trait Depict {
-    /// Failure produced while laying out or depicting this value.
+    /// Coordinate assignment this value is depicted in.
+    type Layout;
+    /// Failure produced while laying out, verifying, or depicting this value.
     type Error;
+
+    /// Generates the layout with [`DepictConfig::default`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when the default layout operation cannot produce the result.
+    fn layout(&self) -> Result<Self::Layout, Self::Error> {
+        self.layout_with(&DepictConfig::default())
+    }
+
+    /// Generates the layout with `config`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when the configured layout operation cannot produce the result.
+    fn layout_with(&self, config: &DepictConfig) -> Result<Self::Layout, Self::Error>;
 
     /// Constructs the depiction with [`DepictConfig::default`].
     ///
@@ -57,13 +80,30 @@ pub trait Depict {
         self.depict_with(&DepictConfig::default())
     }
 
-    /// Constructs the depiction with `config`.
+    /// Constructs the depiction with `config`: [`Self::layout_with`] then [`Self::depict_layout`].
     ///
     /// # Errors
     ///
     /// Returns [`Self::Error`] when the configured layout or depiction operation cannot produce
     /// the result.
-    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error>;
+    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error> {
+        self.depict_layout(&self.layout_with(config)?)
+    }
+
+    /// Checks that `layout` can depict this value without moving any coordinate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] naming the first entity whose supplied geometry cannot be depicted.
+    fn verify_layout(&self, layout: &Self::Layout) -> Result<(), Self::Error>;
+
+    /// Constructs the depiction in a supplied `layout`, verifying it first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when [`Self::verify_layout`] rejects `layout` or the lowering
+    /// cannot produce the result.
+    fn depict_layout(&self, layout: &Self::Layout) -> Result<Depiction, Self::Error>;
 }
 
 /// An opaque, format-neutral molecular drawing scene.

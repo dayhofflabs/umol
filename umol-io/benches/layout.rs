@@ -9,9 +9,12 @@ use umol_graph_ir::ir::{
     AromaticSystemForm, AtomForm, AtomId, BondForm, ElementForm, Molecule, MoleculeEntries,
 };
 use umol_graph_ir::mol_dsl;
-use umol_io::layout::{layout_molecule, MoleculeLayoutAlgorithm};
+use umol_io::depict::{Depict, DepictConfig};
+use umol_io::layout::MoleculeLayoutAlgorithm;
 
-const ALGORITHM: MoleculeLayoutAlgorithm = MoleculeLayoutAlgorithm::CoordGen;
+const CONFIG: DepictConfig = DepictConfig {
+    layout_algorithm: MoleculeLayoutAlgorithm::CoordGen,
+};
 
 struct LayoutCase {
     category: &'static str,
@@ -21,7 +24,9 @@ struct LayoutCase {
 
 impl LayoutCase {
     fn new(category: &'static str, name: &'static str, molecule: Molecule) -> Self {
-        let layout = layout_molecule(&molecule, ALGORITHM).expect("benchmark fixture must lay out");
+        let layout = molecule
+            .layout_with(&CONFIG)
+            .expect("benchmark fixture must lay out");
         layout
             .check_frame(&molecule)
             .expect("benchmark fixture must preserve its atom frame");
@@ -200,7 +205,8 @@ fn bench_layout(c: &mut Criterion) {
         group.bench_with_input(case.benchmark_id(), &case.molecule, |b, molecule| {
             b.iter(|| {
                 black_box(
-                    layout_molecule(black_box(molecule), ALGORITHM)
+                    black_box(molecule)
+                        .layout_with(&CONFIG)
                         .expect("validated benchmark fixture must lay out"),
                 )
             })
