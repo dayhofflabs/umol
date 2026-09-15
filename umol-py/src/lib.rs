@@ -4,7 +4,7 @@
 use pyo3::prelude::*;
 
 #[cfg(feature = "depiction")]
-use crate::depict::{DepictConfig, Depiction, MoleculeLayoutAlgorithm};
+use crate::depict::{DepictConfig, Depiction, MoleculeLayoutAlgorithm, SvgConfig};
 #[cfg(feature = "graph")]
 use crate::{
     algorithm::{
@@ -214,6 +214,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MoleculeLayoutAlgorithm>()?;
         #[cfg(feature = "depiction")]
         module.add_class::<DepictConfig>()?;
+        #[cfg(feature = "depiction")]
+        module.add_class::<SvgConfig>()?;
         #[cfg(feature = "depiction")]
         module.add_class::<Depiction>()?;
         module.add_class::<AutomorphismAlgorithm>()?;
