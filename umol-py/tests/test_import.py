@@ -240,7 +240,13 @@ PUBLIC_EXPORTS = frozenset(
 
 if hasattr(native, "Depiction"):
     PUBLIC_EXPORTS |= frozenset(
-        {"MoleculeLayoutAlgorithm", "MoleculeLayout", "DepictConfig", "Depiction"}
+        {
+            "MoleculeLayoutAlgorithm",
+            "MoleculeLayout",
+            "ReactionLayout",
+            "DepictConfig",
+            "Depiction",
+        }
     )
 
 EDITING_EXPORTS = frozenset(
