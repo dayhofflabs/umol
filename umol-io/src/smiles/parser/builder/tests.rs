@@ -66,7 +66,7 @@ fn test_molecule_editor_finish() {
             span: None,
         });
     }
-    let (molecule, rings) = builder.finish(0).unwrap();
+    let (molecule, rings) = builder.finish(0, &OnceCell::new()).unwrap();
     assert_eq!(
         molecule.stereo_atoms,
         vec![
@@ -149,7 +149,7 @@ fn test_extended_molecule_builder_finish() {
             span: None,
         });
     }
-    let (molecule, rings) = builder.finish(0).unwrap();
+    let (molecule, rings) = builder.finish(0, &OnceCell::new()).unwrap();
     assert_eq!(
         molecule.stereo_atoms,
         vec![

@@ -425,3 +425,60 @@ fn test_parse_reaction_assembly(
         );
     }
 }
+
+#[rstest]
+#[case::long_product([1,0,257])]
+#[case::long_reactant([257,0,1])]
+#[case::long_agent([1,257,1])]
+#[case::uneven([33,1,65])]
+fn test_parse_reaction_growth(#[case] counts: [usize; 3], #[values(false, true)] annotated: bool) {
+    let sections = counts.map(|count| "C".repeat(count));
+    let mut input = sections.join(">");
+    let [reactants, agents, products] = counts.map(|count| Molecule {
+        atoms: (0..count)
+            .map(|i| {
+                Atom::aliphatic_atom_with_span(Element::C, Span::bytes(i as u32, (i + 1) as u32))
+            })
+            .collect(),
+        bonds: (1..count)
+            .map(|i| Bond {
+                span: Some(Span::bytes(i as u32, (i + 1) as u32)),
+                ..Bond::new((i - 1) as u32, i as u32, BondOrder::Single)
+            })
+            .collect(),
+        source_format: if count == 0 {
+            SourceFormat::UNKNOWN
+        } else {
+            SourceFormat::SMILES
+        },
+        ..Molecule::empty()
+    });
+    let mut expected = Reaction {
+        reactants,
+        agents,
+        products,
+        source_format: SourceFormat::SMILES,
+        ..Reaction::empty()
+    };
+    if annotated {
+        let label = "label".repeat(256);
+        input.push_str(&format!(" |${label}$|"));
+        expected.reactants.atoms[0].label = Some(label);
+    }
+    let config = SmilesIoConfig::chemaxon();
+    assert_eq!(
+        parse_reaction(input.as_bytes(), &config),
+        Ok(expected.clone())
+    );
+    let extended = ExtendedReaction {
+        reactants: expected.reactants.into(),
+        agents: expected.agents.into(),
+        products: expected.products.into(),
+        source_format: SourceFormat::SMILES,
+        ..ExtendedReaction::empty()
+    };
+    assert_eq!(
+        parse_extended_reaction_smiles_bytes_with(input.as_bytes(), &config),
+        Ok(extended)
+    );
+}

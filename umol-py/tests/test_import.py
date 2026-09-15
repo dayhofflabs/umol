@@ -99,6 +99,7 @@ PUBLIC_EXPORTS = frozenset(
     InvalidStructureError
     IsotopeMass
     IsotopeMassForm
+    IsotopePolicy
     LigandPermutation
     LigandSymmetryForm
     MaximumIndependentSetAlgorithm

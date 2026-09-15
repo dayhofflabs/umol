@@ -9,9 +9,11 @@ from umol import (
     AtomCompletions,
     AtomForm,
     ChemistryModel,
+    IsotopePolicy,
     Molecule,
     ResolveConfig,
     ResolveReport,
+    Solution,
     StereoFailurePolicy,
     StereoMismatchPolicy,
     StereoResolveConfig,
@@ -419,9 +421,24 @@ def test_stereo_resolve_config_mutation(field, value):
         setattr(config, field, value)
 
 
+@pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
+def test_resolve_config_isotope(isotope):
+    config = ResolveConfig(
+        isotope=isotope,
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+    )
+    assert config.isotope == isotope
+    assert (config == ResolveConfig.default()) == (isotope == IsotopePolicy.Strict)
+    assert {IsotopePolicy.Strict: "strict", IsotopePolicy.Natural: "natural"}[isotope] == (
+        "strict" if isotope == IsotopePolicy.Strict else "natural"
+    )
+
+
 def test_resolve_config_default():
     config = ResolveConfig.default()
 
+    assert config.isotope == IsotopePolicy.Strict
     assert config.aromaticity == AromaticityResolveConfig()
     assert config.stereo == StereoResolveConfig()
     assert config == ResolveConfig.default()
@@ -502,7 +519,7 @@ def test_resolve_config_equality(other):
                     tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
                 ),
             ),
-            "ResolveConfig(aromaticity=AromaticityResolveConfig(perception="
+            "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception="
             "AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm="
             "SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
             "relevant_cycle_algorithm="
@@ -534,6 +551,7 @@ def test_resolve_config_repr(config, expected):
 @pytest.mark.parametrize(
     ("field", "value"),
     [
+        ("isotope", IsotopePolicy.Natural),
         ("aromaticity", AromaticityResolveConfig()),
         ("stereo", StereoResolveConfig()),
     ],
@@ -598,3 +616,58 @@ def test_underdetermined_error_report_empty():
     assert report.unresolved.items() == []
     assert report.tie_breaks == []
     assert repr(report) == "ResolveReport(unresolved=AtomCompletions({}), tie_breaks=[])"
+
+
+@pytest.mark.parametrize("valence", [ValenceModel.smiles(), ChemistryModel.default().valence])
+@pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("[CH4]", '{:atoms ["C#i=#c0#h4#n0#u0#s"]}'),
+        ("[13CH4]", '{:atoms ["C#i13#c0#h4#n0#u0#s"]}'),
+    ],
+)
+def test_molecule_from_smiles_isotope(valence, isotope, source, expected):
+    defaults = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=defaults.connectivity,
+        valence=valence,
+        aromaticity=defaults.aromaticity,
+        stereo=defaults.stereo,
+    )
+    config = ResolveConfig(
+        isotope=isotope,
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+    )
+    assert Molecule.from_smiles(
+        source, chemistry_model=model, resolve_config=config
+    ) == Molecule.parse(expected)
+
+
+def test_molecule_from_smiles_isotope_default():
+    expected = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
+    assert Molecule.from_smiles("C", resolve_config=ResolveConfig.default()) == expected
+    assert Molecule.from_smiles("C") == expected
+
+
+@pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
+def test_molecule_resolve_isotope(isotope):
+    source = Molecule.parse('{:atoms ["C#c0#h4"]}')
+    original = Molecule.parse('{:atoms ["C#c0#h4"]}')
+    config = ResolveConfig(
+        isotope=isotope,
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+    )
+    result = source.resolve(resolve_config=config)
+    if isotope == IsotopePolicy.Strict:
+        assert isinstance(result, Solution.Underdetermined)
+        assert result.report.unresolved.items() == []
+        assert result.report.tie_breaks == []
+    else:
+        assert isinstance(result, Solution.Determined)
+        assert result.molecule == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
+        assert result.report.unresolved.items() == []
+        assert result.report.tie_breaks == []
+    assert source == original

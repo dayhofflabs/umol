@@ -6,10 +6,12 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 
 use smallvec::smallvec;
+use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
-    BondUpdate, BooleanForm, Edits, ElectronCountsForm, Molecule, NumForm, RingSet,
+    BondId, BondUpdate, BooleanForm, Edits, ElectronCountsForm, Lattice, Molecule, NumForm,
+    RingSet, TransactionError, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -80,6 +82,23 @@ pub struct AromaticityResolver {
     perception: AromaticityPerceiver,
     tie_break: AromaticityTieBreak,
     config: AromaticityResolveConfig,
+}
+
+/// Failures to express aromatic systems as atom and bond assertions.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum AromaticityProjectError {
+    #[error("aromatic system {system:?} has non-concrete fields")]
+    NonConcreteSystem { system: AromaticSystemId },
+    #[error("aromatic system {system:?} has nonzero charge")]
+    ChargedSystem { system: AromaticSystemId },
+    #[error("aromatic system {system:?} is not closed-shell singlet")]
+    SystemSpin { system: AromaticSystemId },
+    #[error("atom {atom:?} has an assertion incompatible with its aromatic contribution")]
+    AtomAssertion { atom: AtomId },
+    #[error("bond {bond:?} has an assertion incompatible with aromaticity")]
+    BondAssertion { bond: BondId },
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
 }
 
 impl AromaticityResolver {
@@ -267,6 +286,101 @@ impl AromaticityResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
+        let mut editor = molecule.edit();
+        editor.transact(edits)?;
+        *molecule = editor.build();
+        Ok(Solution::Determined(()))
+    }
+
+    /// Replaces existing aromatic systems with atom contribution and bond assertions.
+    ///
+    /// Writes each member's electron contribution as `#a<n>` and each system bond as `#a`,
+    /// then removes the systems. Atom electron fields and localized bonds are preserved.
+    /// This operation does not perceive systems, admit valence candidates, or apply selection
+    /// policies. Molecules without systems are unchanged.
+    ///
+    /// # Semantic properties
+    ///
+    /// Projection is idempotent and independent of system participant order when electron
+    /// counts are transported with their participants. Successful projection publishes all
+    /// edits together; every failure preserves the input exactly. System removal uses the
+    /// editor's ordinary constraint-compaction semantics.
+    ///
+    /// # Errors
+    ///
+    /// Rejects non-concrete system contributions, charge, or spin; nonzero system charge;
+    /// non-singlet or nonzero-unpaired system spin; and incompatible atom or bond assertions.
+    /// Transaction reports a failure applying the accumulated assertion and removal edits.
+    pub fn project(
+        &self,
+        molecule: &mut Molecule,
+    ) -> Result<Solution<(), AromaticityContradiction>, AromaticityProjectError> {
+        if !molecule.has_aromatic_systems() {
+            return Ok(Solution::Determined(()));
+        }
+        let mut edits = Edits::new();
+        for system in molecule.aromatic_systems().iter() {
+            let AromaticSystemForm {
+                electrons: ElectronCountsForm::Lit(electrons),
+                charge: NumForm::Lit(charge),
+                unpaired_electrons:
+                    UnpairedElectronsForm {
+                        count: NumForm::Lit(unpaired),
+                        multiplicity: NumForm::Lit(multiplicity),
+                    },
+                constraints: _,
+            } = system.attributes
+            else {
+                return Err(AromaticityProjectError::NonConcreteSystem { system: system.id });
+            };
+            if *charge != 0 {
+                return Err(AromaticityProjectError::ChargedSystem { system: system.id });
+            }
+            if *unpaired != 0 || *multiplicity != 1 {
+                return Err(AromaticityProjectError::SystemSpin { system: system.id });
+            }
+            for (atom, &electrons) in system.atom_ids().zip(electrons) {
+                let attributes = molecule.atom(atom).attributes;
+                let aromatic = AromaticValenceForm::aromatic(NumForm::Lit(electrons));
+                let assertion = match attributes.constraints.aromatic_valence() {
+                    Some(existing) => existing
+                        .meet(&aromatic)
+                        .ok_or(AromaticityProjectError::AtomAssertion { atom })?,
+                    None => aromatic,
+                };
+                let mut update = AtomUpdate::default();
+                update
+                    .constraints
+                    .set(AtomConstraintForm::aromatic_valence(assertion));
+                edits.update_atom(AtomHandle::Id(atom), attributes, &update);
+            }
+            for bond in system.bond_ids() {
+                let attributes = molecule.bond(bond).attributes;
+                let assertion = attributes
+                    .constraints
+                    .aromatic()
+                    .meet(&BooleanForm::Lit(true))
+                    .ok_or(AromaticityProjectError::BondAssertion { bond })?;
+                let mut update = BondUpdate::default();
+                update
+                    .constraints
+                    .set(BondConstraintForm::Aromatic(assertion));
+                edits.update_bond(BondHandle::Id(bond), attributes, &update);
+            }
+        }
+        edits.remove_aromatic_systems(
+            molecule
+                .aromatic_systems()
+                .iter()
+                .map(|system| {
+                    (
+                        AromaticSystemHandle::Id(system.id),
+                        system.atom_ids().map(AtomHandle::Id).collect(),
+                        system.attributes.clone(),
+                    )
+                })
+                .collect(),
+        );
         let mut editor = molecule.edit();
         editor.transact(edits)?;
         *molecule = editor.build();
@@ -1056,6 +1170,17 @@ mod tests {
     }
 
     #[fixture]
+    fn resolved_benzene() -> Molecule {
+        mol_dsl_concrete!(
+            r#"{
+            :atoms ["C#h1" "C#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#
+        )
+    }
+
+    #[fixture]
     fn aromatic_valence_mismatch() -> Molecule {
         mol_dsl!(
             r#"{
@@ -1459,6 +1584,155 @@ mod tests {
     }
 
     type SelectOutcome = Solution<ResolveState, AromaticityContradiction>;
+
+    #[rstest]
+    #[case::benzene(resolved_benzene(),
+        mol_dsl_concrete!(r#"{:atoms ["C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+        :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#))]
+    #[case::pyridine(mol_dsl_concrete!(r#"{
+        :atoms ["N#n1" "C#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{
+        :atoms ["N#n1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+        :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#))]
+    #[case::pyrrole(mol_dsl_concrete!(r#"{
+        :atoms ["N#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{
+        :atoms ["N#h1#a2" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+        :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]}"#))]
+    #[case::furan(mol_dsl_concrete!(r#"{
+        :atoms ["O#n1" "C#h1" "C#h1" "C#h1" "C#h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{
+        :atoms ["O#n1#a2" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+        :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]}"#))]
+    #[case::anion(mol_dsl_concrete!(r#"{
+        :atoms ["C#c-#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{
+        :atoms ["C#c-#h1#a2" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+        :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]}"#))]
+    #[case::cation(mol_dsl_concrete!(r#"{
+        :atoms ["C#c+#h1" "C#h1" "C#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[0,1,1,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{
+        :atoms ["C#c+#h1#a0" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+        :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 6 "1#a"] [6 0 "1#a"]]}"#))]
+    #[case::fused(mol_dsl_concrete!(r#"{
+        :atoms ["C#h1" "C#h1" "C#h1" "C#h1" "C" "C" "C#h1" "C#h1" "C#h1" "C#h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8 9] :attrs "[1,1,1,1,1,1,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{
+        :atoms ["C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#a1" "C#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+        :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]
+                [4 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 5 "1#a"]]}"#))]
+    #[case::linked(mol_dsl_concrete!(r#"{
+        :atoms ["C#h1" "C#h1" "C#h1" "C#h1" "C#h1" "C"
+                "C" "C#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"] [5 6 "1"]
+                [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}
+                          {:atoms [6 7 8 9 10 11] :attrs "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{
+        :atoms ["C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#a1" "C#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+        :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"] [5 6 "1"]
+                [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"] [10 11 "1#a"] [11 6 "1#a"]]}"#))]
+    fn test_aromaticity_resolver_project(
+        #[values(AromaticityModel::daylight(), AromaticityModel {
+            scope: ElementScope::AllowList(vec![]), ..AromaticityModel::daylight()
+        })]
+        model: AromaticityModel,
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
+    ) {
+        let resolver = AromaticityResolver::new(&model);
+        assert_eq!(
+            resolver.project(&mut molecule),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, expected);
+        assert_eq!(
+            resolver.project(&mut molecule),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::empty(Molecule::new())]
+    #[case::ordinary(mol_dsl_concrete!(r#"{:atoms ["N#h3#n1" "C#h3#u1#s2" "O#n0#u2#s3"]}"#))]
+    #[case::partial(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "*"]]}"#))]
+    fn test_aromaticity_resolver_project_identity(#[case] mut molecule: Molecule) {
+        let model = AromaticityModel::daylight();
+        let original = molecule.clone();
+        assert_eq!(
+            AromaticityResolver::new(&model).project(&mut molecule),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::charge("[1,1,1,1,1,1]#c+#u0#s", AromaticityProjectError::ChargedSystem { system: AromaticSystemId(0) })]
+    #[case::radical("[1,1,1,1,1,1]#c0#u1#s2", AromaticityProjectError::SystemSpin { system: AromaticSystemId(0) })]
+    #[case::spin("[1,1,1,1,1,1]#c0#u0#s3", AromaticityProjectError::SystemSpin { system: AromaticSystemId(0) })]
+    #[case::charge_unknown("[1,1,1,1,1,1]#u0#s", AromaticityProjectError::NonConcreteSystem { system: AromaticSystemId(0) })]
+    #[case::electrons_unknown("*#c0#u0#s", AromaticityProjectError::NonConcreteSystem { system: AromaticSystemId(0) })]
+    #[case::unpaired_unknown("[1,1,1,1,1,1]#c0#s", AromaticityProjectError::NonConcreteSystem { system: AromaticSystemId(0) })]
+    #[case::multiplicity_unknown("[1,1,1,1,1,1]#c0#u0", AromaticityProjectError::NonConcreteSystem { system: AromaticSystemId(0) })]
+    fn test_aromaticity_resolver_project_error(
+        resolved_benzene: Molecule,
+        #[case] form: &str,
+        #[case] expected: AromaticityProjectError,
+    ) {
+        let model = AromaticityModel::daylight();
+        let mut editor = resolved_benzene.edit();
+        *editor.aromatic_system_mut(AromaticSystemId(0)).attributes = form.parse().unwrap();
+        let mut molecule = editor.build();
+        let original = molecule.clone();
+        assert_eq!(
+            AromaticityResolver::new(&model).project(&mut molecule),
+            Err(expected)
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::atom(Some(AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic)), None,
+        AromaticityProjectError::AtomAssertion { atom: AtomId(5) })]
+    #[case::contribution(Some(AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(2))), None,
+        AromaticityProjectError::AtomAssertion { atom: AtomId(5) })]
+    #[case::bond(None, Some(BondConstraintForm::Aromatic(BooleanForm::Lit(false))),
+        AromaticityProjectError::BondAssertion { bond: BondId(5) })]
+    fn test_aromaticity_resolver_project_constraints(
+        resolved_benzene: Molecule,
+        #[case] atom: Option<AtomConstraintForm>,
+        #[case] bond: Option<BondConstraintForm>,
+        #[case] expected: AromaticityProjectError,
+    ) {
+        let model = AromaticityModel::daylight();
+        let mut editor = resolved_benzene.edit();
+        if let Some(form) = atom {
+            editor.atom_mut(AtomId(5)).attributes.constraints.set(form);
+        }
+        if let Some(form) = bond {
+            editor.bond_mut(BondId(5)).attributes.constraints.set(form);
+        }
+        let mut molecule = editor.build();
+        let original = molecule.clone();
+        assert_eq!(
+            AromaticityResolver::new(&model).project(&mut molecule),
+            Err(expected)
+        );
+        assert_eq!(molecule, original);
+    }
 
     #[rstest]
     #[case::unique_survivor(

@@ -10,7 +10,10 @@ use umol_graph::ingest::ingest_smiles_with;
 use umol_graph::ops::model::{
     ChemistryModel as GraphChemistryModel, ValenceModel as GraphValenceModel,
 };
-use umol_graph::ops::resolve::{ResolveConfig as GraphResolveConfig, Resolver as GraphResolver};
+use umol_graph::ops::resolve::{
+    IsotopePolicy as GraphIsotopePolicy, ResolveConfig as GraphResolveConfig,
+    Resolver as GraphResolver,
+};
 use umol_graph_ir::dsl::MoleculeDsl as GraphIrMoleculeDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromIr, IntoIr, Molecule as GraphIrMolecule,
@@ -237,6 +240,8 @@ impl Molecule {
 
     /// Ingest a determined molecule from SMILES under explicit IO, chemistry,
     /// and resolution policies.
+    /// Omitted options select OpenSMILES, SMILES valence, and Natural isotope policy.
+    /// An explicitly supplied resolve_config is preserved.
     #[staticmethod]
     #[pyo3(signature = (source, *, io_config=None, chemistry_model=None, resolve_config=None))]
     fn from_smiles(
@@ -254,8 +259,13 @@ impl Molecule {
             },
             |model| model.to_rust(),
         );
-        let resolve_config =
-            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        let resolve_config = resolve_config.map_or_else(
+            || GraphResolveConfig {
+                isotope: GraphIsotopePolicy::Natural,
+                ..Default::default()
+            },
+            ResolveConfig::to_rust,
+        );
 
         ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
             .map(Self::from_rust)
@@ -1742,7 +1752,15 @@ mod tests {
             ..GraphChemistryModel::default()
         });
 
-        let solution = molecule.resolve(Some(model), None).unwrap();
+        let solution = molecule
+            .resolve(
+                Some(model),
+                Some(ResolveConfig::from_rust(GraphResolveConfig {
+                    isotope: GraphIsotopePolicy::Natural,
+                    ..Default::default()
+                })),
+            )
+            .unwrap();
 
         let Solution::Determined {
             molecule: resolved,

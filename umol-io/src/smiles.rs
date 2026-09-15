@@ -1,13 +1,14 @@
-//! SMILES format parser, linter, and writer.
+//! SMILES format parsing and rendering.
 
 pub mod config;
 pub mod error;
 mod molecule;
 mod parser;
 mod reaction;
+mod render;
 
 pub use config::SmilesIoConfig;
-pub use error::ParseError;
+pub use error::{ParseError, ReactionSmilesRenderError, SmilesRenderError};
 pub use molecule::Smiles;
 pub use parser::{
     parse_extended_reaction_smiles, parse_extended_reaction_smiles_bytes,

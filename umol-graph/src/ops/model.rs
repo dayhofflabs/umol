@@ -309,7 +309,7 @@ impl Default for StereoModel {
     }
 }
 
-/// Setup-time errors loading model data (TOML registries / valence tables).
+/// Setup-time errors constructing or loading atom-type registries and valence tables.
 /// Distinct from the per-engine `*Error` types that surface at resolve time.
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ConfigError {

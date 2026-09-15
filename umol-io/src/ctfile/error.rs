@@ -17,6 +17,12 @@ use crate::table_ir::SGroupType;
 /// Configuration variants identify options unsupported by the selected parser.
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
+    #[error("unsupported stereo bond {bond}")]
+    UnsupportedStereoBond { bond: u32 },
+    #[error("conflicting configurations at bond {bond}")]
+    ConflictingBondConfiguration { bond: u32 },
+    #[error("missing position for atom {atom}")]
+    MissingPosition { atom: u32 },
     #[error("Basic parser does not support parse flags: {flags}")]
     UnsupportedBasicParseFlags { flags: CtabParseFlags },
     #[error("Invalid counts line at line {line}, col {col}")]

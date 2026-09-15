@@ -15,12 +15,12 @@ use umol_graph::ops::valence::{
     AtomTypeRegistry as GraphAtomTypeRegistry, ValenceEntry as GraphValenceEntry,
     ValenceTable as GraphValenceTable,
 };
-use umol_graph_ir::ir::{ElementForm as GraphIrElementForm, NumForm as GraphIrNumForm};
 
 use crate::atom::AtomForm;
 use crate::element::Element;
 
 /// An immutable collection of atom patterns used by atom-typing valence resolution.
+/// Entries have literal elements and charges in -128..=127, and undetermined isotopes.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AtomTypeRegistry(GraphAtomTypeRegistry);
@@ -33,31 +33,17 @@ impl AtomTypeRegistry {
         Self::from_rust(GraphAtomTypeRegistry::default_registry())
     }
 
-    /// Construct a registry from atom patterns with literal elements and charges.
+    /// Construct a registry from patterns with literal elements and charges, and undetermined isotopes.
+    /// Raises ValueError for an invalid entry, including a charge outside -128..=127.
     #[staticmethod]
     fn from_atoms(py: Python<'_>, atoms: Vec<Py<AtomForm>>) -> PyResult<Self> {
-        let mut rust_atoms = Vec::with_capacity(atoms.len());
-        for (index, atom) in atoms.iter().enumerate() {
-            let atom = atom.bind(py).borrow();
-            let atom = atom.to_rust();
-            if !matches!(&atom.element, GraphIrElementForm::Lit(_)) {
-                return Err(PyValueError::new_err(format!(
-                    "atom type registry entry {index} must have a literal element"
-                )));
-            }
-            let GraphIrNumForm::Lit(charge) = &atom.charge else {
-                return Err(PyValueError::new_err(format!(
-                    "atom type registry entry {index} must have a literal charge"
-                )));
-            };
-            i8::try_from(*charge).map_err(|_| {
-                PyValueError::new_err(format!(
-                    "atom type registry entry {index} charge {charge} is outside -128..=127"
-                ))
-            })?;
-            rust_atoms.push(atom.clone());
-        }
-        Ok(Self(GraphAtomTypeRegistry::from_atoms(rust_atoms)))
+        GraphAtomTypeRegistry::try_from_atoms(
+            atoms
+                .iter()
+                .map(|atom| atom.bind(py).borrow().to_rust().clone()),
+        )
+        .map(Self)
+        .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// Parse a registry from its TOML representation.
@@ -490,15 +476,35 @@ mod tests {
     #[rstest]
     #[case::element(
         GraphIrAtomForm::default().with_charge(0),
-        "atom type registry entry 0 must have a literal element"
+        "invalid atom type registry: registry entries must have literal elements"
     )]
     #[case::charge(
         GraphIrAtomForm::from_element(ChemElement::C),
-        "atom type registry entry 0 must have a literal charge"
+        "invalid atom type registry: registry entries must have literal charges"
     )]
     #[case::charge_range(
         GraphIrAtomForm::from_element(ChemElement::C).with_charge(128),
-        "atom type registry entry 0 charge 128 is outside -128..=127"
+        "invalid atom type registry: registry entry charge 128 is outside -128..=127"
+    )]
+    #[case::natural(
+        "C#i=#c0".parse::<GraphIrAtomForm>().unwrap(),
+        "invalid atom type registry: registry entries must have undetermined isotopes"
+    )]
+    #[case::mass(
+        "C#i13#c0".parse::<GraphIrAtomForm>().unwrap(),
+        "invalid atom type registry: registry entries must have undetermined isotopes"
+    )]
+    #[case::set(
+        "C#i{12,13}#c0".parse::<GraphIrAtomForm>().unwrap(),
+        "invalid atom type registry: registry entries must have undetermined isotopes"
+    )]
+    #[case::variable(
+        "C#i?mass#c0".parse::<GraphIrAtomForm>().unwrap(),
+        "invalid atom type registry: registry entries must have undetermined isotopes"
+    )]
+    #[case::restricted_variable(
+        "C#i?mass :: {12,13}#c0".parse::<GraphIrAtomForm>().unwrap(),
+        "invalid atom type registry: registry entries must have undetermined isotopes"
     )]
     fn test_atom_type_registry_from_atoms_error(
         #[case] atom: GraphIrAtomForm,
@@ -593,7 +599,7 @@ mod tests {
     )]
     #[case::custom(
         AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]),
-        "AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!\"), AtomForm.parse(\"O#i=#c0#h0#n0#u0#s#v2#d0#t0#a!#m!\")])"
+        "AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#c0#h0#n0#u0#s#v4#d0#t0#a!#m!\"), AtomForm.parse(\"O#c0#h0#n0#u0#s#v2#d0#t0#a!#m!\")])"
     )]
     fn test_atom_type_registry_repr(#[case] registry: AtomTypeRegistry, #[case] expected: &str) {
         assert_eq!(registry.__repr__(), expected);
@@ -911,7 +917,7 @@ mod tests {
     #[rstest]
     #[case::atom_typing(
         ValenceModel::atom_typing(AtomTypeRegistry(registry!["C#c0#v4"])),
-        "ValenceModel(candidates=ValenceCandidateSource.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!\")])), tie_break=ValenceTieBreak.Strict)"
+        "ValenceModel(candidates=ValenceCandidateSource.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#c0#h0#n0#u0#s#v4#d0#t0#a!#m!\")])), tie_break=ValenceTieBreak.Strict)"
     )]
     #[case::counts(
         ValenceModel::counts(ValenceTable(valence_table![C => [4, 2]])),

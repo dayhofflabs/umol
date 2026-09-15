@@ -5,7 +5,8 @@ Date: 2026-09-08
 Relates: [104](104-stereochemistry-implementation-plan-2026-05-31.md),
 [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
 [217](217-rhea-participant-failures-2026-08-30.md),
-[225](225-depiction-problems-2026-09-09.md)
+[225](225-depiction-problems-2026-09-09.md),
+[226](226-smiles-roundtrip-design-2026-09-10.md)
 
 ## Purpose
 

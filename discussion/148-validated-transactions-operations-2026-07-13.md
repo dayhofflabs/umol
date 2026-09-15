@@ -454,6 +454,16 @@ later failure.
 The current accidental mixture—per-atom mutation inside stages and persistent earlier stages in the
 composite—should not become the contract by default.
 
+### Projection cost follow-up — 2026-09-14
+
+[226](226-smiles-roundtrip-design-2026-09-10.md) leaves transaction/publication optimization
+with this lifecycle work. Its 2026-09-13 projection profile attributed substantial cost to
+transactions, editor publication, and copy-on-write materialization. Those percentages describe
+the earlier H-eliding projection; H inference has since moved to Convey and valence projection
+is a no-op. Re-measure the current projection and conversion separately before selecting a change.
+The existing phase transactions and atomic composite failure behavior remain the contract;
+no optimization or replacement mutation path is approved by that profile.
+
 ### What must a resolver preserve?
 
 Resolution should normally be monotone in the AST lattice: it may replace undetermined information

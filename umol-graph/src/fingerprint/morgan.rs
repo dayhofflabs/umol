@@ -22,12 +22,12 @@ use crate::hash::Morgan;
 /// RDKit Morgan fingerprint of `radius` iterations (ECFP_{2·radius} equivalent).
 #[derive(Clone, Copy, Debug)]
 pub struct MorganFeaturizer {
-    pub radius: u32,
+    pub radius: usize,
     pub ring_config: RingConfig,
 }
 
 impl MorganFeaturizer {
-    pub fn new(radius: u32) -> Self {
+    pub fn new(radius: usize) -> Self {
         Self {
             radius,
             ring_config: RingConfig::default(),
@@ -147,7 +147,7 @@ mod tests {
     #[case::naphthalene_r2("c1ccc2ccccc2c1", 2, &[98513984, 951226070, 2126281302, 2360741695, 3217380708, 3218693969, 3976623167, 3999906991])]
     fn test_morgan_featurizer_featurize(
         #[case] smiles: &str,
-        #[case] radius: u32,
+        #[case] radius: usize,
         #[case] expected: &[u64],
     ) {
         let mol = ingest_smiles(smiles).expect("ingest");
@@ -163,7 +163,7 @@ mod tests {
     #[case::benzene_r2("c1ccccc1", 2, &[(98513984, 6), (2763854213, 6), (3218693969, 6)])]
     fn test_morgan_featurizer_featurize_counted(
         #[case] smiles: &str,
-        #[case] radius: u32,
+        #[case] radius: usize,
         #[case] expected: &[(u64, u32)],
     ) {
         let mol = ingest_smiles(smiles).expect("ingest");

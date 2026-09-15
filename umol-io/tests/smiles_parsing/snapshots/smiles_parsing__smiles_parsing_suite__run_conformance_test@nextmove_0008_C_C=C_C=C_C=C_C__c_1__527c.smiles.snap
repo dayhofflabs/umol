@@ -2,8 +2,8 @@
 source: umol-io/tests/smiles_parsing/mod.rs
 expression: results
 ---
-expected_category: basic_chemaxon
-category: basic_chemaxon
+expected_category: chemaxon_invalid
+category: chemaxon_invalid
 opensmiles:
   success: true
   summary:

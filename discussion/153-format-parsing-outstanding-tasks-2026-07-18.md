@@ -2,11 +2,17 @@
 
 Status: Proposed
 Date: 2026-07-18
-Relates: [047](047-smiles-conformance-suite-2026-01-21.md), [048](048-smiles-parser-configuration-2026-01-23.md), [100](100-table-ir-raise-ast-2026-05-27.md), [112](112-winnow-unification-2026-06-13.md), [151](151-python-molecule-workflows-2026-07-13.md), [152](152-basic-molecule-wildcards-2026-07-18.md),
+Relates: [047](047-smiles-conformance-suite-2026-01-21.md),
+[048](048-smiles-parser-configuration-2026-01-23.md),
+[100](100-table-ir-raise-ast-2026-05-27.md),
+[112](112-winnow-unification-2026-06-13.md),
+[151](151-python-molecule-workflows-2026-07-13.md),
+[152](152-basic-molecule-wildcards-2026-07-18.md),
 [206](206-umol-perm-review-2026-08-21.md),
 [217](217-rhea-participant-failures-2026-08-30.md),
 [224](224-smiles-ring-closure-frame-2026-09-08.md),
-[225](225-depiction-problems-2026-09-09.md)
+[225](225-depiction-problems-2026-09-09.md),
+[226](226-smiles-roundtrip-design-2026-09-10.md)
 
 ## Purpose
 
@@ -242,6 +248,8 @@ Required work:
   boundaries as tracked in
   [doc 170](170-reaction-smiles-python-2026-07-28.md).
 - Defer Python `CxSmiles`, `Mol`, and `Sdf` APIs until their Rust boundary objects and configs exist.
+- Design Python SMILES output exposure separately from the Rust Convey/export surface completed
+  in doc 226; that work did not add Python output methods or boundary wrappers.
 - Keep parsing methods operation-specific, with separate config types for SMILES, MOL, SDF, and CXSMILES.
 - Avoid generic format-polymorphic parsing APIs unless a later design shows concrete value.
 

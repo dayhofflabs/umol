@@ -459,6 +459,30 @@ impl Lattice for ElementForm {
         matches!(self, Self::Lit(_))
     }
 
+    fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined, Self::Undetermined | Self::Lit(_))
+            | (Self::Lit(_), Self::Undetermined) => true,
+            (Self::Undetermined, Self::LitSet(s)) | (Self::LitSet(s), Self::Undetermined) => {
+                !s.is_empty()
+            }
+            (Self::Undetermined, Self::NotSet(s)) | (Self::NotSet(s), Self::Undetermined) => {
+                s.len() < MAX_ATOMIC_NUMBER as usize
+            }
+            (Self::Lit(a), Self::Lit(b)) => a == b,
+            (Self::Lit(e), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(e)) => s.contains(e),
+            (Self::Lit(e), Self::NotSet(s)) | (Self::NotSet(s), Self::Lit(e)) => !s.contains(e),
+            (Self::LitSet(a), Self::LitSet(b)) => !a.is_disjoint(b),
+            (Self::LitSet(a), Self::NotSet(b)) | (Self::NotSet(b), Self::LitSet(a)) => {
+                a.iter().any(|e| !b.contains(e))
+            }
+            (Self::NotSet(a), Self::NotSet(b)) => Element::all()
+                .iter()
+                .any(|e| !a.contains(e) && !b.contains(e)),
+            _ => self.meet(other).is_some(),
+        }
+    }
+
     /// Greatest lower bound (set intersection), canonicalizing operands and
     /// result. `Var` meets only an equal `Var`; `Var` vs concrete → `None`.
     fn meet(&self, other: &Self) -> Option<Self> {
@@ -681,6 +705,22 @@ impl Lattice for IsotopeMassForm {
     #[inline]
     fn is_ground(&self) -> bool {
         matches!(self, Self::Natural | Self::Lit(_))
+    }
+
+    fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined, Self::Undetermined | Self::Natural | Self::Lit(_))
+            | (Self::Natural | Self::Lit(_), Self::Undetermined) => true,
+            (Self::Undetermined, Self::LitSet(s)) | (Self::LitSet(s), Self::Undetermined) => {
+                !s.is_empty()
+            }
+            (Self::Lit(a), Self::Lit(b)) => a == b,
+            (Self::Natural, Self::Natural) => true,
+            (Self::Natural, _) | (_, Self::Natural) => false,
+            (Self::Lit(n), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(n)) => s.contains(n),
+            (Self::LitSet(a), Self::LitSet(b)) => !a.is_disjoint(b),
+            _ => self.meet(other).is_some(),
+        }
     }
 
     /// Greatest lower bound. `Undetermined` is top; `Natural` is an isolated

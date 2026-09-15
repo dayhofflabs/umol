@@ -884,11 +884,16 @@ mod tests {
     fn test_kekulizer_plan_systems(
         #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
-        #[case] expected: Vec<SystemPlan>,
+        #[case] mut expected: Vec<SystemPlan>,
     ) {
         let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
-        assert_eq!(kekulizer.plan_systems(&input), Ok(expected.clone()));
-        assert_eq!(kekulizer.plan_systems(&input), Ok(expected));
+        let mut actual = kekulizer.plan_systems(&input).unwrap();
+        assert_eq!(kekulizer.plan_systems(&input), Ok(actual.clone()));
+        for plan in actual.iter_mut().chain(&mut expected) {
+            plan.matched_bonds.sort_unstable();
+            plan.unmatched_bonds.sort_unstable();
+        }
+        assert_eq!(actual, expected);
     }
 
     #[rstest]

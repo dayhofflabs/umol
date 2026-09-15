@@ -110,8 +110,9 @@ use crate::{
     remap::{MoleculeRemapping, Remapping},
     resolve::{
         AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
-        AromaticityResolveConfig, AtomCompletions, ResolveConfig, ResolveContradiction,
-        ResolveReport, Solution, StereoFailurePolicy, StereoMismatchPolicy, StereoResolveConfig,
+        AromaticityResolveConfig, AtomCompletions, IsotopePolicy, ResolveConfig,
+        ResolveContradiction, ResolveReport, Solution, StereoFailurePolicy, StereoMismatchPolicy,
+        StereoResolveConfig,
     },
     ring::RingConfig,
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
@@ -277,6 +278,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticityResolveConfig>()?;
         module.add_class::<StereoResolveConfig>()?;
         module.add_class::<ResolveConfig>()?;
+        module.add_class::<IsotopePolicy>()?;
         module.add_class::<ResolveContradiction>()?;
         module.add_class::<ResolveReport>()?;
         module.add_class::<Solution>()?;

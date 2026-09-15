@@ -68,6 +68,14 @@ name = "smiles_parsing"
 name = "smiles_property"
 required-features = ["proptest"]
 
+[[test]]
+name = "table_ir_property"
+required-features = ["proptest"]
+
+[[test]]
+name = "mol_property"
+required-features = ["proptest"]
+
 [[bench]]
 name = "layout"
 harness = false

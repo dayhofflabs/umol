@@ -100,8 +100,6 @@ pub struct Bond {
     pub charge: Option<i8>,
     pub unpaired_electrons: Option<u8>,
     pub multiplicity: Option<SpinMultiplicity>,
-    pub stereo: Option<BondStereo>,
-    pub direction: Option<BondDirection>,
     pub wedge: Option<BondWedge>,
     pub ring: Option<u32>,
     pub span: Option<Span>,
@@ -117,8 +115,6 @@ impl Bond {
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            stereo: None,
-            direction: None,
             wedge: None,
             ring: None,
             span: None,
@@ -137,8 +133,6 @@ impl Bond {
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            stereo: None,
-            direction: None,
             wedge: None,
             ring: None,
             span: None,
@@ -155,8 +149,6 @@ impl Bond {
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            stereo: None,
-            direction: None,
             wedge: None,
             ring: None,
             span: None,
@@ -340,7 +332,8 @@ impl BondDirection {
     }
 }
 
-/// Double-bond stereochemistry (E/Z) annotation in IR
+/// Source double-bond codes used while interpreting CTfile and CXSMILES annotations.
+/// Published tables store the corresponding configuration in `StereoBond`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BondStereo {
     Cis,
@@ -362,8 +355,6 @@ pub struct ExtendedBond {
     pub charge: Option<i8>,
     pub unpaired_electrons: Option<u8>,
     pub multiplicity: Option<SpinMultiplicity>,
-    pub stereo: Option<BondStereo>,
-    pub direction: Option<BondDirection>,
     pub wedge: Option<BondWedge>,
     pub ring: Option<u32>,
     pub reacting_center: Option<BondReactingCenter>,
@@ -383,8 +374,6 @@ impl ExtendedBond {
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            stereo: None,
-            direction: None,
             wedge: None,
             ring: None,
             reacting_center: None,
@@ -406,8 +395,6 @@ impl ExtendedBond {
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            stereo: None,
-            direction: None,
             wedge: None,
             ring: None,
             reacting_center: None,
@@ -427,8 +414,6 @@ impl ExtendedBond {
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,
-            stereo: None,
-            direction: None,
             wedge: None,
             ring: None,
             reacting_center: None,
@@ -496,8 +481,6 @@ impl From<Bond> for ExtendedBond {
             charge: bond.charge,
             unpaired_electrons: bond.unpaired_electrons,
             multiplicity: bond.multiplicity,
-            stereo: bond.stereo,
-            direction: bond.direction,
             wedge: bond.wedge,
             ring: bond.ring,
             reacting_center: None,
@@ -523,8 +506,6 @@ impl TryFrom<ExtendedBond> for Bond {
             charge: extended.charge,
             unpaired_electrons: extended.unpaired_electrons,
             multiplicity: extended.multiplicity,
-            stereo: extended.stereo,
-            direction: extended.direction,
             wedge: extended.wedge,
             ring: extended.ring,
             span: extended.span,
@@ -818,7 +799,7 @@ mod tests {
     #[rstest]
     #[case::query(ExtendedBond::new(0, 1, BondOrder::Any))]
     #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, topology: Some(BondTopology::Ring), donation: None, noncovalent: None,
-                                    charge: None, unpaired_electrons: None, multiplicity: None, stereo: None, direction: None, wedge: None, ring: None,
+                                    charge: None, unpaired_electrons: None, multiplicity: None, wedge: None, ring: None,
                                     reacting_center: None, properties: HashMap::new(), span: None })]
     fn test_extended_bond_try_into_bond_error(#[case] extended: ExtendedBond) {
         let result: Result<Bond, _> = extended.try_into();
@@ -834,7 +815,7 @@ mod tests {
     #[case::query(ExtendedBond::new(0, 1, BondOrder::Any), true)]
     #[case::order_zero(ExtendedBond::new(0, 1, BondOrder::Zero), true)]
     #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, topology: Some(BondTopology::Ring), donation: None, noncovalent: None,
-                                    charge: None, unpaired_electrons: None, multiplicity: None, stereo: None, direction: None, wedge: None, ring: None,
+                                    charge: None, unpaired_electrons: None, multiplicity: None, wedge: None, ring: None,
                                     reacting_center: None, properties: HashMap::new(), span: None }, true)]
     fn test_extended_bond_has_extended_features(
         #[case] extended: ExtendedBond,

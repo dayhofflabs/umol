@@ -1,7 +1,9 @@
 use rstest::rstest;
 
 use super::super::*;
-use crate::table_ir::{BondDirection, BondOrder, StereoAtom, StereoLigand, Winding};
+use crate::table_ir::{
+    BondConfiguration, BondRelation, StereoAtom, StereoBond, StereoLigand, Winding,
+};
 
 #[rstest]
 #[case::opening("C[C@H]1CCCCO1", vec![StereoAtom { atom: 1, ligands: vec![StereoLigand::Atom(0), StereoLigand::ImplicitHydrogen, StereoLigand::Atom(6), StereoLigand::Atom(2)], winding: Winding::CounterClockwise }])]
@@ -171,36 +173,17 @@ fn test_parse_molecule_assembly(
 }
 
 #[rstest]
-#[case::forward(vec!["F/C=C/Cl", "Cl/C=C/F"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Rising)), (1, 2, BondOrder::Double, None), (2, 3, BondOrder::Single, Some(BondDirection::Rising))])]
-#[case::both_signs(vec!["F\\C=C\\Cl"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Falling)), (1, 2, BondOrder::Double, None), (2, 3, BondOrder::Single, Some(BondDirection::Falling))])]
-#[case::opposite(vec!["F/C=C\\Cl"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Rising)), (1, 2, BondOrder::Double, None), (2, 3, BondOrder::Single, Some(BondDirection::Falling))])]
-#[case::ring_marker(vec!["C/C=C1CO\\1", "C/C=C/1CO1"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Rising)), (1, 2, BondOrder::Double, None), (2, 4, BondOrder::Single, Some(BondDirection::Rising)), (2, 3, BondOrder::Single, None), (3, 4, BondOrder::Single, None)])]
-#[case::one_sided(vec!["F/C=CCl"], vec![(0, 1, BondOrder::Single, Some(BondDirection::Rising)), (1, 2, BondOrder::Double, None), (2, 3, BondOrder::Single, None)])]
-fn test_parse_molecule_bond_stereo(
-    #[case] inputs: Vec<&str>,
-    #[case] expected: Vec<(u32, u32, BondOrder, Option<BondDirection>)>,
-) {
+#[case::forward(vec!["F/C=C/Cl", "Cl/C=C/F", "F\\C=C\\Cl"], vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::OppositeSide } }])]
+#[case::opposite(vec!["F/C=C\\Cl"], vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }])]
+#[case::ring(vec!["C/C=C1CO\\1", "C/C=C/1CO1"], vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }])]
+#[case::partial(vec!["F/C=CCl"], vec![])]
+fn test_parse_molecule_bond_stereo(#[case] inputs: Vec<&str>, #[case] expected: Vec<StereoBond>) {
     for input in inputs {
         let basic = parse_molecule(input.as_bytes(), &SmilesIoConfig::default()).unwrap();
         let extended = parse_extended_smiles_bytes(input.as_bytes()).unwrap();
         assert_eq!(ExtendedMolecule::from(basic.clone()), extended);
-        let converted = Molecule::try_from(extended).unwrap();
-        assert_eq!(converted, basic);
-        for table in [basic, converted] {
-            assert_eq!(
-                table
-                    .bonds
-                    .iter()
-                    .map(|bond| (
-                        bond.atoms.first(),
-                        bond.atoms.second(),
-                        bond.order,
-                        bond.direction
-                    ))
-                    .collect::<Vec<_>>(),
-                expected
-            );
-        }
+        assert_eq!(Molecule::try_from(extended).unwrap(), basic);
+        assert_eq!(basic.stereo_bonds, expected);
     }
 }
 
@@ -214,4 +197,128 @@ fn test_parse_molecule_bond_stereo_error(#[case] input: &str, #[case] expected: 
         Err(expected.clone())
     );
     assert_eq!(parse_extended_smiles_bytes(input.as_bytes()), Err(expected));
+}
+
+#[rstest]
+#[case::directions_cis(r"F/C=C\F |c:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }])]
+#[case::directions_trans("F/C=C/F |t:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::OppositeSide } }])]
+#[case::duplicate("FC=CF |c:1,c:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }])]
+#[case::partial_either("F/C=CF |ctu:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Either }])]
+#[case::terminal_either("C=C |ctu:0|", vec![StereoBond { bond: 0, configuration: BondConfiguration::Either }])]
+#[case::wavy_either("FC=CF |w:1.0,ctu:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Either }])]
+#[case::labels("F/C=C/F |$first$|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::OppositeSide } }])]
+#[case::new_before_existing("FC=CF.F/C=C/F |c:1,c:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }, StereoBond { bond: 4, configuration: BondConfiguration::Framed { references: [4,7], relation: BondRelation::OppositeSide } }])]
+#[case::new_after_existing("F/C=C/F.FC=CF |c:4,c:4|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::OppositeSide } }, StereoBond { bond: 4, configuration: BondConfiguration::Framed { references: [4,7], relation: BondRelation::SameSide } }])]
+#[case::unsorted_duplicates("FC=CF.FC=CF |t:4,c:1,t:4,c:1|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }, StereoBond { bond: 4, configuration: BondConfiguration::Framed { references: [4,7], relation: BondRelation::OppositeSide } }])]
+#[case::overwritten_wavy("FC=CF |w:1.0,w:0.0|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Either }])]
+#[case::existing_geometry("F/C=C/F |(0,1,;0,0,;2,0,;2,-1,)|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::OppositeSide } }])]
+#[case::geometry_only("FC=CF |(0,1,;0,0,;2,0,;2,1,)|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Framed { references: [0,3], relation: BondRelation::SameSide } }])]
+#[case::either_geometry("FC=CF |ctu:1,(0,1,;0,0,;2,0,;2,1,)|", vec![StereoBond { bond: 1, configuration: BondConfiguration::Either }])]
+fn test_parse_molecule_cx_frames(#[case] input: &str, #[case] expected: Vec<StereoBond>) {
+    let config = SmilesIoConfig::chemaxon();
+    let basic = parse_molecule(input.as_bytes(), &config).unwrap();
+    let extended = parse_extended_smiles_bytes_with(input.as_bytes(), &config).unwrap();
+    assert_eq!(basic.stereo_bonds, expected);
+    assert_eq!(ExtendedMolecule::from(basic.clone()), extended);
+    assert_eq!(Molecule::try_from(extended).unwrap(), basic);
+}
+
+#[rstest]
+#[case::direction_code("F/C=C/F |c:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::direction_either("F/C=C/F |ctu:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::codes("FC=CF |c:1,t:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::code_either("FC=CF |ctu:1,c:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::wavy_code("FC=CF |w:1.0,c:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::overwritten_wavy("FC=CF |w:1.0,w:0.0,c:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::geometry_code("FC=CF |(0,1,;0,0,;2,0,;2,-1,),c:1|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::single("CC |ctu:0|", ParseError::UnsupportedStereoBond { bond: 0 })]
+#[case::existing_geometry_conflict("F/C=C/F |(0,1,;0,0,;2,0,;2,1,)|", ParseError::ConflictingBondConfiguration { bond: 1 })]
+#[case::existing_short_positions("F/C=C/F |(0,1,;0,0,;2,0,)|", ParseError::MissingPosition { atom: 3 })]
+#[case::existing_site_order_change("F/C=C/F |H:1.1|", ParseError::UnsupportedStereoBond { bond: 1 })]
+#[case::unsorted_conflict("FC=CF.FC=CF |t:4,c:1,c:4|", ParseError::ConflictingBondConfiguration { bond: 4 })]
+fn test_parse_molecule_cx_frames_error(#[case] input: &str, #[case] expected: ParseError) {
+    let config = SmilesIoConfig::chemaxon();
+    assert_eq!(
+        parse_molecule(input.as_bytes(), &config),
+        Err(expected.clone())
+    );
+    assert_eq!(
+        parse_extended_smiles_bytes_with(input.as_bytes(), &config),
+        Err(expected)
+    );
+}
+
+#[rstest]
+#[case::ordinary(b"F/C=C/F>C=C>FC=CF |ctu:3,c:5|", 1, [0,3])]
+#[case::uneven(b"CC.F/C=C/F>C=C>FC=CF |ctu:4,c:6|", 2, [2,5])]
+fn test_parse_reaction_bond_frames(
+    #[case] input: &[u8],
+    #[case] bond: u32,
+    #[case] references: [u32; 2],
+) {
+    let config = SmilesIoConfig::chemaxon();
+    let basic = parse_reaction(input, &config).unwrap();
+    let extended = parse_extended_reaction_smiles_bytes_with(input, &config).unwrap();
+    let expected = [
+        vec![StereoBond {
+            bond,
+            configuration: BondConfiguration::Framed {
+                references,
+                relation: BondRelation::OppositeSide,
+            },
+        }],
+        vec![StereoBond {
+            bond: 0,
+            configuration: BondConfiguration::Either,
+        }],
+        vec![StereoBond {
+            bond: 1,
+            configuration: BondConfiguration::Framed {
+                references: [0, 3],
+                relation: BondRelation::SameSide,
+            },
+        }],
+    ];
+    assert_eq!(
+        [
+            basic.reactants.stereo_bonds,
+            basic.agents.stereo_bonds,
+            basic.products.stereo_bonds
+        ],
+        expected
+    );
+    assert_eq!(
+        [
+            extended.reactants.stereo_bonds,
+            extended.agents.stereo_bonds,
+            extended.products.stereo_bonds
+        ],
+        expected
+    );
+}
+
+#[rstest]
+#[case::code("|t:1|")]
+#[case::geometry("|(0,1,;0,0,;2,0,;2,-1,)|")]
+#[case::geometry_conflict("|(0,1,;0,0,;2,0,;2,1,)|")]
+#[case::site_order_change("|H:1.1|")]
+#[case::substituent_order_change("|C:0.0|")]
+fn test_update_molecule_lookup(#[case] annotations: &str) {
+    let config = SmilesIoConfig::chemaxon();
+    let neighbors = OnceCell::new();
+    let (_, (mut molecule, _, _)) = parse_smiles_inner(
+        b"F/C=C/F",
+        0,
+        false,
+        true,
+        config.syntax_flags,
+        None,
+        &neighbors,
+    )
+    .unwrap();
+    let entries = parse_cx_annotations(annotations.as_bytes(), config.syntax_flags).unwrap();
+    let mut fresh = molecule.clone();
+    let expected = update_molecule(&mut fresh, entries.clone(), &OnceCell::new()).map(|()| fresh);
+    let actual = update_molecule(&mut molecule, entries, &neighbors).map(|()| molecule);
+    assert_eq!(actual, expected);
 }

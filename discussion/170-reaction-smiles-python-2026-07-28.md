@@ -5,7 +5,8 @@ Date: 2026-07-28
 Relates: [151](151-python-molecule-workflows-2026-07-13.md),
 [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
 [155](155-smiles-io-and-resolve-configuration-2026-07-19.md),
-[162](162-common-subgraph-algs-2026-07-25.md)
+[162](162-common-subgraph-algs-2026-07-25.md),
+[226](226-smiles-roundtrip-design-2026-09-10.md)
 
 ## Scope
 

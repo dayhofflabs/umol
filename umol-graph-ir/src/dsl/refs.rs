@@ -96,14 +96,8 @@ macro_rules! define_ref {
                         Ok(Self::Structural($parse_structural(m)?))
                     } )?
                     other => {
-                        #[allow(unused_mut)]
-                        let mut expected = concat!($kind, " ref (int or keyword)");
-                        $(
-                            let _: fn($payload) = |_| {};
-                            expected = concat!($kind, " ref (int, keyword, or structural map)");
-                        )?
                         Err(DeError::TypeMismatch {
-                            expected,
+                            expected: define_ref!(@expected $kind $(, $payload)?),
                             got: other.kind(),
                             path: Vec::new(),
                         })
@@ -143,6 +137,12 @@ macro_rules! define_ref {
                 }
             }
         }
+    };
+    (@expected $kind:literal) => {
+        concat!($kind, " ref (int or keyword)")
+    };
+    (@expected $kind:literal, $payload:ty) => {
+        concat!($kind, " ref (int, keyword, or structural map)")
     };
 }
 

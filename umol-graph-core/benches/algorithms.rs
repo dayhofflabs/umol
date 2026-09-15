@@ -10,7 +10,7 @@ use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
     CommonSubgraphEnumerationAlgorithm, Compaction, ConnectedComponentsAlgorithm, Correspondence,
     EdgeId, EmbeddingKind, GeneralMaximumMatchingAlgorithm, Graph, GraphCorrespondence,
-    MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NodeId,
+    MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NeighborhoodAlgorithm, NodeId,
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
@@ -461,6 +461,97 @@ fn connected_components(c: &mut Criterion) {
         });
     }
     group.finish();
+}
+
+fn traversal(c: &mut Criterion) {
+    let tree_edges: Vec<_> = (1..255).map(|node| [(node - 1) / 2, node]).collect();
+    let disconnected_edges: Vec<_> = (0..4)
+        .flat_map(|component| {
+            (0..6).map(move |node| [6 * component + node, 6 * component + (node + 1) % 6])
+        })
+        .collect();
+    let graphs = [
+        ("path_64", path(64)),
+        ("path_1024", path(1024)),
+        ("binary_tree_255", Graph::new(255, &tree_edges)),
+        ("cycle_64", cycle(64)),
+        ("four_hexagons", Graph::new(24, &disconnected_edges)),
+        (
+            "loops_parallel_isolated",
+            Graph::new(4, &[[0, 0], [0, 1], [0, 1], [1, 2]]),
+        ),
+    ];
+    let mut components = c.benchmark_group("traversal_baseline/components");
+    for (name, graph) in &graphs {
+        components.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).enumerate_connected_components(ConnectedComponentsAlgorithm::Bfs)
+            });
+        });
+    }
+    components.finish();
+    let mut neighborhood = c.benchmark_group("traversal_baseline/neighborhood");
+    for (name, graph) in &graphs {
+        neighborhood.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).neighborhood(NodeId(0), usize::MAX, NeighborhoodAlgorithm::Bfs)
+            });
+        });
+    }
+    neighborhood.finish();
+    let mut depth_first = c.benchmark_group("traversal/depth_first");
+    for (name, graph) in &graphs {
+        depth_first.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).visit_depth_first(graph.node_ids(), |event| {
+                    black_box(event);
+                    ControlFlow::<()>::Continue(())
+                })
+            });
+        });
+    }
+    depth_first.finish();
+    let mut breadth_first = c.benchmark_group("traversal/breadth_first");
+    for (name, graph) in &graphs {
+        breadth_first.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).visit_breadth_first(graph.node_ids(), None, |event| {
+                    black_box(event);
+                    ControlFlow::<()>::Continue(())
+                })
+            });
+        });
+    }
+    breadth_first.finish();
+    let mut depth_first_events = c.benchmark_group("traversal/depth_first_events");
+    for (name, graph) in &graphs {
+        depth_first_events.bench_function(*name, |b| {
+            b.iter(|| black_box(graph).enumerate_depth_first_events(graph.node_ids()));
+        });
+    }
+    depth_first_events.finish();
+    let mut breadth_first_events = c.benchmark_group("traversal/breadth_first_events");
+    for (name, graph) in &graphs {
+        breadth_first_events.bench_function(*name, |b| {
+            b.iter(|| black_box(graph).enumerate_breadth_first_events(graph.node_ids(), None));
+        });
+    }
+    breadth_first_events.finish();
+    let mut component_visitor = c.benchmark_group("traversal/component_visitor");
+    for (name, graph) in &graphs {
+        component_visitor.bench_function(*name, |b| {
+            b.iter(|| {
+                black_box(graph).visit_connected_components(
+                    ConnectedComponentsAlgorithm::Bfs,
+                    |component| {
+                        black_box(component);
+                        ControlFlow::<()>::Continue(())
+                    },
+                )
+            });
+        });
+    }
+    component_visitor.finish();
 }
 
 fn biconnected_components(c: &mut Criterion) {
@@ -1388,6 +1479,25 @@ fn mutation(c: &mut Criterion) {
     group.finish();
 }
 
+fn induced_edges(c: &mut Criterion) {
+    let mut group = c.benchmark_group("induced_edges");
+    for (name, size, selected, expected) in [
+        ("ring_6", 6, 6, 6),
+        ("ring_64", 64, 64, 64),
+        ("ring_1024", 1024, 1024, 1024),
+        ("ring_4096_subset_6", 4096, 6, 5),
+    ] {
+        let edges: Vec<[u32; 2]> = (0..size).map(|node| [node, (node + 1) % size]).collect();
+        let graph = Graph::new(size as usize, &edges);
+        let nodes: Vec<NodeId> = (0..selected).rev().map(NodeId).collect();
+        assert_eq!(graph.induced_edges(&nodes).count(), expected);
+        group.bench_function(name, |b| {
+            b.iter(|| black_box(graph.induced_edges(black_box(&nodes)).count()))
+        });
+    }
+    group.finish();
+}
+
 fn correspondence_updates(c: &mut Criterion) {
     let mut group = c.benchmark_group("correspondence_updates");
     for size in [256usize, 4096, 65536] {
@@ -1410,6 +1520,7 @@ fn correspondence_updates(c: &mut Criterion) {
 
 criterion_group!(
     benches,
+    induced_edges,
     correspondence_updates,
     mutation,
     relevant_cycle_enumeration,
@@ -1418,6 +1529,7 @@ criterion_group!(
     unique_ring_families,
     shortest_cycle,
     connected_components,
+    traversal,
     biconnected_components,
     maximum_matching,
     maximum_independent_set,

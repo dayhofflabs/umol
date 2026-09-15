@@ -1,3 +1,5 @@
+from struct import calcsize
+
 import pytest
 
 from umol import (
@@ -128,6 +130,24 @@ def test_ecfp_hash_scheme():
 def test_hashed_fingerprint_config_defaults(value, expected, expected_repr):
     assert value == expected
     assert repr(value) == expected_repr
+
+
+@pytest.mark.parametrize(
+    "constructor", [HashedFingerprintConfig.Morgan, HashedFingerprintConfig.Ecfp]
+)
+@pytest.mark.parametrize("radius", [0, (1 << (8 * calcsize("P"))) - 1])
+def test_hashed_fingerprint_config_radius(constructor, radius):
+    config = constructor(radius=radius)
+    assert config.radius == radius
+
+
+@pytest.mark.parametrize(
+    "constructor", [HashedFingerprintConfig.Morgan, HashedFingerprintConfig.Ecfp]
+)
+@pytest.mark.parametrize("radius", [-1, 1 << (8 * calcsize("P"))])
+def test_hashed_fingerprint_config_radius_error(constructor, radius):
+    with pytest.raises(OverflowError):
+        constructor(radius=radius)
 
 
 @pytest.mark.parametrize(

@@ -1880,6 +1880,7 @@ dependencies = [
 name = "umol-graph"
 version = "0.8.0"
 dependencies = [
+ "bitflags",
  "bitvec",
  "clap",
  "criterion",

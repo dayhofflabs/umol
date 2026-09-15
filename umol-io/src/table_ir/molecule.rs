@@ -22,10 +22,19 @@ use super::neighbors::AtomNeighbors;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
-use super::stereo::{ConfigurationScope, StereoAtom};
+use super::stereo::{ConfigurationScope, StereoAtom, StereoBond};
 use super::utils::{element_symbol_key, format_sum_formula};
 
-/// Basic molecule IR
+/// Open basic molecular table.
+///
+/// Atom and bond stereo frames refer to this table's rows. Construction and mutation do not
+/// check their incidence; raise checks the references it needs and reports malformed frames.
+///
+/// # Semantic properties
+///
+/// Conversion to `ExtendedMolecule` and back preserves the complete basic table, including
+/// stereo frames. Bond configuration is carried by `stereo_bonds`; editing coordinates does
+/// not rederive those frames.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Molecule {
     pub atoms: Vec<Atom>,
@@ -34,6 +43,9 @@ pub struct Molecule {
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub configuration_scope: Option<ConfigurationScope>,
     pub stereo_atoms: Vec<StereoAtom>,
+    /// Bond configurations in this table's bond and atom index spaces.
+    /// Independently edited references are checked when consumed by raise.
+    pub stereo_bonds: Vec<StereoBond>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
     pub source_format: SourceFormat,
@@ -48,6 +60,7 @@ impl Molecule {
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
             stereo_atoms: Vec::new(),
+            stereo_bonds: Vec::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
             source_format: SourceFormat::UNKNOWN,
@@ -62,7 +75,7 @@ impl Molecule {
         self.bonds.len()
     }
 
-    /// Bonds at each atom in bond order, computed from the current bond list.
+    /// Bonds at each atom ordered by neighbor atom index, then bond index.
     pub fn atom_neighbors(&self) -> AtomNeighbors {
         AtomNeighbors::new(self.atoms.len(), self.bonds.iter().map(|bond| bond.atoms))
     }
@@ -122,6 +135,9 @@ pub struct ExtendedMolecule {
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub configuration_scope: Option<ConfigurationScope>,
     pub stereo_atoms: Vec<StereoAtom>,
+    /// Bond configurations in this table's bond and atom index spaces.
+    /// Independently edited references are checked when consumed by raise.
+    pub stereo_bonds: Vec<StereoBond>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
     pub ctfile_data: Option<CtfileData>,
@@ -138,6 +154,7 @@ impl ExtendedMolecule {
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
             stereo_atoms: Vec::new(),
+            stereo_bonds: Vec::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
             ctfile_data: None,
@@ -154,7 +171,7 @@ impl ExtendedMolecule {
         self.bonds.len()
     }
 
-    /// Bonds at each atom in bond order, computed from the current bond list.
+    /// Bonds at each atom ordered by neighbor atom index, then bond index.
     pub fn atom_neighbors(&self) -> AtomNeighbors {
         AtomNeighbors::new(self.atoms.len(), self.bonds.iter().map(|bond| bond.atoms))
     }
@@ -308,6 +325,7 @@ impl From<Molecule> for ExtendedMolecule {
             multicenter_bonds: mol.multicenter_bonds,
             configuration_scope: mol.configuration_scope,
             stereo_atoms: mol.stereo_atoms,
+            stereo_bonds: mol.stereo_bonds,
             comments: mol.comments,
             properties: mol.properties,
             ctfile_data: None,
@@ -324,20 +342,21 @@ impl TryFrom<ExtendedMolecule> for Molecule {
         Ok(Molecule {
             atoms: extended
                 .atoms
-                .iter()
-                .map(|a| Atom::try_from(a.clone()))
+                .into_iter()
+                .map(Atom::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
             bonds: extended
                 .bonds
-                .iter()
-                .map(|b| Bond::try_from(b.clone()))
+                .into_iter()
+                .map(Bond::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
-            positions: extended.positions.clone(),
-            multicenter_bonds: extended.multicenter_bonds.clone(),
+            positions: extended.positions,
+            multicenter_bonds: extended.multicenter_bonds,
             configuration_scope: extended.configuration_scope,
-            stereo_atoms: extended.stereo_atoms.clone(),
-            comments: extended.comments.clone(),
-            properties: extended.properties.clone(),
+            stereo_atoms: extended.stereo_atoms,
+            stereo_bonds: extended.stereo_bonds,
+            comments: extended.comments,
+            properties: extended.properties,
             source_format: extended.source_format,
         })
     }

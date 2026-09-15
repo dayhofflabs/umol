@@ -8,6 +8,8 @@
 mod common_subgraph;
 #[path = "property/compact.rs"]
 mod compact;
+#[path = "property/connectivity.rs"]
+mod connectivity;
 #[path = "property/corpus.rs"]
 mod corpus;
 #[path = "property/correspondence.rs"]
@@ -24,3 +26,5 @@ mod remap;
 mod strategy;
 #[path = "property/subgraph_isomorphism.rs"]
 mod subgraph_isomorphism;
+#[path = "property/traversal.rs"]
+mod traversal;

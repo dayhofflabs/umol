@@ -1,5 +1,12 @@
 use proptest::prelude::*;
-use umol_graph_ir::ir::StereoKind;
+use rstest::rstest;
+use umol_chem::element::Element;
+use umol_graph_ir::ir::{
+    ArithExpr, AromaticValenceForm, CisTransStereoForm, ElementForm, IsotopeMassForm, Lattice,
+    MulticenterValenceForm, NumForm, PredExpr, RelOp, StereoConfigurationForm, StereoCoset,
+    StereoKind, Stereogenicity, StereogenicityForm, TetrahedralStereoForm, Topicity,
+    TopicityRelationForm,
+};
 
 use crate::strategies::*;
 
@@ -7,7 +14,162 @@ use crate::strategies::*;
 // associativity, absorption, idempotence, and `matches`↔`meet` consistency,
 // checked by `assert_lattice_laws` over a generated value triple.
 
+#[rstest]
+#[case::equal(NumForm::Lit(2), NumForm::Lit(2), true)]
+#[case::different(NumForm::Lit(2), NumForm::Lit(3), false)]
+#[case::unknown(NumForm::Undetermined, NumForm::Lit(2), true)]
+#[case::empty(NumForm::Undetermined, NumForm::LitSet(Box::default()), false)]
+#[case::set(NumForm::Lit(2), NumForm::lit_set([1, 2]), true)]
+#[case::disjoint(NumForm::lit_set([1, 2]), NumForm::lit_set([3, 4]), false)]
+#[case::overlap(NumForm::lit_set([1, 2]), NumForm::lit_set([2, 3]), true)]
+#[case::lower(NumForm::RangeFrom(2), NumForm::Lit(2), true)]
+#[case::upper(NumForm::RangeTo(2), NumForm::Lit(2), false)]
+#[case::empty_interval(NumForm::RangeFrom(2), NumForm::RangeTo(2), false)]
+#[case::interval(NumForm::RangeFrom(2), NumForm::RangeTo(3), true)]
+#[case::wide_interval(NumForm::RangeFrom(i64::MIN), NumForm::RangeTo(i64::MAX), true)]
+#[case::empty_set_range(NumForm::RangeFrom(2), NumForm::LitSet(Box::default()), false)]
+#[case::lower_set(NumForm::RangeFrom(3), NumForm::lit_set([1, 2]), false)]
+#[case::upper_set(NumForm::RangeTo(3), NumForm::lit_set([3, 4]), false)]
+#[case::folded(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])), NumForm::Lit(3), true)]
+#[case::symbolic_division(
+    NumForm::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(1)), Box::new(ArithExpr::Lit(0)))),
+    NumForm::Undetermined,
+    true
+)]
+#[case::contradiction(
+    NumForm::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(2))),
+    NumForm::Undetermined,
+    false
+)]
+fn test_num_form_is_compatible(#[case] a: NumForm, #[case] b: NumForm, #[case] expected: bool) {
+    assert_eq!(a.is_compatible(&b), expected);
+    assert_eq!(b.is_compatible(&a), expected);
+}
+
+#[rstest]
+#[case::empty(ElementForm::Undetermined, ElementForm::LitSet(Box::default()), false)]
+#[case::excluded(ElementForm::Lit(Element::C), ElementForm::not_set([Element::C]), false)]
+#[case::included(ElementForm::lit_set([Element::C, Element::N]), ElementForm::not_set([Element::C]), true)]
+#[case::full_complement(ElementForm::Undetermined, ElementForm::not_set(Element::all().iter().copied()), false)]
+#[case::complement_union(ElementForm::not_set(Element::all().iter().copied().filter(|e| *e != Element::C)), ElementForm::not_set([Element::C]), false)]
+#[case::full_set_variable(ElementForm::lit_set(Element::all().iter().copied()), ElementForm::var("element"), true)]
+#[case::invalid_variable(ElementForm::var_in("element", []), ElementForm::Undetermined, false)]
+fn test_element_form_is_compatible(
+    #[case] a: ElementForm,
+    #[case] b: ElementForm,
+    #[case] expected: bool,
+) {
+    assert_eq!(a.is_compatible(&b), expected);
+    assert_eq!(b.is_compatible(&a), expected);
+}
+
+#[rstest]
+#[case::empty(
+    IsotopeMassForm::Undetermined,
+    IsotopeMassForm::LitSet(Box::default()),
+    false
+)]
+#[case::natural(IsotopeMassForm::Natural, IsotopeMassForm::Lit(13), false)]
+#[case::overlap(IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::lit_set([13, 14]), true)]
+#[case::invalid_variable(IsotopeMassForm::var_in("mass", []), IsotopeMassForm::Undetermined, false)]
+fn test_isotope_mass_form_is_compatible(
+    #[case] a: IsotopeMassForm,
+    #[case] b: IsotopeMassForm,
+    #[case] expected: bool,
+) {
+    assert_eq!(a.is_compatible(&b), expected);
+    assert_eq!(b.is_compatible(&a), expected);
+}
+
+#[rstest]
+#[case::empty(
+    TopicityRelationForm::Undetermined,
+    TopicityRelationForm::LitSet(Default::default()),
+    false
+)]
+#[case::excluded(
+    TopicityRelationForm::Lit(Topicity::Homotopic),
+    TopicityRelationForm::not(Topicity::Homotopic),
+    false
+)]
+#[case::complements(
+    TopicityRelationForm::not(Topicity::Homotopic),
+    TopicityRelationForm::not(Topicity::Enantiotopic),
+    true
+)]
+#[case::full_complement(TopicityRelationForm::Undetermined, TopicityRelationForm::not_set([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic]), false)]
+#[case::complement_union(TopicityRelationForm::not(Topicity::Homotopic), TopicityRelationForm::not_set([Topicity::Enantiotopic, Topicity::Diastereotopic]), false)]
+fn test_topicity_relation_form_is_compatible(
+    #[case] a: TopicityRelationForm,
+    #[case] b: TopicityRelationForm,
+    #[case] expected: bool,
+) {
+    assert_eq!(a.is_compatible(&b), expected);
+    assert_eq!(b.is_compatible(&a), expected);
+}
+
+#[rstest]
+#[case::empty(
+    StereogenicityForm::Undetermined,
+    StereogenicityForm::LitSet(Default::default()),
+    false
+)]
+#[case::excluded(
+    StereogenicityForm::Lit(Stereogenicity::Symmetric),
+    StereogenicityForm::not(Stereogenicity::Symmetric),
+    false
+)]
+#[case::full_complement(StereogenicityForm::Undetermined, StereogenicityForm::not_set([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic]), false)]
+fn test_stereogenicity_form_is_compatible(
+    #[case] a: StereogenicityForm,
+    #[case] b: StereogenicityForm,
+    #[case] expected: bool,
+) {
+    assert_eq!(a.is_compatible(&b), expected);
+    assert_eq!(b.is_compatible(&a), expected);
+}
+
 proptest! {
+    #[test]
+    fn test_num_form_is_compatible_raw(
+        a in raw_num_form_strategy(), b in raw_num_form_strategy(),
+        lower in -10_i64..=10, upper in -10_i64..=10,
+        values in prop::collection::btree_set(-10_i64..=10, 0..8),
+    ) {
+        let forms = [a, b, NumForm::Undetermined, NumForm::Lit(lower),
+            NumForm::LitSet(Box::new(values)), NumForm::RangeFrom(lower), NumForm::RangeTo(upper),
+            NumForm::arith_expr(ArithExpr::Div(Box::new(ArithExpr::Lit(1)), Box::new(ArithExpr::Lit(0)))),
+            NumForm::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(2)))];
+        for a in &forms {
+            for b in &forms {
+                prop_assert_eq!(a.is_compatible(b), a.meet(b).is_some());
+            }
+            let aromatic = AromaticValenceForm::Aromatic(a.clone());
+            prop_assert_eq!(aromatic.is_compatible(&AromaticValenceForm::Undetermined), aromatic.meet(&AromaticValenceForm::Undetermined).is_some());
+            let multicenter = MulticenterValenceForm::Multicenter(a.clone());
+            prop_assert_eq!(multicenter.is_compatible(&MulticenterValenceForm::Undetermined), multicenter.meet(&MulticenterValenceForm::Undetermined).is_some());
+        }
+    }
+
+    #[test]
+    fn test_stereo_configuration_form_is_compatible_raw(
+        a in prop::collection::btree_set(0_u32..4, 0..5),
+        b in prop::collection::btree_set(0_u32..4, 0..5),
+    ) {
+        let cosets = [StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::LitSet(a), StereoCoset::LitSet(b)];
+        for a in &cosets {
+            for b in &cosets {
+                let a = StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, a.clone());
+                let b = StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, b.clone());
+                prop_assert_eq!(a.is_compatible(&b), a.meet(&b).is_some());
+            }
+            let tetra = TetrahedralStereoForm::Stereo(a.clone());
+            prop_assert_eq!(tetra.is_compatible(&TetrahedralStereoForm::Undetermined), tetra.meet(&TetrahedralStereoForm::Undetermined).is_some());
+            let cis_trans = CisTransStereoForm::Stereo(a.clone());
+            prop_assert_eq!(cis_trans.is_compatible(&CisTransStereoForm::Undetermined), cis_trans.meet(&CisTransStereoForm::Undetermined).is_some());
+        }
+    }
+
     #[test]
     fn test_num_form_lattice_laws(
         a in any_num_form_strategy(),

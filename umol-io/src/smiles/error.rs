@@ -5,6 +5,16 @@ use umol_utils::error::UmolError;
 
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
+    #[error("directional bond {bond} is not adjacent to a supported double bond")]
+    DanglingBondDirection { bond: u32 },
+    #[error("contradictory cis/trans markers at atom {atom}")]
+    CisTransConflict { atom: u32 },
+    #[error("unsupported stereo bond {bond}")]
+    UnsupportedStereoBond { bond: u32 },
+    #[error("conflicting configurations at bond {bond}")]
+    ConflictingBondConfiguration { bond: u32 },
+    #[error("missing position for atom {atom}")]
+    MissingPosition { atom: u32 },
     #[error("Leading whitespace")]
     LeadingWhitespace,
     #[error("Invalid element at position {pos}")]
@@ -82,6 +92,68 @@ pub enum ParseError {
 }
 
 impl UmolError for ParseError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// A malformed table reference or frame, or an unsupported SMILES output feature.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum SmilesRenderError {
+    #[error("atom {atom} is out of bounds")]
+    AtomIndexOutOfBounds { atom: u32 },
+    #[error("bond {bond} is out of bounds")]
+    BondIndexOutOfBounds { bond: u32 },
+    #[error("bond {bond} joins an atom to itself")]
+    SelfBond { bond: u32 },
+    #[error("bond {bond} repeats an atom pair")]
+    DuplicateBond { bond: u32 },
+    #[error("unsupported molecule field {field}")]
+    UnsupportedMolecule { field: &'static str },
+    #[error("unsupported atom {atom} field {field}")]
+    UnsupportedAtom { atom: u32, field: &'static str },
+    #[error("unsupported bond {bond} field {field}")]
+    UnsupportedBond { bond: u32, field: &'static str },
+    #[error("atom {atom} requires brackets but has an inferred hydrogen count")]
+    InferredHydrogens { atom: u32 },
+    #[error("duplicate stereo frame at atom {atom}")]
+    DuplicateStereoAtom { atom: u32 },
+    #[error("invalid stereo frame at atom {atom}")]
+    InvalidStereoAtom { atom: u32 },
+    #[error("ring label {label} exceeds 99")]
+    RingLabel { label: usize },
+    #[error("duplicate stereo frame at bond {bond}")]
+    DuplicateStereoBond { bond: u32 },
+    #[error("unsupported stereo site at bond {bond}")]
+    UnsupportedStereoBond { bond: u32 },
+    #[error("bond {bond} has no marker candidate at atom {atom}")]
+    MissingMarkerCandidate { bond: u32, atom: u32 },
+    #[error("invalid reference atom {atom} for stereo bond {bond}")]
+    InvalidStereoBondReference { bond: u32, atom: u32 },
+    #[error("no consistent marker assignment for component containing bond {bond}")]
+    NoMarkerAssignment { bond: u32 },
+}
+
+impl UmolError for SmilesRenderError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Failure to render reaction SMILES, with molecular section context.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ReactionSmilesRenderError {
+    #[error("reactants: {0}")]
+    Reactants(#[source] SmilesRenderError),
+    #[error("agents: {0}")]
+    Agents(#[source] SmilesRenderError),
+    #[error("products: {0}")]
+    Products(#[source] SmilesRenderError),
+    #[error("unsupported reaction field {field}")]
+    UnsupportedReaction { field: &'static str },
+}
+
+impl UmolError for ReactionSmilesRenderError {
     fn as_any(&self) -> &dyn Any {
         self
     }

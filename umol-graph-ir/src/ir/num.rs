@@ -470,6 +470,37 @@ impl Lattice for NumForm {
         matches!(self, NumForm::Lit(_))
     }
 
+    fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Undetermined,
+                Self::Undetermined | Self::Lit(_) | Self::RangeFrom(_) | Self::RangeTo(_),
+            )
+            | (Self::Lit(_) | Self::RangeFrom(_) | Self::RangeTo(_), Self::Undetermined) => true,
+            (Self::Undetermined, Self::LitSet(s)) | (Self::LitSet(s), Self::Undetermined) => {
+                !s.is_empty()
+            }
+            (Self::Lit(a), Self::Lit(b)) => a == b,
+            (Self::Lit(n), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(n)) => s.contains(n),
+            (Self::Lit(n), Self::RangeFrom(lower)) | (Self::RangeFrom(lower), Self::Lit(n)) => {
+                n >= lower
+            }
+            (Self::Lit(n), Self::RangeTo(upper)) | (Self::RangeTo(upper), Self::Lit(n)) => {
+                n < upper
+            }
+            (Self::LitSet(a), Self::LitSet(b)) => !a.is_disjoint(b),
+            (Self::RangeFrom(_), Self::RangeFrom(_)) | (Self::RangeTo(_), Self::RangeTo(_)) => true,
+            (Self::RangeFrom(lower), Self::RangeTo(upper))
+            | (Self::RangeTo(upper), Self::RangeFrom(lower)) => lower < upper,
+            (Self::RangeFrom(lower), Self::LitSet(s))
+            | (Self::LitSet(s), Self::RangeFrom(lower)) => s.last().is_some_and(|n| n >= lower),
+            (Self::RangeTo(upper), Self::LitSet(s)) | (Self::LitSet(s), Self::RangeTo(upper)) => {
+                s.first().is_some_and(|n| n < upper)
+            }
+            _ => self.meet(other).is_some(),
+        }
+    }
+
     /// Greatest lower bound, canonicalizing both operands and the result.
     /// Distinct symbolic forms (`ArithExpr`/`PredExpr`) meet only when equal once
     /// normalized; symbolic versus concrete is rejected.

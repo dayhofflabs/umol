@@ -6,7 +6,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use umol_graph_ir::ir::{Molecule, TryIntoIr};
 use umol_io::smiles::{
     parse_extended_reaction_smiles, parse_extended_smiles_bytes, parse_extended_smiles_bytes_with,
-    ReactionSmiles, Smiles, SmilesIoConfig,
+    ParseError, ReactionSmiles, Smiles, SmilesIoConfig,
 };
 use umol_io::table_ir;
 
@@ -72,7 +72,7 @@ fn tree_inputs() -> Vec<(&'static str, &'static [u8])> {
 fn chain_bonds_inputs() -> Vec<(&'static str, &'static [u8])> {
     vec![
         ("c_2", b"C-C"),
-        ("c_2_stereo", b"C/C"),
+        ("c_4_partial_stereo", b"C/C=CC"),
         ("c_2_double", b"C=C"),
         ("c_2_triple", b"C#C"),
         ("c_2_quadruple", b"C$C"),
@@ -81,7 +81,7 @@ fn chain_bonds_inputs() -> Vec<(&'static str, &'static [u8])> {
         ("c_10", b"C=C=C=C=C=C=C=C=C=C"),
         ("c_10_aromatic", b"C:C:C:C:C:C:C:C:C:C"),
         ("c_10_stereo", b"C/C=C\\C=C/C=C\\C=C/C"),
-        ("c_10_mixed", b"C-C=C#C$C:C/C\\C-C=C"),
+        ("c_11_mixed", b"C-C=C#C$C:C/C=C\\C-C=C"),
         ("mixed_10", b"C-N=C-Br-N=F-S-O-Cl=N"),
         // ("c_50", b"C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C=C"),
         // ("c_50_mixed", b"C-C=C#C$C:C/C\\C-C=C-C=C#C$C:C/C\\C-C=C-C=C#C$C:C/C\\C-C=C-C=C#C$C:C/C\\C-C=C-C=C#C$C:C/C\\C-C=C"),
@@ -144,7 +144,7 @@ fn ring_fused_spiro_inputs() -> Vec<(&'static str, &'static [u8])> {
 // Ring corpus, directed closures and percent indices
 fn ring_stereo_inputs() -> Vec<(&'static str, &'static [u8])> {
     vec![
-        ("dir_up_open", b"C/1CC1"),
+        ("dir_up_open", b"C/1=C/CCCC1"),
         // ("dir_up_close", b"C1CC/1"),
         // ("dir_up_both", b"C/1CC/1"),
         // ("dir_down_both", b"C\\1CC\\1"),
@@ -888,10 +888,89 @@ fn corpus_parsing(c: &mut Criterion) {
     extended_raise.finish();
 }
 
+fn stereo_rejection(c: &mut Criterion) {
+    let inputs: [(&str, &[u8], u32); 3] = [
+        ("isolated_direction", b"C/C", 0),
+        ("mixed_chain_direction", b"C-C=C#C$C:C/C\\C-C=C", 5),
+        ("saturated_ring_direction", b"C/1CC1", 0),
+    ];
+    let mut group = c.benchmark_group("smiles_parsing/stereo_rejection");
+    for &(name, input, bond) in &inputs {
+        group.bench_function(name, |b| {
+            b.iter(|| {
+                assert_eq!(
+                    Smiles::parse_bytes(black_box(input)).unwrap_err(),
+                    ParseError::DanglingBondDirection { bond },
+                );
+            });
+        });
+    }
+    group.finish();
+    let mut group = c.benchmark_group("extended_smiles_parsing/stereo_rejection");
+    for &(name, input, bond) in &inputs {
+        group.bench_function(name, |b| {
+            b.iter(|| {
+                assert_eq!(
+                    parse_extended_smiles_bytes(black_box(input)).unwrap_err(),
+                    ParseError::DanglingBondDirection { bond },
+                );
+            });
+        });
+    }
+    group.finish();
+}
+
+fn smiles_roundtrip(c: &mut Criterion) {
+    let inputs = [
+        (
+            "chain_64",
+            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        ),
+        ("branched", "CC(C)(F)C(Cl)CC"),
+        ("components", "CC.O.[Na+]"),
+        ("aromatic_fused", "c1ccc2ccccc2c1"),
+        ("aromatic_lone_pair", "[nH]1cccc1"),
+        ("charged", "[NH4+]"),
+        ("radical", "[CH3]"),
+        ("tetra_four", "[C@](F)(Cl)(Br)I"),
+        ("tetra_ring", "C[C@H]1CCCCO1"),
+        ("tetra_explicit_h", "C[C@]1([H])CCCCO1"),
+        ("tetra_lone_pair", "C[S@](=O)CC"),
+        ("alkene_four", "F/C(Cl)=C(/Br)I"),
+        ("shared_chain", "C/C=C/C=C/C"),
+        ("partial_triene", "C/C=C/C=CC=C/C"),
+        ("shared_branch", "F/C=C(/C=C/F)C=C"),
+        ("shared_cycle", "C1/C=C/C=C/CCC1"),
+    ];
+    let mut parse = c.benchmark_group("smiles_roundtrip/parse");
+    for &(name, input) in &inputs {
+        Smiles::parse(input).unwrap();
+        parse.bench_function(name, |b| {
+            b.iter(|| Smiles::parse(black_box(input)).unwrap());
+        });
+    }
+    parse.finish();
+
+    let mut raise = c.benchmark_group("smiles_roundtrip/raise");
+    for &(name, input) in &inputs {
+        let table = Smiles::parse(input).unwrap().into_table_ir();
+        let _: Molecule = (&table).try_into_ir(&()).unwrap();
+        raise.bench_function(name, |b| {
+            b.iter(|| {
+                let molecule: Molecule = black_box(&table).try_into_ir(&()).unwrap();
+                molecule
+            });
+        });
+    }
+    raise.finish();
+}
+
 criterion_group!(
     benches,
     smiles_parsing,
     extended_smiles_parsing,
-    corpus_parsing
+    corpus_parsing,
+    stereo_rejection,
+    smiles_roundtrip
 );
 criterion_main!(benches);

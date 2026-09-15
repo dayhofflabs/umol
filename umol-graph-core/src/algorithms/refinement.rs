@@ -23,7 +23,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use crate::algorithms::traversal::TraversalAlgorithm;
+use crate::algorithms::traversal::NeighborhoodAlgorithm;
 use crate::graph::{EdgeId, Graph, NodeId};
 
 /// A refinement algorithm and its configuration. Parameterized variants carry
@@ -182,7 +182,7 @@ fn cell_count<C: Ord + Copy>(coloring: &[C]) -> usize {
 /// can match an external scheme exactly.
 pub trait CircularRefinementHash {
     fn seed_hash(&self, components: &[u32]) -> u64;
-    fn combine(&self, round: u32, current: u64, neighbors: &[(u32, u64)]) -> u64;
+    fn combine(&self, round: usize, current: u64, neighbors: &[(u32, u64)]) -> u64;
 }
 
 /// A circular refinement algorithm. One graph algorithm today (extended
@@ -194,7 +194,7 @@ pub enum CircularRefinementAlgorithm<H> {
     /// ECFP / Morgan fingerprints): iterate `radius` rounds, hashing each node from
     /// the round, its previous identifier, and its sorted `(edge label, neighbor's
     /// previous identifier)` pairs; then remove structurally-duplicate features.
-    Ec { radius: u32, scheme: H },
+    Ec { radius: usize, scheme: H },
 }
 
 impl Graph {
@@ -227,12 +227,12 @@ impl Graph {
         &self,
         node_components: impl Fn(NodeId) -> Vec<u32>,
         edge_label: impl Fn(EdgeId) -> u32,
-        radius: u32,
+        radius: usize,
         scheme: &H,
     ) -> Vec<u64> {
         let node_count = self.node_count();
 
-        let mut rounds: Vec<Vec<u64>> = Vec::with_capacity(radius as usize + 1);
+        let mut rounds: Vec<Vec<u64>> = Vec::with_capacity(radius + 1);
         rounds.push(
             (0..node_count)
                 .map(|i| scheme.seed_hash(&node_components(NodeId(i as u32))))
@@ -261,26 +261,27 @@ impl Graph {
     /// Rogers & Hahn duplicate-structure removal: round-0 identifiers are kept
     /// directly; for rounds ≥ 1, features whose covered bond set coincides collapse
     /// to the one with the smallest `(round, identifier)`. Bond sets come from a BFS.
-    fn remove_duplicate_environments(&self, rounds: &[Vec<u64>], radius: u32) -> Vec<u64> {
+    fn remove_duplicate_environments(&self, rounds: &[Vec<u64>], radius: usize) -> Vec<u64> {
         let mut identifiers: Vec<u64> = rounds[0].clone();
-        let mut kept: HashMap<Vec<u32>, (u32, u64)> = HashMap::new();
+        let mut kept: HashMap<Vec<u32>, (usize, u64)> = HashMap::new();
         if radius >= 1 {
             for atom in 0..self.node_count() {
                 let source = NodeId(atom as u32);
                 // EC duplicate removal is defined over shortest-path radius
                 // shells, so BFS is fixed by the operation rather than exposed
                 // as an independent refinement choice.
-                let neighborhood = self.neighborhood(source, radius - 1, TraversalAlgorithm::Bfs);
+                let neighborhood =
+                    self.neighborhood(source, radius - 1, NeighborhoodAlgorithm::Bfs);
                 let mut bond_set: BTreeSet<u32> = BTreeSet::new();
                 let mut shell = 0;
-                for round in 1..=radius {
+                for (round, round_identifiers) in rounds.iter().enumerate().skip(1) {
                     while shell < neighborhood.len() && neighborhood[shell].1 == round - 1 {
                         for neighbor in self.neighbors(neighborhood[shell].0) {
                             bond_set.insert(neighbor.edge.index() as u32);
                         }
                         shell += 1;
                     }
-                    let identifier = rounds[round as usize][source.index()];
+                    let identifier = round_identifiers[source.index()];
                     let key: Vec<u32> = bond_set.iter().copied().collect();
                     kept.entry(key)
                         .and_modify(|best| {
@@ -340,30 +341,31 @@ mod tests {
         assert_eq!(refinement.graph_hash(), 4);
     }
 
-    // A custom CircularRefinementHash impl exercises that trait seam. Radius 0 returns
-    // the per-node seed hash directly (no duplicate-environment removal).
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     struct SummingScheme;
     impl CircularRefinementHash for SummingScheme {
         fn seed_hash(&self, components: &[u32]) -> u64 {
             components.iter().map(|&c| u64::from(c)).sum()
         }
-        fn combine(&self, _round: u32, current: u64, neighbors: &[(u32, u64)]) -> u64 {
+        fn combine(&self, _round: usize, current: u64, neighbors: &[(u32, u64)]) -> u64 {
             current + neighbors.iter().map(|&(_, color)| color).sum::<u64>()
         }
     }
 
     #[rstest]
-    fn test_graph_circular_refine() {
+    #[case::seeds(0, vec![1, 2])]
+    #[case::one_round(1, vec![1, 2, 3])]
+    #[case::duplicate_environment(2, vec![1, 2, 3])]
+    fn test_graph_circular_refine(#[case] radius: usize, #[case] expected: Vec<u64>) {
         let graph = Graph::new(2, &[[0, 1]]);
         let ids = graph.circular_refine(
             |n: NodeId| vec![n.0 + 1],
             |_| 1,
             CircularRefinementAlgorithm::Ec {
-                radius: 0,
+                radius,
                 scheme: SummingScheme,
             },
         );
-        assert_eq!(ids, vec![1, 2]);
+        assert_eq!(ids, expected);
     }
 }

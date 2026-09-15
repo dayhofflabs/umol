@@ -8,6 +8,31 @@ use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId
 use super::strategy::graph_with_edge_multiset;
 
 proptest! {
+    /// The selected edge IDs equal the endpoint-membership definition, including multigraphs.
+    /// Reversing or repeating the node sequence preserves that edge set without repeating IDs.
+    #[test]
+    fn test_graph_induced_edges(
+        (graph, edges) in graph_with_edge_multiset(16, 40),
+        nodes in prop::collection::vec(0u32..16, 0..32),
+    ) {
+        let mut nodes: Vec<NodeId> = nodes.into_iter()
+            .filter(|&node| (node as usize) < graph.node_count())
+            .map(NodeId).collect();
+        let expected: Vec<EdgeId> = edges.iter().enumerate()
+            .filter(|(_, [a, b])| nodes.contains(&NodeId(*a)) && nodes.contains(&NodeId(*b)))
+            .map(|(index, _)| EdgeId::from(index)).collect();
+
+        let mut actual: Vec<_> = graph.induced_edges(&nodes).collect();
+        actual.sort_unstable();
+        prop_assert_eq!(&actual, &expected);
+
+        nodes.reverse();
+        nodes.extend_from_within(..);
+        let mut actual: Vec<_> = graph.induced_edges(&nodes).collect();
+        actual.sort_unstable();
+        prop_assert_eq!(actual, expected);
+    }
+
     #[test]
     fn test_graph_is_simple(
         (graph, edges) in graph_with_edge_multiset(8, 16),

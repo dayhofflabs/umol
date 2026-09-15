@@ -5,7 +5,9 @@
 //! - `parse_cx_annotations`: basic annotations only (for Molecule)
 //! - `parse_extended_cx_annotations`: all annotations (for ExtendedMolecule)
 
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
+use std::mem;
 
 use bstr::ByteSlice;
 use umol_chem::spin::SpinMultiplicity;
@@ -23,11 +25,12 @@ use super::super::config::SmilesSyntaxFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::table_ir::bond::BondNoncovalent;
+use crate::table_ir::stereo::derive::{derive_stereo_bonds, StereoDerivationError};
 use crate::table_ir::{
-    BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondOrientation, BondStereo,
-    BondTaper, BondWedge, ConfigurationScope, CxAnnotationData, ExtendedMolecule, ExtendedReaction,
-    LinkAtom, Molecule, MulticenterBond, MulticenterSet, Reaction, RingBondCount, SGroup,
-    SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
+    AtomNeighbors, BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondOrientation,
+    BondStereo, BondTaper, BondWedge, ConfigurationScope, CxAnnotationData, ExtendedMolecule,
+    ExtendedReaction, LinkAtom, Molecule, MulticenterBond, MulticenterSet, Reaction, RingBondCount,
+    SGroup, SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
     SGroupData, SGroupDataType, SGroupSubtype, SGroupType, StereoSet, StereoSetRelation,
     SubstitutionCount, UnsaturatedAtom,
 };
@@ -247,10 +250,17 @@ pub fn remap_cx_bond_indices(
 
 /// Update Molecule with parsed CX entries
 /// TODO: Add FragmentGroups, StereoGroups, RelativeStereo, LigandOrder to Molecule?
-pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), ParseError> {
+pub fn update_molecule(
+    mol: &mut Molecule,
+    entries: Vec<CxEntry>,
+    neighbors: &OnceCell<AtomNeighbors>,
+) -> Result<(), ParseError> {
+    let mut bond_stereo_assertions = Vec::new();
+    let mut stereo_changed = false;
     for entry in entries {
         match entry {
             CxEntry::Coordinates(coords) => {
+                stereo_changed = true;
                 if coords.len() > mol.atoms.len() {
                     return Err(ParseError::AtomIndexOutOfBounds {
                         atom_idx: mol.atoms.len() as u32,
@@ -284,6 +294,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
+                stereo_changed |= !wiggly.is_empty();
                 for (atom_idx, bond_idx, orientation) in wiggly {
                     if atom_idx as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
@@ -303,31 +314,26 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                             BondTaper::Narrowing
                         },
                     });
+                    let mut partners = mol.bonds.iter().enumerate().filter(|(_, b)| {
+                        b.order == BondOrder::Double
+                            && (b.atoms.first() == atom_idx || b.atoms.second() == atom_idx)
+                    });
+                    if let (Some((site, _)), None) = (partners.next(), partners.next()) {
+                        bond_stereo_assertions.push((site as u32, BondStereo::Either));
+                    }
                 }
             }
             CxEntry::CisBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Cis);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Cis)));
             }
             CxEntry::TransBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Trans);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Trans)));
             }
             CxEntry::UnspecBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Either);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Either)));
             }
             CxEntry::LonePairs(pairs) => {
                 for (idx, count) in pairs {
@@ -338,6 +344,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                 }
             }
             CxEntry::CoordinateBonds(pairs) => {
+                stereo_changed |= !pairs.is_empty();
                 for (first_atom, bond_idx) in pairs {
                     if first_atom as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds {
@@ -361,6 +368,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                 }
             }
             CxEntry::HydrogenBonds(pairs) => {
+                stereo_changed |= !pairs.is_empty();
                 for (first_atom, bond_idx) in pairs {
                     if first_atom as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds {
@@ -382,6 +390,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                 }
             }
             CxEntry::MulticenterBonds(bonds) => {
+                stereo_changed |= !bonds.is_empty();
                 for (center, ligands) in bonds {
                     if center as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx: center });
@@ -402,6 +411,17 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
         }
     }
 
+    if stereo_changed || !bond_stereo_assertions.is_empty() {
+        mol.stereo_bonds = derive_stereo_bonds(
+            mol.atoms.len(),
+            &mol.bonds,
+            |bond| (bond.atoms, bond.order, bond.wedge),
+            mol.positions.as_deref(),
+            mem::take(&mut mol.stereo_bonds),
+            bond_stereo_assertions,
+            neighbors,
+        )?;
+    }
     Ok(())
 }
 
@@ -409,6 +429,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
 pub fn update_extended_molecule(
     mol: &mut ExtendedMolecule,
     entries: Vec<CxEntry>,
+    neighbors: &OnceCell<AtomNeighbors>,
 ) -> Result<(), ParseError> {
     let mut configuration_scope: Option<ConfigurationScope> = None;
     let mut stereo_groups: BTreeMap<u32, StereoSet> = BTreeMap::new();
@@ -417,9 +438,12 @@ pub fn update_extended_molecule(
     let mut sgroup_index: u32 = 0;
     let mut bicyclo_stereo: Vec<BicycloStereo> = vec![];
 
+    let mut bond_stereo_assertions = Vec::new();
+    let mut stereo_changed = false;
     for entry in entries {
         match entry {
             CxEntry::Coordinates(coords) => {
+                stereo_changed = true;
                 if coords.len() > mol.atoms.len() {
                     return Err(ParseError::AtomIndexOutOfBounds {
                         atom_idx: mol.atoms.len() as u32,
@@ -453,6 +477,7 @@ pub fn update_extended_molecule(
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
+                stereo_changed |= !wiggly.is_empty();
                 for (atom_idx, bond_idx, orientation) in wiggly {
                     if atom_idx as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
@@ -472,31 +497,26 @@ pub fn update_extended_molecule(
                             BondTaper::Narrowing
                         },
                     });
+                    let mut partners = mol.bonds.iter().enumerate().filter(|(_, b)| {
+                        b.order == BondOrder::Double
+                            && (b.atoms.first() == atom_idx || b.atoms.second() == atom_idx)
+                    });
+                    if let (Some((site, _)), None) = (partners.next(), partners.next()) {
+                        bond_stereo_assertions.push((site as u32, BondStereo::Either));
+                    }
                 }
             }
             CxEntry::CisBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Cis);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Cis)));
             }
             CxEntry::TransBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Trans);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Trans)));
             }
             CxEntry::UnspecBonds(indices) => {
-                for idx in indices {
-                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
-                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
-                    };
-                    bond.stereo = Some(BondStereo::Either);
-                }
+                bond_stereo_assertions
+                    .extend(indices.into_iter().map(|bond| (bond, BondStereo::Either)));
             }
             CxEntry::LonePairs(pairs) => {
                 for (idx, count) in pairs {
@@ -507,6 +527,7 @@ pub fn update_extended_molecule(
                 }
             }
             CxEntry::CoordinateBonds(pairs) => {
+                stereo_changed |= !pairs.is_empty();
                 for (first_atom, bond_idx) in pairs {
                     if first_atom as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds {
@@ -530,6 +551,7 @@ pub fn update_extended_molecule(
                 }
             }
             CxEntry::HydrogenBonds(pairs) => {
+                stereo_changed |= !pairs.is_empty();
                 for (first_atom, bond_idx) in pairs {
                     if first_atom as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds {
@@ -551,6 +573,7 @@ pub fn update_extended_molecule(
                 }
             }
             CxEntry::MulticenterBonds(bonds) => {
+                stereo_changed |= !bonds.is_empty();
                 for (center, ligands) in bonds {
                     if center as usize >= mol.atoms.len() {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx: center });
@@ -740,22 +763,52 @@ pub fn update_extended_molecule(
         });
     }
 
+    if stereo_changed || !bond_stereo_assertions.is_empty() {
+        mol.stereo_bonds = derive_stereo_bonds(
+            mol.atoms.len(),
+            &mol.bonds,
+            |bond| (bond.atoms, bond.order, bond.wedge),
+            mol.positions.as_deref(),
+            mem::take(&mut mol.stereo_bonds),
+            bond_stereo_assertions,
+            neighbors,
+        )?;
+    }
     Ok(())
+}
+
+impl From<StereoDerivationError> for ParseError {
+    fn from(error: StereoDerivationError) -> Self {
+        match error {
+            StereoDerivationError::BondIndexOutOfBounds { bond } => {
+                Self::BondIndexOutOfBounds { bond_idx: bond }
+            }
+            StereoDerivationError::AtomIndexOutOfBounds { atom } => {
+                Self::AtomIndexOutOfBounds { atom_idx: atom }
+            }
+            StereoDerivationError::MissingPosition { atom } => Self::MissingPosition { atom },
+            StereoDerivationError::UnsupportedSite { bond } => Self::UnsupportedStereoBond { bond },
+            StereoDerivationError::ConflictingConfiguration { bond } => {
+                Self::ConflictingBondConfiguration { bond }
+            }
+        }
+    }
 }
 
 pub fn update_reaction(
     reaction: &mut Reaction,
     split: (Vec<CxEntry>, Vec<CxEntry>, Vec<CxEntry>),
+    neighbors: &[OnceCell<AtomNeighbors>; 3],
 ) -> Result<(), ParseError> {
     let (reactant_entries, agent_entries, product_entries) = split;
     if !reactant_entries.is_empty() {
-        update_molecule(&mut reaction.reactants, reactant_entries)?;
+        update_molecule(&mut reaction.reactants, reactant_entries, &neighbors[0])?;
     }
     if !agent_entries.is_empty() {
-        update_molecule(&mut reaction.agents, agent_entries)?;
+        update_molecule(&mut reaction.agents, agent_entries, &neighbors[1])?;
     }
     if !product_entries.is_empty() {
-        update_molecule(&mut reaction.products, product_entries)?;
+        update_molecule(&mut reaction.products, product_entries, &neighbors[2])?;
     }
     Ok(())
 }
@@ -763,16 +816,17 @@ pub fn update_reaction(
 pub fn update_extended_reaction(
     reaction: &mut ExtendedReaction,
     split: (Vec<CxEntry>, Vec<CxEntry>, Vec<CxEntry>),
+    neighbors: &[OnceCell<AtomNeighbors>; 3],
 ) -> Result<(), ParseError> {
     let (reactant_entries, agent_entries, product_entries) = split;
     if !reactant_entries.is_empty() {
-        update_extended_molecule(&mut reaction.reactants, reactant_entries)?;
+        update_extended_molecule(&mut reaction.reactants, reactant_entries, &neighbors[0])?;
     }
     if !agent_entries.is_empty() {
-        update_extended_molecule(&mut reaction.agents, agent_entries)?;
+        update_extended_molecule(&mut reaction.agents, agent_entries, &neighbors[1])?;
     }
     if !product_entries.is_empty() {
-        update_extended_molecule(&mut reaction.products, product_entries)?;
+        update_extended_molecule(&mut reaction.products, product_entries, &neighbors[2])?;
     }
     Ok(())
 }
@@ -2675,8 +2729,6 @@ mod tests {
     #[case::radicals(vec![CxEntry::Radicals(vec![(0, (1, None))])],
         |mol: &Molecule| mol.atoms[0].unpaired_electrons == Some(1) && mol.atoms[0].multiplicity.is_none())]
     #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(0, 0, BondOrientation::Either)])], |mol: &Molecule| mol.bonds[0].wedge == Some(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Widening }))]
-    #[case::cis_bonds(vec![CxEntry::CisBonds(vec![0])], |mol: &Molecule| mol.bonds[0].stereo == Some(BondStereo::Cis))]
-    #[case::trans_bonds(vec![CxEntry::TransBonds(vec![1])], |mol: &Molecule| mol.bonds[1].stereo == Some(BondStereo::Trans))]
     #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].donation == Some(BondDonation::Donating))]
     #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].noncovalent == Some(BondNoncovalent::Hydrogen) && mol.bonds[0].order == BondOrder::Zero)]
     #[case::multicenter_bonds(vec![CxEntry::MulticenterBonds(vec![(0, vec![1, 2]), (2, vec![0, 1])])],
@@ -2691,7 +2743,7 @@ mod tests {
         #[case] check: fn(&Molecule) -> bool,
     ) {
         let mut mol = triatomic_molecule;
-        update_molecule(&mut mol, entries).unwrap();
+        update_molecule(&mut mol, entries, &OnceCell::new()).unwrap();
         assert!(check(&mol));
     }
 
@@ -2703,8 +2755,6 @@ mod tests {
     #[case::radicals(vec![CxEntry::Radicals(vec![(2, (2, None))])],
         |mol: &ExtendedMolecule| mol.atoms[2].unpaired_electrons == Some(2) && mol.atoms[2].multiplicity.is_none())]
     #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(1, 0, BondOrientation::Either)])], |mol: &ExtendedMolecule| mol.bonds[0].wedge == Some(BondWedge { orientation: BondOrientation::Either, taper: BondTaper::Narrowing }))]
-    #[case::cis_bonds(vec![CxEntry::CisBonds(vec![1])], |mol: &ExtendedMolecule| mol.bonds[1].stereo == Some(BondStereo::Cis))]
-    #[case::trans_bonds(vec![CxEntry::TransBonds(vec![0])], |mol: &ExtendedMolecule| mol.bonds[0].stereo == Some(BondStereo::Trans))]
     #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(1, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].donation == Some(BondDonation::Accepting))]
     #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].noncovalent == Some(BondNoncovalent::Hydrogen) && mol.bonds[0].order == BondOrder::Zero)]
     #[case::fragment_groups(vec![CxEntry::FragmentGroups(vec![vec![0, 1], vec![2]])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| d.components.as_ref()) == Some(Some(&vec![vec![0, 1], vec![2]])))]
@@ -2729,7 +2779,7 @@ mod tests {
         #[case] check: fn(&ExtendedMolecule) -> bool,
     ) {
         let mut mol = triatomic_extended_molecule;
-        update_extended_molecule(&mut mol, entries).unwrap();
+        update_extended_molecule(&mut mol, entries, &OnceCell::new()).unwrap();
         assert!(check(&mol));
     }
 }

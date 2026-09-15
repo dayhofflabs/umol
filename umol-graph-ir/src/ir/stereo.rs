@@ -1369,6 +1369,19 @@ impl Lattice for StereoConfigurationForm {
         matches!(self, Self::Kinded(_, StereoCoset::Lit(_)))
     }
 
+    fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined, Self::Undetermined) => true,
+            (Self::Undetermined, Self::Kinded(kind, coset))
+            | (Self::Kinded(kind, coset), Self::Undetermined) => {
+                coset_is_compatible(coset, &StereoCoset::Undetermined, *kind)
+            }
+            (Self::Kinded(ka, a), Self::Kinded(kb, b)) => {
+                ka == kb && coset_is_compatible(a, b, *ka)
+            }
+        }
+    }
+
     fn meet(&self, other: &Self) -> Option<Self> {
         let a = self.normalized().ok()?;
         let b = other.normalized().ok()?;
@@ -1505,6 +1518,20 @@ macro_rules! stereo_site {
                     Self::NotStereo => true,
                     Self::Stereo(coset) => matches!(coset, StereoCoset::Lit(_)),
                     Self::Undetermined => false,
+                }
+            }
+
+            fn is_compatible(&self, other: &Self) -> bool {
+                match (self, other) {
+                    (Self::Undetermined, Self::Undetermined | Self::NotStereo)
+                    | (Self::NotStereo, Self::Undetermined) => true,
+                    (Self::Undetermined, Self::Stereo(coset))
+                    | (Self::Stereo(coset), Self::Undetermined) => {
+                        coset_is_compatible(coset, &StereoCoset::Undetermined, $kind)
+                    }
+                    (Self::NotStereo, Self::NotStereo) => true,
+                    (Self::Stereo(a), Self::Stereo(b)) => coset_is_compatible(a, b, $kind),
+                    _ => false,
                 }
             }
 
@@ -1834,6 +1861,20 @@ pub(crate) fn coset_meet(
             )
             .ok()
         }
+    }
+}
+
+fn coset_is_compatible(a: &StereoCoset, b: &StereoCoset, kind: StereoKind) -> bool {
+    match (a, b) {
+        (StereoCoset::Undetermined, StereoCoset::Undetermined | StereoCoset::Lit(_))
+        | (StereoCoset::Lit(_), StereoCoset::Undetermined) => true,
+        (StereoCoset::Undetermined, StereoCoset::LitSet(s))
+        | (StereoCoset::LitSet(s), StereoCoset::Undetermined) => !s.is_empty(),
+        (StereoCoset::Lit(a), StereoCoset::Lit(b)) => a == b,
+        (StereoCoset::Lit(value), StereoCoset::LitSet(s))
+        | (StereoCoset::LitSet(s), StereoCoset::Lit(value)) => s.contains(value),
+        (StereoCoset::LitSet(a), StereoCoset::LitSet(b)) => !a.is_disjoint(b),
+        _ => coset_meet(a, b, kind).is_some(),
     }
 }
 

@@ -84,7 +84,7 @@ import umol
             "cis_trans_stereo_mismatch=Ellipsis, "
             "reset_stereo_constraints=False)",
         ),
-        (umol.ResolveConfig, "(*, aromaticity, stereo)"),
+        (umol.ResolveConfig, "(*, aromaticity, stereo, isotope=Ellipsis)"),
         (
             umol.ConnectivityModel,
             "(*, allow_disconnected, allow_disconnected_dative, "

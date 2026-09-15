@@ -10,6 +10,8 @@ use umol_graph_ir::ir::{AtomForm, AtomId};
 ///
 /// An entry is non-empty — an empty candidate set is a contradiction, not an
 /// entry. This is the one representation invariant.
+/// A valence completion preserves isotope information, which may remain unresolved;
+/// it need not be a ground AtomForm in the layered resolver.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AtomCompletions {
     entries: BTreeMap<AtomId, SmallVec<[AtomForm; 1]>>,

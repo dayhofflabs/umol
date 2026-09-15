@@ -2,7 +2,7 @@
 //! and (optionally) charge. Consumed by the AtomTyping valence resolver.
 //!
 //! TOML-loaded entries are parsed via `AtomDsl` and raised with the registry
-//! raise defaults: concrete struct fields plus the valence-relevant constraints
+//! raise defaults: concrete inherent fields except isotope, plus the valence-relevant constraints
 //! at their zero values (valence, donated/accepted pairs, aromatic valence,
 //! multicenter valence); all other constraints stay unconstrained. Stored under
 //! both `(element, Some(charge))` and `(element, None)` for the two lookup modes.
@@ -15,13 +15,25 @@ use std::sync::LazyLock;
 
 use umol_chem::element::Element;
 use umol_graph_ir::dsl::{
-    AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumDefault,
+    AromaticValenceDefault, AtomDefaults, AtomDsl, IsotopeDefault, MulticenterValenceDefault,
+    NumDefault,
 };
-use umol_graph_ir::ir::{AtomForm, ElementForm, IntoIr, NumForm};
+use umol_graph_ir::ir::{AtomForm, ElementForm, IntoIr, IsotopeMassForm, NumForm};
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::ops::model::ConfigError;
 
+/// Valence patterns indexed by literal element and charge.
+///
+/// Every entry has a literal element, a literal charge in the i8 range, and an
+/// Undetermined isotope. Registry entries cannot assert isotope information.
+/// Other fields and constraints are retained as supplied.
+///
+/// # Semantic properties
+///
+/// Construction and insertion preserve entry order and duplicates within each
+/// lookup bucket. Checked and asserted producers establish the same invariant.
+/// Failed checked insertion preserves both the entries and the content hash.
 #[derive(Debug, Clone)]
 pub struct AtomTypeRegistry {
     atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomForm>>,
@@ -58,12 +70,29 @@ impl AtomTypeRegistry {
         &DEFAULT_ATOM_TYPE_REGISTRY
     }
 
+    /// Constructs a registry from patterns satisfying the entry invariant.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an entry has a non-literal element or charge, a charge outside
+    /// the i8 range, or an isotope other than Undetermined.
     pub fn from_atoms(atoms: impl IntoIterator<Item = AtomForm>) -> Self {
+        Self::try_from_atoms(atoms).expect("invalid atom type registry entries")
+    }
+
+    /// Constructs a registry from independently supplied patterns.
+    ///
+    /// # Errors
+    ///
+    /// Returns ConfigError::InvalidAtomTypeRegistry if an entry has a non-literal
+    /// element or charge, a charge outside the i8 range, or an isotope other than
+    /// Undetermined.
+    pub fn try_from_atoms(atoms: impl IntoIterator<Item = AtomForm>) -> Result<Self, ConfigError> {
         let mut reg = Self::new();
         for atom in atoms {
-            reg.add(atom);
+            reg.try_add(atom)?;
         }
-        reg
+        Ok(reg)
     }
 
     pub fn content_hash(&self) -> u64 {
@@ -88,11 +117,12 @@ impl AtomTypeRegistry {
         self.content_hash = xxh3_64(buf.as_bytes());
     }
 
-    /// The raise defaults for registry entries: concrete struct fields plus
+    /// The raise defaults for registry entries: concrete inherent fields except isotope, plus
     /// the valence-relevant constraints at their zero values; all other
     /// constraints stay unconstrained.
     pub fn raise_defaults() -> AtomDefaults {
         AtomDefaults {
+            isotope: IsotopeDefault::Required,
             valence: NumDefault::Zero,
             donated_pairs: NumDefault::Zero,
             accepted_pairs: NumDefault::Zero,
@@ -102,6 +132,12 @@ impl AtomTypeRegistry {
         }
     }
 
+    /// Loads atom patterns from element and charge sections in TOML.
+    ///
+    /// # Errors
+    ///
+    /// Returns ConfigError::InvalidAtomTypeRegistry for invalid TOML or atom DSL,
+    /// an invalid registry entry, or an entry that disagrees with its section keys.
     pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
             .map_err(|e| ConfigError::InvalidAtomTypeRegistry(e.to_string()))?;
@@ -137,21 +173,38 @@ impl AtomTypeRegistry {
         Ok(reg)
     }
 
+    /// Loads a registry from a TOML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns ConfigError::InvalidAtomTypeRegistry if reading the file or
+    /// loading its contents fails.
     pub fn from_toml_file(path: &Path) -> Result<Self, ConfigError> {
         let input = fs::read_to_string(path)
             .map_err(|e| ConfigError::InvalidAtomTypeRegistry(e.to_string()))?;
         Self::from_toml_str(&input)
     }
 
+    /// Inserts a pattern satisfying the entry invariant.
+    ///
+    /// # Panics
+    ///
+    /// Panics before mutation if the entry has a non-literal element or charge,
+    /// a charge outside the i8 range, or an isotope other than Undetermined.
     pub fn add(&mut self, atom: AtomForm) {
-        let element = match &atom.element {
-            ElementForm::Lit(e) => *e,
-            _ => panic!("registry entries must have literal elements"),
-        };
-        let charge = match &atom.charge {
-            NumForm::Lit(c) => *c as i8,
-            _ => panic!("registry entries must have literal charges"),
-        };
+        self.try_add(atom)
+            .expect("invalid atom type registry entry");
+    }
+
+    /// Inserts an independently supplied pattern, preserving the registry on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns ConfigError::InvalidAtomTypeRegistry if the entry has a non-literal
+    /// element or charge, a charge outside the i8 range, or an isotope other than
+    /// Undetermined.
+    pub fn try_add(&mut self, atom: AtomForm) -> Result<(), ConfigError> {
+        let (element, charge) = entry_key(&atom)?;
         self.atom_types
             .entry((element, Some(charge)))
             .or_default()
@@ -161,6 +214,7 @@ impl AtomTypeRegistry {
             .or_default()
             .push(atom);
         self.recompute_hash();
+        Ok(())
     }
 
     pub fn patterns_for_element(&self, element: Element) -> &[AtomForm] {
@@ -182,6 +236,30 @@ impl AtomTypeRegistry {
     }
 }
 
+fn entry_key(atom: &AtomForm) -> Result<(Element, i8), ConfigError> {
+    let ElementForm::Lit(element) = atom.element else {
+        return Err(ConfigError::InvalidAtomTypeRegistry(
+            "registry entries must have literal elements".to_owned(),
+        ));
+    };
+    let NumForm::Lit(charge) = atom.charge else {
+        return Err(ConfigError::InvalidAtomTypeRegistry(
+            "registry entries must have literal charges".to_owned(),
+        ));
+    };
+    let charge = i8::try_from(charge).map_err(|_| {
+        ConfigError::InvalidAtomTypeRegistry(format!(
+            "registry entry charge {charge} is outside -128..=127"
+        ))
+    })?;
+    if !matches!(atom.isotope_mass, IsotopeMassForm::Undetermined) {
+        return Err(ConfigError::InvalidAtomTypeRegistry(
+            "registry entries must have undetermined isotopes".to_owned(),
+        ));
+    }
+    Ok((element, charge))
+}
+
 fn parse_entry(
     source: &str,
     defaults: &AtomDefaults,
@@ -192,25 +270,13 @@ fn parse_entry(
         .parse()
         .map_err(|e| ConfigError::InvalidAtomTypeRegistry(format!("{}: {}", source, e)))?;
     let atom: AtomForm = dsl.into_ir(defaults);
-    let &ElementForm::Lit(atom_element) = &atom.element else {
-        return Err(ConfigError::InvalidAtomTypeRegistry(format!(
-            "atom '{}' has non-literal element",
-            source
-        )));
-    };
+    let (atom_element, atom_charge) = entry_key(&atom)?;
     if atom_element != element {
         return Err(ConfigError::InvalidAtomTypeRegistry(format!(
             "atom '{}' element {} does not match section element {}",
             source, atom_element, element
         )));
     }
-    let &NumForm::Lit(atom_charge) = &atom.charge else {
-        return Err(ConfigError::InvalidAtomTypeRegistry(format!(
-            "atom '{}' has non-literal charge",
-            source
-        )));
-    };
-    let atom_charge = atom_charge as i8;
     if atom_charge != charge {
         return Err(ConfigError::InvalidAtomTypeRegistry(format!(
             "atom '{}' charge {} does not match section charge {}",
@@ -220,8 +286,13 @@ fn parse_entry(
     Ok(atom)
 }
 
-/// Defines an `AtomTypeRegistry` from a flat list of ground atom-DSL literals.
+/// Defines an `AtomTypeRegistry` from a flat list of atom-DSL patterns.
 /// Element and charge are derived from each literal.
+/// Isotope must be omitted or explicitly Undetermined.
+///
+/// # Panics
+///
+/// Panics if parsing fails or a pattern violates the registry entry invariant.
 ///
 /// ```ignore
 /// let reg = registry!["H#v", "C#v4", "C#c+#v3"];
@@ -250,7 +321,10 @@ static DEFAULT_ATOM_TYPE_REGISTRY: LazyLock<AtomTypeRegistry> = LazyLock::new(||
 
 #[cfg(test)]
 mod tests {
+    use std::{env, process, thread};
+
     use rstest::rstest;
+    use umol_graph_ir::atom_dsl;
 
     use super::*;
 
@@ -288,7 +362,75 @@ mod tests {
             AtomTypeRegistry::from_toml_str(include_str!("../../../config/default-registry.toml"))
                 .unwrap();
 
-        assert_eq!(AtomTypeRegistry::default_registry(), &expected);
+        let registry = AtomTypeRegistry::default_registry();
+        assert_eq!(registry, &expected);
+        for rows in registry.atom_types.values() {
+            for row in rows {
+                assert_eq!(row.isotope_mass, IsotopeMassForm::Undetermined);
+            }
+        }
+        let rebuilt = AtomTypeRegistry::try_from_atoms(
+            registry
+                .atom_types
+                .iter()
+                .filter(|((_, charge), _)| charge.is_none())
+                .flat_map(|(_, rows)| rows.iter().cloned()),
+        )
+        .unwrap();
+        assert_eq!(registry, &rebuilt);
+        assert_eq!(registry.content_hash(), rebuilt.content_hash());
+    }
+
+    #[rstest]
+    #[case::empty(vec![])]
+    #[case::patterns(vec![atom_dsl!("C#c0#h4#D0"), atom_dsl!("C#c+#h3")])]
+    #[case::duplicates(vec![atom_dsl!("C#c0#h4"), atom_dsl!("C#c0#h4")])]
+    #[case::lowest_charge(vec![atom_dsl!("C#c-128")])]
+    fn test_atom_type_registry_try_from_atoms(#[case] atoms: Vec<AtomForm>) {
+        let registry = AtomTypeRegistry::try_from_atoms(atoms.clone()).unwrap();
+        assert_eq!(registry.patterns_for_element(Element::C), atoms);
+        assert_eq!(registry, AtomTypeRegistry::from_atoms(atoms.clone()));
+        for charge in [-128, 0, 1] {
+            let expected: Vec<_> = atoms
+                .iter()
+                .filter(|atom| atom.charge == NumForm::Lit(charge))
+                .cloned()
+                .collect();
+            assert_eq!(
+                registry.patterns_for_element_and_charge(Element::C, charge as i8),
+                expected
+            );
+        }
+    }
+
+    #[rstest]
+    #[case::element(atom_dsl!("*#c0"), "registry entries must have literal elements")]
+    #[case::charge(atom_dsl!("C"), "registry entries must have literal charges")]
+    #[case::charge_high(atom_dsl!("C#c128"), "registry entry charge 128 is outside -128..=127")]
+    #[case::charge_low(atom_dsl!("C#c-129"), "registry entry charge -129 is outside -128..=127")]
+    #[case::natural(atom_dsl!("C#i=#c0"), "registry entries must have undetermined isotopes")]
+    #[case::mass(atom_dsl!("C#i13#c0"), "registry entries must have undetermined isotopes")]
+    #[case::set(atom_dsl!("C#i{12,13}#c0"), "registry entries must have undetermined isotopes")]
+    #[case::variable(atom_dsl!("C#i?mass#c0"), "registry entries must have undetermined isotopes")]
+    #[case::restricted_variable(atom_dsl!("C#i?mass :: {12,13}#c0"), "registry entries must have undetermined isotopes")]
+    #[case::empty_set(AtomForm { isotope_mass: IsotopeMassForm::lit_set([]), ..atom_dsl!("C#c0") }, "registry entries must have undetermined isotopes")]
+    fn test_atom_type_registry_try_from_atoms_error(#[case] atom: AtomForm, #[case] message: &str) {
+        assert_eq!(
+            AtomTypeRegistry::try_from_atoms([atom_dsl!("O#c0"), atom]),
+            Err(ConfigError::InvalidAtomTypeRegistry(message.to_owned())),
+        );
+    }
+
+    #[rstest]
+    #[case::natural(atom_dsl!("C#i=#c0"))]
+    #[case::mass(atom_dsl!("C#i13#c0"))]
+    #[case::set(atom_dsl!("C#i{12,13}#c0"))]
+    #[case::variable(atom_dsl!("C#i?mass#c0"))]
+    #[case::element(atom_dsl!("*#c0"))]
+    #[case::charge(atom_dsl!("C"))]
+    #[should_panic(expected = "invalid atom type registry entries")]
+    fn test_atom_type_registry_from_atoms_error(#[case] atom: AtomForm) {
+        AtomTypeRegistry::from_atoms([atom]);
     }
 
     #[rstest]
@@ -301,6 +443,7 @@ mod tests {
 -1 = ["O#c-#n3#v#a0"]
 "#;
         let defaults = AtomDefaults {
+            isotope: IsotopeDefault::Required,
             valence: NumDefault::Zero,
             donated_pairs: NumDefault::Zero,
             accepted_pairs: NumDefault::Zero,
@@ -323,6 +466,18 @@ mod tests {
             "atom 'O#c0' element O does not match section element C".to_owned(),
         ),
     )]
+    #[case::charge_range(
+        "[C]\n0 = [\"C#c256\"]",
+        ConfigError::InvalidAtomTypeRegistry("registry entry charge 256 is outside -128..=127".to_owned()),
+    )]
+    #[case::nonliteral_element(
+        "[C]\n0 = [\"{C,N}#c0\"]",
+        ConfigError::InvalidAtomTypeRegistry("registry entries must have literal elements".to_owned()),
+    )]
+    #[case::nonliteral_charge(
+        "[C]\n0 = [\"C#c?charge\"]",
+        ConfigError::InvalidAtomTypeRegistry("registry entries must have literal charges".to_owned()),
+    )]
     #[case::wrong_charge(
         "[C]\n0 = [\"C#c+\"]",
         ConfigError::InvalidAtomTypeRegistry(
@@ -334,13 +489,98 @@ mod tests {
     }
 
     #[rstest]
-    fn test_registry_macro() {
-        let defaults = AtomTypeRegistry::raise_defaults();
-        let expected = AtomTypeRegistry::from_atoms(
-            ["C#c0#v4", "C#c+#h3"]
-                .map(|source| source.parse::<AtomDsl>().unwrap().into_ir(&defaults)),
+    #[case::omitted("[C]\n0 = [\"C#v4\"]", Ok(registry!["C#v4"]))]
+    #[case::undetermined("[C]\n0 = [\"C#i*#v4\"]", Ok(registry!["C#v4"]))]
+    #[case::natural("[C]\n0 = [\"C#i=\"]", Err(ConfigError::InvalidAtomTypeRegistry("registry entries must have undetermined isotopes".to_owned())))]
+    #[case::mass("[C]\n0 = [\"C#i13\"]", Err(ConfigError::InvalidAtomTypeRegistry("registry entries must have undetermined isotopes".to_owned())))]
+    #[case::set("[C]\n0 = [\"C#i{12,13}\"]", Err(ConfigError::InvalidAtomTypeRegistry("registry entries must have undetermined isotopes".to_owned())))]
+    #[case::variable("[C]\n0 = [\"C#i?mass\"]", Err(ConfigError::InvalidAtomTypeRegistry("registry entries must have undetermined isotopes".to_owned())))]
+    #[case::restricted_variable("[C]\n0 = [\"C#i?mass :: {12,13}\"]", Err(ConfigError::InvalidAtomTypeRegistry("registry entries must have undetermined isotopes".to_owned())))]
+    fn test_atom_type_registry_from_toml_file(
+        #[case] input: &str,
+        #[case] expected: Result<AtomTypeRegistry, ConfigError>,
+    ) {
+        let path = env::temp_dir().join(format!(
+            "umol-registry-{}-{:?}.toml",
+            process::id(),
+            thread::current().id()
+        ));
+        fs::write(&path, input).unwrap();
+        let result = AtomTypeRegistry::from_toml_file(&path);
+        fs::remove_file(path).unwrap();
+        assert_eq!(result, expected);
+        assert_eq!(AtomTypeRegistry::from_toml_str(input), expected);
+    }
+
+    #[rstest]
+    #[case::new_element("O#h2#D0", "[C]\n0 = [\"C#h4\"]\n[O]\n0 = [\"O#h2#D0\"]")]
+    #[case::new_charge("C#c+#h3", "[C]\n0 = [\"C#h4\"]\n1 = [\"C#c+#h3\"]")]
+    #[case::duplicate("C#h4", "[C]\n0 = [\"C#h4\", \"C#h4\"]")]
+    #[case::highest_charge("C#c127", "[C]\n0 = [\"C#h4\"]\n127 = [\"C#c127\"]")]
+    fn test_atom_type_registry_try_add(#[case] source: &str, #[case] expected: &str) {
+        let mut registry = AtomTypeRegistry::from_toml_str("[C]\n0 = [\"C#h4\"]").unwrap();
+        let atom = source
+            .parse::<AtomDsl>()
+            .unwrap()
+            .into_ir(&AtomTypeRegistry::raise_defaults());
+        assert_eq!(registry.try_add(atom), Ok(()));
+        let expected = AtomTypeRegistry::from_toml_str(expected).unwrap();
+        assert_eq!(registry, expected);
+        assert_eq!(registry.content_hash(), expected.content_hash());
+    }
+
+    #[rstest]
+    #[case::element(atom_dsl!("*#c0"), "registry entries must have literal elements")]
+    #[case::charge(atom_dsl!("C"), "registry entries must have literal charges")]
+    #[case::charge_high(atom_dsl!("C#c128"), "registry entry charge 128 is outside -128..=127")]
+    #[case::charge_low(atom_dsl!("C#c-129"), "registry entry charge -129 is outside -128..=127")]
+    #[case::natural(atom_dsl!("C#i=#c0"), "registry entries must have undetermined isotopes")]
+    #[case::mass(atom_dsl!("C#i13#c0"), "registry entries must have undetermined isotopes")]
+    #[case::set(atom_dsl!("C#i{12,13}#c0"), "registry entries must have undetermined isotopes")]
+    #[case::variable(atom_dsl!("C#i?mass#c0"), "registry entries must have undetermined isotopes")]
+    #[case::restricted_variable(atom_dsl!("C#i?mass :: {12,13}#c0"), "registry entries must have undetermined isotopes")]
+    #[case::empty_set(AtomForm { isotope_mass: IsotopeMassForm::lit_set([]), ..atom_dsl!("C#c0") }, "registry entries must have undetermined isotopes")]
+    fn test_atom_type_registry_try_add_error(#[case] atom: AtomForm, #[case] message: &str) {
+        let mut registry = registry!["C#v4", "O#v2"];
+        let original = registry.clone();
+        assert_eq!(
+            registry.try_add(atom),
+            Err(ConfigError::InvalidAtomTypeRegistry(message.to_owned()))
         );
+        assert_eq!(registry, original);
+        assert_eq!(registry.content_hash(), original.content_hash());
+    }
+
+    #[rstest]
+    #[case::natural(atom_dsl!("C#i=#c0"))]
+    #[case::mass(atom_dsl!("C#i13#c0"))]
+    #[case::set(atom_dsl!("C#i{12,13}#c0"))]
+    #[case::variable(atom_dsl!("C#i?mass#c0"))]
+    #[case::element(atom_dsl!("*#c0"))]
+    #[case::charge(atom_dsl!("C"))]
+    #[should_panic(expected = "invalid atom type registry entry")]
+    fn test_atom_type_registry_add_error(#[case] atom: AtomForm) {
+        AtomTypeRegistry::new().add(atom);
+    }
+
+    #[rstest]
+    fn test_registry_macro() {
+        let expected = AtomTypeRegistry::from_atoms([
+            atom_dsl!("C#c0#h0#n0#u0#s#v4#d0#t0#a!#m!"),
+            atom_dsl!("C#c+#h3#n0#u0#s#v0#d0#t0#a!#m!"),
+        ]);
 
         assert_eq!(registry!["C#c0#v4", "C#c+#h3"], expected);
+    }
+
+    #[rstest]
+    #[case::natural("C#i=")]
+    #[case::mass("C#i13")]
+    #[case::set("C#i{12,13}")]
+    #[case::variable("C#i?mass")]
+    #[case::restricted_variable("C#i?mass :: {12,13}")]
+    #[should_panic(expected = "registry entries must have undetermined isotopes")]
+    fn test_registry_macro_error(#[case] source: &str) {
+        registry![source];
     }
 }

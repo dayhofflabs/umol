@@ -6,8 +6,8 @@ use umol_graph::ops::resolve::{
     AromaticBondConstraintMismatchPolicy as GraphAromaticBondConstraintMismatchPolicy,
     AromaticityFailurePolicy as GraphAromaticityFailurePolicy,
     AromaticityMismatchPolicy as GraphAromaticityMismatchPolicy,
-    AromaticityResolveConfig as GraphAromaticityResolveConfig, ResolveConfig as GraphResolveConfig,
-    ResolveContradiction as GraphResolveContradiction,
+    AromaticityResolveConfig as GraphAromaticityResolveConfig, IsotopePolicy as GraphIsotopePolicy,
+    ResolveConfig as GraphResolveConfig, ResolveContradiction as GraphResolveContradiction,
     StereoFailurePolicy as GraphStereoFailurePolicy,
     StereoMismatchPolicy as GraphStereoMismatchPolicy,
     StereoResolveConfig as GraphStereoResolveConfig,
@@ -20,6 +20,30 @@ use umol_graph_ir::ir::AtomId as GraphIrAtomId;
 use crate::atom::AtomForm;
 use crate::model::aromaticity::AromaticityConfig;
 use crate::molecule::Molecule;
+
+/// Completion of unspecified isotope composition, independently of valence policy.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IsotopePolicy {
+    Strict,
+    Natural,
+}
+
+impl IsotopePolicy {
+    pub(crate) fn from_rust(policy: GraphIsotopePolicy) -> Self {
+        match policy {
+            GraphIsotopePolicy::Strict => Self::Strict,
+            GraphIsotopePolicy::Natural => Self::Natural,
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphIsotopePolicy {
+        match self {
+            Self::Strict => GraphIsotopePolicy::Strict,
+            Self::Natural => GraphIsotopePolicy::Natural,
+        }
+    }
+}
 
 /// Policy for an independently invalid aromatic constraint or entity.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -354,7 +378,7 @@ impl StereoResolveConfig {
     }
 }
 
-/// Operational policy for molecule resolution.
+/// Operational policy for molecule resolution. Isotope completion defaults to Strict.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ResolveConfig(GraphResolveConfig);
@@ -362,9 +386,14 @@ pub struct ResolveConfig(GraphResolveConfig);
 #[pymethods]
 impl ResolveConfig {
     #[new]
-    #[pyo3(signature = (*, aromaticity, stereo))]
-    fn new(aromaticity: AromaticityResolveConfig, stereo: StereoResolveConfig) -> Self {
+    #[pyo3(signature = (*, aromaticity, stereo, isotope=IsotopePolicy::Strict))]
+    fn new(
+        aromaticity: AromaticityResolveConfig,
+        stereo: StereoResolveConfig,
+        isotope: IsotopePolicy,
+    ) -> Self {
         Self(GraphResolveConfig {
+            isotope: isotope.to_rust(),
             aromaticity: aromaticity.to_rust(),
             stereo: stereo.to_rust(),
         })
@@ -373,6 +402,11 @@ impl ResolveConfig {
     #[staticmethod]
     fn default() -> Self {
         Self::from_rust(GraphResolveConfig::default())
+    }
+
+    #[getter]
+    fn isotope(&self) -> IsotopePolicy {
+        IsotopePolicy::from_rust(self.0.isotope)
     }
 
     #[getter]
@@ -390,7 +424,8 @@ impl ResolveConfig {
             return "ResolveConfig.default()".to_owned();
         }
         format!(
-            "ResolveConfig(aromaticity={}, stereo={})",
+            "ResolveConfig(isotope=IsotopePolicy.{:?}, aromaticity={}, stereo={})",
+            self.isotope(),
             self.aromaticity().__repr__(),
             self.stereo().__repr__(),
         )
@@ -417,6 +452,26 @@ mod tests {
     use umol_graph::ops::aromaticity::AromaticityContradiction as GraphAromaticityContradiction;
 
     use super::*;
+
+    #[rstest]
+    #[case::strict(GraphIsotopePolicy::Strict, IsotopePolicy::Strict)]
+    #[case::natural(GraphIsotopePolicy::Natural, IsotopePolicy::Natural)]
+    fn test_isotope_policy_from_rust(
+        #[case] policy: GraphIsotopePolicy,
+        #[case] expected: IsotopePolicy,
+    ) {
+        assert_eq!(IsotopePolicy::from_rust(policy), expected);
+    }
+
+    #[rstest]
+    #[case::strict(IsotopePolicy::Strict, GraphIsotopePolicy::Strict)]
+    #[case::natural(IsotopePolicy::Natural, GraphIsotopePolicy::Natural)]
+    fn test_isotope_policy_to_rust(
+        #[case] policy: IsotopePolicy,
+        #[case] expected: GraphIsotopePolicy,
+    ) {
+        assert_eq!(policy.to_rust(), expected);
+    }
 
     #[rstest]
     #[case::error(GraphAromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error)]
@@ -792,6 +847,7 @@ mod tests {
         AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, AromaticityMismatchPolicy::ReplaceEntity, AromaticBondConstraintMismatchPolicy::RemoveConstraint, true),
         StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoMismatchPolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoMismatchPolicy::Error, false),
         GraphResolveConfig {
+            isotope: GraphIsotopePolicy::Strict,
             aromaticity: GraphAromaticityResolveConfig {
                 perception: Default::default(),
                 aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
@@ -807,6 +863,7 @@ mod tests {
         AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error, AromaticityMismatchPolicy::Error, AromaticBondConstraintMismatchPolicy::Error, false),
         StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoMismatchPolicy::RemoveConstraint, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, StereoMismatchPolicy::ReplaceEntity, true),
         GraphResolveConfig {
+            isotope: GraphIsotopePolicy::Strict,
             aromaticity: GraphAromaticityResolveConfig::default(),
             stereo: GraphStereoResolveConfig {
                 tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
@@ -824,7 +881,10 @@ mod tests {
         #[case] stereo: StereoResolveConfig,
         #[case] expected: GraphResolveConfig,
     ) {
-        assert_eq!(ResolveConfig::new(aromaticity, stereo).0, expected);
+        assert_eq!(
+            ResolveConfig::new(aromaticity, stereo, IsotopePolicy::Strict).0,
+            expected
+        );
     }
 
     #[rstest]
@@ -832,6 +892,7 @@ mod tests {
         assert_eq!(
             ResolveConfig::default(),
             ResolveConfig(GraphResolveConfig {
+                isotope: GraphIsotopePolicy::Strict,
                 aromaticity: GraphAromaticityResolveConfig::default(),
                 stereo: GraphStereoResolveConfig::default(),
             })
@@ -844,8 +905,9 @@ mod tests {
         ResolveConfig::new(
             AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, AromaticityMismatchPolicy::ReplaceEntity, AromaticBondConstraintMismatchPolicy::RemoveConstraint, true),
             StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoMismatchPolicy::RemoveConstraint, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, StereoMismatchPolicy::ReplaceEntity, true),
+            IsotopePolicy::Strict,
         ),
-        "ResolveConfig(aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, aromatic_valence_mismatch=AromaticityMismatchPolicy.ReplaceEntity, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy.RemoveConstraint, reset_aromatic_valence=True), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, tetrahedral_stereo_mismatch=StereoMismatchPolicy.RemoveConstraint, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, cis_trans_stereo_mismatch=StereoMismatchPolicy.ReplaceEntity, reset_stereo_constraints=True))",
+        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, aromatic_valence_mismatch=AromaticityMismatchPolicy.ReplaceEntity, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy.RemoveConstraint, reset_aromatic_valence=True), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, tetrahedral_stereo_mismatch=StereoMismatchPolicy.RemoveConstraint, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, cis_trans_stereo_mismatch=StereoMismatchPolicy.ReplaceEntity, reset_stereo_constraints=True))",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -854,6 +916,7 @@ mod tests {
     #[rstest]
     #[case::default(GraphResolveConfig::default())]
     #[case::configured(GraphResolveConfig {
+        isotope: GraphIsotopePolicy::Strict,
         aromaticity: GraphAromaticityResolveConfig {
             perception: Default::default(),
             aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
@@ -896,6 +959,7 @@ mod tests {
             StereoMismatchPolicy::ReplaceEntity,
             true
         ),
+        IsotopePolicy::Strict
     ))]
     fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {
         assert_eq!(config.to_rust(), config.0);

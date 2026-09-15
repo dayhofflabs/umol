@@ -2,11 +2,10 @@
 source: umol-io/tests/smiles_parsing/mod.rs
 expression: results
 ---
-expected_category: opensmiles
-category: opensmiles
+expected_category: invalid
+category: invalid
 opensmiles:
-  success: true
-  summary:
-    sum_formula: C8
-    atom_count: 8
-    bond_count: 7
+  success: false
+  error:
+    error_type: UnsupportedStereoBond
+    message: unsupported stereo bond 1

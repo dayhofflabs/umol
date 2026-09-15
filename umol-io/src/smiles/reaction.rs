@@ -1,11 +1,14 @@
 use std::str::FromStr;
 
 use super::config::SmilesIoConfig;
-use super::error::ParseError;
+use super::error::{ParseError, ReactionSmilesRenderError};
 use super::parser::parse_reaction;
+use super::render::append_molecule;
 use crate::table_ir::{Reaction, SourceFormat};
 
-/// Parsed semantic value of a reaction SMILES representation.
+/// Semantic value of a reaction SMILES representation.
+///
+/// Owns a TableIR without changing or validating it. Rendering checks the properties it needs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReactionSmiles {
     table_ir: Reaction,
@@ -29,12 +32,71 @@ impl ReactionSmiles {
 
     /// Parse reaction SMILES bytes with an explicit IO configuration.
     pub fn parse_bytes_with(input: &[u8], config: &SmilesIoConfig) -> Result<Self, ParseError> {
-        parse_reaction(input, config).map(Self::from_parsed)
+        let mut table_ir = parse_reaction(input, config)?;
+        table_ir.source_format = SourceFormat::SMILES;
+        Ok(Self::from_table_ir(table_ir))
     }
 
-    /// Borrow the neutral TableIR boundary value.
-    pub fn as_table_ir(&self) -> &Reaction {
-        &self.table_ir
+    /// Render with the OpenSMILES configuration.
+    ///
+    /// # Errors
+    ///
+    /// Fails for invalid references, unsupported fields, or unrepresentable stereo.
+    pub fn render(&self) -> Result<String, ReactionSmilesRenderError> {
+        self.render_with(&SmilesIoConfig::opensmiles())
+    }
+
+    /// Render reactants, agents, and products, in that order, separated by `>`.
+    ///
+    /// Atom.class supplies the written map labels. The derived atom_mapping index is not
+    /// consumed. Traversal and marker assignment run once for each section.
+    ///
+    /// # Errors
+    ///
+    /// Reports molecular failures from [Smiles::render_with](super::Smiles::render_with) with
+    /// section context, including Either and unsupported CX annotations. Unsupported reaction
+    /// metadata fails rather than being omitted.
+    ///
+    /// # Semantic properties
+    ///
+    /// Each section follows [Smiles::render_with](super::Smiles::render_with). Section order and
+    /// every atom-class label are preserved, including repeated labels and labels on agents.
+    /// Output is deterministic for the table and configuration; the table is unchanged on
+    /// success and failure. For supported parsed reaction SMILES, rendering, reparsing, and
+    /// rendering again produces identical text. Source spelling and ring labels may change.
+    pub fn render_with(
+        &self,
+        config: &SmilesIoConfig,
+    ) -> Result<String, ReactionSmilesRenderError> {
+        let table = &self.table_ir;
+        if !table.comments.is_empty() {
+            return Err(ReactionSmilesRenderError::UnsupportedReaction { field: "comments" });
+        }
+        if !table.properties.is_empty() {
+            return Err(ReactionSmilesRenderError::UnsupportedReaction {
+                field: "properties",
+            });
+        }
+        let mut output = String::with_capacity(
+            table.reactants.atoms.len() + table.agents.atoms.len() + table.products.atoms.len() + 2,
+        );
+        append_molecule(&mut output, &table.reactants, config)
+            .map_err(ReactionSmilesRenderError::Reactants)?;
+        output.push('>');
+        append_molecule(&mut output, &table.agents, config)
+            .map_err(ReactionSmilesRenderError::Agents)?;
+        output.push('>');
+        append_molecule(&mut output, &table.products, config)
+            .map_err(ReactionSmilesRenderError::Products)?;
+        Ok(output)
+    }
+
+    /// Take ownership of a TableIR for reaction SMILES rendering.
+    ///
+    /// The table is retained unchanged. Rendering checks the properties it requires.
+    /// Consuming the result with into_table_ir returns exactly the supplied table.
+    pub fn from_table_ir(table_ir: Reaction) -> Self {
+        Self { table_ir }
     }
 
     /// Consume the reaction SMILES value and return its neutral TableIR boundary value.
@@ -42,9 +104,9 @@ impl ReactionSmiles {
         self.table_ir
     }
 
-    fn from_parsed(mut table_ir: Reaction) -> Self {
-        table_ir.source_format = SourceFormat::SMILES;
-        Self { table_ir }
+    /// Borrow the neutral TableIR boundary value.
+    pub fn as_table_ir(&self) -> &Reaction {
+        &self.table_ir
     }
 }
 
@@ -61,8 +123,9 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element;
 
+    use super::super::error::SmilesRenderError;
     use super::*;
-    use crate::table_ir::{Atom, Molecule, Span};
+    use crate::table_ir::{Atom, Bond, BondOrder, Molecule, Span};
 
     #[rstest]
     #[case::empty(
@@ -99,5 +162,80 @@ mod tests {
     #[case::leading_whitespace(" C>>C", ParseError::LeadingWhitespace)]
     fn test_reaction_smiles_parse_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(ReactionSmiles::parse(input), Err(expected));
+    }
+
+    #[rstest]
+    #[case::empty(">>")]
+    #[case::reactants("C>>")]
+    #[case::agents(">O>")]
+    #[case::products(">>N")]
+    #[case::components("C.O>N.Cl>F.Br")]
+    #[case::labels("[C:7].[C:7]>[O:19]>[C:7]")]
+    fn test_reaction_smiles_render(#[case] input: &str) {
+        let reaction = ReactionSmiles::parse(input).unwrap();
+        let original = reaction.clone();
+        assert_eq!(reaction.render(), Ok(input.to_owned()));
+        assert_eq!(reaction, original);
+    }
+
+    #[rstest]
+    #[case::reactants(0, ReactionSmilesRenderError::Reactants(SmilesRenderError::AtomIndexOutOfBounds { atom: 2 }))]
+    #[case::agents(1, ReactionSmilesRenderError::Agents(SmilesRenderError::AtomIndexOutOfBounds { atom: 2 }))]
+    #[case::products(2, ReactionSmilesRenderError::Products(SmilesRenderError::AtomIndexOutOfBounds { atom: 2 }))]
+    fn test_reaction_smiles_render_error(
+        #[case] section: usize,
+        #[case] expected: ReactionSmilesRenderError,
+    ) {
+        let mut table = Reaction::empty();
+        let sections = [&mut table.reactants, &mut table.agents, &mut table.products];
+        *sections.into_iter().nth(section).unwrap() = Molecule {
+            atoms: vec![Atom::aliphatic_atom(Element::C)],
+            bonds: vec![Bond::new(0, 2, BondOrder::Single)],
+            ..Molecule::empty()
+        };
+        let reaction = ReactionSmiles::from_table_ir(table.clone());
+        assert_eq!(reaction.as_table_ir(), &table);
+        assert_eq!(reaction.render(), Err(expected));
+        assert_eq!(reaction.into_table_ir(), table);
+    }
+
+    #[rstest]
+    #[case::comments(Reaction { comments: vec!["note".to_owned()], ..Reaction::empty() }, "comments")]
+    #[case::properties(Reaction { properties: [("name".to_owned(), "reaction".to_owned())].into(), ..Reaction::empty() }, "properties")]
+    fn test_reaction_smiles_render_metadata(#[case] table: Reaction, #[case] field: &'static str) {
+        assert_eq!(
+            ReactionSmiles::from_table_ir(table).render(),
+            Err(ReactionSmilesRenderError::UnsupportedReaction { field })
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_smiles_render_with() {
+        let reaction = ReactionSmiles::parse_with("C>N->B>O", &SmilesIoConfig::lenient()).unwrap();
+        assert_eq!(
+            reaction.render_with(&SmilesIoConfig::lenient()),
+            Ok("C>N->B>O".to_owned())
+        );
+        assert_eq!(
+            reaction.render(),
+            Err(ReactionSmilesRenderError::Agents(
+                SmilesRenderError::UnsupportedBond {
+                    bond: 0,
+                    field: "donation"
+                }
+            ))
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_smiles_from_table_ir() {
+        let mut table = ReactionSmiles::parse("[C:7].[C:7]>[O:19]>[C:7]")
+            .unwrap()
+            .into_table_ir();
+        table.atom_mapping = [(31, (vec![900], vec![800]))].into();
+        let reaction = ReactionSmiles::from_table_ir(table.clone());
+        assert_eq!(reaction.as_table_ir(), &table);
+        assert_eq!(reaction.render(), Ok("[C:7].[C:7]>[O:19]>[C:7]".to_owned()));
+        assert_eq!(reaction.into_table_ir(), table);
     }
 }

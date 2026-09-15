@@ -2,6 +2,12 @@
 
 Status: **Active / analysis.** No code authorized. Scoping doc, not an implementation plan.
 Date: 2026-06-20.
+Relates: [116](116-dative-bond-birelation-2026-06-18.md),
+[118](118-validator-architecture-2026-06-20.md),
+[213](213-editor-overlay-storage-2026-08-27.md),
+[227](227-repository-structure-hygiene-2026-09-10.md),
+[integrity guide](../docs/development/integrity.md),
+[nomenclature guide](../docs/development/nomenclature.md)
 Trigger: the `DativeBond` entity conflates two-atom dative bonds and haptic bonds, which are
 topologically heterogeneous. This raises the broader question of which binding situations deserve
 their own entity and what adding one costs.
@@ -268,6 +274,141 @@ not any design.
   there was no entity-level `NoncovalentBondAst` lattice test at all (the bond was kind-only until now).
 - **D pending.** Resume B5 (Python noncovalent slice). `[dep: A (+B for a Python parse test)]`.
 
+## 5. Participant relations as an algebra
+
+§3 identified inter-entity relations as the dominant cost of a new entity kind and concluded that
+they cannot be generated. This section records an observation that reverses that conclusion: the
+relations factor into a small algebra over participants, and the per-pair modeling is an instance
+of it. Paths below use the current `ir/` module names; earlier sections predate the `ast/` → `ir/`
+rename. Working words in this section (shape names, operator names) are not settled names.
+
+### Participant shapes
+
+Every entity kind is stored as participants plus a payload. From the molecule storage tuples:
+
+| Kind | Roles and shapes | Payload |
+| --- | --- | --- |
+| atom | one atom | `AtomForm` |
+| bond | unordered pair of atoms | `BondForm` |
+| noncovalent bond | unordered pair of atoms | `NoncovalentBondForm` |
+| aromatic system | unordered set of atoms | `AromaticSystemForm` |
+| multicenter bond | unordered set of atoms | `MulticenterBondForm` |
+| dative bond | donors: unordered set of atoms; acceptor: one atom | `DativeBondForm` |
+| stereo atom | site: one atom; ligands: ordered sequence of positions | `StereoAtomForm` |
+| stereo bond | site: one bond; ligands: ordered sequence of positions | `StereoBondForm` |
+
+Three shapes suffice: a single atom, an unordered set (a pair is the arity-2 case), and an ordered
+sequence. Two departures from "participants are atoms" exist and are treated below: the stereo
+bond's site is a bond, and ligand sequences contain virtual positions (implicit hydrogen, lone
+pair) that are not atoms.
+
+### Operators between a role and atoms
+
+`RelationalConstraint` has 31 variants. Grouped by what they assert rather than by kind, they are
+six operators applied to a (kind, role) selector:
+
+| Operator | Variants that instantiate it |
+| --- | --- |
+| role equals these atoms | `DativeBondDonors`, `DativeBondAcceptor`, `AromaticSystemAtoms`, `MulticenterBondAtoms`, `NoncovalentBondEnds`, `StereoAtomSite`, `StereoAtomLigands`, `StereoBondSite`, `StereoBondLigands` |
+| atom is in role | `DativeBondDonor`, `AromaticSystemContains`, `MulticenterBondContains`, `NoncovalentBondContains`, `StereoAtomContains`, `StereoBondContains` |
+| atoms are a subset of role | `DativeBondContainsAllDonors`, `AromaticSystemContainsAll`, `MulticenterBondContainsAll` |
+| every atom in role satisfies a predicate | `DativeBondAllDonors`, `AromaticSystemAllAtoms`, `MulticenterBondAllAtoms`, `NoncovalentBondEndsSatisfy`, `StereoAtomAllLigands`, `StereoBondAllLigands` |
+| some atom in role satisfies a predicate | `DativeBondAnyDonor`, `AromaticSystemAnyAtom`, `MulticenterBondAnyAtom`, `StereoAtomAnyLigand`, `StereoBondAnyLigand` |
+| role equals another entity's role | `DativeBondParallels` |
+
+The enumeration is incomplete in the way hand enumerations are: there is no acceptor-in-set, no
+noncovalent any-end, no stereo-bond-site-satisfies. Under the algebra a relational constraint is one
+operator, one entity reference, one role name, and the operand; completeness is structural.
+
+### Relations between two entities
+
+Every derived inter-entity predicate in `ir/view` is a set relation between two roles, optionally
+qualified by which roles:
+
+| Relation | Meaning | Existing predicates that are instances |
+| --- | --- | --- |
+| disjoint | no shared atom | — |
+| meets | at least one shared atom | `incident`, `has_incident`, `incident_ids`, `is_in_dative_bond`, `is_in_multicenter_bond`, `is_in_noncovalent_bond` |
+| within | one role's atoms are a subset of another's | `is_in_aromatic_system` (a bond's ends within the system's atoms) |
+| coincides | equal as sets, or equal as sequences for ordered roles | `DativeBondParallels`, `coincident_id`, the stereo bond's site relation to its bond |
+
+"Incident" and "coincident" are existing repository terms; "meets" and "within" are working words.
+
+### Kind pairs with chemical meaning
+
+Of the 36 kind pairs (including a kind with itself), the atom-against-anything pairs are membership
+and trivial. The remaining pairs that carry a chemical meaning, and their relation:
+
+| Pair | Chemistry | Relation |
+| --- | --- | --- |
+| bond, bond | adjacent bonds | meets |
+| bond, dative bond | σ bond with a dative bond on top (metal carbonyl) | coincides |
+| bond, aromatic system | ring bond | ends within atoms |
+| bond, multicenter bond | two-center bond inside a bridge | ends within atoms |
+| bond, noncovalent bond | D–H bond adjacent to H···A | meets |
+| bond, stereo atom | ligand bond of a site | meets at site |
+| bond, stereo bond | the site | coincides |
+| dative bond, dative bond | shared acceptor: one coordination sphere; shared donor: bridging ligand | meets, role-qualified |
+| dative bond, aromatic system | η-coordination | donors within atoms |
+| dative bond, stereo atom | metal-center configuration | acceptor coincides site |
+| aromatic system, aromatic system | fused systems | meets |
+| aromatic system, stereo bond | configuration on an aromatic bond | site within atoms, forbidden |
+| multicenter bond, multicenter bond | boranes, carboranes | meets |
+| noncovalent bond, noncovalent bond | bifurcated hydrogen bond | meets |
+| stereo atom, stereo atom | adjacent stereocenters | site of one in ligands of the other |
+| stereo atom, stereo bond | stereocenter at a stereo bond end | site within site |
+| stereo bond, stereo bond | cumulenes, conjugated dienes | meets at site |
+
+Seventeen rows. Pairs absent from the table, including the aromatic system and multicenter bond
+pair that §3 called undefined, have no relation beyond whatever overlap holds, and need none. The
+row for aromatic system and stereo bond shows that integrity rules are statements in the same
+algebra: `BondsParallel` and `NoncovalentBondsParallel` in the integrity guide are "coincides within
+kind, forbidden", and the validator's cross-kind rules are a table of allowed and forbidden
+relations rather than code per pair.
+
+### What stays per kind and what becomes one path
+
+Per kind: the role signature, the payload type and its lattice, the surface syntax, and its rows in
+the relation table. Nothing else is per kind.
+
+One path over roles: remapping and compaction map every atom in every role; matching checks kind,
+then role-wise participants under the atom correspondence, then payload; canonical invariants are
+kind, role shapes, canonical labels sorted per set role and in order per sequence role, then the
+payload's canonical form; deltas are kind, participants, payload change; spans are participants in
+L, K, and R plus payload change, with one rule for which entities land in K. The coset machinery
+stays where it is but becomes a statement about ordered roles in general: a permutation acts on
+any sequence role, and the payload says which permutations are identity.
+
+Doc 213 proposes the storage half of this move for the six overlays in the editor. This section
+adds the relation half and includes atoms and bonds in the same treatment.
+
+### Departures to resolve
+
+- **Stereo bond site.** Currently a `BondId`, the only entity-typed participant. Under the
+  algebra it is the bond's atom pair and the bond is derived as the one that coincides. This
+  depends on `BondsParallel`: a covalent bond is identified by its endpoint pair, which the
+  integrity guide already asserts. Whether the site needs an orientation for grouping ligands by
+  end is to check against the current `StereoBondForm`.
+- **Virtual ligand positions.** The ordered role of a stereo site contains positions that are not
+  atoms. The sequence shape therefore holds positions, each an atom or a virtual kind, so that the
+  coset acts on the full sequence. The departure is contained in the sequence shape.
+- **Derived and asserted.** A dative bond over a ring is "donors within atoms" evaluated; a
+  chemist who wants to require it states the same relation as a relational constraint. Both are
+  one operator, matching the derived-and-asserted distinction in the nomenclature guide.
+- **Effect on §1.** Under this reading the dative/haptic split reduces to a role-signature choice
+  (one donor versus a set). Whether the two-atom case still warrants a separate kind for ring
+  predicates is open.
+
+### Laws to state before code
+
+- meets is symmetric; within is reflexive and transitive; coincides is an equivalence;
+- every relation commutes with remapping and compaction;
+- canonical invariants are functions of kind, shape, canonical participant labels, and payload;
+- integrity holds iff no forbidden relation from the table holds.
+
+These are the property-test statements for the new layer, and the existing property suites are the
+regression half. Doc 227 records the surrounding structural program.
+
 ## Open decisions
 
 - Confirm the dative/haptic split and the two target storage shapes (§1).
@@ -275,3 +416,6 @@ not any design.
 - Whether to invest in an entity-scaffolding mechanism (§3) before or after the first split.
 - §4: resolved — proceeding. Stage A done (2026-07-12); B (string parse) / C (property tests) next, then
   D (resume B5).
+- §5: whether the participant algebra is adopted as the entity model; the names of the three shapes,
+  the six operators, the four relations, and the per-kind roles; the stereo bond site as an atom
+  pair; how §5 sequences against doc 213's overlay storage collapse and doc 227's crate split.
