@@ -165,6 +165,18 @@ transport rather than only frame-invariant comparison.
 
 ## Handoff
 
+Doc [166](166-molecule-ops-2026-07-27.md) records the 2026-09-15 decision that
+participant replacement belongs to relation storage across all five storage
+shapes. The editor must delegate participant mutation to that storage API;
+materialized entries are not the replacement mechanism. Reconcile this
+proposal's mutable storage shape with that decision before implementation.
+The storage API does not depend on this proposed generic editor trait.
+
+The next follow-up is to wire editor-based participant mutation to that storage
+API. Doc 166 records this work without further design and then the hydrogen
+folder/unfolder implementation, whose operation design is essentially settled
+but blocked on the mutation surface.
+
 Nothing here is in the tree. `Overlays` and its six impls were written and reverted along with the
 rest, which is no great loss: the members are lifted verbatim out of the six inherent blocks, and
 the specification above is what took the thinking.

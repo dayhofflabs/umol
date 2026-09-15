@@ -4,6 +4,7 @@ Status: Proposed
 Date: 2026-09-10
 Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [119](119-umol-perm-review-2026-06-21.md),
+[166](166-molecule-ops-2026-07-27.md),
 [code reviews guide](../docs/development/code-reviews.md),
 [property tests guide](../docs/development/property-tests.md),
 [development guides](../docs/development/README.md)
@@ -200,6 +201,158 @@ factor, and rust-analyzer's experience is that they keep source files readable. 
 with the repository rule that test cases use direct literals inline, and with the property-test
 policy that tests state laws. Whether snapshot files are a third test form, a replacement for
 some literal-heavy suites, or excluded, is open.
+
+## Relation storage split experiment — 2026-09-15
+
+A scratch experiment split the five relation-set implementations into private
+child modules, retained shared vocabulary and implementation support in the
+parent, and relocated the existing unit tests into separate files. The main
+workspace's production and test files remain unchanged. The proposed naming and
+participant replacement work belongs to doc 166 and was not implemented here.
+
+The [experiment report](../scratch/relation-split-experiment/report.md) contains
+the frozen-source identity, candidate tree, measurements, compiler visibility
+probes, preservation checks, logs, and further contract findings. Source and
+scripts are in the same scratch directory.
+
+### Sizes and dependencies
+
+The original relation.rs is 5,585 lines: 2,819 before its inline test module and
+2,766 in the test section. Candidate counts include comments and blank lines:
+
+| Component | Production lines | Unit-test lines |
+| --- | ---: | ---: |
+| Shared relation parent | 353 | 65 support + 96 participant tests |
+| FixedRelationSet | 421 | 471 |
+| VarRelationSet | 450 | 580 |
+| FixedFixedBirelationSet | 528 | 477 |
+| FixedVarBirelationSet | 567 | 595 |
+| VarVarBirelationSet | 566 | 499 |
+| Total | 2,885 | 2,783 |
+
+The total grows by 83 lines of module structure, imports, headers, and spacing.
+No resulting file exceeds 595 lines. Each storage type retains its inherent and
+trait implementations in one file. The five implementations use shared parent
+helpers and existing graph/compaction/correspondence/remapping modules; none
+calls another storage implementation. Four types refer to FixedRelationSet's
+algebra documentation, which is a documentation dependency rather than a code
+dependency. Explicit crate-root rustdoc targets preserve those links.
+
+### Visibility
+
+The experiment requires no new pub(crate), pub(super), or pub(in ...) markers
+and no newly public helper. Private parent items are accessible to all child
+modules. Existing public storage types are re-exported through the parent and
+the existing crate-root API. Shared test support remains private in its own
+parent module. The candidate also changes the existing crate-root declaration
+from pub(crate) mod relation to mod relation; compilation confirms that the
+scoped marker is unnecessary there.
+
+Placing Incidence in a separate sibling module would instead require exposing
+its type and methods to that sibling's consumers. Compiler probes confirm that
+plain pub inside a private module works without scoped markers, but the shared
+parent avoids even those additional public declarations. At 353 lines, it does
+not need another split merely to reduce file size. This experiment supports
+choosing the module hierarchy before adding visibility annotations.
+
+### Ordering, documentation, and property evidence
+
+The relocation groups tests by type but preserves existing method order and
+test bodies. Before adopting these files as exemplars, settle a common method
+order that distinguishes collection queries, per-relation operations, mutation,
+id transport, and algebra. Keep checked/asserted and plain/tracked peers adjacent
+and align test order with the methods. The current family differs in reader/
+permutation placement, has scattered test order, and implements Hash for only
+three of its five types. Those are explicit review items, not changes made by
+the experiment.
+
+Documentation also needs review independent of relocation. Existing comments
+describe removed ordering markers, sorting during construction, canonical
+entries, and uniqueness not established by constructors. Indexed-access panic
+preconditions are mostly undocumented; permutation describes its panic in prose;
+map/remap have Panics sections. Option-returning operations need clear absence
+conditions and callback preconditions rather than invented Result errors.
+Semantic-properties sections currently cover transport but do not collect all
+the existing permutation, compaction, and algebra contracts coherently.
+
+The external relation property module remains unchanged. Its ten properties
+cover transport composition/inverse/remap agreement and exact-size iteration
+across all five shapes. Its header should point back to the public properties
+when that documentation is settled. Public operation-family documentation can
+identify the property target; the executable target remains the inventory, as
+required by the property-tests guide. File splitting is not evidence for a new
+semantic law or complete property coverage.
+
+### Validation and conclusion
+
+The baseline and candidate each pass the same 220 expanded relation unit cases.
+The candidate passes all ten relation properties, all-target graph-core
+compilation with the proptest feature, and rustdoc with private items and
+warnings denied. Preservation checks compare all 134 unit-test functions and
+their attributes after formatting, and the five storage bodies apart from
+whitespace and rustdoc link targets. No storage fields or implementation helpers
+gain visibility.
+
+This establishes a feasible module-and-test layout with ordinary public/private
+visibility. It does not measure performance, approve the final method ordering,
+or implement the relation API additions. A production adoption must reconcile
+the documentation and naming decisions with doc 166; the scratch split is not
+itself a completed repository cleanup.
+
+### Agreed organization — 2026-09-15
+
+Keep the five storage implementations in private child modules, with public
+symbols explicitly re-exported through relation.rs. Extract the public
+participant vocabulary into participant.rs: RelationParticipant, ParticipantRefs,
+and ParticipantPosition remain pub and are re-exported by the parent. This
+extraction needs no scoped visibility.
+
+An incidence.rs module is appropriate if the forthcoming participant-mutation
+machinery warrants a separate internal component. Its Incidence type and the
+methods used by sibling storage modules may be pub(super), with fields and
+implementation details private. This preserves the current access boundary:
+a private item in relation.rs and a pub(super) item in its immediate child are
+both accessible within the relation subtree. Keep small shared functions in
+the parent until they form another coherent component; the parent need not
+contain only re-exports.
+
+Use visibility to state those roles consistently:
+
+- pub for intended public API, explicitly re-exported;
+- private for implementation owned by a module and its descendants;
+- pub(super) for an internal component interface shared within the relation
+  subsystem;
+- pub(crate) only for an interface actually needed beyond that subsystem.
+
+This is the accepted direction for the relation family, not a new workspace-wide
+visibility rule. The experiment establishes that avoiding additional markers is
+feasible; minimizing their count is not the final organization criterion. Its
+measurements describe the tested parent-owned layout, not a subsequently
+implemented participant/incidence extraction.
+
+For production adoption, keep each unit-test file self-contained, with local
+fixtures, test payload types, assertion helpers, and explicit imports of production
+symbols and external test tools. Test modules must not import from one another.
+Small duplication is acceptable; constructor shorthands such as n are removed
+in favor of direct construction. The parent
+tests.rs only declares child modules; no shared fixtures/utils module is planned.
+This revises the experiment's shared test-support arrangement, not its recorded
+measurements or results.
+
+Doc 166's relation-storage S0–S4 plan sequences production adoption of this
+layout, contract documentation, participant mutation, and the approved naming
+migration. It records fresh size and visibility measurements after those
+changes; the wider structural program here remains separately proposed.
+
+Both arrangements have established precedents.
+[Arrow's array module](https://github.com/apache/arrow-rs/blob/main/arrow-array/src/array/mod.rs)
+defines its shared Array trait alongside concrete implementation modules and
+re-exports. [Tokio's mpsc module](https://github.com/tokio-rs/tokio/blob/master/tokio/src/sync/mpsc/mod.rs)
+uses sibling implementation modules and collected exports, with scoped
+visibility on [shared channel machinery](https://github.com/tokio-rs/tokio/blob/master/tokio/src/sync/mpsc/chan.rs).
+The [Rust visibility rules](https://doc.rust-lang.org/reference/visibility-and-privacy.html)
+explain the access boundary preserved by a parent-private to child-pub(super)
+extraction.
 
 ## Open questions
 
