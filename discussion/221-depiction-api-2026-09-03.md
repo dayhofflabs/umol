@@ -3,7 +3,15 @@
 Status: Completed
 Date: 2026-09-03
 Relates: [220](220-readable-depiction-2026-09-02.md),
-[225](225-depiction-problems-2026-09-09.md)
+[225](225-depiction-problems-2026-09-09.md),
+[228](228-svg-render-configuration-2026-09-15.md)
+
+## Extension — 2026-09-15
+
+`render_svg()` is no longer the only rendering entry point. Doc
+[228](228-svg-render-configuration-2026-09-15.md) adds `SvgConfig` and
+`Depiction::render_svg_with(&SvgConfig)`; `render_svg()` is the default-configured variant and
+its output is unchanged. The remainder of this record is unchanged.
 
 ## Purpose
 
