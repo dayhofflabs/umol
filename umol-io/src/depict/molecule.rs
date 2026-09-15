@@ -7,20 +7,21 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_geometric_core::{complementary_direction, signed_volume, Point2D, Point3D};
 use umol_graph_ir::ir::{
-    AromaticSystemView, AsLit, AtomId, AtomView, BondId, Entity, IsotopeMass, Molecule,
-    StereoAtomId, StereoAtomView, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    AromaticSystemView, AsLit, AtomId, AtomView, BondId, CisTransConfiguration, Entity,
+    IsotopeMass, Molecule, StereoAtomId, StereoAtomView, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind,
 };
 use umol_utils::error::UmolError;
 
+#[cfg(feature = "coordgen")]
+use super::{verify::verify_molecule_layout, Depict, DepictConfig};
 use super::{
     AtomItem, AtomLabel, BondItem, DashedContourItem, Depiction, DepictionItem, DepictionReference,
     TextItem, WedgeItem, WedgeKind,
 };
 #[cfg(feature = "coordgen")]
-use super::{Depict, DepictConfig};
-use crate::layout::MoleculeLayout;
-#[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, LayoutError};
+use crate::layout::{MoleculeLayout, MoleculeLayoutError};
 
 const AROMATIC_CONTOUR_OFFSET: f64 = 0.18;
 const AROMATIC_ANNOTATION_CLEARANCE: f64 = 0.28;
@@ -29,17 +30,17 @@ const AROMATIC_ANNOTATION_EXTERIOR_OFFSET: f64 = 0.35;
 const GEOMETRY_EPSILON: f64 = 1.0e-9;
 const MAX_CONTOUR_MITER: f64 = 4.0;
 
-/// Constructs the first format-neutral depiction projection of `molecule` in `layout`.
+/// Lowers `molecule` in a `layout` that [`verify_molecule_layout`] has accepted.
 ///
 /// Localized bonds and selected tetrahedral wedges are followed by visible atom labels, then one
 /// trustworthy outer contour and any literal system annotation for each explicit aromatic system;
 /// each group is ordered by graph-IR id. Carbon labels are omitted at non-isolated skeleton
 /// vertices unless an isotope, charge, or radical count decorates the atom. Definite cis/trans
 /// stereo is carried by the supplied coordinates. Nonliteral projected fields and unsupported
-/// overlays, stereo kinds, local aromatic assertions, or constraints are omitted. The first
-/// projection does not represent dative, multicenter, or noncovalent bonds, unprojected inherent
-/// fields, or unsupported constraints. Crossed, degenerate, self-intersecting, and cage-like
-/// aromatic projections receive no contour or system annotation.
+/// overlays, stereo kinds, local aromatic assertions, or constraints are omitted. The projection
+/// does not represent dative, multicenter, or noncovalent bonds, unprojected inherent fields, or
+/// unsupported constraints. Crossed, degenerate, self-intersecting, and cage-like aromatic
+/// projections receive no contour or system annotation.
 ///
 /// # Errors
 ///
@@ -114,21 +115,46 @@ pub(crate) fn depict(
 
 #[cfg(feature = "coordgen")]
 impl Depict for Molecule {
+    type Layout = MoleculeLayout;
     type Error = MoleculeDepictionError;
 
-    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error> {
-        let layout = layout_molecule(self, config.layout_algorithm)?;
-        depict(self, &layout)
+    fn layout_with(&self, config: &DepictConfig) -> Result<Self::Layout, Self::Error> {
+        layout_molecule(self, config.layout_algorithm).map_err(MoleculeDepictionError::Layout)
+    }
+
+    fn verify_layout(&self, layout: &Self::Layout) -> Result<(), Self::Error> {
+        verify_molecule_layout(self, layout)
+    }
+
+    fn depict_layout(&self, layout: &Self::Layout) -> Result<Depiction, Self::Error> {
+        self.verify_layout(layout)?;
+        depict(self, layout)
     }
 }
 
-/// Failures while depicting a graph-IR [`Molecule`].
+/// Failures while laying out, verifying, or depicting a graph-IR [`Molecule`].
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum MoleculeDepictionError {
     /// The configured layout backend could not produce coordinates.
     #[cfg(feature = "coordgen")]
     #[error("layout: {0}")]
     Layout(#[from] LayoutError),
+    /// The supplied layout does not share the molecule's dense atom frame.
+    #[error("layout frame: {0}")]
+    LayoutFrame(#[from] MoleculeLayoutError),
+    /// The supplied coordinates draw a definite cis/trans bond in the opposite configuration.
+    #[error("bond {bond} is stored as {expected:?} but its supplied coordinates draw {found:?}")]
+    CisTransMismatch {
+        bond: BondId,
+        expected: CisTransConfiguration,
+        found: CisTransConfiguration,
+    },
+    /// A selected ligand of a definite cis/trans bond lies on the site axis, so no side is drawn.
+    #[error("bond {bond}: ligand atom {ligand} lies on the cis/trans site axis")]
+    CisTransDegenerate { bond: BondId, ligand: AtomId },
+    /// A quantity the depiction derives from the supplied positions of `entity` is not finite.
+    #[error("{entity} has non-finite or degenerate derived geometry")]
+    NonFiniteGeometry { entity: Entity },
     /// A definite tetrahedral stereo atom could not be represented by a display wedge.
     #[error("tetrahedral geometry cannot establish a display wedge for stereo atom {stereo_atom}")]
     TetrahedralGeometry { stereo_atom: StereoAtomId },
@@ -141,7 +167,7 @@ impl UmolError for MoleculeDepictionError {
 }
 
 #[derive(Clone, Copy)]
-struct SelectedWedge {
+pub(super) struct SelectedWedge {
     stereo_atom: StereoAtomId,
     tip: AtomId,
     base: AtomId,
@@ -161,7 +187,7 @@ struct TetrahedralCandidates {
     wedges: Vec<WedgeCandidate>,
 }
 
-fn tetrahedral_wedges(
+pub(super) fn tetrahedral_wedges(
     molecule: &Molecule,
     layout: &MoleculeLayout,
 ) -> Result<Vec<Option<SelectedWedge>>, MoleculeDepictionError> {
@@ -945,7 +971,7 @@ mod tests {
     #[cfg(feature = "coordgen")]
     use crate::depict::{Depict, DepictConfig};
     #[cfg(feature = "coordgen")]
-    use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
+    use crate::layout::MoleculeLayoutAlgorithm;
 
     fn layout(positions: &[[f64; 2]]) -> MoleculeLayout {
         MoleculeLayout::try_new(positions.iter().map(|&[x, y]| Point2D::new(x, y)).collect())
@@ -1824,6 +1850,39 @@ mod tests {
 
     #[cfg(feature = "coordgen")]
     #[rstest]
+    fn test_depict_layout_equals_depict() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C" "O#h1"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"] [3 4 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+        );
+        let layout = molecule.layout().unwrap();
+        let supplied = molecule.depict_layout(&layout).unwrap();
+        let generated = molecule.depict().unwrap();
+
+        assert_eq!(supplied.items, generated.items);
+        assert_eq!(supplied.render_svg(), generated.render_svg());
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_depict_layout_error() {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);
+        let layout = layout(&[[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]);
+
+        assert_eq!(
+            molecule.depict_layout(&layout).err(),
+            Some(MoleculeDepictionError::LayoutFrame(
+                MoleculeLayoutError::FrameSizeMismatch {
+                    molecule_atom_count: 2,
+                    layout_atom_count: 3,
+                }
+            ))
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
     fn test_molecule_depict() {
         let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);
 
@@ -1841,11 +1900,11 @@ mod tests {
     #[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
     fn test_molecule_depict_with(#[case] algorithm: MoleculeLayoutAlgorithm) {
         let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);
-        let layout = layout_molecule(&molecule, algorithm).unwrap();
-        let expected = depict(&molecule, &layout).unwrap();
         let config = DepictConfig {
             layout_algorithm: algorithm,
         };
+        let layout = molecule.layout_with(&config).unwrap();
+        let expected = depict(&molecule, &layout).unwrap();
 
         assert_eq!(molecule.depict_with(&config).unwrap().items, expected.items);
     }

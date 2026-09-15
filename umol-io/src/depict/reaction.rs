@@ -16,11 +16,9 @@ use super::{molecule, ArrowItem, Depiction, DepictionItem, DepictionReference, T
 use super::{Depict, DepictConfig};
 use crate::depict::molecule::MoleculeDepictionError;
 #[cfg(feature = "coordgen")]
-use crate::layout::layout_molecule;
-use crate::layout::MoleculeLayout;
+use crate::layout::{check_arrow, ReactionLayoutError};
+use crate::layout::{MoleculeLayout, ReactionLayout};
 
-const ARROW_HALF_LENGTH: f64 = 0.75;
-const SIDE_ARROW_GAP: f64 = 1.0;
 const MAP_INDEX_COMPONENT_OFFSET: f64 = 0.35;
 const MAP_INDEX_DISTANCE: f64 = MAP_INDEX_COMPONENT_OFFSET * SQRT_2;
 const MAP_INDEX_FALLBACK_OFFSET: Point2D =
@@ -28,25 +26,21 @@ const MAP_INDEX_FALLBACK_OFFSET: Point2D =
 
 fn compose_sides(
     lhs: &Molecule,
-    lhs_layout: &MoleculeLayout,
     lhs_depiction: Depiction,
     rhs: &Molecule,
-    rhs_layout: &MoleculeLayout,
     rhs_depiction: Depiction,
+    layout: &ReactionLayout,
     atom_correspondence: &Correspondence<AtomId>,
 ) -> Depiction {
-    let lhs_offset = side_offset(lhs_layout, ReactionSide::Lhs);
-    let rhs_offset = side_offset(rhs_layout, ReactionSide::Rhs);
     let mut items = lhs_depiction
         .items
         .into_iter()
-        .map(|item| translate_item(item, lhs_offset, ReactionSide::Lhs))
+        .map(|item| reference_side(item, ReactionSide::Lhs))
         .collect::<Vec<_>>();
 
     items.extend(index_items(
         lhs,
-        lhs_layout,
-        lhs_offset,
+        layout.lhs(),
         atom_correspondence
             .matched_pairs()
             .iter()
@@ -55,20 +49,19 @@ fn compose_sides(
         ReactionSide::Lhs,
     ));
     items.push(DepictionItem::Arrow(ArrowItem {
-        start: Point2D::new(-ARROW_HALF_LENGTH, 0.0),
-        end: Point2D::new(ARROW_HALF_LENGTH, 0.0),
+        start: layout.arrow_start(),
+        end: layout.arrow_end(),
         references: Vec::new(),
     }));
     items.extend(
         rhs_depiction
             .items
             .into_iter()
-            .map(|item| translate_item(item, rhs_offset, ReactionSide::Rhs)),
+            .map(|item| reference_side(item, ReactionSide::Rhs)),
     );
     items.extend(index_items(
         rhs,
-        rhs_layout,
-        rhs_offset,
+        layout.rhs(),
         atom_correspondence
             .matched_pairs()
             .iter()
@@ -82,51 +75,83 @@ fn compose_sides(
 
 #[cfg(feature = "coordgen")]
 impl Depict for Reaction {
+    type Layout = ReactionLayout;
     type Error = ReactionDepictionError;
 
-    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error> {
+    fn layout_with(&self, config: &DepictConfig) -> Result<Self::Layout, Self::Error> {
+        let span = self
+            .to_reaction_span()
+            .map_err(ReactionDepictionError::Materialization)?;
+        let lhs = span
+            .lhs()
+            .layout_with(config)
+            .map_err(ReactionDepictionError::LhsDepiction)?;
+        let rhs = span
+            .rhs()
+            .layout_with(config)
+            .map_err(ReactionDepictionError::RhsDepiction)?;
+        ReactionLayout::arrange(lhs, rhs).map_err(ReactionDepictionError::Layout)
+    }
+
+    fn verify_layout(&self, layout: &Self::Layout) -> Result<(), Self::Error> {
+        let span = self
+            .to_reaction_span()
+            .map_err(ReactionDepictionError::Materialization)?;
+        verify_sides(&span.lhs(), &span.rhs(), layout)
+    }
+
+    fn depict_layout(&self, layout: &Self::Layout) -> Result<Depiction, Self::Error> {
         let span = self
             .to_reaction_span()
             .map_err(ReactionDepictionError::Materialization)?;
         let lhs = span.lhs();
         let rhs = span.rhs();
-        let correspondence = span.correspondence();
-        let lhs_layout = layout_molecule(&lhs, config.layout_algorithm)
-            .map_err(MoleculeDepictionError::Layout)
-            .map_err(ReactionDepictionError::LhsDepiction)?;
-        let rhs_layout = layout_molecule(&rhs, config.layout_algorithm)
-            .map_err(MoleculeDepictionError::Layout)
-            .map_err(ReactionDepictionError::RhsDepiction)?;
+        verify_sides(&lhs, &rhs, layout)?;
         let lhs_depiction =
-            molecule::depict(&lhs, &lhs_layout).map_err(ReactionDepictionError::LhsDepiction)?;
+            molecule::depict(&lhs, layout.lhs()).map_err(ReactionDepictionError::LhsDepiction)?;
         let rhs_depiction =
-            molecule::depict(&rhs, &rhs_layout).map_err(ReactionDepictionError::RhsDepiction)?;
+            molecule::depict(&rhs, layout.rhs()).map_err(ReactionDepictionError::RhsDepiction)?;
 
         Ok(compose_sides(
             &lhs,
-            &lhs_layout,
             lhs_depiction,
             &rhs,
-            &rhs_layout,
             rhs_depiction,
-            correspondence.atoms(),
+            layout,
+            span.correspondence().atoms(),
         ))
     }
 }
 
-/// Failures while depicting a [`Reaction`].
+#[cfg(feature = "coordgen")]
+fn verify_sides(
+    lhs: &Molecule,
+    rhs: &Molecule,
+    layout: &ReactionLayout,
+) -> Result<(), ReactionDepictionError> {
+    lhs.verify_layout(layout.lhs())
+        .map_err(ReactionDepictionError::LhsDepiction)?;
+    rhs.verify_layout(layout.rhs())
+        .map_err(ReactionDepictionError::RhsDepiction)?;
+    check_arrow(layout.arrow_start(), layout.arrow_end()).map_err(ReactionDepictionError::Layout)
+}
+
+/// Failures while laying out, verifying, or depicting a [`Reaction`].
 #[cfg(feature = "coordgen")]
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum ReactionDepictionError {
     /// The reaction deltas could not be materialized into a two-sided reaction span.
     #[error("reaction materialization: {0}")]
     Materialization(#[source] Contradiction),
-    /// Layout or depiction of the materialized left-hand side failed.
+    /// Layout, verification, or depiction of the materialized left-hand side failed.
     #[error("lhs depiction: {0}")]
     LhsDepiction(#[source] MoleculeDepictionError),
-    /// Layout or depiction of the materialized right-hand side failed.
+    /// Layout, verification, or depiction of the materialized right-hand side failed.
     #[error("rhs depiction: {0}")]
     RhsDepiction(#[source] MoleculeDepictionError),
+    /// The reaction layout could not be arranged, or its arrow cannot be drawn.
+    #[error("reaction layout: {0}")]
+    Layout(#[source] ReactionLayoutError),
 }
 
 #[cfg(feature = "coordgen")]
@@ -142,56 +167,14 @@ enum ReactionSide {
     Rhs,
 }
 
-fn side_offset(layout: &MoleculeLayout, side: ReactionSide) -> Point2D {
-    let Some(first) = layout.positions().first() else {
-        return Point2D::new(0.0, 0.0);
-    };
-    let mut min = *first;
-    let mut max = *first;
-    for &position in &layout.positions()[1..] {
-        min.x = min.x.min(position.x);
-        min.y = min.y.min(position.y);
-        max.x = max.x.max(position.x);
-        max.y = max.y.max(position.y);
-    }
-    let x = match side {
-        ReactionSide::Lhs => -ARROW_HALF_LENGTH - SIDE_ARROW_GAP - max.x,
-        ReactionSide::Rhs => ARROW_HALF_LENGTH + SIDE_ARROW_GAP - min.x,
-    };
-    Point2D::new(x, -(min.y + max.y) / 2.0)
-}
-
-fn translate_item(mut item: DepictionItem, offset: Point2D, side: ReactionSide) -> DepictionItem {
+fn reference_side(mut item: DepictionItem, side: ReactionSide) -> DepictionItem {
     let references = match &mut item {
-        DepictionItem::Atom(item) => {
-            item.position = translate(item.position, offset);
-            &mut item.references
-        }
-        DepictionItem::Bond(item) => {
-            item.start = translate(item.start, offset);
-            item.end = translate(item.end, offset);
-            &mut item.references
-        }
-        DepictionItem::Wedge(item) => {
-            item.tip = translate(item.tip, offset);
-            item.base = translate(item.base, offset);
-            &mut item.references
-        }
-        DepictionItem::DashedContour(item) => {
-            for point in &mut item.points {
-                *point = translate(*point, offset);
-            }
-            &mut item.references
-        }
-        DepictionItem::Text(item) => {
-            item.position = translate(item.position, offset);
-            &mut item.references
-        }
-        DepictionItem::Arrow(item) => {
-            item.start = translate(item.start, offset);
-            item.end = translate(item.end, offset);
-            &mut item.references
-        }
+        DepictionItem::Atom(item) => &mut item.references,
+        DepictionItem::Bond(item) => &mut item.references,
+        DepictionItem::Wedge(item) => &mut item.references,
+        DepictionItem::DashedContour(item) => &mut item.references,
+        DepictionItem::Text(item) => &mut item.references,
+        DepictionItem::Arrow(item) => &mut item.references,
     };
     for reference in references {
         if let DepictionReference::Molecule(entity) = *reference {
@@ -204,7 +187,6 @@ fn translate_item(mut item: DepictionItem, offset: Point2D, side: ReactionSide) 
 fn index_items(
     molecule: &Molecule,
     layout: &MoleculeLayout,
-    offset: Point2D,
     indexed_atoms: impl IntoIterator<Item = (usize, AtomId)>,
     side: ReactionSide,
 ) -> Vec<DepictionItem> {
@@ -215,10 +197,7 @@ fn index_items(
                 .position(atom)
                 .expect("correspondence frame agreement establishes every atom position");
             DepictionItem::Text(TextItem {
-                position: translate(
-                    translate(position, offset),
-                    mapping_index_offset(molecule, layout, atom),
-                ),
+                position: translate(position, mapping_index_offset(molecule, layout, atom)),
                 text: index.to_string(),
                 references: vec![
                     reaction_reference(side, Entity::Atom(atom)),
@@ -310,7 +289,7 @@ mod tests {
     #[cfg(feature = "coordgen")]
     use super::ReactionDepictionError;
     use super::{
-        mapping_index_offset, translate_item, ArrowItem, DepictionItem, DepictionReference,
+        mapping_index_offset, reference_side, ArrowItem, DepictionItem, DepictionReference,
         ReactionSide,
     };
     #[cfg(feature = "coordgen")]
@@ -319,9 +298,11 @@ mod tests {
     #[cfg(feature = "coordgen")]
     use crate::depict::{Depict, DepictConfig};
     use crate::layout::MoleculeLayout;
+    #[cfg(feature = "coordgen")]
+    use crate::layout::{MoleculeLayoutError, ReactionLayout, ReactionLayoutError};
 
     #[rstest]
-    fn test_translate_item_geometry() {
+    fn test_reference_side() {
         let wedge = DepictionItem::Wedge(WedgeItem {
             tip: Point2D::new(1.0, 2.0),
             base: Point2D::new(3.0, 4.0),
@@ -338,10 +319,10 @@ mod tests {
         });
 
         assert_eq!(
-            translate_item(wedge, Point2D::new(5.0, -2.0), ReactionSide::Lhs),
+            reference_side(wedge, ReactionSide::Lhs),
             DepictionItem::Wedge(WedgeItem {
-                tip: Point2D::new(6.0, 0.0),
-                base: Point2D::new(8.0, 2.0),
+                tip: Point2D::new(1.0, 2.0),
+                base: Point2D::new(3.0, 4.0),
                 kind: WedgeKind::Hashed,
                 references: vec![
                     DepictionReference::ReactionLhs(Entity::Bond(BondId(2))),
@@ -350,9 +331,9 @@ mod tests {
             })
         );
         assert_eq!(
-            translate_item(contour, Point2D::new(-3.0, 4.0), ReactionSide::Rhs),
+            reference_side(contour, ReactionSide::Rhs),
             DepictionItem::DashedContour(DashedContourItem {
-                points: vec![Point2D::new(-4.0, 4.0), Point2D::new(-1.0, 7.0)],
+                points: vec![Point2D::new(-1.0, 0.0), Point2D::new(2.0, 3.0)],
                 closed: true,
                 references: vec![DepictionReference::ReactionRhs(Entity::Atom(AtomId(1)))],
             })
@@ -610,6 +591,196 @@ mod tests {
                 ReactionDepictionError::RhsDepiction(expected)
             })
         );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_reaction_depict_layout_equals_depict() {
+        for reaction in [
+            bond_order_reaction(),
+            stereo_reaction(),
+            aromatic_reaction(),
+        ] {
+            let layout = reaction.layout().unwrap();
+            let supplied = reaction.depict_layout(&layout).unwrap();
+            let generated = reaction.depict().unwrap();
+
+            assert_eq!(supplied.items, generated.items);
+            assert_eq!(supplied.render_svg(), generated.render_svg());
+        }
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_reaction_layout_arrow() {
+        let reaction = bond_order_reaction();
+        let layout = reaction.layout().unwrap();
+
+        assert_eq!(layout.arrow_start(), Point2D::new(-0.75, 0.0));
+        assert_eq!(layout.arrow_end(), Point2D::new(0.75, 0.0));
+        assert_eq!(reaction.verify_layout(&layout), Ok(()));
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_reaction_depict_layout_moves_arrow() {
+        let reaction = bond_order_reaction();
+        let mut layout = reaction.layout().unwrap();
+        layout
+            .set_arrow(Point2D::new(-1.0, 0.5), Point2D::new(1.0, 0.5))
+            .unwrap();
+
+        let depiction = reaction.depict_layout(&layout).unwrap();
+        let arrows = depiction
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                DepictionItem::Arrow(arrow) => Some(arrow.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            arrows,
+            [ArrowItem {
+                start: Point2D::new(-1.0, 0.5),
+                end: Point2D::new(1.0, 0.5),
+                references: Vec::new(),
+            }]
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    #[case::lhs(true)]
+    #[case::rhs(false)]
+    fn test_reaction_verify_layout_side_error(#[case] lhs: bool) {
+        let reaction = bond_order_reaction();
+        let mut layout = reaction.layout().unwrap();
+        let side = if lhs {
+            layout.lhs_mut()
+        } else {
+            layout.rhs_mut()
+        };
+        let coincident = *side.position(AtomId(1)).unwrap();
+        side.set_position(AtomId(0), coincident).unwrap();
+        let expected = MoleculeDepictionError::NonFiniteGeometry {
+            entity: Entity::Bond(BondId(0)),
+        };
+
+        assert_eq!(
+            reaction.verify_layout(&layout),
+            Err(if lhs {
+                ReactionDepictionError::LhsDepiction(expected.clone())
+            } else {
+                ReactionDepictionError::RhsDepiction(expected.clone())
+            })
+        );
+        assert_eq!(
+            reaction.depict_layout(&layout).err(),
+            Some(if lhs {
+                ReactionDepictionError::LhsDepiction(expected)
+            } else {
+                ReactionDepictionError::RhsDepiction(expected)
+            })
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_reaction_depict_layout_frame_error() {
+        let reaction = bond_order_reaction();
+        let generated = reaction.layout().unwrap();
+        let layout = ReactionLayout::try_new(
+            MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
+            generated.rhs().clone(),
+            generated.arrow_start(),
+            generated.arrow_end(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            reaction.depict_layout(&layout).err(),
+            Some(ReactionDepictionError::LhsDepiction(
+                MoleculeDepictionError::LayoutFrame(MoleculeLayoutError::FrameSizeMismatch {
+                    molecule_atom_count: 2,
+                    layout_atom_count: 1,
+                })
+            ))
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_reaction_layout_materialization_error() {
+        let reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: NumForm::Lit(2),
+                    new: NumForm::Lit(3),
+                },
+            })]),
+        );
+        let layout = ReactionLayout::arrange(
+            MoleculeLayout::try_new(Vec::new()).unwrap(),
+            MoleculeLayout::try_new(Vec::new()).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            reaction.layout().err(),
+            Some(ReactionDepictionError::Materialization(Contradiction))
+        );
+        assert_eq!(
+            reaction.verify_layout(&layout),
+            Err(ReactionDepictionError::Materialization(Contradiction))
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_reaction_layout_error_wraps_arrow() {
+        let error = ReactionDepictionError::Layout(ReactionLayoutError::DegenerateArrow {
+            position: Point2D::new(0.0, 0.0),
+        });
+
+        assert_eq!(
+            error.to_string(),
+            "reaction layout: reaction arrow starts and ends at Point2D { x: 0.0, y: 0.0 }"
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    fn stereo_reaction() -> Reaction {
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+            ),
+            Deltas::new(),
+        )
+    }
+
+    #[cfg(feature = "coordgen")]
+    fn aromatic_reaction() -> Reaction {
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "C" "C" "C" "C" "C" "O#h1" "N#h2"]
+                    :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                            [0 6 "1"] [3 7 "1"]]
+                    :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*#c+"}]}"#
+            ),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(6),
+                change: BondFieldChange::Order {
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
+                },
+            })]),
+        )
     }
 
     #[cfg(feature = "coordgen")]
