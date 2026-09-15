@@ -1,17 +1,105 @@
-//! Exact-size iterator properties and participant-transport laws.
+//! Construction, incidence, coincidence, exact-size iteration, and participant transport.
 //!
+//! Construction checks preserve complete input rows. Incidence follows [RelationParticipant::refs];
+//! coincidence compares complete participant multisets independently in each factor.
+//! A direct row scan supplies expected incidence, and occurrence counts supply multiset equality.
+//! Generated participants may reference a node, an edge, both, or neither; labels distinguish
+//! values with identical references. Small id/label domains exercise duplicates and shared refs.
+//! Variable factors include empty sequences. Queries include independent inputs, reversed rows,
+//! and changed labels with unchanged references to distinguish value equality from incidence.
 //! Transport laws use permutations of eight node and edge ids; unit cases cover partial mappings.
 
+use std::iter;
+
 use proptest::prelude::*;
-use proptest::test_runner::TestCaseResult;
+use proptest::test_runner::{Config, TestCaseResult, TestRunner};
+use rstest::rstest;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet,
-    GraphCorrespondence, GraphRemapping, NodeId, RelationId, Remapping, VarRelationSet,
-    VarVarBirelationSet,
+    GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId, ParticipantRefs, RelationId,
+    RelationParticipant, Remapping, VarRelationSet, VarVarBirelationSet,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TestData(usize);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct TestParticipant {
+    node: Option<NodeId>,
+    edge: Option<EdgeId>,
+    label: u8,
+}
+
+impl RelationParticipant for TestParticipant {
+    fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
+        Some(Self {
+            node: match self.node {
+                Some(node) => Some(node.compact(compaction)?),
+                None => None,
+            },
+            edge: match self.edge {
+                Some(edge) => Some(edge.compact(compaction)?),
+                None => None,
+            },
+            label: self.label,
+        })
+    }
+
+    fn uncompact(self, compaction: &GraphCompaction) -> Self {
+        Self {
+            node: self.node.map(|node| node.uncompact(compaction)),
+            edge: self.edge.map(|edge| edge.uncompact(compaction)),
+            label: self.label,
+        }
+    }
+
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self {
+            node: match self.node {
+                Some(node) => Some(node.try_map(correspondence)?),
+                None => None,
+            },
+            edge: match self.edge {
+                Some(edge) => Some(edge.try_map(correspondence)?),
+                None => None,
+            },
+            label: self.label,
+        })
+    }
+
+    fn remap(self, remapping: &GraphRemapping) -> Self {
+        Self {
+            node: self.node.map(|node| node.remap(remapping)),
+            edge: self.edge.map(|edge| edge.remap(remapping)),
+            label: self.label,
+        }
+    }
+
+    fn refs(self) -> ParticipantRefs {
+        ParticipantRefs {
+            node: self.node,
+            edge: self.edge,
+        }
+    }
+}
+
+fn participant_strategy() -> impl Strategy<Value = TestParticipant> {
+    (prop::option::of(0u32..3), prop::option::of(0u32..3), 0u8..2).prop_map(
+        |(node, edge, label)| TestParticipant {
+            node: node.map(NodeId),
+            edge: edge.map(EdgeId),
+            label,
+        },
+    )
+}
+
+fn same_multiset(left: &[TestParticipant], right: &[TestParticipant]) -> bool {
+    left.len() == right.len()
+        && left.iter().all(|item| {
+            left.iter().filter(|value| *value == item).count()
+                == right.iter().filter(|value| *value == item).count()
+        })
+}
 
 fn participant_mapping_strategy() -> impl Strategy<Value = (GraphCorrespondence, GraphRemapping)> {
     (
@@ -80,6 +168,597 @@ fn assert_data_iter_mut<'a>(
     prop_assert_eq!(iterator.next(), None);
     prop_assert_eq!(iterator.len(), 0);
     Ok(())
+}
+
+#[rstest]
+fn test_fixed_relation_set_new_incidence() {
+    let strategy = (
+        prop::collection::vec(
+            (prop::array::uniform3(participant_strategy()), any::<u8>()),
+            0..8,
+        ),
+        prop::collection::vec(participant_strategy(), 0..5),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_fixed_relation_set_new_incidence"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, query)| {
+            let relations = FixedRelationSet::<TestParticipant, u8, 3>::new(entries.clone());
+            prop_assert_eq!(relations.count(), entries.len());
+            for (index, (participants, data)) in entries.iter().enumerate() {
+                let id = RelationId(index as u32);
+                prop_assert_eq!(relations.participants(id), participants.as_slice());
+                prop_assert_eq!(relations.data(id), data);
+            }
+            for key in 0..4 {
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (participants, _))| {
+                        participants
+                            .iter()
+                            .any(|participant| participant.node == Some(NodeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
+                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (participants, _))| {
+                        participants
+                            .iter()
+                            .any(|participant| participant.edge == Some(EdgeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_edge(EdgeId(key)),
+                    !expected.is_empty()
+                );
+            }
+            let queries = iter::once(query).chain(entries.iter().flat_map(|(participants, _)| {
+                let query: Vec<_> = participants.iter().rev().copied().collect();
+                let mut changed = query.clone();
+                if let Some(participant) = changed.first_mut() {
+                    participant.label ^= 1;
+                }
+                [query, changed]
+            }));
+            for query in queries {
+                for (index, (participants, _)) in entries.iter().enumerate() {
+                    prop_assert_eq!(
+                        relations.is_coincident(RelationId(index as u32), &query),
+                        same_multiset(participants, &query)
+                    );
+                }
+                for key in 0..4 {
+                    let expected = entries
+                        .iter()
+                        .position(|(participants, _)| {
+                            participants
+                                .iter()
+                                .any(|participant| participant.node == Some(NodeId(key)))
+                                && same_multiset(participants, &query)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(relations.coincident(NodeId(key), &query), expected);
+                    let expected = entries
+                        .iter()
+                        .position(|(participants, _)| {
+                            participants
+                                .iter()
+                                .any(|participant| participant.edge == Some(EdgeId(key)))
+                                && same_multiset(participants, &query)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(relations.coincident_edge(EdgeId(key), &query), expected);
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_var_relation_set_new_incidence() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..5),
+                any::<u8>(),
+            ),
+            0..8,
+        ),
+        prop::collection::vec(participant_strategy(), 0..5),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_relation_set_new_incidence"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, query)| {
+            let relations = VarRelationSet::<TestParticipant, u8>::new(entries.clone());
+            prop_assert_eq!(relations.count(), entries.len());
+            for (index, (participants, data)) in entries.iter().enumerate() {
+                let id = RelationId(index as u32);
+                prop_assert_eq!(relations.participants(id), participants.as_slice());
+                prop_assert_eq!(relations.data(id), data);
+            }
+            for key in 0..4 {
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (participants, _))| {
+                        participants
+                            .iter()
+                            .any(|participant| participant.node == Some(NodeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
+                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (participants, _))| {
+                        participants
+                            .iter()
+                            .any(|participant| participant.edge == Some(EdgeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_edge(EdgeId(key)),
+                    !expected.is_empty()
+                );
+            }
+            let queries = iter::once(query).chain(entries.iter().flat_map(|(participants, _)| {
+                let query: Vec<_> = participants.iter().rev().copied().collect();
+                let mut changed = query.clone();
+                if let Some(participant) = changed.first_mut() {
+                    participant.label ^= 1;
+                }
+                [query, changed]
+            }));
+            for query in queries {
+                for (index, (participants, _)) in entries.iter().enumerate() {
+                    prop_assert_eq!(
+                        relations.is_coincident(RelationId(index as u32), &query),
+                        same_multiset(participants, &query)
+                    );
+                }
+                for key in 0..4 {
+                    let expected = entries
+                        .iter()
+                        .position(|(participants, _)| {
+                            participants
+                                .iter()
+                                .any(|participant| participant.node == Some(NodeId(key)))
+                                && same_multiset(participants, &query)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(relations.coincident(NodeId(key), &query), expected);
+                    let expected = entries
+                        .iter()
+                        .position(|(participants, _)| {
+                            participants
+                                .iter()
+                                .any(|participant| participant.edge == Some(EdgeId(key)))
+                                && same_multiset(participants, &query)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(relations.coincident_edge(EdgeId(key), &query), expected);
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_fixed_fixed_birelation_set_new_incidence() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::array::uniform3(participant_strategy()),
+                prop::array::uniform3(participant_strategy()),
+                any::<u8>(),
+            ),
+            0..8,
+        ),
+        (
+            prop::collection::vec(participant_strategy(), 0..5),
+            prop::collection::vec(participant_strategy(), 0..5),
+        ),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_fixed_fixed_birelation_set_new_incidence"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, query)| {
+            let relations =
+                FixedFixedBirelationSet::<TestParticipant, 3, TestParticipant, 3, u8>::new(
+                    entries.clone(),
+                );
+            prop_assert_eq!(relations.count(), entries.len());
+            for (index, (first, second, data)) in entries.iter().enumerate() {
+                let id = RelationId(index as u32);
+                prop_assert_eq!(relations.participants_1(id), first.as_slice());
+                prop_assert_eq!(relations.participants_2(id), second.as_slice());
+                prop_assert_eq!(relations.data(id), data);
+            }
+            for key in 0..4 {
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (first, second, _))| {
+                        first
+                            .iter()
+                            .chain(second)
+                            .any(|participant| participant.node == Some(NodeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
+                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (first, second, _))| {
+                        first
+                            .iter()
+                            .chain(second)
+                            .any(|participant| participant.edge == Some(EdgeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_edge(EdgeId(key)),
+                    !expected.is_empty()
+                );
+            }
+            let queries = iter::once(query).chain(entries.iter().flat_map(|(first, second, _)| {
+                let first: Vec<_> = first.iter().rev().copied().collect();
+                let second: Vec<_> = second.iter().rev().copied().collect();
+                let mut changed_first = first.clone();
+                let mut changed_second = second.clone();
+                if let Some(participant) = changed_first.first_mut() {
+                    participant.label ^= 1;
+                }
+                if let Some(participant) = changed_second.first_mut() {
+                    participant.label ^= 1;
+                }
+                [
+                    (changed_first, second.clone()),
+                    (first.clone(), changed_second),
+                    (first, second),
+                ]
+            }));
+            for (query_1, query_2) in queries {
+                for (index, (first, second, _)) in entries.iter().enumerate() {
+                    prop_assert_eq!(
+                        relations.is_coincident(RelationId(index as u32), &query_1, &query_2),
+                        same_multiset(first, &query_1) && same_multiset(second, &query_2)
+                    );
+                }
+                for key in 0..4 {
+                    let expected = entries
+                        .iter()
+                        .position(|(first, second, _)| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|participant| participant.node == Some(NodeId(key)))
+                                && same_multiset(first, &query_1)
+                                && same_multiset(second, &query_2)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(
+                        relations.coincident(NodeId(key), &query_1, &query_2),
+                        expected
+                    );
+                    let expected = entries
+                        .iter()
+                        .position(|(first, second, _)| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|participant| participant.edge == Some(EdgeId(key)))
+                                && same_multiset(first, &query_1)
+                                && same_multiset(second, &query_2)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(
+                        relations.coincident_edge(EdgeId(key), &query_1, &query_2),
+                        expected
+                    );
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_fixed_var_birelation_set_new_incidence() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::array::uniform3(participant_strategy()),
+                prop::collection::vec(participant_strategy(), 0..5),
+                any::<u8>(),
+            ),
+            0..8,
+        ),
+        (
+            prop::collection::vec(participant_strategy(), 0..5),
+            prop::collection::vec(participant_strategy(), 0..5),
+        ),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_fixed_var_birelation_set_new_incidence"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, query)| {
+            let relations = FixedVarBirelationSet::<TestParticipant, 3, TestParticipant, u8>::new(
+                entries.clone(),
+            );
+            prop_assert_eq!(relations.count(), entries.len());
+            for (index, (first, second, data)) in entries.iter().enumerate() {
+                let id = RelationId(index as u32);
+                prop_assert_eq!(relations.participants_1(id), first.as_slice());
+                prop_assert_eq!(relations.participants_2(id), second.as_slice());
+                prop_assert_eq!(relations.data(id), data);
+            }
+            for key in 0..4 {
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (first, second, _))| {
+                        first
+                            .iter()
+                            .chain(second)
+                            .any(|participant| participant.node == Some(NodeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
+                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (first, second, _))| {
+                        first
+                            .iter()
+                            .chain(second)
+                            .any(|participant| participant.edge == Some(EdgeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_edge(EdgeId(key)),
+                    !expected.is_empty()
+                );
+            }
+            let queries = iter::once(query).chain(entries.iter().flat_map(|(first, second, _)| {
+                let first: Vec<_> = first.iter().rev().copied().collect();
+                let second: Vec<_> = second.iter().rev().copied().collect();
+                let mut changed_first = first.clone();
+                let mut changed_second = second.clone();
+                if let Some(participant) = changed_first.first_mut() {
+                    participant.label ^= 1;
+                }
+                if let Some(participant) = changed_second.first_mut() {
+                    participant.label ^= 1;
+                }
+                [
+                    (changed_first, second.clone()),
+                    (first.clone(), changed_second),
+                    (first, second),
+                ]
+            }));
+            for (query_1, query_2) in queries {
+                for (index, (first, second, _)) in entries.iter().enumerate() {
+                    prop_assert_eq!(
+                        relations.is_coincident(RelationId(index as u32), &query_1, &query_2),
+                        same_multiset(first, &query_1) && same_multiset(second, &query_2)
+                    );
+                }
+                for key in 0..4 {
+                    let expected = entries
+                        .iter()
+                        .position(|(first, second, _)| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|participant| participant.node == Some(NodeId(key)))
+                                && same_multiset(first, &query_1)
+                                && same_multiset(second, &query_2)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(
+                        relations.coincident(NodeId(key), &query_1, &query_2),
+                        expected
+                    );
+                    let expected = entries
+                        .iter()
+                        .position(|(first, second, _)| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|participant| participant.edge == Some(EdgeId(key)))
+                                && same_multiset(first, &query_1)
+                                && same_multiset(second, &query_2)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(
+                        relations.coincident_edge(EdgeId(key), &query_1, &query_2),
+                        expected
+                    );
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_var_var_birelation_set_new_incidence() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..5),
+                prop::collection::vec(participant_strategy(), 0..5),
+                any::<u8>(),
+            ),
+            0..8,
+        ),
+        (
+            prop::collection::vec(participant_strategy(), 0..5),
+            prop::collection::vec(participant_strategy(), 0..5),
+        ),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_var_birelation_set_new_incidence"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, query)| {
+            let relations =
+                VarVarBirelationSet::<TestParticipant, TestParticipant, u8>::new(entries.clone());
+            prop_assert_eq!(relations.count(), entries.len());
+            for (index, (first, second, data)) in entries.iter().enumerate() {
+                let id = RelationId(index as u32);
+                prop_assert_eq!(relations.participants_1(id), first.as_slice());
+                prop_assert_eq!(relations.participants_2(id), second.as_slice());
+                prop_assert_eq!(relations.data(id), data);
+            }
+            for key in 0..4 {
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (first, second, _))| {
+                        first
+                            .iter()
+                            .chain(second)
+                            .any(|participant| participant.node == Some(NodeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
+                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                let expected: Vec<_> = entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (first, second, _))| {
+                        first
+                            .iter()
+                            .chain(second)
+                            .any(|participant| participant.edge == Some(EdgeId(key)))
+                    })
+                    .map(|(index, _)| RelationId(index as u32))
+                    .collect();
+                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_edge(EdgeId(key)),
+                    !expected.is_empty()
+                );
+            }
+            let queries = iter::once(query).chain(entries.iter().flat_map(|(first, second, _)| {
+                let first: Vec<_> = first.iter().rev().copied().collect();
+                let second: Vec<_> = second.iter().rev().copied().collect();
+                let mut changed_first = first.clone();
+                let mut changed_second = second.clone();
+                if let Some(participant) = changed_first.first_mut() {
+                    participant.label ^= 1;
+                }
+                if let Some(participant) = changed_second.first_mut() {
+                    participant.label ^= 1;
+                }
+                [
+                    (changed_first, second.clone()),
+                    (first.clone(), changed_second),
+                    (first, second),
+                ]
+            }));
+            for (query_1, query_2) in queries {
+                for (index, (first, second, _)) in entries.iter().enumerate() {
+                    prop_assert_eq!(
+                        relations.is_coincident(RelationId(index as u32), &query_1, &query_2),
+                        same_multiset(first, &query_1) && same_multiset(second, &query_2)
+                    );
+                }
+                for key in 0..4 {
+                    let expected = entries
+                        .iter()
+                        .position(|(first, second, _)| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|participant| participant.node == Some(NodeId(key)))
+                                && same_multiset(first, &query_1)
+                                && same_multiset(second, &query_2)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(
+                        relations.coincident(NodeId(key), &query_1, &query_2),
+                        expected
+                    );
+                    let expected = entries
+                        .iter()
+                        .position(|(first, second, _)| {
+                            first
+                                .iter()
+                                .chain(second)
+                                .any(|participant| participant.edge == Some(EdgeId(key)))
+                                && same_multiset(first, &query_1)
+                                && same_multiset(second, &query_2)
+                        })
+                        .map(|index| RelationId(index as u32));
+                    prop_assert_eq!(
+                        relations.coincident_edge(EdgeId(key), &query_1, &query_2),
+                        expected
+                    );
+                }
+            }
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
 }
 
 proptest! {

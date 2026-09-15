@@ -2979,6 +2979,38 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(vec![], vec![], vec![])]
+    #[case::repeated(
+        vec![
+            ([NodeId(2), NodeId(0), NodeId(2)], "first"),
+            ([NodeId(0), NodeId(2), NodeId(2)], "duplicate"),
+            ([NodeId(3), NodeId(3), NodeId(3)], "other"),
+        ],
+        vec![RelationId(0), RelationId(1)],
+        vec![RelationId(2)],
+    )]
+    fn test_fixed_relation_set_new_incidence(
+        #[case] entries: Vec<([NodeId; 3], &str)>,
+        #[case] at_two: Vec<RelationId>,
+        #[case] at_three: Vec<RelationId>,
+    ) {
+        let relations = FixedRelationSet::<NodeId, &str, 3>::new(entries.clone());
+        assert_eq!(relations.count(), entries.len());
+        for (index, (participants, data)) in entries.iter().enumerate() {
+            let id = RelationId(index as u32);
+            assert_eq!(relations.participants(id), participants);
+            assert_eq!(relations.data(id), data);
+        }
+        assert_eq!(relations.incident(NodeId(2)), at_two);
+        assert_eq!(relations.incident(NodeId(3)), at_three);
+        assert_eq!(relations.incident(NodeId(4)), &[]);
+        assert_eq!(relations.incident_edge(EdgeId(2)), &[]);
+        assert_eq!(relations.has_incident(NodeId(2)), !at_two.is_empty());
+        assert!(!relations.has_incident_edge(EdgeId(2)));
+        assert_eq!(relations.into_entries(), entries);
+    }
+
+    #[rstest]
     fn test_fixed_relation_set_hash() {
         let entries = vec![([n(2), n(0)], "first"), ([n(3), n(1)], "second")];
         let left: FixedRelationSet<NodeId, &str, 2> = FixedRelationSet::new(entries.clone());
@@ -3392,6 +3424,39 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(vec![], vec![], vec![])]
+    #[case::repeated(
+        vec![
+            (vec![NodeId(2), NodeId(0), NodeId(2)], "first"),
+            (vec![NodeId(0), NodeId(2), NodeId(2)], "duplicate"),
+            (vec![NodeId(3), NodeId(3), NodeId(3)], "other"),
+        ],
+        vec![RelationId(0), RelationId(1)],
+        vec![RelationId(2)],
+    )]
+    #[case::empty_factors(vec![(vec![], "empty")], vec![], vec![])]
+    fn test_var_relation_set_new_incidence(
+        #[case] entries: Vec<(Vec<NodeId>, &str)>,
+        #[case] at_two: Vec<RelationId>,
+        #[case] at_three: Vec<RelationId>,
+    ) {
+        let relations = VarRelationSet::<NodeId, &str>::new(entries.clone());
+        assert_eq!(relations.count(), entries.len());
+        for (index, (participants, data)) in entries.iter().enumerate() {
+            let id = RelationId(index as u32);
+            assert_eq!(relations.participants(id), participants);
+            assert_eq!(relations.data(id), data);
+        }
+        assert_eq!(relations.incident(NodeId(2)), at_two);
+        assert_eq!(relations.incident(NodeId(3)), at_three);
+        assert_eq!(relations.incident(NodeId(4)), &[]);
+        assert_eq!(relations.incident_edge(EdgeId(2)), &[]);
+        assert_eq!(relations.has_incident(NodeId(2)), !at_two.is_empty());
+        assert!(!relations.has_incident_edge(EdgeId(2)));
+        assert_eq!(relations.into_entries(), entries);
+    }
+
+    #[rstest]
     fn test_var_relation_set_hash() {
         let entries = vec![
             (vec![n(2), n(0)], "first"),
@@ -3766,6 +3831,39 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(vec![], vec![], vec![])]
+    #[case::repeated(
+        vec![
+            ([NodeId(2), NodeId(0), NodeId(2)], [NodeId(2), NodeId(1), NodeId(2)], "first"),
+            ([NodeId(0), NodeId(2), NodeId(2)], [NodeId(1), NodeId(2), NodeId(2)], "duplicate"),
+            ([NodeId(3), NodeId(3), NodeId(3)], [NodeId(3), NodeId(3), NodeId(3)], "other"),
+        ],
+        vec![RelationId(0), RelationId(1)],
+        vec![RelationId(2)],
+    )]
+    fn test_fixed_fixed_birelation_set_new_incidence(
+        #[case] entries: Vec<([NodeId; 3], [NodeId; 3], &str)>,
+        #[case] at_two: Vec<RelationId>,
+        #[case] at_three: Vec<RelationId>,
+    ) {
+        let relations = FixedFixedBirelationSet::<NodeId, 3, NodeId, 3, &str>::new(entries.clone());
+        assert_eq!(relations.count(), entries.len());
+        for (index, (first, second, data)) in entries.iter().enumerate() {
+            let id = RelationId(index as u32);
+            assert_eq!(relations.participants_1(id), first);
+            assert_eq!(relations.participants_2(id), second);
+            assert_eq!(relations.data(id), data);
+        }
+        assert_eq!(relations.incident(NodeId(2)), at_two);
+        assert_eq!(relations.incident(NodeId(3)), at_three);
+        assert_eq!(relations.incident(NodeId(4)), &[]);
+        assert_eq!(relations.incident_edge(EdgeId(2)), &[]);
+        assert_eq!(relations.has_incident(NodeId(2)), !at_two.is_empty());
+        assert!(!relations.has_incident_edge(EdgeId(2)));
+        assert_eq!(relations.into_entries(), entries);
+    }
+
+    #[rstest]
     #[case::roundtrip(
         vec![
             ([n(2)], [n(4), n(1)], "first"),
@@ -4098,6 +4196,44 @@ mod tests {
         assert_eq!(rs.participants_1(RelationId(0)), &[EdgeId(0)]);
         assert_eq!(rs.participants_2(RelationId(0)), &[n(1), n(2), n(3)]);
         assert_eq!(rs.data(RelationId(0)), &"ct");
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![], vec![])]
+    #[case::repeated(
+        vec![
+            ([NodeId(2), NodeId(0), NodeId(2)], vec![NodeId(2), NodeId(1), NodeId(2)], "first"),
+            ([NodeId(0), NodeId(2), NodeId(2)], vec![NodeId(1), NodeId(2), NodeId(2)], "duplicate"),
+            ([NodeId(3), NodeId(3), NodeId(3)], vec![NodeId(3), NodeId(3), NodeId(3)], "other"),
+        ],
+        vec![RelationId(0), RelationId(1)],
+        vec![RelationId(2)],
+    )]
+    #[case::empty_second_factor(
+        vec![([NodeId(2), NodeId(2), NodeId(2)], vec![], "empty")],
+        vec![RelationId(0)],
+        vec![],
+    )]
+    fn test_fixed_var_birelation_set_new_incidence(
+        #[case] entries: Vec<([NodeId; 3], Vec<NodeId>, &str)>,
+        #[case] at_two: Vec<RelationId>,
+        #[case] at_three: Vec<RelationId>,
+    ) {
+        let relations = FixedVarBirelationSet::<NodeId, 3, NodeId, &str>::new(entries.clone());
+        assert_eq!(relations.count(), entries.len());
+        for (index, (first, second, data)) in entries.iter().enumerate() {
+            let id = RelationId(index as u32);
+            assert_eq!(relations.participants_1(id), first);
+            assert_eq!(relations.participants_2(id), second);
+            assert_eq!(relations.data(id), data);
+        }
+        assert_eq!(relations.incident(NodeId(2)), at_two);
+        assert_eq!(relations.incident(NodeId(3)), at_three);
+        assert_eq!(relations.incident(NodeId(4)), &[]);
+        assert_eq!(relations.incident_edge(EdgeId(2)), &[]);
+        assert_eq!(relations.has_incident(NodeId(2)), !at_two.is_empty());
+        assert!(!relations.has_incident_edge(EdgeId(2)));
+        assert_eq!(relations.into_entries(), entries);
     }
 
     #[rstest]
@@ -4537,6 +4673,44 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(vec![], vec![], vec![])]
+    #[case::repeated(
+        vec![
+            (vec![NodeId(2), NodeId(0), NodeId(2)], vec![NodeId(2), NodeId(1), NodeId(2)], "first"),
+            (
+                vec![NodeId(0), NodeId(2), NodeId(2)],
+                vec![NodeId(1), NodeId(2), NodeId(2)],
+                "duplicate",
+            ),
+            (vec![NodeId(3), NodeId(3), NodeId(3)], vec![NodeId(3), NodeId(3), NodeId(3)], "other"),
+        ],
+        vec![RelationId(0), RelationId(1)],
+        vec![RelationId(2)],
+    )]
+    #[case::empty_factors(vec![(vec![], vec![], "empty")], vec![], vec![])]
+    fn test_var_var_birelation_set_new_incidence(
+        #[case] entries: Vec<(Vec<NodeId>, Vec<NodeId>, &str)>,
+        #[case] at_two: Vec<RelationId>,
+        #[case] at_three: Vec<RelationId>,
+    ) {
+        let relations = VarVarBirelationSet::<NodeId, NodeId, &str>::new(entries.clone());
+        assert_eq!(relations.count(), entries.len());
+        for (index, (first, second, data)) in entries.iter().enumerate() {
+            let id = RelationId(index as u32);
+            assert_eq!(relations.participants_1(id), first);
+            assert_eq!(relations.participants_2(id), second);
+            assert_eq!(relations.data(id), data);
+        }
+        assert_eq!(relations.incident(NodeId(2)), at_two);
+        assert_eq!(relations.incident(NodeId(3)), at_three);
+        assert_eq!(relations.incident(NodeId(4)), &[]);
+        assert_eq!(relations.incident_edge(EdgeId(2)), &[]);
+        assert_eq!(relations.has_incident(NodeId(2)), !at_two.is_empty());
+        assert!(!relations.has_incident_edge(EdgeId(2)));
+        assert_eq!(relations.into_entries(), entries);
+    }
+
+    #[rstest]
     #[case::roundtrip(
         vec![
             (vec![n(2), n(0)], vec![EdgeId(4), EdgeId(1)], "first"),
@@ -4907,6 +5081,27 @@ mod tests {
     }
 
     #[rstest]
+    #[case::reordered(NodeId(2), vec![NodeId(2), NodeId(2), NodeId(0)], Some(RelationId(0)), true)]
+    #[case::multiplicity(NodeId(2), vec![NodeId(0), NodeId(0), NodeId(2)], None, false)]
+    #[case::short(NodeId(2), vec![NodeId(2), NodeId(0)], None, false)]
+    #[case::long(NodeId(2), vec![NodeId(2), NodeId(0), NodeId(2), NodeId(2)], None, false)]
+    #[case::absent_anchor(NodeId(4), vec![NodeId(2), NodeId(2), NodeId(0)], None, true)]
+    fn test_fixed_relation_set_coincident_multiplicity(
+        #[case] anchor: NodeId,
+        #[case] query: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+        #[case] coincides: bool,
+    ) {
+        let relations = FixedRelationSet::<NodeId, &str, 3>::new(vec![
+            ([NodeId(2), NodeId(0), NodeId(2)], "first"),
+            ([NodeId(0), NodeId(2), NodeId(2)], "duplicate"),
+            ([NodeId(3), NodeId(3), NodeId(3)], "other"),
+        ]);
+        assert_eq!(relations.coincident(anchor, &query), expected);
+        assert_eq!(relations.is_coincident(RelationId(0), &query), coincides);
+    }
+
+    #[rstest]
     #[case::exact(vec![n(0), n(1), n(2)], Some(RelationId(0)))]
     #[case::reordered(vec![n(2), n(0), n(1)], Some(RelationId(0)))]
     #[case::second(vec![n(3), n(4)], Some(RelationId(1)))]
@@ -4924,6 +5119,27 @@ mod tests {
                 .and_then(|&anchor| rs.coincident(anchor, &query)),
             expected,
         );
+    }
+
+    #[rstest]
+    #[case::reordered(NodeId(2), vec![NodeId(2), NodeId(2), NodeId(0)], Some(RelationId(0)), true)]
+    #[case::multiplicity(NodeId(2), vec![NodeId(0), NodeId(0), NodeId(2)], None, false)]
+    #[case::short(NodeId(2), vec![NodeId(2), NodeId(0)], None, false)]
+    #[case::long(NodeId(2), vec![NodeId(2), NodeId(0), NodeId(2), NodeId(2)], None, false)]
+    #[case::absent_anchor(NodeId(4), vec![NodeId(2), NodeId(2), NodeId(0)], None, true)]
+    fn test_var_relation_set_coincident_multiplicity(
+        #[case] anchor: NodeId,
+        #[case] query: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+        #[case] coincides: bool,
+    ) {
+        let relations = VarRelationSet::<NodeId, &str>::new(vec![
+            (vec![NodeId(2), NodeId(0), NodeId(2)], "first"),
+            (vec![NodeId(0), NodeId(2), NodeId(2)], "duplicate"),
+            (vec![NodeId(3), NodeId(3), NodeId(3)], "other"),
+        ]);
+        assert_eq!(relations.coincident(anchor, &query), expected);
+        assert_eq!(relations.is_coincident(RelationId(0), &query), coincides);
     }
 
     #[rstest]
@@ -4950,6 +5166,87 @@ mod tests {
     }
 
     #[rstest]
+    #[case::reordered(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        Some(RelationId(0)),
+        true,
+    )]
+    #[case::multiplicity(
+        NodeId(2),
+        vec![NodeId(0), NodeId(0), NodeId(2)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::short(
+        NodeId(2),
+        vec![NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::long(
+        NodeId(2),
+        vec![NodeId(2), NodeId(0), NodeId(2), NodeId(2)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::absent_anchor(
+        NodeId(4),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        true,
+    )]
+    #[case::second_multiplicity(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(1), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::factor_swap(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        None,
+        false,
+    )]
+    fn test_fixed_fixed_birelation_set_coincident_multiplicity(
+        #[case] anchor: NodeId,
+        #[case] query: Vec<NodeId>,
+        #[case] query_2: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+        #[case] coincides: bool,
+    ) {
+        let relations = FixedFixedBirelationSet::<NodeId, 3, NodeId, 3, &str>::new(vec![
+            (
+                [NodeId(2), NodeId(0), NodeId(2)],
+                [NodeId(2), NodeId(1), NodeId(2)],
+                "first",
+            ),
+            (
+                [NodeId(0), NodeId(2), NodeId(2)],
+                [NodeId(1), NodeId(2), NodeId(2)],
+                "duplicate",
+            ),
+            (
+                [NodeId(3), NodeId(3), NodeId(3)],
+                [NodeId(3), NodeId(3), NodeId(3)],
+                "other",
+            ),
+        ]);
+        assert_eq!(relations.coincident(anchor, &query, &query_2), expected);
+        assert_eq!(
+            relations.is_coincident(RelationId(0), &query, &query_2),
+            coincides
+        );
+    }
+
+    #[rstest]
     #[case::exact(vec![n(0)], vec![n(1)], Some(RelationId(0)))]
     #[case::role_swap(vec![n(1)], vec![n(0)], None)]
     #[case::multiset_reordered(vec![n(3)], vec![n(5), n(4), n(4)], Some(RelationId(1)))]
@@ -4971,6 +5268,87 @@ mod tests {
                 .first()
                 .and_then(|&anchor| rs.coincident(anchor, &query_1, &query_2)),
             expected,
+        );
+    }
+
+    #[rstest]
+    #[case::reordered(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        Some(RelationId(0)),
+        true,
+    )]
+    #[case::multiplicity(
+        NodeId(2),
+        vec![NodeId(0), NodeId(0), NodeId(2)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::short(
+        NodeId(2),
+        vec![NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::long(
+        NodeId(2),
+        vec![NodeId(2), NodeId(0), NodeId(2), NodeId(2)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::absent_anchor(
+        NodeId(4),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        true,
+    )]
+    #[case::second_multiplicity(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(1), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::factor_swap(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        None,
+        false,
+    )]
+    fn test_fixed_var_birelation_set_coincident_multiplicity(
+        #[case] anchor: NodeId,
+        #[case] query: Vec<NodeId>,
+        #[case] query_2: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+        #[case] coincides: bool,
+    ) {
+        let relations = FixedVarBirelationSet::<NodeId, 3, NodeId, &str>::new(vec![
+            (
+                [NodeId(2), NodeId(0), NodeId(2)],
+                vec![NodeId(2), NodeId(1), NodeId(2)],
+                "first",
+            ),
+            (
+                [NodeId(0), NodeId(2), NodeId(2)],
+                vec![NodeId(1), NodeId(2), NodeId(2)],
+                "duplicate",
+            ),
+            (
+                [NodeId(3), NodeId(3), NodeId(3)],
+                vec![NodeId(3), NodeId(3), NodeId(3)],
+                "other",
+            ),
+        ]);
+        assert_eq!(relations.coincident(anchor, &query, &query_2), expected);
+        assert_eq!(
+            relations.is_coincident(RelationId(0), &query, &query_2),
+            coincides
         );
     }
 
@@ -5010,6 +5388,87 @@ mod tests {
                 .first()
                 .and_then(|&anchor| rs.coincident(anchor, &query_1, &query_2)),
             expected,
+        );
+    }
+
+    #[rstest]
+    #[case::reordered(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        Some(RelationId(0)),
+        true,
+    )]
+    #[case::multiplicity(
+        NodeId(2),
+        vec![NodeId(0), NodeId(0), NodeId(2)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::short(
+        NodeId(2),
+        vec![NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::long(
+        NodeId(2),
+        vec![NodeId(2), NodeId(0), NodeId(2), NodeId(2)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::absent_anchor(
+        NodeId(4),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        None,
+        true,
+    )]
+    #[case::second_multiplicity(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        vec![NodeId(2), NodeId(1), NodeId(1)],
+        None,
+        false,
+    )]
+    #[case::factor_swap(
+        NodeId(2),
+        vec![NodeId(2), NodeId(2), NodeId(1)],
+        vec![NodeId(2), NodeId(2), NodeId(0)],
+        None,
+        false,
+    )]
+    fn test_var_var_birelation_set_coincident_multiplicity(
+        #[case] anchor: NodeId,
+        #[case] query: Vec<NodeId>,
+        #[case] query_2: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+        #[case] coincides: bool,
+    ) {
+        let relations = VarVarBirelationSet::<NodeId, NodeId, &str>::new(vec![
+            (
+                vec![NodeId(2), NodeId(0), NodeId(2)],
+                vec![NodeId(2), NodeId(1), NodeId(2)],
+                "first",
+            ),
+            (
+                vec![NodeId(0), NodeId(2), NodeId(2)],
+                vec![NodeId(1), NodeId(2), NodeId(2)],
+                "duplicate",
+            ),
+            (
+                vec![NodeId(3), NodeId(3), NodeId(3)],
+                vec![NodeId(3), NodeId(3), NodeId(3)],
+                "other",
+            ),
+        ]);
+        assert_eq!(relations.coincident(anchor, &query, &query_2), expected);
+        assert_eq!(
+            relations.is_coincident(RelationId(0), &query, &query_2),
+            coincides
         );
     }
 
