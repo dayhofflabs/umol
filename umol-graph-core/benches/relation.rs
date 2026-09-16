@@ -481,6 +481,132 @@ fn fixed_fixed(c: &mut Criterion) {
                     BatchSize::LargeInput,
                 )
             });
+            for (position, row) in [("first", 0), ("middle", count / 2), ("last", count - 1)] {
+                let id = RelationId::from(row);
+                let fixture = format!("{fixture}/row={position}");
+                let first: [NodeId; 4] = array::from_fn(|index| {
+                    NodeId(if repeated && index < 2 {
+                        0
+                    } else {
+                        (count * 4 + index) as u32
+                    })
+                });
+                let second: [EdgeId; 4] = array::from_fn(|index| {
+                    EdgeId(if repeated && index < 2 {
+                        0
+                    } else {
+                        (count * 4 + index) as u32
+                    })
+                });
+                let node = NodeId((count * 4) as u32);
+                let edge = EdgeId((count * 4) as u32);
+                let mut both = relations.clone();
+                both.replace_participants(id, first, second);
+                let mut factor_1 = relations.clone();
+                factor_1.replace_participants_1(id, first);
+                let mut factor_2 = relations.clone();
+                factor_2.replace_participants_2(id, second);
+                let mut local_1 = relations.clone();
+                local_1.replace_participant_1(id, ParticipantPosition(0), node);
+                let mut local_2 = relations.clone();
+                local_2.replace_participant_2(id, ParticipantPosition(0), edge);
+                let mut local_first = entries[row].0;
+                local_first[0] = node;
+                let mut local_second = entries[row].1;
+                local_second[0] = edge;
+                for (changed, a, b) in [
+                    (both, first, second),
+                    (factor_1, first, entries[row].1),
+                    (factor_2, entries[row].0, second),
+                    (local_1, local_first, entries[row].1),
+                    (local_2, entries[row].0, local_second),
+                ] {
+                    let mut expected = entries.clone();
+                    expected[row].0 = a;
+                    expected[row].1 = b;
+                    for node in entries[row].0.into_iter().chain(a) {
+                        let incidence: Vec<_> = expected
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, (parts, _, _))| parts.contains(&node))
+                            .map(|(i, _)| RelationId::from(i))
+                            .collect();
+                        assert_eq!(changed.incident(node), incidence);
+                    }
+                    for edge in entries[row].1.into_iter().chain(b) {
+                        let incidence: Vec<_> = expected
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, (_, parts, _))| parts.contains(&edge))
+                            .map(|(i, _)| RelationId::from(i))
+                            .collect();
+                        assert_eq!(changed.incident_edge(edge), incidence);
+                    }
+                    assert_eq!(changed.into_entries(), expected);
+                }
+                group.bench_function(BenchmarkId::new("replace_participants", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            relations.replace_participants(
+                                black_box(id),
+                                black_box(first),
+                                black_box(second),
+                            );
+                            black_box(relations);
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+                group.bench_function(BenchmarkId::new("replace_participants_1", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            relations.replace_participants_1(black_box(id), black_box(first));
+                            black_box(relations);
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+                group.bench_function(BenchmarkId::new("replace_participants_2", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            relations.replace_participants_2(black_box(id), black_box(second));
+                            black_box(relations);
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+                group.bench_function(BenchmarkId::new("replace_participant_1", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            relations.replace_participant_1(
+                                black_box(id),
+                                black_box(ParticipantPosition(0)),
+                                black_box(node),
+                            );
+                            black_box(relations);
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+                group.bench_function(BenchmarkId::new("replace_participant_2", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            relations.replace_participant_2(
+                                black_box(id),
+                                black_box(ParticipantPosition(0)),
+                                black_box(edge),
+                            );
+                            black_box(relations);
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+            }
         }
     }
     group.finish();
