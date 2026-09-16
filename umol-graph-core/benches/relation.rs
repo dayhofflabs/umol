@@ -747,6 +747,341 @@ fn fixed_var(c: &mut Criterion) {
                         BatchSize::LargeInput,
                     )
                 });
+
+                for (row_name, row) in [("first", 0), ("middle", count / 2), ("last", count - 1)] {
+                    let id = RelationId::from(row);
+                    let fixture = format!("{fixture}/row={row_name}");
+                    let first = [EdgeId((count * 2) as u32), EdgeId((count * 2 + 1) as u32)];
+                    let participant_1 = first[0];
+                    let participant_2 = NodeId((count * width) as u32);
+                    let position = ParticipantPosition(0);
+                    for replacement_len in [0, width / 2, width, width * 2] {
+                        let fixture = format!("{fixture}/replacement={replacement_len}");
+                        let second: Vec<_> = (0..replacement_len)
+                            .map(|position| {
+                                NodeId(if repeated && position < replacement_len / 2 {
+                                    0
+                                } else {
+                                    (count * width + position) as u32
+                                })
+                            })
+                            .collect();
+                        let mut changed = relations.clone();
+                        let mut expected = entries.clone();
+                        changed.replace_participants(id, first, &second);
+                        expected[row].0 = first;
+                        expected[row].1 = second.clone();
+
+                        assert_eq!(changed.clone().into_entries(), expected);
+                        for node in entries[row].1.iter().chain(&expected[row].1) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (_, second, _))| second.contains(node))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident(*node), incident);
+                        }
+                        for edge in entries[row].0.iter().chain(&expected[row].0) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (first, _, _))| first.contains(edge))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident_edge(*edge), incident);
+                        }
+                        group.bench_function(
+                            BenchmarkId::new("replace_participants", &fixture),
+                            |b| {
+                                b.iter_batched_ref(
+                                    || relations.clone(),
+                                    |relations| {
+                                        relations.replace_participants(
+                                            black_box(id),
+                                            black_box(first),
+                                            black_box(&second),
+                                        );
+                                        black_box(relations.participants_1(id));
+                                        black_box(relations.participants_2(id));
+                                    },
+                                    BatchSize::LargeInput,
+                                )
+                            },
+                        );
+                    }
+                    for replacement_len in [0, width / 2, width, width * 2] {
+                        let fixture = format!("{fixture}/replacement={replacement_len}");
+                        let second: Vec<_> = (0..replacement_len)
+                            .map(|position| {
+                                NodeId(if repeated && position < replacement_len / 2 {
+                                    0
+                                } else {
+                                    (count * width + position) as u32
+                                })
+                            })
+                            .collect();
+                        let mut changed = relations.clone();
+                        let mut expected = entries.clone();
+                        changed.replace_participants_2(id, &second);
+                        expected[row].1 = second.clone();
+
+                        assert_eq!(changed.clone().into_entries(), expected);
+                        for node in entries[row].1.iter().chain(&expected[row].1) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (_, second, _))| second.contains(node))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident(*node), incident);
+                        }
+                        for edge in entries[row].0.iter().chain(&expected[row].0) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (first, _, _))| first.contains(edge))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident_edge(*edge), incident);
+                        }
+                        group.bench_function(
+                            BenchmarkId::new("replace_participants_2", &fixture),
+                            |b| {
+                                b.iter_batched_ref(
+                                    || relations.clone(),
+                                    |relations| {
+                                        relations.replace_participants_2(
+                                            black_box(id),
+                                            black_box(&second),
+                                        );
+                                        black_box(relations.participants_1(id));
+                                        black_box(relations.participants_2(id));
+                                    },
+                                    BatchSize::LargeInput,
+                                )
+                            },
+                        );
+                    }
+                    {
+                        let mut changed = relations.clone();
+                        let mut expected = entries.clone();
+                        changed.replace_participants_1(id, first);
+                        expected[row].0 = first;
+
+                        assert_eq!(changed.clone().into_entries(), expected);
+                        for node in entries[row].1.iter().chain(&expected[row].1) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (_, second, _))| second.contains(node))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident(*node), incident);
+                        }
+                        for edge in entries[row].0.iter().chain(&expected[row].0) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (first, _, _))| first.contains(edge))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident_edge(*edge), incident);
+                        }
+                        group.bench_function(
+                            BenchmarkId::new("replace_participants_1", &fixture),
+                            |b| {
+                                b.iter_batched_ref(
+                                    || relations.clone(),
+                                    |relations| {
+                                        relations.replace_participants_1(
+                                            black_box(id),
+                                            black_box(first),
+                                        );
+                                        black_box(relations.participants_1(id));
+                                        black_box(relations.participants_2(id));
+                                    },
+                                    BatchSize::LargeInput,
+                                )
+                            },
+                        );
+                    }
+                    {
+                        let mut changed = relations.clone();
+                        let mut expected = entries.clone();
+                        changed.replace_participant_1(id, position, participant_1);
+                        expected[row].0[0] = participant_1;
+
+                        assert_eq!(changed.clone().into_entries(), expected);
+                        for node in entries[row].1.iter().chain(&expected[row].1) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (_, second, _))| second.contains(node))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident(*node), incident);
+                        }
+                        for edge in entries[row].0.iter().chain(&expected[row].0) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (first, _, _))| first.contains(edge))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident_edge(*edge), incident);
+                        }
+                        group.bench_function(
+                            BenchmarkId::new("replace_participant_1", &fixture),
+                            |b| {
+                                b.iter_batched_ref(
+                                    || relations.clone(),
+                                    |relations| {
+                                        relations.replace_participant_1(
+                                            black_box(id),
+                                            black_box(position),
+                                            black_box(participant_1),
+                                        );
+                                        black_box(relations.participants_1(id));
+                                        black_box(relations.participants_2(id));
+                                    },
+                                    BatchSize::LargeInput,
+                                )
+                            },
+                        );
+                    }
+                    {
+                        let mut changed = relations.clone();
+                        let mut expected = entries.clone();
+                        changed.replace_participant_2(id, position, participant_2);
+                        expected[row].1[0] = participant_2;
+
+                        assert_eq!(changed.clone().into_entries(), expected);
+                        for node in entries[row].1.iter().chain(&expected[row].1) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (_, second, _))| second.contains(node))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident(*node), incident);
+                        }
+                        for edge in entries[row].0.iter().chain(&expected[row].0) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (first, _, _))| first.contains(edge))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident_edge(*edge), incident);
+                        }
+                        group.bench_function(
+                            BenchmarkId::new("replace_participant_2", &fixture),
+                            |b| {
+                                b.iter_batched_ref(
+                                    || relations.clone(),
+                                    |relations| {
+                                        relations.replace_participant_2(
+                                            black_box(id),
+                                            black_box(position),
+                                            black_box(participant_2),
+                                        );
+                                        black_box(relations.participants_1(id));
+                                        black_box(relations.participants_2(id));
+                                    },
+                                    BatchSize::LargeInput,
+                                )
+                            },
+                        );
+                    }
+                    {
+                        let mut changed = relations.clone();
+                        let mut expected = entries.clone();
+                        changed.insert_participant_2(id, position, participant_2);
+                        expected[row].1.insert(0, participant_2);
+
+                        assert_eq!(changed.clone().into_entries(), expected);
+                        for node in entries[row].1.iter().chain(&expected[row].1) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (_, second, _))| second.contains(node))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident(*node), incident);
+                        }
+                        for edge in entries[row].0.iter().chain(&expected[row].0) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (first, _, _))| first.contains(edge))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident_edge(*edge), incident);
+                        }
+                        group.bench_function(
+                            BenchmarkId::new("insert_participant_2", &fixture),
+                            |b| {
+                                b.iter_batched_ref(
+                                    || relations.clone(),
+                                    |relations| {
+                                        relations.insert_participant_2(
+                                            black_box(id),
+                                            black_box(position),
+                                            black_box(participant_2),
+                                        );
+                                        black_box(relations.participants_1(id));
+                                        black_box(relations.participants_2(id));
+                                    },
+                                    BatchSize::LargeInput,
+                                )
+                            },
+                        );
+                    }
+                    {
+                        let mut changed = relations.clone();
+                        let mut expected = entries.clone();
+                        changed.remove_participant_2(id, position);
+                        expected[row].1.remove(0);
+
+                        assert_eq!(changed.clone().into_entries(), expected);
+                        for node in entries[row].1.iter().chain(&expected[row].1) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (_, second, _))| second.contains(node))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident(*node), incident);
+                        }
+                        for edge in entries[row].0.iter().chain(&expected[row].0) {
+                            let incident: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (first, _, _))| first.contains(edge))
+                                .map(|(index, _)| RelationId::from(index))
+                                .collect();
+                            assert_eq!(changed.incident_edge(*edge), incident);
+                        }
+                        group.bench_function(
+                            BenchmarkId::new("remove_participant_2", &fixture),
+                            |b| {
+                                b.iter_batched_ref(
+                                    || relations.clone(),
+                                    |relations| {
+                                        relations.remove_participant_2(
+                                            black_box(id),
+                                            black_box(position),
+                                        );
+                                        black_box(relations.participants_1(id));
+                                        black_box(relations.participants_2(id));
+                                    },
+                                    BatchSize::LargeInput,
+                                )
+                            },
+                        );
+                    }
+                }
             }
         }
     }

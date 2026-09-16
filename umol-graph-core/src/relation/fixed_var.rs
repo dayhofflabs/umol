@@ -30,7 +30,7 @@ use crate::remap::GraphRemapping;
 /// - Coincidence compares participant multisets in each factor; it ignores stored order
 ///   and payloads, but observes multiplicity and complete participant values.
 ///
-/// Construction/query and transport laws are exercised through public APIs in
+/// Construction/query, mutation, and transport laws are exercised through public APIs in
 /// `tests/property/relation.rs`. Transport laws require conforming
 /// [`RelationParticipant`] implementations.
 #[derive(Clone, Debug)]
@@ -311,6 +311,172 @@ where
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         permute_participants(&mut self.participants_2[start..end], order);
+    }
+
+    /// Replace both participant factors of relation `id`, preserving their supplied sequences.
+    ///
+    /// As in [`Self::new`], references are indexed through [`RelationParticipant::refs`]
+    /// without checking membership in an external graph. The array enforces first-factor
+    /// arity; either factor may be empty. Resizing the second factor moves later participants
+    /// and adjusts their row offsets. Incidence is rebuilt over the entire collection once,
+    /// after both factors have been replaced.
+    ///
+    /// # Semantic properties
+    ///
+    /// Relation ids, row count, all payloads, and all other rows remain unchanged.
+    /// Participant order and duplicates are preserved. Incidence lists each relation once
+    /// for every node or edge referenced by either final factor; a reference remains indexed
+    /// while any participant in either factor retains it. Payloads are neither interpreted
+    /// nor transported when lengths or positions change. Replacing both factors with their
+    /// existing sequences preserves the set.
+    /// These laws are exercised against a row model in `tests/property/relation.rs`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
+    pub fn replace_participants(
+        &mut self,
+        id: RelationId,
+        participants_1: [L1; N1],
+        participants_2: &[L2],
+    ) {
+        let start = self.f2_offsets[id.index()] as usize;
+        let end = self.f2_offsets[id.index() + 1] as usize;
+        let old_len = end - start;
+        self.participants_1[id.index()] = participants_1;
+        self.participants_2
+            .splice(start..end, participants_2.iter().copied());
+        for offset in &mut self.f2_offsets[id.index() + 1..] {
+            *offset = (*offset as usize - old_len + participants_2.len()) as u32;
+        }
+        self.incidence = Incidence::build(self.count(), |i, out| {
+            out.extend(self.participants_1[i].iter().map(|p| p.refs()));
+            out.extend(
+                self.participants_2(RelationId::from(i))
+                    .iter()
+                    .map(|p| p.refs()),
+            );
+        });
+    }
+
+    /// Replace the first participant factor of relation `id`, preserving the second factor.
+    ///
+    /// Delegates to [`Self::replace_participants`] with a copy of the current second factor,
+    /// sharing its admission, preservation, and incidence contract. References retained by
+    /// the second factor remain indexed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
+    pub fn replace_participants_1(&mut self, id: RelationId, participants: [L1; N1]) {
+        let second = self.participants_2(id).to_vec();
+        self.replace_participants(id, participants, &second);
+    }
+
+    /// Replace the second participant factor of relation `id`, preserving the first factor.
+    ///
+    /// Delegates to [`Self::replace_participants`] with the current first factor, sharing
+    /// its admission, preservation, and incidence contract. The replacement may be empty.
+    /// References retained by the first factor remain indexed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
+    pub fn replace_participants_2(&mut self, id: RelationId, participants: &[L2]) {
+        self.replace_participants(id, self.participants_1[id.index()], participants);
+    }
+
+    /// Replace one participant at a position local to relation `id`'s first factor.
+    ///
+    /// Delegates to [`Self::replace_participants_1`] with the edited array.
+    ///
+    /// # Semantic properties
+    ///
+    /// Equivalent to whole-factor replacement after changing only `position`.
+    /// Every other position and the complete second factor remain unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `position` is outside `0..N1`.
+    /// Every position is invalid when `N1` is zero.
+    pub fn replace_participant_1(
+        &mut self,
+        id: RelationId,
+        position: ParticipantPosition,
+        participant: L1,
+    ) {
+        let mut participants = self.participants_1[id.index()];
+        participants[position.index()] = participant;
+        self.replace_participants_1(id, participants);
+    }
+
+    /// Replace one participant at a position local to relation `id`'s second factor.
+    ///
+    /// Delegates to [`Self::replace_participants_2`] with the edited sequence.
+    ///
+    /// # Semantic properties
+    ///
+    /// Equivalent to whole-factor replacement after changing only `position`.
+    /// The factor length, every other position, and the complete first factor remain unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `position` is outside the second factor.
+    /// Every position is invalid for an empty second factor.
+    pub fn replace_participant_2(
+        &mut self,
+        id: RelationId,
+        position: ParticipantPosition,
+        participant: L2,
+    ) {
+        let mut participants = self.participants_2(id).to_vec();
+        participants[position.index()] = participant;
+        self.replace_participants_2(id, &participants);
+    }
+
+    /// Insert a second-factor participant before `position`, or append at the factor length.
+    ///
+    /// Delegates to [`Self::replace_participants_2`] with the edited sequence, sharing its
+    /// admission and preservation contract and its full incidence rebuild.
+    ///
+    /// # Semantic properties
+    ///
+    /// The second factor grows by one and existing participants retain their relative order.
+    /// The first factor is unchanged. Removing the inserted position restores the original set.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `position` exceeds the second factor's length.
+    pub fn insert_participant_2(
+        &mut self,
+        id: RelationId,
+        position: ParticipantPosition,
+        participant: L2,
+    ) {
+        let mut participants = self.participants_2(id).to_vec();
+        participants.insert(position.index(), participant);
+        self.replace_participants_2(id, &participants);
+    }
+
+    /// Remove the participant at a position local to relation `id`'s second factor.
+    ///
+    /// Delegates to [`Self::replace_participants_2`] with the edited sequence, sharing its
+    /// admission and preservation contract and its full incidence rebuild.
+    ///
+    /// # Semantic properties
+    ///
+    /// The second factor shrinks by one and surviving participants retain their relative order.
+    /// Removing its sole participant leaves an empty second factor with the same id and payload.
+    /// The first factor is unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `position` is outside the second factor.
+    /// Every position is invalid for an empty second factor.
+    pub fn remove_participant_2(&mut self, id: RelationId, position: ParticipantPosition) {
+        let mut participants = self.participants_2(id).to_vec();
+        participants.remove(position.index());
+        self.replace_participants_2(id, &participants);
     }
 
     /// Relabel participants through a correspondence, preserving rows, positions, and payloads.
