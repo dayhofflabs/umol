@@ -48,6 +48,32 @@ where
     assert_eq!(iterator.size_hint(), (0, Some(0)));
 }
 
+#[fixture]
+fn fixed_relation_set_replacement_input() -> FixedRelationSet<NodeId, ReplacementData, 3> {
+    FixedRelationSet::new(vec![
+        (
+            [NodeId(0), NodeId(1), NodeId(0)],
+            ReplacementData(vec![7, 11, 13]),
+        ),
+        (
+            [NodeId(1), NodeId(1), NodeId(2)],
+            ReplacementData(vec![17, 19, 23]),
+        ),
+        (
+            [NodeId(3), NodeId(4), NodeId(3)],
+            ReplacementData(vec![29, 31, 37]),
+        ),
+    ])
+}
+
+#[fixture]
+fn fixed_relation_set_compaction_input() -> FixedRelationSet<NodeId, &'static str, 2> {
+    FixedRelationSet::new(vec![
+        ([NodeId(0), NodeId(2)], "keep"),
+        ([NodeId(1), NodeId(3)], "drop"),
+    ])
+}
+
 #[rstest]
 fn test_fixed_relation_set_new() {
     let rs: FixedRelationSet<NodeId, &str, 2> = FixedRelationSet::new(vec![
@@ -109,18 +135,6 @@ fn test_fixed_relation_set_new_zero_arity() {
 }
 
 #[rstest]
-fn test_fixed_relation_set_hash() {
-    let entries = vec![
-        ([NodeId(2), NodeId(0)], "first"),
-        ([NodeId(3), NodeId(1)], "second"),
-    ];
-    let left: FixedRelationSet<NodeId, &str, 2> = FixedRelationSet::new(entries.clone());
-    let right: FixedRelationSet<NodeId, &str, 2> = FixedRelationSet::new(entries);
-    assert_eq!(left, right);
-    assert_eq!(hash(&left), hash(&right));
-}
-
-#[rstest]
 #[case::roundtrip(
     vec![([NodeId(2), NodeId(0)], "first"), ([NodeId(3), NodeId(1)], "second")],
 )]
@@ -130,11 +144,25 @@ fn test_fixed_relation_set_into_entries(#[case] entries: Vec<([NodeId; 2], &str)
 }
 
 #[rstest]
-fn test_fixed_relation_set_data_mut() {
-    let mut rs: FixedRelationSet<NodeId, i32, 2> =
-        FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], 1)]);
-    *rs.data_mut(RelationId(0)) = 99;
-    assert_eq!(rs.data(RelationId(0)), &99);
+#[case::first(RelationId(0), true)]
+#[case::last(RelationId(1), true)]
+#[case::out_of_range(RelationId(2), false)]
+fn test_fixed_relation_set_contains(#[case] id: RelationId, #[case] expected: bool) {
+    let rs: FixedRelationSet<NodeId, (), 2> = FixedRelationSet::new(vec![
+        ([NodeId(0), NodeId(1)], ()),
+        ([NodeId(1), NodeId(2)], ()),
+    ]);
+    assert_eq!(rs.contains(id), expected);
+}
+
+#[rstest]
+fn test_fixed_relation_set_relation_ids() {
+    assert_exact_size(FixedRelationSet::<NodeId, (), 2>::default().ids(), vec![]);
+    let rs: FixedRelationSet<NodeId, (), 2> = FixedRelationSet::new(vec![
+        ([NodeId(0), NodeId(1)], ()),
+        ([NodeId(1), NodeId(2)], ()),
+    ]);
+    assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
 }
 
 #[rstest]
@@ -184,6 +212,72 @@ fn test_fixed_relation_set_participants_ordered() {
     ]);
     assert_eq!(rs.participants(RelationId(0)), &[NodeId(2), NodeId(0)]);
     assert_eq!(rs.participants(RelationId(1)), &[NodeId(3), NodeId(1)]);
+}
+
+#[rstest]
+fn test_fixed_relation_set_data_mut() {
+    let mut rs: FixedRelationSet<NodeId, i32, 2> =
+        FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], 1)]);
+    *rs.data_mut(RelationId(0)) = 99;
+    assert_eq!(rs.data(RelationId(0)), &99);
+}
+
+#[rstest]
+fn test_fixed_relation_set_incidence() {
+    let rs: FixedRelationSet<NodeId, (), 2> = FixedRelationSet::new(vec![
+        ([NodeId(0), NodeId(1)], ()),
+        ([NodeId(0), NodeId(2)], ()),
+        ([NodeId(2), NodeId(3)], ()),
+    ]);
+    assert_eq!(rs.incident(NodeId(0)), &[RelationId(0), RelationId(1)]);
+    assert_eq!(rs.incident(NodeId(1)), &[RelationId(0)]);
+    assert_eq!(rs.incident(NodeId(2)), &[RelationId(1), RelationId(2)]);
+    assert_eq!(rs.incident(NodeId(3)), &[RelationId(2)]);
+    assert!(rs.has_incident(NodeId(0)));
+    assert!(!rs.has_incident(NodeId(5)));
+}
+
+#[rstest]
+#[case::exact(vec![NodeId(0), NodeId(1)], Some(RelationId(0)))]
+#[case::reordered(vec![NodeId(1), NodeId(0)], Some(RelationId(0)))]
+#[case::second(vec![NodeId(2), NodeId(3)], Some(RelationId(1)))]
+#[case::absent(vec![NodeId(0), NodeId(3)], None)]
+#[case::wrong_arity(vec![NodeId(0)], None)]
+fn test_fixed_relation_set_coincident(
+    #[case] query: Vec<NodeId>,
+    #[case] expected: Option<RelationId>,
+) {
+    let rs: FixedRelationSet<NodeId, (), 2> = FixedRelationSet::new(vec![
+        ([NodeId(0), NodeId(1)], ()),
+        ([NodeId(2), NodeId(3)], ()),
+    ]);
+    assert_eq!(
+        query
+            .first()
+            .and_then(|&anchor| rs.coincident(anchor, &query)),
+        expected,
+    );
+}
+
+#[rstest]
+#[case::reordered(NodeId(2), vec![NodeId(2), NodeId(2), NodeId(0)], Some(RelationId(0)), true)]
+#[case::multiplicity(NodeId(2), vec![NodeId(0), NodeId(0), NodeId(2)], None, false)]
+#[case::short(NodeId(2), vec![NodeId(2), NodeId(0)], None, false)]
+#[case::long(NodeId(2), vec![NodeId(2), NodeId(0), NodeId(2), NodeId(2)], None, false)]
+#[case::absent_anchor(NodeId(4), vec![NodeId(2), NodeId(2), NodeId(0)], None, true)]
+fn test_fixed_relation_set_coincident_multiplicity(
+    #[case] anchor: NodeId,
+    #[case] query: Vec<NodeId>,
+    #[case] expected: Option<RelationId>,
+    #[case] coincides: bool,
+) {
+    let relations = FixedRelationSet::<NodeId, &str, 3>::new(vec![
+        ([NodeId(2), NodeId(0), NodeId(2)], "first"),
+        ([NodeId(0), NodeId(2), NodeId(2)], "duplicate"),
+        ([NodeId(3), NodeId(3), NodeId(3)], "other"),
+    ]);
+    assert_eq!(relations.coincident(anchor, &query), expected);
+    assert_eq!(relations.is_coincident(RelationId(0), &query), coincides);
 }
 
 #[rstest]
@@ -247,24 +341,6 @@ fn test_fixed_relation_set_permute_with_error(#[case] order: Vec<ParticipantPosi
     let mut rs: FixedRelationSet<NodeId, &str, 3> =
         FixedRelationSet::new(vec![([NodeId(0), NodeId(1), NodeId(2)], "a")]);
     rs.permute_with(RelationId(0), &order);
-}
-
-#[fixture]
-fn fixed_relation_set_replacement_input() -> FixedRelationSet<NodeId, ReplacementData, 3> {
-    FixedRelationSet::new(vec![
-        (
-            [NodeId(0), NodeId(1), NodeId(0)],
-            ReplacementData(vec![7, 11, 13]),
-        ),
-        (
-            [NodeId(1), NodeId(1), NodeId(2)],
-            ReplacementData(vec![17, 19, 23]),
-        ),
-        (
-            [NodeId(3), NodeId(4), NodeId(3)],
-            ReplacementData(vec![29, 31, 37]),
-        ),
-    ])
 }
 
 #[rstest]
@@ -481,105 +557,6 @@ fn test_fixed_relation_set_replace_participant_error<const N: usize>(
 }
 
 #[rstest]
-fn test_fixed_relation_set_incidence() {
-    let rs: FixedRelationSet<NodeId, (), 2> = FixedRelationSet::new(vec![
-        ([NodeId(0), NodeId(1)], ()),
-        ([NodeId(0), NodeId(2)], ()),
-        ([NodeId(2), NodeId(3)], ()),
-    ]);
-    assert_eq!(rs.incident(NodeId(0)), &[RelationId(0), RelationId(1)]);
-    assert_eq!(rs.incident(NodeId(1)), &[RelationId(0)]);
-    assert_eq!(rs.incident(NodeId(2)), &[RelationId(1), RelationId(2)]);
-    assert_eq!(rs.incident(NodeId(3)), &[RelationId(2)]);
-    assert!(rs.has_incident(NodeId(0)));
-    assert!(!rs.has_incident(NodeId(5)));
-}
-
-#[rstest]
-#[case::first(RelationId(0), true)]
-#[case::last(RelationId(1), true)]
-#[case::out_of_range(RelationId(2), false)]
-fn test_fixed_relation_set_contains(#[case] id: RelationId, #[case] expected: bool) {
-    let rs: FixedRelationSet<NodeId, (), 2> = FixedRelationSet::new(vec![
-        ([NodeId(0), NodeId(1)], ()),
-        ([NodeId(1), NodeId(2)], ()),
-    ]);
-    assert_eq!(rs.contains(id), expected);
-}
-
-#[rstest]
-fn test_fixed_relation_set_relation_ids() {
-    assert_exact_size(FixedRelationSet::<NodeId, (), 2>::default().ids(), vec![]);
-    let rs: FixedRelationSet<NodeId, (), 2> = FixedRelationSet::new(vec![
-        ([NodeId(0), NodeId(1)], ()),
-        ([NodeId(1), NodeId(2)], ()),
-    ]);
-    assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
-}
-
-#[fixture]
-fn fixed_relation_set_compaction_input() -> FixedRelationSet<NodeId, &'static str, 2> {
-    FixedRelationSet::new(vec![
-        ([NodeId(0), NodeId(2)], "keep"),
-        ([NodeId(1), NodeId(3)], "drop"),
-    ])
-}
-
-#[rstest]
-#[case::partial(
-    vec![NodeId(1)],
-    FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], "keep")]),
-    vec![RelationId(1)],
-)]
-#[case::all(
-    vec![NodeId(0), NodeId(1)],
-    FixedRelationSet::default(),
-    vec![RelationId(0), RelationId(1)],
-)]
-fn test_fixed_relation_set_tracked_compact(
-    fixed_relation_set_compaction_input: FixedRelationSet<NodeId, &'static str, 2>,
-    #[case] removed_nodes: Vec<NodeId>,
-    #[case] expected: FixedRelationSet<NodeId, &'static str, 2>,
-    #[case] removed_relations: Vec<RelationId>,
-) {
-    let input = fixed_relation_set_compaction_input;
-    let compaction = GraphCompaction::new(
-        Compaction::new(4, removed_nodes).unwrap(),
-        Compaction::empty(),
-    );
-    let (output, witness) = input.tracked_compact(&compaction);
-    assert_eq!(input.compact(&compaction), expected);
-    assert_eq!(output, expected);
-    assert_eq!(
-        witness,
-        Compaction::new(2, removed_relations.clone()).unwrap()
-    );
-    let survivors = (0..2)
-        .map(RelationId)
-        .filter(|id| !removed_relations.contains(id))
-        .collect::<Vec<_>>();
-    for (idx, &old) in survivors.iter().enumerate() {
-        assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
-    }
-}
-
-#[rstest]
-#[case::empty(FixedRelationSet::default())]
-#[case::rows(
-    FixedRelationSet::new(vec![([NodeId(0), NodeId(2)], "keep"), ([NodeId(1), NodeId(3)], "drop")]),
-)]
-fn test_fixed_relation_set_compact_identity(
-    #[case] input: FixedRelationSet<NodeId, &'static str, 2>,
-) {
-    let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::empty());
-    assert_eq!(input.compact(&compaction), input);
-    assert_eq!(
-        input.tracked_compact(&compaction),
-        (input.clone(), Compaction::identity(input.count())),
-    );
-}
-
-#[rstest]
 #[case::rows(FixedRelationSet::new(vec![([NodeId(2), NodeId(0)], vec![7, 11]), ([NodeId(2), NodeId(0)], vec![13, 17])]),
     FixedRelationSet::new(vec![([NodeId(1), NodeId(5)], vec![7, 11]), ([NodeId(1), NodeId(5)], vec![13, 17])]))]
 fn test_fixed_relation_set_map(
@@ -618,6 +595,16 @@ fn test_fixed_relation_set_map_identity(#[case] input: FixedRelationSet<NodeId, 
 }
 
 #[rstest]
+#[should_panic(expected = "correspondence must cover every participant reference")]
+fn test_fixed_relation_set_map_error(participant_correspondence: GraphCorrespondence) {
+    let node = 1;
+
+    let input: FixedRelationSet<NodeId, Vec<u32>, 2> =
+        FixedRelationSet::new(vec![([NodeId(node), NodeId(0)], vec![7, 11])]);
+    input.map(&participant_correspondence);
+}
+
+#[rstest]
 #[case::missing_node(1)]
 #[case::outside_node(4)]
 fn test_fixed_relation_set_try_map_error(
@@ -629,16 +616,6 @@ fn test_fixed_relation_set_try_map_error(
         ([NodeId(node), NodeId(0)], vec![13, 17]),
     ]);
     assert_eq!(input.try_map(&participant_correspondence), None);
-}
-
-#[rstest]
-#[should_panic(expected = "correspondence must cover every participant reference")]
-fn test_fixed_relation_set_map_error(participant_correspondence: GraphCorrespondence) {
-    let node = 1;
-
-    let input: FixedRelationSet<NodeId, Vec<u32>, 2> =
-        FixedRelationSet::new(vec![([NodeId(node), NodeId(0)], vec![7, 11])]);
-    input.map(&participant_correspondence);
 }
 
 #[rstest]
@@ -669,53 +646,57 @@ fn test_fixed_relation_set_try_remap(#[case] nodes: Vec<NodeId>, #[case] covered
 }
 
 #[rstest]
-fn test_fixed_relation_set_default() {
-    let rs = FixedRelationSet::<NodeId, (), 2>::default();
-    assert_eq!(rs.count(), 0);
-    assert!(!rs.has_incident(NodeId(0)));
-}
-
-#[rstest]
-#[case::exact(vec![NodeId(0), NodeId(1)], Some(RelationId(0)))]
-#[case::reordered(vec![NodeId(1), NodeId(0)], Some(RelationId(0)))]
-#[case::second(vec![NodeId(2), NodeId(3)], Some(RelationId(1)))]
-#[case::absent(vec![NodeId(0), NodeId(3)], None)]
-#[case::wrong_arity(vec![NodeId(0)], None)]
-fn test_fixed_relation_set_coincident(
-    #[case] query: Vec<NodeId>,
-    #[case] expected: Option<RelationId>,
+#[case::empty(FixedRelationSet::default())]
+#[case::rows(
+    FixedRelationSet::new(vec![([NodeId(0), NodeId(2)], "keep"), ([NodeId(1), NodeId(3)], "drop")]),
+)]
+fn test_fixed_relation_set_compact_identity(
+    #[case] input: FixedRelationSet<NodeId, &'static str, 2>,
 ) {
-    let rs: FixedRelationSet<NodeId, (), 2> = FixedRelationSet::new(vec![
-        ([NodeId(0), NodeId(1)], ()),
-        ([NodeId(2), NodeId(3)], ()),
-    ]);
+    let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::empty());
+    assert_eq!(input.compact(&compaction), input);
     assert_eq!(
-        query
-            .first()
-            .and_then(|&anchor| rs.coincident(anchor, &query)),
-        expected,
+        input.tracked_compact(&compaction),
+        (input.clone(), Compaction::identity(input.count())),
     );
 }
 
 #[rstest]
-#[case::reordered(NodeId(2), vec![NodeId(2), NodeId(2), NodeId(0)], Some(RelationId(0)), true)]
-#[case::multiplicity(NodeId(2), vec![NodeId(0), NodeId(0), NodeId(2)], None, false)]
-#[case::short(NodeId(2), vec![NodeId(2), NodeId(0)], None, false)]
-#[case::long(NodeId(2), vec![NodeId(2), NodeId(0), NodeId(2), NodeId(2)], None, false)]
-#[case::absent_anchor(NodeId(4), vec![NodeId(2), NodeId(2), NodeId(0)], None, true)]
-fn test_fixed_relation_set_coincident_multiplicity(
-    #[case] anchor: NodeId,
-    #[case] query: Vec<NodeId>,
-    #[case] expected: Option<RelationId>,
-    #[case] coincides: bool,
+#[case::partial(
+    vec![NodeId(1)],
+    FixedRelationSet::new(vec![([NodeId(0), NodeId(1)], "keep")]),
+    vec![RelationId(1)],
+)]
+#[case::all(
+    vec![NodeId(0), NodeId(1)],
+    FixedRelationSet::default(),
+    vec![RelationId(0), RelationId(1)],
+)]
+fn test_fixed_relation_set_tracked_compact(
+    fixed_relation_set_compaction_input: FixedRelationSet<NodeId, &'static str, 2>,
+    #[case] removed_nodes: Vec<NodeId>,
+    #[case] expected: FixedRelationSet<NodeId, &'static str, 2>,
+    #[case] removed_relations: Vec<RelationId>,
 ) {
-    let relations = FixedRelationSet::<NodeId, &str, 3>::new(vec![
-        ([NodeId(2), NodeId(0), NodeId(2)], "first"),
-        ([NodeId(0), NodeId(2), NodeId(2)], "duplicate"),
-        ([NodeId(3), NodeId(3), NodeId(3)], "other"),
-    ]);
-    assert_eq!(relations.coincident(anchor, &query), expected);
-    assert_eq!(relations.is_coincident(RelationId(0), &query), coincides);
+    let input = fixed_relation_set_compaction_input;
+    let compaction = GraphCompaction::new(
+        Compaction::new(4, removed_nodes).unwrap(),
+        Compaction::empty(),
+    );
+    let (output, witness) = input.tracked_compact(&compaction);
+    assert_eq!(input.compact(&compaction), expected);
+    assert_eq!(output, expected);
+    assert_eq!(
+        witness,
+        Compaction::new(2, removed_relations.clone()).unwrap()
+    );
+    let survivors = (0..2)
+        .map(RelationId)
+        .filter(|id| !removed_relations.contains(id))
+        .collect::<Vec<_>>();
+    for (idx, &old) in survivors.iter().enumerate() {
+        assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+    }
 }
 
 #[rstest]
@@ -833,4 +814,23 @@ fn test_fixed_relation_set_tracked_pullback(#[case] combined: Option<i32>) {
     });
     assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
     assert_eq!(result, expected);
+}
+
+#[rstest]
+fn test_fixed_relation_set_default() {
+    let rs = FixedRelationSet::<NodeId, (), 2>::default();
+    assert_eq!(rs.count(), 0);
+    assert!(!rs.has_incident(NodeId(0)));
+}
+
+#[rstest]
+fn test_fixed_relation_set_hash() {
+    let entries = vec![
+        ([NodeId(2), NodeId(0)], "first"),
+        ([NodeId(3), NodeId(1)], "second"),
+    ];
+    let left: FixedRelationSet<NodeId, &str, 2> = FixedRelationSet::new(entries.clone());
+    let right: FixedRelationSet<NodeId, &str, 2> = FixedRelationSet::new(entries);
+    assert_eq!(left, right);
+    assert_eq!(hash(&left), hash(&right));
 }

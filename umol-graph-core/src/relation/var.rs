@@ -1,3 +1,5 @@
+//! Variable-arity relation storage with flat participants and row offsets: [VarRelationSet].
+
 use std::hash::{Hash, Hasher};
 
 use super::incidence::Incidence;
@@ -11,12 +13,24 @@ use crate::correspondence::GraphCorrespondence;
 use crate::graph::{EdgeId, NodeId};
 use crate::remap::GraphRemapping;
 
-/// Variable-arity relation set. Each relation connects an arbitrary
-/// number of nodes. Participants are sorted by `NodeId` on construction.
+/// Variable-arity relations over typed participants, with opaque payloads.
 ///
-/// Flat CSR storage: participant ranges via offset table, incidence
-/// via a second offset table. No heap allocations per node or per
-/// relation.
+/// Rows retain input order, participant multiplicity, and payloads. Coinciding rows are
+/// permitted. Participant references are not checked against an external graph.
+/// Participants occupy one flat buffer with row offsets; rows may be empty.
+/// Relation ids use u32 indices. Variable-factor offsets also use u32.
+///
+/// # Semantic properties
+///
+/// - `new(entries).into_entries() == entries` for representable sizes.
+/// - Equality compares stored sequences and payloads, including their order.
+/// - Incidence lists each relation once per referenced node or edge, in relation-id order.
+/// - Coincidence compares participant multisets in the factor; it ignores stored order
+///   and payloads, but observes multiplicity and complete participant values.
+///
+/// Construction/query and transport laws are exercised through public APIs in
+/// `tests/property/relation.rs`. Transport laws require conforming
+/// [`RelationParticipant`] implementations.
 #[derive(Clone, Debug)]
 pub struct VarRelationSet<P, D> {
     offsets: Vec<u32>,
@@ -25,25 +39,12 @@ pub struct VarRelationSet<P, D> {
     incidence: Incidence,
 }
 
-impl<P: PartialEq, D: PartialEq> PartialEq for VarRelationSet<P, D> {
-    fn eq(&self, other: &Self) -> bool {
-        self.offsets == other.offsets
-            && self.participants == other.participants
-            && self.data == other.data
-    }
-}
-
-impl<P: Eq, D: Eq> Eq for VarRelationSet<P, D> {}
-
-impl<P: Hash, D: Hash> Hash for VarRelationSet<P, D> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.offsets.hash(state);
-        self.participants.hash(state);
-        self.data.hash(state);
-    }
-}
-
 impl<P: RelationParticipant, D> VarRelationSet<P, D> {
+    /// Store entries in order and build their union incidence index.
+    ///
+    /// Preserves the supplied sequence in the factor, including repeated values.
+    /// Node/edge references come from [`RelationParticipant::refs`]; graph membership is
+    /// not validated. Payloads are stored without interpretation.
     pub fn new(entries: Vec<(Vec<P>, D)>) -> Self
     where
         D: Clone,
@@ -76,7 +77,9 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         }
     }
 
-    /// Consume the set into its canonical stored entries, in relation-id order.
+    /// Consume the set into its stored entries, in relation-id order.
+    ///
+    /// Preserves participant order and multiplicity and returns the current payloads.
     pub fn into_entries(self) -> Vec<(Vec<P>, D)> {
         let Self {
             offsets,
@@ -94,16 +97,19 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
             .collect()
     }
 
+    /// Return the number of stored relations.
     pub fn count(&self) -> usize {
         self.data.len()
     }
 
-    pub fn data(&self, id: RelationId) -> &D {
-        &self.data[id.index()]
+    /// Whether `id` lies in this set's dense relation-id range.
+    pub fn contains(&self, id: RelationId) -> bool {
+        id.index() < self.data.len()
     }
 
-    pub fn data_mut(&mut self, id: RelationId) -> &mut D {
-        &mut self.data[id.index()]
+    /// Iterate over `0..count()` in ascending relation-id order.
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+        (0..self.data.len() as u32).map(RelationId)
     }
 
     /// Every relation as `(id, participants, payload)` in relation-id order.
@@ -119,8 +125,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
 
     /// Every relation as `(id, participants, payload)` in relation-id order, the payload mutable.
     ///
-    /// Participants stay immutable: changing them would invalidate the incidence index, which
-    /// [`permute_with`](Self::permute_with) is the one operation allowed to leave intact.
+    /// Only payloads are mutable; participant storage and its derived index stay intact.
     pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = (RelationId, &[P], &mut D)> {
         let offsets = &self.offsets;
         let participants = &self.participants;
@@ -131,59 +136,90 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         })
     }
 
+    /// Borrow the stored participant sequence of relation `id`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
     pub fn participants(&self, id: RelationId) -> &[P] {
         let start = self.offsets[id.index()] as usize;
         let end = self.offsets[id.index() + 1] as usize;
         &self.participants[start..end]
     }
 
-    /// Reorder relation `id`'s participants so that `new[i] = old[order[i]]`, leaving the payload
-    /// untouched.
+    /// Borrow the payload of relation `id`.
     ///
-    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
-    /// unless `order` is a permutation of `0..arity`.
-    pub fn permute_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
-        let start = self.offsets[id.index()] as usize;
-        let end = self.offsets[id.index() + 1] as usize;
-        permute_participants(&mut self.participants[start..end], order);
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
+    pub fn data(&self, id: RelationId) -> &D {
+        &self.data[id.index()]
     }
 
-    /// Id of the relation coinciding with `query` — the one whose participants equal it as a
-    /// multiset, in any order.
+    /// Mutably borrow the payload of relation `id`, leaving participants and incidence intact.
     ///
-    /// This is the identity question, not a lookup: the participant multiset is the relation's
-    /// identity and the stored sequence is only the frame its payload is expressed in, so two
-    /// entries presenting the same participants differently coincide. It is what
-    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
-    /// subset of its constituents is a different question with a different key, and belongs to the
-    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
+    pub fn data_mut(&mut self, id: RelationId) -> &mut D {
+        &mut self.data[id.index()]
+    }
+
+    /// Relations referencing `node`, once each in ascending relation-id order.
+    ///
+    /// Returns an empty slice when no participant references `node`.
+    pub fn incident(&self, node: NodeId) -> &[RelationId] {
+        self.incidence.incident(node)
+    }
+
+    /// Relations referencing `edge`, once each in ascending relation-id order.
+    ///
+    /// Returns an empty slice when no participant references `edge`.
+    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
+        self.incidence.incident_edge(edge)
+    }
+
+    /// Whether any participant references `node`.
+    pub fn has_incident(&self, node: NodeId) -> bool {
+        self.incidence.has_incident(node)
+    }
+
+    /// Whether any participant references `edge`.
+    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
+        self.incidence.has_incident_edge(edge)
+    }
+
+    /// Find the first relation incident with `node` whose participants match `query`.
+    ///
+    /// Compares complete participant multisets in the factor, ignoring stored order and
+    /// payloads. Returns the smallest matching relation id, or `None` if the incidence
+    /// list contains no match. Duplicate matching rows are permitted. An unreferenced
+    /// anchor yields `None`, even if a matching row exists elsewhere.
     pub fn coincident(&self, node: NodeId, query: &[P]) -> Option<RelationId> {
         self.coincident_in(self.incident(node), query)
     }
 
-    /// This is the identity question, not a lookup: the participant multiset is the relation's
-    /// identity and the stored sequence is only the frame its payload is expressed in, so two
-    /// entries presenting the same participants differently coincide. It is what
-    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
-    /// subset of its constituents is a different question with a different key, and belongs to the
-    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    /// Find the first relation incident with `edge` whose participants match `query`.
     ///
-    /// `edge` narrows the scan to the edge incidence index. The node-indexed peer is
-    /// [`coincident`](Self::coincident).
+    /// Uses the same multiset comparison and first-match rule as [`Self::coincident`].
+    /// Returns `None` when the edge incidence list contains no matching row.
     pub fn coincident_edge(&self, edge: EdgeId, query: &[P]) -> Option<RelationId> {
         self.coincident_in(self.incident_edge(edge), query)
     }
 
-    /// Whether relation `id` coincides with these participants — the known-id sibling of
-    /// [`coincident`](Self::coincident), which searches for it instead.
+    /// Whether relation `id` matches the query multiset.
     ///
-    /// `pushout` and `pullback` apply this to a supplied pairing before gluing on it. A caller that
-    /// already holds the id and needs identity established — because a frame-invariant payload
-    /// carries without reading either frame — asks here rather than deriving the comparison again.
+    /// Compares complete participant values and multiplicities in the factor, without
+    /// requiring a node or edge anchor. Stored order and payloads do not affect the result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
     pub fn is_coincident(&self, id: RelationId, query: &[P]) -> bool {
         self.coincident_in(&[id], query).is_some()
     }
 
+    /// Return the first candidate whose stored participant multiset matches the query.
     fn coincident_in(&self, candidates: &[RelationId], query: &[P]) -> Option<RelationId> {
         let mut sorted_query: Vec<P> = query.to_vec();
         sorted_query.sort_unstable();
@@ -193,34 +229,116 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
             .find(|&id| participants_match(self.participants(id), &sorted_query))
     }
 
-    pub fn incident(&self, node: NodeId) -> &[RelationId] {
-        self.incidence.incident(node)
-    }
-
-    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
-        self.incidence.incident_edge(edge)
-    }
-
-    pub fn has_incident(&self, node: NodeId) -> bool {
-        self.incidence.has_incident(node)
-    }
-
-    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
-        self.incidence.has_incident_edge(edge)
-    }
-
-    pub fn contains(&self, id: RelationId) -> bool {
-        id.index() < self.data.len()
-    }
-
-    pub fn ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
-        (0..self.data.len() as u32).map(RelationId)
-    }
-
-    /// Compact participant ids and drop relations containing a removed participant.
+    /// Reorder relation `id`'s participants so that `new[i] = old[order[i]]`.
     ///
-    /// Produces the same set as [`Self::tracked_compact`], without returning
-    /// the relation-id compaction.
+    /// # Semantic properties
+    ///
+    /// The selected multiset, all payloads, and all other rows are unchanged.
+    /// Incidence is unchanged and is not rebuilt. Identity leaves the set equal to itself;
+    /// applying a permutation followed by its inverse recovers the original sequence.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `order` is not a permutation of the selected
+    /// factor's positions (wrong length, repeated position, or out-of-range position).
+    pub fn permute_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        let start = self.offsets[id.index()] as usize;
+        let end = self.offsets[id.index() + 1] as usize;
+        permute_participants(&mut self.participants[start..end], order);
+    }
+
+    /// Relabel participants through a correspondence, preserving rows, positions, and payloads.
+    ///
+    /// The asserted peer of [`Self::try_map`]. No payload or frame normalization is performed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any participant's [`RelationParticipant::try_map`] returns `None`,
+    /// including when a referenced node or edge has no image.
+    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
+    where
+        D: Clone,
+    {
+        self.try_map(correspondence)
+            .expect("correspondence must cover every participant reference")
+    }
+
+    /// Relabel participants, returning `None` if any participant cannot be mapped.
+    ///
+    /// Delegates admission to [`RelationParticipant::try_map`]; a missing image for any
+    /// referenced node or edge rejects the whole operation. Unused ids need no image.
+    ///
+    /// # Semantic properties
+    ///
+    /// For conforming participants, row ids, positions, and payloads are preserved.
+    /// An identity correspondence covering the references leaves the set equal to itself;
+    /// sequential covered mappings agree with mapping through their composition.
+    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.map_participants(|participant| participant.try_map(correspondence))
+    }
+
+    /// Relabel participants through a remapping, preserving rows, positions, and payloads.
+    ///
+    /// # Semantic properties
+    ///
+    /// For conforming participants and a covering remapping, identity leaves the set equal
+    /// to itself and a remapping followed by its inverse recovers the original set.
+    /// The payload stays in the supplied participant frame.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a referenced node or edge is outside the remapping's source range.
+    /// Participant remapping panics propagate.
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self
+    where
+        D: Clone,
+    {
+        self.map_participants(|participant| Some(participant.remap(remapping)))
+            .expect("remapping transport supplies every participant")
+    }
+
+    /// Relabel participants if the remapping covers every reported reference.
+    ///
+    /// Returns `None` if any node or edge reported by [`RelationParticipant::refs`] is
+    /// outside the corresponding source range. Otherwise returns [`Self::remap`]'s result.
+    /// Unused ids do not require coverage.
+    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
+    where
+        D: Clone,
+    {
+        self.ids()
+            .all(|id| remappable_under(self.participants(id), remapping))
+            .then(|| self.remap(remapping))
+    }
+
+    /// Map every factor while retaining row order and payloads; reject the set on any `None`.
+    fn map_participants(&self, mut map_1: impl FnMut(P) -> Option<P>) -> Option<Self>
+    where
+        D: Clone,
+    {
+        let entries = self
+            .ids()
+            .map(|id| {
+                let parts_1: Vec<P> = self
+                    .participants(id)
+                    .iter()
+                    .copied()
+                    .map(&mut map_1)
+                    .collect::<Option<Vec<_>>>()?;
+                Some((parts_1, self.data(id).clone()))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self::new(entries))
+    }
+
+    /// Compact participant ids and discard rows containing a participant that cannot survive.
+    ///
+    /// A row is dropped if any [`RelationParticipant::compact`] call returns `None`.
+    /// For node/edge participants this includes removed or out-of-source-range references.
+    /// Returns the same set as [`Self::tracked_compact`], without its relation-id compaction.
     pub fn compact(&self, compaction: &GraphCompaction) -> Self
     where
         D: Clone,
@@ -228,11 +346,17 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         self.tracked_compact(compaction).0
     }
 
-    /// Compact participant ids, dropping every relation that contains a removed participant, and
-    /// report which relation ids the drop consumed.
+    /// Compact participants and return the induced compaction of this set's relation ids.
     ///
-    /// The returned compaction moves this set's own ids, so a caller holding relation ids can
-    /// carry them across the removal without a second traversal.
+    /// Drops a row if any participant's [`RelationParticipant::compact`] returns `None`.
+    /// The compaction's source count is this set's original row count.
+    ///
+    /// # Semantic properties
+    ///
+    /// Surviving rows retain their relative order, factor positions, and cloned payloads;
+    /// only participant ids and dense relation ids change. For conforming participants,
+    /// a covering identity compaction preserves the set exactly. Plain and tracked
+    /// compaction produce equal sets.
     pub fn tracked_compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: Clone,
@@ -258,79 +382,25 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         )
     }
 
-    /// Relabel every participant, preserving rows, participant order, and payloads.
+    /// Glue two relation sets in the same participant id space using caller-selected pairings.
+    ///
+    /// Calls `coincident` on the original `self` for each right row. The callback must
+    /// identify a matching row, or return `None` for an unmatched row. Matches must be
+    /// injective; storage does not verify participant equality or payload compatibility.
+    /// `combine` receives both original participant sequences and payloads, without frame alignment.
+    /// Returns `None` as soon as `combine` rejects a pair; otherwise returns the glued set.
     ///
     /// # Semantic properties
     ///
-    /// Each positional payload item remains attached to the participant whose id is relabeled.
+    /// For valid pairings, `self` keeps its row ids and participant sequence. Matched payloads are
+    /// replaced by `combine`'s result. Unmatched right rows append in right-row order,
+    /// retaining their participant sequence and payloads. Given identical callback outcomes,
+    /// plain and tracked pushout produce equal sets.
     ///
     /// # Panics
     ///
-    /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn remap(&self, remapping: &GraphRemapping) -> Self
-    where
-        D: Clone,
-    {
-        self.map_participants(|participant| Some(participant.remap(remapping)))
-            .expect("remapping transport supplies every participant")
-    }
-
-    /// Relabel participant ids through a correspondence without changing rows, frames, or payloads.
-    ///
-    /// # Panics
-    /// Panics when any referenced node or edge has no image.
-    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self
-    where
-        D: Clone,
-    {
-        self.try_map(correspondence)
-            .expect("correspondence must cover every participant reference")
-    }
-
-    /// Relabel participant ids, returning `None` when any reference has no image.
-    ///
-    /// Only referenced ids require images; unrelated source entries may be unmatched.
-    ///
-    /// # Semantic properties
-    /// Row ids, participant positions, and payloads are preserved. Identity mapping is exact;
-    /// sequential covered mappings agree with their correspondence composition.
-    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self>
-    where
-        D: Clone,
-    {
-        self.map_participants(|participant| participant.try_map(correspondence))
-    }
-
-    fn map_participants(&self, mut map_1: impl FnMut(P) -> Option<P>) -> Option<Self>
-    where
-        D: Clone,
-    {
-        let entries = self
-            .ids()
-            .map(|id| {
-                let parts_1: Vec<P> = self
-                    .participants(id)
-                    .iter()
-                    .copied()
-                    .map(&mut map_1)
-                    .collect::<Option<Vec<_>>>()?;
-                Some((parts_1, self.data(id).clone()))
-            })
-            .collect::<Option<Vec<_>>>()?;
-        Some(Self::new(entries))
-    }
-
-    /// Relabel every participant, returning `None` when the remapping does not cover the set.
-    pub fn try_remap(&self, remapping: &GraphRemapping) -> Option<Self>
-    where
-        D: Clone,
-    {
-        self.ids()
-            .all(|id| remappable_under(self.participants(id), remapping))
-            .then(|| self.remap(remapping))
-    }
-
-    /// Same-space relation pushout — see [`FixedRelationSet::pushout`](crate::FixedRelationSet::pushout).
+    /// Panics if the callback returns an id outside `self`, or returns the same id for
+    /// multiple right rows and all combinations succeed. Callback panics propagate.
     pub fn pushout(
         &self,
         right: &Self,
@@ -344,9 +414,15 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
             .map(|(object, _)| object)
     }
 
-    /// Glue relation sets and return both input-to-result mappings with the result.
+    /// Perform [`Self::pushout`] and return its relation correspondences.
     ///
-    /// Has the same result and failure behavior as [`Self::pushout`].
+    /// Has the same result and callback contract as the plain operation, including `None`
+    /// on payload-combination rejection. Both correspondences cover their inputs and share the
+    /// result count as their target count.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the callback conditions documented for [`Self::pushout`].
     pub fn tracked_pushout(
         &self,
         right: &Self,
@@ -387,7 +463,24 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         ))
     }
 
-    /// Same-space relation pullback — see [`FixedRelationSet::pullback`](crate::FixedRelationSet::pullback).
+    /// Retain caller-paired rows from two sets in the same participant id space.
+    ///
+    /// Calls `coincident` on `right` for each left row; `None` omits that row. Matching
+    /// must be injective and identify equal participant multisets in the factor; storage
+    /// does not validate the pairing. `combine` receives both original participant sequences and
+    /// payloads, without frame alignment. Returns `None` as soon as `combine` rejects a pair.
+    ///
+    /// # Semantic properties
+    ///
+    /// For valid pairings, the result retains matched left rows in left-row order, with
+    /// their participant sequence, dense new ids, and the combined payloads. No matches yields
+    /// `Some` of an empty set. Given identical callback outcomes, plain and tracked
+    /// pullback produce equal sets.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the callback returns an id outside `right`, or returns the same id for
+    /// multiple left rows and all combinations succeed. Callback panics propagate.
     pub fn pullback(
         &self,
         right: &Self,
@@ -401,9 +494,15 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
             .map(|(object, _)| object)
     }
 
-    /// Return the shared relation set and its two result-to-input projections.
+    /// Perform [`Self::pullback`] and return its relation correspondences.
     ///
-    /// Has the same result and failure behavior as [`Self::pullback`].
+    /// Has the same result and callback contract as the plain operation, including `None`
+    /// on payload-combination rejection. Both correspondences cover the result and share its
+    /// count as their source count.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the callback conditions documented for [`Self::pullback`].
     pub fn tracked_pullback(
         &self,
         right: &Self,
@@ -445,5 +544,23 @@ impl<P, D> Default for VarRelationSet<P, D> {
             data: Vec::new(),
             incidence: Incidence::default(),
         }
+    }
+}
+
+impl<P: PartialEq, D: PartialEq> PartialEq for VarRelationSet<P, D> {
+    fn eq(&self, other: &Self) -> bool {
+        self.offsets == other.offsets
+            && self.participants == other.participants
+            && self.data == other.data
+    }
+}
+
+impl<P: Eq, D: Eq> Eq for VarRelationSet<P, D> {}
+
+impl<P: Hash, D: Hash> Hash for VarRelationSet<P, D> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.offsets.hash(state);
+        self.participants.hash(state);
+        self.data.hash(state);
     }
 }

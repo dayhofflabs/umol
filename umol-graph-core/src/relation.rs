@@ -1,14 +1,20 @@
-//! Relation sets: N-ary relations over typed participants (`NodeId`, `EdgeId`,
-//! or external type implementing `RelationParticipant`), each carrying a shared
-//! union incidence index (a node index and an edge index) routed from every
-//! participant's `refs()`.
-//! `FixedRelationSet<P, D, N>` stores relations of compile-time-known arity,
-//! `VarRelationSet<P, D>` stores variable-arity relations. Participants are
-//! typed `P` (`RelationParticipant`); the factor ordering `O` (`Unordered`/`Ordered`)
-//! controls canonicalization. `FixedFixedBirelationSet`, `FixedVarBirelationSet`,
-//! and `VarVarBirelationSet` relate two factors, each with its own participant
-//! type, ordering, and arity. The union incidence spans both factors, so a relation
-//! is reachable from any of its participants regardless of id-space.
+//! Dense relation storage over typed participants and opaque payloads.
+//!
+//! [FixedRelationSet] and [VarRelationSet] store one participant factor. The three
+//! birelation sets store two distinguished factors with independent types and arities.
+//! Stored order and duplicates are preserved; no constructor selects a canonical frame.
+//! Incidence is the union of node and edge references reported by [RelationParticipant::refs],
+//! across both factors for birelations. References need not belong to an external graph.
+//!
+//! Coincidence compares complete participant multisets within each factor, independently of
+//! stored order and payloads. Coinciding rows are permitted. Anchored queries return the first
+//! matching row from the corresponding incidence list. Relation algebra uses caller-supplied
+//! injective pairings and payload combination; it does not align participant frames.
+//!
+//! Each storage module owns its implementation. Participant vocabulary and the incidence index
+//! have separate modules; relation ids, correspondence carriers, and shared functions live here.
+//! Public-API properties in `tests/property/relation.rs` exercise construction, query, and transport
+//! laws against row scans and generated reference mappings.
 
 use std::ops::{Add, Sub};
 
@@ -29,10 +35,15 @@ mod participant;
 mod var;
 mod var_var;
 
+/// Dense row index within a relation set.
+///
+/// This value carries no set identity or range validation. Indexed operations check it
+/// against their receiver; conversion from usize narrows to u32.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
 
 impl RelationId {
+    /// Return the row index as usize.
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -80,6 +91,18 @@ pub struct RelationPushoutCorrespondence {
     pub right: Correspondence<RelationId>,
 }
 
+/// The two result-to-input projections of a same-space relation-set pullback.
+///
+/// Operation-produced components cover the result and have equal source counts. Public fields may be
+/// assembled independently; agreement with the result and input sets is contextual.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationPullbackCorrespondence {
+    /// object relation → `self` relation.
+    pub left: Correspondence<RelationId>,
+    /// object relation → `right` relation.
+    pub right: Correspondence<RelationId>,
+}
+
 /// The two coprojections of a relation pushout: `self` is the identity prefix `0..self_count`,
 /// `right` follows `right_map`. Both over the object relation space of size `object_count`.
 fn relation_pushout<S>(
@@ -96,18 +119,6 @@ fn relation_pushout<S>(
             right: Correspondence::from_images(&right_map, object_count),
         },
     )
-}
-
-/// The two result-to-input projections of a same-space relation-set pullback.
-///
-/// Operation-produced components cover the result and have equal source counts. Public fields may be
-/// assembled independently; agreement with the result and input sets is contextual.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationPullbackCorrespondence {
-    /// object relation → `self` relation.
-    pub left: Correspondence<RelationId>,
-    /// object relation → `right` relation.
-    pub right: Correspondence<RelationId>,
 }
 
 /// The two projections of a relation pullback, each mapping a shared relation to its original.
@@ -175,7 +186,7 @@ where
 /// Multiset equality of a relation's stored participants against `query`, which the caller has
 /// already sorted (hoisted out of its candidate scan). The stored frame is left intact.
 ///
-/// Matches on identity — the participant multiset — independent of the factor's ordering marker.
+/// Complete participant values and multiplicities determine equality; stored order is ignored.
 fn participants_match<P: RelationParticipant>(participants: &[P], query: &[P]) -> bool {
     if participants.len() != query.len() {
         return false;

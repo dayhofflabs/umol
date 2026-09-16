@@ -41,6 +41,15 @@ where
     assert_eq!(iterator.size_hint(), (0, Some(0)));
 }
 
+#[fixture]
+fn fixed_fixed_birelation_set_compaction_input(
+) -> FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str> {
+    FixedFixedBirelationSet::new(vec![
+        ([NodeId(0)], [NodeId(2), NodeId(4)], "keep"),
+        ([NodeId(1)], [NodeId(5), NodeId(6)], "drop"),
+    ])
+}
+
 #[rstest]
 fn test_fixed_fixed_birelation_set_new() {
     let rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &str> =
@@ -100,11 +109,26 @@ fn test_fixed_fixed_birelation_set_into_entries(
 }
 
 #[rstest]
-fn test_fixed_fixed_birelation_set_data_mut() {
-    let mut rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, i32> =
-        FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1)], 1)]);
-    *rs.data_mut(RelationId(0)) = 99;
-    assert_eq!(rs.data(RelationId(0)), &99);
+#[case::first(RelationId(0), true)]
+#[case::out_of_range(RelationId(1), false)]
+fn test_fixed_fixed_birelation_set_contains(#[case] id: RelationId, #[case] expected: bool) {
+    let rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, &str> =
+        FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1)], "x")]);
+    assert_eq!(rs.contains(id), expected);
+}
+
+#[rstest]
+fn test_fixed_fixed_birelation_set_relation_ids() {
+    assert_exact_size(
+        FixedFixedBirelationSet::<NodeId, 1, NodeId, 1, &str>::default().ids(),
+        vec![],
+    );
+    let rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, &str> =
+        FixedFixedBirelationSet::new(vec![
+            ([NodeId(0)], [NodeId(1)], "a"),
+            ([NodeId(2)], [NodeId(3)], "b"),
+        ]);
+    assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
 }
 
 #[rstest]
@@ -146,47 +170,11 @@ fn test_fixed_fixed_birelation_set_iter_mut() {
 }
 
 #[rstest]
-fn test_fixed_fixed_birelation_set_permute_1_with() {
-    let mut rs: FixedFixedBirelationSet<NodeId, 3, EdgeId, 2, &str> =
-        FixedFixedBirelationSet::new(vec![(
-            [NodeId(0), NodeId(1), NodeId(2)],
-            [EdgeId(7), EdgeId(8)],
-            "a",
-        )]);
-    rs.permute_1_with(
-        RelationId(0),
-        &[
-            ParticipantPosition(2),
-            ParticipantPosition(0),
-            ParticipantPosition(1),
-        ],
-    );
-    assert_eq!(
-        rs.participants_1(RelationId(0)),
-        &[NodeId(2), NodeId(0), NodeId(1)]
-    );
-    assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(7), EdgeId(8)]);
-    assert_eq!(rs.data(RelationId(0)), &"a");
-}
-
-#[rstest]
-fn test_fixed_fixed_birelation_set_permute_2_with() {
-    let mut rs: FixedFixedBirelationSet<NodeId, 3, EdgeId, 2, &str> =
-        FixedFixedBirelationSet::new(vec![(
-            [NodeId(0), NodeId(1), NodeId(2)],
-            [EdgeId(7), EdgeId(8)],
-            "a",
-        )]);
-    rs.permute_2_with(
-        RelationId(0),
-        &[ParticipantPosition(1), ParticipantPosition(0)],
-    );
-    assert_eq!(
-        rs.participants_1(RelationId(0)),
-        &[NodeId(0), NodeId(1), NodeId(2)]
-    );
-    assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(8), EdgeId(7)]);
-    assert_eq!(rs.data(RelationId(0)), &"a");
+fn test_fixed_fixed_birelation_set_data_mut() {
+    let mut rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, i32> =
+        FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1)], 1)]);
+    *rs.data_mut(RelationId(0)) = 99;
+    assert_eq!(rs.data(RelationId(0)), &99);
 }
 
 #[rstest]
@@ -198,238 +186,6 @@ fn test_fixed_fixed_birelation_set_incidence() {
     assert!(rs.has_incident(NodeId(0)));
     assert!(rs.has_incident_edge(EdgeId(7)));
     assert!(!rs.has_incident(NodeId(5)));
-}
-
-#[rstest]
-#[case::first(RelationId(0), true)]
-#[case::out_of_range(RelationId(1), false)]
-fn test_fixed_fixed_birelation_set_contains(#[case] id: RelationId, #[case] expected: bool) {
-    let rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, &str> =
-        FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1)], "x")]);
-    assert_eq!(rs.contains(id), expected);
-}
-
-#[rstest]
-fn test_fixed_fixed_birelation_set_relation_ids() {
-    assert_exact_size(
-        FixedFixedBirelationSet::<NodeId, 1, NodeId, 1, &str>::default().ids(),
-        vec![],
-    );
-    let rs: FixedFixedBirelationSet<NodeId, 1, NodeId, 1, &str> =
-        FixedFixedBirelationSet::new(vec![
-            ([NodeId(0)], [NodeId(1)], "a"),
-            ([NodeId(2)], [NodeId(3)], "b"),
-        ]);
-    assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
-}
-
-#[fixture]
-fn fixed_fixed_birelation_set_compaction_input(
-) -> FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str> {
-    FixedFixedBirelationSet::new(vec![
-        ([NodeId(0)], [NodeId(2), NodeId(4)], "keep"),
-        ([NodeId(1)], [NodeId(5), NodeId(6)], "drop"),
-    ])
-}
-
-#[rstest]
-#[case::partial(
-    vec![NodeId(1)],
-    FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1), NodeId(3)], "keep")]),
-    vec![RelationId(1)],
-)]
-#[case::all(
-    vec![NodeId(0), NodeId(1)],
-    FixedFixedBirelationSet::default(),
-    vec![RelationId(0), RelationId(1)],
-)]
-fn test_fixed_fixed_birelation_set_tracked_compact(
-    fixed_fixed_birelation_set_compaction_input: FixedFixedBirelationSet<
-        NodeId,
-        1,
-        NodeId,
-        2,
-        &'static str,
-    >,
-    #[case] removed_nodes: Vec<NodeId>,
-    #[case] expected: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
-    #[case] removed_relations: Vec<RelationId>,
-) {
-    let input = fixed_fixed_birelation_set_compaction_input;
-    let compaction = GraphCompaction::new(
-        Compaction::new(7, removed_nodes).unwrap(),
-        Compaction::empty(),
-    );
-    let (output, witness) = input.tracked_compact(&compaction);
-    assert_eq!(input.compact(&compaction), expected);
-    assert_eq!(output, expected);
-    assert_eq!(
-        witness,
-        Compaction::new(2, removed_relations.clone()).unwrap()
-    );
-    let survivors = (0..2)
-        .map(RelationId)
-        .filter(|id| !removed_relations.contains(id))
-        .collect::<Vec<_>>();
-    for (idx, &old) in survivors.iter().enumerate() {
-        assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
-    }
-}
-
-#[rstest]
-#[case::empty(FixedFixedBirelationSet::default())]
-#[case::rows(
-    FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(2), NodeId(4)], "keep"), ([NodeId(1)], [NodeId(5), NodeId(6)], "drop")]),
-)]
-fn test_fixed_fixed_birelation_set_compact_identity(
-    #[case] input: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
-) {
-    let compaction = GraphCompaction::new(Compaction::identity(7), Compaction::empty());
-    assert_eq!(input.compact(&compaction), input);
-    assert_eq!(
-        input.tracked_compact(&compaction),
-        (input.clone(), Compaction::identity(input.count())),
-    );
-}
-
-#[rstest]
-#[case::rows(FixedFixedBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![13, 17])]),
-    FixedFixedBirelationSet::new(vec![([EdgeId(3), EdgeId(6)], [NodeId(1), NodeId(5)], vec![7, 11]), ([EdgeId(3), EdgeId(6)], [NodeId(1), NodeId(5)], vec![13, 17])]))]
-fn test_fixed_fixed_birelation_set_map(
-    participant_correspondence: GraphCorrespondence,
-    #[case] input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
-    #[case] expected: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
-) {
-    assert_eq!(input.map(&participant_correspondence), expected);
-    assert_eq!(
-        input.try_map(&participant_correspondence),
-        Some(expected.clone())
-    );
-    let reverse = GraphCorrespondence::new(
-        participant_correspondence.nodes().reverse(),
-        participant_correspondence.edges().reverse(),
-    );
-    assert_eq!(expected.map(&reverse), input);
-    let composed = participant_correspondence.compose(&reverse).unwrap();
-    assert_eq!(input.map(&composed), input);
-    assert_eq!(
-        expected.incident(NodeId(1)),
-        &[RelationId(0), RelationId(1)]
-    );
-    assert_eq!(
-        expected.incident_edge(EdgeId(3)),
-        expected.incident(NodeId(1))
-    );
-}
-
-#[rstest]
-#[case::empty(FixedFixedBirelationSet::new(vec![]))]
-#[case::rows(FixedFixedBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![13, 17])]))]
-fn test_fixed_fixed_birelation_set_map_identity(
-    #[case] input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
-) {
-    let identity = GraphCorrespondence::new(
-        Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
-        Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
-    );
-    assert_eq!(input.try_map(&identity), Some(input.clone()));
-    assert_eq!(input.map(&identity), input);
-}
-
-#[rstest]
-#[case::missing_node(1, 2)]
-#[case::outside_node(4, 2)]
-#[case::missing_edge(2, 1)]
-#[case::outside_edge(2, 4)]
-fn test_fixed_fixed_birelation_set_try_map_error(
-    participant_correspondence: GraphCorrespondence,
-    #[case] node: u32,
-    #[case] edge: u32,
-) {
-    let input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>> =
-        FixedFixedBirelationSet::new(vec![
-            ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]),
-            (
-                [EdgeId(edge), EdgeId(0)],
-                [NodeId(node), NodeId(0)],
-                vec![13, 17],
-            ),
-        ]);
-    assert_eq!(input.try_map(&participant_correspondence), None);
-}
-
-#[rstest]
-#[should_panic(expected = "correspondence must cover every participant reference")]
-fn test_fixed_fixed_birelation_set_map_error(participant_correspondence: GraphCorrespondence) {
-    let node = 1;
-    let edge = 2;
-    let input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>> =
-        FixedFixedBirelationSet::new(vec![(
-            [EdgeId(edge), EdgeId(0)],
-            [NodeId(node), NodeId(0)],
-            vec![7, 11],
-        )]);
-    input.map(&participant_correspondence);
-}
-
-#[rstest]
-fn test_fixed_fixed_birelation_set_remap() {
-    let rs: FixedFixedBirelationSet<NodeId, 2, EdgeId, 2, BiPositionLabels> =
-        FixedFixedBirelationSet::new(vec![(
-            [NodeId(0), NodeId(1)],
-            [EdgeId(0), EdgeId(1)],
-            BiPositionLabels {
-                factor_1: vec![10, 11],
-                factor_2: vec![20, 21],
-            },
-        )]);
-    let remapping = GraphRemapping::new(
-        Remapping::new(vec![NodeId(1), NodeId(0)]).expect("permutation images"),
-        Remapping::new(vec![EdgeId(1), EdgeId(0)]).expect("permutation images"),
-    );
-    let out = rs.remap(&remapping);
-    assert_eq!(out.participants_1(RelationId(0)), &[NodeId(1), NodeId(0)]);
-    assert_eq!(out.participants_2(RelationId(0)), &[EdgeId(1), EdgeId(0)]);
-    assert_eq!(
-        out.data(RelationId(0)),
-        &BiPositionLabels {
-            factor_1: vec![10, 11],
-            factor_2: vec![20, 21],
-        }
-    );
-}
-
-#[rstest]
-#[case::covered(vec![NodeId(1), NodeId(0)], vec![EdgeId(1), EdgeId(0)], true)]
-#[case::uncovered_node(vec![NodeId(0)], vec![EdgeId(1), EdgeId(0)], false)]
-#[case::uncovered_edge(vec![NodeId(1), NodeId(0)], vec![EdgeId(0)], false)]
-fn test_fixed_fixed_birelation_set_try_remap(
-    #[case] nodes: Vec<NodeId>,
-    #[case] edges: Vec<EdgeId>,
-    #[case] covered: bool,
-) {
-    let rs: FixedFixedBirelationSet<NodeId, 2, EdgeId, 2, BiPositionLabels> =
-        FixedFixedBirelationSet::new(vec![(
-            [NodeId(0), NodeId(1)],
-            [EdgeId(0), EdgeId(1)],
-            BiPositionLabels {
-                factor_1: vec![10, 11],
-                factor_2: vec![20, 21],
-            },
-        )]);
-    let remapping = GraphRemapping::new(
-        Remapping::new(nodes).expect("permutation images"),
-        Remapping::new(edges).expect("permutation images"),
-    );
-    let expected = covered.then(|| rs.remap(&remapping));
-    assert_eq!(rs.try_remap(&remapping), expected);
-}
-
-#[rstest]
-fn test_fixed_fixed_birelation_set_default() {
-    let rs = FixedFixedBirelationSet::<NodeId, 1, NodeId, 1, ()>::default();
-    assert_eq!(rs.count(), 0);
-    assert!(!rs.has_incident(NodeId(0)));
 }
 
 #[rstest]
@@ -533,6 +289,243 @@ fn test_fixed_fixed_birelation_set_coincident_multiplicity(
         relations.is_coincident(RelationId(0), &query, &query_2),
         coincides
     );
+}
+
+#[rstest]
+fn test_fixed_fixed_birelation_set_permute_1_with() {
+    let mut rs: FixedFixedBirelationSet<NodeId, 3, EdgeId, 2, &str> =
+        FixedFixedBirelationSet::new(vec![(
+            [NodeId(0), NodeId(1), NodeId(2)],
+            [EdgeId(7), EdgeId(8)],
+            "a",
+        )]);
+    rs.permute_1_with(
+        RelationId(0),
+        &[
+            ParticipantPosition(2),
+            ParticipantPosition(0),
+            ParticipantPosition(1),
+        ],
+    );
+    assert_eq!(
+        rs.participants_1(RelationId(0)),
+        &[NodeId(2), NodeId(0), NodeId(1)]
+    );
+    assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(7), EdgeId(8)]);
+    assert_eq!(rs.data(RelationId(0)), &"a");
+}
+
+#[rstest]
+fn test_fixed_fixed_birelation_set_permute_2_with() {
+    let mut rs: FixedFixedBirelationSet<NodeId, 3, EdgeId, 2, &str> =
+        FixedFixedBirelationSet::new(vec![(
+            [NodeId(0), NodeId(1), NodeId(2)],
+            [EdgeId(7), EdgeId(8)],
+            "a",
+        )]);
+    rs.permute_2_with(
+        RelationId(0),
+        &[ParticipantPosition(1), ParticipantPosition(0)],
+    );
+    assert_eq!(
+        rs.participants_1(RelationId(0)),
+        &[NodeId(0), NodeId(1), NodeId(2)]
+    );
+    assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(8), EdgeId(7)]);
+    assert_eq!(rs.data(RelationId(0)), &"a");
+}
+
+#[rstest]
+#[case::rows(FixedFixedBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![13, 17])]),
+    FixedFixedBirelationSet::new(vec![([EdgeId(3), EdgeId(6)], [NodeId(1), NodeId(5)], vec![7, 11]), ([EdgeId(3), EdgeId(6)], [NodeId(1), NodeId(5)], vec![13, 17])]))]
+fn test_fixed_fixed_birelation_set_map(
+    participant_correspondence: GraphCorrespondence,
+    #[case] input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+    #[case] expected: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+) {
+    assert_eq!(input.map(&participant_correspondence), expected);
+    assert_eq!(
+        input.try_map(&participant_correspondence),
+        Some(expected.clone())
+    );
+    let reverse = GraphCorrespondence::new(
+        participant_correspondence.nodes().reverse(),
+        participant_correspondence.edges().reverse(),
+    );
+    assert_eq!(expected.map(&reverse), input);
+    let composed = participant_correspondence.compose(&reverse).unwrap();
+    assert_eq!(input.map(&composed), input);
+    assert_eq!(
+        expected.incident(NodeId(1)),
+        &[RelationId(0), RelationId(1)]
+    );
+    assert_eq!(
+        expected.incident_edge(EdgeId(3)),
+        expected.incident(NodeId(1))
+    );
+}
+
+#[rstest]
+#[case::empty(FixedFixedBirelationSet::new(vec![]))]
+#[case::rows(FixedFixedBirelationSet::new(vec![([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]), ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![13, 17])]))]
+fn test_fixed_fixed_birelation_set_map_identity(
+    #[case] input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>>,
+) {
+    let identity = GraphCorrespondence::new(
+        Correspondence::from_images(&[NodeId(0), NodeId(1), NodeId(2), NodeId(3)], 4),
+        Correspondence::from_images(&[EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)], 4),
+    );
+    assert_eq!(input.try_map(&identity), Some(input.clone()));
+    assert_eq!(input.map(&identity), input);
+}
+
+#[rstest]
+#[should_panic(expected = "correspondence must cover every participant reference")]
+fn test_fixed_fixed_birelation_set_map_error(participant_correspondence: GraphCorrespondence) {
+    let node = 1;
+    let edge = 2;
+    let input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>> =
+        FixedFixedBirelationSet::new(vec![(
+            [EdgeId(edge), EdgeId(0)],
+            [NodeId(node), NodeId(0)],
+            vec![7, 11],
+        )]);
+    input.map(&participant_correspondence);
+}
+
+#[rstest]
+#[case::missing_node(1, 2)]
+#[case::outside_node(4, 2)]
+#[case::missing_edge(2, 1)]
+#[case::outside_edge(2, 4)]
+fn test_fixed_fixed_birelation_set_try_map_error(
+    participant_correspondence: GraphCorrespondence,
+    #[case] node: u32,
+    #[case] edge: u32,
+) {
+    let input: FixedFixedBirelationSet<EdgeId, 2, NodeId, 2, Vec<u32>> =
+        FixedFixedBirelationSet::new(vec![
+            ([EdgeId(2), EdgeId(0)], [NodeId(2), NodeId(0)], vec![7, 11]),
+            (
+                [EdgeId(edge), EdgeId(0)],
+                [NodeId(node), NodeId(0)],
+                vec![13, 17],
+            ),
+        ]);
+    assert_eq!(input.try_map(&participant_correspondence), None);
+}
+
+#[rstest]
+fn test_fixed_fixed_birelation_set_remap() {
+    let rs: FixedFixedBirelationSet<NodeId, 2, EdgeId, 2, BiPositionLabels> =
+        FixedFixedBirelationSet::new(vec![(
+            [NodeId(0), NodeId(1)],
+            [EdgeId(0), EdgeId(1)],
+            BiPositionLabels {
+                factor_1: vec![10, 11],
+                factor_2: vec![20, 21],
+            },
+        )]);
+    let remapping = GraphRemapping::new(
+        Remapping::new(vec![NodeId(1), NodeId(0)]).expect("permutation images"),
+        Remapping::new(vec![EdgeId(1), EdgeId(0)]).expect("permutation images"),
+    );
+    let out = rs.remap(&remapping);
+    assert_eq!(out.participants_1(RelationId(0)), &[NodeId(1), NodeId(0)]);
+    assert_eq!(out.participants_2(RelationId(0)), &[EdgeId(1), EdgeId(0)]);
+    assert_eq!(
+        out.data(RelationId(0)),
+        &BiPositionLabels {
+            factor_1: vec![10, 11],
+            factor_2: vec![20, 21],
+        }
+    );
+}
+
+#[rstest]
+#[case::covered(vec![NodeId(1), NodeId(0)], vec![EdgeId(1), EdgeId(0)], true)]
+#[case::uncovered_node(vec![NodeId(0)], vec![EdgeId(1), EdgeId(0)], false)]
+#[case::uncovered_edge(vec![NodeId(1), NodeId(0)], vec![EdgeId(0)], false)]
+fn test_fixed_fixed_birelation_set_try_remap(
+    #[case] nodes: Vec<NodeId>,
+    #[case] edges: Vec<EdgeId>,
+    #[case] covered: bool,
+) {
+    let rs: FixedFixedBirelationSet<NodeId, 2, EdgeId, 2, BiPositionLabels> =
+        FixedFixedBirelationSet::new(vec![(
+            [NodeId(0), NodeId(1)],
+            [EdgeId(0), EdgeId(1)],
+            BiPositionLabels {
+                factor_1: vec![10, 11],
+                factor_2: vec![20, 21],
+            },
+        )]);
+    let remapping = GraphRemapping::new(
+        Remapping::new(nodes).expect("permutation images"),
+        Remapping::new(edges).expect("permutation images"),
+    );
+    let expected = covered.then(|| rs.remap(&remapping));
+    assert_eq!(rs.try_remap(&remapping), expected);
+}
+
+#[rstest]
+#[case::empty(FixedFixedBirelationSet::default())]
+#[case::rows(
+    FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(2), NodeId(4)], "keep"), ([NodeId(1)], [NodeId(5), NodeId(6)], "drop")]),
+)]
+fn test_fixed_fixed_birelation_set_compact_identity(
+    #[case] input: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
+) {
+    let compaction = GraphCompaction::new(Compaction::identity(7), Compaction::empty());
+    assert_eq!(input.compact(&compaction), input);
+    assert_eq!(
+        input.tracked_compact(&compaction),
+        (input.clone(), Compaction::identity(input.count())),
+    );
+}
+
+#[rstest]
+#[case::partial(
+    vec![NodeId(1)],
+    FixedFixedBirelationSet::new(vec![([NodeId(0)], [NodeId(1), NodeId(3)], "keep")]),
+    vec![RelationId(1)],
+)]
+#[case::all(
+    vec![NodeId(0), NodeId(1)],
+    FixedFixedBirelationSet::default(),
+    vec![RelationId(0), RelationId(1)],
+)]
+fn test_fixed_fixed_birelation_set_tracked_compact(
+    fixed_fixed_birelation_set_compaction_input: FixedFixedBirelationSet<
+        NodeId,
+        1,
+        NodeId,
+        2,
+        &'static str,
+    >,
+    #[case] removed_nodes: Vec<NodeId>,
+    #[case] expected: FixedFixedBirelationSet<NodeId, 1, NodeId, 2, &'static str>,
+    #[case] removed_relations: Vec<RelationId>,
+) {
+    let input = fixed_fixed_birelation_set_compaction_input;
+    let compaction = GraphCompaction::new(
+        Compaction::new(7, removed_nodes).unwrap(),
+        Compaction::empty(),
+    );
+    let (output, witness) = input.tracked_compact(&compaction);
+    assert_eq!(input.compact(&compaction), expected);
+    assert_eq!(output, expected);
+    assert_eq!(
+        witness,
+        Compaction::new(2, removed_relations.clone()).unwrap()
+    );
+    let survivors = (0..2)
+        .map(RelationId)
+        .filter(|id| !removed_relations.contains(id))
+        .collect::<Vec<_>>();
+    for (idx, &old) in survivors.iter().enumerate() {
+        assert_eq!(witness.compact(old), Some(RelationId::from(idx)));
+    }
 }
 
 #[rstest]
@@ -650,4 +643,11 @@ fn test_fixed_fixed_birelation_set_tracked_pullback(#[case] combined: Option<i32
     });
     assert_eq!(plain, expected.as_ref().map(|(object, _)| object.clone()));
     assert_eq!(result, expected);
+}
+
+#[rstest]
+fn test_fixed_fixed_birelation_set_default() {
+    let rs = FixedFixedBirelationSet::<NodeId, 1, NodeId, 1, ()>::default();
+    assert_eq!(rs.count(), 0);
+    assert!(!rs.has_incident(NodeId(0)));
 }

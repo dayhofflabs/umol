@@ -1,6 +1,8 @@
 //! Construction, incidence, coincidence, exact-size iteration, and participant transport.
 //!
-//! Construction checks preserve complete input rows. Incidence follows [RelationParticipant::refs];
+//! The storage laws documented on [FixedRelationSet], [VarRelationSet],
+//! [FixedFixedBirelationSet], [FixedVarBirelationSet], and [VarVarBirelationSet]
+//! preserve complete input rows. Incidence follows [RelationParticipant::refs];
 //! coincidence compares complete participant multisets independently in each factor.
 //! A direct row scan supplies expected incidence, and occurrence counts supply multiset equality.
 //! Generated participants may reference a node, an edge, both, or neither; labels distinguish
@@ -11,7 +13,9 @@
 //! [FixedRelationSet::replace_participant] compare sequences of edits against independently edited
 //! rows, scanning incidence after every step. Local/whole replacement equivalence supplements that
 //! reference check; equality alone would not detect a stale index.
-//! Transport laws use permutations of eight node and edge ids; unit cases cover partial mappings.
+//! Transport exercises the identity/composition laws of [FixedRelationSet::try_map] and its
+//! peers, plus the positional preservation law of [FixedRelationSet::remap] and its peers.
+//! It uses permutations of eight node and edge ids; unit cases cover partial mappings.
 
 use std::iter;
 
