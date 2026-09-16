@@ -9,6 +9,9 @@
 //! likewise excludes setup cloning and final destruction, but includes rebuilding the whole index.
 //! Whole-factor replacement supplies new references (retaining zero in repeated fixtures); local
 //! replacement changes the first participant. Both exercise first, middle, and last rows.
+//! Variable-row replacement measures empty, shorter, equal-length, and longer final rows.
+//! Local insertion/removal starts from a fresh set on every iteration. All variable mutations
+//! include offset adjustment and any movement of later participants as well as index rebuilding.
 
 use std::array;
 use std::hint::black_box;
@@ -223,6 +226,123 @@ fn var(c: &mut Criterion) {
                         BatchSize::LargeInput,
                     )
                 });
+                for (position, row) in [("first", 0), ("middle", count / 2), ("last", count - 1)] {
+                    let id = RelationId(row as u32);
+                    let fixture = format!("{fixture}/row={position}");
+                    for length in [0, width / 2, width, width * 2] {
+                        let participants: Vec<_> = (0..length)
+                            .map(|index| {
+                                if repeated && index < length / 2 {
+                                    NodeId(0)
+                                } else {
+                                    NodeId((count * width + index) as u32)
+                                }
+                            })
+                            .collect();
+                        let mut expected = entries.clone();
+                        expected[row].0 = participants.clone();
+                        let mut replaced = relations.clone();
+                        replaced.replace_participants(id, &participants);
+                        for node in entries[row].0.iter().chain(&participants) {
+                            let incidence: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (parts, _))| parts.contains(node))
+                                .map(|(i, _)| RelationId::from(i))
+                                .collect();
+                            assert_eq!(replaced.incident(*node), incidence);
+                        }
+                        assert_eq!(replaced.into_entries(), expected);
+                        group.bench_function(
+                            BenchmarkId::new(
+                                "replace_participants",
+                                format!("{fixture}/length={length}"),
+                            ),
+                            |b| {
+                                b.iter_batched_ref(
+                                    || relations.clone(),
+                                    |relations| {
+                                        relations.replace_participants(
+                                            black_box(id),
+                                            black_box(&participants),
+                                        );
+                                        black_box(relations);
+                                    },
+                                    BatchSize::LargeInput,
+                                )
+                            },
+                        );
+                    }
+                    let participant = NodeId((count * width) as u32);
+                    let local_position = ParticipantPosition(0);
+                    let mut replaced = relations.clone();
+                    replaced.replace_participant(id, local_position, participant);
+                    let mut inserted = relations.clone();
+                    inserted.insert_participant(id, local_position, participant);
+                    let mut removed = relations.clone();
+                    removed.remove_participant(id, local_position);
+                    let mut replace_expected = entries.clone();
+                    replace_expected[row].0[0] = participant;
+                    let mut insert_expected = entries.clone();
+                    insert_expected[row].0.insert(0, participant);
+                    let mut remove_expected = entries.clone();
+                    remove_expected[row].0.remove(0);
+                    for (changed, expected) in [
+                        (replaced, replace_expected),
+                        (inserted, insert_expected),
+                        (removed, remove_expected),
+                    ] {
+                        for node in entries[row].0.iter().copied().chain([participant]) {
+                            let incidence: Vec<_> = expected
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, (parts, _))| parts.contains(&node))
+                                .map(|(i, _)| RelationId::from(i))
+                                .collect();
+                            assert_eq!(changed.incident(node), incidence);
+                        }
+                        assert_eq!(changed.into_entries(), expected);
+                    }
+                    group.bench_function(BenchmarkId::new("replace_participant", &fixture), |b| {
+                        b.iter_batched_ref(
+                            || relations.clone(),
+                            |relations| {
+                                relations.replace_participant(
+                                    black_box(id),
+                                    black_box(local_position),
+                                    black_box(participant),
+                                );
+                                black_box(relations);
+                            },
+                            BatchSize::LargeInput,
+                        )
+                    });
+                    group.bench_function(BenchmarkId::new("insert_participant", &fixture), |b| {
+                        b.iter_batched_ref(
+                            || relations.clone(),
+                            |relations| {
+                                relations.insert_participant(
+                                    black_box(id),
+                                    black_box(local_position),
+                                    black_box(participant),
+                                );
+                                black_box(relations);
+                            },
+                            BatchSize::LargeInput,
+                        )
+                    });
+                    group.bench_function(BenchmarkId::new("remove_participant", &fixture), |b| {
+                        b.iter_batched_ref(
+                            || relations.clone(),
+                            |relations| {
+                                relations
+                                    .remove_participant(black_box(id), black_box(local_position));
+                                black_box(relations);
+                            },
+                            BatchSize::LargeInput,
+                        )
+                    });
+                }
             }
         }
     }

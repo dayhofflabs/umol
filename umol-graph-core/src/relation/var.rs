@@ -247,6 +247,110 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         permute_participants(&mut self.participants[start..end], order);
     }
 
+    /// Replace every participant of relation `id`, preserving the supplied order and duplicates.
+    ///
+    /// As in [`Self::new`], references are indexed through [`RelationParticipant::refs`]
+    /// without checking membership in an external graph. The replacement may be empty.
+    /// Resizing moves later participants and adjusts their row offsets. This rebuilds
+    /// incidence over the entire collection.
+    ///
+    /// # Semantic properties
+    ///
+    /// Relation ids, row count, all payloads, and all other rows remain unchanged.
+    /// Incidence contains each relation once for every node or edge referenced by its
+    /// final participants. Payloads are neither interpreted nor transported when lengths
+    /// or positions change. Replacing a row with its existing sequence preserves the set.
+    /// These laws are exercised against a row model in `tests/property/relation.rs`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
+    pub fn replace_participants(&mut self, id: RelationId, participants: &[P]) {
+        let start = self.offsets[id.index()] as usize;
+        let end = self.offsets[id.index() + 1] as usize;
+        let old_len = end - start;
+        self.participants
+            .splice(start..end, participants.iter().copied());
+        for offset in &mut self.offsets[id.index() + 1..] {
+            *offset = (*offset as usize - old_len + participants.len()) as u32;
+        }
+        self.incidence = Incidence::build(self.count(), |i, out| {
+            out.extend(
+                self.participants(RelationId::from(i))
+                    .iter()
+                    .map(|p| p.refs()),
+            );
+        });
+    }
+
+    /// Replace one participant at a factor-local position in relation `id`.
+    ///
+    /// Delegates to [`Self::replace_participants`] with the edited sequence, sharing its
+    /// admission and preservation contract and its full incidence rebuild.
+    ///
+    /// # Semantic properties
+    ///
+    /// Equivalent to whole-factor replacement after changing only `position`.
+    /// The factor length and every other participant position remain unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `position` is outside the selected row.
+    pub fn replace_participant(
+        &mut self,
+        id: RelationId,
+        position: ParticipantPosition,
+        participant: P,
+    ) {
+        let mut participants = self.participants(id).to_vec();
+        participants[position.index()] = participant;
+        self.replace_participants(id, &participants);
+    }
+
+    /// Insert a participant before `position`, or append at the row length.
+    ///
+    /// Delegates to [`Self::replace_participants`] with the edited sequence, sharing its
+    /// admission and preservation contract and its full incidence rebuild.
+    ///
+    /// # Semantic properties
+    ///
+    /// The factor grows by one and existing participants retain their relative order.
+    /// Removing the inserted position restores the original set.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `position` exceeds the selected row's length.
+    pub fn insert_participant(
+        &mut self,
+        id: RelationId,
+        position: ParticipantPosition,
+        participant: P,
+    ) {
+        let mut participants = self.participants(id).to_vec();
+        participants.insert(position.index(), participant);
+        self.replace_participants(id, &participants);
+    }
+
+    /// Remove the participant at a factor-local position in relation `id`.
+    ///
+    /// Delegates to [`Self::replace_participants`] with the edited sequence, sharing its
+    /// admission and preservation contract and its full incidence rebuild.
+    ///
+    /// # Semantic properties
+    ///
+    /// The factor shrinks by one and surviving participants retain their relative order.
+    /// Removing its sole participant leaves an empty row with the same id and payload.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `position` is outside the selected row.
+    /// Every position is invalid for an empty row.
+    pub fn remove_participant(&mut self, id: RelationId, position: ParticipantPosition) {
+        let mut participants = self.participants(id).to_vec();
+        participants.remove(position.index());
+        self.replace_participants(id, &participants);
+    }
+
     /// Relabel participants through a correspondence, preserving rows, positions, and payloads.
     ///
     /// The asserted peer of [`Self::try_map`]. No payload or frame normalization is performed.
