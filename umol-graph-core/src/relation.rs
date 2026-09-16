@@ -13,10 +13,15 @@
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, Sub};
 
+use self::incidence::Incidence;
+pub use self::participant::{ParticipantPosition, ParticipantRefs, RelationParticipant};
 use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::graph::{EdgeId, NodeId};
 use crate::remap::GraphRemapping;
+
+mod incidence;
+mod participant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
@@ -116,17 +121,6 @@ fn relation_pullback<S>(
     )
 }
 
-/// Position of a participant within a single relation's tuple — local to the
-/// relation (frame-relative), distinct from the global `NodeId`/`EdgeId`/`RelationId`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ParticipantPosition(pub u32);
-
-impl ParticipantPosition {
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
 /// Reorder `participants` in place so that `new[i] = old[order[i]]`.
 ///
 /// Panics unless `order` is a permutation of `0..participants.len()`. Under that condition the
@@ -154,167 +148,6 @@ fn permute_participants<P: Copy>(participants: &mut [P], order: &[ParticipantPos
         .map(|position| participants[position.index()])
         .collect();
     participants.copy_from_slice(&permuted);
-}
-
-/// The id-space contents of a participant, surfaced for the incidence index.
-/// At most one ref per space today (a node or an edge); a future port type
-/// could fill both.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ParticipantRefs {
-    pub node: Option<NodeId>,
-    pub edge: Option<EdgeId>,
-}
-/// A value that can occupy a relation factor: supports compaction, remapping, and
-/// correspondence-based id transport, and exposes its node/edge refs for incidence. One impl per concrete
-/// id type — dispatch is static, since a factor is homogeneous.
-pub trait RelationParticipant: Copy + Ord + Hash {
-    fn compact(self, compaction: &GraphCompaction) -> Option<Self>;
-    fn uncompact(self, compaction: &GraphCompaction) -> Self;
-
-    /// Relabel every referenced id through a correspondence, preserving other participant data.
-    ///
-    /// # Panics
-    /// Panics when a referenced node or edge has no image.
-    fn map(self, correspondence: &GraphCorrespondence) -> Self {
-        self.try_map(correspondence)
-            .expect("correspondence must cover every participant reference")
-    }
-
-    /// Relabel every referenced id, or return `None` if any reference has no image.
-    /// Unused correspondence entries need not be matched. Every id looked up must be
-    /// reported by [`refs`](Self::refs); all other participant data must be preserved.
-    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self>;
-
-    /// Relabel this participant through `remapping`.
-    ///
-    /// Every node or edge id read from `remapping` must be reported by [`refs`](Self::refs), so
-    /// checked relation-set remapping can establish coverage before calling this method.
-    fn remap(self, remapping: &GraphRemapping) -> Self;
-
-    /// Return every graph id used to represent this participant.
-    fn refs(self) -> ParticipantRefs;
-}
-
-impl RelationParticipant for NodeId {
-    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
-        correspondence.nodes().right_of(self)
-    }
-    fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
-        compaction.compact_node(self)
-    }
-
-    fn uncompact(self, compaction: &GraphCompaction) -> Self {
-        compaction.uncompact_node(self)
-    }
-
-    fn remap(self, remapping: &GraphRemapping) -> Self {
-        remapping.map_node(self)
-    }
-
-    fn refs(self) -> ParticipantRefs {
-        ParticipantRefs {
-            node: Some(self),
-            edge: None,
-        }
-    }
-}
-
-impl RelationParticipant for EdgeId {
-    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
-        correspondence.edges().right_of(self)
-    }
-    fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
-        compaction.compact_edge(self)
-    }
-
-    fn uncompact(self, compaction: &GraphCompaction) -> Self {
-        compaction.uncompact_edge(self)
-    }
-
-    fn remap(self, remapping: &GraphRemapping) -> Self {
-        remapping.map_edge(self)
-    }
-
-    fn refs(self) -> ParticipantRefs {
-        ParticipantRefs {
-            node: None,
-            edge: Some(self),
-        }
-    }
-}
-
-/// Union incidence index: a node → relations pair and an edge → relations pair,
-/// each a sorted `(keys, rels)` slice. Participants self-route via `refs()`, so a
-/// set with only node participants leaves the edge half empty, and vice versa.
-#[derive(Clone, Debug, Default)]
-struct Incidence {
-    node_keys: Vec<NodeId>,
-    node_rels: Vec<RelationId>,
-    edge_keys: Vec<EdgeId>,
-    edge_rels: Vec<RelationId>,
-}
-
-impl Incidence {
-    /// `fill(i, out)` pushes every participant's `refs()` for relation `i`.
-    fn build(
-        relation_count: usize,
-        mut fill: impl FnMut(usize, &mut Vec<ParticipantRefs>),
-    ) -> Self {
-        let mut node_entries: Vec<(NodeId, RelationId)> = Vec::new();
-        let mut edge_entries: Vec<(EdgeId, RelationId)> = Vec::new();
-        let mut refs: Vec<ParticipantRefs> = Vec::new();
-        let mut nodes: Vec<NodeId> = Vec::new();
-        let mut edges: Vec<EdgeId> = Vec::new();
-        for i in 0..relation_count {
-            let rid = RelationId(i as u32);
-            refs.clear();
-            fill(i, &mut refs);
-            nodes.clear();
-            edges.clear();
-            for r in &refs {
-                if let Some(node) = r.node {
-                    nodes.push(node);
-                }
-                if let Some(edge) = r.edge {
-                    edges.push(edge);
-                }
-            }
-            nodes.sort_unstable();
-            nodes.dedup();
-            edges.sort_unstable();
-            edges.dedup();
-            node_entries.extend(nodes.iter().map(|&n| (n, rid)));
-            edge_entries.extend(edges.iter().map(|&e| (e, rid)));
-        }
-        node_entries.sort_by_key(|&(k, _)| k);
-        edge_entries.sort_by_key(|&(k, _)| k);
-        Self {
-            node_keys: node_entries.iter().map(|&(k, _)| k).collect(),
-            node_rels: node_entries.iter().map(|&(_, r)| r).collect(),
-            edge_keys: edge_entries.iter().map(|&(k, _)| k).collect(),
-            edge_rels: edge_entries.iter().map(|&(_, r)| r).collect(),
-        }
-    }
-
-    fn incident(&self, node: NodeId) -> &[RelationId] {
-        let start = self.node_keys.partition_point(|n| *n < node);
-        let end = start + self.node_keys[start..].partition_point(|n| *n <= node);
-        &self.node_rels[start..end]
-    }
-
-    fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
-        let start = self.edge_keys.partition_point(|e| *e < edge);
-        let end = start + self.edge_keys[start..].partition_point(|e| *e <= edge);
-        &self.edge_rels[start..end]
-    }
-
-    fn has_incident(&self, node: NodeId) -> bool {
-        self.node_keys.binary_search(&node).is_ok()
-    }
-
-    fn has_incident_edge(&self, edge: EdgeId) -> bool {
-        self.edge_keys.binary_search(&edge).is_ok()
-    }
 }
 
 /// Fixed-arity relation set. Each relation connects exactly N nodes.
@@ -2819,6 +2652,8 @@ impl<L1, L2, D> Default for VarVarBirelationSet<L1, L2, D> {
 
 #[cfg(test)]
 mod tests {
+    mod participant;
+
     use std::fmt::Debug;
     use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -2838,30 +2673,6 @@ mod tests {
             Correspondence::new(vec![(EdgeId(0), EdgeId(6)), (EdgeId(2), EdgeId(3))], 4, 7)
                 .unwrap(),
         )
-    }
-
-    #[rstest]
-    #[case::mapped(NodeId(2), Some(NodeId(1)))]
-    #[case::unmatched(NodeId(1), None)]
-    #[case::outside(NodeId(4), None)]
-    fn test_node_id_try_map(
-        participant_correspondence: GraphCorrespondence,
-        #[case] id: NodeId,
-        #[case] expected: Option<NodeId>,
-    ) {
-        assert_eq!(id.try_map(&participant_correspondence), expected);
-    }
-
-    #[rstest]
-    #[case::mapped(EdgeId(2), Some(EdgeId(3)))]
-    #[case::unmatched(EdgeId(1), None)]
-    #[case::outside(EdgeId(4), None)]
-    fn test_edge_id_try_map(
-        participant_correspondence: GraphCorrespondence,
-        #[case] id: EdgeId,
-        #[case] expected: Option<EdgeId>,
-    ) {
-        assert_eq!(id.try_map(&participant_correspondence), expected);
     }
 
     fn hash<T: Hash>(value: &T) -> u64 {
@@ -2899,73 +2710,6 @@ mod tests {
         assert_eq!(iterator.next(), None);
         assert_eq!(iterator.len(), 0);
         assert_eq!(iterator.size_hint(), (0, Some(0)));
-    }
-
-    #[rstest]
-    #[case::before_removed(NodeId(0), Some(NodeId(0)))]
-    #[case::removed(NodeId(1), None)]
-    #[case::after_removed(NodeId(2), Some(NodeId(1)))]
-    fn test_node_id_compact(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
-        let compaction = GraphCompaction::new(
-            Compaction::new(3, vec![NodeId(1)]).unwrap(),
-            Compaction::empty(),
-        );
-        assert_eq!(id.compact(&compaction), expected);
-    }
-
-    #[rstest]
-    #[case::before_gap(NodeId(0), NodeId(0))]
-    #[case::after_gap(NodeId(1), NodeId(2))]
-    fn test_node_id_uncompact(#[case] id: NodeId, #[case] expected: NodeId) {
-        let compaction = GraphCompaction::new(
-            Compaction::new(3, vec![NodeId(1)]).unwrap(),
-            Compaction::empty(),
-        );
-        assert_eq!(id.uncompact(&compaction), expected);
-    }
-
-    #[rstest]
-    fn test_node_id_refs() {
-        assert_eq!(
-            NodeId(3).refs(),
-            ParticipantRefs {
-                node: Some(NodeId(3)),
-                edge: None,
-            }
-        );
-    }
-
-    #[rstest]
-    #[case::removed(EdgeId(0), None)]
-    #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
-    fn test_edge_id_compact(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
-        let compaction = GraphCompaction::new(
-            Compaction::empty(),
-            Compaction::new(3, vec![EdgeId(0)]).unwrap(),
-        );
-        assert_eq!(id.compact(&compaction), expected);
-    }
-
-    #[rstest]
-    #[case::before_gap(EdgeId(0), EdgeId(0))]
-    #[case::after_gap(EdgeId(1), EdgeId(2))]
-    fn test_edge_id_uncompact(#[case] id: EdgeId, #[case] expected: EdgeId) {
-        let compaction = GraphCompaction::new(
-            Compaction::empty(),
-            Compaction::new(3, vec![EdgeId(1)]).unwrap(),
-        );
-        assert_eq!(id.uncompact(&compaction), expected);
-    }
-
-    #[rstest]
-    fn test_edge_id_refs() {
-        assert_eq!(
-            EdgeId(2).refs(),
-            ParticipantRefs {
-                node: None,
-                edge: Some(EdgeId(2)),
-            }
-        );
     }
 
     #[rstest]

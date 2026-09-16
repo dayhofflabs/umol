@@ -10,7 +10,7 @@ pub(crate) mod compact;
 pub(crate) mod correspondence;
 pub(crate) mod digraph;
 pub(crate) mod graph;
-pub(crate) mod relation;
+mod relation;
 pub(crate) mod remap;
 pub(crate) mod rewriting;
 pub(crate) mod union_find;
