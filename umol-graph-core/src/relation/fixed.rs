@@ -109,6 +109,60 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         permute_participants(self.participants[id.index()].as_mut_slice(), order);
     }
 
+    /// Replace every participant of relation `id`, preserving the supplied order and duplicates.
+    ///
+    /// As in [`Self::new`], participant references are indexed through
+    /// [`RelationParticipant::refs`] without checking membership in an external graph.
+    /// The fixed arity is enforced by the array type; zero arity is permitted.
+    /// This rebuilds incidence over the entire collection.
+    ///
+    /// # Semantic properties
+    ///
+    /// Relation ids, row count, all payloads, and all other rows remain unchanged.
+    /// Incidence contains each relation exactly once for every node or edge referenced by
+    /// any of its final participants. The payload is not interpreted or transported.
+    /// Replacing a row with its existing sequence leaves the set unchanged.
+    /// These laws are exercised against a row model in `tests/property/relation.rs`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set.
+    pub fn replace_participants(&mut self, id: RelationId, participants: [P; N]) {
+        self.participants[id.index()] = participants;
+        self.incidence = Incidence::build(self.count(), |i, out| {
+            out.extend(
+                self.participants[i]
+                    .iter()
+                    .map(|participant| participant.refs()),
+            );
+        });
+    }
+
+    /// Replace one participant at a factor-local position in relation `id`.
+    ///
+    /// Delegates to [`Self::replace_participants`] with the edited array, sharing its
+    /// admission and preservation contract and its full incidence rebuild.
+    ///
+    /// # Semantic properties
+    ///
+    /// Equivalent to replacing the whole array after changing only `position`.
+    /// Every other participant position remains unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is outside the set or `position` is outside `0..N`.
+    /// Every position is invalid when `N` is zero.
+    pub fn replace_participant(
+        &mut self,
+        id: RelationId,
+        position: ParticipantPosition,
+        participant: P,
+    ) {
+        let mut participants = self.participants[id.index()];
+        participants[position.index()] = participant;
+        self.replace_participants(id, participants);
+    }
+
     /// Id of the relation coinciding with `query` — the one whose participants equal it as a
     /// multiset, in any order.
     ///

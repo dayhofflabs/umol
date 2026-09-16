@@ -27,6 +27,9 @@ fn hash<T: Hash>(value: &T) -> u64 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PositionLabels(Vec<u32>);
 
+#[derive(Debug, PartialEq, Eq)]
+struct ReplacementData(Vec<u32>);
+
 fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
 where
     T: Debug + PartialEq,
@@ -87,6 +90,22 @@ fn test_fixed_relation_set_new_incidence(
     assert_eq!(relations.has_incident(NodeId(2)), !at_two.is_empty());
     assert!(!relations.has_incident_edge(EdgeId(2)));
     assert_eq!(relations.into_entries(), entries);
+}
+
+#[rstest]
+fn test_fixed_relation_set_new_zero_arity() {
+    let relations = FixedRelationSet::<NodeId, _, 0>::new(vec![([], "first"), ([], "second")]);
+    assert_eq!(
+        relations.ids().collect::<Vec<_>>(),
+        vec![RelationId(0), RelationId(1)]
+    );
+    assert_eq!(relations.incident(NodeId(0)), &[]);
+    assert_eq!(relations.incident_edge(EdgeId(0)), &[]);
+    assert!(relations.is_coincident(RelationId(0), &[]));
+    assert_eq!(
+        relations.into_entries(),
+        vec![([], "first"), ([], "second")]
+    );
 }
 
 #[rstest]
@@ -228,6 +247,237 @@ fn test_fixed_relation_set_permute_with_error(#[case] order: Vec<ParticipantPosi
     let mut rs: FixedRelationSet<NodeId, &str, 3> =
         FixedRelationSet::new(vec![([NodeId(0), NodeId(1), NodeId(2)], "a")]);
     rs.permute_with(RelationId(0), &order);
+}
+
+#[fixture]
+fn fixed_relation_set_replacement_input() -> FixedRelationSet<NodeId, ReplacementData, 3> {
+    FixedRelationSet::new(vec![
+        (
+            [NodeId(0), NodeId(1), NodeId(0)],
+            ReplacementData(vec![7, 11, 13]),
+        ),
+        (
+            [NodeId(1), NodeId(1), NodeId(2)],
+            ReplacementData(vec![17, 19, 23]),
+        ),
+        (
+            [NodeId(3), NodeId(4), NodeId(3)],
+            ReplacementData(vec![29, 31, 37]),
+        ),
+    ])
+}
+
+#[rstest]
+#[case::reordered([NodeId(2), NodeId(1), NodeId(1)], [vec![RelationId(0)], vec![RelationId(0), RelationId(1)], vec![RelationId(1)], vec![RelationId(2)], vec![RelationId(2)], vec![], vec![]])]
+#[case::repeated([NodeId(5), NodeId(5), NodeId(5)], [vec![RelationId(0)], vec![RelationId(0)], vec![], vec![RelationId(2)], vec![RelationId(2)], vec![RelationId(1)], vec![]])]
+#[case::shared([NodeId(1), NodeId(3), NodeId(5)], [vec![RelationId(0)], vec![RelationId(0), RelationId(1)], vec![], vec![RelationId(1), RelationId(2)], vec![RelationId(2)], vec![RelationId(1)], vec![]])]
+#[case::sparse([NodeId(u32::MAX), NodeId(5), NodeId(u32::MAX)], [vec![RelationId(0)], vec![RelationId(0)], vec![], vec![RelationId(2)], vec![RelationId(2)], vec![RelationId(1)], vec![RelationId(1)]])]
+fn test_fixed_relation_set_replace_participants(
+    mut fixed_relation_set_replacement_input: FixedRelationSet<NodeId, ReplacementData, 3>,
+    #[case] participants: [NodeId; 3],
+    #[case] incidence: [Vec<RelationId>; 7],
+) {
+    let relations = &mut fixed_relation_set_replacement_input;
+    relations.replace_participants(RelationId(1), participants);
+    assert_eq!(relations.count(), 3);
+    assert_eq!(
+        relations.ids().collect::<Vec<_>>(),
+        vec![RelationId(0), RelationId(1), RelationId(2)]
+    );
+    for (node, expected) in [0, 1, 2, 3, 4, 5, u32::MAX].into_iter().zip(incidence) {
+        assert_eq!(relations.incident(NodeId(node)), expected);
+        assert_eq!(relations.has_incident(NodeId(node)), !expected.is_empty());
+        assert_eq!(relations.incident_edge(EdgeId(node)), &[]);
+        assert!(!relations.has_incident_edge(EdgeId(node)));
+    }
+    assert_eq!(
+        relations.coincident(participants[0], &participants),
+        Some(RelationId(1))
+    );
+    assert_eq!(
+        relations.coincident(NodeId(2), &[NodeId(1), NodeId(1), NodeId(2)]),
+        (participants == [NodeId(2), NodeId(1), NodeId(1)]).then_some(RelationId(1))
+    );
+    assert_eq!(
+        fixed_relation_set_replacement_input.into_entries(),
+        vec![
+            (
+                [NodeId(0), NodeId(1), NodeId(0)],
+                ReplacementData(vec![7, 11, 13])
+            ),
+            (participants, ReplacementData(vec![17, 19, 23])),
+            (
+                [NodeId(3), NodeId(4), NodeId(3)],
+                ReplacementData(vec![29, 31, 37])
+            ),
+        ]
+    );
+}
+
+#[rstest]
+#[case::zero([])]
+#[case::one([NodeId(5)])]
+#[case::repeated([NodeId(2), NodeId(0), NodeId(2)])]
+fn test_fixed_relation_set_replace_participants_identity<const N: usize>(
+    #[case] participants: [NodeId; N],
+) {
+    let mut relations = FixedRelationSet::new(vec![(participants, ReplacementData(vec![7, 11]))]);
+    relations.replace_participants(RelationId(0), participants);
+    for node in [0, 1, 2, 5] {
+        let expected = if participants.contains(&NodeId(node)) {
+            vec![RelationId(0)]
+        } else {
+            vec![]
+        };
+        assert_eq!(relations.incident(NodeId(node)), expected);
+    }
+    assert_eq!(
+        relations.into_entries(),
+        vec![(participants, ReplacementData(vec![7, 11]))]
+    );
+}
+
+#[rstest]
+fn test_fixed_relation_set_replace_participants_edges() {
+    let mut relations = FixedRelationSet::new(vec![
+        ([EdgeId(0), EdgeId(1)], ReplacementData(vec![7, 11])),
+        ([EdgeId(1), EdgeId(2)], ReplacementData(vec![13, 17])),
+    ]);
+    relations.replace_participants(RelationId(0), [EdgeId(3), EdgeId(3)]);
+    assert_eq!(relations.incident_edge(EdgeId(0)), &[]);
+    assert_eq!(relations.incident_edge(EdgeId(1)), &[RelationId(1)]);
+    assert_eq!(relations.incident_edge(EdgeId(2)), &[RelationId(1)]);
+    assert_eq!(relations.incident_edge(EdgeId(3)), &[RelationId(0)]);
+    assert_eq!(
+        relations.coincident_edge(EdgeId(0), &[EdgeId(0), EdgeId(1)]),
+        None
+    );
+    assert_eq!(
+        relations.coincident_edge(EdgeId(3), &[EdgeId(3), EdgeId(3)]),
+        Some(RelationId(0))
+    );
+    assert_eq!(
+        relations.into_entries(),
+        vec![
+            ([EdgeId(3), EdgeId(3)], ReplacementData(vec![7, 11])),
+            ([EdgeId(1), EdgeId(2)], ReplacementData(vec![13, 17])),
+        ]
+    );
+}
+
+#[rstest]
+#[case::empty(vec![], RelationId(0))]
+#[case::end(vec![([NodeId(0)], ())], RelationId(1))]
+#[case::distant(vec![([NodeId(0)], ())], RelationId(u32::MAX))]
+#[should_panic(expected = "index out of bounds")]
+fn test_fixed_relation_set_replace_participants_error(
+    #[case] entries: Vec<([NodeId; 1], ())>,
+    #[case] id: RelationId,
+) {
+    FixedRelationSet::new(entries).replace_participants(id, [NodeId(1)]);
+}
+
+#[rstest]
+#[case::first(ParticipantPosition(0), NodeId(5), [NodeId(5), NodeId(1), NodeId(2)])]
+#[case::middle(ParticipantPosition(1), NodeId(2), [NodeId(1), NodeId(2), NodeId(2)])]
+#[case::last(ParticipantPosition(2), NodeId(5), [NodeId(1), NodeId(1), NodeId(5)])]
+#[case::sparse(ParticipantPosition(2), NodeId(u32::MAX), [NodeId(1), NodeId(1), NodeId(u32::MAX)])]
+fn test_fixed_relation_set_replace_participant(
+    mut fixed_relation_set_replacement_input: FixedRelationSet<NodeId, ReplacementData, 3>,
+    #[case] position: ParticipantPosition,
+    #[case] participant: NodeId,
+    #[case] expected: [NodeId; 3],
+) {
+    let relations = &mut fixed_relation_set_replacement_input;
+    relations.replace_participant(RelationId(1), position, participant);
+    for node in [0, 1, 2, 3, 4, 5, u32::MAX] {
+        let mut incidence = Vec::new();
+        for (index, row) in [
+            [NodeId(0), NodeId(1), NodeId(0)],
+            expected,
+            [NodeId(3), NodeId(4), NodeId(3)],
+        ]
+        .iter()
+        .enumerate()
+        {
+            if row.contains(&NodeId(node)) {
+                incidence.push(RelationId(index as u32));
+            }
+        }
+        assert_eq!(relations.incident(NodeId(node)), incidence);
+    }
+    assert_eq!(
+        relations.coincident(expected[0], &expected),
+        Some(RelationId(1))
+    );
+    assert_eq!(
+        fixed_relation_set_replacement_input.into_entries(),
+        vec![
+            (
+                [NodeId(0), NodeId(1), NodeId(0)],
+                ReplacementData(vec![7, 11, 13])
+            ),
+            (expected, ReplacementData(vec![17, 19, 23])),
+            (
+                [NodeId(3), NodeId(4), NodeId(3)],
+                ReplacementData(vec![29, 31, 37])
+            ),
+        ]
+    );
+}
+
+#[rstest]
+#[case::first(ParticipantPosition(0))]
+#[case::middle(ParticipantPosition(1))]
+#[case::last(ParticipantPosition(2))]
+fn test_fixed_relation_set_replace_participant_identity(#[case] position: ParticipantPosition) {
+    let participants = [NodeId(2), NodeId(0), NodeId(2)];
+    let mut relations =
+        FixedRelationSet::new(vec![(participants, ReplacementData(vec![7, 11, 13]))]);
+    relations.replace_participant(RelationId(0), position, participants[position.index()]);
+    assert_eq!(relations.incident(NodeId(0)), &[RelationId(0)]);
+    assert_eq!(relations.incident(NodeId(2)), &[RelationId(0)]);
+    assert_eq!(
+        relations.into_entries(),
+        vec![(participants, ReplacementData(vec![7, 11, 13]))]
+    );
+}
+
+#[rstest]
+fn test_fixed_relation_set_replace_participant_edges() {
+    let mut relations =
+        FixedRelationSet::new(vec![([EdgeId(1), EdgeId(1)], ReplacementData(vec![7, 11]))]);
+    relations.replace_participant(RelationId(0), ParticipantPosition(0), EdgeId(3));
+    assert_eq!(relations.incident_edge(EdgeId(1)), &[RelationId(0)]);
+    assert_eq!(relations.incident_edge(EdgeId(3)), &[RelationId(0)]);
+    assert_eq!(
+        relations.coincident_edge(EdgeId(1), &[EdgeId(1), EdgeId(1)]),
+        None
+    );
+    assert_eq!(
+        relations.coincident_edge(EdgeId(3), &[EdgeId(3), EdgeId(1)]),
+        Some(RelationId(0))
+    );
+    assert_eq!(
+        relations.into_entries(),
+        vec![([EdgeId(3), EdgeId(1)], ReplacementData(vec![7, 11]))]
+    );
+}
+
+#[rstest]
+#[case::empty(Vec::<([NodeId; 1], ())>::new(), RelationId(0), ParticipantPosition(0))]
+#[case::relation_end(vec![([NodeId(0)], ())], RelationId(1), ParticipantPosition(0))]
+#[case::relation_distant(vec![([NodeId(0)], ())], RelationId(u32::MAX), ParticipantPosition(0))]
+#[case::position_end(vec![([NodeId(0)], ())], RelationId(0), ParticipantPosition(1))]
+#[case::position_distant(vec![([NodeId(0)], ())], RelationId(0), ParticipantPosition(u32::MAX))]
+#[case::zero_arity(vec![([], ())], RelationId(0), ParticipantPosition(0))]
+#[should_panic(expected = "index out of bounds")]
+fn test_fixed_relation_set_replace_participant_error<const N: usize>(
+    #[case] entries: Vec<([NodeId; N], ())>,
+    #[case] id: RelationId,
+    #[case] position: ParticipantPosition,
+) {
+    FixedRelationSet::new(entries).replace_participant(id, position, NodeId(1));
 }
 
 #[rstest]

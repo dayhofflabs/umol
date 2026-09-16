@@ -5,7 +5,10 @@
 //! the last row; misses keep the shared anchor and change one participant. Incidence measures
 //! returning the indexed slice, not traversing its contents.
 //! Construction excludes input cloning and output destruction. Permutation excludes cloning
-//! and destruction of the working set; each iteration starts in the original frame.
+//! and destruction of the working set; each iteration starts in the original frame. Replacement
+//! likewise excludes setup cloning and final destruction, but includes rebuilding the whole index.
+//! Whole-factor replacement supplies new references (retaining zero in repeated fixtures); local
+//! replacement changes the first participant. Both exercise first, middle, and last rows.
 
 use std::array;
 use std::hint::black_box;
@@ -82,6 +85,70 @@ fn fixed(c: &mut Criterion) {
                     BatchSize::LargeInput,
                 )
             });
+            for (position, row) in [("first", 0), ("middle", count / 2), ("last", count - 1)] {
+                let id = RelationId(row as u32);
+                let fixture = format!("{fixture}/row={position}");
+                let participant = NodeId((count * 4) as u32);
+                let participants = array::from_fn(|index| {
+                    if repeated && index < 2 {
+                        NodeId(0)
+                    } else {
+                        NodeId((count * 4 + index) as u32)
+                    }
+                });
+                let mut replaced = relations.clone();
+                replaced.replace_participants(id, participants);
+                let mut expected = entries.clone();
+                expected[row].0 = participants;
+                for node in entries[row].0.into_iter().chain(participants) {
+                    let incidence: Vec<_> = expected
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (parts, _))| parts.contains(&node))
+                        .map(|(i, _)| RelationId(i as u32))
+                        .collect();
+                    assert_eq!(replaced.incident(node), incidence);
+                }
+                assert_eq!(replaced.into_entries(), expected);
+                let mut replaced = relations.clone();
+                replaced.replace_participant(id, ParticipantPosition(0), participant);
+                let mut expected = entries.clone();
+                expected[row].0[0] = participant;
+                for node in [entries[row].0[0], participant] {
+                    let incidence: Vec<_> = expected
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (parts, _))| parts.contains(&node))
+                        .map(|(i, _)| RelationId(i as u32))
+                        .collect();
+                    assert_eq!(replaced.incident(node), incidence);
+                }
+                assert_eq!(replaced.into_entries(), expected);
+                group.bench_function(BenchmarkId::new("replace_participants", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            relations.replace_participants(black_box(id), black_box(participants));
+                            black_box(relations);
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+                group.bench_function(BenchmarkId::new("replace_participant", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            relations.replace_participant(
+                                black_box(id),
+                                black_box(ParticipantPosition(0)),
+                                black_box(participant),
+                            );
+                            black_box(relations);
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+            }
         }
     }
     group.finish();
