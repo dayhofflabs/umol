@@ -206,14 +206,16 @@ some literal-heavy suites, or excluded, is open.
 
 A scratch experiment split the five relation-set implementations into private
 child modules, retained shared vocabulary and implementation support in the
-parent, and relocated the existing unit tests into separate files. The main
-workspace's production and test files remain unchanged. The proposed naming and
-participant replacement work belongs to doc 166 and was not implemented here.
+parent, and relocated the existing unit tests into separate files. The experiment
+left the main workspace's production and test files unchanged. The proposed naming
+and participant replacement work belongs to doc 166 and was not implemented here.
 
-The [experiment report](../scratch/relation-split-experiment/report.md) contains
-the frozen-source identity, candidate tree, measurements, compiler visibility
-probes, preservation checks, logs, and further contract findings. Source and
-scripts are in the same scratch directory.
+The experiment used relation.rs at revision
+8a97660ed9e21238a86191de53ef23e41ef62e8d (SHA-256
+020dd4ee3aceeb8e3b6e393c22d300098147c8c0b476510db91fef1992f8c5b6).
+Its measurements, visibility findings, preservation results, and limitations are
+recorded below. The scratch candidate, scripts, and logs were disposable; the
+production implementation and its tests are retained in the repository.
 
 ### Sizes and dependencies
 
@@ -353,6 +355,42 @@ visibility on [shared channel machinery](https://github.com/tokio-rs/tokio/blob/
 The [Rust visibility rules](https://doc.rust-lang.org/reference/visibility-and-privacy.html)
 explain the access boundary preserved by a parent-private to child-pub(super)
 extraction.
+
+### Production adoption — completed 2026-09-17
+
+Doc 166's S0–S4 relation-storage prerequisite is complete. Its
+[closeout](166-molecule-ops-2026-07-27.md#s4--verify-and-record-the-delivered-prerequisite)
+records the final sizes, API/delegation audit, dependencies, performance evidence,
+and verification. This completes the relation pilot; the workspace-wide proposals
+in this document remain Proposed.
+
+The delivered parent is 200 lines, participant vocabulary 143, and Incidence 91.
+The five storage implementations are 584–935 lines; their unit-test files are
+858–1,655 lines, with 106 lines of participant tests and six declarations in
+tests.rs. Production totals 4,283 lines and unit bodies/support 6,646. External
+relation properties remain one 2,190-line module and benchmarks one 1,685-line
+file. These counts include the complete mutation family and expanded contracts
+and tests; the original experiment's counts describe its earlier snapshot.
+
+The final implementation follows the agreed private-child organization and
+explicit public re-exports. The only scoped visibility is six pub(super)
+declarations for Incidence's type and five methods; fields and parent helpers
+are private. Storage implementations share vocabulary/index/parent functions
+without depending on sibling storage implementations. Their algebra rustdoc
+is now self-contained too. Test files are independent and own their fixtures
+and support; there is no shared test-support module or constructor shorthand.
+
+Method order, failure contracts, semantic properties, and references to public-API
+properties were reconciled during adoption. The original functions, exact cases,
+and property laws are preserved apart from approved renames and relocation.
+The final workspace gates passed, and 1,926 benchmark cases ran against the
+delivered surface. The S1 comparison records both regressions and improvements;
+the pilot does not establish unchanged performance or isolate their cause.
+
+No workspace-wide threshold, exemplar policy, mechanical checker, tiered gate,
+or further crate/module split is settled by this pilot. Those decisions and the
+ordering of the wider program remain the next work here. Graph-IR/editor wiring
+and hydrogen transformations remain follow-ups owned by doc 166.
 
 ## Open questions
 
