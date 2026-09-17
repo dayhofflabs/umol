@@ -25,6 +25,10 @@
 //! shared-reference preservation with variable-buffer resizing. Independent rows check later-row
 //! offsets after growing, shrinking, and emptying a factor. Insertion/removal roundtrips and
 //! factor/local equivalence supplement the union scans and complete-value coincidence checks.
+//! [VarVarBirelationSet::replace_participants] and its factor/local variants use the same
+//! independent row model with two independently resized factors, including empty factors.
+//! Mixed sequences check both sets of row boundaries through public readers after each edit;
+//! each factor's insertion/removal roundtrip also checks restored union incidence.
 //! Transport exercises the identity/composition laws of [FixedRelationSet::try_map] and its
 //! peers, plus the positional preservation law of [FixedRelationSet::remap] and its peers.
 //! It uses permutations of eight node and edge ids; unit cases cover partial mappings.
@@ -1616,6 +1620,293 @@ fn test_var_var_birelation_set_new_incidence() {
                         expected
                     );
                 }
+            }
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+fn assert_var_var_birelation_rows(
+    relations: &VarVarBirelationSet<TestParticipant, TestParticipant, Vec<u8>>,
+    entries: &[(Vec<TestParticipant>, Vec<TestParticipant>, Vec<u8>)],
+    previous: &(Vec<TestParticipant>, Vec<TestParticipant>),
+    query: &(Vec<TestParticipant>, Vec<TestParticipant>),
+) -> TestCaseResult {
+    prop_assert_eq!(relations.count(), entries.len());
+    prop_assert_eq!(
+        relations.ids().collect::<Vec<_>>(),
+        (0..entries.len()).map(RelationId::from).collect::<Vec<_>>()
+    );
+    prop_assert_eq!(
+        relations
+            .iter()
+            .map(|(id, a, b, data)| (id, a.to_vec(), b.to_vec(), data.clone()))
+            .collect::<Vec<_>>(),
+        entries
+            .iter()
+            .enumerate()
+            .map(|(i, (a, b, data))| (RelationId::from(i), a.clone(), b.clone(), data.clone()))
+            .collect::<Vec<_>>()
+    );
+    let mut queries = vec![(previous.0.to_vec(), previous.1.to_vec()), query.clone()];
+    for (index, (a, b, data)) in entries.iter().enumerate() {
+        let id = RelationId::from(index);
+        prop_assert_eq!(relations.participants_1(id), a);
+        prop_assert_eq!(relations.participants_2(id), b);
+        prop_assert_eq!(relations.data(id), data);
+        let reversed_1: Vec<_> = a.iter().rev().copied().collect();
+        let reversed_2: Vec<_> = b.iter().rev().copied().collect();
+        let mut changed_1 = reversed_1.clone();
+        if let Some(participant) = changed_1.first_mut() {
+            participant.label ^= 1;
+        }
+        let mut changed_2 = reversed_2.clone();
+        if let Some(participant) = changed_2.first_mut() {
+            participant.label ^= 1;
+        }
+        queries.extend([
+            (changed_1, reversed_2.clone()),
+            (reversed_1.clone(), changed_2),
+            (reversed_1, reversed_2),
+        ]);
+    }
+    for (query_1, query_2) in &queries {
+        for (index, (a, b, _)) in entries.iter().enumerate() {
+            prop_assert_eq!(
+                relations.is_coincident(RelationId::from(index), query_1, query_2),
+                same_multiset(a, query_1) && same_multiset(b, query_2)
+            );
+        }
+    }
+    for key in 0..4 {
+        let nodes: Vec<_> = entries
+            .iter()
+            .enumerate()
+            .filter(|(_, (a, b, _))| a.iter().chain(b).any(|p| p.node == Some(NodeId(key))))
+            .map(|(index, _)| RelationId::from(index))
+            .collect();
+        let edges: Vec<_> = entries
+            .iter()
+            .enumerate()
+            .filter(|(_, (a, b, _))| a.iter().chain(b).any(|p| p.edge == Some(EdgeId(key))))
+            .map(|(index, _)| RelationId::from(index))
+            .collect();
+        prop_assert_eq!(relations.incident(NodeId(key)), &nodes);
+        prop_assert_eq!(relations.has_incident(NodeId(key)), !nodes.is_empty());
+        prop_assert_eq!(relations.incident_edge(EdgeId(key)), &edges);
+        prop_assert_eq!(relations.has_incident_edge(EdgeId(key)), !edges.is_empty());
+        for (query_1, query_2) in &queries {
+            let node_hit = nodes.iter().copied().find(|id| {
+                same_multiset(&entries[id.index()].0, query_1)
+                    && same_multiset(&entries[id.index()].1, query_2)
+            });
+            let edge_hit = edges.iter().copied().find(|id| {
+                same_multiset(&entries[id.index()].0, query_1)
+                    && same_multiset(&entries[id.index()].1, query_2)
+            });
+            prop_assert_eq!(
+                relations.coincident(NodeId(key), query_1, query_2),
+                node_hit
+            );
+            prop_assert_eq!(
+                relations.coincident_edge(EdgeId(key), query_1, query_2),
+                edge_hit
+            );
+        }
+    }
+    Ok(())
+}
+
+#[rstest]
+fn test_var_var_birelation_set_replace_participants() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..5),
+                prop::collection::vec(participant_strategy(), 0..7),
+                prop::collection::vec(any::<u8>(), 0..6),
+            ),
+            1..8,
+        ),
+        prop::collection::vec(
+            (
+                0usize..7,
+                prop::collection::vec(participant_strategy(), 0..5),
+                prop::collection::vec(participant_strategy(), 0..7),
+            ),
+            1..16,
+        ),
+        (
+            prop::collection::vec(participant_strategy(), 0..5),
+            prop::collection::vec(participant_strategy(), 0..5),
+        ),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_var_birelation_set_replace_participants"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(mut entries, edits, query)| {
+            let mut relations = VarVarBirelationSet::new(entries.clone());
+            for (row, first, second) in edits {
+                let row = row % entries.len();
+                let previous = (entries[row].0.clone(), entries[row].1.clone());
+                relations.replace_participants(RelationId::from(row), &first, &second);
+                entries[row].0 = first;
+                entries[row].1 = second;
+                assert_var_var_birelation_rows(&relations, &entries, &previous, &query)?;
+                let before = relations.clone();
+                relations.replace_participants(
+                    RelationId::from(row),
+                    &entries[row].0,
+                    &entries[row].1,
+                );
+                prop_assert_eq!(&relations, &before);
+                assert_var_var_birelation_rows(&relations, &entries, &previous, &query)?;
+            }
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_var_var_birelation_set_replace_participants_local_edits() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..5),
+                prop::collection::vec(participant_strategy(), 0..7),
+                prop::collection::vec(any::<u8>(), 0..6),
+            ),
+            1..8,
+        ),
+        prop::collection::vec(
+            (
+                0u8..9,
+                0usize..7,
+                0usize..8,
+                participant_strategy(),
+                prop::collection::vec(participant_strategy(), 0..5),
+                prop::collection::vec(participant_strategy(), 0..7),
+            ),
+            1..24,
+        ),
+        (
+            prop::collection::vec(participant_strategy(), 0..5),
+            prop::collection::vec(participant_strategy(), 0..5),
+        ),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_var_birelation_set_replace_participants_local_edits"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(mut entries, edits, query)| {
+            let mut relations = VarVarBirelationSet::new(entries.clone());
+            let mut whole = relations.clone();
+            for (operation, row, position, participant, first, second) in edits {
+                let row = row % entries.len();
+                let id = RelationId::from(row);
+                let previous = (entries[row].0.clone(), entries[row].1.clone());
+                match operation {
+                    0 => {
+                        relations.replace_participants(id, &first, &second);
+                        entries[row].0 = first;
+                        entries[row].1 = second;
+                    }
+                    1 => {
+                        relations.replace_participants_1(id, &first);
+                        entries[row].0 = first;
+                    }
+                    2 => {
+                        relations.replace_participants_2(id, &second);
+                        entries[row].1 = second;
+                    }
+                    3 if !entries[row].0.is_empty() => {
+                        let position = position % entries[row].0.len();
+                        entries[row].0[position] = participant;
+                        relations.replace_participant_1(
+                            id,
+                            ParticipantPosition(position as u32),
+                            participant,
+                        );
+                    }
+                    4 if !entries[row].1.is_empty() => {
+                        let position = position % entries[row].1.len();
+                        entries[row].1[position] = participant;
+                        relations.replace_participant_2(
+                            id,
+                            ParticipantPosition(position as u32),
+                            participant,
+                        );
+                    }
+                    5 => {
+                        let position = position % (entries[row].1.len() + 1);
+                        let before = relations.clone();
+                        entries[row].1.insert(position, participant);
+                        relations.insert_participant_2(
+                            id,
+                            ParticipantPosition(position as u32),
+                            participant,
+                        );
+                        let mut restored = relations.clone();
+                        restored.remove_participant_2(id, ParticipantPosition(position as u32));
+                        prop_assert_eq!(&restored, &before);
+                        let mut before_entries = entries.clone();
+                        before_entries[row].1.remove(position);
+                        assert_var_var_birelation_rows(
+                            &restored,
+                            &before_entries,
+                            &previous,
+                            &query,
+                        )?;
+                    }
+                    6 if !entries[row].1.is_empty() => {
+                        let position = position % entries[row].1.len();
+                        entries[row].1.remove(position);
+                        relations.remove_participant_2(id, ParticipantPosition(position as u32));
+                    }
+                    7 => {
+                        let position = position % (entries[row].0.len() + 1);
+                        let before = relations.clone();
+                        entries[row].0.insert(position, participant);
+                        relations.insert_participant_1(
+                            id,
+                            ParticipantPosition(position as u32),
+                            participant,
+                        );
+                        let mut restored = relations.clone();
+                        restored.remove_participant_1(id, ParticipantPosition(position as u32));
+                        prop_assert_eq!(&restored, &before);
+                        let mut before_entries = entries.clone();
+                        before_entries[row].0.remove(position);
+                        assert_var_var_birelation_rows(
+                            &restored,
+                            &before_entries,
+                            &previous,
+                            &query,
+                        )?;
+                    }
+                    8 if !entries[row].0.is_empty() => {
+                        let position = position % entries[row].0.len();
+                        entries[row].0.remove(position);
+                        relations.remove_participant_1(id, ParticipantPosition(position as u32));
+                    }
+                    _ => continue,
+                }
+                whole.replace_participants(id, &entries[row].0, &entries[row].1);
+                prop_assert_eq!(&relations, &whole);
+                assert_var_var_birelation_rows(&relations, &entries, &previous, &query)?;
             }
             prop_assert_eq!(relations.into_entries(), entries);
             Ok(())
