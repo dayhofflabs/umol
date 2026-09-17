@@ -217,26 +217,26 @@ where
     ///
     /// Returns an empty slice when no participant references `node`. References in
     /// either factor contribute to the same union index.
-    pub fn incident(&self, node: NodeId) -> &[RelationId] {
-        self.incidence.incident(node)
+    pub fn incident_to_node(&self, node: NodeId) -> &[RelationId] {
+        self.incidence.incident_to_node(node)
     }
 
     /// Relations referencing `edge`, once each in ascending relation-id order.
     ///
     /// Returns an empty slice when no participant references `edge`. References in
     /// either factor contribute to the same union index.
-    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
-        self.incidence.incident_edge(edge)
+    pub fn incident_to_edge(&self, edge: EdgeId) -> &[RelationId] {
+        self.incidence.incident_to_edge(edge)
     }
 
     /// Whether any participant in either factor references `node`.
-    pub fn has_incident(&self, node: NodeId) -> bool {
-        self.incidence.has_incident(node)
+    pub fn has_incident_to_node(&self, node: NodeId) -> bool {
+        self.incidence.has_incident_to_node(node)
     }
 
     /// Whether any participant in either factor references `edge`.
-    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
-        self.incidence.has_incident_edge(edge)
+    pub fn has_incident_to_edge(&self, edge: EdgeId) -> bool {
+        self.incidence.has_incident_to_edge(edge)
     }
 
     /// Find the first relation incident with `node` whose factors match the queries.
@@ -245,21 +245,26 @@ where
     /// payloads. Returns the smallest matching relation id, or `None` if the incidence
     /// list contains no match. Duplicate matching rows are permitted. An unreferenced
     /// anchor yields `None`, even if a matching row exists elsewhere.
-    pub fn coincident(&self, node: NodeId, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
-        self.coincident_in(self.incident(node), query_1, query_2)
+    pub fn coincident_to_node(
+        &self,
+        node: NodeId,
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<RelationId> {
+        self.coincident_among(self.incident_to_node(node), query_1, query_2)
     }
 
     /// Find the first relation incident with `edge` whose factors match the queries.
     ///
-    /// Uses the same multiset comparison and first-match rule as [`Self::coincident`].
+    /// Uses the same multiset comparison and first-match rule as [`Self::coincident_to_node`].
     /// Returns `None` when the edge incidence list contains no matching row.
-    pub fn coincident_edge(
+    pub fn coincident_to_edge(
         &self,
         edge: EdgeId,
         query_1: &[L1],
         query_2: &[L2],
     ) -> Option<RelationId> {
-        self.coincident_in(self.incident_edge(edge), query_1, query_2)
+        self.coincident_among(self.incident_to_edge(edge), query_1, query_2)
     }
 
     /// Whether relation `id` matches the query multisets.
@@ -271,11 +276,11 @@ where
     ///
     /// Panics if `id` is outside the set.
     pub fn is_coincident(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
-        self.coincident_in(&[id], query_1, query_2).is_some()
+        self.coincident_among(&[id], query_1, query_2).is_some()
     }
 
     /// Return the first candidate whose stored participant multisets match both queries.
-    fn coincident_in(
+    fn coincident_among(
         &self,
         candidates: &[RelationId],
         query_1: &[L1],
@@ -303,7 +308,7 @@ where
     ///
     /// Panics if `id` is outside the set or `order` is not a permutation of the selected
     /// factor's positions (wrong length, repeated position, or out-of-range position).
-    pub fn permute_1_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+    pub fn permute_participants_1(&mut self, id: RelationId, order: &[ParticipantPosition]) {
         let start = self.f1_offsets[id.index()] as usize;
         let end = self.f1_offsets[id.index() + 1] as usize;
         permute_participants(&mut self.participants_1[start..end], order);
@@ -321,7 +326,7 @@ where
     ///
     /// Panics if `id` is outside the set or `order` is not a permutation of the selected
     /// factor's positions (wrong length, repeated position, or out-of-range position).
-    pub fn permute_2_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+    pub fn permute_participants_2(&mut self, id: RelationId, order: &[ParticipantPosition]) {
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         permute_participants(&mut self.participants_2[start..end], order);

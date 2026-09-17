@@ -232,8 +232,11 @@ fn test_fixed_relation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
-                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                prop_assert_eq!(relations.incident_to_node(NodeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_to_node(NodeId(key)),
+                    !expected.is_empty()
+                );
                 let expected: Vec<_> = entries
                     .iter()
                     .enumerate()
@@ -244,9 +247,9 @@ fn test_fixed_relation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &expected);
                 prop_assert_eq!(
-                    relations.has_incident_edge(EdgeId(key)),
+                    relations.has_incident_to_edge(EdgeId(key)),
                     !expected.is_empty()
                 );
             }
@@ -275,7 +278,7 @@ fn test_fixed_relation_set_new_incidence() {
                                 && same_multiset(participants, &query)
                         })
                         .map(|index| RelationId(index as u32));
-                    prop_assert_eq!(relations.coincident(NodeId(key), &query), expected);
+                    prop_assert_eq!(relations.coincident_to_node(NodeId(key), &query), expected);
                     let expected = entries
                         .iter()
                         .position(|(participants, _)| {
@@ -285,7 +288,7 @@ fn test_fixed_relation_set_new_incidence() {
                                 && same_multiset(participants, &query)
                         })
                         .map(|index| RelationId(index as u32));
-                    prop_assert_eq!(relations.coincident_edge(EdgeId(key), &query), expected);
+                    prop_assert_eq!(relations.coincident_to_edge(EdgeId(key), &query), expected);
                 }
             }
             prop_assert_eq!(relations.into_entries(), entries);
@@ -346,10 +349,16 @@ fn assert_fixed_relation_rows(
             .filter(|(_, (row, _))| row.iter().any(|p| p.edge == Some(EdgeId(key))))
             .map(|(index, _)| RelationId::from(index))
             .collect();
-        prop_assert_eq!(relations.incident(NodeId(key)), &nodes);
-        prop_assert_eq!(relations.has_incident(NodeId(key)), !nodes.is_empty());
-        prop_assert_eq!(relations.incident_edge(EdgeId(key)), &edges);
-        prop_assert_eq!(relations.has_incident_edge(EdgeId(key)), !edges.is_empty());
+        prop_assert_eq!(relations.incident_to_node(NodeId(key)), &nodes);
+        prop_assert_eq!(
+            relations.has_incident_to_node(NodeId(key)),
+            !nodes.is_empty()
+        );
+        prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &edges);
+        prop_assert_eq!(
+            relations.has_incident_to_edge(EdgeId(key)),
+            !edges.is_empty()
+        );
         for query in &queries {
             let node_hit = nodes
                 .iter()
@@ -359,8 +368,8 @@ fn assert_fixed_relation_rows(
                 .iter()
                 .copied()
                 .find(|id| same_multiset(&entries[id.index()].0, query));
-            prop_assert_eq!(relations.coincident(NodeId(key), query), node_hit);
-            prop_assert_eq!(relations.coincident_edge(EdgeId(key), query), edge_hit);
+            prop_assert_eq!(relations.coincident_to_node(NodeId(key), query), node_hit);
+            prop_assert_eq!(relations.coincident_to_edge(EdgeId(key), query), edge_hit);
         }
     }
     Ok(())
@@ -484,8 +493,11 @@ fn test_var_relation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
-                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                prop_assert_eq!(relations.incident_to_node(NodeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_to_node(NodeId(key)),
+                    !expected.is_empty()
+                );
                 let expected: Vec<_> = entries
                     .iter()
                     .enumerate()
@@ -496,9 +508,9 @@ fn test_var_relation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &expected);
                 prop_assert_eq!(
-                    relations.has_incident_edge(EdgeId(key)),
+                    relations.has_incident_to_edge(EdgeId(key)),
                     !expected.is_empty()
                 );
             }
@@ -527,7 +539,7 @@ fn test_var_relation_set_new_incidence() {
                                 && same_multiset(participants, &query)
                         })
                         .map(|index| RelationId(index as u32));
-                    prop_assert_eq!(relations.coincident(NodeId(key), &query), expected);
+                    prop_assert_eq!(relations.coincident_to_node(NodeId(key), &query), expected);
                     let expected = entries
                         .iter()
                         .position(|(participants, _)| {
@@ -537,7 +549,7 @@ fn test_var_relation_set_new_incidence() {
                                 && same_multiset(participants, &query)
                         })
                         .map(|index| RelationId(index as u32));
-                    prop_assert_eq!(relations.coincident_edge(EdgeId(key), &query), expected);
+                    prop_assert_eq!(relations.coincident_to_edge(EdgeId(key), &query), expected);
                 }
             }
             prop_assert_eq!(relations.into_entries(), entries);
@@ -600,10 +612,16 @@ fn assert_var_relation_rows(
             .filter(|(_, (row, _))| row.iter().any(|p| p.edge == Some(EdgeId(key))))
             .map(|(index, _)| RelationId::from(index))
             .collect();
-        prop_assert_eq!(relations.incident(NodeId(key)), &nodes);
-        prop_assert_eq!(relations.has_incident(NodeId(key)), !nodes.is_empty());
-        prop_assert_eq!(relations.incident_edge(EdgeId(key)), &edges);
-        prop_assert_eq!(relations.has_incident_edge(EdgeId(key)), !edges.is_empty());
+        prop_assert_eq!(relations.incident_to_node(NodeId(key)), &nodes);
+        prop_assert_eq!(
+            relations.has_incident_to_node(NodeId(key)),
+            !nodes.is_empty()
+        );
+        prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &edges);
+        prop_assert_eq!(
+            relations.has_incident_to_edge(EdgeId(key)),
+            !edges.is_empty()
+        );
         for query in &queries {
             let node_hit = nodes
                 .iter()
@@ -613,8 +631,8 @@ fn assert_var_relation_rows(
                 .iter()
                 .copied()
                 .find(|id| same_multiset(&entries[id.index()].0, query));
-            prop_assert_eq!(relations.coincident(NodeId(key), query), node_hit);
-            prop_assert_eq!(relations.coincident_edge(EdgeId(key), query), edge_hit);
+            prop_assert_eq!(relations.coincident_to_node(NodeId(key), query), node_hit);
+            prop_assert_eq!(relations.coincident_to_edge(EdgeId(key), query), edge_hit);
         }
     }
     Ok(())
@@ -806,8 +824,11 @@ fn test_fixed_fixed_birelation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
-                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                prop_assert_eq!(relations.incident_to_node(NodeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_to_node(NodeId(key)),
+                    !expected.is_empty()
+                );
                 let expected: Vec<_> = entries
                     .iter()
                     .enumerate()
@@ -819,9 +840,9 @@ fn test_fixed_fixed_birelation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &expected);
                 prop_assert_eq!(
-                    relations.has_incident_edge(EdgeId(key)),
+                    relations.has_incident_to_edge(EdgeId(key)),
                     !expected.is_empty()
                 );
             }
@@ -862,7 +883,7 @@ fn test_fixed_fixed_birelation_set_new_incidence() {
                         })
                         .map(|index| RelationId(index as u32));
                     prop_assert_eq!(
-                        relations.coincident(NodeId(key), &query_1, &query_2),
+                        relations.coincident_to_node(NodeId(key), &query_1, &query_2),
                         expected
                     );
                     let expected = entries
@@ -877,7 +898,7 @@ fn test_fixed_fixed_birelation_set_new_incidence() {
                         })
                         .map(|index| RelationId(index as u32));
                     prop_assert_eq!(
-                        relations.coincident_edge(EdgeId(key), &query_1, &query_2),
+                        relations.coincident_to_edge(EdgeId(key), &query_1, &query_2),
                         expected
                     );
                 }
@@ -949,10 +970,16 @@ fn assert_fixed_fixed_birelation_rows(
             .filter(|(_, (a, b, _))| a.iter().chain(b).any(|p| p.edge == Some(EdgeId(key))))
             .map(|(index, _)| RelationId::from(index))
             .collect();
-        prop_assert_eq!(relations.incident(NodeId(key)), &nodes);
-        prop_assert_eq!(relations.has_incident(NodeId(key)), !nodes.is_empty());
-        prop_assert_eq!(relations.incident_edge(EdgeId(key)), &edges);
-        prop_assert_eq!(relations.has_incident_edge(EdgeId(key)), !edges.is_empty());
+        prop_assert_eq!(relations.incident_to_node(NodeId(key)), &nodes);
+        prop_assert_eq!(
+            relations.has_incident_to_node(NodeId(key)),
+            !nodes.is_empty()
+        );
+        prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &edges);
+        prop_assert_eq!(
+            relations.has_incident_to_edge(EdgeId(key)),
+            !edges.is_empty()
+        );
         for (query_1, query_2) in &queries {
             let node_hit = nodes.iter().copied().find(|id| {
                 same_multiset(&entries[id.index()].0, query_1)
@@ -963,11 +990,11 @@ fn assert_fixed_fixed_birelation_rows(
                     && same_multiset(&entries[id.index()].1, query_2)
             });
             prop_assert_eq!(
-                relations.coincident(NodeId(key), query_1, query_2),
+                relations.coincident_to_node(NodeId(key), query_1, query_2),
                 node_hit
             );
             prop_assert_eq!(
-                relations.coincident_edge(EdgeId(key), query_1, query_2),
+                relations.coincident_to_edge(EdgeId(key), query_1, query_2),
                 edge_hit
             );
         }
@@ -1157,8 +1184,11 @@ fn test_fixed_var_birelation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
-                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                prop_assert_eq!(relations.incident_to_node(NodeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_to_node(NodeId(key)),
+                    !expected.is_empty()
+                );
                 let expected: Vec<_> = entries
                     .iter()
                     .enumerate()
@@ -1170,9 +1200,9 @@ fn test_fixed_var_birelation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &expected);
                 prop_assert_eq!(
-                    relations.has_incident_edge(EdgeId(key)),
+                    relations.has_incident_to_edge(EdgeId(key)),
                     !expected.is_empty()
                 );
             }
@@ -1213,7 +1243,7 @@ fn test_fixed_var_birelation_set_new_incidence() {
                         })
                         .map(|index| RelationId(index as u32));
                     prop_assert_eq!(
-                        relations.coincident(NodeId(key), &query_1, &query_2),
+                        relations.coincident_to_node(NodeId(key), &query_1, &query_2),
                         expected
                     );
                     let expected = entries
@@ -1228,7 +1258,7 @@ fn test_fixed_var_birelation_set_new_incidence() {
                         })
                         .map(|index| RelationId(index as u32));
                     prop_assert_eq!(
-                        relations.coincident_edge(EdgeId(key), &query_1, &query_2),
+                        relations.coincident_to_edge(EdgeId(key), &query_1, &query_2),
                         expected
                     );
                 }
@@ -1302,10 +1332,16 @@ fn assert_fixed_var_birelation_rows(
             .filter(|(_, (a, b, _))| a.iter().chain(b).any(|p| p.edge == Some(EdgeId(key))))
             .map(|(index, _)| RelationId::from(index))
             .collect();
-        prop_assert_eq!(relations.incident(NodeId(key)), &nodes);
-        prop_assert_eq!(relations.has_incident(NodeId(key)), !nodes.is_empty());
-        prop_assert_eq!(relations.incident_edge(EdgeId(key)), &edges);
-        prop_assert_eq!(relations.has_incident_edge(EdgeId(key)), !edges.is_empty());
+        prop_assert_eq!(relations.incident_to_node(NodeId(key)), &nodes);
+        prop_assert_eq!(
+            relations.has_incident_to_node(NodeId(key)),
+            !nodes.is_empty()
+        );
+        prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &edges);
+        prop_assert_eq!(
+            relations.has_incident_to_edge(EdgeId(key)),
+            !edges.is_empty()
+        );
         for (query_1, query_2) in &queries {
             let node_hit = nodes.iter().copied().find(|id| {
                 same_multiset(&entries[id.index()].0, query_1)
@@ -1316,11 +1352,11 @@ fn assert_fixed_var_birelation_rows(
                     && same_multiset(&entries[id.index()].1, query_2)
             });
             prop_assert_eq!(
-                relations.coincident(NodeId(key), query_1, query_2),
+                relations.coincident_to_node(NodeId(key), query_1, query_2),
                 node_hit
             );
             prop_assert_eq!(
-                relations.coincident_edge(EdgeId(key), query_1, query_2),
+                relations.coincident_to_edge(EdgeId(key), query_1, query_2),
                 edge_hit
             );
         }
@@ -1545,8 +1581,11 @@ fn test_var_var_birelation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident(NodeId(key)), &expected);
-                prop_assert_eq!(relations.has_incident(NodeId(key)), !expected.is_empty());
+                prop_assert_eq!(relations.incident_to_node(NodeId(key)), &expected);
+                prop_assert_eq!(
+                    relations.has_incident_to_node(NodeId(key)),
+                    !expected.is_empty()
+                );
                 let expected: Vec<_> = entries
                     .iter()
                     .enumerate()
@@ -1558,9 +1597,9 @@ fn test_var_var_birelation_set_new_incidence() {
                     })
                     .map(|(index, _)| RelationId(index as u32))
                     .collect();
-                prop_assert_eq!(relations.incident_edge(EdgeId(key)), &expected);
+                prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &expected);
                 prop_assert_eq!(
-                    relations.has_incident_edge(EdgeId(key)),
+                    relations.has_incident_to_edge(EdgeId(key)),
                     !expected.is_empty()
                 );
             }
@@ -1601,7 +1640,7 @@ fn test_var_var_birelation_set_new_incidence() {
                         })
                         .map(|index| RelationId(index as u32));
                     prop_assert_eq!(
-                        relations.coincident(NodeId(key), &query_1, &query_2),
+                        relations.coincident_to_node(NodeId(key), &query_1, &query_2),
                         expected
                     );
                     let expected = entries
@@ -1616,7 +1655,7 @@ fn test_var_var_birelation_set_new_incidence() {
                         })
                         .map(|index| RelationId(index as u32));
                     prop_assert_eq!(
-                        relations.coincident_edge(EdgeId(key), &query_1, &query_2),
+                        relations.coincident_to_edge(EdgeId(key), &query_1, &query_2),
                         expected
                     );
                 }
@@ -1692,10 +1731,16 @@ fn assert_var_var_birelation_rows(
             .filter(|(_, (a, b, _))| a.iter().chain(b).any(|p| p.edge == Some(EdgeId(key))))
             .map(|(index, _)| RelationId::from(index))
             .collect();
-        prop_assert_eq!(relations.incident(NodeId(key)), &nodes);
-        prop_assert_eq!(relations.has_incident(NodeId(key)), !nodes.is_empty());
-        prop_assert_eq!(relations.incident_edge(EdgeId(key)), &edges);
-        prop_assert_eq!(relations.has_incident_edge(EdgeId(key)), !edges.is_empty());
+        prop_assert_eq!(relations.incident_to_node(NodeId(key)), &nodes);
+        prop_assert_eq!(
+            relations.has_incident_to_node(NodeId(key)),
+            !nodes.is_empty()
+        );
+        prop_assert_eq!(relations.incident_to_edge(EdgeId(key)), &edges);
+        prop_assert_eq!(
+            relations.has_incident_to_edge(EdgeId(key)),
+            !edges.is_empty()
+        );
         for (query_1, query_2) in &queries {
             let node_hit = nodes.iter().copied().find(|id| {
                 same_multiset(&entries[id.index()].0, query_1)
@@ -1706,11 +1751,11 @@ fn assert_var_var_birelation_rows(
                     && same_multiset(&entries[id.index()].1, query_2)
             });
             prop_assert_eq!(
-                relations.coincident(NodeId(key), query_1, query_2),
+                relations.coincident_to_node(NodeId(key), query_1, query_2),
                 node_hit
             );
             prop_assert_eq!(
-                relations.coincident_edge(EdgeId(key), query_1, query_2),
+                relations.coincident_to_edge(EdgeId(key), query_1, query_2),
                 edge_hit
             );
         }

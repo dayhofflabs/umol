@@ -891,8 +891,8 @@ Comparing two entries therefore has three independent parts, and a site chooses 
 - **identity** — do the two hold the same structured participants under the entity kind's factor
   semantics. Each ordinary factor is compared as a multiset; stereo-bond endpoint blocks may be
   exchanged only as complete blocks. Graph-core coincidence supplies ordinary factor comparison
-  through `coincident`, `coincident_edge`, `is_coincident`, and `participants_match`; graph IR adds
-  the entity-kind structure that storage alone cannot express.
+  through `coincident_to_node`, `coincident_to_edge`, `is_coincident`, and `participants_match`;
+  graph IR adds the entity-kind structure that storage alone cannot express.
 - **frame transport** — restating one side's payload in the other's frame. Every entity frame has
   distinct complete participant values, so equal structured incidence determines one action in the
   entity kind's group. `DynPermutation::between` or `Permutation::between` derives that action, and

@@ -71,13 +71,13 @@ impl NoncovalentBonds {
         atom: AtomId,
     ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + '_ {
         self.0
-            .incident(NodeId::from(atom))
+            .incident_to_node(NodeId::from(atom))
             .iter()
             .map(|&id| NoncovalentBondId::from(id))
     }
 
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.0.has_incident(NodeId::from(atom))
+        self.0.has_incident_to_node(NodeId::from(atom))
     }
 
     pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], NoncovalentBondForm)> {
@@ -127,7 +127,11 @@ impl NoncovalentBonds {
             .pushout(
                 &right.map(correspondence).0,
                 // Either endpoint anchors a noncovalent bond: the node index.
-                |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
+                |set, atoms| {
+                    atoms
+                        .first()
+                        .and_then(|&node| set.coincident_to_node(node, atoms))
+                },
                 |(_, left), (_, right)| {
                     // The payload is frame-invariant, so the pair's presentation cannot affect it.
                     right.clone().meet(left)
@@ -151,7 +155,7 @@ impl NoncovalentBonds {
         // A noncovalent bond anchors on either endpoint atom; the first narrows as well as the
         // second.
         self.0
-            .coincident(
+            .coincident_to_node(
                 NodeId::from(first),
                 &[NodeId::from(first), NodeId::from(second)],
             )
@@ -179,7 +183,7 @@ impl FrameTransport for NoncovalentBonds {
                 return None;
             }
             *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
-            set.permute_with(relation_id, &participant_order(action));
+            set.permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -214,7 +218,7 @@ pub(crate) fn reframe_noncovalent_bonds_with(
             .reframe_by(&action)
             .ok_or(Contradiction)?
             .normalize()?;
-        set.permute_with(relation_id, &participant_order(&action));
+        set.permute_participants(relation_id, &participant_order(&action));
         visit(id, &action);
     }
     Ok(noncovalent_bonds)
@@ -304,7 +308,8 @@ impl FrameTransport for NoncovalentBondSpans {
                 return None;
             }
             *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
-            self.0.permute_with(relation_id, &participant_order(action));
+            self.0
+                .permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -341,7 +346,7 @@ pub(crate) fn reframe_noncovalent_bond_spans_with(
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         noncovalent_bonds
             .0
-            .permute_with(relation_id, &participant_order(&action));
+            .permute_participants(relation_id, &participant_order(&action));
         visit(id, &action);
     }
     Ok(noncovalent_bonds)
@@ -786,7 +791,7 @@ mod tests {
             NoncovalentBondSpans::new(vec![([AtomId(2), AtomId(5)], span.clone())]);
         spans
             .0
-            .permute_with(RelationId(0), &[ParticipantPosition(1), ParticipantPosition(0)]);
+            .permute_participants(RelationId(0), &[ParticipantPosition(1), ParticipantPosition(0)]);
 
         let source = spans.clone();
         let (reframed, actions) = spans.tracked_reframe().expect("the forms are satisfiable");
@@ -841,7 +846,7 @@ mod tests {
             [AtomId(2), AtomId(5)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )]);
-        Arc::make_mut(&mut bonds.0).permute_with(
+        Arc::make_mut(&mut bonds.0).permute_participants(
             RelationId(0),
             &[ParticipantPosition(1), ParticipantPosition(0)],
         );

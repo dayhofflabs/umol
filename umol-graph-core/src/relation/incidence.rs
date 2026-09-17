@@ -66,26 +66,26 @@ impl Incidence {
     }
 
     /// Rows referencing `node`, in ascending order; empty if absent.
-    pub(super) fn incident(&self, node: NodeId) -> &[RelationId] {
+    pub(super) fn incident_to_node(&self, node: NodeId) -> &[RelationId] {
         let start = self.node_keys.partition_point(|n| *n < node);
         let end = start + self.node_keys[start..].partition_point(|n| *n <= node);
         &self.node_rels[start..end]
     }
 
     /// Rows referencing `edge`, in ascending order; empty if absent.
-    pub(super) fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
+    pub(super) fn incident_to_edge(&self, edge: EdgeId) -> &[RelationId] {
         let start = self.edge_keys.partition_point(|e| *e < edge);
         let end = start + self.edge_keys[start..].partition_point(|e| *e <= edge);
         &self.edge_rels[start..end]
     }
 
     /// Whether any row references `node`.
-    pub(super) fn has_incident(&self, node: NodeId) -> bool {
+    pub(super) fn has_incident_to_node(&self, node: NodeId) -> bool {
         self.node_keys.binary_search(&node).is_ok()
     }
 
     /// Whether any row references `edge`.
-    pub(super) fn has_incident_edge(&self, edge: EdgeId) -> bool {
+    pub(super) fn has_incident_to_edge(&self, edge: EdgeId) -> bool {
         self.edge_keys.binary_search(&edge).is_ok()
     }
 }

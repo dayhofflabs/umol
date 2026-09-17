@@ -84,13 +84,13 @@ impl DativeBonds {
     /// Ids of the dative bonds `atom` takes part in, as acceptor or donor.
     pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = DativeBondId> + '_ {
         self.0
-            .incident(NodeId::from(atom))
+            .incident_to_node(NodeId::from(atom))
             .iter()
             .map(|&id| DativeBondId::from(id))
     }
 
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.0.has_incident(NodeId::from(atom))
+        self.0.has_incident_to_node(NodeId::from(atom))
     }
 
     pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, DativeBondForm)> {
@@ -161,7 +161,7 @@ impl DativeBonds {
                 |set, acceptor, donors| {
                     acceptor
                         .first()
-                        .and_then(|&node| set.coincident(node, acceptor, donors))
+                        .and_then(|&node| set.coincident_to_node(node, acceptor, donors))
                 },
                 |(_, _, left), (_, _, right)| {
                     // The payload is frame-invariant, so the donor presentation cannot affect it.
@@ -185,7 +185,7 @@ impl DativeBonds {
         // The acceptor is a single atom, so it is the sharpest node anchor available.
         let donors: Vec<NodeId> = donors.iter().map(|&atom| NodeId::from(atom)).collect();
         self.0
-            .coincident(NodeId::from(acceptor), &[NodeId::from(acceptor)], &donors)
+            .coincident_to_node(NodeId::from(acceptor), &[NodeId::from(acceptor)], &donors)
             .map(DativeBondId::from)
     }
 }
@@ -210,7 +210,7 @@ impl FrameTransport for DativeBonds {
                 return None;
             }
             *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
-            set.permute_2_with(relation_id, &participant_order(action));
+            set.permute_participants_2(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -249,7 +249,7 @@ pub(crate) fn reframe_dative_bonds_with(
             .reframe_by(&action)
             .ok_or(Contradiction)?
             .normalize()?;
-        set.permute_2_with(relation_id, &participant_order(&action));
+        set.permute_participants_2(relation_id, &participant_order(&action));
         visit(id, &action);
     }
     Ok(dative_bonds)
@@ -359,7 +359,7 @@ impl FrameTransport for DativeBondSpans {
             }
             *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
             self.0
-                .permute_2_with(relation_id, &participant_order(action));
+                .permute_participants_2(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -398,7 +398,7 @@ pub(crate) fn reframe_dative_bond_spans_with(
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         dative_bonds
             .0
-            .permute_2_with(relation_id, &participant_order(&action));
+            .permute_participants_2(relation_id, &participant_order(&action));
         visit(id, &action);
     }
     Ok(dative_bonds)
@@ -757,7 +757,7 @@ mod tests {
             AtomId(0),
             span.clone(),
         )]);
-        spans.0.permute_2_with(
+        spans.0.permute_participants_2(
             RelationId(0),
             &[
                 ParticipantPosition(2),
@@ -825,7 +825,7 @@ mod tests {
             AtomId(0),
             DativeBondForm::from_order(1),
         )]);
-        Arc::make_mut(&mut bonds.0).permute_2_with(
+        Arc::make_mut(&mut bonds.0).permute_participants_2(
             RelationId(0),
             &[
                 ParticipantPosition(2),

@@ -59,9 +59,9 @@ fn fixed(c: &mut Criterion) {
             } else {
                 vec![id]
             };
-            assert_eq!(relations.incident(node), expected_incidence);
-            assert_eq!(relations.coincident(node, &query_1), Some(id));
-            assert_eq!(relations.coincident(node, &missing), None);
+            assert_eq!(relations.incident_to_node(node), expected_incidence);
+            assert_eq!(relations.coincident_to_node(node, &query_1), Some(id));
+            assert_eq!(relations.coincident_to_node(node, &missing), None);
             group.bench_function(BenchmarkId::new("new", &fixture), |b| {
                 b.iter_batched(
                     || entries.clone(),
@@ -69,20 +69,24 @@ fn fixed(c: &mut Criterion) {
                     BatchSize::LargeInput,
                 )
             });
-            group.bench_function(BenchmarkId::new("incident", &fixture), |b| {
-                b.iter(|| black_box(relations.incident(black_box(node))))
+            group.bench_function(BenchmarkId::new("incident_to_node", &fixture), |b| {
+                b.iter(|| black_box(relations.incident_to_node(black_box(node))))
             });
-            group.bench_function(BenchmarkId::new("coincident_hit", &fixture), |b| {
-                b.iter(|| black_box(relations.coincident(black_box(node), black_box(&query_1))))
+            group.bench_function(BenchmarkId::new("coincident_to_node_hit", &fixture), |b| {
+                b.iter(|| {
+                    black_box(relations.coincident_to_node(black_box(node), black_box(&query_1)))
+                })
             });
-            group.bench_function(BenchmarkId::new("coincident_miss", &fixture), |b| {
-                b.iter(|| black_box(relations.coincident(black_box(node), black_box(&missing))))
+            group.bench_function(BenchmarkId::new("coincident_to_node_miss", &fixture), |b| {
+                b.iter(|| {
+                    black_box(relations.coincident_to_node(black_box(node), black_box(&missing)))
+                })
             });
-            group.bench_function(BenchmarkId::new("permute_with", &fixture), |b| {
+            group.bench_function(BenchmarkId::new("permute_participants", &fixture), |b| {
                 b.iter_batched_ref(
                     || relations.clone(),
                     |relations| {
-                        relations.permute_with(black_box(id), black_box(&order_1));
+                        relations.permute_participants(black_box(id), black_box(&order_1));
                         black_box(relations.participants(id));
                     },
                     BatchSize::LargeInput,
@@ -110,7 +114,7 @@ fn fixed(c: &mut Criterion) {
                         .filter(|(_, (parts, _))| parts.contains(&node))
                         .map(|(i, _)| RelationId(i as u32))
                         .collect();
-                    assert_eq!(replaced.incident(node), incidence);
+                    assert_eq!(replaced.incident_to_node(node), incidence);
                 }
                 assert_eq!(replaced.into_entries(), expected);
                 let mut replaced = relations.clone();
@@ -124,7 +128,7 @@ fn fixed(c: &mut Criterion) {
                         .filter(|(_, (parts, _))| parts.contains(&node))
                         .map(|(i, _)| RelationId(i as u32))
                         .collect();
-                    assert_eq!(replaced.incident(node), incidence);
+                    assert_eq!(replaced.incident_to_node(node), incidence);
                 }
                 assert_eq!(replaced.into_entries(), expected);
                 group.bench_function(BenchmarkId::new("replace_participants", &fixture), |b| {
@@ -197,9 +201,9 @@ fn var(c: &mut Criterion) {
                 } else {
                     vec![id]
                 };
-                assert_eq!(relations.incident(node), expected_incidence);
-                assert_eq!(relations.coincident(node, &query_1), Some(id));
-                assert_eq!(relations.coincident(node, &missing), None);
+                assert_eq!(relations.incident_to_node(node), expected_incidence);
+                assert_eq!(relations.coincident_to_node(node, &query_1), Some(id));
+                assert_eq!(relations.coincident_to_node(node, &missing), None);
                 group.bench_function(BenchmarkId::new("new", &fixture), |b| {
                     b.iter_batched(
                         || entries.clone(),
@@ -207,20 +211,28 @@ fn var(c: &mut Criterion) {
                         BatchSize::LargeInput,
                     )
                 });
-                group.bench_function(BenchmarkId::new("incident", &fixture), |b| {
-                    b.iter(|| black_box(relations.incident(black_box(node))))
+                group.bench_function(BenchmarkId::new("incident_to_node", &fixture), |b| {
+                    b.iter(|| black_box(relations.incident_to_node(black_box(node))))
                 });
-                group.bench_function(BenchmarkId::new("coincident_hit", &fixture), |b| {
-                    b.iter(|| black_box(relations.coincident(black_box(node), black_box(&query_1))))
+                group.bench_function(BenchmarkId::new("coincident_to_node_hit", &fixture), |b| {
+                    b.iter(|| {
+                        black_box(
+                            relations.coincident_to_node(black_box(node), black_box(&query_1)),
+                        )
+                    })
                 });
-                group.bench_function(BenchmarkId::new("coincident_miss", &fixture), |b| {
-                    b.iter(|| black_box(relations.coincident(black_box(node), black_box(&missing))))
+                group.bench_function(BenchmarkId::new("coincident_to_node_miss", &fixture), |b| {
+                    b.iter(|| {
+                        black_box(
+                            relations.coincident_to_node(black_box(node), black_box(&missing)),
+                        )
+                    })
                 });
-                group.bench_function(BenchmarkId::new("permute_with", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("permute_participants", &fixture), |b| {
                     b.iter_batched_ref(
                         || relations.clone(),
                         |relations| {
-                            relations.permute_with(black_box(id), black_box(&order_1));
+                            relations.permute_participants(black_box(id), black_box(&order_1));
                             black_box(relations.participants(id));
                         },
                         BatchSize::LargeInput,
@@ -250,7 +262,7 @@ fn var(c: &mut Criterion) {
                                 .filter(|(_, (parts, _))| parts.contains(node))
                                 .map(|(i, _)| RelationId::from(i))
                                 .collect();
-                            assert_eq!(replaced.incident(*node), incidence);
+                            assert_eq!(replaced.incident_to_node(*node), incidence);
                         }
                         assert_eq!(replaced.into_entries(), expected);
                         group.bench_function(
@@ -299,7 +311,7 @@ fn var(c: &mut Criterion) {
                                 .filter(|(_, (parts, _))| parts.contains(&node))
                                 .map(|(i, _)| RelationId::from(i))
                                 .collect();
-                            assert_eq!(changed.incident(node), incidence);
+                            assert_eq!(changed.incident_to_node(node), incidence);
                         }
                         assert_eq!(changed.into_entries(), expected);
                     }
@@ -403,15 +415,18 @@ fn fixed_fixed(c: &mut Criterion) {
             } else {
                 vec![id]
             };
-            assert_eq!(relations.incident(node), expected_incidence);
-            assert_eq!(relations.coincident(node, &query_1, &query_2), Some(id));
-            assert_eq!(relations.coincident(node, &missing, &query_2), None);
-            assert_eq!(relations.incident_edge(edge), expected_incidence);
+            assert_eq!(relations.incident_to_node(node), expected_incidence);
             assert_eq!(
-                relations.coincident_edge(edge, &query_1, &query_2),
+                relations.coincident_to_node(node, &query_1, &query_2),
                 Some(id)
             );
-            assert_eq!(relations.coincident_edge(edge, &missing, &query_2), None);
+            assert_eq!(relations.coincident_to_node(node, &missing, &query_2), None);
+            assert_eq!(relations.incident_to_edge(edge), expected_incidence);
+            assert_eq!(
+                relations.coincident_to_edge(edge, &query_1, &query_2),
+                Some(id)
+            );
+            assert_eq!(relations.coincident_to_edge(edge, &missing, &query_2), None);
             group.bench_function(BenchmarkId::new("new", &fixture), |b| {
                 b.iter_batched(
                     || entries.clone(),
@@ -419,63 +434,63 @@ fn fixed_fixed(c: &mut Criterion) {
                     BatchSize::LargeInput,
                 )
             });
-            group.bench_function(BenchmarkId::new("incident", &fixture), |b| {
-                b.iter(|| black_box(relations.incident(black_box(node))))
+            group.bench_function(BenchmarkId::new("incident_to_node", &fixture), |b| {
+                b.iter(|| black_box(relations.incident_to_node(black_box(node))))
             });
-            group.bench_function(BenchmarkId::new("coincident_hit", &fixture), |b| {
+            group.bench_function(BenchmarkId::new("coincident_to_node_hit", &fixture), |b| {
                 b.iter(|| {
-                    black_box(relations.coincident(
+                    black_box(relations.coincident_to_node(
                         black_box(node),
                         black_box(&query_1),
                         black_box(&query_2),
                     ))
                 })
             });
-            group.bench_function(BenchmarkId::new("coincident_miss", &fixture), |b| {
+            group.bench_function(BenchmarkId::new("coincident_to_node_miss", &fixture), |b| {
                 b.iter(|| {
-                    black_box(relations.coincident(
+                    black_box(relations.coincident_to_node(
                         black_box(node),
                         black_box(&missing),
                         black_box(&query_2),
                     ))
                 })
             });
-            group.bench_function(BenchmarkId::new("incident_edge", &fixture), |b| {
-                b.iter(|| black_box(relations.incident_edge(black_box(edge))))
+            group.bench_function(BenchmarkId::new("incident_to_edge", &fixture), |b| {
+                b.iter(|| black_box(relations.incident_to_edge(black_box(edge))))
             });
-            group.bench_function(BenchmarkId::new("coincident_edge_hit", &fixture), |b| {
+            group.bench_function(BenchmarkId::new("coincident_to_edge_hit", &fixture), |b| {
                 b.iter(|| {
-                    black_box(relations.coincident_edge(
+                    black_box(relations.coincident_to_edge(
                         black_box(edge),
                         black_box(&query_1),
                         black_box(&query_2),
                     ))
                 })
             });
-            group.bench_function(BenchmarkId::new("coincident_edge_miss", &fixture), |b| {
+            group.bench_function(BenchmarkId::new("coincident_to_edge_miss", &fixture), |b| {
                 b.iter(|| {
-                    black_box(relations.coincident_edge(
+                    black_box(relations.coincident_to_edge(
                         black_box(edge),
                         black_box(&missing),
                         black_box(&query_2),
                     ))
                 })
             });
-            group.bench_function(BenchmarkId::new("permute_1_with", &fixture), |b| {
+            group.bench_function(BenchmarkId::new("permute_participants_1", &fixture), |b| {
                 b.iter_batched_ref(
                     || relations.clone(),
                     |relations| {
-                        relations.permute_1_with(black_box(id), black_box(&order_1));
+                        relations.permute_participants_1(black_box(id), black_box(&order_1));
                         black_box(relations.participants_1(id));
                     },
                     BatchSize::LargeInput,
                 )
             });
-            group.bench_function(BenchmarkId::new("permute_2_with", &fixture), |b| {
+            group.bench_function(BenchmarkId::new("permute_participants_2", &fixture), |b| {
                 b.iter_batched_ref(
                     || relations.clone(),
                     |relations| {
-                        relations.permute_2_with(black_box(id), black_box(&order_2));
+                        relations.permute_participants_2(black_box(id), black_box(&order_2));
                         black_box(relations.participants_2(id));
                     },
                     BatchSize::LargeInput,
@@ -531,7 +546,7 @@ fn fixed_fixed(c: &mut Criterion) {
                             .filter(|(_, (parts, _, _))| parts.contains(&node))
                             .map(|(i, _)| RelationId::from(i))
                             .collect();
-                        assert_eq!(changed.incident(node), incidence);
+                        assert_eq!(changed.incident_to_node(node), incidence);
                     }
                     for edge in entries[row].1.into_iter().chain(b) {
                         let incidence: Vec<_> = expected
@@ -540,7 +555,7 @@ fn fixed_fixed(c: &mut Criterion) {
                             .filter(|(_, (_, parts, _))| parts.contains(&edge))
                             .map(|(i, _)| RelationId::from(i))
                             .collect();
-                        assert_eq!(changed.incident_edge(edge), incidence);
+                        assert_eq!(changed.incident_to_edge(edge), incidence);
                     }
                     assert_eq!(changed.into_entries(), expected);
                 }
@@ -669,15 +684,18 @@ fn fixed_var(c: &mut Criterion) {
                 } else {
                     vec![id]
                 };
-                assert_eq!(relations.incident(node), expected_incidence);
-                assert_eq!(relations.coincident(node, &query_1, &query_2), Some(id));
-                assert_eq!(relations.coincident(node, &missing, &query_2), None);
-                assert_eq!(relations.incident_edge(edge), expected_incidence);
+                assert_eq!(relations.incident_to_node(node), expected_incidence);
                 assert_eq!(
-                    relations.coincident_edge(edge, &query_1, &query_2),
+                    relations.coincident_to_node(node, &query_1, &query_2),
                     Some(id)
                 );
-                assert_eq!(relations.coincident_edge(edge, &missing, &query_2), None);
+                assert_eq!(relations.coincident_to_node(node, &missing, &query_2), None);
+                assert_eq!(relations.incident_to_edge(edge), expected_incidence);
+                assert_eq!(
+                    relations.coincident_to_edge(edge, &query_1, &query_2),
+                    Some(id)
+                );
+                assert_eq!(relations.coincident_to_edge(edge, &missing, &query_2), None);
                 group.bench_function(BenchmarkId::new("new", &fixture), |b| {
                     b.iter_batched(
                         || entries.clone(),
@@ -685,63 +703,63 @@ fn fixed_var(c: &mut Criterion) {
                         BatchSize::LargeInput,
                     )
                 });
-                group.bench_function(BenchmarkId::new("incident", &fixture), |b| {
-                    b.iter(|| black_box(relations.incident(black_box(node))))
+                group.bench_function(BenchmarkId::new("incident_to_node", &fixture), |b| {
+                    b.iter(|| black_box(relations.incident_to_node(black_box(node))))
                 });
-                group.bench_function(BenchmarkId::new("coincident_hit", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("coincident_to_node_hit", &fixture), |b| {
                     b.iter(|| {
-                        black_box(relations.coincident(
+                        black_box(relations.coincident_to_node(
                             black_box(node),
                             black_box(&query_1),
                             black_box(&query_2),
                         ))
                     })
                 });
-                group.bench_function(BenchmarkId::new("coincident_miss", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("coincident_to_node_miss", &fixture), |b| {
                     b.iter(|| {
-                        black_box(relations.coincident(
+                        black_box(relations.coincident_to_node(
                             black_box(node),
                             black_box(&missing),
                             black_box(&query_2),
                         ))
                     })
                 });
-                group.bench_function(BenchmarkId::new("incident_edge", &fixture), |b| {
-                    b.iter(|| black_box(relations.incident_edge(black_box(edge))))
+                group.bench_function(BenchmarkId::new("incident_to_edge", &fixture), |b| {
+                    b.iter(|| black_box(relations.incident_to_edge(black_box(edge))))
                 });
-                group.bench_function(BenchmarkId::new("coincident_edge_hit", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("coincident_to_edge_hit", &fixture), |b| {
                     b.iter(|| {
-                        black_box(relations.coincident_edge(
+                        black_box(relations.coincident_to_edge(
                             black_box(edge),
                             black_box(&query_1),
                             black_box(&query_2),
                         ))
                     })
                 });
-                group.bench_function(BenchmarkId::new("coincident_edge_miss", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("coincident_to_edge_miss", &fixture), |b| {
                     b.iter(|| {
-                        black_box(relations.coincident_edge(
+                        black_box(relations.coincident_to_edge(
                             black_box(edge),
                             black_box(&missing),
                             black_box(&query_2),
                         ))
                     })
                 });
-                group.bench_function(BenchmarkId::new("permute_1_with", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("permute_participants_1", &fixture), |b| {
                     b.iter_batched_ref(
                         || relations.clone(),
                         |relations| {
-                            relations.permute_1_with(black_box(id), black_box(&order_1));
+                            relations.permute_participants_1(black_box(id), black_box(&order_1));
                             black_box(relations.participants_1(id));
                         },
                         BatchSize::LargeInput,
                     )
                 });
-                group.bench_function(BenchmarkId::new("permute_2_with", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("permute_participants_2", &fixture), |b| {
                     b.iter_batched_ref(
                         || relations.clone(),
                         |relations| {
-                            relations.permute_2_with(black_box(id), black_box(&order_2));
+                            relations.permute_participants_2(black_box(id), black_box(&order_2));
                             black_box(relations.participants_2(id));
                         },
                         BatchSize::LargeInput,
@@ -780,7 +798,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].0.iter().chain(&expected[row].0) {
                             let incident: Vec<_> = expected
@@ -789,7 +807,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participants", &fixture),
@@ -834,7 +852,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].0.iter().chain(&expected[row].0) {
                             let incident: Vec<_> = expected
@@ -843,7 +861,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participants_2", &fixture),
@@ -877,7 +895,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].0.iter().chain(&expected[row].0) {
                             let incident: Vec<_> = expected
@@ -886,7 +904,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participants_1", &fixture),
@@ -920,7 +938,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].0.iter().chain(&expected[row].0) {
                             let incident: Vec<_> = expected
@@ -929,7 +947,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participant_1", &fixture),
@@ -964,7 +982,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].0.iter().chain(&expected[row].0) {
                             let incident: Vec<_> = expected
@@ -973,7 +991,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participant_2", &fixture),
@@ -1008,7 +1026,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].0.iter().chain(&expected[row].0) {
                             let incident: Vec<_> = expected
@@ -1017,7 +1035,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("insert_participant_2", &fixture),
@@ -1052,7 +1070,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].0.iter().chain(&expected[row].0) {
                             let incident: Vec<_> = expected
@@ -1061,7 +1079,7 @@ fn fixed_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("remove_participant_2", &fixture),
@@ -1147,15 +1165,18 @@ fn var_var(c: &mut Criterion) {
                 } else {
                     vec![id]
                 };
-                assert_eq!(relations.incident(node), expected_incidence);
-                assert_eq!(relations.coincident(node, &query_1, &query_2), Some(id));
-                assert_eq!(relations.coincident(node, &missing, &query_2), None);
-                assert_eq!(relations.incident_edge(edge), expected_incidence);
+                assert_eq!(relations.incident_to_node(node), expected_incidence);
                 assert_eq!(
-                    relations.coincident_edge(edge, &query_1, &query_2),
+                    relations.coincident_to_node(node, &query_1, &query_2),
                     Some(id)
                 );
-                assert_eq!(relations.coincident_edge(edge, &missing, &query_2), None);
+                assert_eq!(relations.coincident_to_node(node, &missing, &query_2), None);
+                assert_eq!(relations.incident_to_edge(edge), expected_incidence);
+                assert_eq!(
+                    relations.coincident_to_edge(edge, &query_1, &query_2),
+                    Some(id)
+                );
+                assert_eq!(relations.coincident_to_edge(edge, &missing, &query_2), None);
                 group.bench_function(BenchmarkId::new("new", &fixture), |b| {
                     b.iter_batched(
                         || entries.clone(),
@@ -1163,63 +1184,63 @@ fn var_var(c: &mut Criterion) {
                         BatchSize::LargeInput,
                     )
                 });
-                group.bench_function(BenchmarkId::new("incident", &fixture), |b| {
-                    b.iter(|| black_box(relations.incident(black_box(node))))
+                group.bench_function(BenchmarkId::new("incident_to_node", &fixture), |b| {
+                    b.iter(|| black_box(relations.incident_to_node(black_box(node))))
                 });
-                group.bench_function(BenchmarkId::new("coincident_hit", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("coincident_to_node_hit", &fixture), |b| {
                     b.iter(|| {
-                        black_box(relations.coincident(
+                        black_box(relations.coincident_to_node(
                             black_box(node),
                             black_box(&query_1),
                             black_box(&query_2),
                         ))
                     })
                 });
-                group.bench_function(BenchmarkId::new("coincident_miss", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("coincident_to_node_miss", &fixture), |b| {
                     b.iter(|| {
-                        black_box(relations.coincident(
+                        black_box(relations.coincident_to_node(
                             black_box(node),
                             black_box(&missing),
                             black_box(&query_2),
                         ))
                     })
                 });
-                group.bench_function(BenchmarkId::new("incident_edge", &fixture), |b| {
-                    b.iter(|| black_box(relations.incident_edge(black_box(edge))))
+                group.bench_function(BenchmarkId::new("incident_to_edge", &fixture), |b| {
+                    b.iter(|| black_box(relations.incident_to_edge(black_box(edge))))
                 });
-                group.bench_function(BenchmarkId::new("coincident_edge_hit", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("coincident_to_edge_hit", &fixture), |b| {
                     b.iter(|| {
-                        black_box(relations.coincident_edge(
+                        black_box(relations.coincident_to_edge(
                             black_box(edge),
                             black_box(&query_1),
                             black_box(&query_2),
                         ))
                     })
                 });
-                group.bench_function(BenchmarkId::new("coincident_edge_miss", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("coincident_to_edge_miss", &fixture), |b| {
                     b.iter(|| {
-                        black_box(relations.coincident_edge(
+                        black_box(relations.coincident_to_edge(
                             black_box(edge),
                             black_box(&missing),
                             black_box(&query_2),
                         ))
                     })
                 });
-                group.bench_function(BenchmarkId::new("permute_1_with", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("permute_participants_1", &fixture), |b| {
                     b.iter_batched_ref(
                         || relations.clone(),
                         |relations| {
-                            relations.permute_1_with(black_box(id), black_box(&order_1));
+                            relations.permute_participants_1(black_box(id), black_box(&order_1));
                             black_box(relations.participants_1(id));
                         },
                         BatchSize::LargeInput,
                     )
                 });
-                group.bench_function(BenchmarkId::new("permute_2_with", &fixture), |b| {
+                group.bench_function(BenchmarkId::new("permute_participants_2", &fixture), |b| {
                     b.iter_batched_ref(
                         || relations.clone(),
                         |relations| {
-                            relations.permute_2_with(black_box(id), black_box(&order_2));
+                            relations.permute_participants_2(black_box(id), black_box(&order_2));
                             black_box(relations.participants_2(id));
                         },
                         BatchSize::LargeInput,
@@ -1272,7 +1293,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1281,7 +1302,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participants", &fixture),
@@ -1324,7 +1345,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1333,7 +1354,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participants_1", &fixture),
@@ -1375,7 +1396,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1384,7 +1405,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participants_2", &fixture),
@@ -1416,7 +1437,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1425,7 +1446,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participant_1", &fixture),
@@ -1458,7 +1479,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1467,7 +1488,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("replace_participant_2", &fixture),
@@ -1500,7 +1521,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1509,7 +1530,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("insert_participant_1", &fixture),
@@ -1542,7 +1563,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1551,7 +1572,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("insert_participant_2", &fixture),
@@ -1584,7 +1605,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1593,7 +1614,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("remove_participant_1", &fixture),
@@ -1625,7 +1646,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (first, _, _))| first.contains(node))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident(*node), incident);
+                            assert_eq!(changed.incident_to_node(*node), incident);
                         }
                         for edge in entries[row].1.iter().chain(&expected[row].1) {
                             let incident: Vec<_> = expected
@@ -1634,7 +1655,7 @@ fn var_var(c: &mut Criterion) {
                                 .filter(|(_, (_, second, _))| second.contains(edge))
                                 .map(|(index, _)| RelationId::from(index))
                                 .collect();
-                            assert_eq!(changed.incident_edge(*edge), incident);
+                            assert_eq!(changed.incident_to_edge(*edge), incident);
                         }
                         group.bench_function(
                             BenchmarkId::new("remove_participant_2", &fixture),

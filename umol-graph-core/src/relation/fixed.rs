@@ -135,25 +135,25 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// Relations referencing `node`, once each in ascending relation-id order.
     ///
     /// Returns an empty slice when no participant references `node`.
-    pub fn incident(&self, node: NodeId) -> &[RelationId] {
-        self.incidence.incident(node)
+    pub fn incident_to_node(&self, node: NodeId) -> &[RelationId] {
+        self.incidence.incident_to_node(node)
     }
 
     /// Relations referencing `edge`, once each in ascending relation-id order.
     ///
     /// Returns an empty slice when no participant references `edge`.
-    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
-        self.incidence.incident_edge(edge)
+    pub fn incident_to_edge(&self, edge: EdgeId) -> &[RelationId] {
+        self.incidence.incident_to_edge(edge)
     }
 
     /// Whether any participant references `node`.
-    pub fn has_incident(&self, node: NodeId) -> bool {
-        self.incidence.has_incident(node)
+    pub fn has_incident_to_node(&self, node: NodeId) -> bool {
+        self.incidence.has_incident_to_node(node)
     }
 
     /// Whether any participant references `edge`.
-    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
-        self.incidence.has_incident_edge(edge)
+    pub fn has_incident_to_edge(&self, edge: EdgeId) -> bool {
+        self.incidence.has_incident_to_edge(edge)
     }
 
     /// Find the first relation incident with `node` whose participants match `query`.
@@ -162,16 +162,16 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// payloads. Returns the smallest matching relation id, or `None` if the incidence
     /// list contains no match. Duplicate matching rows are permitted. An unreferenced
     /// anchor yields `None`, even if a matching row exists elsewhere.
-    pub fn coincident(&self, node: NodeId, query: &[P]) -> Option<RelationId> {
-        self.coincident_in(self.incident(node), query)
+    pub fn coincident_to_node(&self, node: NodeId, query: &[P]) -> Option<RelationId> {
+        self.coincident_among(self.incident_to_node(node), query)
     }
 
     /// Find the first relation incident with `edge` whose participants match `query`.
     ///
-    /// Uses the same multiset comparison and first-match rule as [`Self::coincident`].
+    /// Uses the same multiset comparison and first-match rule as [`Self::coincident_to_node`].
     /// Returns `None` when the edge incidence list contains no matching row.
-    pub fn coincident_edge(&self, edge: EdgeId, query: &[P]) -> Option<RelationId> {
-        self.coincident_in(self.incident_edge(edge), query)
+    pub fn coincident_to_edge(&self, edge: EdgeId, query: &[P]) -> Option<RelationId> {
+        self.coincident_among(self.incident_to_edge(edge), query)
     }
 
     /// Whether relation `id` matches the query multiset.
@@ -183,11 +183,11 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     ///
     /// Panics if `id` is outside the set.
     pub fn is_coincident(&self, id: RelationId, query: &[P]) -> bool {
-        self.coincident_in(&[id], query).is_some()
+        self.coincident_among(&[id], query).is_some()
     }
 
     /// Return the first candidate whose stored participant multiset matches the query.
-    fn coincident_in(&self, candidates: &[RelationId], query: &[P]) -> Option<RelationId> {
+    fn coincident_among(&self, candidates: &[RelationId], query: &[P]) -> Option<RelationId> {
         let mut sorted_query: Vec<P> = query.to_vec();
         sorted_query.sort_unstable();
         candidates
@@ -208,7 +208,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     ///
     /// Panics if `id` is outside the set or `order` is not a permutation of the selected
     /// factor's positions (wrong length, repeated position, or out-of-range position).
-    pub fn permute_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+    pub fn permute_participants(&mut self, id: RelationId, order: &[ParticipantPosition]) {
         permute_participants(self.participants[id.index()].as_mut_slice(), order);
     }
 

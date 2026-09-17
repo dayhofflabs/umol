@@ -78,13 +78,13 @@ impl MulticenterBonds {
         atom: AtomId,
     ) -> impl ExactSizeIterator<Item = MulticenterBondId> + '_ {
         self.0
-            .incident(NodeId::from(atom))
+            .incident_to_node(NodeId::from(atom))
             .iter()
             .map(|&id| MulticenterBondId::from(id))
     }
 
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.0.has_incident(NodeId::from(atom))
+        self.0.has_incident_to_node(NodeId::from(atom))
     }
 
     pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, MulticenterBondForm)> {
@@ -140,7 +140,11 @@ impl MulticenterBonds {
             .pushout(
                 &right.map(correspondence).0,
                 // Multicenter bonds anchor on their atoms: the node index.
-                |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
+                |set, atoms| {
+                    atoms
+                        .first()
+                        .and_then(|&node| set.coincident_to_node(node, atoms))
+                },
                 |(left_atoms, left), (right_atoms, right)| {
                     let left_atoms: Vec<AtomId> =
                         left_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
@@ -167,7 +171,7 @@ impl MulticenterBonds {
         let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
         let anchor = *query.first()?;
         self.0
-            .coincident(anchor, &query)
+            .coincident_to_node(anchor, &query)
             .map(MulticenterBondId::from)
     }
 }
@@ -192,7 +196,7 @@ impl FrameTransport for MulticenterBonds {
                 return None;
             }
             *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
-            set.permute_with(relation_id, &participant_order(action));
+            set.permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -231,7 +235,7 @@ pub(crate) fn reframe_multicenter_bonds_with(
             .reframe_by(&action)
             .ok_or(Contradiction)?
             .normalize()?;
-        set.permute_with(relation_id, &participant_order(&action));
+        set.permute_participants(relation_id, &participant_order(&action));
         visit(id, &action);
     }
     Ok(multicenter_bonds)
@@ -327,7 +331,8 @@ impl FrameTransport for MulticenterBondSpans {
                 return None;
             }
             *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
-            self.0.permute_with(relation_id, &participant_order(action));
+            self.0
+                .permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
     }
@@ -366,7 +371,7 @@ pub(crate) fn reframe_multicenter_bond_spans_with(
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         multicenter_bonds
             .0
-            .permute_with(relation_id, &participant_order(&action));
+            .permute_participants(relation_id, &participant_order(&action));
         visit(id, &action);
     }
     Ok(multicenter_bonds)
@@ -752,7 +757,7 @@ mod tests {
                 rhs: MulticenterBondForm::from_electrons(vec![11, 21, 31]),
             },
         )]);
-        spans.0.permute_with(
+        spans.0.permute_participants(
             RelationId(0),
             &[
                 ParticipantPosition(2),
@@ -838,7 +843,7 @@ mod tests {
                 rhs: MulticenterBondForm::from_electrons(vec![11, 21]),
             },
         )]);
-        unsorted.0.permute_with(
+        unsorted.0.permute_participants(
             RelationId(0),
             &[ParticipantPosition(1), ParticipantPosition(0)],
         );
@@ -864,7 +869,7 @@ mod tests {
             vec![AtomId(1), AtomId(4), AtomId(7)],
             MulticenterBondForm::from_electrons(vec![10, 20, 30]),
         )]);
-        Arc::make_mut(&mut systems.0).permute_with(
+        Arc::make_mut(&mut systems.0).permute_participants(
             RelationId(0),
             &[
                 ParticipantPosition(2),

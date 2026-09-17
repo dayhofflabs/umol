@@ -107,7 +107,10 @@ fn assert_var_var_birelation_rows(
                         })
                 })
                 .map(RelationId::from);
-            assert_eq!(relations.coincident(node, &query_1, &query_2), expected);
+            assert_eq!(
+                relations.coincident_to_node(node, &query_1, &query_2),
+                expected
+            );
         }
     }
     for node in [0, 1, 2, 3, 4, 5, 6, 7, u32::MAX].map(NodeId) {
@@ -117,10 +120,10 @@ fn assert_var_var_birelation_rows(
             .filter(|(_, (a, b, _))| a.iter().chain(b).any(|p| *p == node))
             .map(|(i, _)| RelationId::from(i))
             .collect();
-        assert_eq!(relations.incident(node), expected);
-        assert_eq!(relations.has_incident(node), !expected.is_empty());
-        assert_eq!(relations.incident_edge(EdgeId(node.0)), &[]);
-        assert!(!relations.has_incident_edge(EdgeId(node.0)));
+        assert_eq!(relations.incident_to_node(node), expected);
+        assert_eq!(relations.has_incident_to_node(node), !expected.is_empty());
+        assert_eq!(relations.incident_to_edge(EdgeId(node.0)), &[]);
+        assert!(!relations.has_incident_to_edge(EdgeId(node.0)));
     }
     assert_eq!(relations.clone().into_entries(), entries);
 }
@@ -172,12 +175,15 @@ fn test_var_var_birelation_set_new_incidence(
         assert_eq!(relations.participants_2(id), second);
         assert_eq!(relations.data(id), data);
     }
-    assert_eq!(relations.incident(NodeId(2)), at_two);
-    assert_eq!(relations.incident(NodeId(3)), at_three);
-    assert_eq!(relations.incident(NodeId(4)), &[]);
-    assert_eq!(relations.incident_edge(EdgeId(2)), &[]);
-    assert_eq!(relations.has_incident(NodeId(2)), !at_two.is_empty());
-    assert!(!relations.has_incident_edge(EdgeId(2)));
+    assert_eq!(relations.incident_to_node(NodeId(2)), at_two);
+    assert_eq!(relations.incident_to_node(NodeId(3)), at_three);
+    assert_eq!(relations.incident_to_node(NodeId(4)), &[]);
+    assert_eq!(relations.incident_to_edge(EdgeId(2)), &[]);
+    assert_eq!(
+        relations.has_incident_to_node(NodeId(2)),
+        !at_two.is_empty()
+    );
+    assert!(!relations.has_incident_to_edge(EdgeId(2)));
     assert_eq!(relations.into_entries(), entries);
 }
 
@@ -279,11 +285,11 @@ fn test_var_var_birelation_set_data_mut() {
 fn test_var_var_birelation_set_incidence() {
     let rs: VarVarBirelationSet<NodeId, EdgeId, &str> =
         VarVarBirelationSet::new(vec![(vec![NodeId(0), NodeId(1)], vec![EdgeId(5)], "y")]);
-    assert_eq!(rs.incident(NodeId(1)), &[RelationId(0)]);
-    assert_eq!(rs.incident_edge(EdgeId(5)), &[RelationId(0)]);
-    assert!(rs.has_incident(NodeId(0)));
-    assert!(rs.has_incident_edge(EdgeId(5)));
-    assert!(!rs.has_incident_edge(EdgeId(0)));
+    assert_eq!(rs.incident_to_node(NodeId(1)), &[RelationId(0)]);
+    assert_eq!(rs.incident_to_edge(EdgeId(5)), &[RelationId(0)]);
+    assert!(rs.has_incident_to_node(NodeId(0)));
+    assert!(rs.has_incident_to_edge(EdgeId(5)));
+    assert!(!rs.has_incident_to_edge(EdgeId(0)));
 }
 
 #[rstest]
@@ -291,7 +297,7 @@ fn test_var_var_birelation_set_incidence() {
 #[case::reordered(vec![NodeId(1), NodeId(0)], vec![NodeId(3), NodeId(2)], Some(RelationId(0)))]
 #[case::role_swap(vec![NodeId(2), NodeId(3)], vec![NodeId(0), NodeId(1)], None)]
 #[case::absent(vec![NodeId(0), NodeId(1)], vec![NodeId(2), NodeId(9)], None)]
-fn test_var_var_birelation_set_coincident(
+fn test_var_var_birelation_set_coincident_to_node(
     #[case] query_1: Vec<NodeId>,
     #[case] query_2: Vec<NodeId>,
     #[case] expected: Option<RelationId>,
@@ -303,7 +309,7 @@ fn test_var_var_birelation_set_coincident(
     assert_eq!(
         query_1
             .first()
-            .and_then(|&anchor| rs.coincident(anchor, &query_1, &query_2)),
+            .and_then(|&anchor| rs.coincident_to_node(anchor, &query_1, &query_2)),
         expected,
     );
 }
@@ -358,7 +364,7 @@ fn test_var_var_birelation_set_coincident(
     None,
     false,
 )]
-fn test_var_var_birelation_set_coincident_multiplicity(
+fn test_var_var_birelation_set_coincident_to_node_multiplicity(
     #[case] anchor: NodeId,
     #[case] query: Vec<NodeId>,
     #[case] query_2: Vec<NodeId>,
@@ -382,7 +388,10 @@ fn test_var_var_birelation_set_coincident_multiplicity(
             "other",
         ),
     ]);
-    assert_eq!(relations.coincident(anchor, &query, &query_2), expected);
+    assert_eq!(
+        relations.coincident_to_node(anchor, &query, &query_2),
+        expected
+    );
     assert_eq!(
         relations.is_coincident(RelationId(0), &query, &query_2),
         coincides
@@ -390,7 +399,7 @@ fn test_var_var_birelation_set_coincident_multiplicity(
 }
 
 #[rstest]
-fn test_var_var_birelation_set_permute_1_with() {
+fn test_var_var_birelation_set_permute_participants_1() {
     let mut rs: VarVarBirelationSet<NodeId, EdgeId, &str> = VarVarBirelationSet::new(vec![
         (vec![NodeId(0), NodeId(1)], vec![EdgeId(9)], "a"),
         (
@@ -399,7 +408,7 @@ fn test_var_var_birelation_set_permute_1_with() {
             "b",
         ),
     ]);
-    rs.permute_1_with(
+    rs.permute_participants_1(
         RelationId(1),
         &[
             ParticipantPosition(2),
@@ -417,7 +426,7 @@ fn test_var_var_birelation_set_permute_1_with() {
 }
 
 #[rstest]
-fn test_var_var_birelation_set_permute_2_with() {
+fn test_var_var_birelation_set_permute_participants_2() {
     let mut rs: VarVarBirelationSet<NodeId, EdgeId, &str> = VarVarBirelationSet::new(vec![
         (vec![NodeId(0), NodeId(1)], vec![EdgeId(9)], "a"),
         (
@@ -426,7 +435,7 @@ fn test_var_var_birelation_set_permute_2_with() {
             "b",
         ),
     ]);
-    rs.permute_2_with(
+    rs.permute_participants_2(
         RelationId(1),
         &[ParticipantPosition(1), ParticipantPosition(0)],
     );
@@ -509,14 +518,14 @@ fn test_var_var_birelation_set_replace_participants_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -608,14 +617,14 @@ fn test_var_var_birelation_set_replace_participants_1_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -701,14 +710,14 @@ fn test_var_var_birelation_set_replace_participants_2_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -785,14 +794,14 @@ fn test_var_var_birelation_set_replace_participant_1_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -895,14 +904,14 @@ fn test_var_var_birelation_set_replace_participant_2_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -992,14 +1001,14 @@ fn test_var_var_birelation_set_insert_participant_1_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -1089,14 +1098,14 @@ fn test_var_var_birelation_set_insert_participant_2_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -1183,14 +1192,14 @@ fn test_var_var_birelation_set_remove_participant_1_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -1272,14 +1281,14 @@ fn test_var_var_birelation_set_remove_participant_2_edges() {
         } else {
             vec![]
         };
-        assert_eq!(relations.incident(NodeId(key)), nodes);
-        assert_eq!(relations.incident_edge(EdgeId(key)), edges);
+        assert_eq!(relations.incident_to_node(NodeId(key)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(key)), edges);
         assert_eq!(
-            relations.coincident(NodeId(key), &first, &second),
+            relations.coincident_to_node(NodeId(key), &first, &second),
             nodes.first().copied()
         );
         assert_eq!(
-            relations.coincident_edge(EdgeId(key), &first, &second),
+            relations.coincident_to_edge(EdgeId(key), &first, &second),
             edges.first().copied()
         );
     }
@@ -1346,12 +1355,12 @@ fn test_var_var_birelation_set_map(
     let composed = participant_correspondence.compose(&reverse).unwrap();
     assert_eq!(input.map(&composed), input);
     assert_eq!(
-        expected.incident(NodeId(1)),
+        expected.incident_to_node(NodeId(1)),
         &[RelationId(0), RelationId(1)]
     );
     assert_eq!(
-        expected.incident_edge(EdgeId(3)),
-        expected.incident(NodeId(1))
+        expected.incident_to_edge(EdgeId(3)),
+        expected.incident_to_node(NodeId(1))
     );
 }
 
@@ -1535,7 +1544,9 @@ fn test_var_var_birelation_set_tracked_pushout() {
     let (object, glue) = left
         .tracked_pushout(
             &right,
-            |set: &_, q1: &[NodeId], q2: &_| q1.first().and_then(|&n| set.coincident(n, q1, q2)),
+            |set: &_, q1: &[NodeId], q2: &_| {
+                q1.first().and_then(|&n| set.coincident_to_node(n, q1, q2))
+            },
             |(_, _, a), (_, _, b)| Some(a + b),
         )
         .expect("no ⊥");
@@ -1543,7 +1554,7 @@ fn test_var_var_birelation_set_tracked_pushout() {
         left.pushout(
             &right,
             |set: &_, q1: &[NodeId], q2: &_| {
-                q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                q1.first().and_then(|&n| set.coincident_to_node(n, q1, q2))
             },
             |(_, _, a), (_, _, b)| Some(a + b),
         ),
@@ -1575,7 +1586,7 @@ fn test_var_var_birelation_set_tracked_pushout() {
         left.tracked_pushout(
             &right,
             |set: &_, q1: &[NodeId], q2: &_| {
-                q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                q1.first().and_then(|&n| set.coincident_to_node(n, q1, q2))
             },
             |_, _| None,
         ),
@@ -1585,7 +1596,7 @@ fn test_var_var_birelation_set_tracked_pushout() {
         left.pushout(
             &right,
             |set: &_, q1: &[NodeId], q2: &_| {
-                q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                q1.first().and_then(|&n| set.coincident_to_node(n, q1, q2))
             },
             |_, _| None,
         ),
@@ -1610,7 +1621,7 @@ fn test_var_var_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
         |set, first: &[NodeId], second: &[NodeId]| {
             first
                 .first()
-                .and_then(|&id| set.coincident(id, first, second))
+                .and_then(|&id| set.coincident_to_node(id, first, second))
         },
         |(_, _, a), (_, _, b)| combined.map(|_| a + b),
     );
@@ -1619,7 +1630,7 @@ fn test_var_var_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
         |set, first: &[NodeId], second: &[NodeId]| {
             first
                 .first()
-                .and_then(|&id| set.coincident(id, first, second))
+                .and_then(|&id| set.coincident_to_node(id, first, second))
         },
         |(_, _, a), (_, _, b)| combined.map(|_| a + b),
     );
@@ -1640,5 +1651,5 @@ fn test_var_var_birelation_set_tracked_pullback(#[case] combined: Option<i32>) {
 fn test_var_var_birelation_set_default() {
     let rs = VarVarBirelationSet::<NodeId, EdgeId, ()>::default();
     assert_eq!(rs.count(), 0);
-    assert!(!rs.has_incident(NodeId(0)));
+    assert!(!rs.has_incident_to_node(NodeId(0)));
 }

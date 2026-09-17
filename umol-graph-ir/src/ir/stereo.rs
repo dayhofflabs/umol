@@ -88,13 +88,13 @@ impl StereoAtoms {
     /// Ids of the stereo atoms `atom` takes part in, as site or as ligand.
     pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoAtomId> + '_ {
         self.0
-            .incident(NodeId::from(atom))
+            .incident_to_node(NodeId::from(atom))
             .iter()
             .map(|&id| StereoAtomId::from(id))
     }
 
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.0.has_incident(NodeId::from(atom))
+        self.0.has_incident_to_node(NodeId::from(atom))
     }
 
     pub(crate) fn into_entries(self) -> Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> {
@@ -150,7 +150,7 @@ impl StereoAtoms {
                 // A stereo atom's site is an atom, unique by integrity: the sharpest node anchor.
                 |set, site, ligands| {
                     site.first()
-                        .and_then(|&node| set.coincident(node, site, ligands))
+                        .and_then(|&node| set.coincident_to_node(node, site, ligands))
                 },
                 |(_, left_ligands, left), (_, right_ligands, right)| {
                     let action = Permutation::between(right_ligands, left_ligands)?;
@@ -173,7 +173,7 @@ impl StereoAtoms {
         // A stereo atom's site is an atom, and integrity makes it unique, so it is the sharpest
         // node anchor available.
         self.0
-            .coincident(NodeId::from(site), &[NodeId::from(site)], ligands)
+            .coincident_to_node(NodeId::from(site), &[NodeId::from(site)], ligands)
             .map(StereoAtomId::from)
     }
 }
@@ -214,7 +214,7 @@ impl FrameTransport for StereoAtoms {
                 return None;
             }
             *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
-            set.permute_2_with(relation_id, &participant_order(*action));
+            set.permute_participants_2(relation_id, &participant_order(*action));
         }
         Some(self)
     }
@@ -252,7 +252,7 @@ pub(crate) fn reframe_stereo_atoms_with(
             .reframe_by(&action)
             .ok_or(Contradiction)?
             .normalize()?;
-        set.permute_2_with(relation_id, &participant_order(action));
+        set.permute_participants_2(relation_id, &participant_order(action));
         visit(id, action);
     }
     Ok(stereo_atoms)
@@ -316,13 +316,13 @@ impl StereoBonds {
     /// Ids of the stereo atoms `atom` takes part in, as site or as ligand.
     pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoBondId> + '_ {
         self.0
-            .incident(NodeId::from(atom))
+            .incident_to_node(NodeId::from(atom))
             .iter()
             .map(|&id| StereoBondId::from(id))
     }
 
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.0.has_incident(NodeId::from(atom))
+        self.0.has_incident_to_node(NodeId::from(atom))
     }
 
     /// Ids of the stereo bonds `bond` is the site of.
@@ -331,13 +331,13 @@ impl StereoBonds {
         bond: BondId,
     ) -> impl ExactSizeIterator<Item = StereoBondId> + '_ {
         self.0
-            .incident_edge(EdgeId::from(bond))
+            .incident_to_edge(EdgeId::from(bond))
             .iter()
             .map(|&id| StereoBondId::from(id))
     }
 
     pub fn has_incident_bond(&self, bond: BondId) -> bool {
-        self.0.has_incident_edge(EdgeId::from(bond))
+        self.0.has_incident_to_edge(EdgeId::from(bond))
     }
 
     pub(crate) fn into_entries(self) -> Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> {
@@ -393,7 +393,7 @@ impl StereoBonds {
                 // A stereo bond's site is a bond: the one entity kind scanning the edge index.
                 |set, site, ligands| {
                     site.first()
-                        .and_then(|&edge| set.coincident_edge(edge, site, ligands))
+                        .and_then(|&edge| set.coincident_to_edge(edge, site, ligands))
                 },
                 |(_, left_ligands, left), (_, right_ligands, right)| {
                     let action = Permutation::between(right_ligands, left_ligands)?;
@@ -415,7 +415,7 @@ impl StereoBonds {
     pub fn coincident_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
         // A stereo bond's site is a bond, so this is the one entity kind that scans the edge index.
         self.0
-            .coincident_edge(EdgeId::from(site), &[EdgeId::from(site)], ligands)
+            .coincident_to_edge(EdgeId::from(site), &[EdgeId::from(site)], ligands)
             .map(StereoBondId::from)
     }
 }
@@ -440,7 +440,7 @@ impl FrameTransport for StereoBonds {
                 return None;
             }
             *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
-            set.permute_2_with(relation_id, &participant_order(*action));
+            set.permute_participants_2(relation_id, &participant_order(*action));
         }
         Some(self)
     }
@@ -478,7 +478,7 @@ pub(crate) fn reframe_stereo_bonds_with(
             .reframe_by(&action)
             .ok_or(Contradiction)?
             .normalize()?;
-        set.permute_2_with(relation_id, &participant_order(action));
+        set.permute_participants_2(relation_id, &participant_order(action));
         visit(id, action);
     }
     Ok(stereo_bonds)
@@ -580,7 +580,7 @@ impl FrameTransport for StereoAtomSpans {
             }
             *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
             self.0
-                .permute_2_with(relation_id, &participant_order(*action));
+                .permute_participants_2(relation_id, &participant_order(*action));
         }
         Some(self)
     }
@@ -617,7 +617,7 @@ pub(crate) fn reframe_stereo_atom_spans_with(
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         stereo_atoms
             .0
-            .permute_2_with(relation_id, &participant_order(action));
+            .permute_participants_2(relation_id, &participant_order(action));
         visit(id, action);
     }
     Ok(stereo_atoms)
@@ -719,7 +719,7 @@ impl FrameTransport for StereoBondSpans {
             }
             *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
             self.0
-                .permute_2_with(relation_id, &participant_order(*action));
+                .permute_participants_2(relation_id, &participant_order(*action));
         }
         Some(self)
     }
@@ -756,7 +756,7 @@ pub(crate) fn reframe_stereo_bond_spans_with(
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         stereo_bonds
             .0
-            .permute_2_with(relation_id, &participant_order(action));
+            .permute_participants_2(relation_id, &participant_order(action));
         visit(id, action);
     }
     Ok(stereo_bonds)
