@@ -1679,14 +1679,13 @@ impl Reaction {
                     return Ok(None);
                 }
             }
-            // Stereo incidence (site or ligand) via the stereo views; a stereo bond's site is a bond,
-            // so a deleted atom touches a stereo bond only as a ligand — `incident_ids` covers both.
+            // Stereo views include site atoms/endpoints and ligand anchors.
             for stereo_atom in host.stereo_atoms().incident_ids(host_atom) {
                 if !removed_host_stereo_atom.contains(&stereo_atom) {
                     return Ok(None);
                 }
             }
-            for stereo_bond in host.stereo_bonds().incident_ids(host_atom) {
+            for stereo_bond in host.stereo_bonds().incident_to_atom_ids(host_atom) {
                 if !removed_host_stereo_bond.contains(&stereo_bond) {
                     return Ok(None);
                 }

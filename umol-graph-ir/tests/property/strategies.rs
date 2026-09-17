@@ -5333,13 +5333,13 @@ fn build_reaction(
         }));
     }
     // A removed atom also takes its incident stereo entities (site OR ligand incidence), else
-    // apply and span materialization would otherwise leave dangling references. `incident_ids`
-    // covers both site and ligand incidence.
+    // apply and span materialization would otherwise leave dangling references. Both view queries
+    // cover site and ligand incidence.
     let mut removed_stereo_atom: HashSet<StereoAtomId> = HashSet::new();
     let mut removed_stereo_bond: HashSet<StereoBondId> = HashSet::new();
     for &id in &removed_atoms {
         removed_stereo_atom.extend(lhs.stereo_atoms().incident_ids(id));
-        removed_stereo_bond.extend(lhs.stereo_bonds().incident_ids(id));
+        removed_stereo_bond.extend(lhs.stereo_bonds().incident_to_atom_ids(id));
     }
     for &id in &removed_stereo_atom {
         let view = lhs.stereo_atom(id);

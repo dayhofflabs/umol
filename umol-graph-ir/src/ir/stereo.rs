@@ -313,20 +313,27 @@ impl StereoBonds {
         Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
     }
 
-    /// Ids of the stereo atoms `atom` takes part in, as site or as ligand.
-    pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoBondId> + '_ {
+    /// Ids of stereo bonds with a ligand anchored on `atom`.
+    ///
+    /// Includes atom and virtual ligands. A site-bond endpoint contributes only
+    /// when a ligand is anchored on it.
+    pub fn incident_to_atom_ids(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = StereoBondId> + '_ {
         self.0
             .incident_to_node(NodeId::from(atom))
             .iter()
             .map(|&id| StereoBondId::from(id))
     }
 
-    pub fn has_incident(&self, atom: AtomId) -> bool {
+    /// Whether a stereo bond has a ligand anchored on `atom`.
+    pub fn has_incident_to_atom(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
 
     /// Ids of the stereo bonds `bond` is the site of.
-    pub fn incident_bond_ids(
+    pub fn incident_to_bond_ids(
         &self,
         bond: BondId,
     ) -> impl ExactSizeIterator<Item = StereoBondId> + '_ {
@@ -336,7 +343,8 @@ impl StereoBonds {
             .map(|&id| StereoBondId::from(id))
     }
 
-    pub fn has_incident_bond(&self, bond: BondId) -> bool {
+    /// Whether `bond` is the site of any stereo bond.
+    pub fn has_incident_to_bond(&self, bond: BondId) -> bool {
         self.0.has_incident_to_edge(EdgeId::from(bond))
     }
 

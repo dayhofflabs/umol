@@ -372,8 +372,8 @@ impl<'a> StereoBondViews<'a> {
     /// Ids of stereo bonds incident on `atom` (site endpoint or ligand). The
     /// site is an edge, so node incidence covers only ligands; site-endpoint
     /// membership is unioned in (and deduped) explicitly.
-    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
-        let ligand_ids = self.stereo_bonds.incident_ids(atom);
+    pub fn incident_to_atom_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
+        let ligand_ids = self.stereo_bonds.incident_to_atom_ids(atom);
         let mut seen = HashSet::new();
         self.incident_as_site_ids(atom)
             .chain(ligand_ids)
@@ -381,21 +381,22 @@ impl<'a> StereoBondViews<'a> {
     }
 
     /// Any stereo bond is incident on `atom` (site endpoint or ligand).
-    pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.stereo_bonds.has_incident(atom) || self.has_incident_as_site(atom)
+    pub fn has_incident_to_atom(&self, atom: AtomId) -> bool {
+        self.stereo_bonds.has_incident_to_atom(atom) || self.has_incident_as_site(atom)
     }
 
-    /// Views of stereo bonds incident on `atom`.
-    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
+    /// Views of stereo bonds incident on `atom` (site endpoint or ligand anchor).
+    pub fn incident_to_atom(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        self.incident_ids(atom).map(move |id| StereoBondView {
-            id,
-            site: set.site(id),
-            ligands: set.ligands(id),
-            attributes: set.attributes(id),
-            molecule,
-        })
+        self.incident_to_atom_ids(atom)
+            .map(move |id| StereoBondView {
+                id,
+                site: set.site(id),
+                ligands: set.ligands(id),
+                attributes: set.attributes(id),
+                molecule,
+            })
     }
 
     /// Ids of stereo bonds incident, in which `atom` is ligand.
@@ -405,7 +406,7 @@ impl<'a> StereoBondViews<'a> {
             atom_id: atom,
             kind: StereoLigandKind::Atom,
         };
-        set.incident_ids(atom)
+        set.incident_to_atom_ids(atom)
             .filter(move |&id| set.ligands(id).contains(&ligand))
     }
 
@@ -416,7 +417,7 @@ impl<'a> StereoBondViews<'a> {
             atom_id: atom,
             kind: StereoLigandKind::Atom,
         };
-        set.incident_ids(atom)
+        set.incident_to_atom_ids(atom)
             .any(|id| set.ligands(id).contains(&ligand))
     }
 
@@ -442,7 +443,7 @@ impl<'a> StereoBondViews<'a> {
         let set = self.stereo_bonds;
         self.molecule
             .neighbors(atom)
-            .flat_map(move |n| set.incident_bond_ids(n.bond_id()))
+            .flat_map(move |n| set.incident_to_bond_ids(n.bond_id()))
     }
 
     /// Any stereo bond, in which `atom` is a site endpoint.
@@ -450,7 +451,7 @@ impl<'a> StereoBondViews<'a> {
         let set = self.stereo_bonds;
         self.molecule
             .neighbors(atom)
-            .any(move |n| set.has_incident_bond(n.bond_id()))
+            .any(move |n| set.has_incident_to_bond(n.bond_id()))
     }
 
     /// Views of stereo bonds, in which `atom` is a site endpoint.
@@ -469,12 +470,12 @@ impl<'a> StereoBondViews<'a> {
 
     /// Id of the stereo bond sited on `bond`, if any.
     pub fn at_id(&self, bond: BondId) -> Option<StereoBondId> {
-        self.stereo_bonds.incident_bond_ids(bond).next()
+        self.stereo_bonds.incident_to_bond_ids(bond).next()
     }
 
     /// Whether a stereo bond is sited on `bond`.
     pub fn is_at(&self, bond: BondId) -> bool {
-        self.stereo_bonds.has_incident_bond(bond)
+        self.stereo_bonds.has_incident_to_bond(bond)
     }
 
     /// View of the stereo bond sited on `bond`, if any.
@@ -1396,7 +1397,7 @@ mod tests {
     #[case::site_endpoint(AtomId(2), vec![StereoBondId(0)])]
     #[case::ligand(AtomId(4), vec![StereoBondId(0)])]
     #[case::unrelated(AtomId(6), vec![])]
-    fn test_stereo_bond_views_incident(
+    fn test_stereo_bond_views_incident_to_atom_ids(
         molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: Vec<StereoBondId>,
@@ -1404,7 +1405,7 @@ mod tests {
         assert_eq!(
             molecule
                 .stereo_bonds()
-                .incident_ids(atom)
+                .incident_to_atom_ids(atom)
                 .collect::<Vec<_>>(),
             expected,
         );
