@@ -1,4 +1,4 @@
-# 213 — Collapsing the editor's overlay storage
+# 213 — Molecule and reaction mutation
 
 Status: Proposed
 Date: 2026-08-27
@@ -9,181 +9,366 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
-## Purpose
+## Scope — revised 2026-09-18
 
-`MoleculeEditor` holds its six overlays through three copy-on-write wrappers — `FixedSetStorage`,
-`VarSetStorage` and `FixedVarSetStorage` — carrying 31 methods between them. They exist only because
-they are generic over the *storage shape*, and most of what they carry now duplicates reads the six
-overlay types already own.
+Review and design the full molecule/reaction mutation API: direct changes, checked
+batches, transactions and rollback, participant replacement, publication, and
+identity tracking. Include the six overlay entity sets owned by Molecule and the
+Rust/Python boundary. The original editor-wrapper consolidation is one part of
+this work, not its organizing assumption.
 
-## The shape
+The relation-storage work in [166](166-molecule-ops-2026-07-27.md), S0–S5, is
+complete. The graph-core restoration extension is also owned by 166 and is a
+prerequisite for restoration delegation here. Design and implement the common
+molecule/reaction mutation infrastructure here, then return to 166 for
+non-transactional editing at operation call sites and
+HydrogenFolder/HydrogenUnfolder. Projection requirements inform this design;
+their remaining operation work stays in 166. This is a current-state review and
+open design, not an implementation plan.
 
-One wrapper parameterised by the overlay type replaces the three:
+## Current ownership
 
-```rust
-enum OverlayEditor<O: Overlays> {
-    Shared(O),
-    Mutable(Vec<(O::Participants, O::Attributes)>),
-}
-```
+Molecule owns topology, atom/bond attributes, six overlay entity sets, and global
+constraints. Each overlay set already owns an Arc-backed relation set:
 
-`Shared` holds the published overlay, so reads go to it; `Mutable` accumulates entries and is
-positional, which is why the editor indexes where the overlay does not.
-
-**Do not fold the two states into the overlay type itself.** The shared state is a real
-copy-on-write win — an edit touching one atom republishes the other five overlays' handles with no
-work — and a mutable variant on `Molecule`'s field would give the published type a state it must
-never hold. The accumulating state belongs to the editor.
-
-## `Overlays`
-
-**Open before implementation.** `Overlays` is not an approved trait name: the plural denotes all
-overlays, while each proposed implementation represents one entity set. Whether the editor needs a
-generic set trait at all, whether such a trait should be public, and what it should be called remain
-unsettled. The surface below records the earlier design sketch rather than an implementation-ready
-API.
-
-The earlier sketch placed the shared surface of the six overlay storage types in `traits.rs` and
-specified it as follows:
-
-Public, carrying the members that were already `pub` and inherent on all six, plus three:
-
-```rust
-type Id: Copy + From<usize>;
-type Participants: Clone;
-type Attributes: Clone + Normalize + FrameTransport<Action = Self::LocalAction>;
-type LocalAction;
-
-fn into_entries(self) -> Vec<(Self::Participants, Self::Attributes)>;
-fn entry(&self, id: Self::Id) -> (Self::Participants, Self::Attributes);         // new
-fn count(&self) -> usize;
-fn contains(&self, id: Self::Id) -> bool;
-fn ids(&self) -> impl ExactSizeIterator<Item = Self::Id> + '_;
-fn attributes(&self, id: Self::Id) -> &Self::Attributes;
-fn attributes_mut(&mut self, id: Self::Id) -> &mut Self::Attributes;
-fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = Self::Id> + '_;
-fn has_incident(&self, atom: AtomId) -> bool;
-fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>);  // new
-
-fn alignment_action(
-    from: &Self::Participants,
-    to: &Self::Participants,
-) -> Option<Self::LocalAction>;                                                  // new
-```
-
-Members whose shape is the entity kind's own stay inherent: the participant accessors, `is_coincident`
-and `coincident_id`, whose arguments are the participants themselves, `into_arc`, the node-level
-accessors, `StereoBonds`'s bond-keyed incidence, and the crate-private `remap`, `glue` and
-`attributes_iter_mut`. Nothing crate-private is published by the trait.
-
-`ids` needs an explicit `+ '_`: in trait position it captures the `&self` lifetime where the
-inherent `impl Trait` did not, and that propagates to the four `*Views::ids` methods.
-
-## Participant alignment
-
-The editor's six `*_equiv` old-state checks ask two questions of one entry — is this the entity you
-mean, and does its value agree in the stored participant frame. The first cannot be a Boolean
-participant comparison. It must retain the unique local frame action from the offered participants
-to the stored participants so that the second can transport the offered attributes before comparing
-their normal forms.
-
-This operation has no home in the three storage-shaped editor wrappers. Their relation sets know
-only factors and multisets; they do not know which factor bears the entity frame or, for a stereo
-bond, that its ligand factor consists of two endpoint blocks. The six overlay aggregates do
-know that structure, so `Overlays::alignment_action` owns the per-kind derivation. Its direction is
-
-```text
-to[i] = from[action[i]]
-```
-
-and it returns `None` unless `from` and `to` are two frames of the same entity under the
-structured-participant semantics of that entity kind. Ordinary unordered factors use
-`DynPermutation`; stereo factors use the bounded `Permutation`. Stereo-bond alignment permits
-permutations within each endpoint block and exchange of the two complete blocks, but not movement
-of one ligand across the endpoint boundary. Integrity-valid frames have distinct complete
-participant values, so the admissible action is unique.
-
-The participant and local-action types are:
-
-| overlay | `Participants` | `LocalAction` |
+| Entity set | Storage | Participants |
 | --- | --- | --- |
-| aromatic system, multicenter bond | `Vec<AtomId>` | `DynPermutation` |
-| noncovalent bond | `[AtomId; 2]` | `DynPermutation` in `S_2` |
-| dative bond | `(Vec<AtomId>, AtomId)` — donors, acceptor | `DynPermutation` on donors |
-| stereo atom | `(AtomId, Vec<StereoLigand>)` — site, ligands | `Permutation` on ligands |
-| stereo bond | `(BondId, Vec<StereoLigand>)` — site, ligands | `Permutation` in `S_2 wr S_2` |
+| AromaticSystems | VarRelationSet | Atoms |
+| MulticenterBonds | VarRelationSet | Atoms |
+| NoncovalentBonds | FixedRelationSet, arity 2 | Two atoms |
+| DativeBonds | FixedVarBirelationSet | Fixed acceptor, variable donors |
+| StereoAtoms | FixedVarBirelationSet | Fixed atom site, variable ligands |
+| StereoBonds | FixedVarBirelationSet | Fixed bond site, variable ligands |
 
-`OverlayEditor<O>` then owns one `entry_framed_eq` old-state check for every overlay kind. It
-obtains the stored entry, calls `O::alignment_action(offered, stored)`, transports the offered
-attributes with `FrameTransport`, and calls `normalized_eq` against the stored attributes. It
-neither selects a representative frame nor implements `Reframe`; this is pairwise alignment
-between two supplied local frames. Participant or transport incompatibility returns `false`, and
-the transaction retains its existing `TransactionError::OldStateMismatch` boundary.
+Their crate-private attribute mutation already uses Arc::make_mut. Their public
+surface supplies typed reads and transformations; raw construction, entry
+extraction, and mutable attribute access are crate-private.
+See [aromatic](../umol-graph-ir/src/ir/aromatic.rs),
+[multicenter](../umol-graph-ir/src/ir/multicenter.rs),
+[noncovalent](../umol-graph-ir/src/ir/noncovalent.rs),
+[dative](../umol-graph-ir/src/ir/dative.rs), and
+[stereo](../umol-graph-ir/src/ir/stereo.rs).
 
-The current six `MoleculeEditor::*_equiv` methods therefore retire with the wrapper migration. Their
-per-kind knowledge moves into the six `alignment_action` implementations rather than remaining as
-six copies of the transaction operation.
+MoleculeEditor instead holds three private storage-shape wrappers:
+FixedSetStorage, VarSetStorage, and FixedVarSetStorage. Each switches from a shared
+relation set to a mutable vector of entries. Attribute mutation and insertion
+materialize that vector; publication rebuilds relation storage. These wrappers
+also duplicate reads, removal, and compaction behavior. See
+[editor storage](../umol-graph-ir/src/ir/molecule/editor.rs).
 
-Two consequences:
+All five graph-core relation shapes now support participant replacement, add,
+remove, and tracked_remove. They own incidence-index maintenance and stable row
+compaction. They do not interpret molecular payloads, validate external node/edge
+references, or coordinate other entity sets and constraints. The graph itself
+already supports add_node, add_edge, remove_cascading, and
+tracked_remove_cascading.
 
-- Four constructors nest one level deeper — dative, noncovalent and both stereo kinds. `new` and
-  `into_entries` are `pub`, but every caller is inside `umol-graph-ir` and most are in test modules;
-  nothing in `umol-graph`, `umol-io` or `umol-py` constructs or destructures an overlay. The span
-  types mirror the overlays and want the same `(Participants, Attributes)` entry shape or they drift
-  from what they mirror.
-- If `new` leaves the trait, `OverlayEditor`'s publish step still has to rebuild the overlay from
-  entries, so construction must stay reachable generically — either a construction member under a
-  name that is not `new`, or a
-  `From<Vec<(Self::Participants, Self::Attributes)>>` bound on the wrapper.
+The molecule-level wiring to the new relation mutation surface remains to be
+designed. The existence of five storage shapes does not require five kinds of
+molecular wrapper: the current overlays use only the three shapes above.
 
-## Editor views
+## Existing mutation paths
 
-Three of the six editor views hold `&'a [NodeId]` and convert on read, which worked while the
-mutable state also held node ids. Overlay entries are in graph-IR ids, so the two states no longer
-agree and no borrowed slice covers both.
+| Surface | Current behavior and boundary |
+| --- | --- |
+| Molecule direct mutation | Atom, bond, dative, and noncovalent attributes have direct mutable views/bulk methods. Aromatic, multicenter, and stereo attributes and global constraints have public checked modification callbacks. Those checked methods modify a private candidate and publish only after integrity succeeds; they do not create an undo journal. |
+| MoleculeBuilder | Fresh construction delegates to MoleculeEditor; build uses the asserted integrity gate. |
+| MoleculeEditor primitives | Add atoms, bonds, and all six overlays; mutate attributes and constraints; remove topology with cascading consequences; remove each overlay kind. These are direct operations without an undo journal. Participant slices in mutable views remain read-only. |
+| MoleculeEditor::apply | Consumes the editor and applies Edits without constructing Undo. Failure returns no partially modified editor. Success still requires publication. |
+| MoleculeEditor::transact | Borrows the editor, applies Edits, and returns a Transaction journal. Application failure triggers rollback; rollback failure has its own error. Successful application does not itself publish a valid Molecule. |
+| Molecule::apply | Applies Edits to a private editor and checks publication, preserving the source molecule on failure. Reports batch failures separately from integrity failures. |
+| Editor snapshot/build | snapshot and try_build check aggregate integrity; snapshot preserves the editor, try_build consumes it. build is the asserted counterpart. |
+| Tracked operations | Return identity correspondences/compactions. They are independent of rollback journals. The editor also maintains an initial-to-current session correspondence during ordinary operations. |
 
-The immutable views therefore own their participants, `Vec<AtomId>`. The `*ViewMut` variants are
-always constructed after `materialize`, so they borrow `&'a [AtomId]` from the entry. This is one
-allocation per editor view construction, on the editing path: the `*EditorView` types are built at
-nine sites, all in `editor.rs`, and the published read path is `*View` on `Molecule`, untouched. The
-editor already copies a whole entry list into the mutable state on the first write to an overlay.
+See [Molecule](../umol-graph-ir/src/ir/molecule.rs),
+[builder](../umol-graph-ir/src/ir/molecule/build.rs),
+[editor](../umol-graph-ir/src/ir/molecule/editor.rs), and
+[batch application](../umol-graph-ir/src/ir/molecule/transact.rs).
 
-The stereo views need no change — `StereoLigand` is the same type in both states — and the
-noncovalent views already hold `[AtomId; 2]` owned.
+Edits is an ordered batch with handles for initial entities and entities created
+within the batch. Overlay removals carry offered old participants and attributes;
+field changes carry old/new values. Both apply and transact resolve handles and
+check preconditions. Their dispatch paths are separate, with shared operations
+underneath. Neither Edits nor the direct editor currently exposes participant
+replacement. Undo records realized changes, including cascades and compactions;
+it is not simply an inverse Edit. See [edit carriers](../umol-graph-ir/src/ir/edit.rs).
 
-## Evidence
+A Transaction is issued for a particular post-state; its rollback guarantee is
+bound to that history. Restoration also has to recover deleted rows at their old
+dense positions. Append-only relation insertion does not alone replace this
+restoration path. Review that path alongside forward mutation.
 
-Retain every editor and transaction assertion, including rollback. Assert that publishing an
-unmodified overlay returns the same handle without rebuilding, and that a batch of pushes
-materialises once rather than per operation.
+Other existing molecule operations include extraction, combination, splitting,
+constraint lifting/inlining, remapping, reframing, and canonicalization. Their
+named semantics remain relevant consumers/producers; a common mutation foundation
+does not by itself justify replacing their public APIs with edit batches.
 
-Exercise `alignment_action` and the generic old-state check for every overlay kind: identity and a
-legal reordering succeed, a participant mismatch fails, and stereo-bond cases distinguish
-within-block and complete-block exchange from an illegal cross-block movement. Use a
-position-sensitive aromatic or multicenter payload and a stereo payload so success demonstrates
-transport rather than only frame-invariant comparison.
+### Reaction definitions, spans, and application
 
-## Handoff
+Reaction owns a Molecule lhs and Deltas. It exposes checked/asserted construction,
+read access, into_parts, and named transformations, but no ReactionEditor or
+mutable lhs/deltas accessor. Deltas itself is an open mutable carrier; rebuilding
+a Reaction establishes aggregate integrity. ReactionSpan likewise has an open
+entries carrier and checked/asserted publication. See
+[Reaction](../umol-graph-ir/src/ir/reaction.rs),
+[Deltas](../umol-graph-ir/src/ir/delta.rs), and
+[ReactionSpan](../umol-graph-ir/src/ir/reaction_span.rs).
 
-Doc [166](166-molecule-ops-2026-07-27.md) records the 2026-09-15 decision that
-participant replacement belongs to relation storage across all five storage
-shapes. The editor must delegate participant mutation to that storage API;
-materialized entries are not the replacement mechanism. Reconcile this
-proposal's mutable storage shape with that decision before implementation.
-The storage API does not depend on this proposed generic editor trait.
+Editing a reaction definition and applying that reaction to a host are distinct
+operations. The former must coordinate lhs ids, delta targets, participant
+frames, and constraints; span editing must coordinate both sides and their
+correspondence. The latter already has contextual matching and applicability
+contracts, including ordinary non-applicability versus errors. Its implementation
+lowers to molecule Edits, calls transact, discards the journal, and checks product
+integrity. It derives its result correspondence from the host/product relation;
+that witness must not be silently replaced by an editor witness with different
+pairing semantics.
 
-The next follow-up is to wire editor-based participant mutation to that storage
-API. Doc 166 records this work without further design and then the hydrogen
-folder/unfolder implementation, whose operation design is essentially settled
-but blocked on the mutation surface.
+The review includes both paths. Whether reaction-definition editing needs a
+public editor, checked modification methods, or reconstruction through existing
+constructors is still open. Delta, Edit, and Undo have different roles; reviewing
+them together does not establish that they should share a representation.
 
-Nothing here is in the tree. `Overlays` and its six impls were written and reverted along with the
-rest, which is no great loss: the members are lifted verbatim out of the six inherent blocks, and
-the specification above is what took the thinking.
+### Python ownership
 
-The whole of it is to be done: `Overlays` and its impls, the `Participants` and `LocalAction`
-associated types with `alignment_action`, `OverlayEditor`, the generic framed old-state check, the
-editor view change, and the migration of the editor call sites — around 66 of them, every one a
-"trait not in scope" or an index-keyed read becoming an entry.
+The Python MoleculeEditor wraps an optional Rust editor. apply consumes it,
+including on failure; transact borrows it. Build consumes it; snapshot does not.
+Python exposes removal methods but not the complete Rust direct-add/mutable-view
+surface. Transaction rollback consumes the journal. Review parity deliberately
+rather than exposing detached mutable copies or assuming every Rust borrow can
+be bound directly. See [bindings](../umol-py/src/transaction.rs).
 
-None of it is required by doc 211's remaining stages.
+## What projections expose
+
+AromaticityResolver::project and StereoResolver::project construct field updates
+and collect full old overlay entries for removal before calling transact and
+discarding the journal. IsotopeResolver::project also uses transact. The aggregate
+Resolver::project already works on a private candidate before publishing its
+successful result. See [aromaticity](../umol-graph/src/ops/resolve/aromaticity.rs),
+[stereo](../umol-graph/src/ops/resolve/stereo.rs),
+[isotope](../umol-graph/src/ops/resolve/isotope.rs), and
+[resolver](../umol-graph/src/ops/resolve.rs).
+
+Switching transact to apply would remove journal construction, but would retain
+the work of describing old state, constructing Edits, and resolving handles.
+Direct mutation already exists for some of these operations. The design question
+is what the caller must express, and which common operations own the remaining
+bookkeeping. Chemical interpretation stays in umol-graph; storage maintenance,
+reference compaction, and graph-IR integrity belong below it. These are source-level
+observations, not measurements of runtime cost.
+
+## Settled storage and editor ownership — 2026-09-18
+
+Remove FixedSetStorage, VarSetStorage, and FixedVarSetStorage from the design.
+MoleculeEditor holds the same storage types as Molecule: Graph, Arc-backed
+atom/bond attributes, the six typed overlay entity sets directly, and Constraints.
+It also retains its editing-session correspondence. Entity-set mutation delegates
+to relation storage, using the sets' existing copy-on-write ownership. There is no
+separate mutable-vector representation. Transaction journals remain separate from
+the editor's intrinsic state.
+
+Retain MoleculeEditor as a separate owned type. Molecule promises aggregate
+representation integrity; the editor may hold unfinished changes whose combined
+result must pass the publication gate. For example, replacing stereo participants
+and adjusting their attributes may require coordinated changes before the result
+is a valid Molecule. The editor can be abandoned without publishing that state.
+
+A mutable Molecule borrow alone does not provide this boundary. When the borrow
+ends, including through an early return or panic, the caller again has a Molecule
+whose integrity must hold. Such mutation must either preserve integrity at each
+operation boundary or use controlled editing that validates the result and
+preserves/restores the original on failure.
+
+Molecule and MoleculeEditor therefore use the same storage types with different
+aggregate guarantees. Integrity-preserving operations may remain directly on
+Molecule; retaining the editor does not require routing every mutation through it.
+The exact entity-set mutation methods and their visibility remain to be designed.
+
+## Disposition of the earlier wrapper proposal
+
+The earlier sketch proposed OverlayEditor<O>, an Overlays trait, and a
+Shared/Mutable-vector representation. None is implemented. Storage-owned
+replacement now makes the mutable-vector representation unsuitable as the
+participant-mutation mechanism. The typed entity sets already provide
+copy-on-write ownership; a second representation is not needed merely to preserve
+sharing.
+
+The sketch also described raw constructors and entry extraction as public; they
+are currently crate-private. Publishing them through a trait would broaden the
+construction boundary. A generic trait, its name and visibility, constructor
+reshaping, and allocating editor views are not approved requirements. The editor
+will own the existing typed sets directly; the mutation access they need while
+the editor is transient remains to be designed.
+
+The useful part of the earlier proposal is participant-frame ownership. Generic
+relation storage knows factors and indices; graph IR knows which participants
+carry a frame and how attributes transform with that frame. The editor's existing
+six *_equiv methods already align offered participants and transport attributes
+for old-state comparison. Moving this knowledge to an entity-set operation is an
+ownership proposal, not new comparison semantics.
+
+For pairwise alignment, retain the direction `to[i] = from[action[i]]` and compare
+attributes after transport into the stored frame. Ordinary unordered factors use
+DynPermutation; stereo factors use bounded Permutation. Stereo-bond alignment
+must respect endpoint blocks: reorder within blocks or exchange complete blocks,
+not move an individual ligand across the boundary. The location and visibility of
+this operation remain open; it does not require a public generic trait.
+
+## Mutation surface under discussion — 2026-09-18
+
+The following records the proposed surface for discussion. It does not settle
+method names, signatures, or the remaining integrity and failure contracts.
+
+### Existing methods to reroute
+
+Delegate through the typed entity sets that own copy-on-write relation storage:
+
+| Editor surface | Storage operation and retained coordination |
+| --- | --- |
+| add_dative_bond, add_aromatic_system, add_multicenter_bond, add_noncovalent_bond, add_stereo_atom, add_stereo_bond | Relation add; editor extends session correspondence. |
+| Each overlay remove_* / tracked_remove_* pair | Relation tracked_remove; editor compacts constraints and correspondence using its returned row compaction. |
+| Mutable overlay attribute views | Entity-set attribute mutation through relation data_mut. |
+| Topology remove / tracked_remove | Existing Graph::tracked_remove_cascading, followed by relation tracked_compact; editor coordinates all entity spaces and constraints. |
+| Overlay reads and views | Typed entity-set accessors. |
+
+Plain editor removal still needs compaction internally even when it returns no
+witness. Atom/bond addition already delegates to Graph, and entity-set frame
+transformations already use storage participant permutation. Undo of additions
+can reuse removals; undo of removals needs the restoration capability below.
+
+### Missing editor participant operations
+
+| Entity kind | Mutable participant components |
+| --- | --- |
+| Aromatic system | Atom sequence |
+| Multicenter bond | Atom sequence |
+| Noncovalent bond | Fixed atom pair |
+| Dative bond | Acceptor and donor sequence, together and separately |
+| Stereo atom | Site and ligand sequence, together and separately |
+| Stereo bond | Site and ligand sequence, together and separately |
+
+Propose whole replacement, individual replacement, and positioned insertion/removal
+for variable sequences. Fixed components do not gain insertion/removal. Molecular
+names should identify atoms, donors, ligands, and sites rather than expose factor
+numbers. These changes preserve the entity id. Ordinary replacement preserves the
+attributes; the draft permits the caller to adjust them separately before publication.
+This permits ligand changes without removing and recreating the stereo entity.
+
+Reframing has a separate meaning: transport attributes and affected constraints
+along with participant order to preserve the represented value. Reuse the existing
+frame machinery; storage permutation alone does not perform that transformation.
+
+Localized-bond endpoint replacement is another gap. Graph has no edge-endpoint
+replacement operation, so retaining BondId while rewiring a bond would require
+additional graph-storage design beyond the completed relation surface.
+
+### Direct Molecule mutation
+
+Retain the existing direct attribute mutation and checked attribute/constraint
+callbacks. Consider direct structural methods for complete additions, removals,
+and replacements, with success preserving aggregate integrity and failure leaving
+the molecule unchanged. Share underlying mutation operations with the editor;
+these methods need neither Edits construction nor an undo journal. A private
+candidate followed by checked publication is a possible initial implementation;
+local checks may suffice where their preservation guarantee is established.
+
+Removal is not automatically integral. Deleting a bond from a stereo site to an
+explicit ligand can preserve all stored atom references while breaking required
+ligand incidence. Relation compaction does not detect that missing connecting
+bond. A direct Molecule operation must reject the result or have an explicitly
+defined broader cascade; this choice remains open.
+
+Some complete replacements must accept coordinated attributes, such as changing
+an aromatic participant count and its electron-count vector. The editor can
+perform these changes in separate steps; direct Molecule mutation must complete
+them within its integrity boundary. How much of the editor's primitive surface
+should have Molecule conveniences remains open.
+
+### Removal rollback: current implementation
+
+Transactional removal captures actual stored entries before mutation, including
+old entity ids, participants in their stored order, and attributes. Topology
+removal also captures cascading bonds and overlays. Undo stores the compaction
+and the constraint changes needed for restoration. UndoCompaction is an inverse
+view of MoleculeCompaction, not a separate history of payloads.
+
+Rollback replays Undo in reverse order. Before each operation, validate_undo checks
+counts, reconstruction positions, and relevant reference coverage. For each
+relation family, restore_* then:
+
+1. Allocates slots for the original row count.
+2. Places surviving rows at their original ids using inverse row compaction.
+3. Expands surviving node/edge references through inverse graph compaction.
+4. Places saved removed rows at their original ids. Their participants already
+   use the original graph ids and must not be expanded again.
+5. Stores the reconstructed entries in the current mutable-vector wrapper.
+   Relation storage and incidence indices are rebuilt when materialized for publication.
+
+Topology restoration similarly reconstructs atom/bond arrays and rebuilds Graph
+from restored endpoints. The transaction layer restores constraints and expands
+the session correspondence after restoring the affected tables. See
+[restore methods](../umol-graph-ir/src/ir/molecule/editor.rs),
+[undo execution](../umol-graph-ir/src/ir/molecule/transact.rs), and
+[UndoCompaction](../umol-graph-ir/src/ir/compact.rs).
+
+### Graph-core restoration dependency
+
+The settled graph-core restoration design and public contracts are
+recorded with the earlier storage work in
+[166 — Graph and relation restoration](166-molecule-ops-2026-07-27.md#graph-and-relation-restoration).
+That work will provide Graph::restore and relation-set restore/restore_participants;
+uncompact remains non-mutating reference translation. This document owns editor
+integration, including attribute arrays, constraints, correspondence, and
+transaction coordination, and delegates graph/relation reconstruction to those
+storage operations.
+
+## Design questions to settle together
+
+1. **Owning operations.** Which mutations belong on typed entity sets, which need
+   molecule-wide coordination, and which published Molecule conveniences should
+   remain? Delegate relation changes to storage while keeping constraint updates,
+   cascades, and identity tracking with the aggregate that owns those references.
+2. **Participants and attributes.** Specify whole replacement, individual
+   replacement, addition/removal where meaningful, and frame permutation together.
+   Storage replacement preserves the payload; graph IR must define how a changed
+   frame or participant count interacts with that payload. Distinguish reframing
+   the same entity from changing its participants. Decide when both must be
+   supplied together and when temporary inconsistency is permitted in a draft.
+3. **Execution and failure.** Define a direct path for callers working on a private
+   draft and a transactional path for rollback. Decide which operations they
+   share, where preconditions are checked, and what survives failure. Keep
+   journal-free execution, atomic publication, and reversible history distinct.
+4. **References and witnesses.** Separate current dense ids, batch handles,
+   session correspondences, per-operation compactions, and rollback restoration.
+   Preserve constraints through compaction. Record when an identity survives
+   participant replacement and what tracked results mean for changed frames.
+5. **Reaction mutation.** Specify editing lhs/deltas and editing both sides of a
+   span, including dependent references and publication. Review reaction
+   application as a consumer of the same molecule primitives without changing its
+   matching, non-applicability, or correspondence semantics by accident.
+6. **Public contract and bindings.** Enumerate the intended constructors,
+   conversions, mutators, publication gates, and contextual consumers before
+   implementation. State invalid-id panics versus recoverable input errors,
+   failure atomicity, and Rust/Python ownership for each surface. Existing low-level
+   storage failure rules do not automatically determine the batch or Python rules.
+
+The starting proposal for discussion is storage-owned mutation, typed graph-IR
+coordination, and transaction handling layered on the same underlying operations.
+Public names, signatures, and any additional type or trait remain to be settled.
+
+## Evidence for the eventual implementation
+
+Preserve the existing laws for handle namespaces, apply/transact result agreement,
+rollback, failure recovery, constraint compaction, publication, and correspondence
+composition. Relevant suites include
+[edit properties](../umol-graph-ir/tests/property/edit.rs),
+[publication](../umol-graph-ir/tests/property/molecule/publication.rs),
+[compaction](../umol-graph-ir/tests/property/molecule/compaction.rs), and the
+[reaction properties](../umol-graph-ir/tests/property/reaction).
+
+Extend coverage from the settled contract: all six entity kinds, participant and
+payload coordination, legal and illegal frame alignment, cascade restoration,
+reaction reference updates, and Python failure ownership. Include position-sensitive
+payloads so that frame tests prove transport. Benchmark representative direct,
+apply, and transact paths from the beginning, including copy-on-write sharing and
+repeated relation mutation; do not assume the current fixtures establish scale.

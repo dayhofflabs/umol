@@ -243,6 +243,7 @@ spelling.
 | `*Selection` for nested structural layers | `*Level` | selection does not state that the alternatives form an ordered, nested hierarchy |
 | `*Features` for mutually exclusive nested presets | `*Level` | features are independently combinable switches |
 | `try_*` solely because an operation returns `Option` or `Result` | the ordinary operation name | fallibility is part of the signature; `try_*` distinguishes a checked counterpart or restricted dispatch |
+| `uncompact_participants` for a storage mutation | `restore_participants` | uncompaction returns translated ids or participant values without mutating storage |
 | agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
 | operation-noun composites for run artifacts (`KekulizationConfig`) | verb stem (`KekulizeConfig`) | the operation noun names a completed act, not a run's parameters |
 | `CanonicalizeLevel`, `CanonicalizationLevel` | private `DescriptionLevel` | the internal hierarchy describes represented prefixes; public canonicalization is complete-only |
@@ -369,6 +370,12 @@ compaction per entity kind so every stale reference can be updated or discarded 
 post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
 the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for
 them.
+
+**Uncompaction** translates surviving ids from the result space back to the source space without
+mutating storage. For a participant value, it returns a value with translated references and
+preserves its other data. Applying those translated values to storage is a separate mutation
+operation; do not name that operation `uncompact_participants`. Uncompaction does not reinsert
+removed entities; that operation is restoration.
 
 **Not:** a correspondence, whose unmatched ids remain members of their respective carriers; not a
 remapping, which gives every source id an image and never expresses removal.
@@ -1549,6 +1556,18 @@ resolution leaves its source unchanged.
 **Not:** transformation (which rewrites determined representation), validation (which does not
 mutate), perception (which is policy-free).
 **In code:** `Resolver`, `resolve`, `ResolveConfig`.
+
+### Restoration
+
+**Restoration** reinstates removed entities from saved entries at their original ids, returning
+survivors to their original positions. Relation restoration preserves surviving participant
+values and attributes. Uncompaction translates participant references without mutating storage;
+applying those translated references to storage is participant-reference restoration.
+
+**Not:** uncompaction alone, which recovers surviving ids without reconstructing removed entries;
+transaction rollback, which coordinates restoration with other recorded changes.
+**In code:** editor `restore_topology`, `restore_atoms`, `restore_bonds`, and overlay `restore_*`
+methods; planned `Graph::restore` and relation-set `restore`/`restore_participants` methods.
 
 ### Result delivery
 
