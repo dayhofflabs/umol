@@ -21,6 +21,10 @@
 //! model with variable-length factors and positional payloads. Mixed edit sequences exercise
 //! growing, shrinking, and empty rows; every step checks both reference spaces and all row
 //! offsets through public readers. Insertion followed by removal also restores the prior value.
+//! [VarRelationSet::add] and [VarRelationSet::tracked_remove] additionally exercise mixed
+//! row additions, replacements, and removals with independently varying participant and payload
+//! lengths. Direct row scans check empty-row preservation, compacted offsets, and incidence;
+//! a separate add/remove roundtrip checks restoration after appending an empty or nonempty row.
 //! [FixedFixedBirelationSet::replace_participants] and its factor/local variants preserve
 //! both distinguished factors against a row model. Generated references can overlap within
 //! and across factors; direct union scans check that editing one factor retains references
@@ -761,6 +765,133 @@ fn assert_var_relation_rows(
         }
     }
     Ok(())
+}
+
+#[rstest]
+fn test_var_relation_set_add_roundtrip() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..9),
+                prop::collection::vec(any::<u8>(), 0..6),
+            ),
+            0..8,
+        ),
+        prop::collection::vec(participant_strategy(), 0..9),
+        prop::collection::vec(any::<u8>(), 0..6),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_relation_set_add_roundtrip"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(entries, participants, data)| {
+            let mut relations = VarRelationSet::new(entries.clone());
+            let id = relations.add(&participants, data.clone());
+            prop_assert_eq!(id, RelationId::from(entries.len()));
+            let mut appended = entries.clone();
+            appended.push((participants.clone(), data));
+            assert_var_relation_rows(&relations, &appended, &[], &participants)?;
+            relations.remove(&[id]);
+            assert_var_relation_rows(&relations, &entries, &participants, &[])?;
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_var_relation_set_tracked_remove() {
+    let strategy = (
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..9),
+                prop::collection::vec(any::<u8>(), 0..6),
+            ),
+            0..8,
+        ),
+        prop::collection::vec(
+            (
+                0u8..3,
+                prop::collection::vec(participant_strategy(), 0..9),
+                prop::collection::vec(any::<u8>(), 0..6),
+                0usize..16,
+                prop::collection::vec(0usize..16, 0..10),
+            ),
+            1..24,
+        ),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_relation_set_tracked_remove"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(mut entries, edits)| {
+            let mut relations = VarRelationSet::new(entries.clone());
+            for (operation, participants, data, position, removals) in edits {
+                let previous: Vec<_> = entries
+                    .iter()
+                    .flat_map(|(row, _)| row.iter().copied())
+                    .collect();
+                match operation {
+                    0 => {
+                        let id = relations.add(&participants, data.clone());
+                        prop_assert_eq!(id, RelationId::from(entries.len()));
+                        entries.push((participants.clone(), data));
+                    }
+                    1 if !entries.is_empty() => {
+                        let row = position % entries.len();
+                        relations.replace_participants(RelationId::from(row), &participants);
+                        entries[row].0 = participants.clone();
+                    }
+                    _ => {
+                        let ids: Vec<_> = if entries.is_empty() {
+                            vec![]
+                        } else {
+                            removals
+                                .iter()
+                                .map(|i| RelationId::from(i % entries.len()))
+                                .collect()
+                        };
+                        let source_count = entries.len();
+                        let survivors: Vec<_> = (0..source_count)
+                            .filter(|&i| !ids.contains(&RelationId::from(i)))
+                            .collect();
+                        let removed: Vec<_> = (0..source_count)
+                            .filter(|&i| ids.contains(&RelationId::from(i)))
+                            .map(RelationId::from)
+                            .collect();
+                        let mut plain = relations.clone();
+                        plain.remove(&ids);
+                        let compaction = relations.tracked_remove(&ids);
+                        prop_assert_eq!(&relations, &plain);
+                        prop_assert_eq!(compaction.source_count(), source_count);
+                        prop_assert_eq!(compaction.result_count(), survivors.len());
+                        prop_assert_eq!(compaction.removed(), &removed);
+                        for i in 0..=source_count {
+                            let expected = survivors
+                                .iter()
+                                .position(|&old| old == i)
+                                .map(RelationId::from);
+                            prop_assert_eq!(compaction.compact(RelationId::from(i)), expected);
+                        }
+                        entries = survivors.iter().map(|&i| entries[i].clone()).collect();
+                    }
+                }
+                assert_var_relation_rows(&relations, &entries, &previous, &participants)?;
+            }
+            prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[rstest]

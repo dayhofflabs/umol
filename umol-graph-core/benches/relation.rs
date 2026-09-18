@@ -469,6 +469,125 @@ fn var(c: &mut Criterion) {
     group.finish();
 }
 
+fn var_rows(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relation/var_rows");
+    for count in [0usize, 1, 64, 1024] {
+        for width in [0usize, 4, 32] {
+            for repeated in [false, true] {
+                let pattern = if repeated { "repeated" } else { "sparse" };
+                let fixture = format!("rows={count}/width={width}/{pattern}");
+                let entries: Vec<(Vec<NodeId>, usize)> = (0..count)
+                    .map(|row| {
+                        (
+                            (0..width)
+                                .map(|position| {
+                                    NodeId(if repeated {
+                                        if position < width / 2 {
+                                            0
+                                        } else {
+                                            row as u32 + 1
+                                        }
+                                    } else {
+                                        (row * width + position) as u32
+                                    })
+                                })
+                                .collect(),
+                            row,
+                        )
+                    })
+                    .collect();
+                let relations = VarRelationSet::new(entries.clone());
+                let participants: Vec<_> = (0..width)
+                    .map(|position| {
+                        NodeId(if repeated {
+                            if position < width / 2 {
+                                0
+                            } else {
+                                count as u32 + 1
+                            }
+                        } else {
+                            (count * width + position) as u32
+                        })
+                    })
+                    .collect();
+                let mut added = relations.clone();
+                assert_eq!(added.add(&participants, count), RelationId::from(count));
+                let mut expected = entries.clone();
+                expected.push((participants.clone(), count));
+                assert_eq!(added.into_entries(), expected);
+                group.bench_function(BenchmarkId::new("add", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            black_box(relations.add(black_box(&participants), black_box(count)))
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+                let mut removals = vec![("empty", vec![])];
+                if count > 0 {
+                    removals.extend([
+                        ("first", vec![RelationId(0)]),
+                        ("middle", vec![RelationId::from(count / 2)]),
+                        ("last", vec![RelationId::from(count - 1)]),
+                        (
+                            "alternating",
+                            (0..count).step_by(2).map(RelationId::from).collect(),
+                        ),
+                        ("all", (0..count).map(RelationId::from).collect()),
+                    ]);
+                }
+                for (selection, ids) in removals {
+                    let fixture = format!("{fixture}/selection={selection}");
+                    let expected: Vec<_> = entries
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| !ids.contains(&RelationId::from(*i)))
+                        .map(|(_, entry)| entry.clone())
+                        .collect();
+                    let mut removed = relations.clone();
+                    let compaction = removed.tracked_remove(&ids);
+                    assert_eq!(compaction.source_count(), count);
+                    assert_eq!(compaction.result_count(), expected.len());
+                    for node in entries
+                        .first()
+                        .into_iter()
+                        .chain(entries.last())
+                        .flat_map(|(row, _)| row)
+                    {
+                        let incidence: Vec<_> = expected
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, (row, _))| row.contains(node))
+                            .map(|(i, _)| RelationId::from(i))
+                            .collect();
+                        assert_eq!(removed.incident_to_node(*node), incidence);
+                    }
+                    assert_eq!(removed.into_entries(), expected);
+                    group.bench_function(BenchmarkId::new("remove", &fixture), |b| {
+                        b.iter_batched_ref(
+                            || relations.clone(),
+                            |relations| {
+                                relations.remove(black_box(&ids));
+                                black_box(relations.count());
+                            },
+                            BatchSize::LargeInput,
+                        )
+                    });
+                    group.bench_function(BenchmarkId::new("tracked_remove", &fixture), |b| {
+                        b.iter_batched_ref(
+                            || relations.clone(),
+                            |relations| black_box(relations.tracked_remove(black_box(&ids))),
+                            BatchSize::LargeInput,
+                        )
+                    });
+                }
+            }
+        }
+    }
+    group.finish();
+}
+
 fn fixed_fixed(c: &mut Criterion) {
     let mut group = c.benchmark_group("relation/fixed_fixed");
     for count in [1usize, 64, 1024] {
@@ -1794,6 +1913,7 @@ criterion_group!(
     fixed,
     fixed_rows,
     var,
+    var_rows,
     fixed_fixed,
     fixed_var,
     var_var

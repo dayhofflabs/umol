@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
@@ -27,7 +28,8 @@ fn hash<T: Hash>(value: &T) -> u64 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PositionLabels(Vec<u32>);
 
-struct NonCloneData;
+#[derive(Debug, PartialEq, Eq)]
+struct NonCloneData(Vec<u32>);
 
 fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
 where
@@ -371,6 +373,198 @@ fn test_var_relation_set_coincident_to_node_multiplicity(
     ]);
     assert_eq!(relations.coincident_to_node(anchor, &query), expected);
     assert_eq!(relations.is_coincident(RelationId(0), &query), coincides);
+}
+
+#[rstest]
+#[case::empty_set(vec![], vec![NodeId(2), NodeId(2)], vec![(vec![NodeId(2), NodeId(2)], "added")])]
+#[case::empty_row(vec![], vec![], vec![(vec![], "added")])]
+#[case::adjacent_empty(vec![(vec![], "first"), (vec![], "second")], vec![], vec![(vec![], "first"), (vec![], "second"), (vec![], "added")])]
+#[case::after_empty(vec![(vec![NodeId(0)], "first"), (vec![], "second")], vec![NodeId(2), NodeId(0)], vec![(vec![NodeId(0)], "first"), (vec![], "second"), (vec![NodeId(2), NodeId(0)], "added")])]
+#[case::coinciding(vec![(vec![NodeId(2), NodeId(2)], "old")], vec![NodeId(2), NodeId(2)], vec![(vec![NodeId(2), NodeId(2)], "old"), (vec![NodeId(2), NodeId(2)], "added")])]
+#[case::sparse(vec![(vec![NodeId(0)], "old")], vec![NodeId(u32::MAX), NodeId(0), NodeId(u32::MAX)], vec![(vec![NodeId(0)], "old"), (vec![NodeId(u32::MAX), NodeId(0), NodeId(u32::MAX)], "added")])]
+#[case::empty_after_nonempty(vec![(vec![NodeId(1), NodeId(0)], "old")], vec![], vec![(vec![NodeId(1), NodeId(0)], "old"), (vec![], "added")])]
+fn test_var_relation_set_add(
+    #[case] entries: Vec<(Vec<NodeId>, &'static str)>,
+    #[case] participants: Vec<NodeId>,
+    #[case] expected: Vec<(Vec<NodeId>, &'static str)>,
+) {
+    let count = entries.len();
+    let mut relations = VarRelationSet::new(entries);
+    assert_eq!(
+        relations.add(&participants, "added"),
+        RelationId::from(count)
+    );
+    assert_eq!(relations.count(), count + 1);
+    for (index, (row, data)) in expected.iter().enumerate() {
+        assert_eq!(relations.participants(RelationId::from(index)), row);
+        assert_eq!(relations.data(RelationId::from(index)), data);
+    }
+    for node in [NodeId(0), NodeId(1), NodeId(2), NodeId(u32::MAX)] {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.contains(&node))
+            .map(|(i, _)| RelationId::from(i))
+            .collect();
+        assert_eq!(relations.incident_to_node(node), incidence);
+        assert_eq!(relations.incident_to_edge(EdgeId(node.0)), &[]);
+    }
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+fn test_var_relation_set_add_payload() {
+    let mut relations = VarRelationSet::default();
+    assert_eq!(
+        relations.add(&[EdgeId(2), EdgeId(0)], NonCloneData(vec![7, 11])),
+        RelationId(0)
+    );
+    assert_eq!(relations.add(&[], NonCloneData(vec![13])), RelationId(1));
+    assert_eq!(
+        relations.add(&[EdgeId(2), EdgeId(2)], NonCloneData(vec![17, 19])),
+        RelationId(2)
+    );
+    assert_eq!(relations.incident_to_edge(EdgeId(0)), &[RelationId(0)]);
+    assert_eq!(
+        relations.incident_to_edge(EdgeId(2)),
+        &[RelationId(0), RelationId(2)]
+    );
+    assert_eq!(relations.incident_to_node(NodeId(2)), &[]);
+    assert_eq!(
+        relations.into_entries(),
+        vec![
+            (vec![EdgeId(2), EdgeId(0)], NonCloneData(vec![7, 11])),
+            (vec![], NonCloneData(vec![13])),
+            (vec![EdgeId(2), EdgeId(2)], NonCloneData(vec![17, 19])),
+        ]
+    );
+}
+
+#[rstest]
+#[case::first_empty(vec![RelationId(0)], vec![1, 2, 3, 4, 5])]
+#[case::first_nonempty(vec![RelationId(1)], vec![0, 2, 3, 4, 5])]
+#[case::middle_empty(vec![RelationId(2)], vec![0, 1, 3, 4, 5])]
+#[case::last(vec![RelationId(5)], vec![0, 1, 2, 3, 4])]
+#[case::unordered_repeated(vec![RelationId(4), RelationId(1), RelationId(4), RelationId(2)], vec![0, 3, 5])]
+#[case::all_nonempty(vec![RelationId(1), RelationId(3), RelationId(5)], vec![0, 2, 4])]
+#[case::all_empty(vec![RelationId(0), RelationId(2), RelationId(4)], vec![1, 3, 5])]
+#[case::all(vec![RelationId(5), RelationId(3), RelationId(1), RelationId(0), RelationId(2), RelationId(4)], vec![])]
+fn test_var_relation_set_tracked_remove(
+    #[case] ids: Vec<RelationId>,
+    #[case] survivors: Vec<usize>,
+) {
+    let entries = vec![
+        (vec![], PositionLabels(vec![7])),
+        (
+            vec![NodeId(0), NodeId(1), NodeId(0)],
+            PositionLabels(vec![11, 13, 17]),
+        ),
+        (vec![], PositionLabels(vec![19])),
+        (vec![NodeId(2), NodeId(3)], PositionLabels(vec![23, 29])),
+        (vec![], PositionLabels(vec![31])),
+        (vec![NodeId(1)], PositionLabels(vec![37])),
+    ];
+    let expected: Vec<_> = survivors.iter().map(|&i| entries[i].clone()).collect();
+    let mut relations = VarRelationSet::new(entries);
+    let mut plain = relations.clone();
+    plain.remove(&ids);
+    let compaction = relations.tracked_remove(&ids);
+    assert_eq!(relations, plain);
+    assert_eq!(compaction.source_count(), 6);
+    assert_eq!(compaction.result_count(), survivors.len());
+    let removed: Vec<_> = (0..6)
+        .filter(|i| !survivors.contains(i))
+        .map(RelationId::from)
+        .collect();
+    assert_eq!(compaction.removed(), removed);
+    for old in 0..=6 {
+        assert_eq!(
+            compaction.compact(RelationId::from(old)),
+            survivors
+                .iter()
+                .position(|&i| i == old)
+                .map(RelationId::from)
+        );
+    }
+    assert_var_relation_rows(&relations, &expected);
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+#[case::empty(vec![])]
+#[case::empty_rows(vec![(vec![], PositionLabels(vec![7])), (vec![], PositionLabels(vec![11]))])]
+#[case::mixed(vec![(vec![], PositionLabels(vec![7])), (vec![NodeId(2), NodeId(0)], PositionLabels(vec![11, 13]))])]
+fn test_var_relation_set_tracked_remove_identity(
+    #[case] entries: Vec<(Vec<NodeId>, PositionLabels)>,
+) {
+    let mut relations = VarRelationSet::new(entries.clone());
+    let original = relations.clone();
+    assert_eq!(
+        relations.tracked_remove(&[]),
+        Compaction::identity(entries.len())
+    );
+    assert_eq!(relations, original);
+    assert_var_relation_rows(&relations, &entries);
+}
+
+#[rstest]
+fn test_var_relation_set_tracked_remove_payload() {
+    let mut relations = VarRelationSet::default();
+    relations.add(&[EdgeId(2), EdgeId(0)], NonCloneData(vec![7, 11]));
+    relations.add(&[], NonCloneData(vec![13]));
+    relations.add(
+        &[EdgeId(2), EdgeId(2), EdgeId(3)],
+        NonCloneData(vec![17, 19, 23]),
+    );
+    relations.add(&[], NonCloneData(vec![29]));
+    let compaction = relations.tracked_remove(&[RelationId(0), RelationId(3)]);
+    assert_eq!(compaction.source_count(), 4);
+    assert_eq!(compaction.result_count(), 2);
+    assert_eq!(compaction.removed(), &[RelationId(0), RelationId(3)]);
+    assert_eq!(relations.participants(RelationId(0)), &[]);
+    assert_eq!(
+        relations.participants(RelationId(1)),
+        &[EdgeId(2), EdgeId(2), EdgeId(3)]
+    );
+    assert_eq!(relations.incident_to_edge(EdgeId(0)), &[]);
+    assert_eq!(relations.incident_to_edge(EdgeId(2)), &[RelationId(1)]);
+    assert_eq!(relations.incident_to_edge(EdgeId(3)), &[RelationId(1)]);
+    assert_eq!(
+        relations.into_entries(),
+        vec![
+            (vec![], NonCloneData(vec![13])),
+            (
+                vec![EdgeId(2), EdgeId(2), EdgeId(3)],
+                NonCloneData(vec![17, 19, 23])
+            ),
+        ]
+    );
+}
+
+#[rstest]
+#[case::empty(vec![], vec![RelationId(0)])]
+#[case::end(vec![(vec![], "empty")], vec![RelationId(1)])]
+#[case::mixed(vec![(vec![NodeId(0)], "first"), (vec![], "empty"), (vec![NodeId(2)], "last")], vec![RelationId(0), RelationId(3)])]
+#[case::distant(vec![(vec![NodeId(0)], "first")], vec![RelationId(u32::MAX), RelationId(0)])]
+fn test_var_relation_set_tracked_remove_error(
+    #[case] entries: Vec<(Vec<NodeId>, &'static str)>,
+    #[case] ids: Vec<RelationId>,
+) {
+    let original = VarRelationSet::new(entries);
+    let mut relations = original.clone();
+    let panic = catch_unwind(AssertUnwindSafe(|| relations.tracked_remove(&ids))).unwrap_err();
+    let message = panic.downcast_ref::<String>().unwrap();
+    assert!(message.starts_with("removed relations belong to the source set"));
+    assert_eq!(relations, original);
+    for node in [NodeId(0), NodeId(2)] {
+        assert_eq!(
+            relations.incident_to_node(node),
+            original.incident_to_node(node)
+        );
+    }
+    let panic = catch_unwind(AssertUnwindSafe(|| relations.remove(&ids))).unwrap_err();
+    assert_eq!(panic.downcast_ref::<String>(), Some(message));
+    assert_eq!(relations, original);
 }
 
 #[rstest]
