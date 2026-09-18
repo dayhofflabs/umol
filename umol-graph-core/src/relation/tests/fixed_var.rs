@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
@@ -48,7 +49,8 @@ where
     assert_eq!(iterator.size_hint(), (0, Some(0)));
 }
 
-struct NonCloneData;
+#[derive(Debug, PartialEq, Eq)]
+struct NonCloneData(Vec<u32>);
 
 #[fixture]
 fn fixed_var_birelation_set_mutation_entries() -> Vec<([NodeId; 2], Vec<NodeId>, BiPositionLabels)>
@@ -426,6 +428,257 @@ fn test_fixed_var_birelation_set_find_by_participants_edge_anchor(
         rs.coincident_to_edge(EdgeId(0), &[EdgeId(0)], &ligands),
         expected,
     );
+}
+
+#[rstest]
+#[case::empty(vec![], [NodeId(2), NodeId(2)], vec![NodeId(2), NodeId(3)])]
+#[case::shared(vec![([NodeId(0), NodeId(2)], vec![NodeId(2), NodeId(1)], "old")], [NodeId(2), NodeId(2)], vec![NodeId(2), NodeId(3), NodeId(2)])]
+#[case::coinciding(vec![([NodeId(2)], vec![NodeId(2), NodeId(3)], "old")], [NodeId(2)], vec![NodeId(2), NodeId(3)])]
+#[case::reordered(vec![([NodeId(0), NodeId(1)], vec![NodeId(2), NodeId(3)], "old")], [NodeId(1), NodeId(0)], vec![NodeId(3), NodeId(2)])]
+#[case::sparse(vec![], [NodeId(u32::MAX)], vec![NodeId(u32::MAX), NodeId(0)])]
+#[case::first_empty(vec![([], vec![NodeId(0), NodeId(1)], "old")], [], vec![NodeId(1)])]
+#[case::second_empty(vec![([NodeId(0)], vec![NodeId(1), NodeId(2)], "old")], [NodeId(1)], vec![])]
+#[case::adjacent_empty(vec![([NodeId(0)], vec![], "first"), ([NodeId(1)], vec![], "second")], [NodeId(2)], vec![])]
+#[case::after_empty(vec![([NodeId(0)], vec![], "first"), ([NodeId(1)], vec![], "second")], [NodeId(2)], vec![NodeId(3), NodeId(2)])]
+#[case::both_empty(vec![([], vec![], "first")], [], vec![])]
+fn test_fixed_var_birelation_set_add<const N1: usize>(
+    #[case] entries: Vec<([NodeId; N1], Vec<NodeId>, &'static str)>,
+    #[case] first: [NodeId; N1],
+    #[case] second: Vec<NodeId>,
+) {
+    let mut relations = FixedVarBirelationSet::new(entries.clone());
+    assert_eq!(
+        relations.add(first, &second, "added"),
+        RelationId::from(entries.len())
+    );
+    let mut expected = entries;
+    expected.push((first, second, "added"));
+    assert_eq!(relations.count(), expected.len());
+    for (i, (a, b, data)) in expected.iter().enumerate() {
+        assert_eq!(relations.participants_1(RelationId::from(i)), a);
+        assert_eq!(relations.participants_2(RelationId::from(i)), b);
+        assert_eq!(relations.data(RelationId::from(i)), data);
+    }
+    for node in [0, 1, 2, 3, u32::MAX].map(NodeId) {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (a, b, _))| a.contains(&node) || b.contains(&node))
+            .map(|(i, _)| RelationId::from(i))
+            .collect();
+        assert_eq!(relations.incident_to_node(node), incidence);
+        assert_eq!(relations.incident_to_edge(EdgeId(node.0)), &[]);
+    }
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+fn test_fixed_var_birelation_set_add_payload() {
+    let mut relations = FixedVarBirelationSet::default();
+    assert_eq!(
+        relations.add(
+            [EdgeId(0)],
+            &[NodeId(2), NodeId(0)],
+            NonCloneData(vec![7, 11])
+        ),
+        RelationId(0)
+    );
+    assert_eq!(
+        relations.add([EdgeId(1)], &[], NonCloneData(vec![13])),
+        RelationId(1)
+    );
+    assert_eq!(
+        relations.add(
+            [EdgeId(2)],
+            &[NodeId(2), NodeId(2)],
+            NonCloneData(vec![17, 19])
+        ),
+        RelationId(2)
+    );
+    assert_eq!(relations.incident_to_edge(EdgeId(0)), &[RelationId(0)]);
+    assert_eq!(relations.incident_to_edge(EdgeId(1)), &[RelationId(1)]);
+    assert_eq!(relations.incident_to_edge(EdgeId(2)), &[RelationId(2)]);
+    assert_eq!(relations.incident_to_node(NodeId(0)), &[RelationId(0)]);
+    assert_eq!(relations.incident_to_node(NodeId(1)), &[]);
+    assert_eq!(
+        relations.incident_to_node(NodeId(2)),
+        &[RelationId(0), RelationId(2)]
+    );
+    assert_eq!(
+        relations.into_entries(),
+        vec![
+            (
+                [EdgeId(0)],
+                vec![NodeId(2), NodeId(0)],
+                NonCloneData(vec![7, 11])
+            ),
+            ([EdgeId(1)], vec![], NonCloneData(vec![13])),
+            (
+                [EdgeId(2)],
+                vec![NodeId(2), NodeId(2)],
+                NonCloneData(vec![17, 19])
+            ),
+        ]
+    );
+}
+
+#[rstest]
+#[case::first(vec![RelationId(0)], vec![1, 2])]
+#[case::empty_second_factor(vec![RelationId(1)], vec![0, 2])]
+#[case::last(vec![RelationId(2)], vec![0, 1])]
+#[case::unordered_repeated(vec![RelationId(2), RelationId(0), RelationId(2)], vec![1])]
+#[case::all(vec![RelationId(2), RelationId(0), RelationId(1)], vec![])]
+fn test_fixed_var_birelation_set_tracked_remove(
+    fixed_var_birelation_set_mutation_entries: Vec<([NodeId; 2], Vec<NodeId>, BiPositionLabels)>,
+    #[case] ids: Vec<RelationId>,
+    #[case] survivors: Vec<usize>,
+) {
+    let entries = fixed_var_birelation_set_mutation_entries;
+    let expected: Vec<_> = survivors.iter().map(|&i| entries[i].clone()).collect();
+    let mut relations = FixedVarBirelationSet::new(entries);
+    let mut plain = relations.clone();
+    plain.remove(&ids);
+    let compaction = relations.tracked_remove(&ids);
+    assert_eq!(relations, plain);
+    assert_eq!(compaction.source_count(), 3);
+    assert_eq!(compaction.result_count(), survivors.len());
+    let removed: Vec<_> = (0..3)
+        .filter(|i| !survivors.contains(i))
+        .map(RelationId::from)
+        .collect();
+    assert_eq!(compaction.removed(), removed);
+    for old in 0..=3 {
+        assert_eq!(
+            compaction.compact(RelationId::from(old)),
+            survivors
+                .iter()
+                .position(|&i| i == old)
+                .map(RelationId::from)
+        );
+    }
+    assert_fixed_var_birelation_rows(&relations, &expected);
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+#[case::empty(FixedVarBirelationSet::<NodeId, 0, NodeId, &str>::default())]
+#[case::both_empty(FixedVarBirelationSet::<NodeId, 0, NodeId, &str>::new(vec![([], vec![], "first"), ([], vec![], "second")]))]
+#[case::nonempty(FixedVarBirelationSet::new(vec![([NodeId(0)], vec![NodeId(2), NodeId(0)], "first")]))]
+fn test_fixed_var_birelation_set_tracked_remove_identity<const N1: usize>(
+    #[case] input: FixedVarBirelationSet<NodeId, N1, NodeId, &'static str>,
+) {
+    let mut relations = input.clone();
+    assert_eq!(
+        relations.tracked_remove(&[]),
+        Compaction::identity(input.count())
+    );
+    assert_eq!(relations, input);
+    for node in [NodeId(0), NodeId(2)] {
+        assert_eq!(
+            relations.incident_to_node(node),
+            input.incident_to_node(node)
+        );
+    }
+}
+
+#[rstest]
+#[case::first_empty([], vec![NodeId(0), NodeId(1)])]
+#[case::second_empty([NodeId(0), NodeId(1)], vec![])]
+#[case::both_empty([], vec![])]
+#[case::overlap([NodeId(0)], vec![NodeId(0), NodeId(1)])]
+fn test_fixed_var_birelation_set_tracked_remove_arity<const N1: usize>(
+    #[case] first: [NodeId; N1],
+    #[case] second: Vec<NodeId>,
+) {
+    let mut relations = FixedVarBirelationSet::new(vec![
+        (first, vec![], "first"),
+        (first, second, "second"),
+        (first, vec![], "third"),
+        (first, vec![NodeId(2)], "fourth"),
+    ]);
+    let compaction = relations.tracked_remove(&[RelationId(1), RelationId(2)]);
+    assert_eq!(compaction.source_count(), 4);
+    assert_eq!(compaction.result_count(), 2);
+    assert_eq!(compaction.removed(), &[RelationId(1), RelationId(2)]);
+    let expected = vec![(first, vec![], "first"), (first, vec![NodeId(2)], "fourth")];
+    for (i, (a, b, data)) in expected.iter().enumerate() {
+        assert_eq!(relations.participants_1(RelationId::from(i)), a);
+        assert_eq!(relations.participants_2(RelationId::from(i)), b);
+        assert_eq!(relations.data(RelationId::from(i)), data);
+    }
+    for node in [NodeId(0), NodeId(1), NodeId(2)] {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (a, b, _))| a.contains(&node) || b.contains(&node))
+            .map(|(i, _)| RelationId::from(i))
+            .collect();
+        assert_eq!(relations.incident_to_node(node), incidence);
+    }
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+fn test_fixed_var_birelation_set_tracked_remove_payload() {
+    let mut relations = FixedVarBirelationSet::default();
+    relations.add(
+        [EdgeId(0)],
+        &[NodeId(2), NodeId(0)],
+        NonCloneData(vec![7, 11]),
+    );
+    relations.add([EdgeId(1)], &[], NonCloneData(vec![13]));
+    relations.add(
+        [EdgeId(2)],
+        &[NodeId(2), NodeId(2), NodeId(3)],
+        NonCloneData(vec![17, 19, 23]),
+    );
+    let compaction = relations.tracked_remove(&[RelationId(0)]);
+    assert_eq!(compaction.source_count(), 3);
+    assert_eq!(compaction.result_count(), 2);
+    assert_eq!(compaction.removed(), &[RelationId(0)]);
+    assert_eq!(relations.incident_to_edge(EdgeId(0)), &[]);
+    assert_eq!(relations.incident_to_edge(EdgeId(1)), &[RelationId(0)]);
+    assert_eq!(relations.incident_to_edge(EdgeId(2)), &[RelationId(1)]);
+    assert_eq!(relations.incident_to_node(NodeId(0)), &[]);
+    assert_eq!(relations.incident_to_node(NodeId(2)), &[RelationId(1)]);
+    assert_eq!(relations.incident_to_node(NodeId(3)), &[RelationId(1)]);
+    assert_eq!(
+        relations.into_entries(),
+        vec![
+            ([EdgeId(1)], vec![], NonCloneData(vec![13])),
+            (
+                [EdgeId(2)],
+                vec![NodeId(2), NodeId(2), NodeId(3)],
+                NonCloneData(vec![17, 19, 23])
+            ),
+        ]
+    );
+}
+
+#[rstest]
+#[case::empty(vec![], vec![RelationId(0)])]
+#[case::end(vec![([NodeId(0)], vec![], "first")], vec![RelationId(1)])]
+#[case::mixed(vec![([NodeId(0)], vec![NodeId(2)], "first"), ([NodeId(2)], vec![], "second")], vec![RelationId(0), RelationId(2)])]
+#[case::distant(vec![([NodeId(0)], vec![NodeId(2)], "first")], vec![RelationId(u32::MAX), RelationId(0)])]
+fn test_fixed_var_birelation_set_tracked_remove_error(
+    #[case] entries: Vec<([NodeId; 1], Vec<NodeId>, &'static str)>,
+    #[case] ids: Vec<RelationId>,
+) {
+    let original = FixedVarBirelationSet::new(entries);
+    let mut relations = original.clone();
+    let panic = catch_unwind(AssertUnwindSafe(|| relations.tracked_remove(&ids))).unwrap_err();
+    let message = panic.downcast_ref::<String>().unwrap();
+    assert!(message.starts_with("removed relations belong to the source set"));
+    assert_eq!(relations, original);
+    for node in [NodeId(0), NodeId(2)] {
+        assert_eq!(
+            relations.incident_to_node(node),
+            original.incident_to_node(node)
+        );
+    }
+    let panic = catch_unwind(AssertUnwindSafe(|| relations.remove(&ids))).unwrap_err();
+    assert_eq!(panic.downcast_ref::<String>(), Some(message));
+    assert_eq!(relations, original);
 }
 
 #[rstest]
