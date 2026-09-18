@@ -2184,6 +2184,177 @@ fn var_var(c: &mut Criterion) {
     group.finish();
 }
 
+fn var_var_rows(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relation/var_var_rows");
+    for count in [0usize, 1, 64, 1024] {
+        for (width_1, width_2) in [
+            (0usize, 0usize),
+            (0, 4),
+            (0, 32),
+            (4, 0),
+            (4, 4),
+            (4, 32),
+            (32, 0),
+            (32, 4),
+            (32, 32),
+        ] {
+            for repeated in [false, true] {
+                let pattern = if repeated { "repeated" } else { "sparse" };
+                let fixture = format!("rows={count}/widths={width_1},{width_2}/{pattern}");
+                let entries: Vec<(Vec<NodeId>, Vec<EdgeId>, usize)> = (0..count)
+                    .map(|row| {
+                        let first = (0..width_1)
+                            .map(|position| {
+                                NodeId(if repeated {
+                                    if position < width_1 / 2 {
+                                        0
+                                    } else {
+                                        row as u32 + 1
+                                    }
+                                } else {
+                                    (row * width_1 + position) as u32
+                                })
+                            })
+                            .collect();
+                        let second = (0..width_2)
+                            .map(|position| {
+                                EdgeId(if repeated {
+                                    if position < width_2 / 2 {
+                                        0
+                                    } else {
+                                        row as u32 + 1
+                                    }
+                                } else {
+                                    (row * width_2 + position) as u32
+                                })
+                            })
+                            .collect();
+                        (first, second, row)
+                    })
+                    .collect();
+                let relations = VarVarBirelationSet::new(entries.clone());
+                let first: Vec<_> = (0..width_1)
+                    .map(|position| {
+                        NodeId(if repeated {
+                            if position < width_1 / 2 {
+                                0
+                            } else {
+                                count as u32 + 1
+                            }
+                        } else {
+                            (count * width_1 + position) as u32
+                        })
+                    })
+                    .collect();
+                let second: Vec<_> = (0..width_2)
+                    .map(|position| {
+                        EdgeId(if repeated {
+                            if position < width_2 / 2 {
+                                0
+                            } else {
+                                count as u32 + 1
+                            }
+                        } else {
+                            (count * width_2 + position) as u32
+                        })
+                    })
+                    .collect();
+                let mut added = relations.clone();
+                assert_eq!(added.add(&first, &second, count), RelationId::from(count));
+                let mut expected = entries.clone();
+                expected.push((first.clone(), second.clone(), count));
+                assert_eq!(added.into_entries(), expected);
+                group.bench_function(BenchmarkId::new("add", &fixture), |b| {
+                    b.iter_batched_ref(
+                        || relations.clone(),
+                        |relations| {
+                            black_box(relations.add(
+                                black_box(&first),
+                                black_box(&second),
+                                black_box(count),
+                            ))
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
+                let mut removals = vec![("empty", vec![])];
+                if count > 0 {
+                    removals.extend([
+                        ("first", vec![RelationId(0)]),
+                        ("middle", vec![RelationId::from(count / 2)]),
+                        ("last", vec![RelationId::from(count - 1)]),
+                        (
+                            "alternating",
+                            (0..count).step_by(2).map(RelationId::from).collect(),
+                        ),
+                        ("all", (0..count).map(RelationId::from).collect()),
+                    ]);
+                }
+                for (selection, ids) in removals {
+                    let fixture = format!("{fixture}/selection={selection}");
+                    let expected: Vec<_> = entries
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| !ids.contains(&RelationId::from(*i)))
+                        .map(|(_, entry)| entry.clone())
+                        .collect();
+                    let mut removed = relations.clone();
+                    let compaction = removed.tracked_remove(&ids);
+                    assert_eq!(compaction.source_count(), count);
+                    assert_eq!(compaction.result_count(), expected.len());
+                    for node in entries
+                        .first()
+                        .into_iter()
+                        .chain(entries.last())
+                        .flat_map(|(row, _, _)| row)
+                    {
+                        let incidence: Vec<_> = expected
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, (row, _, _))| row.contains(node))
+                            .map(|(i, _)| RelationId::from(i))
+                            .collect();
+                        assert_eq!(removed.incident_to_node(*node), incidence);
+                    }
+                    for edge in entries
+                        .first()
+                        .into_iter()
+                        .chain(entries.last())
+                        .flat_map(|(_, row, _)| row)
+                    {
+                        let incidence: Vec<_> = expected
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, (_, row, _))| row.contains(edge))
+                            .map(|(i, _)| RelationId::from(i))
+                            .collect();
+                        assert_eq!(removed.incident_to_edge(*edge), incidence);
+                    }
+                    assert_eq!(removed.into_entries(), expected);
+                    group.bench_function(BenchmarkId::new("remove", &fixture), |b| {
+                        b.iter_batched_ref(
+                            || relations.clone(),
+                            |relations| {
+                                relations.remove(black_box(&ids));
+                                black_box(relations.count());
+                            },
+                            BatchSize::LargeInput,
+                        )
+                    });
+                    group.bench_function(BenchmarkId::new("tracked_remove", &fixture), |b| {
+                        b.iter_batched_ref(
+                            || relations.clone(),
+                            |relations| black_box(relations.tracked_remove(black_box(&ids))),
+                            BatchSize::LargeInput,
+                        )
+                    });
+                }
+            }
+        }
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     fixed,
@@ -2194,6 +2365,7 @@ criterion_group!(
     fixed_fixed_rows,
     fixed_var,
     fixed_var_rows,
-    var_var
+    var_var,
+    var_var_rows
 );
 criterion_main!(benches);
