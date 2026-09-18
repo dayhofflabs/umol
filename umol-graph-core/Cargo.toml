@@ -43,6 +43,10 @@ harness = false
 name = "relation"
 harness = false
 
+[[bench]]
+name = "restore"
+harness = false
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"

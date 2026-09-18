@@ -179,6 +179,8 @@ where
 
     /// Recover a survivor's source id.
     ///
+    /// Lookup uses one binary search over the removed ids, without allocating.
+    ///
     /// # Panics
     ///
     /// Panics when `post` is outside the result domain.
@@ -188,18 +190,24 @@ where
     }
 
     /// Checked form of [`Self::uncompact`]; returns `None` outside the result domain.
+    ///
+    /// Takes O(log(r + 1)) time and O(1) extra space for r removed ids.
     pub fn try_uncompact(&self, post: Id) -> Option<Id> {
         if post.into() >= self.result_count() {
             return None;
         }
-        let mut old = post;
-        loop {
-            let next = post + self.removed.partition_point(|&r| r <= old);
-            if next == old {
-                return Some(old);
+        let mut left = 0;
+        let mut right = self.removed.len();
+        while left < right {
+            let mid = left + (right - left) / 2;
+            let survivors_before_removed = self.removed[mid] - mid;
+            if survivors_before_removed <= post {
+                left = mid + 1;
+            } else {
+                right = mid;
             }
-            old = next;
         }
+        Some(post + left)
     }
 
     /// Compact a source-id-indexed data column, preserving survivor order.
@@ -492,6 +500,12 @@ mod tests {
     #[case::survivor(3, vec![NodeId(1)], NodeId(1), Some(NodeId(2)))]
     #[case::boundary(3, vec![NodeId(1)], NodeId(2), None)]
     #[case::full(2, vec![NodeId(0), NodeId(1)], NodeId(0), None)]
+    #[case::interleaved(8192, (1..8192).step_by(2).map(NodeId).collect(), NodeId(4095), Some(NodeId(8190)))]
+    #[case::prefix(4096, (0..4095).map(NodeId).collect(), NodeId(0), Some(NodeId(4095)))]
+    #[case::middle_run(4096, (1..4095).map(NodeId).collect(), NodeId(1), Some(NodeId(4095)))]
+    #[case::suffix(4096, (1..4096).map(NodeId).collect(), NodeId(0), Some(NodeId(0)))]
+    #[case::upper_ids(u32::MAX as usize, vec![NodeId(u32::MAX - 3), NodeId(u32::MAX - 2)], NodeId(u32::MAX - 3), Some(NodeId(u32::MAX - 1)))]
+    #[case::upper_boundary(u32::MAX as usize, vec![NodeId(0), NodeId(1)], NodeId(u32::MAX - 2), None)]
     fn test_compaction_try_uncompact(
         #[case] count: usize,
         #[case] removed: Vec<NodeId>,
