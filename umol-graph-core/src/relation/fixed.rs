@@ -28,7 +28,7 @@ use crate::remap::GraphRemapping;
 /// - Coincidence compares participant multisets in the factor; it ignores stored order
 ///   and payloads, but observes multiplicity and complete participant values.
 ///
-/// Construction/query and transport laws are exercised through public APIs in
+/// Construction/query, mutation, and transport laws are exercised through public APIs in
 /// `tests/property/relation.rs`. Transport laws require conforming
 /// [`RelationParticipant`] implementations.
 #[derive(Clone, Debug)]
@@ -194,6 +194,94 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
             .iter()
             .copied()
             .find(|&id| participants_match(self.participants(id), &sorted_query))
+    }
+
+    /// Append a relation and return its id, equal to the previous row count.
+    ///
+    /// As in [`Self::new`], order and repeated participants are preserved, coinciding rows
+    /// are permitted, and references are indexed without checking external graph membership.
+    /// Fixed arity is enforced by the array type; zero arity is permitted.
+    /// The payload is moved into storage. Incidence is rebuilt over the entire collection.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids, participants, and payloads remain unchanged. Incidence lists the new
+    /// relation once for each referenced node or edge. Removing the appended relation
+    /// immediately afterward restores the previous set. These laws are exercised against
+    /// a row model in `tests/property/relation.rs`.
+    pub fn add(&mut self, participants: [P; N], data: D) -> RelationId {
+        let id = RelationId(self.count() as u32);
+        self.participants.push(participants);
+        self.data.push(data);
+        self.incidence = Incidence::build(self.count(), |i, out| {
+            out.extend(
+                self.participants[i]
+                    .iter()
+                    .map(|participant| participant.refs()),
+            );
+        });
+        id
+    }
+
+    /// Remove whole relations, preserving survivor order and making their ids dense.
+    ///
+    /// Delegates to [`Self::tracked_remove`] and discards the compaction. Input ids refer
+    /// to the pre-removal set; their order and repetitions do not matter. Empty input
+    /// leaves the set unchanged. Participant references and surviving payloads are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics before mutation if any supplied id is outside the set.
+    pub fn remove(&mut self, ids: &[RelationId]) {
+        self.tracked_remove(ids);
+    }
+
+    /// Remove whole relations and return the old-to-new survivor compaction.
+    ///
+    /// Input ids refer to the pre-removal set; their order and repetitions do not matter.
+    /// The compaction records the original count and removed ids, not removed payloads.
+    /// A nonempty removal rebuilds incidence over the surviving rows once.
+    ///
+    /// # Semantic properties
+    ///
+    /// Survivors retain their relative order, participant sequences, and payloads without
+    /// cloning. Only relation ids change; referenced nodes and edges are not removed or
+    /// relabeled. Incidence uses the new dense relation ids. Empty input returns identity
+    /// over the original count and leaves the set unchanged. Discarding the compaction
+    /// produces the same state as [`Self::remove`]. These laws are exercised against
+    /// a row model in `tests/property/relation.rs`.
+    ///
+    /// # Panics
+    ///
+    /// Panics before mutation if any supplied id is outside the set.
+    pub fn tracked_remove(&mut self, ids: &[RelationId]) -> Compaction<RelationId> {
+        let compaction = Compaction::new(self.count(), ids.to_vec())
+            .expect("removed relations belong to the source set");
+        if ids.is_empty() {
+            return compaction;
+        }
+        let mut dst = 0;
+        for src in 0..self.count() {
+            if compaction
+                .removed()
+                .binary_search(&RelationId(src as u32))
+                .is_err()
+            {
+                self.participants.swap(dst, src);
+                self.data.swap(dst, src);
+                dst += 1;
+            }
+        }
+        self.participants.truncate(dst);
+        self.data.truncate(dst);
+        self.incidence = Incidence::build(self.count(), |i, out| {
+            out.extend(
+                self.participants[i]
+                    .iter()
+                    .map(|participant| participant.refs()),
+            );
+        });
+        compaction
     }
 
     /// Reorder relation `id`'s participants so that `new[i] = old[order[i]]`.
