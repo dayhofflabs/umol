@@ -15,12 +15,15 @@
 //!
 //! VarRelationSet exercises the same restoration laws over heterogeneous rows of zero to eight
 //! participants, checking packed row boundaries as well as complete values and incidence.
+//!
+//! FixedFixedBirelationSet uses factors of arity two and three. Independent expectations
+//! retain their boundaries and scan union incidence, including references shared across factors.
 
 use proptest::prelude::*;
 use umol_graph_core::{
-    Compaction, EdgeId, FixedRelationSet, Graph, GraphCompaction, GraphCorrespondence,
-    GraphRemapping, Neighbor, NodeId, ParticipantRefs, RelationId, RelationParticipant,
-    VarRelationSet,
+    Compaction, EdgeId, FixedFixedBirelationSet, FixedRelationSet, Graph, GraphCompaction,
+    GraphCorrespondence, GraphRemapping, Neighbor, NodeId, ParticipantRefs, RelationId,
+    RelationParticipant, VarRelationSet,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -489,6 +492,153 @@ proptest! {
         let mut relations = VarRelationSet::new(rows.into_iter().enumerate().map(|(id, row)|
             (row.iter().copied().map(|(node, edge, label)| References { node: node.map(NodeId), edge: edge.map(EdgeId), label }).collect::<Vec<_>>(), id)
         ).collect());
+        relations.restore_participants(&GraphCompaction::new(
+            Compaction::new(nodes, (0..nodes).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
+            Compaction::new(edges, (0..edges).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
+        ));
+    }
+
+    #[test]
+    fn test_fixed_fixed_birelation_set_restore(
+        rows in prop::collection::vec((prop::array::uniform5(0u32..16), any::<bool>()), 0..33),
+        order in prop::collection::vec(any::<u32>(), 32),
+    ) {
+        let ids = rows.iter().enumerate().filter(|(_, (_, remove))| *remove)
+            .map(|(id, _)| RelationId::from(id)).collect();
+        let compaction = Compaction::new(rows.len(), ids).unwrap();
+        let expected: Vec<_> = rows.iter().enumerate().map(|(id, (row, remove))| (
+            [NodeId(row[0]), NodeId(row[1])], [NodeId(row[2]), NodeId(row[3]), NodeId(row[4])],
+            if *remove { id } else { id + rows.len() })).collect();
+        let survivors = expected.iter().zip(&rows).filter(|(_, (_, remove))| !remove).map(|(entry, _)| *entry).collect();
+        let mut saved: Vec<_> = expected.iter().zip(&rows).enumerate().rev().filter(|(_, (_, (_, remove)))| *remove)
+            .map(|(id, ((first, second, data), _))| (RelationId::from(id), *first, *second, *data)).collect();
+        saved.sort_unstable_by_key(|(id, _, _, _)| (order[id.index()], *id));
+        let mut relations = FixedFixedBirelationSet::new(survivors);
+        relations.restore(&compaction, saved);
+        for node in 0..17 {
+            let incidence: Vec<_> = expected.iter().enumerate()
+                .filter(|(_, (first, second, _))| first.contains(&NodeId(node)) || second.contains(&NodeId(node)))
+                .map(|(id, _)| RelationId::from(id)).collect();
+            prop_assert_eq!(relations.incident_to_node(NodeId(node)), incidence);
+            prop_assert_eq!(relations.incident_to_edge(EdgeId(node)), &[]);
+        }
+        prop_assert_eq!(relations.into_entries(), expected);
+    }
+
+    #[test]
+    fn test_fixed_fixed_birelation_set_restore_roundtrip(
+        rows in prop::collection::vec((prop::array::uniform5(0u32..16), any::<bool>()), 0..33),
+    ) {
+        let expected: Vec<_> = rows.iter().enumerate().map(|(id, (row, _))| (
+            [NodeId(row[0]), NodeId(row[1])], [EdgeId(row[2]), EdgeId(row[3]), EdgeId(row[4])], id)).collect();
+        let original = FixedFixedBirelationSet::new(expected.clone());
+        let ids: Vec<_> = rows.iter().enumerate().filter(|(_, (_, remove))| *remove).map(|(id, _)| RelationId::from(id)).collect();
+        let saved = expected.iter().zip(&rows).enumerate().rev().filter(|(_, (_, (_, remove)))| *remove)
+            .map(|(id, ((first, second, data), _))| (RelationId::from(id), *first, *second, *data)).collect();
+        let mut relations = original.clone();
+        let compaction = relations.tracked_remove(&ids);
+        relations.restore(&compaction, saved);
+        for id in 0..17 {
+            let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (row, _, _))| row.contains(&NodeId(id))).map(|(i, _)| RelationId::from(i)).collect();
+            let edges: Vec<_> = expected.iter().enumerate().filter(|(_, (_, row, _))| row.contains(&EdgeId(id))).map(|(i, _)| RelationId::from(i)).collect();
+            prop_assert_eq!(relations.incident_to_node(NodeId(id)), nodes);
+            prop_assert_eq!(relations.incident_to_edge(EdgeId(id)), edges);
+        }
+        prop_assert_eq!(relations, original);
+    }
+
+    #[test]
+    fn test_fixed_fixed_birelation_set_restore_malformed(
+        rows in prop::collection::vec(prop::array::uniform5(any::<u32>()), 0..33),
+        count in 0usize..41,
+        removals in prop::collection::vec(any::<bool>(), 40),
+        saved in prop::collection::vec((0u32..48, prop::array::uniform5(any::<u32>())), 0..41),
+    ) {
+        let mut relations = FixedFixedBirelationSet::new(rows.into_iter().enumerate().map(|(id, row)| (
+            [NodeId(row[0]), NodeId(row[1])], [EdgeId(row[2]), EdgeId(row[3]), EdgeId(row[4])], id)).collect());
+        let compaction = Compaction::new(count, (0..count).filter(|&id| removals[id]).map(RelationId::from).collect()).unwrap();
+        relations.restore(&compaction, saved.into_iter().enumerate().map(|(data, (id, row))| (
+            RelationId(id), [NodeId(row[0]), NodeId(row[1])], [EdgeId(row[2]), EdgeId(row[3]), EdgeId(row[4])], data)).collect());
+    }
+
+    #[test]
+    fn test_fixed_fixed_birelation_set_restore_participants(
+        nodes in 0usize..9,
+        edges in 0usize..9,
+        node_removals in prop::collection::vec(any::<bool>(), 8),
+        edge_removals in prop::collection::vec(any::<bool>(), 8),
+        rows in prop::collection::vec(prop::array::uniform5((0usize..8, 0usize..8, any::<bool>(), any::<bool>(), any::<u8>())), 0..33),
+    ) {
+        let surviving_nodes: Vec<_> = (0..nodes).filter(|&id| !node_removals[id]).map(NodeId::from).collect();
+        let surviving_edges: Vec<_> = (0..edges).filter(|&id| !edge_removals[id]).map(EdgeId::from).collect();
+        let compaction = GraphCompaction::new(
+            Compaction::new(nodes, (0..nodes).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
+            Compaction::new(edges, (0..edges).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
+        );
+        let entries: Vec<_> = rows.iter().enumerate().map(|(id, row)| {
+            let row = row.map(|(n, e, has_n, has_e, label)| References {
+                node: (has_n && !surviving_nodes.is_empty()).then(|| NodeId::from(n % surviving_nodes.len())),
+                edge: (has_e && !surviving_edges.is_empty()).then(|| EdgeId::from(e % surviving_edges.len())), label,
+            });
+            ([row[0], row[1]], [row[2], row[3], row[4]], id)
+        }).collect();
+        let expected: Vec<_> = entries.iter().map(|(first, second, data)| (
+            first.map(|p| References { node: p.node.map(|id| surviving_nodes[id.index()]), edge: p.edge.map(|id| surviving_edges[id.index()]), ..p }),
+            second.map(|p| References { node: p.node.map(|id| surviving_nodes[id.index()]), edge: p.edge.map(|id| surviving_edges[id.index()]), ..p }), *data)).collect();
+        let mut relations = FixedFixedBirelationSet::new(entries);
+        relations.restore_participants(&compaction);
+        for id in 0..9 {
+            let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (first, second, _))|
+                first.iter().chain(second).any(|p| p.node == Some(NodeId(id)))).map(|(i, _)| RelationId::from(i)).collect();
+            let edges: Vec<_> = expected.iter().enumerate().filter(|(_, (first, second, _))|
+                first.iter().chain(second).any(|p| p.edge == Some(EdgeId(id)))).map(|(i, _)| RelationId::from(i)).collect();
+            prop_assert_eq!(relations.incident_to_node(NodeId(id)), nodes);
+            prop_assert_eq!(relations.incident_to_edge(EdgeId(id)), edges);
+        }
+        prop_assert_eq!(relations.into_entries(), expected);
+    }
+
+    #[test]
+    fn test_fixed_fixed_birelation_set_restore_participants_roundtrip(
+        rows in prop::collection::vec(prop::array::uniform5((0u32..8, 0u32..8, any::<bool>(), any::<bool>(), any::<u8>())), 0..33),
+        node_removals in prop::collection::vec(any::<bool>(), 8),
+        edge_removals in prop::collection::vec(any::<bool>(), 8),
+    ) {
+        let entries: Vec<_> = rows.into_iter().enumerate().map(|(id, row)| {
+            let row = row.map(|(n, e, has_n, has_e, label)| References { node: has_n.then_some(NodeId(n)), edge: has_e.then_some(EdgeId(e)), label });
+            ([row[0], row[1]], [row[2], row[3], row[4]], id)
+        }).collect();
+        let expected: Vec<_> = entries.iter().filter(|(first, second, _)| first.iter().chain(second).all(|p|
+            p.node.is_none_or(|id| !node_removals[id.index()]) && p.edge.is_none_or(|id| !edge_removals[id.index()]))).copied().collect();
+        let compaction = GraphCompaction::new(
+            Compaction::new(8, (0..8).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
+            Compaction::new(8, (0..8).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
+        );
+        let mut relations = FixedFixedBirelationSet::new(entries).compact(&compaction);
+        relations.restore_participants(&compaction);
+        for id in 0..9 {
+            let nodes: Vec<_> = expected.iter().enumerate().filter(|(_, (first, second, _))|
+                first.iter().chain(second).any(|p| p.node == Some(NodeId(id)))).map(|(i, _)| RelationId::from(i)).collect();
+            let edges: Vec<_> = expected.iter().enumerate().filter(|(_, (first, second, _))|
+                first.iter().chain(second).any(|p| p.edge == Some(EdgeId(id)))).map(|(i, _)| RelationId::from(i)).collect();
+            prop_assert_eq!(relations.incident_to_node(NodeId(id)), nodes);
+            prop_assert_eq!(relations.incident_to_edge(EdgeId(id)), edges);
+        }
+        prop_assert_eq!(relations.into_entries(), expected);
+    }
+
+    #[test]
+    fn test_fixed_fixed_birelation_set_restore_participants_malformed(
+        rows in prop::collection::vec(prop::array::uniform5((prop::option::of(0u32..16), prop::option::of(0u32..16), any::<u8>())), 0..33),
+        nodes in 0usize..9,
+        edges in 0usize..9,
+        node_removals in prop::collection::vec(any::<bool>(), 8),
+        edge_removals in prop::collection::vec(any::<bool>(), 8),
+    ) {
+        let mut relations = FixedFixedBirelationSet::new(rows.into_iter().enumerate().map(|(id, row)| {
+            let row = row.map(|(node, edge, label)| References { node: node.map(NodeId), edge: edge.map(EdgeId), label });
+            ([row[0], row[1]], [row[2], row[3], row[4]], id)
+        }).collect());
         relations.restore_participants(&GraphCompaction::new(
             Compaction::new(nodes, (0..nodes).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
             Compaction::new(edges, (0..edges).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),

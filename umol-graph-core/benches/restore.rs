@@ -20,8 +20,8 @@
 //! the same no-panic contract. The graph `isolates` case removes a trailing degree-zero node;
 //! it does not measure a single bonded-atom removal or establish a typical application workload.
 //!
-//! Fixed- and variable-relation row restoration also measure retained capacity: setup removes rows from a
-//! fresh original set, while the ordinary setup clones the compacted set without its spare
+//! Native relation row restoration also measures retained capacity: setup removes rows from
+//! a fresh original set, while the ordinary setup clones the compacted set without its spare
 //! capacity. Removal stays outside timing for both native and reconstruction paths. Native
 //! restoration reuses payload and offset/fixed columns. Variable restoration repacks a flat
 //! participant buffer without per-survivor vectors; saved participants are copied into that
@@ -718,22 +718,63 @@ fn fixed_fixed(c: &mut Criterion) {
                     removed.clone(),
                 ));
                 check(&rebuilt, &entries);
-                group.bench_function(
-                    BenchmarkId::new("rows_rebuild", format!("{fixture}/{removal}")),
-                    |b| {
-                        b.iter_batched(
-                            || (compacted.clone(), removed.clone()),
-                            |(relations, removed)| {
-                                black_box(FixedFixedBirelationSet::new(rebuild_rows(
-                                    black_box(relations).into_entries(),
-                                    black_box(&compaction),
-                                    black_box(removed),
-                                )))
-                            },
-                            BatchSize::LargeInput,
-                        )
-                    },
-                );
+                let saved: Vec<_> = removed
+                    .iter()
+                    .map(|(id, (first, second, data))| (*id, *first, *second, *data))
+                    .collect();
+                for retained in [false, true] {
+                    let setup = || {
+                        if retained {
+                            let mut relations = original.clone();
+                            relations.remove(&ids);
+                            relations
+                        } else {
+                            compacted.clone()
+                        }
+                    };
+                    let mut restored = setup();
+                    restored.restore(&compaction, saved.clone());
+                    check(&restored, &entries);
+                    let rebuild_name = if retained {
+                        "rows_rebuild_retained"
+                    } else {
+                        "rows_rebuild"
+                    };
+                    let restore_name = if retained {
+                        "rows_restore_retained"
+                    } else {
+                        "rows_restore"
+                    };
+                    group.bench_function(
+                        BenchmarkId::new(rebuild_name, format!("{fixture}/{removal}")),
+                        |b| {
+                            b.iter_batched(
+                                || (setup(), removed.clone()),
+                                |(relations, removed)| {
+                                    black_box(FixedFixedBirelationSet::new(rebuild_rows(
+                                        black_box(relations).into_entries(),
+                                        black_box(&compaction),
+                                        black_box(removed),
+                                    )))
+                                },
+                                BatchSize::LargeInput,
+                            )
+                        },
+                    );
+                    group.bench_function(
+                        BenchmarkId::new(restore_name, format!("{fixture}/{removal}")),
+                        |b| {
+                            b.iter_batched(
+                                || (setup(), saved.clone()),
+                                |(mut relations, removed)| {
+                                    relations.restore(black_box(&compaction), black_box(removed));
+                                    black_box(relations)
+                                },
+                                BatchSize::LargeInput,
+                            )
+                        },
+                    );
+                }
             }
             let reference_count = 2 * count * width;
             for (removal, positions) in removal_cases(reference_count) {
@@ -780,6 +821,22 @@ fn fixed_fixed(c: &mut Criterion) {
                     )
                 };
                 check(&rebuild(compacted.clone()), &expected);
+                let mut restored = compacted.clone();
+                restored.restore_participants(&compaction);
+                check(&restored, &expected);
+                group.bench_function(
+                    BenchmarkId::new("participants_restore", format!("{fixture}/{removal}")),
+                    |b| {
+                        b.iter_batched(
+                            || compacted.clone(),
+                            |mut relations| {
+                                relations.restore_participants(black_box(&compaction));
+                                black_box(relations)
+                            },
+                            BatchSize::LargeInput,
+                        )
+                    },
+                );
                 group.bench_function(
                     BenchmarkId::new("participants_rebuild", format!("{fixture}/{removal}")),
                     |b| {

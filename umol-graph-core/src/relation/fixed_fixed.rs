@@ -28,7 +28,8 @@ use crate::remap::GraphRemapping;
 ///   and payloads, but observes multiplicity and complete participant values.
 ///
 /// Construction/query, mutation, and transport laws are exercised through public APIs in
-/// `tests/property/relation.rs`. Transport laws require conforming
+/// `tests/property/relation.rs`; restoration laws in `tests/property/restore.rs`.
+/// Transport and restoration laws require conforming
 /// [`RelationParticipant`] implementations.
 #[derive(Clone, Debug)]
 pub struct FixedFixedBirelationSet<L1, const N1: usize, L2, const N2: usize, D> {
@@ -349,6 +350,146 @@ where
             out.extend(self.participants_2[i].iter().map(|p| p.refs()));
         });
         compaction
+    }
+
+    /// Undo row removal using its compaction and original saved entries.
+    ///
+    /// Saved entries carry original relation ids and may arrive in any order. Their
+    /// participants already use the desired reference space and are not translated.
+    /// Payloads move without cloning. Storage appends the saved rows, reorders all three
+    /// columns in place using a temporary destination array, and rebuilds incidence.
+    ///
+    /// The compaction and saved entries must come from the removal being undone.
+    /// With conforming [`RelationParticipant`] implementations, manipulated or mismatched
+    /// undo data does not panic; the resulting set is unspecified.
+    ///
+    /// # Semantic properties
+    ///
+    /// Matching removal and restoration recover the original rows, ids, and incidence.
+    /// Surviving participant sequences and current payloads are preserved. Reordering
+    /// saved entries does not affect the result. Matching identity is a no-op, including
+    /// when either or both factors have zero arity. Public-API properties in
+    /// `tests/property/restore.rs` check these laws against independent rows and
+    /// incidence scans, plus freedom from panics.
+    pub fn restore(
+        &mut self,
+        compaction: &Compaction<RelationId>,
+        removed: Vec<(RelationId, [L1; N1], [L2; N2], D)>,
+    ) {
+        if compaction.removed().is_empty() {
+            return;
+        }
+        let Some(count) = self.count().checked_add(removed.len()) else {
+            return;
+        };
+        if compaction.source_count() > u32::MAX as usize || count > u32::MAX as usize {
+            return;
+        }
+        let mut destinations = Vec::new();
+        if destinations.try_reserve_exact(count).is_err()
+            || self.participants_1.try_reserve(removed.len()).is_err()
+            || self.participants_2.try_reserve(removed.len()).is_err()
+            || self.data.try_reserve(removed.len()).is_err()
+        {
+            return;
+        }
+        let mut removed_ids = compaction.removed().iter().peekable();
+        let mut original = 0;
+        for _ in 0..self.count() {
+            while removed_ids.peek().is_some_and(|id| id.index() == original) {
+                removed_ids.next();
+                original += 1;
+            }
+            if original >= compaction.source_count() {
+                return;
+            }
+            destinations.push(original);
+            original += 1;
+        }
+        for (id, participants_1, participants_2, data) in removed {
+            destinations.push(id.index());
+            self.participants_1.push(participants_1);
+            self.participants_2.push(participants_2);
+            self.data.push(data);
+        }
+        for source in 0..count {
+            while destinations[source] != source {
+                let target = destinations[source];
+                if target >= count || destinations[target] == target {
+                    break;
+                }
+                self.participants_1.swap(source, target);
+                self.participants_2.swap(source, target);
+                self.data.swap(source, target);
+                destinations.swap(source, target);
+            }
+        }
+        self.incidence = Incidence::build(self.count(), |i, out| {
+            out.extend(self.participants_1[i].iter().map(|p| p.refs()));
+            out.extend(self.participants_2[i].iter().map(|p| p.refs()));
+        });
+    }
+
+    /// Undo graph-reference compaction in the surviving participant rows.
+    ///
+    /// Expands node and edge references in both factors in place and rebuilds incidence.
+    /// Payloads are not moved or cloned. Restore participant references before restoring removed
+    /// rows, whose saved participants already use original graph ids.
+    ///
+    /// The graph compaction must match the participant compaction being undone.
+    /// With conforming [`RelationParticipant`] implementations, manipulated or mismatched
+    /// undo data does not panic; the resulting set is unspecified.
+    ///
+    /// # Semantic properties
+    ///
+    /// Matching compaction and restoration recover surviving participant values,
+    /// including their order, multiplicity, and non-reference data. Relation ids,
+    /// factor boundaries, arities, and payloads are unchanged. Matching identity and
+    /// empty storage are no-ops. Public-API properties in `tests/property/restore.rs` check independent
+    /// inverse-reference expectations and incidence, roundtrips, and freedom from panics.
+    pub fn restore_participants(&mut self, compaction: &GraphCompaction) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        if compaction.nodes().source_count().saturating_sub(1) > u32::MAX as usize
+            || compaction.edges().source_count().saturating_sub(1) > u32::MAX as usize
+        {
+            return;
+        }
+        for row in &mut self.participants_1 {
+            for participant in row {
+                let refs = participant.refs();
+                if refs
+                    .node
+                    .is_some_and(|id| id.index() >= compaction.nodes().result_count())
+                    || refs
+                        .edge
+                        .is_some_and(|id| id.index() >= compaction.edges().result_count())
+                {
+                    continue;
+                }
+                *participant = participant.uncompact(compaction);
+            }
+        }
+        for row in &mut self.participants_2 {
+            for participant in row {
+                let refs = participant.refs();
+                if refs
+                    .node
+                    .is_some_and(|id| id.index() >= compaction.nodes().result_count())
+                    || refs
+                        .edge
+                        .is_some_and(|id| id.index() >= compaction.edges().result_count())
+                {
+                    continue;
+                }
+                *participant = participant.uncompact(compaction);
+            }
+        }
+        self.incidence = Incidence::build(self.count(), |i, out| {
+            out.extend(self.participants_1[i].iter().map(|p| p.refs()));
+            out.extend(self.participants_2[i].iter().map(|p| p.refs()));
+        });
     }
 
     /// Reorder relation `id`'s first-factor participants so that `new[i] = old[order[i]]`.
