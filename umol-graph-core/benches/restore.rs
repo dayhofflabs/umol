@@ -1,4 +1,4 @@
-//! Constructor-based restoration baselines over synthetic storage fixtures.
+//! Restoration benchmarks over synthetic storage fixtures.
 //!
 //! Row reconstruction consumes entries, scatters saved rows by original id, fills survivor
 //! slots in order, and rebuilds incidence. Participant reconstruction expands surviving
@@ -9,8 +9,10 @@
 //! Setup cloning, fixture capture, and final result destruction are excluded. Entry extraction,
 //! temporary allocations, old storage disposal, and constructor/index work are timed. Graph
 //! setup creates either a unique CSR or a clone sharing the retained fixture's CSR. These valid-
-//! input baselines do not implement restoration's complete error checks or identity fast paths.
-//! Payloads are usize; variable entries are materialized as per-row Vecs by into_entries.
+//! input baselines omit restoration's panic guards and identity fast paths.
+//! Native Graph::restore uses the same ownership setup, includes panic guards and CSR rebuilding,
+//! and exercises its identity fast path. Payloads are usize; variable entries are materialized
+//! as per-row Vecs by into_entries.
 
 use std::array;
 use std::collections::{BTreeMap, BTreeSet};
@@ -175,34 +177,38 @@ fn graph(c: &mut Criterion) {
                     .map(|(i, pair)| (EdgeId::from(i), pair.map(NodeId)))
                     .collect();
                 let rebuilt = rebuild_graph(&compacted, &compaction, &removed);
-                assert_eq!(rebuilt.node_count(), node_count);
-                assert_eq!(rebuilt.edge_count(), endpoints.len());
-                assert_eq!(
-                    rebuilt
-                        .edge_ids()
-                        .map(|id| rebuilt.edge_endpoints(id))
-                        .collect::<Vec<_>>(),
-                    endpoints
-                        .iter()
-                        .map(|pair| pair.map(NodeId))
-                        .collect::<Vec<_>>()
-                );
-                let mut expected_neighbors = vec![vec![]; node_count];
-                for (edge, &[a, b]) in endpoints.iter().enumerate() {
-                    expected_neighbors[a as usize].push(Neighbor {
-                        node: NodeId(b),
-                        edge: EdgeId::from(edge),
-                    });
-                    expected_neighbors[b as usize].push(Neighbor {
-                        node: NodeId(a),
-                        edge: EdgeId::from(edge),
-                    });
-                }
-                for (node, mut expected) in expected_neighbors.into_iter().enumerate() {
-                    expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
-                    let mut actual = rebuilt.neighbors(NodeId::from(node)).to_vec();
-                    actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
-                    assert_eq!(actual, expected);
+                let mut restored = compacted.clone();
+                restored.restore(&compaction, &removed);
+                for checked in [&rebuilt, &restored] {
+                    assert_eq!(checked.node_count(), node_count);
+                    assert_eq!(checked.edge_count(), endpoints.len());
+                    assert_eq!(
+                        checked
+                            .edge_ids()
+                            .map(|id| checked.edge_endpoints(id))
+                            .collect::<Vec<_>>(),
+                        endpoints
+                            .iter()
+                            .map(|pair| pair.map(NodeId))
+                            .collect::<Vec<_>>()
+                    );
+                    let mut expected_neighbors = vec![vec![]; node_count];
+                    for (edge, &[a, b]) in endpoints.iter().enumerate() {
+                        expected_neighbors[a as usize].push(Neighbor {
+                            node: NodeId(b),
+                            edge: EdgeId::from(edge),
+                        });
+                        expected_neighbors[b as usize].push(Neighbor {
+                            node: NodeId(a),
+                            edge: EdgeId::from(edge),
+                        });
+                    }
+                    for (node, mut expected) in expected_neighbors.into_iter().enumerate() {
+                        expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                        let mut actual = checked.neighbors(NodeId::from(node)).to_vec();
+                        actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                        assert_eq!(actual, expected);
+                    }
                 }
                 let compacted_endpoints: Vec<_> = compacted
                     .edge_ids()
@@ -211,7 +217,7 @@ fn graph(c: &mut Criterion) {
                 for shared_csr in [false, true] {
                     let ownership = if shared_csr { "shared" } else { "unique" };
                     let fixture = format!("edges={count}/{pattern}/{removal}/csr={ownership}");
-                    group.bench_function(BenchmarkId::new("rebuild", fixture), |b| {
+                    group.bench_function(BenchmarkId::new("rebuild", &fixture), |b| {
                         b.iter_batched(
                             || {
                                 if shared_csr {
@@ -226,6 +232,22 @@ fn graph(c: &mut Criterion) {
                                     black_box(&compaction),
                                     black_box(&removed),
                                 );
+                                black_box(graph)
+                            },
+                            BatchSize::LargeInput,
+                        )
+                    });
+                    group.bench_function(BenchmarkId::new("restore", &fixture), |b| {
+                        b.iter_batched(
+                            || {
+                                if shared_csr {
+                                    compacted.clone()
+                                } else {
+                                    Graph::new(compacted.node_count(), &compacted_endpoints)
+                                }
+                            },
+                            |mut graph| {
+                                graph.restore(black_box(&compaction), black_box(&removed));
                                 black_box(graph)
                             },
                             BatchSize::LargeInput,

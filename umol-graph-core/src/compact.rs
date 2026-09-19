@@ -1,11 +1,10 @@
-//! Order-preserving compaction of dense id spaces and storage restoration errors.
+//! Order-preserving compaction of dense id spaces.
 
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::{Add, Sub};
 
 use crate::graph::{EdgeId, NodeId};
-use crate::relation::RelationId;
 
 /// Failure to construct a compaction over a finite source domain.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,83 +24,6 @@ impl<Id: Debug> Display for CompactionError<Id> {
 }
 
 impl<Id: Debug> Error for CompactionError<Id> {}
-
-/// Incompatible counts, saved entries, or references during storage restoration.
-///
-/// Count mismatches report the compaction's result count as `expected` and the current
-/// storage count as `actual`. Saved entries use original ids and must cover the removed ids
-/// exactly once. Unexpected entry ids include ids outside the original domain.
-///
-/// Reference-error `count` is the exclusive upper bound of the required domain: the original
-/// node count for saved graph endpoints, or the compaction's result node/edge count for
-/// participant references before inverse translation. This error carries diagnostic values;
-/// it does not establish that storage and restoration data share an operation history.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RestoreError {
-    /// The current node count differs from the compaction's result node count.
-    NodeCountMismatch { expected: usize, actual: usize },
-    /// The current edge count differs from the compaction's result edge count.
-    EdgeCountMismatch { expected: usize, actual: usize },
-    /// The current relation count differs from the compaction's result relation count.
-    RelationCountMismatch { expected: usize, actual: usize },
-    /// A removed edge has no supplied entry.
-    MissingEdgeEntry { id: EdgeId },
-    /// An expected edge entry is supplied more than once.
-    DuplicateEdgeEntry { id: EdgeId },
-    /// A supplied edge id is not among the removed edges.
-    UnexpectedEdgeEntry { id: EdgeId },
-    /// A removed relation has no supplied entry.
-    MissingRelationEntry { id: RelationId },
-    /// An expected relation entry is supplied more than once.
-    DuplicateRelationEntry { id: RelationId },
-    /// A supplied relation id is not among the removed relations.
-    UnexpectedRelationEntry { id: RelationId },
-    /// A node reference lies outside `0..count` in the required id space.
-    NodeReferenceOutOfRange { id: NodeId, count: usize },
-    /// An edge reference lies outside `0..count` in the required id space.
-    EdgeReferenceOutOfRange { id: EdgeId, count: usize },
-}
-
-impl Display for RestoreError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NodeCountMismatch { expected, actual } => {
-                write!(f, "node count mismatch: expected {expected}, got {actual}")
-            }
-            Self::EdgeCountMismatch { expected, actual } => {
-                write!(f, "edge count mismatch: expected {expected}, got {actual}")
-            }
-            Self::RelationCountMismatch { expected, actual } => {
-                write!(
-                    f,
-                    "relation count mismatch: expected {expected}, got {actual}"
-                )
-            }
-            Self::MissingEdgeEntry { id } => write!(f, "missing edge entry for {id:?}"),
-            Self::DuplicateEdgeEntry { id } => {
-                write!(f, "edge entry {id:?} occurs more than once")
-            }
-            Self::UnexpectedEdgeEntry { id } => {
-                write!(f, "edge entry {id:?} is not among removed edges")
-            }
-            Self::MissingRelationEntry { id } => write!(f, "missing relation entry for {id:?}"),
-            Self::DuplicateRelationEntry { id } => {
-                write!(f, "relation entry {id:?} occurs more than once")
-            }
-            Self::UnexpectedRelationEntry { id } => {
-                write!(f, "relation entry {id:?} is not among removed relations")
-            }
-            Self::NodeReferenceOutOfRange { id, count } => {
-                write!(f, "node reference {id:?} is out of range for {count} nodes")
-            }
-            Self::EdgeReferenceOutOfRange { id, count } => {
-                write!(f, "edge reference {id:?} is out of range for {count} edges")
-            }
-        }
-    }
-}
-
-impl Error for RestoreError {}
 
 /// Order-preserving removal between two finite dense id spaces.
 ///
@@ -301,7 +223,6 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::{RelationId, RestoreError};
 
     #[rstest]
     #[case(CompactionError::RemovedIdOutOfRange { id: NodeId(2), source_count: 2 }, "removed id NodeId(2) is out of range for 2 entries")]
@@ -310,24 +231,6 @@ mod tests {
         #[case] expected: &str,
     ) {
         assert_eq!(error.to_string(), expected);
-    }
-
-    #[rstest]
-    #[case::node_count(RestoreError::NodeCountMismatch { expected: 3, actual: 2 }, "node count mismatch: expected 3, got 2")]
-    #[case::edge_count(RestoreError::EdgeCountMismatch { expected: 4, actual: 1 }, "edge count mismatch: expected 4, got 1")]
-    #[case::relation_count(RestoreError::RelationCountMismatch { expected: 2, actual: 0 }, "relation count mismatch: expected 2, got 0")]
-    #[case::missing_edge(RestoreError::MissingEdgeEntry { id: EdgeId(2) }, "missing edge entry for EdgeId(2)")]
-    #[case::duplicate_edge(RestoreError::DuplicateEdgeEntry { id: EdgeId(1) }, "edge entry EdgeId(1) occurs more than once")]
-    #[case::unexpected_edge(RestoreError::UnexpectedEdgeEntry { id: EdgeId(3) }, "edge entry EdgeId(3) is not among removed edges")]
-    #[case::missing_relation(RestoreError::MissingRelationEntry { id: RelationId(2) }, "missing relation entry for RelationId(2)")]
-    #[case::duplicate_relation(RestoreError::DuplicateRelationEntry { id: RelationId(1) }, "relation entry RelationId(1) occurs more than once")]
-    #[case::unexpected_relation(RestoreError::UnexpectedRelationEntry { id: RelationId(3) }, "relation entry RelationId(3) is not among removed relations")]
-    #[case::node_reference(RestoreError::NodeReferenceOutOfRange { id: NodeId(5), count: 5 }, "node reference NodeId(5) is out of range for 5 nodes")]
-    #[case::edge_reference(RestoreError::EdgeReferenceOutOfRange { id: EdgeId(4), count: 3 }, "edge reference EdgeId(4) is out of range for 3 edges")]
-    fn test_restore_error_display(#[case] error: RestoreError, #[case] expected: &str) {
-        let error: &dyn Error = &error;
-        assert_eq!(error.to_string(), expected);
-        assert_eq!(error.source().map(ToString::to_string), None);
     }
 
     #[rstest]

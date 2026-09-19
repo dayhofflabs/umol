@@ -317,7 +317,9 @@ The settled graph-core restoration design and public contracts are
 recorded with the earlier storage work in
 [166 — Graph and relation restoration](166-molecule-ops-2026-07-27.md#graph-and-relation-restoration).
 That work will provide Graph::restore and relation-set restore/restore_participants;
-uncompact remains non-mutating reference translation. This document owns editor
+uncompact remains non-mutating reference translation. Restoration returns (): matching
+removal data recovers the original storage; manipulated inputs must not panic but
+have no specified restoration result. This document owns editor
 integration, including attribute arrays, constraints, correspondence, and
 transaction coordination, and delegates graph/relation reconstruction to those
 storage operations.

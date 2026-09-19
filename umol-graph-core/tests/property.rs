@@ -22,6 +22,8 @@ mod graph;
 mod relation;
 #[path = "property/remap.rs"]
 mod remap;
+#[path = "property/restore.rs"]
+mod restore;
 #[path = "property/strategy.rs"]
 mod strategy;
 #[path = "property/subgraph_isomorphism.rs"]

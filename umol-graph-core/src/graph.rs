@@ -2,8 +2,8 @@
 //!
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
-//! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
-//! it and produce a [`crate::compact::GraphCompaction`] for reindexing external data.
+//! Clones share the CSR through `Arc`; mutations rebuild it. Tracked removals produce a
+//! [`GraphCompaction`] for reindexing external data and restoring original node/edge positions.
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
@@ -346,6 +346,72 @@ impl Graph {
         ));
 
         compaction
+    }
+
+    /// Undo a removal using its compaction and original saved edges.
+    ///
+    /// Saved entries use original edge and node ids and may arrive in any order. The
+    /// compaction supplies the original node count; no saved node entries are needed.
+    /// Surviving endpoints are expanded to their original ids, and adjacency is rebuilt
+    /// with loops and parallel edges retained.
+    ///
+    /// The compaction and saved entries must come from the removal being undone. Manipulated
+    /// or mismatched inputs do not panic, but the resulting graph is unspecified.
+    ///
+    /// # Semantic properties
+    ///
+    /// Restoring a matching removal with the original saved edges recovers the original graph,
+    /// including its ids and adjacency. Identity compaction with empty saved entries is a no-op.
+    /// Other graphs sharing the original CSR remain unchanged. Public-API properties in
+    /// `tests/property/restore.rs` check independent topology, roundtrips, and freedom from panics.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use umol_graph_core::{Graph, NodeId};
+    /// let mut graph = Graph::new(3, &[[0, 1]]);
+    /// let original = graph.clone();
+    /// let compaction = graph.tracked_remove_cascading(&[NodeId(2)], &[]);
+    /// graph.restore(&compaction, &[]);
+    /// assert_eq!(graph, original);
+    /// ```
+    pub fn restore(&mut self, compaction: &GraphCompaction, removed: &[(EdgeId, [NodeId; 2])]) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        let node_count = compaction.nodes().source_count();
+        let edge_count = compaction.edges().source_count();
+        if node_count.saturating_sub(1) > u32::MAX as usize
+            || node_count >= isize::MAX as usize / size_of::<u32>()
+            || edge_count > u32::MAX as usize / 2
+            || edge_count > isize::MAX as usize / size_of::<Neighbor>() / 2
+            || (node_count == 0 && edge_count != 0)
+        {
+            return;
+        }
+        let mut endpoints = vec![[0; 2]; edge_count];
+        for (index, &[a, b]) in self.csr.endpoints.iter().enumerate() {
+            let Some(original) = compaction.try_uncompact_edge(EdgeId::from(index)) else {
+                return;
+            };
+            let (Some(a), Some(b)) = (
+                compaction.try_uncompact_node(a),
+                compaction.try_uncompact_node(b),
+            ) else {
+                return;
+            };
+            endpoints[original.index()] = [a.0, b.0];
+        }
+        for &(id, [a, b]) in removed {
+            let Some(pair) = endpoints.get_mut(id.index()) else {
+                return;
+            };
+            if a.index() >= node_count || b.index() >= node_count {
+                return;
+            }
+            *pair = [a.0, b.0];
+        }
+        self.csr = Arc::new(Self::build_csr(node_count, &endpoints));
     }
 
     /// DPO-style removal: delete exactly `nodes` and `edges`, or `None` when that would strand an
@@ -1162,6 +1228,161 @@ mod tests {
         for (idx, &old) in surviving_edges.iter().enumerate() {
             assert_eq!(compaction.compact_edge(old), Some(EdgeId::from(idx)));
         }
+    }
+
+    #[rstest]
+    #[case::isolated_nodes(Graph::new(0, &[]), vec![NodeId(0), NodeId(1), NodeId(2)], vec![], vec![], Graph::new(3, &[]))]
+    #[case::node_only(Graph::new(2, &[[0, 1]]), vec![NodeId(0), NodeId(2)], vec![], vec![], Graph::new(4, &[[1, 3]]))]
+    #[case::edge_only(Graph::new(3, &[[1, 2]]), vec![], vec![EdgeId(0), EdgeId(2), EdgeId(3)], vec![(EdgeId(3), [NodeId(0), NodeId(0)]), (EdgeId(2), [NodeId(2), NodeId(1)]), (EdgeId(0), [NodeId(1), NodeId(1)])], Graph::new(3, &[[1, 1], [1, 2], [1, 2], [0, 0]]))]
+    #[case::mixed(Graph::new(2, &[[0, 1]]), vec![NodeId(0), NodeId(2)], vec![EdgeId(0), EdgeId(2), EdgeId(3)], vec![(EdgeId(3), [NodeId(2), NodeId(1)]), (EdgeId(2), [NodeId(3), NodeId(3)]), (EdgeId(0), [NodeId(1), NodeId(2)])], Graph::new(4, &[[1, 2], [1, 3], [3, 3], [1, 2]]))]
+    #[case::all(Graph::new(0, &[]), vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0), EdgeId(1), EdgeId(2)], vec![(EdgeId(2), [NodeId(2), NodeId(0)]), (EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(1), [NodeId(1), NodeId(1)])], Graph::new(3, &[[0, 2], [1, 1], [0, 2]]))]
+    fn test_graph_restore(
+        #[case] mut graph: Graph,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] removed: Vec<(EdgeId, [NodeId; 2])>,
+        #[case] expected: Graph,
+        #[values(false, true)] shared: bool,
+    ) {
+        let before = Graph::new(
+            graph.node_count(),
+            &graph
+                .edge_ids()
+                .map(|edge| graph.edge_endpoints(edge).map(|node| node.0))
+                .collect::<Vec<_>>(),
+        );
+        let retained = shared.then(|| graph.clone());
+        let compaction = GraphCompaction::new(
+            Compaction::new(expected.node_count(), nodes).unwrap(),
+            Compaction::new(expected.edge_count(), edges).unwrap(),
+        );
+        graph.restore(&compaction, &removed);
+        assert_eq!(graph, expected);
+        if let Some(retained) = retained {
+            assert_eq!(retained, before);
+        }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::new(0, &[]))]
+    #[case::isolates(Graph::new(3, &[]))]
+    #[case::multigraph(Graph::new(4, &[[0, 1], [1, 0], [2, 2]]))]
+    fn test_graph_restore_identity(#[case] mut graph: Graph) {
+        let original = graph.clone();
+        let compaction = GraphCompaction::new(
+            Compaction::identity(graph.node_count()),
+            Compaction::identity(graph.edge_count()),
+        );
+        graph.restore(&compaction, &[]);
+        assert_eq!(graph, original);
+        assert!(Arc::ptr_eq(&graph.csr, &original.csr));
+    }
+
+    #[rstest]
+    #[case::node_count(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(4, vec![NodeId(1)]).unwrap(), Compaction::new(4, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::edge_count(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(4, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::missing_entries(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![],
+    )]
+    #[case::missing_and_bad_reference(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::duplicates_and_missing(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(2), [NodeId(1), NodeId(1)]), (EdgeId(2), [NodeId(1), NodeId(1)])],
+    )]
+    #[case::duplicates_and_bad_reference(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(3), NodeId(3)]), (EdgeId(0), [NodeId(3), NodeId(3)]), (EdgeId(2), [NodeId(1), NodeId(1)])],
+    )]
+    #[case::duplicates_and_survivor(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(1), [NodeId(0), NodeId(0)])],
+    )]
+    #[case::survivor_and_duplicates(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(1), [NodeId(0), NodeId(0)]), (EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(0), [NodeId(0), NodeId(2)])],
+    )]
+    #[case::outside_edge_domain(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(3), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::bad_endpoints(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(2), [NodeId(4), NodeId(3)]), (EdgeId(0), [NodeId(3), NodeId(3)])],
+    )]
+    #[case::second_endpoint(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(3, vec![NodeId(1)]).unwrap(), Compaction::new(3, vec![EdgeId(0), EdgeId(2)]).unwrap()),
+        vec![(EdgeId(2), [NodeId(1), NodeId(1)]), (EdgeId(0), [NodeId(0), NodeId(3)])],
+    )]
+    #[case::identity_entries(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::identity(2), Compaction::identity(1)),
+        vec![(EdgeId(0), [NodeId(0), NodeId(2)])],
+    )]
+    #[case::empty_node_domain(
+        Graph::new(0, &[]),
+        GraphCompaction::new(Compaction::empty(), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(0), NodeId(0)])],
+    )]
+    #[case::missing_edges_without_nodes(
+        Graph::new(0, &[]),
+        GraphCompaction::new(Compaction::empty(), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
+        vec![],
+    )]
+    #[case::survivor_node_domain(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::new(2, vec![NodeId(0)]).unwrap(), Compaction::identity(1)),
+        vec![],
+    )]
+    #[case::survivor_edge_domain(
+        Graph::new(1, &[[0, 0]]),
+        GraphCompaction::new(Compaction::identity(1), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(0), NodeId(0)])],
+    )]
+    #[case::node_capacity(
+        Graph::new(0, &[]),
+        GraphCompaction::new(Compaction::new(usize::MAX, vec![NodeId(0)]).unwrap(), Compaction::empty()),
+        vec![],
+    )]
+    #[case::edge_capacity(
+        Graph::new(0, &[]),
+        GraphCompaction::new(Compaction::identity(1), Compaction::new(usize::MAX, vec![EdgeId(0)]).unwrap()),
+        vec![],
+    )]
+    #[case::adjacency_capacity(
+        Graph::new(0, &[]),
+        GraphCompaction::new(Compaction::identity(1), Compaction::new(u32::MAX as usize, vec![EdgeId(0)]).unwrap()),
+        vec![],
+    )]
+    fn test_graph_restore_malformed(
+        #[case] mut graph: Graph,
+        #[case] compaction: GraphCompaction,
+        #[case] removed: Vec<(EdgeId, [NodeId; 2])>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let retained = shared.then(|| graph.clone());
+        graph.restore(&compaction, &removed);
+        drop(retained);
     }
 
     #[rstest]

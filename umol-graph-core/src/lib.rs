@@ -49,7 +49,7 @@ pub use algorithms::traversal::{
     visit_breadth_first, visit_depth_first, BreadthFirstEvent, DepthFirstEvent,
     NeighborhoodAlgorithm,
 };
-pub use compact::{Compaction, CompactionError, GraphCompaction, RestoreError};
+pub use compact::{Compaction, CompactionError, GraphCompaction};
 pub use correspondence::{
     Correspondence, CorrespondenceComposeError, CorrespondenceError, GraphCorrespondence,
     GraphCorrespondenceComposeError,
