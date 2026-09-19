@@ -15,9 +15,9 @@
 //! as per-row Vecs by into_entries.
 //!
 //! Reconstruction can panic on manipulated inputs and is not a contract-compliant substitute
-//! for restoration. The comparison measures the cost of guarded full reconstruction to inform
-//! whether storage-specific optimization is worthwhile. Compare replacement algorithms under
-//! the same no-panic contract. The graph `isolates` case removes a trailing degree-zero node;
+//! for restoration. Further timing requires a concrete implementation decision between algorithms
+//! satisfying the same contract; refining the baseline gap alone does not provide one.
+//! The graph `isolates` case removes a trailing degree-zero node;
 //! it does not measure a single bonded-atom removal or establish a typical application workload.
 //!
 //! Native relation row restoration also measures retained capacity: setup removes rows from
@@ -26,6 +26,12 @@
 //! restoration reuses payload and offset/fixed columns. Variable restoration repacks a flat
 //! participant buffer without per-survivor vectors; saved participants are copied into that
 //! buffer through the old buffer. All non-identity native relation operations rebuild incidence.
+//!
+//! Combined fixtures undo graph removal and all five relation shapes in sequence. They include
+//! empty storage, loops, parallel edges, isolates, empty factors, full cascades, and two removals
+//! undone in reverse order. Each undo restores the graph, survivor references, then saved rows.
+//! The native path includes every separate CSR/incidence rebuild. Correctness checks run in test
+//! mode; these fixtures do not introduce a weaker-contract reconstruction comparison.
 
 use std::array;
 use std::collections::{BTreeMap, BTreeSet};
@@ -1296,5 +1302,344 @@ fn var_var(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, graph, fixed, var, fixed_fixed, fixed_var, var_var);
+fn sequence(c: &mut Criterion) {
+    let mut group = c.benchmark_group("restore/sequence");
+    for count in [0usize, 8, 64] {
+        let node_count = if count == 0 { 0 } else { count + 1 };
+        let endpoints: Vec<_> = (0..count as u32)
+            .flat_map(|id| {
+                let next = (id + 1) % count as u32;
+                [
+                    [id, id],
+                    [id.min(next), id.max(next)],
+                    [id.min(next), id.max(next)],
+                ]
+            })
+            .collect();
+        let fixed_entries: Vec<_> = (0..count)
+            .map(|id| ([NodeId::from(id), NodeId::from((id + 1) % count)], id))
+            .collect();
+        let var_entries: Vec<_> = (0..count)
+            .map(|id| {
+                (
+                    (0..id % 4)
+                        .map(|offset| EdgeId::from(3 * id + offset))
+                        .collect::<Vec<_>>(),
+                    id,
+                )
+            })
+            .collect();
+        let fixed_fixed_entries: Vec<_> = (0..count)
+            .map(|id| {
+                (
+                    [NodeId::from(id), NodeId::from(id)],
+                    [EdgeId::from(3 * id)],
+                    id,
+                )
+            })
+            .collect();
+        let fixed_var_entries: Vec<_> = fixed_entries
+            .iter()
+            .zip(&var_entries)
+            .map(|((first, data), (second, _))| (*first, second.clone(), *data))
+            .collect();
+        let var_var_entries: Vec<_> = (0..count)
+            .map(|id| {
+                (
+                    (0..id % 3).map(|_| NodeId::from(id)).collect::<Vec<_>>(),
+                    (0..id % 4)
+                        .map(|offset| EdgeId::from(3 * id + offset))
+                        .collect::<Vec<_>>(),
+                    id,
+                )
+            })
+            .collect();
+        for scenario in ["identity", "node", "edge", "isolate", "all", "sequential"] {
+            let mut graph = Graph::new(node_count, &endpoints);
+            let mut fixed = FixedRelationSet::new(fixed_entries.clone());
+            let mut var = VarRelationSet::new(var_entries.clone());
+            let mut fixed_fixed = FixedFixedBirelationSet::new(fixed_fixed_entries.clone());
+            let mut fixed_var = FixedVarBirelationSet::new(fixed_var_entries.clone());
+            let mut var_var = VarVarBirelationSet::new(var_var_entries.clone());
+            let mut history = Vec::new();
+            let steps = if scenario == "sequential" { 2 } else { 1 };
+            for _ in 0..steps {
+                let nodes: Vec<_> = match scenario {
+                    "node" | "sequential" => graph.node_ids().take(1).collect(),
+                    "isolate" => graph.node_ids().last().into_iter().collect(),
+                    "all" => graph.node_ids().collect(),
+                    _ => vec![],
+                };
+                let edges: Vec<_> = if scenario == "edge" {
+                    graph.edge_ids().take(1).collect()
+                } else {
+                    vec![]
+                };
+                let saved_edges: Vec<_> = (0..graph.edge_count())
+                    .map(EdgeId::from)
+                    .rev()
+                    .filter_map(|id| {
+                        let pair = graph.edge_endpoints(id);
+                        (edges.contains(&id) || pair.iter().any(|node| nodes.contains(node)))
+                            .then_some((id, pair))
+                    })
+                    .collect();
+                let compaction = graph.tracked_remove_cascading(&nodes, &edges);
+                let (compacted, fixed_compaction) = fixed.tracked_compact(&compaction);
+                let entries = fixed.into_entries();
+                let fixed_saved: Vec<_> = fixed_compaction
+                    .removed()
+                    .iter()
+                    .rev()
+                    .map(|id| {
+                        let (first, data) = &entries[id.index()];
+                        (*id, *first, *data)
+                    })
+                    .collect();
+                fixed = compacted;
+                let (compacted, var_compaction) = var.tracked_compact(&compaction);
+                let entries = var.into_entries();
+                let var_saved: Vec<_> = var_compaction
+                    .removed()
+                    .iter()
+                    .rev()
+                    .map(|id| {
+                        let (first, data) = &entries[id.index()];
+                        (*id, first.clone(), *data)
+                    })
+                    .collect();
+                var = compacted;
+                let (compacted, fixed_fixed_compaction) = fixed_fixed.tracked_compact(&compaction);
+                let entries = fixed_fixed.into_entries();
+                let fixed_fixed_saved: Vec<_> = fixed_fixed_compaction
+                    .removed()
+                    .iter()
+                    .rev()
+                    .map(|id| {
+                        let (first, second, data) = &entries[id.index()];
+                        (*id, *first, *second, *data)
+                    })
+                    .collect();
+                fixed_fixed = compacted;
+                let (compacted, fixed_var_compaction) = fixed_var.tracked_compact(&compaction);
+                let entries = fixed_var.into_entries();
+                let fixed_var_saved: Vec<_> = fixed_var_compaction
+                    .removed()
+                    .iter()
+                    .rev()
+                    .map(|id| {
+                        let (first, second, data) = &entries[id.index()];
+                        (*id, *first, second.clone(), *data)
+                    })
+                    .collect();
+                fixed_var = compacted;
+                let (compacted, var_var_compaction) = var_var.tracked_compact(&compaction);
+                let entries = var_var.into_entries();
+                let var_var_saved: Vec<_> = var_var_compaction
+                    .removed()
+                    .iter()
+                    .rev()
+                    .map(|id| {
+                        let (first, second, data) = &entries[id.index()];
+                        (*id, first.clone(), second.clone(), *data)
+                    })
+                    .collect();
+                var_var = compacted;
+                history.push((
+                    compaction,
+                    saved_edges,
+                    fixed_compaction,
+                    fixed_saved,
+                    var_compaction,
+                    var_saved,
+                    fixed_fixed_compaction,
+                    fixed_fixed_saved,
+                    fixed_var_compaction,
+                    fixed_var_saved,
+                    var_var_compaction,
+                    var_var_saved,
+                ));
+            }
+            let compacted = (
+                graph.clone(),
+                fixed.clone(),
+                var.clone(),
+                fixed_fixed.clone(),
+                fixed_var.clone(),
+                var_var.clone(),
+            );
+            for (
+                compaction,
+                saved_edges,
+                fixed_compaction,
+                fixed_saved,
+                var_compaction,
+                var_saved,
+                fixed_fixed_compaction,
+                fixed_fixed_saved,
+                fixed_var_compaction,
+                fixed_var_saved,
+                var_var_compaction,
+                var_var_saved,
+            ) in history.clone().into_iter().rev()
+            {
+                graph.restore(&compaction, &saved_edges);
+                fixed.restore_participants(&compaction);
+                fixed.restore(&fixed_compaction, fixed_saved);
+                var.restore_participants(&compaction);
+                var.restore(&var_compaction, var_saved);
+                fixed_fixed.restore_participants(&compaction);
+                fixed_fixed.restore(&fixed_fixed_compaction, fixed_fixed_saved);
+                fixed_var.restore_participants(&compaction);
+                fixed_var.restore(&fixed_var_compaction, fixed_var_saved);
+                var_var.restore_participants(&compaction);
+                var_var.restore(&var_var_compaction, var_var_saved);
+            }
+            assert_eq!(graph.node_count(), node_count);
+            assert_eq!(
+                graph
+                    .edge_ids()
+                    .map(|id| graph.edge_endpoints(id).map(|n| n.0))
+                    .collect::<Vec<_>>(),
+                endpoints
+            );
+            let mut neighbors = vec![vec![]; node_count];
+            for (id, &[a, b]) in endpoints.iter().enumerate() {
+                let edge = EdgeId::from(id);
+                neighbors[a as usize].push(Neighbor {
+                    node: NodeId(b),
+                    edge,
+                });
+                neighbors[b as usize].push(Neighbor {
+                    node: NodeId(a),
+                    edge,
+                });
+            }
+            for (id, mut expected) in neighbors.into_iter().enumerate() {
+                expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                let mut actual = graph.neighbors(NodeId::from(id)).to_vec();
+                actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                assert_eq!(actual, expected);
+            }
+            assert_eq!(fixed.clone().into_entries(), fixed_entries);
+            assert_incidence(
+                node_count.max(endpoints.len()),
+                fixed_entries
+                    .iter()
+                    .map(|(first, _)| first.iter().map(|p| p.refs()).collect()),
+                |node| fixed.incident_to_node(node),
+                |edge| fixed.incident_to_edge(edge),
+            );
+            assert_eq!(var.clone().into_entries(), var_entries);
+            assert_incidence(
+                node_count.max(endpoints.len()),
+                var_entries
+                    .iter()
+                    .map(|(first, _)| first.iter().map(|p| p.refs()).collect()),
+                |node| var.incident_to_node(node),
+                |edge| var.incident_to_edge(edge),
+            );
+            assert_eq!(fixed_fixed.clone().into_entries(), fixed_fixed_entries);
+            assert_incidence(
+                node_count.max(endpoints.len()),
+                fixed_fixed_entries.iter().map(|(first, second, _)| {
+                    first
+                        .iter()
+                        .map(|p| p.refs())
+                        .chain(second.iter().map(|p| p.refs()))
+                        .collect()
+                }),
+                |node| fixed_fixed.incident_to_node(node),
+                |edge| fixed_fixed.incident_to_edge(edge),
+            );
+            assert_eq!(fixed_var.clone().into_entries(), fixed_var_entries);
+            assert_incidence(
+                node_count.max(endpoints.len()),
+                fixed_var_entries.iter().map(|(first, second, _)| {
+                    first
+                        .iter()
+                        .map(|p| p.refs())
+                        .chain(second.iter().map(|p| p.refs()))
+                        .collect()
+                }),
+                |node| fixed_var.incident_to_node(node),
+                |edge| fixed_var.incident_to_edge(edge),
+            );
+            assert_eq!(var_var.clone().into_entries(), var_var_entries);
+            assert_incidence(
+                node_count.max(endpoints.len()),
+                var_var_entries.iter().map(|(first, second, _)| {
+                    first
+                        .iter()
+                        .map(|p| p.refs())
+                        .chain(second.iter().map(|p| p.refs()))
+                        .collect()
+                }),
+                |node| var_var.incident_to_node(node),
+                |edge| var_var.incident_to_edge(edge),
+            );
+            group.bench_function(
+                BenchmarkId::new("native", format!("rows={count}/{scenario}")),
+                |b| {
+                    b.iter_batched(
+                        || (compacted.clone(), history.clone()),
+                        |(
+                            (
+                                mut graph,
+                                mut fixed,
+                                mut var,
+                                mut fixed_fixed,
+                                mut fixed_var,
+                                mut var_var,
+                            ),
+                            history,
+                        )| {
+                            for (
+                                compaction,
+                                saved_edges,
+                                fixed_compaction,
+                                fixed_saved,
+                                var_compaction,
+                                var_saved,
+                                fixed_fixed_compaction,
+                                fixed_fixed_saved,
+                                fixed_var_compaction,
+                                fixed_var_saved,
+                                var_var_compaction,
+                                var_var_saved,
+                            ) in black_box(history).into_iter().rev()
+                            {
+                                graph.restore(&compaction, &saved_edges);
+                                fixed.restore_participants(&compaction);
+                                fixed.restore(&fixed_compaction, fixed_saved);
+                                var.restore_participants(&compaction);
+                                var.restore(&var_compaction, var_saved);
+                                fixed_fixed.restore_participants(&compaction);
+                                fixed_fixed.restore(&fixed_fixed_compaction, fixed_fixed_saved);
+                                fixed_var.restore_participants(&compaction);
+                                fixed_var.restore(&fixed_var_compaction, fixed_var_saved);
+                                var_var.restore_participants(&compaction);
+                                var_var.restore(&var_var_compaction, var_var_saved);
+                            }
+                            black_box((graph, fixed, var, fixed_fixed, fixed_var, var_var))
+                        },
+                        BatchSize::LargeInput,
+                    )
+                },
+            );
+        }
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    graph,
+    fixed,
+    var,
+    fixed_fixed,
+    fixed_var,
+    var_var,
+    sequence
+);
 criterion_main!(benches);

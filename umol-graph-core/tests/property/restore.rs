@@ -24,6 +24,15 @@
 //!
 //! VarVarBirelationSet varies both factor lengths independently from zero to eight,
 //! checking the same laws with unequal lengths, empty factors, and shared references.
+//!
+//! Combined sequence properties exercise graph cascading removal and induced relation compaction
+//! over up to eight nodes, sixteen edges, and sixteen rows. One to three removals are undone in
+//! reverse order: graph restoration, survivor-reference restoration, then saved-row restoration.
+//! Each intermediate state is checked against its saved rows and an endpoint/adjacency model;
+//! incidence is scanned independently. This checks compatibility across the two id domains,
+//! supplementing the independent single-operation oracles above. Removal choices include random
+//! subsets, all nodes, all edges, and identity; participants retain labels and may reference either,
+//! both, or neither graph domain. Variable factors independently contain zero to four participants.
 
 use proptest::prelude::*;
 use umol_graph_core::{
@@ -353,6 +362,76 @@ proptest! {
     }
 
     #[test]
+    fn test_fixed_relation_set_restore_sequence(
+        node_count in 0usize..9,
+        raw_edges in prop::collection::vec((0u32..8, 0u32..8), 0..17),
+        raw_rows in prop::collection::vec(prop::array::uniform2((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>())), 0..17),
+        removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
+    ) {
+        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
+            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let mut graph = Graph::new(node_count, &endpoints);
+        let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
+            node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
+            edge: edge.filter(|_| !endpoints.is_empty()).map(|id| EdgeId::from(id % endpoints.len())),
+            label,
+        };
+        let entries: Vec<_> = raw_rows.into_iter().enumerate().map(|(data, row)| (row.map(participant), data)).collect();
+        let mut relations = FixedRelationSet::new(entries);
+        let mut history = Vec::new();
+        for (node_mask, edge_mask, mode) in removals {
+            let before_nodes = graph.node_count();
+            let before_edges: Vec<_> = graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect();
+            let before_rows = relations.clone().into_entries();
+            let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
+            let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
+            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
+            let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
+                .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
+                .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let saved_rows = row_compaction.removed().iter().rev().map(|id| {
+                let (first, data) = before_rows[id.index()];
+                (*id, first, data)
+            }).collect();
+            relations = compacted;
+            history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
+        }
+        for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
+            graph.restore(&compaction, &saved_edges);
+            relations.restore_participants(&compaction);
+            relations.restore(&row_compaction, saved_rows);
+            prop_assert_eq!(graph.node_count(), expected_nodes);
+            prop_assert_eq!(&graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect::<Vec<_>>(), &expected_edges);
+            let mut neighbors = vec![vec![]; expected_nodes];
+            for (id, &[a, b]) in expected_edges.iter().enumerate() {
+                let edge = EdgeId::from(id);
+                neighbors[a.index()].push(Neighbor { node: b, edge });
+                neighbors[b.index()].push(Neighbor { node: a, edge });
+            }
+            for (id, mut expected) in neighbors.into_iter().enumerate() {
+                expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                let mut actual = graph.neighbors(NodeId::from(id)).to_vec();
+                actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                prop_assert_eq!(actual, expected);
+            }
+            for id in 0..=expected_nodes {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, _))| first.iter().any(|p| p.node == Some(NodeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_node(NodeId::from(id)), expected);
+            }
+            for id in 0..=expected_edges.len() {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, _))| first.iter().any(|p| p.edge == Some(EdgeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_edge(EdgeId::from(id)), expected);
+            }
+            prop_assert_eq!(relations.clone().into_entries(), expected_rows);
+        }
+    }
+
+    #[test]
     fn test_var_relation_set_restore(
         rows in prop::collection::vec((prop::collection::vec(0u32..16, 0..9), any::<bool>()), 0..33),
         order in prop::collection::vec(any::<u32>(), 32),
@@ -505,6 +584,76 @@ proptest! {
     }
 
     #[test]
+    fn test_var_relation_set_restore_sequence(
+        node_count in 0usize..9,
+        raw_edges in prop::collection::vec((0u32..8, 0u32..8), 0..17),
+        raw_rows in prop::collection::vec(prop::collection::vec((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()), 0..5), 0..17),
+        removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
+    ) {
+        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
+            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let mut graph = Graph::new(node_count, &endpoints);
+        let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
+            node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
+            edge: edge.filter(|_| !endpoints.is_empty()).map(|id| EdgeId::from(id % endpoints.len())),
+            label,
+        };
+        let entries: Vec<_> = raw_rows.into_iter().enumerate().map(|(data, row)| (row.into_iter().map(participant).collect::<Vec<_>>(), data)).collect();
+        let mut relations = VarRelationSet::new(entries);
+        let mut history = Vec::new();
+        for (node_mask, edge_mask, mode) in removals {
+            let before_nodes = graph.node_count();
+            let before_edges: Vec<_> = graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect();
+            let before_rows = relations.clone().into_entries();
+            let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
+            let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
+            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
+            let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
+                .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
+                .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let saved_rows = row_compaction.removed().iter().rev().map(|id| {
+                let (first, data) = before_rows[id.index()].clone();
+                (*id, first, data)
+            }).collect();
+            relations = compacted;
+            history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
+        }
+        for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
+            graph.restore(&compaction, &saved_edges);
+            relations.restore_participants(&compaction);
+            relations.restore(&row_compaction, saved_rows);
+            prop_assert_eq!(graph.node_count(), expected_nodes);
+            prop_assert_eq!(&graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect::<Vec<_>>(), &expected_edges);
+            let mut neighbors = vec![vec![]; expected_nodes];
+            for (id, &[a, b]) in expected_edges.iter().enumerate() {
+                let edge = EdgeId::from(id);
+                neighbors[a.index()].push(Neighbor { node: b, edge });
+                neighbors[b.index()].push(Neighbor { node: a, edge });
+            }
+            for (id, mut expected) in neighbors.into_iter().enumerate() {
+                expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                let mut actual = graph.neighbors(NodeId::from(id)).to_vec();
+                actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                prop_assert_eq!(actual, expected);
+            }
+            for id in 0..=expected_nodes {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, _))| first.iter().any(|p| p.node == Some(NodeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_node(NodeId::from(id)), expected);
+            }
+            for id in 0..=expected_edges.len() {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, _))| first.iter().any(|p| p.edge == Some(EdgeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_edge(EdgeId::from(id)), expected);
+            }
+            prop_assert_eq!(relations.clone().into_entries(), expected_rows);
+        }
+    }
+
+    #[test]
     fn test_fixed_fixed_birelation_set_restore(
         rows in prop::collection::vec((prop::array::uniform5(0u32..16), any::<bool>()), 0..33),
         order in prop::collection::vec(any::<u32>(), 32),
@@ -650,6 +799,77 @@ proptest! {
             Compaction::new(edges, (0..edges).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
         ));
     }
+
+    #[test]
+    fn test_fixed_fixed_birelation_set_restore_sequence(
+        node_count in 0usize..9,
+        raw_edges in prop::collection::vec((0u32..8, 0u32..8), 0..17),
+        raw_rows in prop::collection::vec((prop::array::uniform2((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>())), prop::array::uniform3((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()))), 0..17),
+        removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
+    ) {
+        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
+            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let mut graph = Graph::new(node_count, &endpoints);
+        let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
+            node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
+            edge: edge.filter(|_| !endpoints.is_empty()).map(|id| EdgeId::from(id % endpoints.len())),
+            label,
+        };
+        let entries: Vec<_> = raw_rows.into_iter().enumerate().map(|(data, row)| (row.0.map(participant), row.1.map(participant), data)).collect();
+        let mut relations = FixedFixedBirelationSet::new(entries);
+        let mut history = Vec::new();
+        for (node_mask, edge_mask, mode) in removals {
+            let before_nodes = graph.node_count();
+            let before_edges: Vec<_> = graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect();
+            let before_rows = relations.clone().into_entries();
+            let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
+            let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
+            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
+            let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
+                .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
+                .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let saved_rows = row_compaction.removed().iter().rev().map(|id| {
+                let (first, second, data) = before_rows[id.index()];
+                (*id, first, second, data)
+            }).collect();
+            relations = compacted;
+            history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
+        }
+        for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
+            graph.restore(&compaction, &saved_edges);
+            relations.restore_participants(&compaction);
+            relations.restore(&row_compaction, saved_rows);
+            prop_assert_eq!(graph.node_count(), expected_nodes);
+            prop_assert_eq!(&graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect::<Vec<_>>(), &expected_edges);
+            let mut neighbors = vec![vec![]; expected_nodes];
+            for (id, &[a, b]) in expected_edges.iter().enumerate() {
+                let edge = EdgeId::from(id);
+                neighbors[a.index()].push(Neighbor { node: b, edge });
+                neighbors[b.index()].push(Neighbor { node: a, edge });
+            }
+            for (id, mut expected) in neighbors.into_iter().enumerate() {
+                expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                let mut actual = graph.neighbors(NodeId::from(id)).to_vec();
+                actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                prop_assert_eq!(actual, expected);
+            }
+            for id in 0..=expected_nodes {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, second, _))| first.iter().chain(second).any(|p| p.node == Some(NodeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_node(NodeId::from(id)), expected);
+            }
+            for id in 0..=expected_edges.len() {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, second, _))| first.iter().chain(second).any(|p| p.edge == Some(EdgeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_edge(EdgeId::from(id)), expected);
+            }
+            prop_assert_eq!(relations.clone().into_entries(), expected_rows);
+        }
+    }
+
     #[test]
     fn test_fixed_var_birelation_set_restore(
         rows in prop::collection::vec(((prop::array::uniform2(0u32..16), prop::collection::vec(0u32..16, 0..9)), any::<bool>()), 0..33),
@@ -802,6 +1022,77 @@ proptest! {
             Compaction::new(edges, (0..edges).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
         ));
     }
+
+    #[test]
+    fn test_fixed_var_birelation_set_restore_sequence(
+        node_count in 0usize..9,
+        raw_edges in prop::collection::vec((0u32..8, 0u32..8), 0..17),
+        raw_rows in prop::collection::vec((prop::array::uniform2((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>())), prop::collection::vec((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()), 0..5)), 0..17),
+        removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
+    ) {
+        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
+            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let mut graph = Graph::new(node_count, &endpoints);
+        let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
+            node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
+            edge: edge.filter(|_| !endpoints.is_empty()).map(|id| EdgeId::from(id % endpoints.len())),
+            label,
+        };
+        let entries: Vec<_> = raw_rows.into_iter().enumerate().map(|(data, row)| (row.0.map(participant), row.1.into_iter().map(participant).collect::<Vec<_>>(), data)).collect();
+        let mut relations = FixedVarBirelationSet::new(entries);
+        let mut history = Vec::new();
+        for (node_mask, edge_mask, mode) in removals {
+            let before_nodes = graph.node_count();
+            let before_edges: Vec<_> = graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect();
+            let before_rows = relations.clone().into_entries();
+            let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
+            let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
+            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
+            let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
+                .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
+                .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let saved_rows = row_compaction.removed().iter().rev().map(|id| {
+                let (first, second, data) = before_rows[id.index()].clone();
+                (*id, first, second, data)
+            }).collect();
+            relations = compacted;
+            history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
+        }
+        for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
+            graph.restore(&compaction, &saved_edges);
+            relations.restore_participants(&compaction);
+            relations.restore(&row_compaction, saved_rows);
+            prop_assert_eq!(graph.node_count(), expected_nodes);
+            prop_assert_eq!(&graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect::<Vec<_>>(), &expected_edges);
+            let mut neighbors = vec![vec![]; expected_nodes];
+            for (id, &[a, b]) in expected_edges.iter().enumerate() {
+                let edge = EdgeId::from(id);
+                neighbors[a.index()].push(Neighbor { node: b, edge });
+                neighbors[b.index()].push(Neighbor { node: a, edge });
+            }
+            for (id, mut expected) in neighbors.into_iter().enumerate() {
+                expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                let mut actual = graph.neighbors(NodeId::from(id)).to_vec();
+                actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                prop_assert_eq!(actual, expected);
+            }
+            for id in 0..=expected_nodes {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, second, _))| first.iter().chain(second).any(|p| p.node == Some(NodeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_node(NodeId::from(id)), expected);
+            }
+            for id in 0..=expected_edges.len() {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, second, _))| first.iter().chain(second).any(|p| p.edge == Some(EdgeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_edge(EdgeId::from(id)), expected);
+            }
+            prop_assert_eq!(relations.clone().into_entries(), expected_rows);
+        }
+    }
+
     #[test]
     fn test_var_var_birelation_set_restore(
         rows in prop::collection::vec(((prop::collection::vec(0u32..16, 0..9), prop::collection::vec(0u32..16, 0..9)), any::<bool>()), 0..33),
@@ -953,5 +1244,75 @@ proptest! {
             Compaction::new(nodes, (0..nodes).filter(|&id| node_removals[id]).map(NodeId::from).collect()).unwrap(),
             Compaction::new(edges, (0..edges).filter(|&id| edge_removals[id]).map(EdgeId::from).collect()).unwrap(),
         ));
+    }
+
+    #[test]
+    fn test_var_var_birelation_set_restore_sequence(
+        node_count in 0usize..9,
+        raw_edges in prop::collection::vec((0u32..8, 0u32..8), 0..17),
+        raw_rows in prop::collection::vec((prop::collection::vec((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()), 0..5), prop::collection::vec((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()), 0..5)), 0..17),
+        removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
+    ) {
+        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
+            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let mut graph = Graph::new(node_count, &endpoints);
+        let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
+            node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
+            edge: edge.filter(|_| !endpoints.is_empty()).map(|id| EdgeId::from(id % endpoints.len())),
+            label,
+        };
+        let entries: Vec<_> = raw_rows.into_iter().enumerate().map(|(data, row)| (row.0.into_iter().map(participant).collect::<Vec<_>>(), row.1.into_iter().map(participant).collect::<Vec<_>>(), data)).collect();
+        let mut relations = VarVarBirelationSet::new(entries);
+        let mut history = Vec::new();
+        for (node_mask, edge_mask, mode) in removals {
+            let before_nodes = graph.node_count();
+            let before_edges: Vec<_> = graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect();
+            let before_rows = relations.clone().into_entries();
+            let nodes: Vec<_> = graph.node_ids().filter(|id| mode == 1 || (mode == 0 && node_mask[id.index()])).collect();
+            let edges: Vec<_> = graph.edge_ids().filter(|id| mode == 2 || (mode == 0 && edge_mask[id.index()])).collect();
+            let compaction = graph.tracked_remove_cascading(&nodes, &edges);
+            let saved_edges: Vec<_> = before_edges.iter().enumerate().rev()
+                .filter(|(id, pair)| edges.contains(&EdgeId::from(*id)) || pair.iter().any(|node| nodes.contains(node)))
+                .map(|(id, &pair)| (EdgeId::from(id), pair)).collect();
+            let (compacted, row_compaction) = relations.tracked_compact(&compaction);
+            let saved_rows = row_compaction.removed().iter().rev().map(|id| {
+                let (first, second, data) = before_rows[id.index()].clone();
+                (*id, first, second, data)
+            }).collect();
+            relations = compacted;
+            history.push((compaction, saved_edges, row_compaction, saved_rows, before_nodes, before_edges, before_rows));
+        }
+        for (compaction, saved_edges, row_compaction, saved_rows, expected_nodes, expected_edges, expected_rows) in history.into_iter().rev() {
+            graph.restore(&compaction, &saved_edges);
+            relations.restore_participants(&compaction);
+            relations.restore(&row_compaction, saved_rows);
+            prop_assert_eq!(graph.node_count(), expected_nodes);
+            prop_assert_eq!(&graph.edge_ids().map(|id| graph.edge_endpoints(id)).collect::<Vec<_>>(), &expected_edges);
+            let mut neighbors = vec![vec![]; expected_nodes];
+            for (id, &[a, b]) in expected_edges.iter().enumerate() {
+                let edge = EdgeId::from(id);
+                neighbors[a.index()].push(Neighbor { node: b, edge });
+                neighbors[b.index()].push(Neighbor { node: a, edge });
+            }
+            for (id, mut expected) in neighbors.into_iter().enumerate() {
+                expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                let mut actual = graph.neighbors(NodeId::from(id)).to_vec();
+                actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+                prop_assert_eq!(actual, expected);
+            }
+            for id in 0..=expected_nodes {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, second, _))| first.iter().chain(second).any(|p| p.node == Some(NodeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_node(NodeId::from(id)), expected);
+            }
+            for id in 0..=expected_edges.len() {
+                let expected: Vec<_> = expected_rows.iter().enumerate()
+                    .filter(|(_, (first, second, _))| first.iter().chain(second).any(|p| p.edge == Some(EdgeId::from(id))))
+                    .map(|(id, _)| RelationId::from(id)).collect();
+                prop_assert_eq!(relations.incident_to_edge(EdgeId::from(id)), expected);
+            }
+            prop_assert_eq!(relations.clone().into_entries(), expected_rows);
+        }
     }
 }
