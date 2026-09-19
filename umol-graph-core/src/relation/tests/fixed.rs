@@ -7,8 +7,8 @@ use rstest::{fixture, rstest};
 
 use crate::{
     Compaction, Correspondence, EdgeId, FixedRelationSet, GraphCompaction, GraphCorrespondence,
-    GraphRemapping, NodeId, ParticipantPosition, RelationId, RelationPullbackCorrespondence,
-    RelationPushoutCorrespondence, Remapping,
+    GraphRemapping, NodeId, ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant,
+    RelationPullbackCorrespondence, RelationPushoutCorrespondence, Remapping,
 };
 
 #[fixture]
@@ -30,6 +30,66 @@ struct PositionLabels(Vec<u32>);
 
 #[derive(Debug, PartialEq, Eq)]
 struct ReplacementData(Vec<u32>);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct References {
+    node: Option<NodeId>,
+    edge: Option<EdgeId>,
+    label: u8,
+}
+
+impl RelationParticipant for References {
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self {
+            node: match self.node {
+                Some(id) => Some(id.try_map(correspondence)?),
+                None => None,
+            },
+            edge: match self.edge {
+                Some(id) => Some(id.try_map(correspondence)?),
+                None => None,
+            },
+            ..self
+        })
+    }
+
+    fn remap(self, remapping: &GraphRemapping) -> Self {
+        Self {
+            node: self.node.map(|id| id.remap(remapping)),
+            edge: self.edge.map(|id| id.remap(remapping)),
+            ..self
+        }
+    }
+
+    fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
+        Some(Self {
+            node: match self.node {
+                Some(id) => Some(id.compact(compaction)?),
+                None => None,
+            },
+            edge: match self.edge {
+                Some(id) => Some(id.compact(compaction)?),
+                None => None,
+            },
+            ..self
+        })
+    }
+
+    fn uncompact(self, compaction: &GraphCompaction) -> Self {
+        Self {
+            node: self.node.map(|id| id.uncompact(compaction)),
+            edge: self.edge.map(|id| id.uncompact(compaction)),
+            ..self
+        }
+    }
+
+    fn refs(self) -> ParticipantRefs {
+        ParticipantRefs {
+            node: self.node,
+            edge: self.edge,
+        }
+    }
+}
 
 fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
 where
@@ -459,6 +519,272 @@ fn test_fixed_relation_set_tracked_remove_error(
     let panic = catch_unwind(AssertUnwindSafe(|| relations.remove(&ids))).unwrap_err();
     assert_eq!(panic.downcast_ref::<String>(), Some(message));
     assert_eq!(relations, original);
+}
+
+#[rstest]
+#[case::interleaved(
+    vec![([NodeId(1), NodeId(1)], "survivor"), ([NodeId(3), NodeId(1)], "changed")],
+    5, vec![RelationId(0), RelationId(2), RelationId(4)],
+    vec![(RelationId(4), [NodeId(4), NodeId(4)], "last"), (RelationId(0), [NodeId(0), NodeId(1)], "first"), (RelationId(2), [NodeId(2), NodeId(1)], "middle")],
+    vec![([NodeId(0), NodeId(1)], "first"), ([NodeId(1), NodeId(1)], "survivor"), ([NodeId(2), NodeId(1)], "middle"), ([NodeId(3), NodeId(1)], "changed"), ([NodeId(4), NodeId(4)], "last")],
+)]
+#[case::all(
+    vec![], 2, vec![RelationId(0), RelationId(1)],
+    vec![(RelationId(1), [NodeId(1), NodeId(1)], "second"), (RelationId(0), [NodeId(0), NodeId(1)], "first")],
+    vec![([NodeId(0), NodeId(1)], "first"), ([NodeId(1), NodeId(1)], "second")],
+)]
+#[case::zero_arity(
+    vec![([], "survivor")], 3, vec![RelationId(0), RelationId(2)],
+    vec![(RelationId(2), [], "last"), (RelationId(0), [], "first")],
+    vec![([], "first"), ([], "survivor"), ([], "last")],
+)]
+#[case::coincident(
+    vec![([NodeId(0), NodeId(1)], "survivor")], 2, vec![RelationId(0)],
+    vec![(RelationId(0), [NodeId(0), NodeId(1)], "restored")],
+    vec![([NodeId(0), NodeId(1)], "restored"), ([NodeId(0), NodeId(1)], "survivor")],
+)]
+fn test_fixed_relation_set_restore<const N: usize>(
+    #[case] entries: Vec<([NodeId; N], &'static str)>,
+    #[case] count: usize,
+    #[case] ids: Vec<RelationId>,
+    #[case] removed: Vec<(RelationId, [NodeId; N], &'static str)>,
+    #[case] expected: Vec<([NodeId; N], &'static str)>,
+) {
+    let mut relations = FixedRelationSet::new(entries);
+    relations.restore(&Compaction::new(count, ids).unwrap(), removed);
+    assert_eq!(relations.clone().into_entries(), expected);
+    for node in 0..6 {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.contains(&NodeId(node)))
+            .map(|(id, _)| RelationId::from(id))
+            .collect();
+        assert_eq!(relations.incident_to_node(NodeId(node)), incidence);
+        assert_eq!(relations.incident_to_edge(EdgeId(node)), &[]);
+    }
+}
+
+#[rstest]
+#[case::empty(FixedRelationSet::<NodeId, &str, 0>::new(vec![]))]
+#[case::zero_arity(FixedRelationSet::<NodeId, &str, 0>::new(vec![([], "first"), ([], "second")]))]
+#[case::nonempty(FixedRelationSet::new(vec![([NodeId(0), NodeId(2)], "first")]))]
+fn test_fixed_relation_set_restore_identity<const N: usize>(
+    #[case] input: FixedRelationSet<NodeId, &'static str, N>,
+) {
+    let mut relations = input.clone();
+    relations.restore(&Compaction::identity(input.count()), vec![]);
+    assert_eq!(relations, input);
+}
+
+#[rstest]
+#[case::edges([EdgeId(2), EdgeId(2)], [EdgeId(0), EdgeId(2)])]
+#[case::zero_arity([], [])]
+fn test_fixed_relation_set_restore_payload<const N: usize>(
+    #[case] surviving: [EdgeId; N],
+    #[case] removed: [EdgeId; N],
+) {
+    let mut relations = FixedRelationSet::new(vec![(surviving, ReplacementData(vec![7, 11]))]);
+    relations.restore(
+        &Compaction::new(2, vec![RelationId(0)]).unwrap(),
+        vec![(RelationId(0), removed, ReplacementData(vec![13, 17]))],
+    );
+    let expected = vec![
+        (removed, ReplacementData(vec![13, 17])),
+        (surviving, ReplacementData(vec![7, 11])),
+    ];
+    for edge in 0..4 {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.contains(&EdgeId(edge)))
+            .map(|(id, _)| RelationId::from(id))
+            .collect();
+        assert_eq!(relations.incident_to_edge(EdgeId(edge)), incidence);
+    }
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+#[case::missing(3, vec![RelationId(0), RelationId(2)], vec![])]
+#[case::duplicate(3, vec![RelationId(0), RelationId(2)], vec![RelationId(0), RelationId(0)])]
+#[case::survivor_slot(3, vec![RelationId(0), RelationId(2)], vec![RelationId(1), RelationId(2)])]
+#[case::out_of_range(3, vec![RelationId(0), RelationId(2)], vec![RelationId(u32::MAX)])]
+#[case::too_many_survivors(1, vec![RelationId(0)], vec![RelationId(0)])]
+#[case::too_few_survivors(8, vec![RelationId(0)], vec![RelationId(0)])]
+#[case::identity_with_entries(1, vec![], vec![RelationId(0)])]
+#[case::oversized(usize::MAX, vec![RelationId(0)], vec![])]
+fn test_fixed_relation_set_restore_malformed(
+    #[case] count: usize,
+    #[case] ids: Vec<RelationId>,
+    #[case] removed: Vec<RelationId>,
+) {
+    let mut relations = FixedRelationSet::new(vec![([NodeId(0)], ReplacementData(vec![7]))]);
+    relations.restore(
+        &Compaction::new(count, ids).unwrap(),
+        removed
+            .into_iter()
+            .map(|id| (id, [NodeId(u32::MAX)], ReplacementData(vec![11])))
+            .collect(),
+    );
+}
+
+#[rstest]
+#[case::nodes(vec![([NodeId(0), NodeId(1), NodeId(0)], "first"), ([NodeId(2), NodeId(1), NodeId(2)], "second")], vec![([NodeId(1), NodeId(3), NodeId(1)], "first"), ([NodeId(4), NodeId(3), NodeId(4)], "second")])]
+#[case::edges(vec![([EdgeId(0), EdgeId(1), EdgeId(0)], "first")], vec![([EdgeId(0), EdgeId(2), EdgeId(0)], "first")])]
+#[case::zero_arity(vec![([] as [NodeId; 0], "first")], vec![([], "first")])]
+#[case::empty(Vec::<([NodeId; 2], &str)>::new(), vec![])]
+fn test_fixed_relation_set_restore_participants<P: RelationParticipant + Debug, const N: usize>(
+    #[case] entries: Vec<([P; N], &'static str)>,
+    #[case] expected: Vec<([P; N], &'static str)>,
+) {
+    let compaction = GraphCompaction::new(
+        Compaction::new(5, vec![NodeId(0), NodeId(2)]).unwrap(),
+        Compaction::new(4, vec![EdgeId(1)]).unwrap(),
+    );
+    let mut relations = FixedRelationSet::new(entries);
+    relations.restore_participants(&compaction);
+    assert_eq!(relations.clone().into_entries(), expected);
+    for id in 0..6 {
+        let nodes: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.iter().any(|p| p.refs().node == Some(NodeId(id))))
+            .map(|(id, _)| RelationId::from(id))
+            .collect();
+        let edges: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.iter().any(|p| p.refs().edge == Some(EdgeId(id))))
+            .map(|(id, _)| RelationId::from(id))
+            .collect();
+        assert_eq!(relations.incident_to_node(NodeId(id)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(id)), edges);
+    }
+}
+
+#[rstest]
+fn test_fixed_relation_set_restore_participants_references() {
+    let compacted = [
+        References {
+            node: Some(NodeId(0)),
+            edge: Some(EdgeId(1)),
+            label: 1,
+        },
+        References {
+            node: Some(NodeId(0)),
+            edge: None,
+            label: 2,
+        },
+        References {
+            node: None,
+            edge: Some(EdgeId(1)),
+            label: 3,
+        },
+        References {
+            node: None,
+            edge: None,
+            label: 4,
+        },
+        References {
+            node: Some(NodeId(0)),
+            edge: Some(EdgeId(1)),
+            label: 5,
+        },
+    ];
+    let mut relations = FixedRelationSet::new(vec![(compacted, ReplacementData(vec![7, 11]))]);
+    let payload = relations.data(RelationId(0)) as *const ReplacementData;
+    relations.restore_participants(&GraphCompaction::new(
+        Compaction::new(3, vec![NodeId(0)]).unwrap(),
+        Compaction::new(4, vec![EdgeId(1)]).unwrap(),
+    ));
+    assert_eq!(
+        relations.data(RelationId(0)) as *const ReplacementData,
+        payload
+    );
+    assert_eq!(
+        relations.participants(RelationId(0)),
+        &[
+            References {
+                node: Some(NodeId(1)),
+                edge: Some(EdgeId(2)),
+                label: 1
+            },
+            References {
+                node: Some(NodeId(1)),
+                edge: None,
+                label: 2
+            },
+            References {
+                node: None,
+                edge: Some(EdgeId(2)),
+                label: 3
+            },
+            References {
+                node: None,
+                edge: None,
+                label: 4
+            },
+            References {
+                node: Some(NodeId(1)),
+                edge: Some(EdgeId(2)),
+                label: 5
+            },
+        ]
+    );
+    assert_eq!(relations.data(RelationId(0)), &ReplacementData(vec![7, 11]));
+    assert_eq!(relations.incident_to_node(NodeId(1)), &[RelationId(0)]);
+    assert_eq!(relations.incident_to_edge(EdgeId(2)), &[RelationId(0)]);
+    assert_eq!(relations.incident_to_node(NodeId(0)), &[]);
+    assert_eq!(relations.incident_to_edge(EdgeId(1)), &[]);
+}
+
+#[rstest]
+#[case::empty(FixedRelationSet::<NodeId, &str, 0>::new(vec![]))]
+#[case::zero_arity(FixedRelationSet::<NodeId, &str, 0>::new(vec![([], "first")]))]
+#[case::nonempty(FixedRelationSet::new(vec![([NodeId(0), NodeId(2)], "first")]))]
+fn test_fixed_relation_set_restore_participants_identity<const N: usize>(
+    #[case] input: FixedRelationSet<NodeId, &'static str, N>,
+) {
+    let mut relations = input.clone();
+    relations.restore_participants(&GraphCompaction::new(
+        Compaction::identity(3),
+        Compaction::identity(0),
+    ));
+    assert_eq!(relations, input);
+}
+
+#[rstest]
+#[case::node_domain(3, 3, Some(NodeId(2)), None)]
+#[case::edge_domain(3, 3, None, Some(EdgeId(2)))]
+#[case::both_domains(3, 3, Some(NodeId(u32::MAX)), Some(EdgeId(u32::MAX)))]
+#[case::oversized_nodes(usize::MAX, 3, Some(NodeId(0)), None)]
+#[case::oversized_edges(3, usize::MAX, None, Some(EdgeId(0)))]
+fn test_fixed_relation_set_restore_participants_malformed(
+    #[case] nodes: usize,
+    #[case] edges: usize,
+    #[case] node: Option<NodeId>,
+    #[case] edge: Option<EdgeId>,
+) {
+    let mut relations = FixedRelationSet::new(vec![(
+        [
+            References {
+                node: Some(NodeId(0)),
+                edge: Some(EdgeId(0)),
+                label: 1,
+            },
+            References {
+                node,
+                edge,
+                label: 2,
+            },
+        ],
+        ReplacementData(vec![7]),
+    )]);
+    relations.restore_participants(&GraphCompaction::new(
+        Compaction::new(nodes, vec![NodeId(0)]).unwrap(),
+        Compaction::new(edges, vec![EdgeId(0)]).unwrap(),
+    ));
 }
 
 #[rstest]
