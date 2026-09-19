@@ -7,8 +7,8 @@ use rstest::{fixture, rstest};
 
 use crate::{
     Compaction, Correspondence, EdgeId, GraphCompaction, GraphCorrespondence, GraphRemapping,
-    NodeId, ParticipantPosition, RelationId, RelationPullbackCorrespondence,
-    RelationPushoutCorrespondence, Remapping, VarRelationSet,
+    NodeId, ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant,
+    RelationPullbackCorrespondence, RelationPushoutCorrespondence, Remapping, VarRelationSet,
 };
 
 #[fixture]
@@ -30,6 +30,66 @@ struct PositionLabels(Vec<u32>);
 
 #[derive(Debug, PartialEq, Eq)]
 struct NonCloneData(Vec<u32>);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct References {
+    node: Option<NodeId>,
+    edge: Option<EdgeId>,
+    label: u8,
+}
+
+impl RelationParticipant for References {
+    fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
+        Some(Self {
+            node: match self.node {
+                Some(id) => Some(id.try_map(correspondence)?),
+                None => None,
+            },
+            edge: match self.edge {
+                Some(id) => Some(id.try_map(correspondence)?),
+                None => None,
+            },
+            ..self
+        })
+    }
+
+    fn remap(self, remapping: &GraphRemapping) -> Self {
+        Self {
+            node: self.node.map(|id| id.remap(remapping)),
+            edge: self.edge.map(|id| id.remap(remapping)),
+            ..self
+        }
+    }
+
+    fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
+        Some(Self {
+            node: match self.node {
+                Some(id) => Some(id.compact(compaction)?),
+                None => None,
+            },
+            edge: match self.edge {
+                Some(id) => Some(id.compact(compaction)?),
+                None => None,
+            },
+            ..self
+        })
+    }
+
+    fn uncompact(self, compaction: &GraphCompaction) -> Self {
+        Self {
+            node: self.node.map(|id| id.uncompact(compaction)),
+            edge: self.edge.map(|id| id.uncompact(compaction)),
+            ..self
+        }
+    }
+
+    fn refs(self) -> ParticipantRefs {
+        ParticipantRefs {
+            node: self.node,
+            edge: self.edge,
+        }
+    }
+}
 
 fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
 where
@@ -565,6 +625,276 @@ fn test_var_relation_set_tracked_remove_error(
     let panic = catch_unwind(AssertUnwindSafe(|| relations.remove(&ids))).unwrap_err();
     assert_eq!(panic.downcast_ref::<String>(), Some(message));
     assert_eq!(relations, original);
+}
+
+#[rstest]
+#[case::interleaved(
+    vec![(vec![], "survivor"), (vec![NodeId(3), NodeId(1), NodeId(3)], "changed")],
+    5, vec![RelationId(0), RelationId(2), RelationId(4)],
+    vec![(RelationId(4), vec![NodeId(4)], "last"), (RelationId(0), vec![NodeId(0), NodeId(1)], "first"), (RelationId(2), vec![], "middle")],
+    vec![(vec![NodeId(0), NodeId(1)], "first"), (vec![], "survivor"), (vec![], "middle"), (vec![NodeId(3), NodeId(1), NodeId(3)], "changed"), (vec![NodeId(4)], "last")],
+)]
+#[case::all(
+    vec![], 3, vec![RelationId(0), RelationId(1), RelationId(2)],
+    vec![(RelationId(2), vec![NodeId(2), NodeId(1), NodeId(2), NodeId(0), NodeId(2)], "last"), (RelationId(0), vec![], "empty"), (RelationId(1), vec![NodeId(1)], "middle")],
+    vec![(vec![], "empty"), (vec![NodeId(1)], "middle"), (vec![NodeId(2), NodeId(1), NodeId(2), NodeId(0), NodeId(2)], "last")],
+)]
+#[case::empty_rows(
+    vec![(vec![], "survivor")], 3, vec![RelationId(0), RelationId(2)],
+    vec![(RelationId(2), vec![], "last"), (RelationId(0), vec![], "first")],
+    vec![(vec![], "first"), (vec![], "survivor"), (vec![], "last")],
+)]
+#[case::coincident(
+    vec![(vec![NodeId(0), NodeId(1)], "survivor")], 2, vec![RelationId(0)],
+    vec![(RelationId(0), vec![NodeId(0), NodeId(1)], "restored")],
+    vec![(vec![NodeId(0), NodeId(1)], "restored"), (vec![NodeId(0), NodeId(1)], "survivor")],
+)]
+fn test_var_relation_set_restore(
+    #[case] entries: Vec<(Vec<NodeId>, &'static str)>,
+    #[case] count: usize,
+    #[case] ids: Vec<RelationId>,
+    #[case] removed: Vec<(RelationId, Vec<NodeId>, &'static str)>,
+    #[case] expected: Vec<(Vec<NodeId>, &'static str)>,
+) {
+    let mut relations = VarRelationSet::new(entries);
+    relations.restore(&Compaction::new(count, ids).unwrap(), removed);
+    assert_eq!(relations.clone().into_entries(), expected);
+    for node in 0..6 {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.contains(&NodeId(node)))
+            .map(|(id, _)| RelationId::from(id))
+            .collect();
+        assert_eq!(relations.incident_to_node(NodeId(node)), incidence);
+        assert_eq!(relations.incident_to_edge(EdgeId(node)), &[]);
+    }
+}
+
+#[rstest]
+#[case::empty(VarRelationSet::<NodeId, &str>::new(vec![]))]
+#[case::empty_rows(VarRelationSet::<NodeId, &str>::new(vec![(vec![], "first"), (vec![], "second")]))]
+#[case::nonempty(VarRelationSet::new(vec![(vec![NodeId(0), NodeId(2)], "first")]))]
+fn test_var_relation_set_restore_identity(#[case] input: VarRelationSet<NodeId, &'static str>) {
+    let mut relations = input.clone();
+    relations.restore(&Compaction::identity(input.count()), vec![]);
+    assert_eq!(relations, input);
+}
+
+#[rstest]
+#[case::edges(vec![EdgeId(2), EdgeId(2)], vec![EdgeId(0), EdgeId(2)])]
+#[case::empty_rows(vec![], vec![])]
+#[case::empty_survivor(vec![], vec![EdgeId(0), EdgeId(2), EdgeId(0)])]
+#[case::empty_restored(vec![EdgeId(2)], vec![])]
+fn test_var_relation_set_restore_payload(
+    #[case] surviving: Vec<EdgeId>,
+    #[case] removed: Vec<EdgeId>,
+) {
+    let mut relations = VarRelationSet::default();
+    relations.add(&surviving, NonCloneData(vec![7, 11]));
+    relations.restore(
+        &Compaction::new(2, vec![RelationId(0)]).unwrap(),
+        vec![(RelationId(0), removed.clone(), NonCloneData(vec![13, 17]))],
+    );
+    let expected = vec![
+        (removed, NonCloneData(vec![13, 17])),
+        (surviving, NonCloneData(vec![7, 11])),
+    ];
+    for edge in 0..4 {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.contains(&EdgeId(edge)))
+            .map(|(id, _)| RelationId::from(id))
+            .collect();
+        assert_eq!(relations.incident_to_edge(EdgeId(edge)), incidence);
+    }
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+#[case::missing(3, vec![RelationId(0), RelationId(2)], vec![])]
+#[case::duplicate(3, vec![RelationId(0), RelationId(2)], vec![RelationId(0), RelationId(0)])]
+#[case::survivor_slot(3, vec![RelationId(0), RelationId(2)], vec![RelationId(1), RelationId(2)])]
+#[case::out_of_range(3, vec![RelationId(0), RelationId(2)], vec![RelationId(u32::MAX)])]
+#[case::too_many_survivors(1, vec![RelationId(0)], vec![RelationId(0)])]
+#[case::too_few_survivors(8, vec![RelationId(0)], vec![RelationId(0)])]
+#[case::identity_with_entries(1, vec![], vec![RelationId(0)])]
+#[case::oversized(usize::MAX, vec![RelationId(0)], vec![])]
+fn test_var_relation_set_restore_malformed(
+    #[case] count: usize,
+    #[case] ids: Vec<RelationId>,
+    #[case] removed: Vec<RelationId>,
+) {
+    let mut relations = VarRelationSet::default();
+    relations.add(&[NodeId(0)], NonCloneData(vec![7]));
+    relations.restore(
+        &Compaction::new(count, ids).unwrap(),
+        removed
+            .into_iter()
+            .map(|id| (id, vec![NodeId(u32::MAX)], NonCloneData(vec![11])))
+            .collect(),
+    );
+}
+
+#[rstest]
+#[case::nodes(vec![(vec![NodeId(0), NodeId(1), NodeId(0)], "first"), (vec![], "empty"), (vec![NodeId(2)], "second")], vec![(vec![NodeId(1), NodeId(3), NodeId(1)], "first"), (vec![], "empty"), (vec![NodeId(4)], "second")])]
+#[case::edges(vec![(vec![EdgeId(0), EdgeId(1), EdgeId(0)], "first")], vec![(vec![EdgeId(0), EdgeId(2), EdgeId(0)], "first")])]
+#[case::empty_rows(vec![(Vec::<NodeId>::new(), "first")], vec![(vec![], "first")])]
+#[case::empty(Vec::<(Vec<NodeId>, &str)>::new(), vec![])]
+fn test_var_relation_set_restore_participants<P: RelationParticipant + Debug>(
+    #[case] entries: Vec<(Vec<P>, &'static str)>,
+    #[case] expected: Vec<(Vec<P>, &'static str)>,
+) {
+    let compaction = GraphCompaction::new(
+        Compaction::new(5, vec![NodeId(0), NodeId(2)]).unwrap(),
+        Compaction::new(4, vec![EdgeId(1)]).unwrap(),
+    );
+    let mut relations = VarRelationSet::new(entries);
+    relations.restore_participants(&compaction);
+    assert_eq!(relations.clone().into_entries(), expected);
+    for id in 0..6 {
+        let nodes: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.iter().any(|p| p.refs().node == Some(NodeId(id))))
+            .map(|(id, _)| RelationId::from(id))
+            .collect();
+        let edges: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.iter().any(|p| p.refs().edge == Some(EdgeId(id))))
+            .map(|(id, _)| RelationId::from(id))
+            .collect();
+        assert_eq!(relations.incident_to_node(NodeId(id)), nodes);
+        assert_eq!(relations.incident_to_edge(EdgeId(id)), edges);
+    }
+}
+
+#[rstest]
+fn test_var_relation_set_restore_participants_references() {
+    let compacted = vec![
+        References {
+            node: Some(NodeId(0)),
+            edge: Some(EdgeId(1)),
+            label: 1,
+        },
+        References {
+            node: Some(NodeId(0)),
+            edge: None,
+            label: 2,
+        },
+        References {
+            node: None,
+            edge: Some(EdgeId(1)),
+            label: 3,
+        },
+        References {
+            node: None,
+            edge: None,
+            label: 4,
+        },
+        References {
+            node: Some(NodeId(0)),
+            edge: Some(EdgeId(1)),
+            label: 5,
+        },
+    ];
+    let mut relations = VarRelationSet::default();
+    relations.add(&compacted, NonCloneData(vec![7, 11]));
+    let payload = relations.data(RelationId(0)) as *const NonCloneData;
+    relations.restore_participants(&GraphCompaction::new(
+        Compaction::new(3, vec![NodeId(0)]).unwrap(),
+        Compaction::new(4, vec![EdgeId(1)]).unwrap(),
+    ));
+    assert_eq!(
+        relations.data(RelationId(0)) as *const NonCloneData,
+        payload
+    );
+    assert_eq!(
+        relations.participants(RelationId(0)),
+        &[
+            References {
+                node: Some(NodeId(1)),
+                edge: Some(EdgeId(2)),
+                label: 1
+            },
+            References {
+                node: Some(NodeId(1)),
+                edge: None,
+                label: 2
+            },
+            References {
+                node: None,
+                edge: Some(EdgeId(2)),
+                label: 3
+            },
+            References {
+                node: None,
+                edge: None,
+                label: 4
+            },
+            References {
+                node: Some(NodeId(1)),
+                edge: Some(EdgeId(2)),
+                label: 5
+            },
+        ]
+    );
+    assert_eq!(relations.data(RelationId(0)), &NonCloneData(vec![7, 11]));
+    assert_eq!(relations.incident_to_node(NodeId(1)), &[RelationId(0)]);
+    assert_eq!(relations.incident_to_edge(EdgeId(2)), &[RelationId(0)]);
+    assert_eq!(relations.incident_to_node(NodeId(0)), &[]);
+    assert_eq!(relations.incident_to_edge(EdgeId(1)), &[]);
+}
+
+#[rstest]
+#[case::empty(VarRelationSet::<NodeId, &str>::new(vec![]))]
+#[case::empty_rows(VarRelationSet::<NodeId, &str>::new(vec![(vec![], "first")]))]
+#[case::nonempty(VarRelationSet::new(vec![(vec![NodeId(0), NodeId(2)], "first")]))]
+fn test_var_relation_set_restore_participants_identity(
+    #[case] input: VarRelationSet<NodeId, &'static str>,
+) {
+    let mut relations = input.clone();
+    relations.restore_participants(&GraphCompaction::new(
+        Compaction::identity(3),
+        Compaction::identity(0),
+    ));
+    assert_eq!(relations, input);
+}
+
+#[rstest]
+#[case::node_domain(3, 3, Some(NodeId(2)), None)]
+#[case::edge_domain(3, 3, None, Some(EdgeId(2)))]
+#[case::both_domains(3, 3, Some(NodeId(u32::MAX)), Some(EdgeId(u32::MAX)))]
+#[case::oversized_nodes(usize::MAX, 3, Some(NodeId(0)), None)]
+#[case::oversized_edges(3, usize::MAX, None, Some(EdgeId(0)))]
+fn test_var_relation_set_restore_participants_malformed(
+    #[case] nodes: usize,
+    #[case] edges: usize,
+    #[case] node: Option<NodeId>,
+    #[case] edge: Option<EdgeId>,
+) {
+    let mut relations = VarRelationSet::default();
+    relations.add(
+        &[
+            References {
+                node: Some(NodeId(0)),
+                edge: Some(EdgeId(0)),
+                label: 1,
+            },
+            References {
+                node,
+                edge,
+                label: 2,
+            },
+        ],
+        NonCloneData(vec![7]),
+    );
+    relations.restore_participants(&GraphCompaction::new(
+        Compaction::new(nodes, vec![NodeId(0)]).unwrap(),
+        Compaction::new(edges, vec![EdgeId(0)]).unwrap(),
+    ));
 }
 
 #[rstest]
