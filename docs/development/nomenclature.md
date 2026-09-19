@@ -1566,8 +1566,9 @@ applying those translated references to storage is participant-reference restora
 
 **Not:** uncompaction alone, which recovers surviving ids without reconstructing removed entries;
 transaction rollback, which coordinates restoration with other recorded changes.
-**In code:** editor `restore_topology`, `restore_atoms`, `restore_bonds`, and overlay `restore_*`
-methods; planned `Graph::restore` and relation-set `restore`/`restore_participants` methods.
+**In code:** `Graph::restore` and relation-set `restore`/`restore_participants`; editor
+`restore_topology`, `restore_atoms`, `restore_bonds`, and overlay `restore_*` methods coordinate
+molecular restoration.
 
 ### Result delivery
 

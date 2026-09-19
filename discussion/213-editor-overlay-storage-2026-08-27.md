@@ -18,9 +18,10 @@ Rust/Python boundary. The original editor-wrapper consolidation is one part of
 this work, not its organizing assumption.
 
 The relation-storage work in [166](166-molecule-ops-2026-07-27.md), S0–S5, is
-complete. The graph-core restoration extension is also owned by 166 and is a
-prerequisite for restoration delegation here. Design and implement the common
-molecule/reaction mutation infrastructure here, then return to 166 for
+complete. Its S6–S8 graph-core restoration extension is also complete as of
+2026-09-19; the storage prerequisite for restoration delegation is available.
+Design and implement the common molecule/reaction mutation infrastructure here,
+then return to 166 for
 non-transactional editing at operation call sites and
 HydrogenFolder/HydrogenUnfolder. Projection requirements inform this design;
 their remaining operation work stays in 166. This is a current-state review and
@@ -316,13 +317,15 @@ the session correspondence after restoring the affected tables. See
 The settled graph-core restoration design and public contracts are
 recorded with the earlier storage work in
 [166 — Graph and relation restoration](166-molecule-ops-2026-07-27.md#graph-and-relation-restoration).
-That work will provide Graph::restore and relation-set restore/restore_participants;
+Completed 2026-09-19: Graph::restore and restore/restore_participants on all five
+relation-set shapes are implemented and verified in 166 S6–S8;
 uncompact remains non-mutating reference translation. Restoration returns (): matching
 removal data recovers the original storage; manipulated inputs must not panic but
 have no specified restoration result. This document owns editor
 integration, including attribute arrays, constraints, correspondence, and
 transaction coordination, and delegates graph/relation reconstruction to those
-storage operations.
+storage operations. The editor currently retains the reconstruction paths described
+above; rewiring them is not part of the completed graph-core work.
 
 ## Design questions to settle together
 

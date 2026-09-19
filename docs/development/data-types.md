@@ -660,6 +660,22 @@ for independently asserting that provenance. Replacing it with another transacti
 object independently violates the operation contract; rollback must not panic, but it does not owe
 correct restoration for the compromised pairing.
 
+Graph::restore and relation-set restore/restore_participants likewise consume undo data from a
+matching removal. The compaction and saved rows are supplied separately, but their required
+relationship comes from that operation history; restoration does not revalidate the entire
+history. Matching inputs recover original storage. Manipulated or mismatched inputs must not
+panic, but have no specified result, diagnostic, or unchanged-receiver guarantee. Local guards
+protect indexing, inverse translation, size arithmetic, and capacity limits. Relation restoration
+assumes conforming RelationParticipant implementations, whose transported references are all
+reported by refs.
+
+Whole-row restoration reinstates saved rows at their original ids without translating their
+participants and preserves current surviving values. Participant restoration expands only
+surviving references. After graph removal and relation compaction, undo restores the graph,
+restores participant references in surviving relations, then restores saved relation rows.
+Relation payloads move without requiring Clone. Uncompaction remains non-mutating id/value
+translation; its existing asserted and checked interfaces retain their contracts.
+
 Reaction iterators are operation-issued values with a different lifecycle. `Reaction::apply`
 checks reaction-wide preconditions and then issues a `ReactionApplicationIter<T>` that owns snapshots
 of the reaction and host, normalized application state, and an eagerly enumerated correspondence

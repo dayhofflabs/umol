@@ -50,7 +50,8 @@ pub struct ParticipantRefs {
 ///
 /// Relation-set transport relies on these laws. Public-API properties in
 /// `tests/property/relation.rs` exercise mapping and remapping with node/edge participants;
-/// unit cases cover compaction and expansion. Structured participants exercise incidence.
+/// `tests/property/restore.rs` checks inverse transport and combined removal/restoration sequences.
+/// Structured participants exercise incidence and preservation of non-reference data.
 pub trait RelationParticipant: Copy + Ord + Hash {
     /// Relabel every referenced id through a correspondence, preserving other participant data.
     ///

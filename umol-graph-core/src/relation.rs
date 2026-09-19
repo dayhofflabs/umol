@@ -14,7 +14,10 @@
 //! Each storage module owns its implementation. Participant vocabulary and the incidence index
 //! have separate modules; relation ids, correspondence carriers, and shared functions live here.
 //! Public-API properties in `tests/property/relation.rs` exercise construction, query, and transport
-//! laws against row scans and generated reference mappings.
+//! laws against row scans and generated reference mappings. Restoration laws in
+//! `tests/property/restore.rs` check matching undo, survivor-reference translation, and combined
+//! graph/relation sequences against original rows and independently scanned incidence. Manipulated
+//! undo inputs must not panic; their resulting storage is unspecified.
 
 use std::ops::{Add, Sub};
 
