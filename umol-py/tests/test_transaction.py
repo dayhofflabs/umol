@@ -4,6 +4,7 @@ from umol import (
     AromaticSystemForm,
     AtomForm,
     BondForm,
+    ConsumedError,
     Correspondence,
     DativeBondForm,
     Edits,
@@ -79,6 +80,25 @@ def test_molecule_editor_tracked_snapshot_and_build():
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 1)
 
 
+@pytest.mark.parametrize("method", ["build", "tracked_build", "apply", "tracked_apply"])
+def test_molecule_editor_consumed(method):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    editor = molecule.edit()
+    alias = editor
+    if method in ("apply", "tracked_apply"):
+        result = getattr(editor, method)(Edits())
+        if method == "tracked_apply":
+            result = result[0]
+        assert result.build() == molecule
+    else:
+        result = getattr(editor, method)()
+        assert (result[0] if method == "tracked_build" else result) == molecule
+
+    with pytest.raises(ConsumedError, match="^MoleculeEditor has been consumed$") as error:
+        alias.snapshot()
+    assert type(error.value) is ConsumedError
+
+
 def test_molecule_editor_tracked_apply():
     molecule = Molecule.parse('{:atoms ["N#h3"]}')
 
@@ -105,6 +125,23 @@ def test_molecule_editor_tracked_transact_and_rollback():
 
     assert tracked_editor.snapshot() == plain_editor.snapshot() == molecule
     assert reverse.atoms == Correspondence([(0, 0)], 2, 1)
+
+
+@pytest.mark.parametrize("method", ["rollback", "tracked_rollback"])
+def test_transaction_consumed(method):
+    molecule = Molecule.parse('{:atoms ["N"]}')
+    editor = molecule.edit()
+    edits = Edits()
+    edits.add_atom(AtomForm.parse("C"))
+    transaction = editor.transact(edits)
+    alias = transaction
+
+    getattr(transaction, method)(editor)
+
+    assert editor.snapshot() == molecule
+    with pytest.raises(ConsumedError, match="^Transaction has been consumed$") as error:
+        getattr(alias, method)(editor)
+    assert type(error.value) is ConsumedError
 
 
 def test_molecule_editor_tracked_remove():

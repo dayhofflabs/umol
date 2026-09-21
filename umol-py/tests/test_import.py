@@ -69,6 +69,7 @@ PUBLIC_EXPORTS = frozenset(
     Constraints
     ConstraintsView
     ContradictionError
+    ConsumedError
     Correspondence
     CountedHashedFeatureSet
     DativeBondForm
@@ -97,6 +98,7 @@ PUBLIC_EXPORTS = frozenset(
     HashedFeatureSet
     HashedFingerprintConfig
     InvalidStructureError
+    InvalidatedViewError
     IsotopeMass
     IsotopeMassForm
     IsotopePolicy
@@ -474,6 +476,8 @@ def test_public_constructor_method_signature(constructor, expected):
     "error_type",
     [
         umol.ContradictionError,
+        umol.ConsumedError,
+        umol.InvalidatedViewError,
         umol.InvalidStructureError,
         umol.ModelConversionError,
         umol.ParseError,
@@ -487,3 +491,8 @@ def test_error_import(error_type):
     assert getattr(umol, error_type.__name__) is error_type
     assert isinstance(error, Exception)
     assert str(error) == "diagnostic"
+
+
+@pytest.mark.parametrize("error_type", [umol.ConsumedError, umol.InvalidatedViewError])
+def test_lifecycle_error_import(error_type):
+    assert error_type.__bases__ == (RuntimeError,)

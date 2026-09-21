@@ -69,6 +69,20 @@ create_exception!(
     "Raised when transactional molecule editing or rollback fails."
 );
 
+create_exception!(
+    umol,
+    ConsumedError,
+    PyRuntimeError,
+    "Raised when an operation accesses an object whose contents have been consumed."
+);
+
+create_exception!(
+    umol,
+    InvalidatedViewError,
+    PyRuntimeError,
+    "Raised when a view or iterator accesses storage made unavailable by owner consumption."
+);
+
 /// Map an `umol_graph_ir` parse error onto the catchable `umol.ParseError`.
 pub(crate) fn parse_error(error: GraphIrParseError) -> PyErr {
     ParseError::new_err(error.to_string())

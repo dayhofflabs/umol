@@ -1341,26 +1341,6 @@ impl EditIter {
     }
 }
 
-/// The argument to `Edits.extend`: another container or edit entries.
-#[derive(FromPyObject)]
-pub(crate) enum EditsExtend {
-    Container(Py<Edits>),
-    Entries(Vec<Py<Edit>>),
-}
-
-impl EditsExtend {
-    /// Snapshot every Python input before the target takes a write borrow.
-    fn resolve(&self, py: Python<'_>) -> Vec<GraphIrEdit> {
-        match self {
-            Self::Container(container) => container.bind(py).borrow().0.as_slice().to_vec(),
-            Self::Entries(entries) => entries
-                .iter()
-                .map(|entry| entry.bind(py).borrow().to_rust(py))
-                .collect(),
-        }
-    }
-}
-
 /// An ordered, append-only batch of host-specific molecule edits.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
@@ -1398,15 +1378,6 @@ impl Edits {
     /// Append one detached raw edit and account for every entity it creates.
     fn append(&mut self, py: Python<'_>, edit: Py<Edit>) {
         self.0.push(edit.bind(py).borrow().to_rust(py));
-    }
-
-    /// Append another container or iterable without rebasing creation handles.
-    fn extend(slf: Py<Self>, py: Python<'_>, other: EditsExtend) {
-        let entries = other.resolve(py);
-        let mut target = slf.borrow_mut(py);
-        for edit in entries {
-            target.0.push(edit);
-        }
     }
 
     fn __len__(&self) -> usize {

@@ -21,6 +21,7 @@ from umol import (
     Edits,
     ElectronCountsForm,
     Entity,
+    Molecule,
     MoleculeDefaults,
     MoleculeConstraint,
     MulticenterBondForm,
@@ -244,21 +245,15 @@ def test_edits():
     assert list(edits) == [first, first, second]
 
 
-def test_edits_extend():
-    first = Edit.AddAtoms(atoms=[AtomForm.parse("C")])
-    second = Edit.RemoveTopology(atoms=[New(0)], bonds=[])
-    source = Edits([first, second])
-    target = Edits([second])
+def test_edits_apply():
+    edits = Edits()
+    carbon = edits.add_atom(AtomForm.parse("C"))
+    nitrogen = edits.add_atom(AtomForm.parse("N"))
+    edits.append(Edit.RemoveTopology(atoms=[nitrogen], bonds=[]))
 
-    assert target.extend(source) is None
-    assert target.extend([first]) is None
-    source.append(first)
-
-    assert list(target) == [second, first, second, first]
-
-    target.extend(target)
-
-    assert list(target) == [second, first, second, first] * 2
+    assert carbon == New(0)
+    assert nitrogen == New(1)
+    assert Molecule().apply(edits) == Molecule.parse('{:atoms ["C"]}')
 
 
 @pytest.mark.parametrize("index", [-4, 3])

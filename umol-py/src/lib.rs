@@ -70,8 +70,8 @@ use crate::{
     electrons::ElectronCountsForm,
     element::Element,
     error::{
-        ContradictionError, InvalidStructureError, MetadataError, ModelConversionError, ParseError,
-        TransactionError, UnderdeterminedError,
+        ConsumedError, ContradictionError, InvalidStructureError, InvalidatedViewError,
+        MetadataError, ModelConversionError, ParseError, TransactionError, UnderdeterminedError,
     },
     fingerprint::config::{
         EcfpHashScheme, HashedFingerprintConfig, PatternFingerprintConfig,
@@ -244,6 +244,11 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add(
             "TransactionError",
             module.py().get_type::<TransactionError>(),
+        )?;
+        module.add("ConsumedError", module.py().get_type::<ConsumedError>())?;
+        module.add(
+            "InvalidatedViewError",
+            module.py().get_type::<InvalidatedViewError>(),
         )?;
         module.add(
             "UnderdeterminedError",

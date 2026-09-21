@@ -48,7 +48,8 @@ use crate::convert::{into_py_variant, variant_repr};
 use crate::dative::DativeBondForm;
 use crate::electrons::ElectronCountsForm;
 use crate::entity::Readonly;
-use crate::lattice::impl_py_normalize;
+use crate::error::contradiction_error;
+use crate::lattice::Normalize;
 use crate::multicenter::MulticenterBondForm;
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
 use crate::num::NumForm;
@@ -1755,39 +1756,6 @@ impl DeltaIter {
     }
 }
 
-/// The argument to `Deltas.extend`: another container or delta entries.
-#[derive(FromPyObject)]
-pub(crate) enum DeltasExtend {
-    Container(Py<Deltas>),
-    Entries(Vec<Py<Delta>>),
-}
-
-impl DeltasExtend {
-    /// Snapshot every Python input before the target takes a write borrow.
-    fn resolve(&self, py: Python<'_>) -> ResolvedDeltasExtend {
-        let entries = match self {
-            Self::Container(container) => container.bind(py).borrow().to_rust().as_slice().to_vec(),
-            Self::Entries(entries) => entries
-                .iter()
-                .map(|entry| entry.bind(py).borrow().to_rust(py))
-                .collect(),
-        };
-        ResolvedDeltasExtend(entries)
-    }
-}
-
-/// An extend input containing no Python references that need to be read.
-pub(crate) struct ResolvedDeltasExtend(Vec<GraphIrDelta>);
-
-impl ResolvedDeltasExtend {
-    /// Append the resolved deltas in order, preserving duplicates.
-    fn apply(self, target: &mut GraphIrDeltas) {
-        for delta in self.0 {
-            target.push(delta);
-        }
-    }
-}
-
 /// Resolved deltas in insertion order. Mutable, value-equal, and unhashable.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
@@ -1821,12 +1789,6 @@ impl Deltas {
         self.0.push(delta.bind(py).borrow().to_rust(py));
     }
 
-    /// Append another container or iterable after snapshotting the complete RHS.
-    fn extend(slf: Py<Self>, py: Python<'_>, other: DeltasExtend) {
-        let resolved = other.resolve(py);
-        resolved.apply(slf.borrow_mut(py).to_rust_mut());
-    }
-
     fn __len__(&self) -> usize {
         self.0.len()
     }
@@ -1841,12 +1803,22 @@ impl Deltas {
     }
 }
 
-impl_py_normalize!(
-    Deltas,
-    GraphIrDeltas,
-    |value: &Deltas, _py: Python<'_>| -> PyResult<GraphIrDeltas> { Ok(value.to_rust().clone()) },
-    |_py: Python<'_>, value: GraphIrDeltas| -> PyResult<Deltas> { Ok(Deltas::from_rust(value)) }
-);
+#[pymethods]
+impl Deltas {
+    /// Return the normal form without mutating the receiver.
+    fn normalize(&self) -> PyResult<Self> {
+        self.0
+            .clone()
+            .normalize()
+            .map(Self::from_rust)
+            .map_err(contradiction_error)
+    }
+
+    /// Compare normal forms while leaving structural equality unchanged.
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self.0.normalized_eq(&other.0)
+    }
+}
 
 impl Deltas {
     pub(crate) fn from_rust(deltas: GraphIrDeltas) -> Self {
@@ -4861,108 +4833,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_deltas_extend_container() {
-        Python::attach(|py| {
-            let target = Py::new(
-                py,
-                Deltas::from_rust(
-                    vec![GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                        id: GraphIrAtomId(3),
-                        attributes: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
-                    })]
-                    .into_iter()
-                    .collect(),
-                ),
-            )
-            .unwrap();
-            let source = Py::new(
-                py,
-                Deltas::from_rust(
-                    vec![GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-                        GraphIrConstraint::Atom(
-                            GraphIrAtomId(3),
-                            GraphIrAtomConstraintForm::degree(2),
-                        ),
-                    ))]
-                    .into_iter()
-                    .collect(),
-                ),
-            )
-            .unwrap();
-
-            Deltas::extend(target.clone_ref(py), py, DeltasExtend::Container(source));
-
-            assert_eq!(
-                target.bind(py).borrow().to_rust().as_slice(),
-                &[
-                    GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                        id: GraphIrAtomId(3),
-                        attributes: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
-                    }),
-                    GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(GraphIrConstraint::Atom(
-                        GraphIrAtomId(3),
-                        GraphIrAtomConstraintForm::degree(2),
-                    ))),
-                ]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_deltas_extend_entries() {
-        Python::attach(|py| {
-            let target = Py::new(py, Deltas::from_rust(GraphIrDeltas::new())).unwrap();
-            let atom = GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                id: GraphIrAtomId(3),
-                attributes: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
-            });
-            let constraint = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-                GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
-            ));
-            let entries = vec![
-                into_py_variant(py, Delta::from_rust(py, &atom).unwrap()).unwrap(),
-                into_py_variant(py, Delta::from_rust(py, &constraint).unwrap()).unwrap(),
-            ];
-
-            Deltas::extend(target.clone_ref(py), py, DeltasExtend::Entries(entries));
-
-            assert_eq!(
-                target.bind(py).borrow().to_rust().as_slice(),
-                &[atom, constraint]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_deltas_extend_self() {
-        Python::attach(|py| {
-            let atom = GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                id: GraphIrAtomId(3),
-                attributes: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
-            });
-            let constraint = GraphIrDelta::Constraint(GraphIrConstraintDelta::Add(
-                GraphIrConstraint::Atom(GraphIrAtomId(3), GraphIrAtomConstraintForm::degree(2)),
-            ));
-            let target = Py::new(
-                py,
-                Deltas::from_rust(vec![atom.clone(), constraint.clone()].into_iter().collect()),
-            )
-            .unwrap();
-
-            Deltas::extend(
-                target.clone_ref(py),
-                py,
-                DeltasExtend::Container(target.clone_ref(py)),
-            );
-
-            assert_eq!(
-                target.bind(py).borrow().to_rust().as_slice(),
-                &[atom.clone(), constraint.clone(), atom, constraint]
-            );
-        });
-    }
-
-    #[rstest]
     #[case::field_fusion(
         vec![
             GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
@@ -5042,14 +4912,12 @@ mod tests {
         let source = Deltas::from_rust(input.into_iter().collect());
         let before = source.to_rust().clone();
 
-        Python::attach(|py| {
-            let normalized = source.normalize(py).unwrap();
+        let normalized = source.normalize().unwrap();
 
-            let expected: GraphIrDeltas = expected.into_iter().collect();
-            assert_eq!(normalized.to_rust(), &expected);
-            assert_eq!(source.to_rust(), &before);
-            assert_eq!(normalized.normalize(py).unwrap(), normalized);
-        });
+        let expected: GraphIrDeltas = expected.into_iter().collect();
+        assert_eq!(normalized.to_rust(), &expected);
+        assert_eq!(source.to_rust(), &before);
+        assert_eq!(normalized.normalize().unwrap(), normalized);
     }
 
     #[rstest]
@@ -5077,7 +4945,7 @@ mod tests {
         let before = source.to_rust();
 
         Python::attach(|py| {
-            let error = source.normalize(py).err().unwrap();
+            let error = source.normalize().err().unwrap();
             assert!(error.is_instance_of::<ContradictionError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),

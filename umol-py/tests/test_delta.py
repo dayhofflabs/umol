@@ -239,7 +239,7 @@ def test_entity_delta_readonly_contract(
     wrapped = wrap_delta(entity_delta)
     deltas = Deltas([wrapped])
     deltas.append(wrapped)
-    deltas.extend([wrapped])
+    deltas.append(wrapped)
     assert list(deltas) == [wrapped, wrapped, wrapped]
 
 
@@ -1621,89 +1621,6 @@ def test_deltas_append():
     ]
 
 
-def test_deltas_extend():
-    target = Deltas(
-        [Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C"))))]
-    )
-    container_source = Deltas(
-        [
-            Delta.Constraint(
-                ConstraintDelta.Add(
-                    constraint=Constraint.Atom(
-                        3,
-                        AtomConstraintForm.Degree(NumForm.Lit(2)),
-                    )
-                )
-            )
-        ]
-    )
-    iterable_source = [
-        Delta.Atom(AtomDelta.Add(id=4, attributes=AtomForm(Element("N")))),
-        Delta.Atom(AtomDelta.Add(id=4, attributes=AtomForm(Element("N")))),
-    ]
-
-    assert target.extend(container_source) is None
-    target.extend(iterable_source)
-    container_source.append(
-        Delta.Atom(AtomDelta.Add(id=9, attributes=AtomForm(Element("O"))))
-    )
-    with pytest.raises(TypeError):
-        iterable_source[0]._0.attributes.charge = 1
-
-    assert list(target) == [
-        Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C")))),
-        Delta.Constraint(
-            ConstraintDelta.Add(
-                constraint=Constraint.Atom(
-                    3,
-                    AtomConstraintForm.Degree(NumForm.Lit(2)),
-                )
-            )
-        ),
-        Delta.Atom(AtomDelta.Add(id=4, attributes=AtomForm(Element("N")))),
-        Delta.Atom(AtomDelta.Add(id=4, attributes=AtomForm(Element("N")))),
-    ]
-
-
-def test_deltas_extend_self():
-    deltas = Deltas(
-        [
-            Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C")))),
-            Delta.Constraint(
-                ConstraintDelta.Add(
-                    constraint=Constraint.Atom(
-                        3,
-                        AtomConstraintForm.Degree(NumForm.Lit(2)),
-                    )
-                )
-            ),
-        ]
-    )
-
-    deltas.extend(deltas)
-
-    assert list(deltas) == [
-        Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C")))),
-        Delta.Constraint(
-            ConstraintDelta.Add(
-                constraint=Constraint.Atom(
-                    3,
-                    AtomConstraintForm.Degree(NumForm.Lit(2)),
-                )
-            )
-        ),
-        Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C")))),
-        Delta.Constraint(
-            ConstraintDelta.Add(
-                constraint=Constraint.Atom(
-                    3,
-                    AtomConstraintForm.Degree(NumForm.Lit(2)),
-                )
-            )
-        ),
-    ]
-
-
 def test_deltas_getitem():
     deltas = Deltas(
         [
@@ -1962,3 +1879,34 @@ def test_deltas_normalized_eq():
 
     assert lhs != rhs
     assert lhs.normalized_eq(rhs) is True
+
+
+@pytest.mark.parametrize(
+    ("lhs_changes", "rhs_changes", "expected"),
+    [
+        ([], [], True),
+        ([(0, 1)], [(0, 1)], True),
+        ([(0, 1)], [(0, 2)], False),
+        ([(0, 1), (1, 2)], [(0, 2)], True),
+        ([(0, 1), (2, 3)], [(4, 5), (6, 7)], True),
+        ([(0, 1), (2, 3)], [(0, 1)], False),
+    ],
+    ids=["empty", "equal", "unequal", "fusion", "both_contradictory", "one_contradictory"],
+)
+def test_deltas_normalized_eq_fields(lhs_changes, rhs_changes, expected):
+    lhs, rhs = [
+        Deltas([
+            Delta.Atom(AtomDelta.ModifyField(
+                id=0,
+                change=AtomFieldChange.Charge(old=NumForm.Lit(old), new=NumForm.Lit(new)),
+            ))
+            for old, new in changes
+        ])
+        for changes in (lhs_changes, rhs_changes)
+    ]
+    before = (list(lhs), list(rhs))
+
+    assert lhs.normalized_eq(rhs) is expected
+    assert rhs.normalized_eq(lhs) is expected
+    assert lhs.normalized_eq(lhs) is True
+    assert (list(lhs), list(rhs)) == before

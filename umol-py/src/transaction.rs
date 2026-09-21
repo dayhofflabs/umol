@@ -1,6 +1,6 @@
 //! Python ownership wrappers for transactional molecule editing.
 
-use pyo3::exceptions::{PyIndexError, PyRuntimeError};
+use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MoleculeEditor as GraphIrMoleculeEditor,
@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
 use crate::compact::MoleculeCompaction;
 use crate::correspondence::MoleculeCorrespondence;
 use crate::edit::Edits;
-use crate::error::{molecule_integrity_error, transaction_error};
+use crate::error::{molecule_integrity_error, transaction_error, ConsumedError};
 use crate::molecule::Molecule;
 
 /// A mutable molecule editor that can be inspected before it is finalized.
@@ -329,16 +329,15 @@ fn ensure_in_range(ids: &[u32], count: usize, entity: &str) -> PyResult<()> {
 }
 
 fn consumed_editor_error() -> PyErr {
-    PyRuntimeError::new_err("molecule editor has been consumed")
+    ConsumedError::new_err("MoleculeEditor has been consumed")
 }
 
 fn consumed_transaction_error() -> PyErr {
-    PyRuntimeError::new_err("transaction has been consumed")
+    ConsumedError::new_err("Transaction has been consumed")
 }
 
 #[cfg(test)]
 mod tests {
-    use pyo3::exceptions::PyRuntimeError;
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
@@ -402,7 +401,7 @@ mod tests {
         assert_eq!(snapshot.to_rust(), &initial);
         assert_eq!(built.to_rust(), &mol_dsl!(r#"{:atoms ["N"]}"#));
         Python::attach(|py| {
-            assert!(snapshot_error.is_instance_of::<PyRuntimeError>(py));
+            assert!(snapshot_error.is_instance_of::<ConsumedError>(py));
             assert_eq!(
                 snapshot_error
                     .value(py)
@@ -410,9 +409,9 @@ mod tests {
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "molecule editor has been consumed"
+                "MoleculeEditor has been consumed"
             );
-            assert!(build_error.is_instance_of::<PyRuntimeError>(py));
+            assert!(build_error.is_instance_of::<ConsumedError>(py));
             assert_eq!(
                 build_error
                     .value(py)
@@ -420,7 +419,7 @@ mod tests {
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "molecule editor has been consumed"
+                "MoleculeEditor has been consumed"
             );
         });
     }
@@ -531,7 +530,7 @@ mod tests {
                 editor.bind(py).borrow().snapshot().unwrap().to_rust(),
                 &mol_dsl!(r#"{:atoms ["C"]}"#)
             );
-            assert!(second_error.is_instance_of::<PyRuntimeError>(py));
+            assert!(second_error.is_instance_of::<ConsumedError>(py));
             assert_eq!(
                 second_error
                     .value(py)
@@ -539,7 +538,7 @@ mod tests {
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "transaction has been consumed"
+                "Transaction has been consumed"
             );
         });
     }
@@ -568,7 +567,7 @@ mod tests {
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "rollback journal does not match editor state"
             );
-            assert!(second_error.is_instance_of::<PyRuntimeError>(py));
+            assert!(second_error.is_instance_of::<ConsumedError>(py));
             assert_eq!(
                 second_error
                     .value(py)
@@ -576,7 +575,7 @@ mod tests {
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "transaction has been consumed"
+                "Transaction has been consumed"
             );
         });
     }
@@ -593,10 +592,10 @@ mod tests {
 
             let error = carbon_editor.transact(py, edits).unwrap_err();
 
-            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert!(error.is_instance_of::<ConsumedError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "molecule editor has been consumed"
+                "MoleculeEditor has been consumed"
             );
         });
     }
@@ -614,10 +613,10 @@ mod tests {
 
             let error = transaction.rollback(py, editor).unwrap_err();
 
-            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert!(error.is_instance_of::<ConsumedError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "molecule editor has been consumed"
+                "MoleculeEditor has been consumed"
             );
         });
     }
