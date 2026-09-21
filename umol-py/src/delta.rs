@@ -1,7 +1,5 @@
 //! Python bindings for resolved molecule deltas and their field-change payloads.
 
-use std::vec::IntoIter;
-
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
@@ -1728,21 +1726,14 @@ fn resolve_delta_index(len: usize, index: isize) -> PyResult<usize> {
     }
 }
 
-/// Build a detached iterator of concrete Python delta variants.
-fn delta_iter(py: Python<'_>, deltas: &GraphIrDeltas) -> PyResult<DeltaIter> {
-    let entries = deltas
-        .iter()
-        .map(|delta| into_py_variant(py, Delta::from_rust(py, delta)?))
-        .collect::<PyResult<Vec<_>>>()?;
-    Ok(DeltaIter {
-        entries: entries.into_iter(),
-    })
-}
-
-/// A snapshot iterator over resolved deltas.
+/// A lazy iterator yielding independent copies of the batch's initial entries.
+///
+/// Retains the batch until dropped, but excludes entries appended after creation.
 #[pyclass]
 pub(crate) struct DeltaIter {
-    entries: IntoIter<Py<Delta>>,
+    owner: Py<Deltas>,
+    position: usize,
+    end: usize,
 }
 
 #[pymethods]
@@ -1751,8 +1742,17 @@ impl DeltaIter {
         slf
     }
 
-    fn __next__(&mut self) -> Option<Py<Delta>> {
-        self.entries.next()
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<Py<Delta>>> {
+        if self.position == self.end {
+            return Ok(None);
+        }
+        let owner = self.owner.try_borrow(py)?;
+        let entry = into_py_variant(
+            py,
+            Delta::from_rust(py, &owner.0.as_slice()[self.position])?,
+        )?;
+        self.position += 1;
+        Ok(Some(entry))
     }
 }
 
@@ -1798,8 +1798,14 @@ impl Deltas {
         Delta::from_rust(py, &self.0.as_slice()[index])
     }
 
-    fn __iter__(&self, py: Python<'_>) -> PyResult<DeltaIter> {
-        delta_iter(py, &self.0)
+    /// Lazily copy entries present now; later appends are excluded.
+    fn __iter__(slf: Py<Self>, py: Python<'_>) -> PyResult<DeltaIter> {
+        let end = slf.try_borrow(py)?.0.len();
+        Ok(DeltaIter {
+            owner: slf,
+            position: 0,
+            end,
+        })
     }
 }
 
@@ -1832,6 +1838,7 @@ impl Deltas {
 
 #[cfg(test)]
 mod tests {
+    use pyo3::exceptions::PyRuntimeError;
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
@@ -4718,6 +4725,32 @@ mod tests {
     }
 
     #[rstest]
+    fn test_delta_iter_next_error() {
+        Python::attach(|py| {
+            let expected = GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                id: GraphIrAtomId(0),
+                attributes: GraphIrAtomForm::default(),
+            });
+            let owner = Py::new(
+                py,
+                Deltas::from_rust([expected.clone()].into_iter().collect()),
+            )
+            .unwrap();
+            let mut iter = Deltas::__iter__(owner.clone_ref(py), py).unwrap();
+            let borrow = owner.borrow_mut(py);
+
+            let error = iter.__next__(py).unwrap_err();
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            drop(borrow);
+
+            let entry = iter.__next__(py).unwrap().unwrap();
+            assert_eq!(entry.borrow(py).to_rust(py), expected);
+            assert!(owner.try_borrow_mut(py).is_ok());
+            assert!(iter.__next__(py).unwrap().is_none());
+        });
+    }
+
+    #[rstest]
     #[case::empty(Vec::new())]
     #[case::populated(vec![
         GraphIrDelta::Atom(GraphIrAtomDelta::Add {
@@ -5033,16 +5066,26 @@ mod tests {
         ];
         Python::attach(|py| {
             let deltas = Deltas::from_rust(expected.clone().into_iter().collect());
-            let mut iter = deltas.__iter__(py).unwrap();
+            let mut iter = Deltas::__iter__(Py::new(py, deltas).unwrap(), py).unwrap();
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                iter.__next__(py)
+                    .unwrap()
+                    .unwrap()
+                    .bind(py)
+                    .borrow()
+                    .to_rust(py),
                 expected[0]
             );
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                iter.__next__(py)
+                    .unwrap()
+                    .unwrap()
+                    .bind(py)
+                    .borrow()
+                    .to_rust(py),
                 expected[1]
             );
-            assert!(iter.__next__().is_none());
+            assert!(iter.__next__(py).unwrap().is_none());
         });
     }
 

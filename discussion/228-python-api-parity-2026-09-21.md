@@ -558,8 +558,8 @@ change with the corrected contract. Other families' properties remain unreviewed
 
 ### P4 — Edits and Deltas iteration materializes every entry before the first next
 
-S7a update: Edits iteration now converts one copied entry per next(); Deltas
-iteration is still eager pending S7b. Thin entry access remains unscheduled.
+S7a/S7b update: Edits and Deltas iteration now convert one copied entry per next().
+Thin entry access remains unscheduled.
 The following preserves the original finding and its broader design discussion.
 
 Confirmed finding: eager conversion defeats iterator laziness. The subsequent
@@ -924,7 +924,7 @@ copies or authorize another investigation automatically.
 ## Implementation plan — bounded lazy iteration
 
 S7 is a new, independent stage; numbering does not reactivate withdrawn S1–S6.
-S7a is complete; S7b and S7c remain. Each subitem ends green and
+S7a and S7b are complete; S7c remains. Each subitem ends green and
 includes its tests and method documentation. There are no preparatory stages or
 new public types/methods. The existing Edits.__iter__, EditIter.__next__,
 Deltas.__iter__, and DeltaIter.__next__ are the affected Python operations.
@@ -946,7 +946,7 @@ Deltas.__iter__, and DeltaIter.__next__ are the affected Python operations.
   conversions at construction and exactly one per successful next(); do not add
   public diagnostics. Run focused edit Rust/Python tests against the rebuilt
   extension. [dep: retained S0; none of withdrawn S1–S6]
-- [ ] **S7b — Deltas iteration.** Module: delta.rs, Deltas/DeltaIter and delta_iter;
+- [x] **S7b — Deltas iteration.** Module: delta.rs, Deltas/DeltaIter and delta_iter;
   tests: delta.rs unit cases and test_delta.py. Apply the same concrete iterator
   shape and conversion timing to Deltas, preserving existing Delta variant
   construction and the borrowed normalized_eq path. Remove the eager collection
@@ -991,3 +991,20 @@ append exclusion, exhaustion, and borrow-failure retry without skipping an entry
 Package formatting and diff checks passed. The complete S7a source/test diff was
 reviewed against the restored pre-S1 files, separately from the pending S1
 reversal. No workspace suite, benchmark, or MSRV check ran.
+
+### S7b outcome — 2026-09-21
+
+DeltaIter now uses the same retained-owner, position, and initial-length structure
+as EditIter. Iterator creation performs no entry conversion; each successful
+next() converts exactly one Delta through the existing conversion and then
+advances. The eager delta_iter collection is removed. Constructor, append,
+indexing, normalized_eq, normalization, and copied-result semantics are unchanged.
+No consuming-state machinery or shared iterator framework was introduced.
+
+All 265 focused delta Rust cases and 113 Python delta cases passed under Python
+3.13.15 after rebuilding the extension. Tests cover empty/populated batches,
+Atom/Constraint variant results, independent nested objects and their existing
+read-only permissions, iterator independence, retained owners, append exclusion,
+permanent exhaustion, and borrow-failure retry. Source review confirms laziness;
+the complete diff, package formatting, and diff checks passed. S7c remains for
+combined verification and the return to 213. No broader test or timing campaign ran.

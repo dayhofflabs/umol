@@ -1651,23 +1651,57 @@ def test_deltas_getitem():
         deltas[-3]
 
 
-def test_deltas_iter():
-    deltas = Deltas(
-        [
-            Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C")))),
-            Delta.Atom(AtomDelta.Add(id=4, attributes=AtomForm(Element("N")))),
-        ]
-    )
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_deltas_iter(count):
+    expected = [
+        Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C")))),
+        Delta.Constraint(
+            ConstraintDelta.Add(
+                Constraint.Atom(3, AtomConstraintForm.Valence(NumForm.Lit(4)))
+            )
+        ),
+    ][:count]
+    deltas = Deltas(expected)
+    first = iter(deltas)
+    second = iter(deltas)
+    assert iter(first) is first
 
-    entries = list(deltas)
+    deltas.append(Delta.Atom(AtomDelta.Add(id=4, attributes=AtomForm(Element("N")))))
+    second_values = list(second)
+    first_values = list(first)
 
-    assert entries == [
+    assert first_values == expected
+    assert second_values == expected
+    for left, right, original in zip(first_values, second_values, expected):
+        assert type(left) is type(original)
+        assert type(right) is type(original)
+        assert left is not right
+        assert left._0 is not right._0
+    if count:
+        assert first_values[0]._0.attributes is not second_values[0]._0.attributes
+        with pytest.raises(TypeError):
+            first_values[0]._0.attributes.charge = -1
+        assert deltas[0]._0.attributes.charge == NumForm.Undetermined()
+
+    deltas.append(Delta.Atom(AtomDelta.Add(id=5, attributes=AtomForm(Element("O")))))
+    assert list(first) == []
+    assert list(second) == []
+    assert list(first) == []
+
+
+def test_deltas_iter_owner():
+    expected = [
         Delta.Atom(AtomDelta.Add(id=3, attributes=AtomForm(Element("C")))),
         Delta.Atom(AtomDelta.Add(id=4, attributes=AtomForm(Element("N")))),
     ]
-    with pytest.raises(TypeError):
-        entries[0]._0.attributes.charge = -1
-    assert deltas[0]._0.attributes.charge == NumForm.Undetermined()
+    deltas = Deltas(expected)
+    first = iter(deltas)
+    second = iter(deltas)
+    assert next(first) == expected[0]
+    del deltas
+
+    assert list(second) == expected
+    assert list(first) == expected[1:]
 
 
 @pytest.mark.parametrize(
