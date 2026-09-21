@@ -1761,6 +1761,28 @@ impl DeltaIter {
 #[derive(Debug, PartialEq)]
 pub struct Deltas(GraphIrDeltas);
 
+/// Read-only access to one stored delta, retaining its owning batch.
+struct DeltaAccess {
+    owner: Py<Deltas>,
+    index: usize,
+}
+
+impl DeltaAccess {
+    fn with_rust<T>(
+        &self,
+        py: Python<'_>,
+        read: impl FnOnce(&GraphIrDelta) -> PyResult<T>,
+    ) -> PyResult<T> {
+        let owner = self.owner.try_borrow(py)?;
+        let delta = owner
+            .to_rust()
+            .as_slice()
+            .get(self.index)
+            .ok_or_else(|| PyIndexError::new_err("delta index out of range"))?;
+        read(delta)
+    }
+}
+
 #[pymethods]
 impl Deltas {
     /// Build an owned container from delta entries, preserving order and duplicates.
@@ -1773,6 +1795,11 @@ impl Deltas {
                 .map(|entry| entry.bind(py).borrow().to_rust(py))
                 .collect(),
         )
+    }
+
+    /// Return an independent batch, preserving entry order and duplicates.
+    fn copy(&self) -> Self {
+        Self::from_rust(self.0.clone())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -1793,9 +1820,9 @@ impl Deltas {
         self.0.len()
     }
 
-    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Delta> {
-        let index = resolve_delta_index(self.0.len(), index)?;
-        Delta::from_rust(py, &self.0.as_slice()[index])
+    fn __getitem__(slf: Py<Self>, py: Python<'_>, index: isize) -> PyResult<Delta> {
+        let index = resolve_delta_index(slf.try_borrow(py)?.to_rust().len(), index)?;
+        DeltaAccess { owner: slf, index }.with_rust(py, |delta| Delta::from_rust(py, delta))
     }
 
     fn __iter__(&self, py: Python<'_>) -> PyResult<DeltaIter> {
@@ -4968,6 +4995,71 @@ mod tests {
     }
 
     #[rstest]
+    fn test_delta_access_with_rust() {
+        Python::attach(|py| {
+            let expected = GraphIrAromaticSystemForm::default();
+            let atoms = vec![GraphIrAtomId(0), GraphIrAtomId(1)];
+            let original_address = atoms.as_ptr() as usize;
+            let owner = Py::new(
+                py,
+                Deltas::from_rust(
+                    [GraphIrDelta::AromaticSystem(
+                        GraphIrAromaticSystemDelta::Add {
+                            id: GraphIrAromaticSystemId(0),
+                            atoms,
+                            attributes: expected.clone(),
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+            let copied = owner.borrow(py).copy();
+            let access = DeltaAccess {
+                owner: owner.clone_ref(py),
+                index: 0,
+            };
+            drop(owner);
+            for _ in 0..128 {
+                access
+                    .owner
+                    .borrow_mut(py)
+                    .0
+                    .push(GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                        id: GraphIrAtomId(2),
+                        attributes: GraphIrAtomForm::default(),
+                    }));
+            }
+
+            access
+                .with_rust(py, |delta| {
+                    let GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
+                        atoms,
+                        attributes,
+                        ..
+                    }) = delta
+                    else {
+                        panic!("expected aromatic Add")
+                    };
+                    assert_eq!(atoms.as_ptr() as usize, original_address);
+                    assert_eq!(atoms, &[GraphIrAtomId(0), GraphIrAtomId(1)]);
+                    assert_eq!(attributes, &expected);
+                    assert!(access.owner.try_borrow_mut(py).is_err());
+                    Ok(())
+                })
+                .unwrap();
+            assert!(access.owner.try_borrow_mut(py).is_ok());
+            let GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add { atoms, .. }) =
+                &copied.to_rust().as_slice()[0]
+            else {
+                panic!("expected aromatic Add")
+            };
+            assert_ne!(atoms.as_ptr() as usize, original_address);
+        });
+    }
+
+    #[rstest]
     #[case::positive(0, GraphIrDelta::Atom(GraphIrAtomDelta::Add {
         id: GraphIrAtomId(3),
         attributes: GraphIrAtomForm::new(GraphIrElementForm::Lit(ChemElement::C)),
@@ -4991,7 +5083,12 @@ mod tests {
                 .into_iter()
                 .collect(),
             );
-            assert_eq!(deltas.__getitem__(py, index).unwrap().to_rust(py), expected);
+            assert_eq!(
+                Deltas::__getitem__(Py::new(py, deltas).unwrap(), py, index)
+                    .unwrap()
+                    .to_rust(py),
+                expected
+            );
         });
     }
 
@@ -5014,7 +5111,9 @@ mod tests {
                 .into_iter()
                 .collect(),
             );
-            let error = deltas.__getitem__(py, index).err().unwrap();
+            let error = Deltas::__getitem__(Py::new(py, deltas).unwrap(), py, index)
+                .err()
+                .unwrap();
             assert!(error.is_instance_of::<PyIndexError>(py));
         });
     }

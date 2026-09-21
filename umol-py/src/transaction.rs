@@ -82,10 +82,12 @@ impl MoleculeEditor {
 
     /// Consume this editor and apply a checked edit batch without constructing a rollback journal.
     fn apply(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
+        let edits = edits.try_borrow(py)?;
+        let edits = edits.to_rust()?;
         self.inner
             .take()
             .ok_or_else(consumed_editor_error)?
-            .apply(edits.bind(py).borrow().to_rust().clone())
+            .apply(edits.clone())
             .map(Self::from_rust)
             .map_err(transaction_error)
     }
@@ -96,10 +98,12 @@ impl MoleculeEditor {
         py: Python<'_>,
         edits: Py<Edits>,
     ) -> PyResult<(Self, MoleculeCorrespondence)> {
+        let edits = edits.try_borrow(py)?;
+        let edits = edits.to_rust()?;
         self.inner
             .take()
             .ok_or_else(consumed_editor_error)?
-            .tracked_apply(edits.bind(py).borrow().to_rust().clone())
+            .tracked_apply(edits.clone())
             .map(|(editor, correspondence)| {
                 (
                     Self::from_rust(editor),
@@ -113,7 +117,7 @@ impl MoleculeEditor {
     fn transact(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Transaction> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         editor
-            .transact(edits.bind(py).borrow().to_rust().clone())
+            .transact(edits.bind(py).borrow().to_rust()?.clone())
             .map(|transaction| Transaction {
                 inner: Some(transaction),
             })
@@ -128,7 +132,7 @@ impl MoleculeEditor {
     ) -> PyResult<(Transaction, MoleculeCorrespondence)> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         editor
-            .tracked_transact(edits.bind(py).borrow().to_rust().clone())
+            .tracked_transact(edits.bind(py).borrow().to_rust()?.clone())
             .map(|(transaction, correspondence)| {
                 (
                     Transaction {

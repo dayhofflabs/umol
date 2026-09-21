@@ -1621,6 +1621,21 @@ def test_deltas_append():
     ]
 
 
+def test_deltas_copy():
+    carbon = Delta.Atom(AtomDelta.Add(id=0, attributes=AtomForm.parse("C")))
+    nitrogen = Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm.parse("N")))
+    source = Deltas([carbon, nitrogen, carbon])
+    copied = source.copy()
+
+    assert copied is not source
+    assert copied == source
+    source.append(nitrogen)
+    assert list(copied) == [carbon, nitrogen, carbon]
+    copied.append(carbon)
+    assert list(copied) == [carbon, nitrogen, carbon, carbon]
+    assert list(source) == [carbon, nitrogen, carbon, nitrogen]
+
+
 def test_deltas_getitem():
     deltas = Deltas(
         [

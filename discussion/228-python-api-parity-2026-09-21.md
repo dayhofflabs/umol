@@ -662,7 +662,7 @@ Scope: remove wrapper-owned extension; replace disconnected entry properties and
 eager entry iteration with thin access; remove Deltas comparison preclones; and
 transfer Edits into the six existing application entry points without cloning.
 This implements the current Rust operations, not doc 213's future editor and
-transaction API. S0 is complete; S1–S6 remain outstanding.
+transaction API. S0–S1 are complete; S2–S6 remain outstanding.
 
 ### Contract and scope controls
 
@@ -753,17 +753,17 @@ P3/P4 accessor and iterator changes remain outstanding.
 
 ### S1 — Batch ownership and concrete access support
 
-- [ ] **S1a — Edits storage and explicit copy.** Module: edit.rs, Edits. Introduce
+- [x] **S1a — Edits storage and explicit copy.** Module: edit.rs, Edits. Introduce
   the consumed-state-capable storage needed by accessors, with one checked route
   to its Rust contents. Add copy() preserving entries and creation counters.
   Keep application transfer for S5. Additive API/internal rewire, green. Verify
   copied batches are independent and subsequent creation handles are correct.
   [dep: S0a, S0c]
-- [ ] **S1b — Deltas explicit copy.** Module: delta.rs, Deltas. Add copy() with
+- [x] **S1b — Deltas explicit copy.** Module: delta.rs, Deltas. Add copy() with
   independent owned contents; do not add an artificial consuming operation to
   Deltas for symmetry. Additive, green. Verify order, duplicates, and independent
   subsequent mutation. [dep: S0c]
-- [ ] **S1c — Scoped owner-backed access.** Modules: entity.rs and concrete
+- [x] **S1c — Scoped owner-backed access.** Modules: entity.rs and concrete
   Edit/Delta storage support. Implement the minimal owner/location and short-borrow
   access needed by the proven variant pattern, including nested permission and
   invalidation propagation. Additive internal support, green; no public generic
@@ -771,6 +771,35 @@ P3/P4 accessor and iterator changes remain outstanding.
   without holding references across Python calls. Bring the relevant prototype
   cases into maintained tests; scratch is not a test dependency.
   [dep: S0a, S1a, S1b]
+
+#### S1 outcome
+
+Edits stores optional Rust contents and checks availability on reads and writes.
+Edits.copy preserves entries and all eight creation counters; Deltas.copy
+preserves order and duplicates. These are the only new public methods. Deltas
+has no artificial consumed state. Existing application callers now propagate
+unavailable-batch errors; editor application checks the batch before taking the
+editor. Application still clones the batch until S5.
+
+Private EditAccess and DeltaAccess retain a concrete batch owner and entry index.
+Their scoped readers borrow original storage immutably, including nested payloads,
+and release the borrow before returning. EditAccess translates owner consumption
+to InvalidatedViewError before invoking the reader. Maintained Rust tests verify
+original payload addresses after append growth, owner retention, borrow release,
+copy independence, and invalidation. Consumption is exercised internally until
+S5 provides its production path; no test-only public method was added.
+
+Indexing uses this scoped support but still materializes Python entries. Python
+nested permission propagation and retained child wrappers belong to S2, followed
+by thin entry access and lazy iteration in S3/S4. No change to entity.rs was needed
+for the concrete batch support; its form integration remains in S2.
+
+Verification: Python 3.13.15; rebuilt editable extension with graph/depiction.
+All 450 Rust unit cases across edit, delta, transaction, and molecule modules and
+385 Python cases across import, edit, delta, transaction, and molecule modules
+passed. Copy tests cover subsequent New ordinals for every entity kind and an
+applied batch containing bulk creation and removal. Package formatting and diff
+checks passed; the full S1 diff was reviewed. No workspace suite or MSRV gate ran.
 
 ### S2 — Nested payload access
 
