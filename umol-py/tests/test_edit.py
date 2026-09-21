@@ -245,6 +245,54 @@ def test_edits():
     assert list(edits) == [first, first, second]
 
 
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_edits_iter(count):
+    expected = [
+        Edit.AddAtoms(atoms=[AtomForm.parse("C")]),
+        Edit.RemoveTopology(atoms=[0], bonds=[]),
+    ][:count]
+    edits = Edits(expected)
+    first = iter(edits)
+    second = iter(edits)
+    assert iter(first) is first
+
+    edits.append(Edit.AddAtoms(atoms=[AtomForm.parse("N")]))
+    second_values = list(second)
+    first_values = list(first)
+
+    assert first_values == expected
+    assert second_values == expected
+    for left, right, original in zip(first_values, second_values, expected):
+        assert type(left) is type(original)
+        assert type(right) is type(original)
+        assert left is not right
+    if count:
+        assert first_values[0].atoms[0] is not second_values[0].atoms[0]
+        with pytest.raises(TypeError):
+            first_values[0].atoms[0].charge = -1
+        assert edits[0] == expected[0]
+
+    edits.append(Edit.AddAtoms(atoms=[AtomForm.parse("O")]))
+    assert list(first) == []
+    assert list(second) == []
+    assert list(first) == []
+
+
+def test_edits_iter_owner():
+    expected = [
+        Edit.AddAtoms(atoms=[AtomForm.parse("C")]),
+        Edit.AddAtoms(atoms=[AtomForm.parse("N")]),
+    ]
+    edits = Edits(expected)
+    first = iter(edits)
+    second = iter(edits)
+    assert next(first) == expected[0]
+    del edits
+
+    assert list(second) == expected
+    assert list(first) == expected[1:]
+
+
 def test_edits_append():
     edits = Edits()
     carbon = edits.add_atom(AtomForm.parse("C"))
@@ -254,48 +302,6 @@ def test_edits_append():
     assert carbon == New(0)
     assert nitrogen == New(1)
     assert Molecule().apply(edits) == Molecule.parse('{:atoms ["C"]}')
-
-
-@pytest.mark.parametrize(
-    ("method", "arguments"),
-    [
-        ("add_atom", (AtomForm.parse("C"),)),
-        ("add_bond", (0, 1, BondForm.parse("1"))),
-        ("add_dative_bond", ([0, 1], DativeBondForm(1))),
-        ("add_aromatic_system", ([0, 1], AromaticSystemForm([1, 1]))),
-        ("add_multicenter_bond", ([0, 1], MulticenterBondForm([1, 1]))),
-        ("add_noncovalent_bond", ((0, 1), NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))),
-        ("add_stereo_atom", (0, [], StereoAtomForm.parse("Th0"))),
-        ("add_stereo_bond", (0, [], StereoBondForm.parse("Ct0"))),
-    ],
-)
-def test_edits_copy(method, arguments):
-    source = Edits()
-    assert getattr(source, method)(*arguments) == New(0)
-    copied = source.copy()
-    before = list(source)
-
-    assert copied is not source
-    assert copied == source
-    assert getattr(source, method)(*arguments) == New(1)
-    assert list(copied) == before
-    assert getattr(copied, method)(*arguments) == New(1)
-    assert list(copied) == before * 2
-    assert getattr(source, method)(*arguments) == New(2)
-    assert list(copied) == before * 2
-    assert list(source) == before * 3
-
-
-def test_edits_copy_creation_ordinals():
-    source = Edits()
-    assert source.add_atoms([AtomForm.parse("C"), AtomForm.parse("N")]) == [New(0), New(1)]
-    source.remove_topology([New(1)], [])
-    copied = source.copy()
-
-    assert copied.add_atom(AtomForm.parse("O")) == New(2)
-    assert source.add_atom(AtomForm.parse("F")) == New(2)
-    assert Molecule().apply(copied) == Molecule.parse('{:atoms ["C" "O"]}')
-    assert Molecule().apply(source) == Molecule.parse('{:atoms ["C" "F"]}')
 
 
 @pytest.mark.parametrize("index", [-4, 3])

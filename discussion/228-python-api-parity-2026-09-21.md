@@ -18,8 +18,9 @@ must preserve their semantic, reference, failure, and lifecycle contracts.
 
 The immediate trigger is Python-only collection extension for Edits and Deltas.
 S0 removed that wrapper-owned extension surface; any replacement must delegate to a
-settled operation on the Rust container. Doc 213 is paused for this urgent
-review. It retains incremental construction of one Edits sequence and leaves
+settled operation on the Rust container. Doc 213 resumes after the bounded
+lazy-iteration correction below, without waiting for the full audit or an ownership
+migration. It retains incremental construction of one Edits sequence and leaves
 independent-batch composition unresolved; resolving that composition is not a
 prerequisite for the review or removal. If resumed, its assembly and handle
 semantics must move from Deltas lowering into Edits methods, with lowering
@@ -27,7 +28,9 @@ restructured to use them. Do not implement rebasing in umol-py or preserve the
 current methods as compatibility paths.
 
 This document records an urgent review and process correction, including the
-first bounded passes below and a bounded P1–P6 implementation plan. It is not a
+first bounded passes below, retained S0 corrections, and the withdrawal of the
+S1–S6 ownership/access plan. The sole next correction is lazy iteration with
+unchanged yielded-result ownership, followed by a return to doc 213. This is not a
 completed API audit. The broader ownership/type-role review remains in 192 and
 copy-cost review in 181.
 
@@ -62,7 +65,8 @@ the user is not required to disprove an asserted PyO3 or ABI necessity.
 
 These criteria are now explicit in AGENTS.md and the Python API guide. S0 repairs
 the bounded issues recorded in its outcome below; the remaining audit and fixes
-are unfinished. Doc 213 remains paused.
+are unfinished. Only the bounded lazy-iteration correction precedes returning to
+doc 213; the remaining audit and ownership questions are not prerequisites.
 
 ### Consumption and mutation — clarified 2026-09-21
 
@@ -130,6 +134,105 @@ owned entry of the same variant; mutation does not trigger implicit copying.
 Readonly describes access permissions, not ownership in general. The bounded
 experiment below verifies the class/storage approach for one nested variant;
 production replacement of the generated wrappers remains outstanding.
+
+### Child access after structural replacement — settled 2026-09-21
+
+Structural replacement invalidates all existing child accessors, including
+container accessors and their descendants. Subsequent access raises
+InvalidatedViewError; newly obtained accessors expose the replacement. Ordinary
+mutation within an existing value remains visible through valid accessors.
+Explicit independent copies survive. Do not distinguish container accessors from
+item accessors, preserve selected children, or implicitly copy their contents.
+This settles the retained-child replacement contract for S2; implementation is
+still outstanding.
+
+### Entry input ownership — reopened 2026-09-21
+
+The initially approved transfer policy below was reopened because Edit/Delta
+payloads reach most entity forms: its lifecycle machinery would be widespread.
+The bounded comparison below evaluates that cost against construction copies.
+The policy has not been implemented. Further ownership/access implementation is
+unscheduled, and S1's preparatory changes were reverted as recorded below. The
+former S1–S6 plan is withdrawn; the lazy-iteration proposal does not depend on it.
+
+Entry constructors consume owned payloads into the entry. Batch constructors and
+append likewise consume owned entries. Callers use explicit copy() when they need
+to retain an input or supply a read-only accessor. A read-only accessor cannot be
+consumed in place; construction does not silently copy it.
+
+Convert and check every input, including ownership, availability, and required
+borrows, before transferring any of them. Repeated aliases of the same owned
+input cannot supply two transfers and must fail before either transfer occurs.
+Successful transfer leaves input aliases consumed and invalidates their child
+accessors; independent copies remain usable. This is ownership transfer, not
+additional molecular validation.
+
+#### Bounded construction comparison — 2026-09-21
+
+**Decision supported:** the tested transfer path needs simple consumed-state
+checks and ordinary PyO3 borrows, not a new lifecycle framework. This initially
+supported recommending transfer with explicit copies for reuse. That recommendation
+understated the delivery and review cost of migrating the connected type surface
+consistently; the experiment does not settle that cost. The saving on this small
+fixture is modest, and the evidence does not establish an application-wide
+speedup. Neither ownership policy is selected. No additional experiment is proposed.
+
+One standalone PyO3 probe compares two implementations of the same path:
+AtomForm → Edit::AddAtoms → Edits → Molecule::apply. Inputs are the existing
+test_atom_form_parse fixtures C#R(6) and O#n2, giving two forms including a ring
+constraint. Both implementations use the actual graph-IR types, owner-backed
+read-only observations, and consuming batch application. The copy policy retains
+input forms and entries; the transfer policy takes their contents. Initial form
+parsing and Python argument conversion are outside the measurement.
+
+| Boundary | Copy policy | Transfer policy |
+| --- | --- | --- |
+| Construct AddAtoms | Two form clones; 1 Rust allocation requesting 384 bytes | No payload clones; 2 allocations requesting 416 bytes |
+| Insert entry into Edits | One entry clone (copies both forms); 2 allocations requesting 1,408 bytes | No payload clones; 1 allocation requesting 1,024 bytes |
+| Apply batch | No wrapper payload clones; 26 allocations requesting 2,452 bytes | Same |
+| Explicit copy of first stored form | One form clone; no allocation | Same |
+
+Thus transfer avoids four form copies and the 384-byte vector clone on insertion,
+but uses a 32-byte temporary vector to retain input borrows during construction.
+Both paths make three allocation requests across construction/insertion;
+transfer requests 352 fewer bytes. The copy path borrows and copies each input
+in turn, since it does not need to preserve inputs against partial consumption.
+This fixture's form cloning needs no heap allocation of
+its own; allocation count alone would miss the form copies. A thread-local gated
+Rust allocator counts allocation/reallocation requests and requested bytes, not
+Python allocations, peak memory, or retained memory. Clone counts instrument
+explicit wrapper clone calls; the entry clone includes its two contained forms.
+No elapsed-time measurements were needed for this structural comparison.
+
+On this macOS arm64 build, AtomForm and Option<AtomForm> both occupy 192 bytes;
+Edit and Option<Edit> both occupy 256 bytes. These are Rust storage sizes, not
+complete Python object sizes or portable layout guarantees. The copy version
+needs consumed state only in Batch; the transfer version also needs it in Atom
+and Entry. Each access checks availability, and each transfer takes the Option.
+The multi-input constructor borrows all inputs mutably and checks every Option
+before taking any. Retaining the borrows makes duplicate aliases fail before
+mutation without a separate alias registry or rollback journal.
+
+Checks passed for identical applied molecules, live observations under the copy
+policy, invalidation under transfer, invalidation after batch application,
+surviving explicit copies, duplicate-input rejection, and an unavailable second
+input leaving the first intact. Explicit reuse under transfer required one form
+copy (no allocation for this fixture). The probe uses RuntimeError for lifecycle
+failures; production exception names were not reimplemented. Both versions share
+the same scoped-reader structure. No universal access framework was introduced.
+
+The breadth remains real: production Edit payloads reference all eight entity
+forms, all eight field-change families, and ConstraintEdit; their leaf forms and
+constraint payloads extend the consuming-input chain. This experiment does not
+measure the full migration, nested structural replacement, or all failure shapes.
+Those facts limit the conclusion; they do not open another research task.
+
+Reproduction while scratch exists: activate umol-py/.venv and run
+`cargo run --offline --manifest-path scratch/228-entry-access/Cargo.toml --bin ownership`.
+The probe is src/bin/ownership.rs plus ownership.py in that directory, using
+Python 3.13.15 and PyO3 0.29.0 with abi3-py39. All assertions passed. The production
+extension and implementation were unchanged. This section preserves the fixture,
+method, results, limitations, and recommendation after scratch is deleted.
 
 ### Entry-access feasibility experiment — 2026-09-21
 
@@ -455,6 +558,10 @@ change with the corrected contract. Other families' properties remain unreviewed
 
 ### P4 — Edits and Deltas iteration materializes every entry before the first next
 
+S7a update: Edits iteration now converts one copied entry per next(); Deltas
+iteration is still eager pending S7b. Thin entry access remains unscheduled.
+The following preserves the original finding and its broader design discussion.
+
 Confirmed finding: eager conversion defeats iterator laziness. The subsequent
 design discussion settles lazy iteration and prefers thin read-only access to
 backing Rust entries over copied observations wherever possible.
@@ -485,7 +592,8 @@ failure timing. Consumption with outstanding accessors is settled above: it
 invalidates them, and later access raises InvalidatedViewError. These lifetime
 differences are not reasons to restore eager snapshots. No claim of universally
 lower retained memory is made, and no unsafe long-lived Rust reference or public
-accessor hierarchy is prescribed. No fix is implemented.
+accessor hierarchy is prescribed. S7 addresses eagerness only, preserving the
+existing copied-result contract.
 
 This finding covers Edits.__iter__/EditIter and Deltas.__iter__/DeltaIter. Other
 iterator families remain unreviewed. The general review criterion is thin, cheap,
@@ -656,49 +764,14 @@ Use the existing contract and review process; do not introduce another runtime
 layer or automatically expose every Rust method in Python. Settle the process
 changes and findings before scheduling the broader implementation.
 
-## Implementation plan — P1–P6
+## Completed and withdrawn implementation work
 
-Scope: remove wrapper-owned extension; replace disconnected entry properties and
-eager entry iteration with thin access; remove Deltas comparison preclones; and
-transfer Edits into the six existing application entry points without cloning.
-This implements the current Rust operations, not doc 213's future editor and
-transaction API. S0–S1 are complete; S2–S6 remain outstanding.
-
-### Contract and scope controls
-
-- Preserve existing variant names, constructor field names, and class-pattern
-  inspection. Owned entries and accessors use the same variant classes. Readonly
-  reports permissions; copy() produces independent ownership. Nested access must
-  obey the same contract. Do not preserve generated storage layout at the expense
-  of those semantics.
-- Indexing and iteration access original storage. Iterators exclude later appends,
-  allocate wrappers only on demand, and remain exhausted once exhaustion has been
-  reported. Consumption invalidates active accessors without waiting for them.
-- For application, complete argument conversion, acquire required borrows, and
-  check both receiver and batch availability before taking either input. Once
-  Rust execution begins, the batch remains consumed even on failure. Receiver
-  restoration/destruction follows the current Rust method, including its actual
-  rollback error contract.
-- Retain single-sequence constructors, append, and domain construction methods.
-  Never replace independent Edits composition with an unchanged append loop.
-  No new composition API, handle-kind hierarchy, general exception redesign,
-  inverse/normalization lifecycle redesign, or unrelated binding audit is included.
-- Nested forms, constraints, and field-change wrappers are dependencies where
-  reached through Edit/Delta access. Change only what is required for faithful
-  access, copying, and affected consumers; this does not mark their broader review
-  groups complete. Remove obsolete copying adapters when their last caller moves.
-- The prototype proves one variant, not every boundary. Before the affected
-  subitem, reconcile the exact public symbols and contracts for owned field
-  replacement and retained nested accessors, and for entry arguments passed to
-  constructors/append. If existing decisions do not determine a behavior, settle
-  that specific point with the user; do not silently introduce copies, setters,
-  invalidation rules, or additional public types. This plan supplies sequencing,
-  not permission to invent missing semantics.
-
-Every subitem includes its affected Rust/Python callers, documentation, and
-focused tests. Breaking changes may be temporarily red while editing, but each
-subitem should finish green; every stage must finish green. No commits are
-authorized by this plan.
+S0 remains complete. S1 was implemented and reverted. The former S1–S6 plan is
+withdrawn, not paused for automatic resumption: it coupled local copying/access
+corrections to a broad ownership migration without an acceptable delivery and
+review boundary. Its entity-form, nested-access, entry-storage, consuming-application,
+and integration stages are not executable work items. No replacement migration
+schedule is approved. The records below preserve completed work and its reversal.
 
 ### S0 — Independent corrections and error vocabulary
 
@@ -751,28 +824,10 @@ the complete S0 diff was reviewed against its scope. No workspace suite, MSRV
 check, or timing benchmark ran. Edits application still copies its input until S5;
 P3/P4 accessor and iterator changes remain outstanding.
 
-### S1 — Batch ownership and concrete access support
+### S1 historical outcome — reverted 2026-09-21
 
-- [x] **S1a — Edits storage and explicit copy.** Module: edit.rs, Edits. Introduce
-  the consumed-state-capable storage needed by accessors, with one checked route
-  to its Rust contents. Add copy() preserving entries and creation counters.
-  Keep application transfer for S5. Additive API/internal rewire, green. Verify
-  copied batches are independent and subsequent creation handles are correct.
-  [dep: S0a, S0c]
-- [x] **S1b — Deltas explicit copy.** Module: delta.rs, Deltas. Add copy() with
-  independent owned contents; do not add an artificial consuming operation to
-  Deltas for symmetry. Additive, green. Verify order, duplicates, and independent
-  subsequent mutation. [dep: S0c]
-- [x] **S1c — Scoped owner-backed access.** Modules: entity.rs and concrete
-  Edit/Delta storage support. Implement the minimal owner/location and short-borrow
-  access needed by the proven variant pattern, including nested permission and
-  invalidation propagation. Additive internal support, green; no public generic
-  framework. Verify original-storage access, owner retention, and append growth
-  without holding references across Python calls. Bring the relevant prototype
-  cases into maintained tests; scratch is not a test dependency.
-  [dep: S0a, S1a, S1b]
-
-#### S1 outcome
+The following records the implementation and its verification before reversal;
+it does not describe the current code.
 
 Edits stores optional Rust contents and checks availability on reads and writes.
 Edits.copy preserves entries and all eight creation counters; Deltas.copy
@@ -801,132 +856,138 @@ passed. Copy tests cover subsequent New ordinals for every entity kind and an
 applied batch containing bulk creation and removal. Package formatting and diff
 checks passed; the full S1 diff was reviewed. No workspace suite or MSRV gate ran.
 
-### S2 — Nested payload access
+### S1 reversal — 2026-09-21
 
-- [ ] **S2a — Entity-form access.** Modules: entity.rs and the eight entity-form
-  binding families. Enable owner-backed reads and explicit owned copies for forms
-  reached through entries; preserve the existing Python form classes. Migrate
-  boundary consumers that currently require an unconditional owned conversion
-  to scoped access where their Rust operation borrows. Breaking internal/API-role
-  rewire, green with callers. Verify nested reads do not copy whole forms and
-  supported writes either affect backing storage or raise TypeError.
-  [dep: S1c]
-- [ ] **S2b — Nested constraints and sequences.** Modules: constraint bindings,
-  sequence-valued payload getters, and their concrete access support. Replace
-  mutable disconnected outputs on these entry paths with owner-backed access;
-  carry permissions and invalidation through nested containers. Breaking return
-  behavior, green with callers. Test retained grandchildren, indexing, lazy
-  iteration, invalidation, and explicit copy independence. Do not implement an
-  unrelated collection API. [dep: S2a]
-- [ ] **S2c — Field changes and ConstraintEdit.** Modules: delta.rs field_change
-  generation and edit.rs ConstraintEdit. Provide the nested access/copy support
-  required by outer entries, preserving variant and field inspection. Breaking
-  wrapper rewire, green with callers. Test both scalar and structured old/new
-  payloads plus reference-bearing constraint fields. Existing inverse semantics
-  are not redesigned by this item. [dep: S2a, S2b]
+Removed the complete S1 production/test changes: optional Edits storage and its
+availability checks, private EditAccess/DeltaAccess support, both batch copy()
+methods, application-caller adaptations, and their tests. The six affected source
+and test files were restored exactly to their pre-S1 contents. S0 remains intact,
+including its lifecycle exception names, removed extension methods, and borrowed
+Deltas.normalized_eq comparison. Existing editor/transaction consumption is
+unchanged. No new consuming operation or preparatory ownership machinery remains
+from S1. The subsequent design discussion and experiment are retained; neither
+constitutes approval to resume the migration.
 
-### S3 — Edit entries and lazy Edits access
+Reversal verification: all six source/test files match the pre-S1 revision
+exactly; 442 focused Rust cases and 375 Python cases passed across the edit,
+delta, transaction, molecule, and Python import suites. The extension was rebuilt
+under Python 3.13.15. Package formatting and diff checks passed. No workspace
+suite or MSRV check ran.
 
-- [ ] **S3a — Edit variant storage (P3).** Module: edit.rs, Edit and its 33
-  variants/conversions. Replace generated stored-field wrappers with the shared
-  owned/accessor variant interface; implement readonly and copy(). Preserve
-  keyword/positional matching and constructor names. Avoid whole-entry rebuilding
-  for reads/comparisons where the owning Rust values can be borrowed. Breaking,
-  green with constructor/conversion callers migrated. Exercise every variant's
-  fields, including nested removal tuples and stereo factors, and preserve exact
-  Rust conversion values. [dep: S2c]
-- [ ] **S3b — Edits indexing and iteration (P4).** Module: edit.rs, Edits and
-  EditIter. Return owner-backed entry accessors; replace eager Vec materialization
-  with initial-length lazy traversal. Breaking result ownership, green with tests
-  migrated. Verify no entry conversion at iterator creation, one demanded wrapper
-  per next, negative indexing, later-append exclusion, read-only nested access,
-  and stable exhaustion. Add counters only in test instrumentation; no public
-  diagnostic methods. [dep: S3a]
+## Bounded proposal — lazy Edits/Deltas iteration
 
-### S4 — Delta entries and lazy Deltas access
+This is the sole next correction agreed on 2026-09-21. It removes eager work while
+preserving the current ownership of yielded results. It does not implement thin
+entry access, eliminate constructor/application copies, or complete P3/P4/P6.
+The withdrawn S1–S6 stages are not prerequisites.
 
-Each family subitem below replaces its generated owned-field representation with
-the shared variant interface, migrates its conversions/callers, and tests every
-Add/Remove/Modify shape it actually exposes. These are breaking rewires, green
-when complete. Preserve exact participant factors, field-change values, and
-existing inverse results; test readonly, independent copy, and variant matching.
+### Contract and implementation boundary
 
-| Subitem | Module/type family | Dependencies |
-| --- | --- | --- |
-| S4a | delta.rs: AtomDelta | [dep: S2c] |
-| S4b | delta.rs: BondDelta | [dep: S2c] |
-| S4c | delta.rs: DativeBondDelta | [dep: S2c] |
-| S4d | delta.rs: AromaticSystemDelta | [dep: S2c] |
-| S4e | delta.rs: MulticenterBondDelta | [dep: S2c] |
-| S4f | delta.rs: NoncovalentBondDelta | [dep: S2c] |
-| S4g | delta.rs: StereoAtomDelta | [dep: S2c] |
-| S4h | delta.rs: StereoBondDelta | [dep: S2c] |
-| S4i | delta.rs: ConstraintDelta | [dep: S2b] |
+- Calling iter() performs no entry conversion or payload copy.
+- Each next() converts only the requested entry and returns the same independent
+  Python variant/value representation as today. Indexing is unchanged.
+- The iterator retains its batch and captures the initial length. Later appends
+  are excluded. Separate iterators advance independently; exhaustion is permanent.
+- The existing containers are append-only. The iterator briefly borrows the batch
+  when converting an entry; no Rust reference survives between Python calls.
+- No consuming operation, optional owner storage, new exception, public accessor
+  hierarchy, or nested-payload rewrite is introduced. Existing application and
+  constructor semantics remain unchanged.
 
-- [ ] **S4j — Outer Delta.** Module: delta.rs, Delta. Connect all nine family
-  payloads through thin nested access while preserving outer variant classes and
-  fields, including _0. Breaking rewire, green. Verify owner retention through
-  outer/family/form/constraint chains and no recursive payload materialization
-  merely to inspect an outer variant. [dep: S4a, S4b, S4c, S4d, S4e, S4f, S4g,
-  S4h, S4i]
-- [ ] **S4k — Deltas indexing and iteration (P4).** Module: delta.rs, Deltas and
-  DeltaIter. Use the same lazy read-only contract as Edits; remove eager iterator
-  snapshots. Breaking result ownership, green with affected reaction/test callers
-  migrated. Verify indexing, initial-length traversal, nested read-only access,
-  and no payload clones on access. Preserve S0b's borrowed comparison path.
-  [dep: S0b, S4j, S3b]
+The change is confined to edit.rs (Edits iteration/EditIter) and delta.rs
+(Deltas iteration/DeltaIter), their affected callers, and focused tests. Replace
+prebuilt vectors of Python entries with a retained batch, position, and initial
+length. Reuse the existing entry conversions at next(). Conversion failure occurs
+when that entry is requested rather than at iterator creation; advance only after
+successful conversion, so failure does not silently skip an entry.
 
-### S5 — Consume Edits at application boundaries (P6)
+The iterator keeps the batch alive until the iterator is dropped, including any
+later-appended entries it will not yield. This replaces eager copied-entry storage
+with owner retention; it is not a guarantee of lower retained memory in every
+usage pattern.
 
-- [ ] **S5a — Molecule application.** Module: molecule.rs, apply/tracked_apply.
-  Take Edits after argument/availability checks and pass the Rust batch by value;
-  remove unconditional cloning. Breaking argument lifecycle, green with callers
-  migrated. Update deliberate reuse to explicit pre-application copy(). Verify
-  successful and failed application consume the batch, invalidated nested views
-  raise the exact error, and invalid input state causes no premature consumption.
-  Keep the current Rust molecule receiver semantics. [dep: S3b]
-- [ ] **S5b — Editor application and transactions.** Module: transaction.rs,
-  apply/tracked_apply/transact/tracked_transact. Check receiver and batch first,
-  then transfer Edits without copying. Breaking argument lifecycle, green with
-  all callers migrated. Verify both consumed-input orders, successful application,
-  ordinary edit failure, final publication where applicable, journal rollback,
-  and receiver preservation/destruction against the Rust contract. Do not claim
-  guaranteed restoration for RollbackFailed. Include aliases, active iterators,
-  retained nested accessors, and surviving explicit copies. [dep: S0a, S5a]
+### Acceptance and stopping point
 
-### S6 — Bounded integration and closeout
+Verify exact yielded values and variant classes, zero conversions at iterator
+creation, one conversion per successful next(), initial-length exclusion,
+permanent exhaustion, independent iterators, owner retention, and independence of
+yielded results. Use focused Rust tests and rebuilt Python edit/delta tests under
+the repository Python 3.13 environment, then package formatting and diff review.
+Source inspection or private test instrumentation establishes laziness; no public
+diagnostics, timing campaign, workspace suite, or migration framework is needed.
 
-- [ ] **S6a — P1–P6 integration gate.** Modules: affected bindings, exports,
-  tests, and documentation. Check the full changed public surface against the
-  approved names/roles; remove unused snapshot/conversion adapters. Review paths
-  through reaction and workflow consumers for accidental copies or changed
-  semantics without expanding their audit scope. Verify combined entry access,
-  copying, application, and invalidation through public Python APIs. Record exact
-  coverage and remaining limitations; keep other findings unresolved and other
-  groups unreviewed. Update this record/index and resume the broader review only
-  after this bounded work is complete. [dep: S0b, S0c, S4k, S5b]
+After this correction, return to doc 213. Constructor ownership, thin nested
+access, consuming batch application, and the remaining audit findings stay
+unresolved and unscheduled. Their unresolved status does not endorse existing
+copies or authorize another investigation automatically.
 
-### Verification and critical path
+## Implementation plan — bounded lazy iteration
 
-Use Python 3.13 from umol-py/.venv for every PyO3 build and Python test. During
-implementation run affected Rust unit filters and focused Python modules/cases;
-rebuild the extension before testing changed bindings. Do not run the full
-workspace suite after each subitem or stage. A stage gate covers its affected
-bindings and migrated consumers, including Python behavior, not compilation alone.
+S7 is a new, independent stage; numbering does not reactivate withdrawn S1–S6.
+S7a is complete; S7b and S7c remain. Each subitem ends green and
+includes its tests and method documentation. There are no preparatory stages or
+new public types/methods. The existing Edits.__iter__, EditIter.__next__,
+Deltas.__iter__, and DeltaIter.__next__ are the affected Python operations.
 
-At S6a run formatting/diff checks, the complete umol-py Rust test target, rebuilt
-Python tests, strict Clippy and rustdoc for the affected package with the relevant
-graph/depiction configuration. Exercise applicable feature-gated binding tests
-explicitly. Broaden into other crates only if implementation actually changes
-them. Any applicable pinned MSRV check belongs to this final gate, not iteration.
+### S7 — Lazy iteration with existing result ownership
 
-Copy/laziness verification starts with the first real access implementation:
-source traces and focused instrumentation must distinguish wrappers/scalars from
-payload clones. No timing campaign is required to demonstrate removal of an eager
-copy or to compare against an implementation with the wrong semantics.
+- [x] **S7a — Edits iteration.** Module: edit.rs, Edits/EditIter and edit_iter;
+  tests: edit.rs unit cases and test_edit.py. Replace the eager vector of Python
+  entries with a retained Edits owner, current position, and captured initial
+  length. Remove edit_iter's eager collection; call the existing Edit conversion
+  only from next(). Advance after successful conversion and return exhaustion
+  permanently at the captured bound. Migrate affected internal callers and remove
+  unused imports. Existing signatures at the Python call site and result
+  ownership are preserved; evaluation/error timing becomes lazy. Green with
+  callers and tests. Verify empty and populated batches, exact values/classes,
+  independent iterator positions, append exclusion before and after exhaustion,
+  owner retention after deleting the batch variable, and independent yielded
+  results. Inspect the constructor and next() paths to establish zero entry
+  conversions at construction and exactly one per successful next(); do not add
+  public diagnostics. Run focused edit Rust/Python tests against the rebuilt
+  extension. [dep: retained S0; none of withdrawn S1–S6]
+- [ ] **S7b — Deltas iteration.** Module: delta.rs, Deltas/DeltaIter and delta_iter;
+  tests: delta.rs unit cases and test_delta.py. Apply the same concrete iterator
+  shape and conversion timing to Deltas, preserving existing Delta variant
+  construction and the borrowed normalized_eq path. Remove the eager collection
+  and migrate direct iterator callers. Preserve Python call signatures and result
+  ownership; green with callers and tests. Cover the same observable cases as
+  S7a using actual Delta family payloads, and verify returned nested values retain
+  their current independence and permissions. Run focused delta Rust/Python tests
+  against the rebuilt extension. Reuse the agreed contract, not a new generic
+  iterator framework. [dep: S7a for the reviewed implementation pattern]
+- [ ] **S7c — Combined verification and handoff.** Modules: both iterator
+  implementations, affected tests, and discussion/status records. Review the full
+  change against the scope: no altered indexing, construction, append,
+  application, entry storage, or consumption. Run the edit/delta Rust unit filters
+  and rebuilt Python edit/delta modules together, package formatting, and
+  git diff --check. Record that lazy conversion is implemented while yielded
+  payload copying remains. Mark S7 complete and update 213 and the status index
+  to resume the mutation-API design. Other Python findings remain open, so do not
+  mark the full audit completed. Green closeout; no new API. [dep: S7a, S7b]
 
-Critical path: S0a/S0c → S1 → S2 → S3 → S5, with S2 → S4 and S0b joining at S6.
-S0b is independent; the Delta family conversions share file ownership and should
-not be edited concurrently without isolation. No stage above is optional for
-P1–P6 completion. Remaining review groups and independent-batch composition are
-separate deferred work, not extra stages in this plan.
+Critical path: S7a → S7b → S7c. Both iterator changes are required; no further
+stage is implied. Use Python 3.13 from umol-py/.venv for all PyO3 builds/tests and
+rebuild with maturin develop before Python checks. The focused combined gate is
+sufficient for this two-module change; no workspace suite, benchmark campaign,
+or MSRV campaign is scheduled. Constructor ownership, nested access, consuming
+application, and broader review remain unscheduled.
+
+### S7a outcome — 2026-09-21
+
+EditIter retains Edits, a position, and the initial length. Edits.__iter__ performs
+no entry conversion; next() calls the existing conversion for one entry and
+advances only on success. Source review establishes laziness without additional
+instrumentation. Yielded values keep their existing independent storage and
+permissions. Later appends are excluded and exhausted iterators stay exhausted.
+The iterator keeps its owner alive until dropped, including later-appended data.
+No optional batch storage, consumed-state checks, or entry-access wrappers were
+introduced. Deltas iteration remains for S7b.
+
+All 19 focused edit Rust cases and 30 Python edit cases passed under Python
+3.13.15 after rebuilding the extension. New cases cover empty/populated traversal,
+variant classes, independent results and iterator positions, owner retention,
+append exclusion, exhaustion, and borrow-failure retry without skipping an entry.
+Package formatting and diff checks passed. The complete S7a source/test diff was
+reviewed against the restored pre-S1 files, separately from the pending S1
+reversal. No workspace suite, benchmark, or MSRV check ran.

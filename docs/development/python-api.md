@@ -37,8 +37,8 @@ outstanding views and iterators, including nested accessors. Access raises one o
 exceptions, both subclasses of `RuntimeError`:
 
 - `ConsumedError`: access to an owned object whose Rust contents have been consumed.
-- `InvalidatedViewError`: access through a view or iterator whose owner's consumption made its
-  backing storage unavailable.
+- `InvalidatedViewError`: access through a view or iterator invalidated by owner consumption or
+  structural replacement.
 
 Messages identify the consumed type or the invalidated accessor and its owning type. Explicit
 independent copies made before consumption remain usable. Do not copy automatically on invalid
@@ -90,6 +90,12 @@ between Python calls. Nested accessors preserve the same ownership and invalidat
 Read-only access rejects mutation; mutable access updates backing storage. Explicit copying
 produces an independent owned value. Consumption invalidates dependent accessors as specified
 above. The location and its behavior under structural mutation must be defined for the owning type.
+
+For the Edit/Delta nested-access pattern, structural replacement invalidates all existing child
+accessors, including container accessors and their descendants. Fresh accessors expose the new
+state. Ordinary mutation within an existing value remains visible through valid accessors.
+Replacement does not preserve selected children, retarget them to replacement values, or copy
+their former contents. Independent explicit copies remain usable.
 
 This is a reusable pattern, not a requirement to give every type an owned-or-accessor representation.
 Owned-only values and accessor-only views remain appropriate. Where one Python class legitimately
@@ -247,12 +253,11 @@ Construction of an immutable owner must not retain a mutable Python alias that c
 owner. Convert mutable inputs to the owner's immutable representation at the construction boundary.
 This is an ownership rule, not semantic validation; validation follows the data-type contracts.
 
-Entity forms are ordinarily writable owned objects. When an entity form is stored in an immutable
-delta, construction clones its value into a form instance whose `readonly` property is true. The
-state cannot be changed in place, getters retain that same read-only instance, and field and
-constraint mutation raise `TypeError`. `copy`, `normalize`, `meet`, and `join` produce ordinary
-writable forms. Individual delta variants are immutable; `Deltas` provides only append-only
-container mutation.
+Entity forms are ordinarily writable owned objects. Access through a read-only entry is read-only,
+including nested fields and constraints. Such access rejects mutation with `TypeError`.
+`copy`, `normalize`, `meet`, and `join` produce ordinary
+writable forms. `Deltas` provides append-only container mutation; its entry accessors do not permit
+mutation of stored entries.
 
 Use `*Like` argument adapters for accepted alternate input representations. A `*Like` type is an
 argument boundary and is not exposed as the stored or returned type.
