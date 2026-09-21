@@ -28,8 +28,8 @@ HydrogenFolder/HydrogenUnfolder. Projection requirements inform this design;
 their remaining operation work stays in 166. This is a current-state review and
 open design, not an implementation plan.
 
-Priority update 2026-09-21: resume this work after the bounded lazy Edits/Deltas
-iteration correction in [228](228-python-api-parity-2026-09-21.md). Its broad
+Priority update 2026-09-21: the bounded lazy Edits/Deltas iteration correction in
+[228](228-python-api-parity-2026-09-21.md) is complete; resume this work. Its broad
 ownership/access migration plan is withdrawn; neither that migration nor the
 full Python audit is a prerequisite here. Preserve the settled editor/transaction
 scheme below; independent-batch composition remains unresolved.
@@ -1034,7 +1034,7 @@ Molecule pretending to be the original value. Tracking is confined to batch
 application and transaction commit; direct editor correspondence accumulation
 is removed by the settled design above.
 
-After the bounded lazy-iteration correction in 228, resume with Undo visibility, draft names
+With the bounded lazy-iteration correction in 228 complete, resume with Undo visibility, draft names
 and errors, transformation outcome types, and Python lifecycle. Independent-batch
 composition remains unresolved; if revisited, Edits must own the assembly
 semantics currently held in Deltas lowering. The authorized experiment below

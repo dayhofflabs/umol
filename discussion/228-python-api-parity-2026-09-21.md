@@ -18,8 +18,8 @@ must preserve their semantic, reference, failure, and lifecycle contracts.
 
 The immediate trigger is Python-only collection extension for Edits and Deltas.
 S0 removed that wrapper-owned extension surface; any replacement must delegate to a
-settled operation on the Rust container. Doc 213 resumes after the bounded
-lazy-iteration correction below, without waiting for the full audit or an ownership
+settled operation on the Rust container. The bounded lazy-iteration correction
+is complete; return to doc 213 without waiting for the full audit or an ownership
 migration. It retains incremental construction of one Edits sequence and leaves
 independent-batch composition unresolved; resolving that composition is not a
 prerequisite for the review or removal. If resumed, its assembly and handle
@@ -29,8 +29,8 @@ current methods as compatibility paths.
 
 This document records an urgent review and process correction, including the
 first bounded passes below, retained S0 corrections, and the withdrawal of the
-S1–S6 ownership/access plan. The sole next correction is lazy iteration with
-unchanged yielded-result ownership, followed by a return to doc 213. This is not a
+S1–S6 ownership/access plan. S7 completed lazy iteration with unchanged
+yielded-result ownership; the next work is back in doc 213. This is not a
 completed API audit. The broader ownership/type-role review remains in 192 and
 copy-cost review in 181.
 
@@ -65,8 +65,8 @@ the user is not required to disprove an asserted PyO3 or ABI necessity.
 
 These criteria are now explicit in AGENTS.md and the Python API guide. S0 repairs
 the bounded issues recorded in its outcome below; the remaining audit and fixes
-are unfinished. Only the bounded lazy-iteration correction precedes returning to
-doc 213; the remaining audit and ownership questions are not prerequisites.
+are unfinished. The bounded lazy-iteration correction is complete; the remaining
+audit and ownership questions are not prerequisites for doc 213.
 
 ### Consumption and mutation — clarified 2026-09-21
 
@@ -874,9 +874,9 @@ delta, transaction, molecule, and Python import suites. The extension was rebuil
 under Python 3.13.15. Package formatting and diff checks passed. No workspace
 suite or MSRV check ran.
 
-## Bounded proposal — lazy Edits/Deltas iteration
+## Bounded correction — lazy Edits/Deltas iteration
 
-This is the sole next correction agreed on 2026-09-21. It removes eager work while
+This correction was agreed and completed on 2026-09-21. It removes eager work while
 preserving the current ownership of yielded results. It does not implement thin
 entry access, eliminate constructor/application copies, or complete P3/P4/P6.
 The withdrawn S1–S6 stages are not prerequisites.
@@ -924,7 +924,7 @@ copies or authorize another investigation automatically.
 ## Implementation plan — bounded lazy iteration
 
 S7 is a new, independent stage; numbering does not reactivate withdrawn S1–S6.
-S7a and S7b are complete; S7c remains. Each subitem ends green and
+S7a–S7c are complete. Each subitem ends green and
 includes its tests and method documentation. There are no preparatory stages or
 new public types/methods. The existing Edits.__iter__, EditIter.__next__,
 Deltas.__iter__, and DeltaIter.__next__ are the affected Python operations.
@@ -956,7 +956,7 @@ Deltas.__iter__, and DeltaIter.__next__ are the affected Python operations.
   their current independence and permissions. Run focused delta Rust/Python tests
   against the rebuilt extension. Reuse the agreed contract, not a new generic
   iterator framework. [dep: S7a for the reviewed implementation pattern]
-- [ ] **S7c — Combined verification and handoff.** Modules: both iterator
+- [x] **S7c — Combined verification and handoff.** Modules: both iterator
   implementations, affected tests, and discussion/status records. Review the full
   change against the scope: no altered indexing, construction, append,
   application, entry storage, or consumption. Run the edit/delta Rust unit filters
@@ -1008,3 +1008,23 @@ read-only permissions, iterator independence, retained owners, append exclusion,
 permanent exhaustion, and borrow-failure retry. Source review confirms laziness;
 the complete diff, package formatting, and diff checks passed. S7c remains for
 combined verification and the return to 213. No broader test or timing campaign ran.
+
+### S7c outcome — 2026-09-21
+
+S7 is complete. The combined gate passed all 284 edit/delta Rust cases and 143
+Python edit/delta cases after rebuilding the extension under Python 3.13.15.
+Package formatting and git diff --check passed. Review of the complete source/test
+diff against the retained S0 revision confirms only the two iterators and their
+tests changed: indexing, construction, append, application, entry representation,
+and consumption are unchanged. S1's preparatory machinery remains absent.
+
+Iterator creation no longer materializes entries; next() still copies the requested
+payload through the existing conversion. Both iterators retain the whole owner
+until dropped, including later-appended entries they exclude. These are the
+delivered behavior and limitation, not completion of thin nested access or a claim
+that other copies are justified. No broader test, timing, or MSRV campaign ran.
+
+Return to doc 213 for mutation-API design. The broader Python audit remains open;
+ownership migration, thin nested access, and consuming application remain
+unscheduled. S1–S6 stay withdrawn, and this document stays In Progress for its
+unresolved review scope rather than being marked as a completed audit.
