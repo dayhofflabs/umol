@@ -245,7 +245,7 @@ def test_edits():
     assert list(edits) == [first, first, second]
 
 
-def test_edits_apply():
+def test_edits_append():
     edits = Edits()
     carbon = edits.add_atom(AtomForm.parse("C"))
     nitrogen = edits.add_atom(AtomForm.parse("N"))

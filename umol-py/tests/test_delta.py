@@ -1895,13 +1895,19 @@ def test_deltas_normalized_eq():
 )
 def test_deltas_normalized_eq_fields(lhs_changes, rhs_changes, expected):
     lhs, rhs = [
-        Deltas([
-            Delta.Atom(AtomDelta.ModifyField(
-                id=0,
-                change=AtomFieldChange.Charge(old=NumForm.Lit(old), new=NumForm.Lit(new)),
-            ))
-            for old, new in changes
-        ])
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=NumForm.Lit(old), new=NumForm.Lit(new)
+                        ),
+                    )
+                )
+                for old, new in changes
+            ]
+        )
         for changes in (lhs_changes, rhs_changes)
     ]
     before = (list(lhs), list(rhs))

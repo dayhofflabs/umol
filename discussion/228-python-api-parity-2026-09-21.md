@@ -1,6 +1,6 @@
 # 228 — Python API semantic parity review
 
-Status: Proposed
+Status: In Progress
 Date: 2026-09-21
 Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 [192](192-python-api-type-roles-2026-08-09.md),
@@ -17,7 +17,7 @@ operations. Python may omit Rust APIs and adapt their syntax for ergonomics. It
 must preserve their semantic, reference, failure, and lifecycle contracts.
 
 The immediate trigger is Python-only collection extension for Edits and Deltas.
-Remove that wrapper-owned extension surface; any replacement must delegate to a
+S0 removed that wrapper-owned extension surface; any replacement must delegate to a
 settled operation on the Rust container. Doc 213 is paused for this urgent
 review. It retains incremental construction of one Edits sequence and leaves
 independent-batch composition unresolved; resolving that composition is not a
@@ -60,8 +60,9 @@ the user is not required to disprove an asserted PyO3 or ABI necessity.
   machinery. Summaries should state the broken contract, consequence, and owning
   fix in a few lines, leaving detailed evidence accessible separately.
 
-These criteria are now explicit in AGENTS.md and the Python API guide. They do
-not complete the audit or repair existing wrappers. Doc 213 remains paused.
+These criteria are now explicit in AGENTS.md and the Python API guide. S0 repairs
+the bounded issues recorded in its outcome below; the remaining audit and fixes
+are unfinished. Doc 213 remains paused.
 
 ### Consumption and mutation — clarified 2026-09-21
 
@@ -94,9 +95,10 @@ consumption remain usable.
 
 Use these names across the bindings. Messages identify the object or accessor and
 its consumed owner, for example: "Edits has been consumed" and "Edit view is
-invalid because its owning Edits has been consumed". These are approved interface
-names, not implemented exceptions. Further lifecycle machinery is not required
-for this design decision.
+invalid because its owning Edits has been consumed". S0 implements both exception
+exports and uses ConsumedError for existing editor/journal consumption. Owner-backed
+entry invalidation remains for later stages. Further lifecycle machinery is not
+required for this design decision.
 
 ### Reusable access pattern — settled 2026-09-21
 
@@ -222,7 +224,7 @@ claim that the full migration is complete.
 - At the start of this review, the Python API guide explicitly endorsed extension
   without rebasing identifiers or New handles. The defective behavior had been
   incorporated into guidance as well as code and tests. The guide was corrected
-  on 2026-09-21; wrapper removal remains outstanding. Checking wrappers against
+  on 2026-09-21; S0 removed the wrappers. Checking wrappers against
   the previous guidance alone would have preserved the defect.
 
 These observations establish the contract and verification gap. They do not
@@ -660,7 +662,7 @@ Scope: remove wrapper-owned extension; replace disconnected entry properties and
 eager entry iteration with thin access; remove Deltas comparison preclones; and
 transfer Edits into the six existing application entry points without cloning.
 This implements the current Rust operations, not doc 213's future editor and
-transaction API. Implementation has not started.
+transaction API. S0 is complete; S1–S6 remain outstanding.
 
 ### Contract and scope controls
 
@@ -700,24 +702,54 @@ authorized by this plan.
 
 ### S0 — Independent corrections and error vocabulary
 
-- [ ] **S0a — Lifecycle exceptions.** Modules: error.rs, lib.rs, Python package
+- [x] **S0a — Lifecycle exceptions.** Modules: error.rs, lib.rs, Python package
   exports, transaction.rs. Add ConsumedError and InvalidatedViewError as RuntimeError
   subclasses; migrate existing editor/journal consumed-state errors to the common
   vocabulary. Additive exports plus breaking error refinement, green with callers
   migrated. Verify exact classes, alias behavior, and unchanged Rust failure
   outcomes. [dep: none]
-- [ ] **S0b — Borrowed Deltas comparison (P5).** Modules: delta.rs, lattice.rs only
+- [x] **S0b — Borrowed Deltas comparison (P5).** Modules: delta.rs, lattice.rs only
   as needed. Delegate normalized_eq through borrowed GraphIrDeltas; leave normalize
   unchanged. Green implementation change. Verify equal, unequal, equal-normal-form,
   and contradiction cases against Rust; inspect the path for preliminary clones.
   Do not generalize other macro users without evidence. [dep: none]
-- [ ] **S0c — Extension removal (P1/P2).** Modules: edit.rs, delta.rs and their
+- [x] **S0c — Extension removal (P1/P2).** Modules: edit.rs, delta.rs and their
   Rust/Python tests. Remove both extend methods, EditsExtend, DeltasExtend, and
   ResolvedDeltasExtend. Delete extension/self-extension tests; change the incidental
   single-entry extension in the delta property test to append. Breaking, green
   after migration. Recheck repository callers and preserve construction/append
   coverage, including application of a single sequence with New references.
   [dep: none]
+
+#### S0 outcome — 2026-09-21
+
+Both lifecycle exceptions are public RuntimeError subclasses. Existing
+MoleculeEditor and Transaction consumed-state failures now raise ConsumedError,
+with the owning type named in the message; their Rust lifecycle is unchanged.
+InvalidatedViewError is exported for later accessor implementation and has no
+production accessor producer yet.
+
+Deltas.normalized_eq now directly borrows both stored Rust Deltas. Its former
+shared-macro use was replaced with two local methods so normalization retains
+its existing behavior without imposing owned conversion on comparison. The shared
+macro and its other users are unchanged. Source review confirms no preliminary
+clone on the comparison path; no timing claim is made.
+
+Removed Edits.extend, Deltas.extend, all three extension adapter types, the unused
+Deltas mutable-conversion helper, and extension-specific tests. The incidental
+single-entry caller uses append. Repository search found no remaining binding
+callers. The maintained single-sequence case adds carbon and nitrogen, removes
+the issued nitrogen handle, and verifies that application leaves carbon.
+
+Verification: Python 3.13.15, rebuilt editable extension with graph/depiction
+features; 9 transaction, 264 delta, and 18 edit Rust unit tests passed. All 262
+Python cases in test_import.py, test_edit.py, test_delta.py, and test_transaction.py
+passed. They cover exact exception exports/inheritance and alias failures,
+comparison equality/inequality, normal-form fusion, contradictory inputs, and
+receiver preservation. Package formatting and staged/unstaged diff checks passed;
+the complete S0 diff was reviewed against its scope. No workspace suite, MSRV
+check, or timing benchmark ran. Edits application still copies its input until S5;
+P3/P4 accessor and iterator changes remain outstanding.
 
 ### S1 — Batch ownership and concrete access support
 

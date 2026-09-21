@@ -1828,10 +1828,6 @@ impl Deltas {
     pub(crate) fn to_rust(&self) -> &GraphIrDeltas {
         &self.0
     }
-
-    fn to_rust_mut(&mut self) -> &mut GraphIrDeltas {
-        &mut self.0
-    }
 }
 
 #[cfg(test)]
