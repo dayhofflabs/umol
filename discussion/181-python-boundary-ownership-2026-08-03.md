@@ -3,7 +3,8 @@
 Status: Proposed
 Date: 2026-08-03
 Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
-[151](151-python-molecule-workflows-2026-07-13.md)
+[151](151-python-molecule-workflows-2026-07-13.md),
+[228](228-python-api-parity-2026-09-21.md)
 
 The Rust/Python boundary should be reviewed for unnecessary cloning and reconstruction after the
 editing and transaction work in doc 179 is complete. Python is expected to be the primary interface,

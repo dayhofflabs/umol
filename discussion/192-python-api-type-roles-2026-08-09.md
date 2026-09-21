@@ -5,7 +5,8 @@ Date: 2026-08-09
 Relates: [139](139-mutability-hashability-equality-2026-07-09.md),
 [176](176-ast-naming-2026-07-31.md), [178](178-python-lattice-ops-2026-08-01.md),
 [179](179-python-editing-and-transactions-2026-08-02.md),
-[181](181-python-boundary-ownership-2026-08-03.md)
+[181](181-python-boundary-ownership-2026-08-03.md),
+[228](228-python-api-parity-2026-09-21.md)
 
 ## Purpose
 

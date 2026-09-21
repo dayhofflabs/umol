@@ -7,16 +7,58 @@ strategy and PyO3 implementation are not themselves part of that contract. A Pyt
 able to tell from a type and operation whether a value is immutable, independently mutable, or a
 live accessor into another object.
 
-The public Rust API is the starting point. Its types, constructors, value-producing operations,
-mutating operations, views, editors, and lifecycle boundaries carry deliberate semantics that the
-Python binding preserves where Python can express them reasonably. The binding may omit Rust APIs
-and may adapt call syntax, but it does not redesign the type hierarchy merely because Python has a
-different ownership model. A Python-specific deviation needs a concrete usability or correctness
-reason.
+The public Rust API defines the operations and contracts to preserve. Every difference in Python
+requires a specific justification, without exceptions: exposed types and methods, names, semantics,
+construction, lifecycle, ownership, aliasing, failure behavior, and copying. The binding may omit
+Rust APIs or adapt call syntax for a concrete usability reason; it must not invent domain
+operations. Existing code, tests, documentation, and prior acceptance do not justify a deviation.
+
+For each deviation, identify the public Rust counterpart, the precise difference, the concrete
+Python requirement, and the evidence supporting the chosen adaptation. Claims that PyO3 or the
+Python ABI requires a design need evidence for the relevant version and code path. An unexplained
+or unreviewed difference remains unresolved; familiarity and passing tests do not establish parity.
+
+Cloning and snapshots require the same justification. State what is copied and why, distinguishing
+shared ownership from copying owned data and subsequent copy-on-write costs. Examine whether
+borrowing, ownership transfer with an explicit consumed state, or a supported live view can preserve
+the Rust contract before selecting a copy. These are alternatives to evaluate, not mandatory new
+wrappers. Converting a consuming Rust operation into a reusable copy-producing Python operation is
+a lifecycle change. Neither defensive cloning nor a universal ban on copying decides its contract.
+Do not change the Rust API solely to legitimize a wrapper convenience.
+
+Preserve consumption when the owning Rust operation consumes its input. Possible reuse does not
+justify an unconditional copy: callers explicitly copy when they need to retain the input, as in
+Rust. A departure requires a concrete justification beyond possible reuse or a general claim that
+consumption is unsuitable for Python. Failure ordering and accessor implementation are interface
+questions, not reasons to assume copying is necessary.
+
+Consumption leaves all aliases of the Python owner in a consumed state and invalidates its
+outstanding views and iterators, including nested accessors. Access raises one of two shared
+exceptions, both subclasses of `RuntimeError`:
+
+- `ConsumedError`: access to an owned object whose Rust contents have been consumed.
+- `InvalidatedViewError`: access through a view or iterator whose owner's consumption made its
+  backing storage unavailable.
+
+Messages identify the consumed type or the invalidated accessor and its owning type. Explicit
+independent copies made before consumption remain usable. Do not copy automatically on invalid
+access or block consumption solely because an accessor remains alive.
 
 The central rule is that apparent mutation must have one observable meaning. An assignment either
 changes the object through which the value was obtained or is rejected. A property must not return
 a disconnected mutable copy on which assignments succeed but have no effect on the parent.
+This includes nested containers and mutating methods. Mutable access updates backing storage;
+immutable observations reject mutation. An explicitly requested independent copy may be mutable,
+with mutations affecting its own storage. Calling a property result detached does not justify
+silent, ineffective writes.
+
+Keep bindings thin and cheap. Prefer read-only access to backing Rust storage over copied
+observations where possible. Preserve iterator laziness: creating an iterator must not materialize
+its entries, and requesting one entry must not convert the unrequested remainder. Prefer a thin
+read-only Python accessor for each yielded entry, including nested access, over copying its payload.
+Owner lifetime and interaction with mutation or consumption need explicit contracts; they do not
+justify defaulting to snapshots. Python being the primary application interface does not justify
+separate semantics or additional copying.
 
 ## Graph-IR naming at the boundary
 
@@ -34,7 +76,34 @@ reintroduced on only one side of the binding boundary.
 
 ## Public object roles
 
-Every exported class has one of the following roles.
+Every exported class has an explicit ownership/access role. Combining owned and accessor
+representations in one class requires a type-specific justification and an explicit mutation
+contract.
+
+### Reusable owner-backed access pattern
+
+Where Rust exposes borrowed access to stored data, a Python accessor can retain its owner and a
+location within that owner. Each operation briefly borrows the owner, checks availability, locates
+the data, and performs the requested access. No Rust reference into relocatable storage survives
+between Python calls. Nested accessors preserve the same ownership and invalidation contract.
+
+Read-only access rejects mutation; mutable access updates backing storage. Explicit copying
+produces an independent owned value. Consumption invalidates dependent accessors as specified
+above. The location and its behavior under structural mutation must be defined for the owning type.
+
+This is a reusable pattern, not a requirement to give every type an owned-or-accessor representation.
+Owned-only values and accessor-only views remain appropriate. Where one Python class legitimately
+supports both roles, an internal owned-or-owner-and-location representation is possible; it is not
+ordinary Rust `Cow` and must not clone automatically on mutation. Public role distinctions are
+settled per type. Introduce shared implementation machinery only when concrete uses support it;
+this pattern does not authorize a universal wrapper framework or a blanket binding rewrite.
+
+For Edit/Delta entries, owned values and read-only accessors use the same Python variant classes
+and field names. This preserves one variant-inspection and pattern-matching interface instead of
+duplicating the variant hierarchy. A read-only `readonly` property reports mutation permissions;
+it is not a general ownership indicator. Accessors obtained from batches are read-only, including
+nested access. `copy()` returns an independent owned entry of the same variant. The backing-storage
+distinction remains internal; mutation never silently detaches an accessor by copying.
 
 ### Immutable owned value
 
@@ -144,12 +213,13 @@ does not by itself require renaming that type: Python users ordinarily expect a 
 advertise mutation through its methods and properties. A split is justified when one name would
 otherwise cover observably incompatible aliasing or lifecycle behavior.
 
-An immutable entry type may belong to a mutable container. `Edit` and `Delta` variants are immutable
-values, while `Edits` and `Deltas` provide iterable construction, `append`, and `extend` in insertion
-order. Container mutation does not imply entry mutation. These operations establish list-like
-append-only accumulation, not unrestricted list replacement, insertion, deletion, or reordering.
-Extension appends entries exactly as written and does not rebase or otherwise rewrite identifiers or
-`New(n)` handles.
+An immutable entry type may belong to a mutable container; container mutation does not imply entry
+mutation. Python collection idioms must preserve the owning Rust container's reference semantics.
+A spelling such as `append` may delegate to Rust `push`; it does not authorize batch concatenation.
+Entries in an `Edits` sequence share one handle namespace. Combining independent batches requires
+a separately designed Rust operation on `Edits`; raw list extension cannot establish that contract.
+Any supported bulk operation on `Deltas` likewise belongs to its Rust container. Do not implement
+collection composition in the bindings merely because Python lists support `extend`.
 
 ## Properties and nested objects
 

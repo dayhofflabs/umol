@@ -49,6 +49,10 @@ models. Do not treat a format boundary type as the one true molecular model.
 - Keep external formats behind boundary types. Conversion to graph IR may be lossy or model-dependent.
 - Rust/Python boundary methods are `from_rust` and `to_rust`; prefixed Rust imports in `umol-py`
   drop `umol-`.
+- Every Python/Rust API difference needs a specific justification: types, names, semantics,
+  lifecycle, ownership, and copying. Preserve Rust operations; do not create domain operations in
+  bindings. Prior code, tests, or acceptance do not justify a deviation. Apply
+  `docs/development/python-api.md`; unreviewed differences remain unresolved.
 - Public names and visibility are design decisions. Do not hide unfinished design in `pub(crate)`
   helpers, indiscriminately re-export, or proliferate public seams.
 - Before changing an invariant-bearing public API, enumerate its intended public symbols and match
@@ -62,9 +66,9 @@ models. Do not treat a format boundary type as the one true molecular model.
 - Code states current behavior; discussion documents preserve reasoning and history.
 
 Normative guides are `docs/development/data-types.md` (construction and fallibility),
-`integrity.md` (representation contracts), `nomenclature.md` (terms and public names), and
-`property-tests.md` (property suites). Discussion documents are non-normative and must not be cited
-from source comments or public rustdoc.
+`integrity.md` (representation contracts), `nomenclature.md` (terms and public names),
+`property-tests.md` (property suites), and `python-api.md` (binding semantics and ownership).
+Discussion documents are non-normative and must not be cited from source comments or public rustdoc.
 
 ## Working rules
 
