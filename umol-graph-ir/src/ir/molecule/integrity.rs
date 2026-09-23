@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 
+use smallvec::SmallVec;
 use thiserror::Error;
 use umol_graph_core::NodeId;
 
@@ -179,14 +180,18 @@ impl Molecule {
             Entity::StereoBond(id) => id.index() < self.stereo_bonds.count(),
         };
 
-        let mut bond_pairs = HashSet::new();
         for view in self.bonds().iter() {
             let entity = Entity::Bond(view.id);
             let atoms = view.atom_ids();
-            require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
             check_unique_pair(entity, atoms)?;
             let pair = unordered_pair(atoms);
-            if !bond_pairs.insert(pair) {
+            let upper = NodeId::from(pair[1]);
+            let neighbors = self.graph.neighbors(NodeId::from(pair[0]));
+            let position = neighbors.partition_point(|neighbor| neighbor.node < upper);
+            if neighbors
+                .get(position + 1)
+                .is_some_and(|neighbor| neighbor.node == upper)
+            {
                 return Err(MoleculeIntegrityError::ParallelBonds { atoms: pair });
             }
         }
@@ -240,14 +245,21 @@ impl Molecule {
             )?;
         }
 
-        let mut noncovalent_pairs = HashSet::new();
+        let mut noncovalent_pairs: SmallVec<[u64; 16]> =
+            SmallVec::with_capacity(self.noncovalent_bonds.count());
         for view in self.noncovalent_bonds().iter() {
             let entity = Entity::NoncovalentBond(view.id);
             let atoms = view.atom_ids();
             require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
             check_unique_pair(entity, atoms)?;
             let pair = unordered_pair(atoms);
-            if !noncovalent_pairs.insert(pair) {
+            noncovalent_pairs.push((u64::from(pair[0].0) << 32) | u64::from(pair[1].0));
+        }
+        noncovalent_pairs.sort_unstable();
+        for keys in noncovalent_pairs.windows(2) {
+            if keys[0] == keys[1] {
+                let key = keys[0];
+                let pair = [AtomId((key >> 32) as u32), AtomId(key as u32)];
                 return Err(MoleculeIntegrityError::ParallelNoncovalentBonds { atoms: pair });
             }
         }

@@ -572,6 +572,15 @@ fn test_molecule_try_from_entries_error(
         atoms: [AtomId(0), AtomId(1)],
     },
 )]
+#[case::bonds_parallel_reversed(
+    |entries: &mut MoleculeEntries| {
+        entries.bonds[1].0 = AtomId(1);
+        entries.bonds[1].1 = AtomId(0);
+    },
+    MoleculeIntegrityError::ParallelBonds {
+        atoms: [AtomId(0), AtomId(1)],
+    },
+)]
 #[case::dative_donor_duplicate(
     |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(1),
     MoleculeIntegrityError::DuplicateAtom {

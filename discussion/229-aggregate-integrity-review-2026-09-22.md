@@ -1869,6 +1869,22 @@ delta normal-form property, and strict graph-IR Clippy passed.
   (F10). Use sorted adjacency for localized-bond duplicates and inline
   sorted keys for noncovalent duplicates. Check parallel/self-loop errors
   and compare construction time and allocations.
+  **Complete 2026-09-23.** The assembled Molecule gate no longer repeats the
+  localized-bond endpoint check; raw-entry preflight still rejects invalid
+  endpoints before Graph construction. Sorted graph adjacency detects parallel
+  localized bonds, and an inline SmallVec of exact packed endpoint keys detects
+  parallel noncovalent bonds. Exact self-loop and parallel cases, including
+  reversed endpoints, passed. All 6,898 active graph-IR library tests, strict
+  crate Clippy, rustdoc with warnings denied, and formatting passed.
+
+  On the complete 80-atom overlay-rich Molecule construction benchmark,
+  no-constraint and one-constraint point estimates changed from 22.068 and
+  21.870 µs immediately before S4b to 17.393 and 17.211 µs. Allocation calls
+  and requested bytes changed from 270 / 37,876 to 261 / 35,284 in both cases.
+  The 80-atom chain now takes 2.019 µs without a constraint versus the S0a
+  6.73 µs baseline; its allocations changed from 27 / 14,732 to 21 / 12,416.
+  Timings used the S0a Criterion protocol; allocations used the same separate
+  seven-call median probe.
 - **S4c — molecule::integrity; green [dep: S0a, S0c].** Replace dative and
   multicenter per-row HashSets/trees with exact two-word keys for molecules of
   at most 128 atoms and sorted keys above that bound (F2, F4). Reserve the
