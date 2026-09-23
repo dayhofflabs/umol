@@ -144,8 +144,7 @@ fn check_stereo_atom(
     ligand_count: usize,
     attributes: &StereoAtomForm,
 ) -> Result<(), StereoIntegrityError> {
-    check_configuration_site_kind(entity, &attributes.configuration, StereoSite::Atom)?;
-    check_configuration(entity, ligand_count, &attributes.configuration)?;
+    check_stereo_atom_configuration_on_frame(entity, ligand_count, &attributes.configuration)?;
     for constraint in attributes.constraints.iter() {
         check_stereo_atom_constraint(entity, ligand_count, constraint)?;
     }
@@ -157,12 +156,29 @@ fn check_stereo_bond(
     ligand_count: usize,
     attributes: &StereoBondForm,
 ) -> Result<(), StereoIntegrityError> {
-    check_configuration_site_kind(entity, &attributes.configuration, StereoSite::Bond)?;
-    check_configuration(entity, ligand_count, &attributes.configuration)?;
+    check_stereo_bond_configuration_on_frame(entity, ligand_count, &attributes.configuration)?;
     for constraint in attributes.constraints.iter() {
         check_stereo_bond_constraint(entity, ligand_count, constraint)?;
     }
     Ok(())
+}
+
+pub(crate) fn check_stereo_atom_configuration_on_frame(
+    entity: Entity,
+    ligand_count: usize,
+    configuration: &StereoConfigurationForm,
+) -> Result<(), StereoIntegrityError> {
+    check_configuration_site_kind(entity, configuration, StereoSite::Atom)?;
+    check_configuration(entity, ligand_count, configuration)
+}
+
+pub(crate) fn check_stereo_bond_configuration_on_frame(
+    entity: Entity,
+    ligand_count: usize,
+    configuration: &StereoConfigurationForm,
+) -> Result<(), StereoIntegrityError> {
+    check_configuration_site_kind(entity, configuration, StereoSite::Bond)?;
+    check_configuration(entity, ligand_count, configuration)
 }
 
 pub(crate) fn check_stereo_atom_constraint_on_frame(
@@ -243,7 +259,7 @@ fn check_stereo_site_kind(
     }
 }
 
-fn check_stereo_frame_arity(
+pub(crate) fn check_stereo_frame_arity(
     entity: Entity,
     ligand_count: usize,
     kind: StereoKind,
@@ -259,7 +275,7 @@ fn check_stereo_frame_arity(
     Ok(())
 }
 
-fn check_stereo_atom_constraint(
+pub(crate) fn check_stereo_atom_constraint(
     entity: Entity,
     ligand_count: usize,
     constraint: &StereoAtomConstraintForm,
@@ -276,7 +292,7 @@ fn check_stereo_atom_constraint(
     }
 }
 
-fn check_stereo_bond_constraint(
+pub(crate) fn check_stereo_bond_constraint(
     entity: Entity,
     ligand_count: usize,
     constraint: &StereoBondConstraintForm,

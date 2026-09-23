@@ -16,12 +16,15 @@ use super::super::edit::{
 };
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
-use super::super::id::AtomId;
+use super::super::id::{AtomId, StereoAtomId, StereoBondId};
 use super::super::ligand::StereoLigand;
 use super::super::molecule::Molecule;
 use super::super::stereo::integrity::{
-    check_stereo_atom_entry, check_stereo_atom_kind, check_stereo_bond_entry,
-    check_stereo_bond_kind, StereoIntegrityError,
+    check_stereo_atom_configuration_on_frame, check_stereo_atom_constraint,
+    check_stereo_atom_constraint_on_frame, check_stereo_atom_entry, check_stereo_atom_kind,
+    check_stereo_bond_configuration_on_frame, check_stereo_bond_constraint,
+    check_stereo_bond_constraint_on_frame, check_stereo_bond_entry, check_stereo_bond_kind,
+    check_stereo_frame_arity, StereoIntegrityError,
 };
 use super::super::stereo::StereoKind;
 use super::Reaction;
@@ -214,7 +217,7 @@ impl ReactionIntegrityCheck {
             self.validate_electron_count_delta(lhs, &added, delta)?;
         }
         for delta in deltas.iter() {
-            self.validate_stereo_delta(delta)?;
+            self.validate_stereo_delta(lhs, &added, delta)?;
         }
         for delta in deltas.iter() {
             self.validate_removal_incidence(lhs, &added, delta)?;
@@ -437,45 +440,154 @@ impl ReactionIntegrityCheck {
         }
     }
 
-    fn validate_stereo_delta(&self, delta: &Delta) -> Result<(), ReactionIntegrityError> {
-        let result = match delta {
-            Delta::StereoAtom(StereoAtomDelta::Add {
-                id,
-                site,
-                ligands,
-                attributes,
-            }) => check_stereo_atom_entry(Entity::StereoAtom(*id), *site, ligands, attributes),
-            Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
-                id,
-                kind: Some(kind),
-                ..
-            }) => check_stereo_atom_kind(Entity::StereoAtom(*id), *kind),
-            Delta::StereoBond(StereoBondDelta::Add {
-                id,
-                ligands,
-                attributes,
-                ..
-            }) => check_stereo_bond_entry(Entity::StereoBond(*id), ligands, attributes),
-            Delta::StereoBond(StereoBondDelta::ModifyConstraint {
-                id,
-                kind: Some(kind),
-                ..
-            }) => check_stereo_bond_kind(Entity::StereoBond(*id), *kind),
-            _ => Ok(()),
-        };
-        result.map_err(ReactionIntegrityError::from)?;
-
+    fn validate_stereo_delta(
+        &self,
+        lhs: &Molecule,
+        added: &HashMap<Entity, &Delta>,
+        delta: &Delta,
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
+            Delta::StereoAtom(
+                StereoAtomDelta::Add {
+                    id,
+                    site,
+                    ligands,
+                    attributes,
+                }
+                | StereoAtomDelta::Remove {
+                    id,
+                    site,
+                    ligands,
+                    attributes,
+                },
+            ) => check_stereo_atom_entry(Entity::StereoAtom(*id), *site, ligands, attributes)?,
             Delta::StereoAtom(StereoAtomDelta::ModifyField { id, change }) => {
+                let entity = Entity::StereoAtom(*id);
+                let ligand_count = self.stereo_atom_ligand_count(lhs, added, *id)?;
                 let StereoAtomFieldChange::Configuration { old, new } = change;
-                check_delta_stereo_kind(Entity::StereoAtom(*id), old.kind(), new.kind())
+                check_stereo_atom_configuration_on_frame(entity, ligand_count, old)?;
+                check_stereo_atom_configuration_on_frame(entity, ligand_count, new)?;
+                check_delta_stereo_kind(entity, old.kind(), new.kind())?;
             }
+            Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { id, kind, old, new }) => {
+                let entity = Entity::StereoAtom(*id);
+                let ligand_count = self.stereo_atom_ligand_count(lhs, added, *id)?;
+                if let Some(kind) = kind {
+                    check_stereo_atom_kind(entity, *kind)?;
+                    check_stereo_frame_arity(entity, ligand_count, *kind)?;
+                }
+                for constraint in old.iter().chain(new) {
+                    check_stereo_atom_constraint(entity, ligand_count, constraint)?;
+                }
+            }
+            Delta::StereoBond(
+                StereoBondDelta::Add {
+                    id,
+                    site: _,
+                    ligands,
+                    attributes,
+                }
+                | StereoBondDelta::Remove {
+                    id,
+                    site: _,
+                    ligands,
+                    attributes,
+                },
+            ) => check_stereo_bond_entry(Entity::StereoBond(*id), ligands, attributes)?,
             Delta::StereoBond(StereoBondDelta::ModifyField { id, change }) => {
+                let entity = Entity::StereoBond(*id);
+                let ligand_count = self.stereo_bond_ligand_count(lhs, added, *id)?;
                 let StereoBondFieldChange::Configuration { old, new } = change;
-                check_delta_stereo_kind(Entity::StereoBond(*id), old.kind(), new.kind())
+                check_stereo_bond_configuration_on_frame(entity, ligand_count, old)?;
+                check_stereo_bond_configuration_on_frame(entity, ligand_count, new)?;
+                check_delta_stereo_kind(entity, old.kind(), new.kind())?;
             }
-            _ => Ok(()),
+            Delta::StereoBond(StereoBondDelta::ModifyConstraint { id, kind, old, new }) => {
+                let entity = Entity::StereoBond(*id);
+                let ligand_count = self.stereo_bond_ligand_count(lhs, added, *id)?;
+                if let Some(kind) = kind {
+                    check_stereo_bond_kind(entity, *kind)?;
+                    check_stereo_frame_arity(entity, ligand_count, *kind)?;
+                }
+                for constraint in old.iter().chain(new) {
+                    check_stereo_bond_constraint(entity, ligand_count, constraint)?;
+                }
+            }
+            Delta::Constraint(ConstraintDelta::Add(constraint))
+            | Delta::Constraint(ConstraintDelta::Remove(constraint)) => {
+                self.validate_stereo_constraint(lhs, added, constraint)?;
+            }
+            _ => {}
         }
+        Ok(())
+    }
+
+    fn validate_stereo_constraint(
+        &self,
+        lhs: &Molecule,
+        added: &HashMap<Entity, &Delta>,
+        constraint: &Constraint,
+    ) -> Result<(), ReactionIntegrityError> {
+        match constraint {
+            Constraint::StereoAtom(id, kind, constraint) => {
+                let entity = Entity::StereoAtom(*id);
+                let ligand_count = self.stereo_atom_ligand_count(lhs, added, *id)?;
+                check_stereo_atom_constraint_on_frame(entity, ligand_count, *kind, constraint)?;
+            }
+            Constraint::StereoBond(id, kind, constraint) => {
+                let entity = Entity::StereoBond(*id);
+                let ligand_count = self.stereo_bond_ligand_count(lhs, added, *id)?;
+                check_stereo_bond_constraint_on_frame(entity, ligand_count, *kind, constraint)?;
+            }
+            Constraint::And(constraints) | Constraint::Or(constraints) => {
+                for constraint in constraints {
+                    self.validate_stereo_constraint(lhs, added, constraint)?;
+                }
+            }
+            Constraint::Not(constraint) => {
+                self.validate_stereo_constraint(lhs, added, constraint)?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn stereo_atom_ligand_count(
+        &self,
+        lhs: &Molecule,
+        added: &HashMap<Entity, &Delta>,
+        id: StereoAtomId,
+    ) -> Result<usize, ReactionIntegrityError> {
+        let entity = Entity::StereoAtom(id);
+        lhs.stereo_atoms()
+            .get(id)
+            .map(|view| view.ligand_count())
+            .or_else(|| match added.get(&entity).copied() {
+                Some(Delta::StereoAtom(StereoAtomDelta::Add { ligands, .. })) => {
+                    Some(ligands.len())
+                }
+                _ => None,
+            })
+            .ok_or(ReactionIntegrityError::InvalidReference { entity })
+    }
+
+    fn stereo_bond_ligand_count(
+        &self,
+        lhs: &Molecule,
+        added: &HashMap<Entity, &Delta>,
+        id: StereoBondId,
+    ) -> Result<usize, ReactionIntegrityError> {
+        let entity = Entity::StereoBond(id);
+        lhs.stereo_bonds()
+            .get(id)
+            .map(|view| view.ligand_count())
+            .or_else(|| match added.get(&entity).copied() {
+                Some(Delta::StereoBond(StereoBondDelta::Add { ligands, .. })) => {
+                    Some(ligands.len())
+                }
+                _ => None,
+            })
+            .ok_or(ReactionIntegrityError::InvalidReference { entity })
     }
 
     fn validate_removal_incidence(
@@ -784,9 +896,9 @@ impl Reaction {
     /// Check the representation invariants required to interpret this reaction.
     ///
     /// The check covers delta references, added-id uniqueness, positional electron-count lengths,
-    /// local stereo data carried by additions and constraint wrappers, and the source incidence and
-    /// participant structure recorded by removals. The closed lhs already satisfies molecule
-    /// integrity. This check does not impose DPO or chemistry semantics.
+    /// local stereo payloads in additions, removals, modifications, and constraints, and the source
+    /// incidence and participant structure recorded by removals. The closed lhs already satisfies
+    /// molecule integrity. This check does not impose DPO or chemistry semantics.
     pub(crate) fn check_integrity(&self) -> Result<(), ReactionIntegrityError> {
         ReactionIntegrityCheck.check(&self.lhs, &self.deltas)
     }

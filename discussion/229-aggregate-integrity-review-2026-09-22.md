@@ -1806,6 +1806,11 @@ The 6,822 active graph-IR library tests and strict crate Clippy passed.
   positions/actions against the owning frame. Exact tests distinguish local
   domain failures from deferred old-value and product failures; run Reaction
   identity-frame and publication properties.
+  **Complete 2026-09-23.** The constructor checks these payloads against the
+  lhs or a same-reaction Add frame. Exact cases cover each payload and preserve
+  deferred old-value and product failures. An application-precondition generator
+  now uses a locally valid but incompatible stereo kind. Crate tests, Reaction
+  properties, strict crate Clippy, and rustdoc passed.
 - **S2e — reaction::integrity and callers; breaking, restored green
   [dep: S2d].** Remove the constructor's determined-old/new stereo-kind
   comparison and ReactionIntegrityError::StereoKindModified (R11). Keep

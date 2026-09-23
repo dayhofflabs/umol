@@ -916,10 +916,10 @@ impl Reaction {
 
     /// Construct a reaction after checking its representation integrity.
     ///
-    /// The check covers delta references, positional electron-count lengths, added stereo entries,
-    /// stereo constraint site kinds, and removal incidence compatible with each source entity's
-    /// participant structure. The lhs is an already closed [`Molecule`]. Removal payloads are
-    /// interpreted in their recorded local frame.
+    /// The check covers delta references, positional electron-count lengths, local stereo payloads
+    /// in additions, removals, modifications, and constraints, and removal incidence compatible
+    /// with each source entity's participant structure. The lhs is an already closed [`Molecule`].
+    /// Removal payloads are interpreted in their recorded local frame.
     /// The check does not require the deltas to materialize a reaction span or impose DPO or
     /// chemistry semantics.
     ///
@@ -2817,12 +2817,13 @@ mod tests {
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
     use umol_perm::MAX_DEGREE;
 
+    use super::super::boolean::BooleanForm;
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
-        Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-        NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintForm,
-        StereoBondConstraintForm, StereoLigandPair, StereogenicityForm, TopicityForm,
-        TopicityRelationForm,
+        Constraints, DativeBondConstraintForm, FluxionalityForm, LigandPermutation,
+        MoleculeConstraint, MulticenterBondConstraintForm, NoncovalentBondConstraintForm,
+        RelationalConstraint, StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair,
+        StereogenicityForm, TopicityForm, TopicityRelationForm,
     };
     use super::super::edit::{AtomFieldChange, BondFieldChange};
     use super::super::electrons::ElectronCountsForm;
@@ -3719,6 +3720,185 @@ mod tests {
         );
     }
 
+    #[fixture]
+    fn stereo_domain_lhs() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(5), AtomId(6), BondForm::from_order(2)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+                (AtomId(5), AtomId(1), BondForm::from_order(1)),
+                (AtomId(6), AtomId(2), BondForm::from_order(1)),
+                (AtomId(6), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::default(),
+            )],
+            stereo_bonds: vec![(
+                BondId(4),
+                (0..=3)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoBondForm::default(),
+            )],
+            ..Default::default()
+        })
+    }
+
+    #[rstest]
+    #[case::atom(
+        Delta::StereoAtom(StereoAtomDelta::Remove {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: (1..=4)
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 2u32),
+        }),
+        ReactionIntegrityError::StereoCosetOutOfRange {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            kind: StereoKind::Tetrahedral,
+            coset: 2,
+            count: 2,
+        },
+    )]
+    #[case::bond(
+        Delta::StereoBond(StereoBondDelta::Remove {
+            id: StereoBondId(0),
+            site: BondId(4),
+            ligands: (0..=3)
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoBondForm::new(StereoKind::CisTrans, 2u32),
+        }),
+        ReactionIntegrityError::StereoCosetOutOfRange {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            kind: StereoKind::CisTrans,
+            coset: 2,
+            count: 2,
+        },
+    )]
+    fn test_reaction_try_new_stereo_remove_domain_error(
+        #[case] delta: Delta,
+        #[case] expected: ReactionIntegrityError,
+        stereo_domain_lhs: Molecule,
+    ) {
+        assert_eq!(
+            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
+            Err(expected),
+        );
+    }
+
+    #[rstest]
+    #[case::atom_old(
+        Delta::StereoAtom(StereoAtomDelta::ModifyField {
+            id: StereoAtomId(0),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 2u32),
+                new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+            },
+        }),
+        Entity::StereoAtom(StereoAtomId(0)),
+        StereoKind::Tetrahedral,
+    )]
+    #[case::atom_new(
+        Delta::StereoAtom(StereoAtomDelta::ModifyField {
+            id: StereoAtomId(0),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+                new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 2u32),
+            },
+        }),
+        Entity::StereoAtom(StereoAtomId(0)),
+        StereoKind::Tetrahedral,
+    )]
+    #[case::bond_old(
+        Delta::StereoBond(StereoBondDelta::ModifyField {
+            id: StereoBondId(0),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 2u32),
+                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32),
+            },
+        }),
+        Entity::StereoBond(StereoBondId(0)),
+        StereoKind::CisTrans,
+    )]
+    #[case::bond_new(
+        Delta::StereoBond(StereoBondDelta::ModifyField {
+            id: StereoBondId(0),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32),
+                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 2u32),
+            },
+        }),
+        Entity::StereoBond(StereoBondId(0)),
+        StereoKind::CisTrans,
+    )]
+    fn test_reaction_try_new_stereo_modify_field_domain_error(
+        #[case] delta: Delta,
+        #[case] entity: Entity,
+        #[case] kind: StereoKind,
+        stereo_domain_lhs: Molecule,
+    ) {
+        assert_eq!(
+            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
+            Err(ReactionIntegrityError::StereoCosetOutOfRange {
+                entity,
+                kind,
+                coset: 2,
+                count: 2,
+            }),
+        );
+    }
+
+    #[rstest]
+    #[case::atom_arity(
+        Delta::StereoAtom(StereoAtomDelta::ModifyField {
+            id: StereoAtomId(0),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationForm::Undetermined,
+                new: StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32),
+            },
+        }),
+        ReactionIntegrityError::StereoLigandArity {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            kind: StereoKind::Octahedral,
+            expected: 6,
+            actual: 4,
+        },
+    )]
+    #[case::bond_site_kind(
+        Delta::StereoBond(StereoBondDelta::ModifyField {
+            id: StereoBondId(0),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationForm::Undetermined,
+                new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+            },
+        }),
+        ReactionIntegrityError::StereoKindSiteMismatch {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            kind: StereoKind::Tetrahedral,
+        },
+    )]
+    fn test_reaction_try_new_stereo_modify_field_kind_error(
+        #[case] delta: Delta,
+        #[case] expected: ReactionIntegrityError,
+        stereo_domain_lhs: Molecule,
+    ) {
+        assert_eq!(
+            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
+            Err(expected),
+        );
+    }
+
     #[rstest]
     #[case::atom(
         Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
@@ -3778,6 +3958,96 @@ mod tests {
         assert_eq!(
             Reaction::try_new(lhs, Deltas::from_iter([delta])),
             Err(ReactionIntegrityError::StereoKindSiteMismatch { entity, kind }),
+        );
+    }
+
+    #[rstest]
+    #[case::atom_old_position(
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(0),
+            kind: None,
+            old: Some(StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(99)),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            })),
+            new: None,
+        }),
+        ReactionIntegrityError::StereoLigandPositionOutOfRange {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            position: 99,
+            degree: 4,
+        },
+    )]
+    #[case::atom_new_action(
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(0),
+            kind: Some(StereoKind::Tetrahedral),
+            old: None,
+            new: Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
+                permutation: LigandPermutation(Permutation::identity(3)),
+                active: BooleanForm::Undetermined,
+            })),
+        }),
+        ReactionIntegrityError::StereoPermutationDegree {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            expected: 4,
+            actual: 3,
+        },
+    )]
+    #[case::bond_old_position(
+        Delta::StereoBond(StereoBondDelta::ModifyConstraint {
+            id: StereoBondId(0),
+            kind: Some(StereoKind::CisTrans),
+            old: Some(StereoBondConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(99)),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            })),
+            new: None,
+        }),
+        ReactionIntegrityError::StereoLigandPositionOutOfRange {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            position: 99,
+            degree: 4,
+        },
+    )]
+    #[case::bond_new_action(
+        Delta::StereoBond(StereoBondDelta::ModifyConstraint {
+            id: StereoBondId(0),
+            kind: None,
+            old: None,
+            new: Some(StereoBondConstraintForm::Fluxionality(FluxionalityForm {
+                permutation: LigandPermutation(Permutation::identity(3)),
+                active: BooleanForm::Undetermined,
+            })),
+        }),
+        ReactionIntegrityError::StereoPermutationDegree {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            expected: 4,
+            actual: 3,
+        },
+    )]
+    #[case::atom_kind_arity(
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(0),
+            kind: Some(StereoKind::Octahedral),
+            old: None,
+            new: None,
+        }),
+        ReactionIntegrityError::StereoLigandArity {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            kind: StereoKind::Octahedral,
+            expected: 6,
+            actual: 4,
+        },
+    )]
+    fn test_reaction_try_new_stereo_modify_constraint_domain_error(
+        #[case] delta: Delta,
+        #[case] expected: ReactionIntegrityError,
+        stereo_domain_lhs: Molecule,
+    ) {
+        assert_eq!(
+            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
+            Err(expected),
         );
     }
 
@@ -3873,6 +4143,180 @@ mod tests {
             Reaction::try_new(lhs, Deltas::from_iter(deltas)),
             Err(ReactionIntegrityError::StereoKindSiteMismatch { entity, kind }),
         );
+    }
+
+    #[rstest]
+    #[case::atom_position_in_and(
+        Delta::Constraint(ConstraintDelta::Add(Constraint::And(vec![
+            Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(
+                        StereoLigandPosition(0),
+                        StereoLigandPosition(99),
+                    ),
+                    relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+                }),
+            ),
+        ]))),
+        ReactionIntegrityError::StereoLigandPositionOutOfRange {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            position: 99,
+            degree: 4,
+        },
+    )]
+    #[case::bond_action_in_not(
+        Delta::Constraint(ConstraintDelta::Remove(Constraint::Not(Box::new(
+            Constraint::StereoBond(
+                StereoBondId(0),
+                StereoKind::CisTrans,
+                StereoBondConstraintForm::Fluxionality(FluxionalityForm {
+                    permutation: LigandPermutation(Permutation::identity(3)),
+                    active: BooleanForm::Undetermined,
+                }),
+            ),
+        )))),
+        ReactionIntegrityError::StereoPermutationDegree {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            expected: 4,
+            actual: 3,
+        },
+    )]
+    fn test_reaction_try_new_stereo_constraint_domain_error(
+        #[case] delta: Delta,
+        #[case] expected: ReactionIntegrityError,
+        stereo_domain_lhs: Molecule,
+    ) {
+        assert_eq!(
+            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
+            Err(expected),
+        );
+    }
+
+    #[rstest]
+    #[case::entity_constraint(
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(1),
+            kind: None,
+            old: None,
+            new: Some(StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(3)),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            })),
+        }),
+        ReactionIntegrityError::StereoLigandPositionOutOfRange {
+            entity: Entity::StereoAtom(StereoAtomId(1)),
+            position: 3,
+            degree: 3,
+        },
+    )]
+    #[case::top_level_constraint(
+        Delta::Constraint(ConstraintDelta::Add(Constraint::StereoAtom(
+            StereoAtomId(1),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+        ))),
+        ReactionIntegrityError::StereoLigandArity {
+            entity: Entity::StereoAtom(StereoAtomId(1)),
+            kind: StereoKind::Tetrahedral,
+            expected: 4,
+            actual: 3,
+        },
+    )]
+    fn test_reaction_try_new_stereo_forward_add_domain_error(
+        #[case] delta: Delta,
+        #[case] expected: ReactionIntegrityError,
+        stereo_domain_lhs: Molecule,
+    ) {
+        let addition = Delta::StereoAtom(StereoAtomDelta::Add {
+            id: StereoAtomId(1),
+            site: AtomId(5),
+            ligands: [AtomId(0), AtomId(1), AtomId(2)]
+                .into_iter()
+                .map(|id| StereoLigand::new(id, StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoAtomForm::default(),
+        });
+
+        assert_eq!(
+            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta, addition])),
+            Err(expected),
+        );
+    }
+
+    #[rstest]
+    #[case::remove_old_value(
+        Delta::StereoAtom(StereoAtomDelta::Remove {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: (1..=4)
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        }),
+    )]
+    #[case::modify_old_value(
+        Delta::StereoBond(StereoBondDelta::ModifyField {
+            id: StereoBondId(0),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32),
+                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1u32),
+            },
+        }),
+    )]
+    #[case::kindless_constraint(
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(0),
+            kind: None,
+            old: None,
+            new: Some(StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(3)),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            })),
+        }),
+    )]
+    #[case::top_level_constraint(
+        Delta::Constraint(ConstraintDelta::Add(Constraint::StereoBond(
+            StereoBondId(0),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Fluxionality(FluxionalityForm {
+                permutation: LigandPermutation(Permutation::identity(4)),
+                active: BooleanForm::Undetermined,
+            }),
+        ))),
+    )]
+    fn test_reaction_try_new_stereo_domain(#[case] delta: Delta, stereo_domain_lhs: Molecule) {
+        let deltas = Deltas::from_iter([delta]);
+
+        assert_eq!(
+            Reaction::try_new(stereo_domain_lhs.clone(), deltas.clone()),
+            Ok(Reaction {
+                lhs: stereo_domain_lhs,
+                deltas,
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_try_new_stereo_product_domain(stereo_domain_lhs: Molecule) {
+        let addition = Delta::StereoAtom(StereoAtomDelta::Add {
+            id: StereoAtomId(1),
+            site: AtomId(0),
+            ligands: (1..=4)
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoAtomForm::default(),
+        });
+        let deltas = Deltas::from_iter([addition]);
+        let expected = Reaction {
+            lhs: stereo_domain_lhs.clone(),
+            deltas: deltas.clone(),
+        };
+
+        let reaction = Reaction::try_new(stereo_domain_lhs, deltas).unwrap();
+        assert_eq!(reaction, expected);
+        assert_eq!(reaction.to_reaction_span(), Err(Contradiction));
     }
 
     #[rstest]

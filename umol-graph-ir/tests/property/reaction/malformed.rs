@@ -404,7 +404,8 @@ fn incompatible_incidence_strategy() -> impl Strategy<
 }
 
 fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
-    let stereo_atom = (stereo_atom_kind_strategy(), 0u32..16).prop_map(|(kind, offset)| {
+    let stereo_atom = (0u32..StereoKind::SquarePlanar.count() as u32).prop_map(|coset| {
+        let kind = StereoKind::Tetrahedral;
         let ligands: Vec<StereoLigand> = (1..=kind.degree() as u32)
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
@@ -420,14 +421,14 @@ fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
-                    old: StereoConfigurationForm::kinded(kind, 0u32),
-                    new: StereoConfigurationForm::kinded(kind, kind.count() as u32 + offset),
+                    old: StereoConfigurationForm::kinded(StereoKind::SquarePlanar, 0u32),
+                    new: StereoConfigurationForm::kinded(StereoKind::SquarePlanar, coset),
                 },
             })]),
         )
         .expect("generated stereo-atom update is representation-valid")
     });
-    let stereo_bond = (0u32..16).prop_map(|offset| {
+    let stereo_bond = (0u32..StereoKind::Axial.count() as u32).prop_map(|coset| {
         let kind = StereoKind::CisTrans;
         Reaction::try_new(
             Molecule::from_entries(MoleculeEntries {
@@ -451,8 +452,8 @@ fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
             Deltas::from_iter([Delta::StereoBond(StereoBondDelta::ModifyField {
                 id: StereoBondId(0),
                 change: StereoBondFieldChange::Configuration {
-                    old: StereoConfigurationForm::kinded(kind, 0u32),
-                    new: StereoConfigurationForm::kinded(kind, kind.count() as u32 + offset),
+                    old: StereoConfigurationForm::kinded(StereoKind::Axial, 0u32),
+                    new: StereoConfigurationForm::kinded(StereoKind::Axial, coset),
                 },
             })]),
         )
