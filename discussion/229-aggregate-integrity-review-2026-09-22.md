@@ -1767,6 +1767,7 @@ The 6,822 active graph-IR library tests and strict crate Clippy passed.
   Return Contradiction otherwise. Exact cases cover atoms, bonds, six
   overlays, reordered compatible frames, changed sites/factors, and changed
   old values; run the existing delta normal-form properties.
+  **Complete 2026-09-23.**
 - **S2b — reaction::integrity; breaking, restored green [dep: S2a].** Replace
   the created-ID set and copied source-frame map with one borrowed Add map
   keyed by Entity. Read existing frames through lhs views; preserve pass order.
@@ -1791,6 +1792,14 @@ The 6,822 active graph-IR library tests and strict crate Clippy passed.
   comparison and ReactionIntegrityError::StereoKindModified (R11). Keep
   application and ReactionSpan checks. Exact cases show constructor
   acceptance followed by the existing application/span failures.
+
+#### S2a result (2026-09-23)
+
+Created-entity cancellation now compares the removal's incidence and old
+attributes with the state after intervening changes. Overlay and stereo
+removals transport their old attributes into the Add frame; incompatible frames
+and values return Contradiction. The 27 focused cases, 127 delta unit cases,
+delta normal-form property, and strict graph-IR Clippy passed.
 
 ### S3 — Documentation boundaries
 
