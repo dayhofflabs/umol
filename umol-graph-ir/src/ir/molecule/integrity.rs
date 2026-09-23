@@ -202,50 +202,53 @@ impl Molecule {
 
         check_multicenter_bonds(self, &contains)?;
 
-        let mut noncovalent_pairs: SmallVec<[u64; 16]> =
-            SmallVec::with_capacity(self.noncovalent_bonds.count());
-        for view in self.noncovalent_bonds().iter() {
-            let entity = Entity::NoncovalentBond(view.id);
-            let atoms = view.atom_ids();
-            require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
-            check_unique_pair(entity, atoms)?;
-            let pair = unordered_pair(atoms);
-            noncovalent_pairs.push((u64::from(pair[0].0) << 32) | u64::from(pair[1].0));
-        }
-        noncovalent_pairs.sort_unstable();
-        for keys in noncovalent_pairs.windows(2) {
-            if keys[0] == keys[1] {
-                let key = keys[0];
-                let pair = [AtomId((key >> 32) as u32), AtomId(key as u32)];
-                return Err(MoleculeIntegrityError::ParallelNoncovalentBonds { atoms: pair });
+        {
+            let mut noncovalent_pairs: SmallVec<[u64; 16]> =
+                SmallVec::with_capacity(self.noncovalent_bonds.count());
+            for view in self.noncovalent_bonds().iter() {
+                let entity = Entity::NoncovalentBond(view.id);
+                let atoms = view.atom_ids();
+                require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
+                check_unique_pair(entity, atoms)?;
+                let pair = unordered_pair(atoms);
+                noncovalent_pairs.push((u64::from(pair[0].0) << 32) | u64::from(pair[1].0));
+            }
+            noncovalent_pairs.sort_unstable();
+            for keys in noncovalent_pairs.windows(2) {
+                if keys[0] == keys[1] {
+                    let key = keys[0];
+                    let pair = [AtomId((key >> 32) as u32), AtomId(key as u32)];
+                    return Err(MoleculeIntegrityError::ParallelNoncovalentBonds { atoms: pair });
+                }
             }
         }
 
-        let mut stereo_atom_sites = HashSet::new();
-        for view in self.stereo_atoms().iter() {
-            let entity = Entity::StereoAtom(view.id);
-            let site = view.site_id();
-            let ligand_frame = self.stereo_atoms.ligands(view.id);
-            require_reference(&contains, Entity::Atom(site))?;
-            require_references(
-                &contains,
-                ligand_frame
+        {
+            let mut stereo_atom_sites = HashSet::with_capacity(self.stereo_atoms.count());
+            for view in self.stereo_atoms().iter() {
+                let entity = Entity::StereoAtom(view.id);
+                let site = view.site_id();
+                let ligand_frame = self.stereo_atoms.ligands(view.id);
+                require_reference(&contains, Entity::Atom(site))?;
+                require_references(
+                    &contains,
+                    ligand_frame
+                        .iter()
+                        .map(|ligand| Entity::Atom(ligand.atom_id)),
+                )?;
+                check_stereo_atom_entry(entity, site, ligand_frame, view.attributes)?;
+                if !stereo_atom_sites.insert(site) {
+                    return Err(MoleculeIntegrityError::DuplicateStereoAtomSites { atom: site });
+                }
+                if ligand_frame
                     .iter()
-                    .map(|ligand| Entity::Atom(ligand.atom_id)),
-            )?;
-            check_stereo_atom_entry(entity, site, ligand_frame, view.attributes)?;
-            if !stereo_atom_sites.insert(site) {
-                return Err(MoleculeIntegrityError::DuplicateStereoAtomSites { atom: site });
-            }
-            if ligand_frame
-                .iter()
-                .any(|&ligand| !ligand_matches_site(self, ligand, site, None))
-            {
-                return Err(MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity });
+                    .any(|&ligand| !ligand_matches_site(self, ligand, site, None))
+                {
+                    return Err(MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity });
+                }
             }
         }
 
-        let mut stereo_bond_sites = HashSet::new();
         for view in self.stereo_bonds().iter() {
             let entity = Entity::StereoBond(view.id);
             let site = view.site_id();
@@ -258,7 +261,12 @@ impl Molecule {
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
             check_stereo_bond_entry(entity, ligand_frame, view.attributes)?;
-            if !stereo_bond_sites.insert(site) {
+            if self
+                .stereo_bonds
+                .incident_to_bond_ids(site)
+                .next()
+                .is_some_and(|id| id < view.id)
+            {
                 return Err(MoleculeIntegrityError::DuplicateStereoBondSites { bond: site });
             }
             let [first, second] = view.site().atom_ids();

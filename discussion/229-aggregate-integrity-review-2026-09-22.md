@@ -1974,7 +1974,24 @@ delta normal-form property, and strict graph-IR Clippy passed.
   family table to its loop (F16), reserve the stereo-atom site table, and use
   existing site incidence for stereo-bond duplicates. Preserve exact
   duplicate-site behavior; measure allocation counts and peak-live memory
-  separately from operation time.
+  separately from operation time. **Complete 2026-09-23.** The remaining
+  noncovalent and stereo-atom scratch tables now end with their family checks;
+  the dative, aromatic, and multicenter tables already ended in their family
+  functions. The stereo-atom table reserves its known relation count, and the
+  stereo-bond check reads the first relation ID from the sorted site-incidence
+  index instead of constructing another HashSet.
+
+  On the complete 80-atom overlay-rich Molecule constructor, Criterion point
+  estimates changed from 9.185 to 8.964 µs without a constraint and from
+  9.260 to 9.171 µs with one. Neither change was statistically resolved by the
+  S0a protocol (p = 0.07 and 0.15). Allocation calls/requested bytes changed
+  from 111 / 28,256 to 106 / 28,016 in both cases. Peak additional requested
+  heap remained 5,904 bytes relative to the prepared input. The peak probe
+  tracked live requested bytes through allocation, deallocation, and
+  reallocation; it excludes allocator metadata and transient old/new-buffer
+  overlap within realloc. Exact duplicate-site and error-order cases passed,
+  as did 104 focused try_from_entries cases, the full graph-IR unit suite
+  (6,921 passed, three ignored), and strict crate Clippy.
 - **S4f — symmetry.rs and canonicalize.rs; green [dep: S1b, S4a].** Remove
   the closed-frame arity and uniqueness rechecks (F11, F12), retaining
   nonliteral, action, and normalization failure paths. Run focused

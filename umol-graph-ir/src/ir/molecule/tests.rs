@@ -978,6 +978,25 @@ fn test_molecule_try_from_entries_error(
     },
     MoleculeIntegrityError::DuplicateStereoBondSites { bond: BondId(1) },
 )]
+#[case::stereo_bond_duplicate_site_before_incidence(
+    |entries: &mut MoleculeEntries| {
+        let mut stereo_bond = entries.stereo_bonds[0].clone();
+        stereo_bond.1[1] = StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen);
+        entries.stereo_bonds.push(stereo_bond);
+    },
+    MoleculeIntegrityError::DuplicateStereoBondSites { bond: BondId(1) },
+)]
+#[case::stereo_bond_frame_before_duplicate_site(
+    |entries: &mut MoleculeEntries| {
+        let mut stereo_bond = entries.stereo_bonds[0].clone();
+        stereo_bond.1[1] = stereo_bond.1[0];
+        entries.stereo_bonds.push(stereo_bond);
+    },
+    MoleculeIntegrityError::DuplicateStereoLigand {
+        entity: Entity::StereoBond(StereoBondId(1)),
+        ligand: StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    },
+)]
 #[case::stereo_atom_actual_ligand_incidence(
     |entries: &mut MoleculeEntries| entries.stereo_atoms[0].1[1] =
         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
