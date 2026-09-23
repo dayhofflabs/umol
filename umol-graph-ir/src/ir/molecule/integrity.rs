@@ -256,7 +256,7 @@ impl Molecule {
         for view in self.stereo_atoms().iter() {
             let entity = Entity::StereoAtom(view.id);
             let site = view.site_id();
-            let ligand_frame = view.ligand_frame();
+            let ligand_frame = self.stereo_atoms.ligands(view.id);
             require_reference(&contains, Entity::Atom(site))?;
             require_references(
                 &contains,
@@ -264,7 +264,7 @@ impl Molecule {
                     .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
-            check_stereo_atom_entry(entity, site, &ligand_frame, view.attributes)?;
+            check_stereo_atom_entry(entity, site, ligand_frame, view.attributes)?;
             if !stereo_atom_sites.insert(site) {
                 return Err(MoleculeIntegrityError::DuplicateStereoAtomSites { atom: site });
             }
@@ -280,7 +280,7 @@ impl Molecule {
         for view in self.stereo_bonds().iter() {
             let entity = Entity::StereoBond(view.id);
             let site = view.site_id();
-            let ligand_frame = view.ligand_frame();
+            let ligand_frame = self.stereo_bonds.ligands(view.id);
             require_reference(&contains, Entity::Bond(site))?;
             require_references(
                 &contains,
@@ -288,7 +288,7 @@ impl Molecule {
                     .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
-            check_stereo_bond_entry(entity, &ligand_frame, view.attributes)?;
+            check_stereo_bond_entry(entity, ligand_frame, view.attributes)?;
             if !stereo_bond_sites.insert(site) {
                 return Err(MoleculeIntegrityError::DuplicateStereoBondSites { bond: site });
             }

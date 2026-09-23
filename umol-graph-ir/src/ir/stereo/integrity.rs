@@ -1,8 +1,5 @@
 //! Local stereo integrity checks shared by Molecule and Reaction.
 
-use std::collections::HashSet;
-use std::iter;
-
 use umol_perm::{Permutation, MAX_DEGREE};
 
 use super::{
@@ -56,19 +53,6 @@ pub(crate) enum StereoIntegrityError {
     },
 }
 
-fn check_unique_atoms(
-    entity: Entity,
-    atoms: impl IntoIterator<Item = AtomId>,
-) -> Result<(), StereoIntegrityError> {
-    let mut seen = HashSet::new();
-    for atom in atoms {
-        if !seen.insert(atom) {
-            return Err(StereoIntegrityError::DuplicateAtom { entity, atom });
-        }
-    }
-    Ok(())
-}
-
 fn check_stereo_frame(
     entity: Entity,
     ligand_frame: &[StereoLigand],
@@ -81,9 +65,8 @@ fn check_stereo_frame(
         });
     }
 
-    let mut seen = HashSet::new();
-    for &ligand in ligand_frame {
-        if !seen.insert(ligand) {
+    for (position, &ligand) in ligand_frame.iter().enumerate() {
+        if ligand_frame[..position].contains(&ligand) {
             return Err(StereoIntegrityError::DuplicateStereoLigand { entity, ligand });
         }
     }
@@ -97,15 +80,12 @@ pub(crate) fn check_stereo_atom_entry(
     attributes: &StereoAtomForm,
 ) -> Result<(), StereoIntegrityError> {
     check_stereo_frame(entity, ligand_frame)?;
-    check_unique_atoms(
-        entity,
-        iter::once(site).chain(
-            ligand_frame
-                .iter()
-                .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
-                .map(|ligand| ligand.atom_id),
-        ),
-    )?;
+    if ligand_frame
+        .iter()
+        .any(|ligand| ligand.kind == StereoLigandKind::Atom && ligand.atom_id == site)
+    {
+        return Err(StereoIntegrityError::DuplicateAtom { entity, atom: site });
+    }
     check_stereo_atom(entity, ligand_frame.len(), attributes)
 }
 
@@ -115,13 +95,6 @@ pub(crate) fn check_stereo_bond_entry(
     attributes: &StereoBondForm,
 ) -> Result<(), StereoIntegrityError> {
     check_stereo_frame(entity, ligand_frame)?;
-    check_unique_atoms(
-        entity,
-        ligand_frame
-            .iter()
-            .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
-            .map(|ligand| ligand.atom_id),
-    )?;
     check_stereo_bond(entity, ligand_frame.len(), attributes)
 }
 

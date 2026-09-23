@@ -1851,6 +1851,19 @@ delta normal-form property, and strict graph-IR Clippy passed.
   (F7), remove the implied second stereo-bond atom set (F5), and use a site
   exclusion scan for stereo atoms (F6). Preserve degree and first-error
   order; compare exact malformed-frame cases and complete gate timings.
+  **Complete 2026-09-23.** The Molecule gate borrows both stored ligand frames.
+  The shared stereo check scans the bounded frame prefix; stereo atoms scan
+  only for an Atom-kind ligand equal to the site, and stereo bonds no longer
+  repeat the implied atom-uniqueness check. Existing exact malformed-frame and
+  first-error cases passed, as did all 6,897 active graph-IR library tests,
+  strict crate Clippy, rustdoc with warnings denied, and formatting.
+
+  In the 80-atom overlay-rich complete Molecule construction benchmark, the
+  no-constraint case changed from 25.369 to 22.953 µs and the one-constraint
+  case from 25.480 to 22.916 µs (Criterion point estimates, 20 samples, same
+  run protocol). The S0a allocation probe changed from 330 calls and 40,316
+  requested bytes to 270 calls and 37,876 bytes in both cases. The unchanged
+  80-atom chain allocation count remained 27 calls and 14,732 bytes.
 - **S4b — molecule::integrity; green [dep: S0b, S0a].** Remove the assembled
   graph's redundant endpoint recheck while retaining raw-entry preflight
   (F10). Use sorted adjacency for localized-bond duplicates and inline
