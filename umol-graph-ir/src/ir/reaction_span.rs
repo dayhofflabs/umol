@@ -56,9 +56,10 @@ use super::stereo::{
 };
 use super::traits::{EntityPatch, FrameTransport, Normalize, Reframe};
 
-/// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
-/// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
-/// appended; `atoms` / `bonds` are indexed parallel to the graph's nodes / edges.
+/// The superimposed reaction graph — the reaction's DPO rule span, materialized. Each entity kind
+/// has one dense union id space. Entry construction preserves any valid union order; spans derived
+/// from a reaction use lhs ids first and append right-only entities. `atoms` and `bonds` are indexed
+/// parallel to the graph's nodes and edges.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReactionSpan {
     graph: Graph,
@@ -1322,10 +1323,10 @@ impl ReactionSpan {
     /// # Semantic properties
     ///
     /// Converting the result back to a span and then to a reaction is idempotent by exact
-    /// structural equality. When this span already uses canonical set-difference semantics for
-    /// constraints and contains no redundant equivalent `Modified` entry, converting the returned
-    /// reaction back to a span reproduces `self` exactly. Otherwise the conversion may standardize
-    /// those representational distinctions while preserving both side semantics.
+    /// structural equality. Converting the returned reaction back to a span reproduces `self`
+    /// exactly when `self` is lhs anchored, uses canonical set-difference semantics for
+    /// constraints, and contains no redundant equivalent `Modified` entry. Otherwise the result
+    /// is an lhs-anchored normal form that preserves both side semantics.
     pub fn to_reaction(&self) -> Reaction {
         let atom_ids: HashMap<AtomId, AtomId> =
             projected_ids(self.atoms.iter().map(|span| span.lhs().is_some()));

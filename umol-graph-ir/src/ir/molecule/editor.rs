@@ -663,9 +663,8 @@ impl MoleculeEditor {
         BondId::from(id)
     }
 
-    /// Append a dative-bond overlay directly to the editor. The acceptor is
-    /// factor 1; the donors are factor 2 (sorted by the `Unordered`
-    /// canonicalization).
+    /// Append a dative-bond overlay directly to the editor. The acceptor is factor 1; the donors
+    /// are factor 2. Their supplied order is retained as the stored frame.
     pub fn add_dative_bond(
         &mut self,
         donors: Vec<AtomId>,

@@ -1239,8 +1239,9 @@ pub enum Stereogenicity {
 /// Element-side stereo configuration: either undetermined (geometry not yet
 /// known, so no coset) or `Kinded` — a concrete geometry bound to a coset that
 /// may still be open. `*` (`Undetermined`) and `Th*` (`Kinded(Tetrahedral,
-/// Undetermined)`) are distinct. `normalize` folds the coset under the kind;
-/// no physical range-check (tier-2; the validator does it).
+/// Undetermined)`) are distinct. `normalize` folds the coset under the kind.
+/// Aggregate integrity checks concrete coset ranges at publication. Normalizing
+/// this standalone form does not check them.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoConfigurationForm {
     #[default]
@@ -1797,7 +1798,8 @@ fn compose_term(term: &StereoTerm, kind: StereoKind) -> (&StereoTerm, Permutatio
 /// Mirror > Swap > Apply (canonicalizing the domain); every other form reduces to
 /// a literal index set that folds: ∅ → `Err` (the bottom `meet` uses to signal
 /// incompatible cosets), singleton → `Lit`, else `LitSet`. No universe folding
-/// (`full → Undetermined`) and no range-check — both are tier-2 (the validator).
+/// (`full → Undetermined`). Range checking belongs to aggregate integrity,
+/// not this standalone normalizer.
 pub(crate) fn canon_coset(
     coset: StereoCoset,
     kind: StereoKind,

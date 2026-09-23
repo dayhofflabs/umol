@@ -816,8 +816,8 @@ mod tests {
         assert_eq!(twice, once);
     }
 
-    /// The donors are an `Unordered` factor, so storage sorts them on construction; the stored
-    /// frame is permuted first to model the frame-preserving storage S5 introduces.
+    /// Start with sorted donors, then permute the stored frame to exercise reframing from another
+    /// order.
     #[fixture]
     fn unsorted_bond() -> DativeBonds {
         let mut bonds = DativeBonds::new(vec![(

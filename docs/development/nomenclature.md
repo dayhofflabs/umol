@@ -1402,10 +1402,12 @@ a standardized span.
 
 A correspondence with values and a direction added is what lifts it to a span.
 
-The materialized union is lhs-anchored: preserved entities retain lhs ids and rhs-only entities are
-appended. Its lhs projection is structurally identical to the source lhs. Its rhs projection is the
-source rhs reindexed into that reaction frame and is compared under the induced total
-correspondence, not by structural equality when the source correspondence crosses entity order.
+Raw span construction permits any valid dense union order. Spans derived by `superimpose` or from a
+reaction are lhs anchored: lhs-present entities retain lhs ids and rhs-only entities are appended.
+For these derived spans, the lhs projection is structurally identical to the source lhs. The rhs
+projection is the source rhs reindexed into that reaction frame and is compared under the induced
+total correspondence, not by structural equality when the source correspondence crosses entity
+order.
 
 **Not:** a correspondence, which is valueless pairing; not a reaction, which is the rule itself.
 **In code:** `ReactionSpan`, `lhs()`, `rhs()`.

@@ -1838,6 +1838,11 @@ delta normal-form property, and strict graph-IR Clippy passed.
   ReactionSpan anchoring and roundtrip claims (R6, R7), and the completed
   Molecule/Reaction error inventories. Run rustdoc with warnings denied and
   the existing order/roundtrip cases; do not change the represented values.
+  **Complete 2026-09-23.** Corrected the donor-order and coset-range comments,
+  the raw-versus-lhs-anchored span description, and the exact roundtrip condition.
+  The Molecule and Reaction integrity-guide inventories already match their
+  current error enums. Focused dative-order, coset, and span-roundtrip cases,
+  ReactionSpan properties, and rustdoc with warnings denied passed.
 
 ### S4 — Molecule gate allocations and repeated checks
 
