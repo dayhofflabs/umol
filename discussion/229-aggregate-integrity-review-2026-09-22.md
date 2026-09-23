@@ -1637,6 +1637,7 @@ counts here so that scratch experiments may be deleted.
   validate_reaction_span_entries function to check_reaction_span_entries.
   Keep reference-first error order and check the existing exact
   missing-reference cases, including nested constraints and ReactionSpan.
+  **Complete 2026-09-23.**
 - **S0c — MoleculeIntegrityError and callers; breaking, restored green
   [dep: S0b].** Apply the seven approved variant renames in this record,
   including DuplicateAtom. Migrate constructors, editor errors, DSL and
@@ -1688,6 +1689,22 @@ neither peak live memory nor process RSS. Timing and allocation binaries are
 separate, and scratch probe files are disposable. Reuse this protocol and these
 fixtures for S2, S4, and S5 comparisons; compare complete operations, not only
 isolated kernels.
+
+#### S0b result (2026-09-23)
+
+The five reference traversals now live in molecule::integrity; only
+check_entry_references and check_constraint_references are crate-private.
+ReactionSpan's entry preflight uses the check_* name. The borrowed predicate is
+statically dispatched in both entry and closed-molecule reference checks.
+The 116 focused try_from_entries cases and strict crate Clippy passed;
+formatting and diff checks passed.
+
+Complete-operation timings did not show a consistent material gain: the
+80-atom overlay-rich Molecule case with one constraint changed from 26.39 to
+25.84 µs, while 80-atom interleaved ReactionSpan construction with one
+constraint stayed at 55.55 versus 55.63 µs. The no-constraint span case moved
+from 55.42 to 56.12 µs. F1 remains a local removal of avoidable dispatch, not
+an end-to-end speedup claim.
 
 ### S1 — Stereo domains and admitted inputs
 

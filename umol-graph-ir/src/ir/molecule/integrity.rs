@@ -8,7 +8,8 @@ use umol_graph_core::NodeId;
 use umol_perm::{Permutation, MAX_DEGREE};
 
 use super::super::constraint::{
-    Constraint, StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair,
+    Constraint, MoleculeConstraint, RelationalConstraint, StereoAtomConstraintForm,
+    StereoBondConstraintForm, StereoLigandPair,
 };
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
@@ -17,7 +18,7 @@ use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::stereo::{
     StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm,
 };
-use super::{validate_constraint_references, Molecule};
+use super::{Molecule, MoleculeEntries};
 
 /// Failure of the representation contract required to interpret a [`Molecule`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -244,7 +245,7 @@ impl Molecule {
             }
         }
         for constraint in self.constraints.iter() {
-            validate_constraint_references(constraint, &contains)
+            check_constraint_references(constraint, &contains)
                 .map_err(|entity| MoleculeIntegrityError::InvalidReference { entity })?;
             check_molecule_constraint(self, constraint)?;
         }
@@ -375,8 +376,8 @@ pub(crate) fn check_stereo_bond_kind(
     check_stereo_site_kind(entity, kind, StereoSite::Bond)
 }
 
-pub(super) fn require_reference(
-    contains: &dyn Fn(Entity) -> bool,
+fn require_reference(
+    contains: &impl Fn(Entity) -> bool,
     entity: Entity,
 ) -> Result<(), MoleculeIntegrityError> {
     if contains(entity) {
@@ -386,8 +387,8 @@ pub(super) fn require_reference(
     }
 }
 
-pub(super) fn require_references(
-    contains: &dyn Fn(Entity) -> bool,
+fn require_references(
+    contains: &impl Fn(Entity) -> bool,
     entities: impl IntoIterator<Item = Entity>,
 ) -> Result<(), MoleculeIntegrityError> {
     for entity in entities {
@@ -683,4 +684,220 @@ fn check_pair(
         }
     }
     Ok(())
+}
+
+pub(crate) fn check_entry_references(
+    entries: &MoleculeEntries,
+) -> Result<(), MoleculeIntegrityError> {
+    check_entry_references_inner(entries)
+        .map_err(|entity| MoleculeIntegrityError::InvalidReference { entity })
+}
+
+fn check_entry_references_inner(entries: &MoleculeEntries) -> Result<(), Entity> {
+    let contains = |entity| match entity {
+        Entity::Atom(id) => id.index() < entries.atoms.len(),
+        Entity::Bond(id) => id.index() < entries.bonds.len(),
+        Entity::DativeBond(id) => id.index() < entries.dative.len(),
+        Entity::AromaticSystem(id) => id.index() < entries.aromatic.len(),
+        Entity::MulticenterBond(id) => id.index() < entries.multicenter.len(),
+        Entity::NoncovalentBond(id) => id.index() < entries.noncovalent.len(),
+        Entity::StereoAtom(id) => id.index() < entries.stereo_atoms.len(),
+        Entity::StereoBond(id) => id.index() < entries.stereo_bonds.len(),
+    };
+
+    for &(first, second, _) in &entries.bonds {
+        check_reference(&contains, Entity::Atom(first))?;
+        check_reference(&contains, Entity::Atom(second))?;
+    }
+    for (donors, acceptor, _) in &entries.dative {
+        check_references(&contains, donors.iter().copied().map(Entity::Atom))?;
+        check_reference(&contains, Entity::Atom(*acceptor))?;
+    }
+    for (atoms, _) in &entries.aromatic {
+        check_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
+    }
+    for (atoms, _) in &entries.multicenter {
+        check_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
+    }
+    for (atoms, _) in &entries.noncovalent {
+        check_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
+    }
+    for (site, ligands, _) in &entries.stereo_atoms {
+        check_reference(&contains, Entity::Atom(*site))?;
+        check_references(
+            &contains,
+            ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)),
+        )?;
+    }
+    for (site, ligands, _) in &entries.stereo_bonds {
+        check_reference(&contains, Entity::Bond(*site))?;
+        check_references(
+            &contains,
+            ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)),
+        )?;
+    }
+    for constraint in entries.constraints.iter() {
+        check_constraint_references(constraint, &contains)?;
+    }
+    Ok(())
+}
+
+fn check_reference(contains: &impl Fn(Entity) -> bool, entity: Entity) -> Result<(), Entity> {
+    if contains(entity) {
+        Ok(())
+    } else {
+        Err(entity)
+    }
+}
+
+fn check_references(
+    contains: &impl Fn(Entity) -> bool,
+    entities: impl IntoIterator<Item = Entity>,
+) -> Result<(), Entity> {
+    for entity in entities {
+        check_reference(contains, entity)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn check_constraint_references(
+    constraint: &Constraint,
+    contains: &impl Fn(Entity) -> bool,
+) -> Result<(), Entity> {
+    match constraint {
+        Constraint::Atom(id, _) => check_reference(contains, Entity::Atom(*id)),
+        Constraint::Bond(id, _) => check_reference(contains, Entity::Bond(*id)),
+        Constraint::DativeBond(id, _) => check_reference(contains, Entity::DativeBond(*id)),
+        Constraint::AromaticSystem(id, _) => check_reference(contains, Entity::AromaticSystem(*id)),
+        Constraint::MulticenterBond(id, _) => {
+            check_reference(contains, Entity::MulticenterBond(*id))
+        }
+        Constraint::NoncovalentBond(id, _) => {
+            check_reference(contains, Entity::NoncovalentBond(*id))
+        }
+        Constraint::StereoAtom(id, _, _) => check_reference(contains, Entity::StereoAtom(*id)),
+        Constraint::StereoBond(id, _, _) => check_reference(contains, Entity::StereoBond(*id)),
+        Constraint::Relational(constraint) => {
+            check_relational_constraint_references(constraint, contains)
+        }
+        Constraint::Molecule(constraint) => {
+            check_molecule_constraint_references(constraint, contains)
+        }
+        Constraint::And(constraints) | Constraint::Or(constraints) => {
+            for constraint in constraints {
+                check_constraint_references(constraint, contains)?;
+            }
+            Ok(())
+        }
+        Constraint::Not(constraint) => check_constraint_references(constraint, contains),
+    }
+}
+
+fn check_relational_constraint_references(
+    constraint: &RelationalConstraint,
+    contains: &impl Fn(Entity) -> bool,
+) -> Result<(), Entity> {
+    match constraint {
+        RelationalConstraint::DativeBondDonors { bond, atoms }
+        | RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
+            check_reference(contains, Entity::DativeBond(*bond))?;
+            check_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::DativeBondDonor { bond, atom }
+        | RelationalConstraint::DativeBondAcceptor { bond, atom } => {
+            check_reference(contains, Entity::DativeBond(*bond))?;
+            check_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::DativeBondAllDonors { bond, .. }
+        | RelationalConstraint::DativeBondAnyDonor { bond, .. }
+        | RelationalConstraint::DativeBondAcceptorSatisfies { bond, .. } => {
+            check_reference(contains, Entity::DativeBond(*bond))
+        }
+        RelationalConstraint::DativeBondParallels { dative, parallel } => {
+            check_reference(contains, Entity::DativeBond(*dative))?;
+            check_reference(contains, Entity::Bond(*parallel))
+        }
+        RelationalConstraint::AromaticSystemAtoms { system, atoms }
+        | RelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
+            check_reference(contains, Entity::AromaticSystem(*system))?;
+            check_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::AromaticSystemContains { system, atom } => {
+            check_reference(contains, Entity::AromaticSystem(*system))?;
+            check_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::AromaticSystemAllAtoms { system, .. }
+        | RelationalConstraint::AromaticSystemAnyAtom { system, .. } => {
+            check_reference(contains, Entity::AromaticSystem(*system))
+        }
+        RelationalConstraint::MulticenterBondAtoms { bond, atoms }
+        | RelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
+            check_reference(contains, Entity::MulticenterBond(*bond))?;
+            check_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::MulticenterBondContains { bond, atom } => {
+            check_reference(contains, Entity::MulticenterBond(*bond))?;
+            check_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::MulticenterBondAllAtoms { bond, .. }
+        | RelationalConstraint::MulticenterBondAnyAtom { bond, .. } => {
+            check_reference(contains, Entity::MulticenterBond(*bond))
+        }
+        RelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
+            check_reference(contains, Entity::NoncovalentBond(*bond))?;
+            check_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::NoncovalentBondContains { bond, atom } => {
+            check_reference(contains, Entity::NoncovalentBond(*bond))?;
+            check_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::NoncovalentBondEndsSatisfy { bond, .. } => {
+            check_reference(contains, Entity::NoncovalentBond(*bond))
+        }
+        RelationalConstraint::StereoAtomSite { stereo_atom, atom }
+        | RelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
+            check_reference(contains, Entity::StereoAtom(*stereo_atom))?;
+            check_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
+            check_reference(contains, Entity::StereoAtom(*stereo_atom))?;
+            check_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::StereoAtomAllLigands { stereo_atom, .. }
+        | RelationalConstraint::StereoAtomAnyLigand { stereo_atom, .. } => {
+            check_reference(contains, Entity::StereoAtom(*stereo_atom))
+        }
+        RelationalConstraint::StereoBondSite { stereo_bond, bond } => {
+            check_reference(contains, Entity::StereoBond(*stereo_bond))?;
+            check_reference(contains, Entity::Bond(*bond))
+        }
+        RelationalConstraint::StereoBondContains { stereo_bond, atom } => {
+            check_reference(contains, Entity::StereoBond(*stereo_bond))?;
+            check_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
+            check_reference(contains, Entity::StereoBond(*stereo_bond))?;
+            check_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::StereoBondAllLigands { stereo_bond, .. }
+        | RelationalConstraint::StereoBondAnyLigand { stereo_bond, .. } => {
+            check_reference(contains, Entity::StereoBond(*stereo_bond))
+        }
+    }
+}
+
+fn check_molecule_constraint_references(
+    constraint: &MoleculeConstraint,
+    contains: &impl Fn(Entity) -> bool,
+) -> Result<(), Entity> {
+    match constraint {
+        MoleculeConstraint::ChargeSum { atoms, .. }
+        | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
+        | MoleculeConstraint::Connected { atoms } => {
+            check_references(contains, atoms.iter().flatten().copied().map(Entity::Atom))
+        }
+        MoleculeConstraint::BondOrderSum { bonds, .. } => {
+            check_references(contains, bonds.iter().flatten().copied().map(Entity::Bond))
+        }
+    }
 }

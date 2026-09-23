@@ -40,9 +40,8 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::molecule::{
-    validate_constraint_references, Molecule, MoleculeEntries, MoleculeIntegrityError,
-};
+use super::molecule::integrity::check_constraint_references;
+use super::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
 use super::multicenter::{
     reframe_multicenter_bond_spans_with, MulticenterBondForm, MulticenterBondSpans,
 };
@@ -158,7 +157,7 @@ impl ReactionSpan {
     pub fn try_from_entries(
         entries: ReactionSpanEntries,
     ) -> Result<Self, ReactionSpanIntegrityError> {
-        validate_reaction_span_entries(&entries)?;
+        check_reaction_span_entries(&entries)?;
 
         let ReactionSpanEntries {
             atoms,
@@ -448,57 +447,57 @@ fn contains_entry(entries: &ReactionSpanEntries, entity: Entity) -> bool {
     }
 }
 
-fn validate_reaction_span_entries(
+fn check_reaction_span_entries(
     entries: &ReactionSpanEntries,
 ) -> Result<(), ReactionSpanIntegrityError> {
-    let validate = |entity| {
+    let check_reference = |entity| {
         contains_entry(entries, entity)
             .then_some(())
             .ok_or(ReactionSpanIntegrityError::InvalidReference { entity })
     };
 
     for (first, second, _) in &entries.bonds {
-        validate(Entity::Atom(*first))?;
-        validate(Entity::Atom(*second))?;
+        check_reference(Entity::Atom(*first))?;
+        check_reference(Entity::Atom(*second))?;
     }
     for (donors, acceptor, _) in &entries.dative {
-        validate(Entity::Atom(*acceptor))?;
+        check_reference(Entity::Atom(*acceptor))?;
         for &donor in donors {
-            validate(Entity::Atom(donor))?;
+            check_reference(Entity::Atom(donor))?;
         }
     }
     for (atoms, _) in &entries.aromatic {
         for &atom in atoms {
-            validate(Entity::Atom(atom))?;
+            check_reference(Entity::Atom(atom))?;
         }
     }
     for (atoms, _) in &entries.multicenter {
         for &atom in atoms {
-            validate(Entity::Atom(atom))?;
+            check_reference(Entity::Atom(atom))?;
         }
     }
     for (atoms, _) in &entries.noncovalent {
         for &atom in atoms {
-            validate(Entity::Atom(atom))?;
+            check_reference(Entity::Atom(atom))?;
         }
     }
     for (site, ligands, _) in &entries.stereo_atoms {
-        validate(Entity::Atom(*site))?;
+        check_reference(Entity::Atom(*site))?;
         for ligand in ligands {
-            validate(Entity::Atom(ligand.atom_id))?;
+            check_reference(Entity::Atom(ligand.atom_id))?;
         }
     }
     for (site, ligands, _) in &entries.stereo_bonds {
-        validate(Entity::Bond(*site))?;
+        check_reference(Entity::Bond(*site))?;
         for ligand in ligands {
-            validate(Entity::Atom(ligand.atom_id))?;
+            check_reference(Entity::Atom(ligand.atom_id))?;
         }
     }
 
     let contains = |entity| contains_entry(entries, entity);
     for span in &entries.constraints {
         for constraint in [span.lhs(), span.rhs()].into_iter().flatten() {
-            validate_constraint_references(constraint, &contains)
+            check_constraint_references(constraint, &contains)
                 .map_err(|entity| ReactionSpanIntegrityError::InvalidReference { entity })?;
         }
     }
