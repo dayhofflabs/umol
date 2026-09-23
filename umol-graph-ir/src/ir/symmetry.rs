@@ -14,7 +14,10 @@ use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
-use super::stereo::{coset_apply_permutation, StereoCoset, StereoKind, Stereogenicity, Topicity};
+use super::stereo::{
+    coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
+    Topicity,
+};
 use super::traits::AsLit;
 
 /// Configuration for [`Molecule::graph_symmetry`].
@@ -232,7 +235,7 @@ impl Molecule {
     }
 
     /// The kind, stored coset, and ordered ligands of a stereo entity; `None` for
-    /// non-stereo entities or out-of-range ids.
+    /// non-stereo entities, out-of-range ids, or an undetermined kind.
     fn stereo_center(
         &self,
         entity: Entity,
@@ -240,19 +243,27 @@ impl Molecule {
         match entity {
             Entity::StereoAtom(id) => {
                 let view = self.stereo_atoms().get(id)?;
+                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes.configuration
+                else {
+                    return None;
+                };
                 let ligands = view
                     .ligands()
                     .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                     .collect();
-                Some((view.kind(), view.coset(), ligands))
+                Some((*kind, coset, ligands))
             }
             Entity::StereoBond(id) => {
                 let view = self.stereo_bonds().get(id)?;
+                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes.configuration
+                else {
+                    return None;
+                };
                 let ligands = view
                     .ligands()
                     .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                     .collect();
-                Some((view.kind(), view.coset(), ligands))
+                Some((*kind, coset, ligands))
             }
             _ => None,
         }
@@ -615,6 +626,69 @@ mod tests {
         assert!(!symmetry.is_chiral());
         assert!(!symmetry.same_proper_orbit(AtomId(1), AtomId(2)));
         assert!(symmetry.same_star_orbit(AtomId(1), AtomId(2)));
+    }
+
+    #[rstest]
+    #[case::atom(
+        MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::default(),
+            )],
+            ..Default::default()
+        },
+        AtomId(1),
+        vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+    )]
+    #[case::bond(
+        MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(0),
+                (2..=5)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoBondForm::default(),
+            )],
+            ..Default::default()
+        },
+        AtomId(2),
+        vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+    )]
+    fn test_molecule_graph_symmetry_kindless(
+        #[case] entries: MoleculeEntries,
+        #[case] atom: AtomId,
+        #[case] expected_orbit: Vec<AtomId>,
+    ) {
+        let molecule = Molecule::try_from_entries(entries).expect("kindless stereo is admitted");
+        for coloring in [
+            ConstitutionColoring::entity_only(),
+            ConstitutionColoring::full(),
+        ] {
+            let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
+                coloring,
+                iterate_to_fixpoint: false,
+                max_iterations: 1,
+                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            });
+
+            assert_eq!(symmetry.proper_orbit_of(atom), expected_orbit);
+            assert_eq!(symmetry.is_chiral(), false);
+        }
     }
 
     #[rstest]

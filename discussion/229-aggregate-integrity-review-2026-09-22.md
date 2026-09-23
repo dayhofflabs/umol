@@ -322,6 +322,8 @@ kind (view/stereo.rs:187–191). A five-atom star with four distinct actual liga
 and StereoAtomForm::default() passes try_from_entries, then graph_symmetry panics
 with "stereo view has a concrete kind". The public reproduction used
 ConstitutionColoring::entity_only, Nauty, and one refinement iteration.
+ConstitutionColoring::full also calls view.kind() while coloring stereo entities,
+before graph_symmetry reaches stereo_center.
 
 **Defense:** symmetry needs a geometry to grade orientation. However, its existing
 nonliteral handling already permits no orientation contribution; graph_symmetry has
@@ -1729,10 +1731,12 @@ denied.
   Check exact existing stereo errors and add the accepted and malformed
   nested-term cases (F9). Add no public helper or checker type.
   **Complete 2026-09-23.**
-- **S1b — symmetry.rs; green [dep: S1a].** Handle a published kindless stereo
-  frame without calling the determined-kind accessor (F14). Keep it admitted
-  by Molecule construction and add the public graph_symmetry regression;
-  retain unresolved and nonliteral behavior.
+- **S1b — symmetry.rs and coloring.rs; green [dep: S1a].** Handle a published
+  kindless stereo frame without calling the determined-kind accessor (F14),
+  including the full-coloring path. Keep it admitted by Molecule construction
+  and add the public graph_symmetry regression; retain unresolved and
+  nonliteral behavior.
+  **Complete 2026-09-23.**
 
 #### S1a result (2026-09-23)
 
@@ -1744,6 +1748,15 @@ gates. New Molecule::try_from_entries cases reject malformed nested terms and
 preserve an accepted raw term. The 6,820 active graph-IR library tests, strict
 crate Clippy, rustdoc with warnings denied, and the Python binding crate check
 passed.
+
+#### S1b result (2026-09-23)
+
+Graph symmetry now treats a stereo atom or bond without a determined kind as
+having no orientation contribution. Full constitution coloring hashes the
+optional kind instead of calling an asserted accessor. Public Molecule
+construction still admits both frames; exact atom- and bond-frame regressions
+check their resulting orbits and achirality under entity-only and full coloring.
+The 6,822 active graph-IR library tests and strict crate Clippy passed.
 
 ### S2 — Delta and Reaction correctness
 
