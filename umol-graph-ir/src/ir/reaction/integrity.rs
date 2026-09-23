@@ -10,7 +10,11 @@ use super::super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
-use super::super::edit::{StereoAtomFieldChange, StereoBondFieldChange};
+use super::super::edit::{
+    AromaticSystemFieldChange, MulticenterBondFieldChange, StereoAtomFieldChange,
+    StereoBondFieldChange,
+};
+use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::id::AtomId;
 use super::super::ligand::StereoLigand;
@@ -35,6 +39,15 @@ pub enum ReactionIntegrityError {
     /// An addition reuses an entity ID from the lhs or an earlier addition.
     #[error("reaction adds duplicate entity reference {entity:?}")]
     DuplicateReference { entity: Entity },
+    /// A literal electron-count vector has a different length from its participant frame.
+    #[error(
+        "{entity}: electron-count vector has length {electron_counts}, expected {participants}"
+    )]
+    ElectronCountLengthMismatch {
+        entity: Entity,
+        participants: usize,
+        electron_counts: usize,
+    },
     /// An atom occurs twice in one stereo entity's atom references.
     #[error("{entity}: participant atom {atom:?} is duplicated")]
     DuplicateAtom { entity: Entity, atom: AtomId },
@@ -198,6 +211,9 @@ impl ReactionIntegrityCheck {
             self.validate_references(lhs, &added, delta)?;
         }
         for delta in deltas.iter() {
+            self.validate_electron_count_delta(lhs, &added, delta)?;
+        }
+        for delta in deltas.iter() {
             self.validate_stereo_delta(delta)?;
         }
         for delta in deltas.iter() {
@@ -340,6 +356,85 @@ impl ReactionIntegrityCheck {
             self.require_available(lhs, added, Entity::Atom(atom))?;
         }
         Ok(())
+    }
+
+    fn validate_electron_count_delta(
+        &self,
+        lhs: &Molecule,
+        added: &HashMap<Entity, &Delta>,
+        delta: &Delta,
+    ) -> Result<(), ReactionIntegrityError> {
+        match delta {
+            Delta::AromaticSystem(
+                AromaticSystemDelta::Add {
+                    id,
+                    atoms,
+                    attributes,
+                }
+                | AromaticSystemDelta::Remove {
+                    id,
+                    atoms,
+                    attributes,
+                },
+            ) => check_electron_count_length(
+                Entity::AromaticSystem(*id),
+                atoms.len(),
+                &attributes.electrons,
+            ),
+            Delta::MulticenterBond(
+                MulticenterBondDelta::Add {
+                    id,
+                    atoms,
+                    attributes,
+                }
+                | MulticenterBondDelta::Remove {
+                    id,
+                    atoms,
+                    attributes,
+                },
+            ) => check_electron_count_length(
+                Entity::MulticenterBond(*id),
+                atoms.len(),
+                &attributes.electrons,
+            ),
+            Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                id,
+                change: AromaticSystemFieldChange::Electrons { old, new },
+            }) => {
+                let entity = Entity::AromaticSystem(*id);
+                let participants = if let Some(view) = lhs.aromatic_systems().get(*id) {
+                    view.atom_ids().len()
+                } else {
+                    let Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, .. }) =
+                        added[&entity]
+                    else {
+                        unreachable!("reference check found the added aromatic system")
+                    };
+                    atoms.len()
+                };
+                check_electron_count_length(entity, participants, old)?;
+                check_electron_count_length(entity, participants, new)
+            }
+            Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
+                id,
+                change: MulticenterBondFieldChange::Electrons { old, new },
+            }) => {
+                let entity = Entity::MulticenterBond(*id);
+                let participants = if let Some(view) = lhs.multicenter_bonds().get(*id) {
+                    view.atom_ids().len()
+                } else {
+                    let Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, .. }) =
+                        added[&entity]
+                    else {
+                        unreachable!("reference check found the added multicenter bond")
+                    };
+                    atoms.len()
+                };
+                check_electron_count_length(entity, participants, old)?;
+                check_electron_count_length(entity, participants, new)
+            }
+            _ => Ok(()),
+        }
     }
 
     fn validate_stereo_delta(&self, delta: &Delta) -> Result<(), ReactionIntegrityError> {
@@ -688,10 +783,10 @@ impl ReactionIntegrityCheck {
 impl Reaction {
     /// Check the representation invariants required to interpret this reaction.
     ///
-    /// The check covers delta references, added-id uniqueness, local stereo data carried by
-    /// additions and constraint wrappers, and the source incidence and participant structure
-    /// recorded by removals. The closed lhs already satisfies molecule integrity. This check does
-    /// not impose DPO or chemistry semantics.
+    /// The check covers delta references, added-id uniqueness, positional electron-count lengths,
+    /// local stereo data carried by additions and constraint wrappers, and the source incidence and
+    /// participant structure recorded by removals. The closed lhs already satisfies molecule
+    /// integrity. This check does not impose DPO or chemistry semantics.
     pub(crate) fn check_integrity(&self) -> Result<(), ReactionIntegrityError> {
         ReactionIntegrityCheck.check(&self.lhs, &self.deltas)
     }
@@ -715,6 +810,23 @@ fn added_entity(delta: &Delta) -> Option<Entity> {
         Delta::StereoBond(StereoBondDelta::Add { id, .. }) => Some(Entity::StereoBond(*id)),
         _ => None,
     }
+}
+
+fn check_electron_count_length(
+    entity: Entity,
+    participants: usize,
+    electrons: &ElectronCountsForm,
+) -> Result<(), ReactionIntegrityError> {
+    if let ElectronCountsForm::Lit(counts) = electrons {
+        if counts.len() != participants {
+            return Err(ReactionIntegrityError::ElectronCountLengthMismatch {
+                entity,
+                participants,
+                electron_counts: counts.len(),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn contains_entity(molecule: &Molecule, entity: Entity) -> bool {

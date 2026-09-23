@@ -1796,6 +1796,10 @@ The 6,822 active graph-IR library tests and strict crate Clippy passed.
   counts in Add, Remove, and both ModifyField sides against their frame.
   Migrate error consumers and check exact lengths and errors, retaining
   undetermined values.
+  **Complete 2026-09-23.** The constructor now checks local Add/Remove frames and
+  the lhs or same-reaction Add frame for ModifyField. Exact cases, crate tests,
+  Reaction properties, strict crate Clippy, rustdoc, and the Python binding
+  check passed. The Python error mapping already handles new integrity variants.
 - **S2d — reaction::integrity; green [dep: S1a, S2b].** Use the shared local
   stereo integrity checks for R3–R5: Remove configurations, both ModifyField
   configurations, entity constraint changes, and top-level ConstraintDelta

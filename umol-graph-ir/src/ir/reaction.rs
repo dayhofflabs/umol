@@ -916,9 +916,10 @@ impl Reaction {
 
     /// Construct a reaction after checking its representation integrity.
     ///
-    /// The check covers delta references, added stereo entries, stereo constraint site kinds, and
-    /// removal incidence compatible with each source entity's participant structure. The lhs is an
-    /// already closed [`Molecule`]. Removal payloads are interpreted in their recorded local frame.
+    /// The check covers delta references, positional electron-count lengths, added stereo entries,
+    /// stereo constraint site kinds, and removal incidence compatible with each source entity's
+    /// participant structure. The lhs is an already closed [`Molecule`]. Removal payloads are
+    /// interpreted in their recorded local frame.
     /// The check does not require the deltas to materialize a reaction span or impose DPO or
     /// chemistry semantics.
     ///
@@ -3442,6 +3443,202 @@ mod tests {
         ]);
 
         assert_eq!(Reaction::try_new(lhs, deltas).map(|_| ()), expected);
+    }
+
+    #[rstest]
+    #[case::aromatic_undetermined(vec![Delta::AromaticSystem(AromaticSystemDelta::Add {
+        id: AromaticSystemId(1),
+        atoms: vec![AtomId(3), AtomId(4), AtomId(5)],
+        attributes: AromaticSystemForm::default(),
+    })])]
+    #[case::aromatic_literal(vec![Delta::AromaticSystem(AromaticSystemDelta::Add {
+        id: AromaticSystemId(1),
+        atoms: vec![AtomId(3), AtomId(4), AtomId(5)],
+        attributes: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+    })])]
+    #[case::aromatic_modify_new_undetermined(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+        id: AromaticSystemId(0),
+        change: AromaticSystemFieldChange::Electrons {
+            old: ElectronCountsForm::Lit(vec![1, 1, 1]),
+            new: ElectronCountsForm::Undetermined,
+        },
+    })])]
+    #[case::multicenter_local_frame(vec![Delta::MulticenterBond(MulticenterBondDelta::Remove {
+        id: MulticenterBondId(0),
+        atoms: vec![AtomId(2), AtomId(0), AtomId(1)],
+        attributes: MulticenterBondForm::from_electrons(vec![1, 1, 1]),
+    })])]
+    #[case::multicenter_modify_old_undetermined(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
+        id: MulticenterBondId(0),
+        change: MulticenterBondFieldChange::Electrons {
+            old: ElectronCountsForm::Undetermined,
+            new: ElectronCountsForm::Lit(vec![1, 1, 1]),
+        },
+    })])]
+    fn test_reaction_try_new_electron_count_length(#[case] deltas: Vec<Delta>) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::default(),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondForm::default(),
+            )],
+            ..Default::default()
+        });
+        let deltas = Deltas::from_iter(deltas);
+
+        assert_eq!(
+            Reaction::try_new(lhs.clone(), deltas.clone()),
+            Ok(Reaction { lhs, deltas }),
+        );
+    }
+
+    #[rstest]
+    #[case::aromatic_add(
+        vec![Delta::AromaticSystem(AromaticSystemDelta::Add {
+            id: AromaticSystemId(1),
+            atoms: vec![AtomId(3), AtomId(4), AtomId(5)],
+            attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
+        })],
+        Entity::AromaticSystem(AromaticSystemId(1)),
+        3,
+    )]
+    #[case::aromatic_remove(
+        vec![Delta::AromaticSystem(AromaticSystemDelta::Remove {
+            id: AromaticSystemId(0),
+            atoms: vec![AtomId(2), AtomId(0), AtomId(1)],
+            attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
+        })],
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        3,
+    )]
+    #[case::aromatic_modify_old(
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(0),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![1, 1]),
+                new: ElectronCountsForm::Lit(vec![1, 1, 1]),
+            },
+        })],
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        3,
+    )]
+    #[case::aromatic_modify_new(
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(0),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![1, 1, 1]),
+                new: ElectronCountsForm::Lit(vec![1, 1]),
+            },
+        })],
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        3,
+    )]
+    #[case::aromatic_modify_forward_add(
+        vec![
+            Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                id: AromaticSystemId(1),
+                change: AromaticSystemFieldChange::Electrons {
+                    old: ElectronCountsForm::Undetermined,
+                    new: ElectronCountsForm::Lit(vec![1, 1]),
+                },
+            }),
+            Delta::AromaticSystem(AromaticSystemDelta::Add {
+                id: AromaticSystemId(1),
+                atoms: vec![AtomId(3), AtomId(4), AtomId(5), AtomId(6)],
+                attributes: AromaticSystemForm::default(),
+            }),
+        ],
+        Entity::AromaticSystem(AromaticSystemId(1)),
+        4,
+    )]
+    #[case::multicenter_add(
+        vec![Delta::MulticenterBond(MulticenterBondDelta::Add {
+            id: MulticenterBondId(1),
+            atoms: vec![AtomId(3), AtomId(4), AtomId(5)],
+            attributes: MulticenterBondForm::from_electrons(vec![1, 1]),
+        })],
+        Entity::MulticenterBond(MulticenterBondId(1)),
+        3,
+    )]
+    #[case::multicenter_remove(
+        vec![Delta::MulticenterBond(MulticenterBondDelta::Remove {
+            id: MulticenterBondId(0),
+            atoms: vec![AtomId(2), AtomId(0), AtomId(1)],
+            attributes: MulticenterBondForm::from_electrons(vec![1, 1]),
+        })],
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        3,
+    )]
+    #[case::multicenter_modify_old(
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
+            id: MulticenterBondId(0),
+            change: MulticenterBondFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![1, 1]),
+                new: ElectronCountsForm::Lit(vec![1, 1, 1]),
+            },
+        })],
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        3,
+    )]
+    #[case::multicenter_modify_new(
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
+            id: MulticenterBondId(0),
+            change: MulticenterBondFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![1, 1, 1]),
+                new: ElectronCountsForm::Lit(vec![1, 1]),
+            },
+        })],
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        3,
+    )]
+    #[case::multicenter_modify_forward_add(
+        vec![
+            Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
+                id: MulticenterBondId(1),
+                change: MulticenterBondFieldChange::Electrons {
+                    old: ElectronCountsForm::Undetermined,
+                    new: ElectronCountsForm::Lit(vec![1, 1]),
+                },
+            }),
+            Delta::MulticenterBond(MulticenterBondDelta::Add {
+                id: MulticenterBondId(1),
+                atoms: vec![AtomId(3), AtomId(4), AtomId(5), AtomId(6)],
+                attributes: MulticenterBondForm::default(),
+            }),
+        ],
+        Entity::MulticenterBond(MulticenterBondId(1)),
+        4,
+    )]
+    fn test_reaction_try_new_electron_count_length_error(
+        #[case] deltas: Vec<Delta>,
+        #[case] entity: Entity,
+        #[case] participants: usize,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::default(),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondForm::default(),
+            )],
+            ..Default::default()
+        });
+
+        assert_eq!(
+            Reaction::try_new(lhs, Deltas::from_iter(deltas)),
+            Err(ReactionIntegrityError::ElectronCountLengthMismatch {
+                entity,
+                participants,
+                electron_counts: 2,
+            }),
+        );
     }
 
     #[rstest]

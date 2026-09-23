@@ -140,13 +140,12 @@ transport conjugates the one owning action for the lhs or `Add` entity by the lo
 the removal retains the same relation to its owner. Normalization instead uses the local-to-source
 action directly to align the removal with that owner before reframing.
 
-Reaction integrity intentionally does not establish delta normal form, old/new continuity,
-old/new stereo-kind agreement, constraint satisfiability, two-sided span materializability, DPO
-gluing conditions, host applicability, or chemistry. A ModifyField may carry individually valid
-configurations of different kinds; application rejects the unexecutable change, and span conversion
-rejects a kind change within one shared entity. The operation that first requires each deferred
-property checks it. The current Reaction constructor still rejects differing determined kinds;
-removing that check and adding the electron-count length check are pending.
+Reaction integrity does not establish delta normal form, old/new continuity, constraint
+satisfiability, two-sided span materializability, DPO gluing conditions, host applicability, or
+chemistry. The operation that first requires each deferred property checks it. The current Reaction
+constructor still rejects a ModifyField whose determined old and new configurations name different
+stereo kinds, although application and span conversion already check whether such a change can be
+executed or materialized. Removing that constructor check remains pending.
 
 ## `ReactionSpan` integrity inventory
 
