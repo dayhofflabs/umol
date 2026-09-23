@@ -920,8 +920,9 @@ impl Reaction {
     /// in additions, removals, modifications, and constraints, and removal incidence compatible
     /// with each source entity's participant structure. The lhs is an already closed [`Molecule`].
     /// Removal payloads are interpreted in their recorded local frame.
-    /// The check does not require the deltas to materialize a reaction span or impose DPO or
-    /// chemistry semantics.
+    /// A stereo configuration change may name different kinds on its two sides; application and
+    /// span conversion check whether that change can be realized. Construction does not require
+    /// the deltas to materialize a reaction span or impose DPO or chemistry semantics.
     ///
     /// # Errors
     ///
@@ -3753,6 +3754,39 @@ mod tests {
         })
     }
 
+    #[fixture]
+    fn stereo_kind_change_lhs() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(5), AtomId(6), BondForm::from_order(2)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+                (AtomId(5), AtomId(1), BondForm::from_order(1)),
+                (AtomId(6), AtomId(2), BondForm::from_order(1)),
+                (AtomId(6), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            stereo_bonds: vec![(
+                BondId(4),
+                (0..=3)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoBondForm::new(StereoKind::CisTrans, 0u32),
+            )],
+            ..Default::default()
+        })
+    }
+
     #[rstest]
     #[case::atom(
         Delta::StereoAtom(StereoAtomDelta::Remove {
@@ -5039,38 +5073,26 @@ mod tests {
         );
     }
 
-    /// A stereo entity keeps its kind across a configuration change. An undetermined side asserts
-    /// no geometry and restricts nothing, and the same-kind change is an ordinary modification.
-    #[rustfmt::skip]
     #[rstest]
     #[case::kind_change(
         StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        StereoConfigurationForm::kinded(StereoKind::Axial, StereoCoset::Lit(0)),
-        Err(ReactionIntegrityError::StereoKindModified {
-            entity: Entity::StereoAtom(StereoAtomId(0)),
-            old: StereoKind::Tetrahedral,
-            new: StereoKind::Axial,
-        }),
+        StereoConfigurationForm::kinded(StereoKind::Axial, StereoCoset::Lit(0))
     )]
     #[case::same_kind(
         StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-        Ok(()),
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1))
     )]
     #[case::old_undetermined(
         StereoConfigurationForm::Undetermined,
-        StereoConfigurationForm::kinded(StereoKind::Axial, StereoCoset::Lit(0)),
-        Ok(()),
+        StereoConfigurationForm::kinded(StereoKind::Axial, StereoCoset::Lit(0))
     )]
     #[case::new_undetermined(
         StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        StereoConfigurationForm::Undetermined,
-        Ok(()),
+        StereoConfigurationForm::Undetermined
     )]
     fn test_reaction_try_new_stereo_kind(
         #[case] old: StereoConfigurationForm,
         #[case] new: StereoConfigurationForm,
-        #[case] expected: Result<(), ReactionIntegrityError>,
     ) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
@@ -5090,11 +5112,50 @@ mod tests {
             ..Default::default()
         });
         let deltas = Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
-                id: StereoAtomId(0),
-                change: StereoAtomFieldChange::Configuration { old, new },
-            })]);
+            id: StereoAtomId(0),
+            change: StereoAtomFieldChange::Configuration { old, new },
+        })]);
 
-        assert_eq!(Reaction::try_new(lhs, deltas).map(drop), expected);
+        assert_eq!(
+            Reaction::try_new(lhs.clone(), deltas.clone()),
+            Ok(Reaction { lhs, deltas }),
+        );
+    }
+
+    #[rstest]
+    #[case::atom(Delta::StereoAtom(StereoAtomDelta::ModifyField {
+        id: StereoAtomId(0),
+        change: StereoAtomFieldChange::Configuration {
+            old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+            new: StereoConfigurationForm::kinded(StereoKind::Axial, 0u32),
+        },
+    }))]
+    #[case::bond(Delta::StereoBond(StereoBondDelta::ModifyField {
+        id: StereoBondId(0),
+        change: StereoBondFieldChange::Configuration {
+            old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32),
+            new: StereoConfigurationForm::kinded(StereoKind::Axial, 0u32),
+        },
+    }))]
+    fn test_reaction_try_new_stereo_kind_change(
+        #[case] delta: Delta,
+        stereo_kind_change_lhs: Molecule,
+    ) {
+        let deltas = Deltas::from_iter([delta]);
+        let reaction = Reaction::try_new(stereo_kind_change_lhs.clone(), deltas.clone()).unwrap();
+
+        assert_eq!(
+            reaction,
+            Reaction {
+                lhs: stereo_kind_change_lhs,
+                deltas,
+            },
+        );
+        assert_eq!(
+            reaction.check_preconditions(),
+            Err(ApplyPreconditionError::InconsistentReaction),
+        );
+        assert_eq!(reaction.to_reaction_span(), Err(Contradiction));
     }
 
     #[rstest]

@@ -211,13 +211,10 @@ impl ReactionSpan {
         Ok(())
     }
 
-    /// A modified stereo entity keeps its stereo kind: the two sides of one span are read against a
-    /// single participant list, so sides asserting different kinds have no common admissible group
-    /// and no frame action can serve both.
-    ///
-    /// A kind change is representable as removal plus addition, where the two entities carry
-    /// different ids. Each side can be individually valid, so this cannot ride the per-side
-    /// projection above.
+    /// Two determined sides of a preserved stereo entity share one kind. Distinct kinds describe
+    /// different stereogenic units even at the same frame degree, so a change uses removal and
+    /// addition with different ids. Each side can be valid; the per-side checks above cannot
+    /// establish this agreement.
     fn check_stereo_kind_unchanged(&self) -> Result<(), ReactionSpanIntegrityError> {
         for id in self.stereo_atoms.ids() {
             if let EntitySpan::Modified { lhs, rhs } = self.stereo_atoms.attributes(id) {

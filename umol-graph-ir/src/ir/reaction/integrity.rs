@@ -107,13 +107,6 @@ pub enum ReactionIntegrityError {
     /// A removal records incidence incompatible with its source entity's participant structure.
     #[error("reaction incidence does not match source entity {entity:?}")]
     IncidenceMismatch { entity: Entity },
-    /// A configuration change replaces one stereo kind with another within a single entity.
-    #[error("{entity:?}: configuration change replaces stereo kind {old:?} with {new:?}")]
-    StereoKindModified {
-        entity: Entity,
-        old: StereoKind,
-        new: StereoKind,
-    },
 }
 
 impl From<StereoIntegrityError> for ReactionIntegrityError {
@@ -178,24 +171,6 @@ impl From<StereoIntegrityError> for ReactionIntegrityError {
                 degree,
             },
         }
-    }
-}
-
-/// A stereo entity keeps its kind across a configuration change: the kind names the coordination
-/// geometry, so replacing it replaces the stereogenic unit rather than its configuration. That is
-/// expressed as removal plus addition, where the two entities carry different ids.
-///
-/// An undetermined side asserts no geometry and so restricts nothing.
-fn check_delta_stereo_kind(
-    entity: Entity,
-    old: Option<StereoKind>,
-    new: Option<StereoKind>,
-) -> Result<(), ReactionIntegrityError> {
-    match (old, new) {
-        (Some(old), Some(new)) if old != new => {
-            Err(ReactionIntegrityError::StereoKindModified { entity, old, new })
-        }
-        _ => Ok(()),
     }
 }
 
@@ -467,7 +442,6 @@ impl ReactionIntegrityCheck {
                 let StereoAtomFieldChange::Configuration { old, new } = change;
                 check_stereo_atom_configuration_on_frame(entity, ligand_count, old)?;
                 check_stereo_atom_configuration_on_frame(entity, ligand_count, new)?;
-                check_delta_stereo_kind(entity, old.kind(), new.kind())?;
             }
             Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { id, kind, old, new }) => {
                 let entity = Entity::StereoAtom(*id);
@@ -500,7 +474,6 @@ impl ReactionIntegrityCheck {
                 let StereoBondFieldChange::Configuration { old, new } = change;
                 check_stereo_bond_configuration_on_frame(entity, ligand_count, old)?;
                 check_stereo_bond_configuration_on_frame(entity, ligand_count, new)?;
-                check_delta_stereo_kind(entity, old.kind(), new.kind())?;
             }
             Delta::StereoBond(StereoBondDelta::ModifyConstraint { id, kind, old, new }) => {
                 let entity = Entity::StereoBond(*id);

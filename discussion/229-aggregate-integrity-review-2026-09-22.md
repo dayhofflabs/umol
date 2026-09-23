@@ -1816,6 +1816,12 @@ The 6,822 active graph-IR library tests and strict crate Clippy passed.
   comparison and ReactionIntegrityError::StereoKindModified (R11). Keep
   application and ReactionSpan checks. Exact cases show constructor
   acceptance followed by the existing application/span failures.
+  **Complete 2026-09-23.** Reaction construction accepts individually valid
+  old/new configurations of different kinds. Exact atom and bond cases show
+  `try_new` acceptance, `check_preconditions` returning `InconsistentReaction`,
+  and `to_reaction_span` returning `Contradiction`. The ReactionSpan check remains.
+  Crate tests, Reaction properties, the Python binding check, strict crate
+  Clippy, and rustdoc passed.
 
 #### S2a result (2026-09-23)
 

@@ -142,10 +142,10 @@ action directly to align the removal with that owner before reframing.
 
 Reaction integrity does not establish delta normal form, old/new continuity, constraint
 satisfiability, two-sided span materializability, DPO gluing conditions, host applicability, or
-chemistry. The operation that first requires each deferred property checks it. The current Reaction
-constructor still rejects a ModifyField whose determined old and new configurations name different
-stereo kinds, although application and span conversion already check whether such a change can be
-executed or materialized. Removing that constructor check remains pending.
+chemistry. The operation that first requires each deferred property checks it. A ModifyField may
+carry individually valid old and new stereo configurations of different kinds. Application checks
+whether that change can execute, and span conversion checks whether it can form one preserved
+stereo entity.
 
 ## `ReactionSpan` integrity inventory
 
@@ -158,7 +158,7 @@ results.
 | `InvalidReference` | A union-frame participant, site, ligand, or constraint refers outside the union namespace. | Projection uses dense union-to-side maps and indexes them by stored ids. A missing union id would panic during map indexing before either molecule projection could report its own integrity error. |
 | `Lhs` | The lhs projection fails any `Molecule` integrity check. | `ReactionSpan::lhs` uses the asserted `Molecule::from_entries` path. Establishing the projection at span publication prevents that infallible accessor and every lhs-consuming operation from panicking or receiving an incoherent molecule. |
 | `Rhs` | The rhs projection fails any `Molecule` integrity check. | `ReactionSpan::rhs` uses the asserted `Molecule::from_entries` path. Establishing the projection at span publication prevents that infallible accessor and every rhs-consuming operation from panicking or receiving an incoherent molecule. |
-| `StereoKindModified` | The two determined sides of one stereo entity assert different kinds against their shared participant frame. | Reframing the span requires one action for the complete entity. Different kinds have different admissible groups, so selecting or applying one action would misinterpret at least one side. A kind change uses removal plus addition. |
+| `StereoKindModified` | The two determined sides of one stereo entity assert different kinds against their shared participant frame. | One preserved stereo entity has one kind on both sides of a span. Equal frame degrees or compatible actions do not make distinct kinds the same entity; a kind change uses removal plus addition. |
 
 Reaction-span integrity does not establish a DPO dangling condition, reaction applicability,
 chemistry, satisfiability, or canonical form.
