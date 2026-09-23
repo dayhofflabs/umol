@@ -267,4 +267,4 @@ the statuses recorded here remain authoritative.
 | [226-smiles-roundtrip-design-2026-09-10.md](226-smiles-roundtrip-design-2026-09-10.md)                           | Completed     | 2026-09-14  |                                                                                                             |
 | [227-repository-structure-hygiene-2026-09-10.md](227-repository-structure-hygiene-2026-09-10.md)                 | Proposed      | 2026-09-17   | Settle workspace thresholds, exemplar contracts, tooling, tiered gate, and structural order. |
 | [228-python-api-parity-2026-09-21.md](228-python-api-parity-2026-09-21.md) | In Progress | 2026-09-21 | S0/S7 complete; return to 213. Broader audit and ownership/access work remain unscheduled; S1–S6 withdrawn. |
-| [229-aggregate-integrity-review-2026-09-22.md](229-aggregate-integrity-review-2026-09-22.md) | In Progress | 2026-09-23 | S0/S1/S2a complete; next S2b Reaction integrity. |
+| [229-aggregate-integrity-review-2026-09-22.md](229-aggregate-integrity-review-2026-09-22.md) | In Progress | 2026-09-23 | S0/S1/S2a/S2b complete; next S2c Reaction electron-count lengths. |

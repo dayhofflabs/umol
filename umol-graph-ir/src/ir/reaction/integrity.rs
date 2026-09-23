@@ -1,6 +1,6 @@
 //! Reaction representation-integrity checks.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::iter;
 
 use thiserror::Error;
@@ -12,7 +12,7 @@ use super::super::delta::{
 };
 use super::super::edit::{StereoAtomFieldChange, StereoBondFieldChange};
 use super::super::entity::Entity;
-use super::super::id::{AtomId, BondId};
+use super::super::id::AtomId;
 use super::super::ligand::StereoLigand;
 use super::super::molecule::Molecule;
 use super::super::stereo::integrity::{
@@ -26,31 +26,15 @@ use super::Reaction;
 #[derive(Clone, Copy, Debug, Default)]
 struct ReactionIntegrityCheck;
 
-#[derive(Clone, Debug)]
-enum OverlayFrame {
-    Dative {
-        donors: Vec<AtomId>,
-        acceptor: AtomId,
-    },
-    Aromatic(Vec<AtomId>),
-    Multicenter(Vec<AtomId>),
-    Noncovalent([AtomId; 2]),
-    StereoAtom {
-        site: AtomId,
-        ligands: Vec<StereoLigand>,
-    },
-    StereoBond {
-        site: BondId,
-        ligands: Vec<StereoLigand>,
-    },
-}
-
 /// Failure of the representation contract required to interpret a [`Reaction`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionIntegrityError {
     /// A delta refers to an entity unavailable from either the lhs or the reaction's additions.
     #[error("reaction references unavailable entity {entity:?}")]
     InvalidReference { entity: Entity },
+    /// An addition reuses an entity ID from the lhs or an earlier addition.
+    #[error("reaction adds duplicate entity reference {entity:?}")]
+    DuplicateReference { entity: Entity },
     /// An atom occurs twice in one stereo entity's atom references.
     #[error("{entity}: participant atom {atom:?} is duplicated")]
     DuplicateAtom { entity: Entity, atom: AtomId },
@@ -201,27 +185,23 @@ fn check_delta_stereo_kind(
 
 impl ReactionIntegrityCheck {
     fn check(&self, lhs: &Molecule, deltas: &Deltas) -> Result<(), ReactionIntegrityError> {
-        let mut source_frames = source_frames(lhs);
-        let mut created = HashSet::new();
+        let mut added = HashMap::new();
         for delta in deltas.iter() {
-            if let Some((entity, frame)) = added_entity_and_frame(delta) {
-                if contains_entity(lhs, entity) || !created.insert(entity) {
-                    return Err(ReactionIntegrityError::InvalidReference { entity });
-                }
-                if let Some(frame) = frame {
-                    source_frames.insert(entity, frame);
+            if let Some(entity) = added_entity(delta) {
+                if contains_entity(lhs, entity) || added.insert(entity, delta).is_some() {
+                    return Err(ReactionIntegrityError::DuplicateReference { entity });
                 }
             }
         }
 
         for delta in deltas.iter() {
-            self.validate_references(lhs, &created, delta)?;
+            self.validate_references(lhs, &added, delta)?;
         }
         for delta in deltas.iter() {
             self.validate_stereo_delta(delta)?;
         }
         for delta in deltas.iter() {
-            self.validate_removal_incidence(lhs, &source_frames, delta)?;
+            self.validate_removal_incidence(lhs, &added, delta)?;
         }
         Ok(())
     }
@@ -229,7 +209,7 @@ impl ReactionIntegrityCheck {
     fn validate_references(
         &self,
         lhs: &Molecule,
-        created: &HashSet<Entity>,
+        added: &HashMap<Entity, &Delta>,
         delta: &Delta,
     ) -> Result<(), ReactionIntegrityError> {
         match delta {
@@ -238,101 +218,101 @@ impl ReactionIntegrityCheck {
                 AtomDelta::Remove { id, .. }
                 | AtomDelta::ModifyField { id, .. }
                 | AtomDelta::ModifyConstraint { id, .. },
-            ) => self.require_available(lhs, created, Entity::Atom(*id)),
-            Delta::Bond(BondDelta::Add { atoms, .. }) => self.require_atoms(lhs, created, *atoms),
+            ) => self.require_available(lhs, added, Entity::Atom(*id)),
+            Delta::Bond(BondDelta::Add { atoms, .. }) => self.require_atoms(lhs, added, *atoms),
             Delta::Bond(BondDelta::Remove { id, atoms, .. }) => {
-                self.require_available(lhs, created, Entity::Bond(*id))?;
-                self.require_atoms(lhs, created, *atoms)
+                self.require_available(lhs, added, Entity::Bond(*id))?;
+                self.require_atoms(lhs, added, *atoms)
             }
             Delta::Bond(
                 BondDelta::ModifyField { id, .. } | BondDelta::ModifyConstraint { id, .. },
-            ) => self.require_available(lhs, created, Entity::Bond(*id)),
+            ) => self.require_available(lhs, added, Entity::Bond(*id)),
             Delta::DativeBond(DativeBondDelta::Add {
                 donors, acceptor, ..
-            }) => self.require_atoms(lhs, created, donors.iter().copied().chain([*acceptor])),
+            }) => self.require_atoms(lhs, added, donors.iter().copied().chain([*acceptor])),
             Delta::DativeBond(DativeBondDelta::Remove {
                 id,
                 donors,
                 acceptor,
                 ..
             }) => {
-                self.require_available(lhs, created, Entity::DativeBond(*id))?;
-                self.require_atoms(lhs, created, donors.iter().copied().chain([*acceptor]))
+                self.require_available(lhs, added, Entity::DativeBond(*id))?;
+                self.require_atoms(lhs, added, donors.iter().copied().chain([*acceptor]))
             }
             Delta::DativeBond(
                 DativeBondDelta::ModifyField { id, .. }
                 | DativeBondDelta::ModifyConstraint { id, .. },
-            ) => self.require_available(lhs, created, Entity::DativeBond(*id)),
+            ) => self.require_available(lhs, added, Entity::DativeBond(*id)),
             Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, .. }) => {
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             Delta::AromaticSystem(AromaticSystemDelta::Remove { id, atoms, .. }) => {
-                self.require_available(lhs, created, Entity::AromaticSystem(*id))?;
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_available(lhs, added, Entity::AromaticSystem(*id))?;
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             Delta::AromaticSystem(
                 AromaticSystemDelta::ModifyField { id, .. }
                 | AromaticSystemDelta::ModifyConstraint { id, .. },
-            ) => self.require_available(lhs, created, Entity::AromaticSystem(*id)),
+            ) => self.require_available(lhs, added, Entity::AromaticSystem(*id)),
             Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, .. }) => {
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             Delta::MulticenterBond(MulticenterBondDelta::Remove { id, atoms, .. }) => {
-                self.require_available(lhs, created, Entity::MulticenterBond(*id))?;
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_available(lhs, added, Entity::MulticenterBond(*id))?;
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             Delta::MulticenterBond(
                 MulticenterBondDelta::ModifyField { id, .. }
                 | MulticenterBondDelta::ModifyConstraint { id, .. },
-            ) => self.require_available(lhs, created, Entity::MulticenterBond(*id)),
+            ) => self.require_available(lhs, added, Entity::MulticenterBond(*id)),
             Delta::NoncovalentBond(NoncovalentBondDelta::Add { atoms, .. }) => {
-                self.require_atoms(lhs, created, *atoms)
+                self.require_atoms(lhs, added, *atoms)
             }
             Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, atoms, .. }) => {
-                self.require_available(lhs, created, Entity::NoncovalentBond(*id))?;
-                self.require_atoms(lhs, created, *atoms)
+                self.require_available(lhs, added, Entity::NoncovalentBond(*id))?;
+                self.require_atoms(lhs, added, *atoms)
             }
             Delta::NoncovalentBond(
                 NoncovalentBondDelta::ModifyField { id, .. }
                 | NoncovalentBondDelta::ModifyConstraint { id, .. },
-            ) => self.require_available(lhs, created, Entity::NoncovalentBond(*id)),
+            ) => self.require_available(lhs, added, Entity::NoncovalentBond(*id)),
             Delta::StereoAtom(StereoAtomDelta::Add { site, ligands, .. }) => self.require_atoms(
                 lhs,
-                created,
+                added,
                 iter::once(*site).chain(ligands.iter().map(|ligand| ligand.atom_id)),
             ),
             Delta::StereoAtom(StereoAtomDelta::Remove {
                 id, site, ligands, ..
             }) => {
-                self.require_available(lhs, created, Entity::StereoAtom(*id))?;
+                self.require_available(lhs, added, Entity::StereoAtom(*id))?;
                 self.require_atoms(
                     lhs,
-                    created,
+                    added,
                     iter::once(*site).chain(ligands.iter().map(|ligand| ligand.atom_id)),
                 )
             }
             Delta::StereoAtom(
                 StereoAtomDelta::ModifyField { id, .. }
                 | StereoAtomDelta::ModifyConstraint { id, .. },
-            ) => self.require_available(lhs, created, Entity::StereoAtom(*id)),
+            ) => self.require_available(lhs, added, Entity::StereoAtom(*id)),
             Delta::StereoBond(StereoBondDelta::Add { site, ligands, .. }) => {
-                self.require_available(lhs, created, Entity::Bond(*site))?;
-                self.require_atoms(lhs, created, ligands.iter().map(|ligand| ligand.atom_id))
+                self.require_available(lhs, added, Entity::Bond(*site))?;
+                self.require_atoms(lhs, added, ligands.iter().map(|ligand| ligand.atom_id))
             }
             Delta::StereoBond(StereoBondDelta::Remove {
                 id, site, ligands, ..
             }) => {
-                self.require_available(lhs, created, Entity::StereoBond(*id))?;
-                self.require_available(lhs, created, Entity::Bond(*site))?;
-                self.require_atoms(lhs, created, ligands.iter().map(|ligand| ligand.atom_id))
+                self.require_available(lhs, added, Entity::StereoBond(*id))?;
+                self.require_available(lhs, added, Entity::Bond(*site))?;
+                self.require_atoms(lhs, added, ligands.iter().map(|ligand| ligand.atom_id))
             }
             Delta::StereoBond(
                 StereoBondDelta::ModifyField { id, .. }
                 | StereoBondDelta::ModifyConstraint { id, .. },
-            ) => self.require_available(lhs, created, Entity::StereoBond(*id)),
+            ) => self.require_available(lhs, added, Entity::StereoBond(*id)),
             Delta::Constraint(ConstraintDelta::Add(constraint))
             | Delta::Constraint(ConstraintDelta::Remove(constraint)) => {
-                self.validate_constraint(lhs, created, constraint)
+                self.validate_constraint(lhs, added, constraint)
             }
         }
     }
@@ -340,10 +320,10 @@ impl ReactionIntegrityCheck {
     fn require_available(
         &self,
         lhs: &Molecule,
-        created: &HashSet<Entity>,
+        added: &HashMap<Entity, &Delta>,
         entity: Entity,
     ) -> Result<(), ReactionIntegrityError> {
-        if contains_entity(lhs, entity) || created.contains(&entity) {
+        if contains_entity(lhs, entity) || added.contains_key(&entity) {
             Ok(())
         } else {
             Err(ReactionIntegrityError::InvalidReference { entity })
@@ -353,11 +333,11 @@ impl ReactionIntegrityCheck {
     fn require_atoms(
         &self,
         lhs: &Molecule,
-        created: &HashSet<Entity>,
+        added: &HashMap<Entity, &Delta>,
         atoms: impl IntoIterator<Item = AtomId>,
     ) -> Result<(), ReactionIntegrityError> {
         for atom in atoms {
-            self.require_available(lhs, created, Entity::Atom(atom))?;
+            self.require_available(lhs, added, Entity::Atom(atom))?;
         }
         Ok(())
     }
@@ -406,20 +386,21 @@ impl ReactionIntegrityCheck {
     fn validate_removal_incidence(
         &self,
         lhs: &Molecule,
-        source_frames: &HashMap<Entity, OverlayFrame>,
+        added: &HashMap<Entity, &Delta>,
         delta: &Delta,
     ) -> Result<(), ReactionIntegrityError> {
         let (entity, matches) = match delta {
             Delta::Bond(BondDelta::Remove { id, atoms, .. }) => {
                 let entity = Entity::Bond(*id);
-                return if !lhs.bonds().contains(*id)
-                    || unordered_pair(lhs.bonds().get(*id).expect("checked lhs bond").atom_ids())
-                        == unordered_pair(*atoms)
-                {
-                    Ok(())
+                let source = if let Some(view) = lhs.bonds().get(*id) {
+                    view.atom_ids()
                 } else {
-                    Err(ReactionIntegrityError::IncidenceMismatch { entity })
+                    let Delta::Bond(BondDelta::Add { atoms, .. }) = added[&entity] else {
+                        unreachable!("reference check found the added bond")
+                    };
+                    *atoms
                 };
+                (entity, unordered_pair(source) == unordered_pair(*atoms))
             }
             Delta::DativeBond(DativeBondDelta::Remove {
                 id,
@@ -428,44 +409,63 @@ impl ReactionIntegrityCheck {
                 ..
             }) => {
                 let entity = Entity::DativeBond(*id);
-                let OverlayFrame::Dative {
-                    donors: source,
-                    acceptor: source_acceptor,
-                } = &source_frames[&entity]
-                else {
-                    unreachable!("entity kind fixes its source-frame variant")
-                };
+                let (source_acceptor, source_donors) =
+                    if let Some(view) = lhs.dative_bonds().get(*id) {
+                        (view.acceptor_id(), unordered_ids(view.donor_ids()))
+                    } else {
+                        let Delta::DativeBond(DativeBondDelta::Add {
+                            donors, acceptor, ..
+                        }) = added[&entity]
+                        else {
+                            unreachable!("reference check found the added dative bond")
+                        };
+                        (*acceptor, unordered_ids(donors.iter().copied()))
+                    };
                 (
                     entity,
-                    *source_acceptor == *acceptor
-                        && unordered_ids(source.iter().copied())
-                            == unordered_ids(donors.iter().copied()),
+                    source_acceptor == *acceptor
+                        && source_donors == unordered_ids(donors.iter().copied()),
                 )
             }
             Delta::AromaticSystem(AromaticSystemDelta::Remove { id, atoms, .. }) => {
                 let entity = Entity::AromaticSystem(*id);
-                let OverlayFrame::Aromatic(source) = &source_frames[&entity] else {
-                    unreachable!("entity kind fixes its source-frame variant")
+                let source = if let Some(view) = lhs.aromatic_systems().get(*id) {
+                    unordered_ids(view.atom_ids())
+                } else {
+                    let Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, .. }) =
+                        added[&entity]
+                    else {
+                        unreachable!("reference check found the added aromatic system")
+                    };
+                    unordered_ids(atoms.iter().copied())
                 };
-                (
-                    entity,
-                    unordered_ids(source.iter().copied()) == unordered_ids(atoms.iter().copied()),
-                )
+                (entity, source == unordered_ids(atoms.iter().copied()))
             }
             Delta::MulticenterBond(MulticenterBondDelta::Remove { id, atoms, .. }) => {
                 let entity = Entity::MulticenterBond(*id);
-                let OverlayFrame::Multicenter(source) = &source_frames[&entity] else {
-                    unreachable!("entity kind fixes its source-frame variant")
+                let source = if let Some(view) = lhs.multicenter_bonds().get(*id) {
+                    unordered_ids(view.atom_ids())
+                } else {
+                    let Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, .. }) =
+                        added[&entity]
+                    else {
+                        unreachable!("reference check found the added multicenter bond")
+                    };
+                    unordered_ids(atoms.iter().copied())
                 };
-                (
-                    entity,
-                    unordered_ids(source.iter().copied()) == unordered_ids(atoms.iter().copied()),
-                )
+                (entity, source == unordered_ids(atoms.iter().copied()))
             }
             Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, atoms, .. }) => {
                 let entity = Entity::NoncovalentBond(*id);
-                let OverlayFrame::Noncovalent(source) = source_frames[&entity] else {
-                    unreachable!("entity kind fixes its source-frame variant")
+                let source = if let Some(view) = lhs.noncovalent_bonds().get(*id) {
+                    view.atom_ids()
+                } else {
+                    let Delta::NoncovalentBond(NoncovalentBondDelta::Add { atoms, .. }) =
+                        added[&entity]
+                    else {
+                        unreachable!("reference check found the added noncovalent bond")
+                    };
+                    *atoms
                 };
                 (entity, unordered_pair(source) == unordered_pair(*atoms))
             }
@@ -473,35 +473,44 @@ impl ReactionIntegrityCheck {
                 id, site, ligands, ..
             }) => {
                 let entity = Entity::StereoAtom(*id);
-                let OverlayFrame::StereoAtom {
-                    site: source_site,
-                    ligands: source,
-                } = &source_frames[&entity]
-                else {
-                    unreachable!("entity kind fixes its source-frame variant")
+                let matches = if let Some(view) = lhs.stereo_atoms().get(*id) {
+                    view.site_id() == *site
+                        && unordered_ligands(view.ligand_frame())
+                            == unordered_ligands(ligands.iter().copied())
+                } else {
+                    let Delta::StereoAtom(StereoAtomDelta::Add {
+                        site: added_site,
+                        ligands: added_ligands,
+                        ..
+                    }) = added[&entity]
+                    else {
+                        unreachable!("reference check found the added stereo atom")
+                    };
+                    *added_site == *site
+                        && unordered_ligands(added_ligands.iter().copied())
+                            == unordered_ligands(ligands.iter().copied())
                 };
-                (
-                    entity,
-                    *source_site == *site
-                        && unordered_ligands(source.iter().copied())
-                            == unordered_ligands(ligands.iter().copied()),
-                )
+                (entity, matches)
             }
             Delta::StereoBond(StereoBondDelta::Remove {
                 id, site, ligands, ..
             }) => {
                 let entity = Entity::StereoBond(*id);
-                let OverlayFrame::StereoBond {
-                    site: source_site,
-                    ligands: source,
-                } = &source_frames[&entity]
-                else {
-                    unreachable!("entity kind fixes its source-frame variant")
+                let matches = if let Some(view) = lhs.stereo_bonds().get(*id) {
+                    view.site_id() == *site
+                        && stereo_bond_frames_match(&view.ligand_frame(), ligands)
+                } else {
+                    let Delta::StereoBond(StereoBondDelta::Add {
+                        site: added_site,
+                        ligands: added_ligands,
+                        ..
+                    }) = added[&entity]
+                    else {
+                        unreachable!("reference check found the added stereo bond")
+                    };
+                    *added_site == *site && stereo_bond_frames_match(added_ligands, ligands)
                 };
-                (
-                    entity,
-                    *source_site == *site && stereo_bond_frames_match(source, ligands),
-                )
+                (entity, matches)
             }
             _ => return Ok(()),
         };
@@ -515,141 +524,141 @@ impl ReactionIntegrityCheck {
     fn validate_constraint(
         &self,
         lhs: &Molecule,
-        created: &HashSet<Entity>,
+        added: &HashMap<Entity, &Delta>,
         constraint: &Constraint,
     ) -> Result<(), ReactionIntegrityError> {
         match constraint {
-            Constraint::Atom(id, _) => self.require_available(lhs, created, Entity::Atom(*id)),
-            Constraint::Bond(id, _) => self.require_available(lhs, created, Entity::Bond(*id)),
+            Constraint::Atom(id, _) => self.require_available(lhs, added, Entity::Atom(*id)),
+            Constraint::Bond(id, _) => self.require_available(lhs, added, Entity::Bond(*id)),
             Constraint::DativeBond(id, _) => {
-                self.require_available(lhs, created, Entity::DativeBond(*id))
+                self.require_available(lhs, added, Entity::DativeBond(*id))
             }
             Constraint::AromaticSystem(id, _) => {
-                self.require_available(lhs, created, Entity::AromaticSystem(*id))
+                self.require_available(lhs, added, Entity::AromaticSystem(*id))
             }
             Constraint::MulticenterBond(id, _) => {
-                self.require_available(lhs, created, Entity::MulticenterBond(*id))
+                self.require_available(lhs, added, Entity::MulticenterBond(*id))
             }
             Constraint::NoncovalentBond(id, _) => {
-                self.require_available(lhs, created, Entity::NoncovalentBond(*id))
+                self.require_available(lhs, added, Entity::NoncovalentBond(*id))
             }
             Constraint::StereoAtom(id, kind, _) => {
-                self.require_available(lhs, created, Entity::StereoAtom(*id))?;
+                self.require_available(lhs, added, Entity::StereoAtom(*id))?;
                 check_stereo_atom_kind(Entity::StereoAtom(*id), *kind)
                     .map_err(ReactionIntegrityError::from)
             }
             Constraint::StereoBond(id, kind, _) => {
-                self.require_available(lhs, created, Entity::StereoBond(*id))?;
+                self.require_available(lhs, added, Entity::StereoBond(*id))?;
                 check_stereo_bond_kind(Entity::StereoBond(*id), *kind)
                     .map_err(ReactionIntegrityError::from)
             }
             Constraint::Relational(constraint) => {
-                self.validate_relational_constraint(lhs, created, constraint)
+                self.validate_relational_constraint(lhs, added, constraint)
             }
             Constraint::Molecule(constraint) => {
-                self.validate_molecule_constraint(lhs, created, constraint)
+                self.validate_molecule_constraint(lhs, added, constraint)
             }
             Constraint::And(constraints) | Constraint::Or(constraints) => {
                 for constraint in constraints {
-                    self.validate_constraint(lhs, created, constraint)?;
+                    self.validate_constraint(lhs, added, constraint)?;
                 }
                 Ok(())
             }
-            Constraint::Not(constraint) => self.validate_constraint(lhs, created, constraint),
+            Constraint::Not(constraint) => self.validate_constraint(lhs, added, constraint),
         }
     }
 
     fn validate_relational_constraint(
         &self,
         lhs: &Molecule,
-        created: &HashSet<Entity>,
+        added: &HashMap<Entity, &Delta>,
         constraint: &RelationalConstraint,
     ) -> Result<(), ReactionIntegrityError> {
         match constraint {
             RelationalConstraint::DativeBondDonors { bond, atoms }
             | RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
-                self.require_available(lhs, created, Entity::DativeBond(*bond))?;
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_available(lhs, added, Entity::DativeBond(*bond))?;
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             RelationalConstraint::DativeBondDonor { bond, atom }
             | RelationalConstraint::DativeBondAcceptor { bond, atom } => {
-                self.require_available(lhs, created, Entity::DativeBond(*bond))?;
-                self.require_available(lhs, created, Entity::Atom(*atom))
+                self.require_available(lhs, added, Entity::DativeBond(*bond))?;
+                self.require_available(lhs, added, Entity::Atom(*atom))
             }
             RelationalConstraint::DativeBondAllDonors { bond, .. }
             | RelationalConstraint::DativeBondAnyDonor { bond, .. }
             | RelationalConstraint::DativeBondAcceptorSatisfies { bond, .. } => {
-                self.require_available(lhs, created, Entity::DativeBond(*bond))
+                self.require_available(lhs, added, Entity::DativeBond(*bond))
             }
             RelationalConstraint::DativeBondParallels { dative, parallel } => {
-                self.require_available(lhs, created, Entity::DativeBond(*dative))?;
-                self.require_available(lhs, created, Entity::Bond(*parallel))
+                self.require_available(lhs, added, Entity::DativeBond(*dative))?;
+                self.require_available(lhs, added, Entity::Bond(*parallel))
             }
             RelationalConstraint::AromaticSystemAtoms { system, atoms }
             | RelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
-                self.require_available(lhs, created, Entity::AromaticSystem(*system))?;
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_available(lhs, added, Entity::AromaticSystem(*system))?;
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             RelationalConstraint::AromaticSystemContains { system, atom } => {
-                self.require_available(lhs, created, Entity::AromaticSystem(*system))?;
-                self.require_available(lhs, created, Entity::Atom(*atom))
+                self.require_available(lhs, added, Entity::AromaticSystem(*system))?;
+                self.require_available(lhs, added, Entity::Atom(*atom))
             }
             RelationalConstraint::AromaticSystemAllAtoms { system, .. }
             | RelationalConstraint::AromaticSystemAnyAtom { system, .. } => {
-                self.require_available(lhs, created, Entity::AromaticSystem(*system))
+                self.require_available(lhs, added, Entity::AromaticSystem(*system))
             }
             RelationalConstraint::MulticenterBondAtoms { bond, atoms }
             | RelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
-                self.require_available(lhs, created, Entity::MulticenterBond(*bond))?;
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_available(lhs, added, Entity::MulticenterBond(*bond))?;
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             RelationalConstraint::MulticenterBondContains { bond, atom } => {
-                self.require_available(lhs, created, Entity::MulticenterBond(*bond))?;
-                self.require_available(lhs, created, Entity::Atom(*atom))
+                self.require_available(lhs, added, Entity::MulticenterBond(*bond))?;
+                self.require_available(lhs, added, Entity::Atom(*atom))
             }
             RelationalConstraint::MulticenterBondAllAtoms { bond, .. }
             | RelationalConstraint::MulticenterBondAnyAtom { bond, .. } => {
-                self.require_available(lhs, created, Entity::MulticenterBond(*bond))
+                self.require_available(lhs, added, Entity::MulticenterBond(*bond))
             }
             RelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
-                self.require_available(lhs, created, Entity::NoncovalentBond(*bond))?;
-                self.require_atoms(lhs, created, *atoms)
+                self.require_available(lhs, added, Entity::NoncovalentBond(*bond))?;
+                self.require_atoms(lhs, added, *atoms)
             }
             RelationalConstraint::NoncovalentBondContains { bond, atom } => {
-                self.require_available(lhs, created, Entity::NoncovalentBond(*bond))?;
-                self.require_available(lhs, created, Entity::Atom(*atom))
+                self.require_available(lhs, added, Entity::NoncovalentBond(*bond))?;
+                self.require_available(lhs, added, Entity::Atom(*atom))
             }
             RelationalConstraint::NoncovalentBondEndsSatisfy { bond, .. } => {
-                self.require_available(lhs, created, Entity::NoncovalentBond(*bond))
+                self.require_available(lhs, added, Entity::NoncovalentBond(*bond))
             }
             RelationalConstraint::StereoAtomSite { stereo_atom, atom }
             | RelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
-                self.require_available(lhs, created, Entity::StereoAtom(*stereo_atom))?;
-                self.require_available(lhs, created, Entity::Atom(*atom))
+                self.require_available(lhs, added, Entity::StereoAtom(*stereo_atom))?;
+                self.require_available(lhs, added, Entity::Atom(*atom))
             }
             RelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
-                self.require_available(lhs, created, Entity::StereoAtom(*stereo_atom))?;
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_available(lhs, added, Entity::StereoAtom(*stereo_atom))?;
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             RelationalConstraint::StereoAtomAllLigands { stereo_atom, .. }
             | RelationalConstraint::StereoAtomAnyLigand { stereo_atom, .. } => {
-                self.require_available(lhs, created, Entity::StereoAtom(*stereo_atom))
+                self.require_available(lhs, added, Entity::StereoAtom(*stereo_atom))
             }
             RelationalConstraint::StereoBondSite { stereo_bond, bond } => {
-                self.require_available(lhs, created, Entity::StereoBond(*stereo_bond))?;
-                self.require_available(lhs, created, Entity::Bond(*bond))
+                self.require_available(lhs, added, Entity::StereoBond(*stereo_bond))?;
+                self.require_available(lhs, added, Entity::Bond(*bond))
             }
             RelationalConstraint::StereoBondContains { stereo_bond, atom } => {
-                self.require_available(lhs, created, Entity::StereoBond(*stereo_bond))?;
-                self.require_available(lhs, created, Entity::Atom(*atom))
+                self.require_available(lhs, added, Entity::StereoBond(*stereo_bond))?;
+                self.require_available(lhs, added, Entity::Atom(*atom))
             }
             RelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
-                self.require_available(lhs, created, Entity::StereoBond(*stereo_bond))?;
-                self.require_atoms(lhs, created, atoms.iter().copied())
+                self.require_available(lhs, added, Entity::StereoBond(*stereo_bond))?;
+                self.require_atoms(lhs, added, atoms.iter().copied())
             }
             RelationalConstraint::StereoBondAllLigands { stereo_bond, .. }
             | RelationalConstraint::StereoBondAnyLigand { stereo_bond, .. } => {
-                self.require_available(lhs, created, Entity::StereoBond(*stereo_bond))
+                self.require_available(lhs, added, Entity::StereoBond(*stereo_bond))
             }
         }
     }
@@ -657,18 +666,18 @@ impl ReactionIntegrityCheck {
     fn validate_molecule_constraint(
         &self,
         lhs: &Molecule,
-        created: &HashSet<Entity>,
+        added: &HashMap<Entity, &Delta>,
         constraint: &MoleculeConstraint,
     ) -> Result<(), ReactionIntegrityError> {
         match constraint {
             MoleculeConstraint::ChargeSum { atoms, .. }
             | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
             | MoleculeConstraint::Connected { atoms } => {
-                self.require_atoms(lhs, created, atoms.iter().flatten().copied())
+                self.require_atoms(lhs, added, atoms.iter().flatten().copied())
             }
             MoleculeConstraint::BondOrderSum { bonds, .. } => {
                 for &bond in bonds.iter().flatten() {
-                    self.require_available(lhs, created, Entity::Bond(bond))?;
+                    self.require_available(lhs, added, Entity::Bond(bond))?;
                 }
                 Ok(())
             }
@@ -679,7 +688,7 @@ impl ReactionIntegrityCheck {
 impl Reaction {
     /// Check the representation invariants required to interpret this reaction.
     ///
-    /// The check covers delta references, created-id uniqueness, local stereo data carried by
+    /// The check covers delta references, added-id uniqueness, local stereo data carried by
     /// additions and constraint wrappers, and the source incidence and participant structure
     /// recorded by removals. The closed lhs already satisfies molecule integrity. This check does
     /// not impose DPO or chemistry semantics.
@@ -688,102 +697,22 @@ impl Reaction {
     }
 }
 
-fn source_frames(lhs: &Molecule) -> HashMap<Entity, OverlayFrame> {
-    let mut frames = HashMap::new();
-    for view in lhs.dative_bonds().iter() {
-        frames.insert(
-            Entity::DativeBond(view.id),
-            OverlayFrame::Dative {
-                donors: view.donor_ids().collect(),
-                acceptor: view.acceptor_id(),
-            },
-        );
-    }
-    for view in lhs.aromatic_systems().iter() {
-        frames.insert(
-            Entity::AromaticSystem(view.id),
-            OverlayFrame::Aromatic(view.atom_ids().collect()),
-        );
-    }
-    for view in lhs.multicenter_bonds().iter() {
-        frames.insert(
-            Entity::MulticenterBond(view.id),
-            OverlayFrame::Multicenter(view.atom_ids().collect()),
-        );
-    }
-    for view in lhs.noncovalent_bonds().iter() {
-        frames.insert(
-            Entity::NoncovalentBond(view.id),
-            OverlayFrame::Noncovalent(view.atom_ids()),
-        );
-    }
-    for view in lhs.stereo_atoms().iter() {
-        frames.insert(
-            Entity::StereoAtom(view.id),
-            OverlayFrame::StereoAtom {
-                site: view.site_id(),
-                ligands: view.ligand_frame(),
-            },
-        );
-    }
-    for view in lhs.stereo_bonds().iter() {
-        frames.insert(
-            Entity::StereoBond(view.id),
-            OverlayFrame::StereoBond {
-                site: view.site_id(),
-                ligands: view.ligand_frame(),
-            },
-        );
-    }
-    frames
-}
-
-fn added_entity_and_frame(delta: &Delta) -> Option<(Entity, Option<OverlayFrame>)> {
+fn added_entity(delta: &Delta) -> Option<Entity> {
     match delta {
-        Delta::Atom(AtomDelta::Add { id, .. }) => Some((Entity::Atom(*id), None)),
-        Delta::Bond(BondDelta::Add { id, .. }) => Some((Entity::Bond(*id), None)),
-        Delta::DativeBond(DativeBondDelta::Add {
-            id,
-            donors,
-            acceptor,
-            ..
-        }) => Some((
-            Entity::DativeBond(*id),
-            Some(OverlayFrame::Dative {
-                donors: donors.clone(),
-                acceptor: *acceptor,
-            }),
-        )),
-        Delta::AromaticSystem(AromaticSystemDelta::Add { id, atoms, .. }) => Some((
-            Entity::AromaticSystem(*id),
-            Some(OverlayFrame::Aromatic(atoms.clone())),
-        )),
-        Delta::MulticenterBond(MulticenterBondDelta::Add { id, atoms, .. }) => Some((
-            Entity::MulticenterBond(*id),
-            Some(OverlayFrame::Multicenter(atoms.clone())),
-        )),
-        Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, atoms, .. }) => Some((
-            Entity::NoncovalentBond(*id),
-            Some(OverlayFrame::Noncovalent(*atoms)),
-        )),
-        Delta::StereoAtom(StereoAtomDelta::Add {
-            id, site, ligands, ..
-        }) => Some((
-            Entity::StereoAtom(*id),
-            Some(OverlayFrame::StereoAtom {
-                site: *site,
-                ligands: ligands.clone(),
-            }),
-        )),
-        Delta::StereoBond(StereoBondDelta::Add {
-            id, site, ligands, ..
-        }) => Some((
-            Entity::StereoBond(*id),
-            Some(OverlayFrame::StereoBond {
-                site: *site,
-                ligands: ligands.clone(),
-            }),
-        )),
+        Delta::Atom(AtomDelta::Add { id, .. }) => Some(Entity::Atom(*id)),
+        Delta::Bond(BondDelta::Add { id, .. }) => Some(Entity::Bond(*id)),
+        Delta::DativeBond(DativeBondDelta::Add { id, .. }) => Some(Entity::DativeBond(*id)),
+        Delta::AromaticSystem(AromaticSystemDelta::Add { id, .. }) => {
+            Some(Entity::AromaticSystem(*id))
+        }
+        Delta::MulticenterBond(MulticenterBondDelta::Add { id, .. }) => {
+            Some(Entity::MulticenterBond(*id))
+        }
+        Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, .. }) => {
+            Some(Entity::NoncovalentBond(*id))
+        }
+        Delta::StereoAtom(StereoAtomDelta::Add { id, .. }) => Some(Entity::StereoAtom(*id)),
+        Delta::StereoBond(StereoBondDelta::Add { id, .. }) => Some(Entity::StereoBond(*id)),
         _ => None,
     }
 }

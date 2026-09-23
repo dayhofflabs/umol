@@ -3330,6 +3330,121 @@ mod tests {
     }
 
     #[rstest]
+    #[case::lhs(true, false)]
+    #[case::earlier_add(false, false)]
+    #[case::unavailable_before_duplicate(false, true)]
+    fn test_reaction_try_new_duplicate_reference(
+        #[case] existing: bool,
+        #[case] unavailable: bool,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: if existing {
+                vec![AtomForm::from_element(Element::C)]
+            } else {
+                vec![]
+            },
+            ..Default::default()
+        });
+        let addition = Delta::Atom(AtomDelta::Add {
+            id: AtomId(0),
+            attributes: AtomForm::from_element(Element::N),
+        });
+        let mut deltas = Vec::new();
+        if unavailable {
+            deltas.push(Delta::Atom(AtomDelta::Remove {
+                id: AtomId(7),
+                attributes: AtomForm::default(),
+            }));
+        }
+        if !existing {
+            deltas.push(addition.clone());
+        }
+        deltas.push(addition);
+
+        assert_eq!(
+            Reaction::try_new(lhs, Deltas::from_iter(deltas)),
+            Err(ReactionIntegrityError::DuplicateReference {
+                entity: Entity::Atom(AtomId(0)),
+            }),
+        );
+    }
+
+    #[rstest]
+    #[case::lhs_matching(true, [AtomId(1), AtomId(0)], Ok(()))]
+    #[case::lhs_mismatch(true, [AtomId(0), AtomId(2)], Err(ReactionIntegrityError::IncidenceMismatch {
+        entity: Entity::Bond(BondId(0)),
+    }))]
+    #[case::forward_add_matching(false, [AtomId(1), AtomId(0)], Ok(()))]
+    #[case::forward_add_mismatch(false, [AtomId(0), AtomId(2)], Err(ReactionIntegrityError::IncidenceMismatch {
+        entity: Entity::Bond(BondId(0)),
+    }))]
+    fn test_reaction_try_new_bond_removal_incidence(
+        #[case] existing: bool,
+        #[case] recorded_atoms: [AtomId; 2],
+        #[case] expected: Result<(), ReactionIntegrityError>,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: if existing {
+                vec![(AtomId(0), AtomId(1), BondForm::default())]
+            } else {
+                vec![]
+            },
+            ..Default::default()
+        });
+        let removal = Delta::Bond(BondDelta::Remove {
+            id: BondId(0),
+            atoms: recorded_atoms,
+            attributes: BondForm::default(),
+        });
+        let deltas = if existing {
+            Deltas::from_iter([removal])
+        } else {
+            Deltas::from_iter([
+                removal,
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::default(),
+                }),
+            ])
+        };
+
+        assert_eq!(Reaction::try_new(lhs, deltas).map(|_| ()), expected);
+    }
+
+    #[rstest]
+    #[case::matching(vec![AtomId(1), AtomId(0)], Ok(()))]
+    #[case::mismatch(vec![AtomId(0), AtomId(3)], Err(ReactionIntegrityError::IncidenceMismatch {
+        entity: Entity::DativeBond(DativeBondId(0)),
+    }))]
+    fn test_reaction_try_new_forward_add_removal_incidence(
+        #[case] donors: Vec<AtomId>,
+        #[case] expected: Result<(), ReactionIntegrityError>,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            ..Default::default()
+        });
+        let deltas = Deltas::from_iter([
+            Delta::DativeBond(DativeBondDelta::Remove {
+                id: DativeBondId(0),
+                donors,
+                acceptor: AtomId(2),
+                attributes: DativeBondForm::default(),
+            }),
+            Delta::DativeBond(DativeBondDelta::Add {
+                id: DativeBondId(0),
+                donors: vec![AtomId(0), AtomId(1)],
+                acceptor: AtomId(2),
+                attributes: DativeBondForm::default(),
+            }),
+        ]);
+
+        assert_eq!(Reaction::try_new(lhs, deltas).map(|_| ()), expected);
+    }
+
+    #[rstest]
     #[case::atom(
         Delta::StereoAtom(StereoAtomDelta::Add {
             id: StereoAtomId(0),

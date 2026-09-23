@@ -112,7 +112,7 @@ It does not require that the deltas can already materialize a consistent reactio
 
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
-| `InvalidReference` | A delta or nested constraint refers to neither an lhs entity nor a uniquely added entity. | Delta execution and remapping index entities by id, while removal integrity indexes source-frame maps after reference validation. A missing id would panic or select no source frame. |
+| `InvalidReference` | A delta or nested constraint refers to neither an lhs entity nor a uniquely added entity. | Delta execution and remapping index entities by id, while removal integrity reads the source from the lhs or its addition after reference validation. A missing id would panic or select no source. |
 | `DuplicateReference` | An `Add` uses an entity ID already present in the lhs or used by an earlier `Add`. | The same entity reference would name two different entities, giving later deltas and correspondences incompatible meanings. |
 | `ElectronCountLengthMismatch` | A literal electron-count vector in an aromatic or multicenter Add, Remove, or ModifyField has a length different from its owning or explicit local participant frame. | Counts follow participant positions; without one count per position, even identity frame transport can fail or detach counts from atoms. The Reaction error has the same `{ entity, participants, electron_counts }` fields as the Molecule error. |
 | `DuplicateAtom` | A stereo Add repeats an actual atom ligand, or a stereo-atom Add uses its site atom as an actual ligand. | Distinct actual atom occurrences are required for unambiguous incidence and frame actions. Virtual ligands anchored at the site remain allowed. |
@@ -123,15 +123,14 @@ It does not require that the deltas can already materialize a consistent reactio
 | `StereoCosetOutOfRange` | A literal, set member, or term in a stereo delta names a coset outside its kind. | The value denotes no configuration and later group action would fail for an unrelated reason. |
 | `StereoPermutationDegree` | A stereo constraint or term carries a permutation of the wrong degree. | Composing it with the frame action could assert or transport positions incorrectly. |
 | `StereoLigandPositionOutOfRange` | A stereo topicity pair in a delta names a position outside its owning or explicit local ligand frame. | Positional transport or evaluation would index a nonexistent ligand. |
-| `IncidenceMismatch` | An overlay removal names a site or structured participant incidence different from the lhs entity or same-reaction addition it removes. Factor-local reordering and complete stereo-bond endpoint-block exchange preserve incidence; moving individual ligands between blocks does not. | A removal id and its recorded incidence would describe different entities. Span conversion and application could then delete one entity while matching, transporting, or reporting another. |
+| `IncidenceMismatch` | A bond or overlay removal records endpoints, a site, or structured participant incidence different from the lhs entity or same-reaction addition it removes. Factor-local reordering and complete stereo-bond endpoint-block exchange preserve incidence; moving individual ligands between blocks does not. | A removal id and its recorded incidence would describe different entities. Span conversion and application could then delete one entity while matching, transporting, or reporting another. |
 
 The eight local stereo failures are direct Reaction variants with the same fields
 as their Molecule counterparts. Molecule and Reaction share the local validation
 rules, but each aggregate owns its reference, incidence, and public error
 contract. Reaction does not wrap `MoleculeIntegrityError` for a delta payload;
 ReactionSpan's `Lhs` and `Rhs` variants still wrap actual failed Molecule
-projections. The current Reaction constructor still reports duplicate `Add`
-references as `InvalidReference`; the `DuplicateReference` split is pending.
+projections.
 
 An overlay removal may record compatible incidence in a participant order different from its source.
 That sequence is an explicit local frame, not malformed representation. Because complete participant

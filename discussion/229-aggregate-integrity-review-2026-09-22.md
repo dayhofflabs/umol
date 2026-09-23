@@ -1776,6 +1776,21 @@ The 6,822 active graph-IR library tests and strict crate Clippy passed.
   by checking a created bond's recorded removal endpoints against its Add.
   Keep R10 at construction. Check lhs and forward-Add sources, duplicate
   additions, exact IncidenceMismatch, and the constructor benchmark.
+  **Complete 2026-09-23.** One borrowed Add map now serves uniqueness,
+  availability, and added-source lookup; lhs frames are read only for removals.
+  The constructor rejects added-ID collisions as DuplicateReference and checks
+  created-bond removal endpoints. Exact cases cover lhs and forward-Add
+  sources, reordered frames, mismatches, and first-pass error precedence.
+  On the same Criterion 80-atom constructor fixture, the committed pre-S2b
+  code measured 5.86, 5.97, and 8.32 µs for zero, one, and 20 removals
+  without constraints. S2b measured 0.025, 0.062, and 1.07 µs respectively.
+  Inputs were cloned outside the timed body in both runs. The 20-removal
+  baseline had outliers; the constrained fixture measured 7.30 versus
+  1.07 µs for that case. Eliminating the eager lhs frame copy improves the
+  sparse cases and does not trade that gain for slower dense removals. The
+  earlier scratch probe used a different harness and is not a numeric
+  baseline for this comparison.
+  Crate tests, Reaction property tests, strict crate Clippy, and rustdoc passed.
 - **S2c — reaction::integrity; breaking, restored green [dep: S2b].** Add
   ElectronCountLengthMismatch for R2 and check literal aromatic/multicenter
   counts in Add, Remove, and both ModifyField sides against their frame.
