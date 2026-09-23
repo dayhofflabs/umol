@@ -5,5 +5,5 @@ description: MANDATORY — use whenever creating, editing, reviewing, renaming, 
 
 # Test writing
 
-Read and follow [the canonical repository skill](../../../.agents/skills/test-writing/SKILL.md) in
-full before taking task actions. The `.agents` copy is authoritative.
+Read and follow [the canonical repository skill](../../../.agents/skills/test-writing/SKILL.md)
+in full before taking task actions. The `.agents` copy is authoritative.
