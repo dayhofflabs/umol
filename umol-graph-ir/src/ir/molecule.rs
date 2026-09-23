@@ -89,224 +89,6 @@ pub struct MoleculeEntries {
     pub constraints: Constraints,
 }
 
-pub(super) fn validate_entry_references(
-    entries: &MoleculeEntries,
-) -> Result<(), MoleculeIntegrityError> {
-    validate_entry_references_inner(entries)
-        .map_err(|entity| MoleculeIntegrityError::InvalidReference { entity })
-}
-
-fn validate_entry_references_inner(entries: &MoleculeEntries) -> Result<(), Entity> {
-    let contains = |entity| match entity {
-        Entity::Atom(id) => id.index() < entries.atoms.len(),
-        Entity::Bond(id) => id.index() < entries.bonds.len(),
-        Entity::DativeBond(id) => id.index() < entries.dative.len(),
-        Entity::AromaticSystem(id) => id.index() < entries.aromatic.len(),
-        Entity::MulticenterBond(id) => id.index() < entries.multicenter.len(),
-        Entity::NoncovalentBond(id) => id.index() < entries.noncovalent.len(),
-        Entity::StereoAtom(id) => id.index() < entries.stereo_atoms.len(),
-        Entity::StereoBond(id) => id.index() < entries.stereo_bonds.len(),
-    };
-
-    for &(first, second, _) in &entries.bonds {
-        require_reference(&contains, Entity::Atom(first))?;
-        require_reference(&contains, Entity::Atom(second))?;
-    }
-    for (donors, acceptor, _) in &entries.dative {
-        require_references(&contains, donors.iter().copied().map(Entity::Atom))?;
-        require_reference(&contains, Entity::Atom(*acceptor))?;
-    }
-    for (atoms, _) in &entries.aromatic {
-        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
-    }
-    for (atoms, _) in &entries.multicenter {
-        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
-    }
-    for (atoms, _) in &entries.noncovalent {
-        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
-    }
-    for (site, ligands, _) in &entries.stereo_atoms {
-        require_reference(&contains, Entity::Atom(*site))?;
-        require_references(
-            &contains,
-            ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)),
-        )?;
-    }
-    for (site, ligands, _) in &entries.stereo_bonds {
-        require_reference(&contains, Entity::Bond(*site))?;
-        require_references(
-            &contains,
-            ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)),
-        )?;
-    }
-    for constraint in entries.constraints.iter() {
-        validate_constraint_references(constraint, &contains)?;
-    }
-    Ok(())
-}
-
-fn require_reference(contains: &dyn Fn(Entity) -> bool, entity: Entity) -> Result<(), Entity> {
-    if contains(entity) {
-        Ok(())
-    } else {
-        Err(entity)
-    }
-}
-
-fn require_references(
-    contains: &dyn Fn(Entity) -> bool,
-    entities: impl IntoIterator<Item = Entity>,
-) -> Result<(), Entity> {
-    for entity in entities {
-        require_reference(contains, entity)?;
-    }
-    Ok(())
-}
-
-pub(super) fn validate_constraint_references(
-    constraint: &Constraint,
-    contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), Entity> {
-    match constraint {
-        Constraint::Atom(id, _) => require_reference(contains, Entity::Atom(*id)),
-        Constraint::Bond(id, _) => require_reference(contains, Entity::Bond(*id)),
-        Constraint::DativeBond(id, _) => require_reference(contains, Entity::DativeBond(*id)),
-        Constraint::AromaticSystem(id, _) => {
-            require_reference(contains, Entity::AromaticSystem(*id))
-        }
-        Constraint::MulticenterBond(id, _) => {
-            require_reference(contains, Entity::MulticenterBond(*id))
-        }
-        Constraint::NoncovalentBond(id, _) => {
-            require_reference(contains, Entity::NoncovalentBond(*id))
-        }
-        Constraint::StereoAtom(id, _, _) => require_reference(contains, Entity::StereoAtom(*id)),
-        Constraint::StereoBond(id, _, _) => require_reference(contains, Entity::StereoBond(*id)),
-        Constraint::Relational(constraint) => {
-            validate_relational_constraint_references(constraint, contains)
-        }
-        Constraint::Molecule(constraint) => {
-            validate_molecule_constraint_references(constraint, contains)
-        }
-        Constraint::And(constraints) | Constraint::Or(constraints) => {
-            for constraint in constraints {
-                validate_constraint_references(constraint, contains)?;
-            }
-            Ok(())
-        }
-        Constraint::Not(constraint) => validate_constraint_references(constraint, contains),
-    }
-}
-
-fn validate_relational_constraint_references(
-    constraint: &RelationalConstraint,
-    contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), Entity> {
-    match constraint {
-        RelationalConstraint::DativeBondDonors { bond, atoms }
-        | RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
-            require_reference(contains, Entity::DativeBond(*bond))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::DativeBondDonor { bond, atom }
-        | RelationalConstraint::DativeBondAcceptor { bond, atom } => {
-            require_reference(contains, Entity::DativeBond(*bond))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::DativeBondAllDonors { bond, .. }
-        | RelationalConstraint::DativeBondAnyDonor { bond, .. }
-        | RelationalConstraint::DativeBondAcceptorSatisfies { bond, .. } => {
-            require_reference(contains, Entity::DativeBond(*bond))
-        }
-        RelationalConstraint::DativeBondParallels { dative, parallel } => {
-            require_reference(contains, Entity::DativeBond(*dative))?;
-            require_reference(contains, Entity::Bond(*parallel))
-        }
-        RelationalConstraint::AromaticSystemAtoms { system, atoms }
-        | RelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
-            require_reference(contains, Entity::AromaticSystem(*system))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::AromaticSystemContains { system, atom } => {
-            require_reference(contains, Entity::AromaticSystem(*system))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::AromaticSystemAllAtoms { system, .. }
-        | RelationalConstraint::AromaticSystemAnyAtom { system, .. } => {
-            require_reference(contains, Entity::AromaticSystem(*system))
-        }
-        RelationalConstraint::MulticenterBondAtoms { bond, atoms }
-        | RelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
-            require_reference(contains, Entity::MulticenterBond(*bond))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::MulticenterBondContains { bond, atom } => {
-            require_reference(contains, Entity::MulticenterBond(*bond))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::MulticenterBondAllAtoms { bond, .. }
-        | RelationalConstraint::MulticenterBondAnyAtom { bond, .. } => {
-            require_reference(contains, Entity::MulticenterBond(*bond))
-        }
-        RelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
-            require_reference(contains, Entity::NoncovalentBond(*bond))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::NoncovalentBondContains { bond, atom } => {
-            require_reference(contains, Entity::NoncovalentBond(*bond))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::NoncovalentBondEndsSatisfy { bond, .. } => {
-            require_reference(contains, Entity::NoncovalentBond(*bond))
-        }
-        RelationalConstraint::StereoAtomSite { stereo_atom, atom }
-        | RelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
-            require_reference(contains, Entity::StereoAtom(*stereo_atom))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
-            require_reference(contains, Entity::StereoAtom(*stereo_atom))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::StereoAtomAllLigands { stereo_atom, .. }
-        | RelationalConstraint::StereoAtomAnyLigand { stereo_atom, .. } => {
-            require_reference(contains, Entity::StereoAtom(*stereo_atom))
-        }
-        RelationalConstraint::StereoBondSite { stereo_bond, bond } => {
-            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
-            require_reference(contains, Entity::Bond(*bond))
-        }
-        RelationalConstraint::StereoBondContains { stereo_bond, atom } => {
-            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
-            require_reference(contains, Entity::Atom(*atom))
-        }
-        RelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
-            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
-            require_references(contains, atoms.iter().copied().map(Entity::Atom))
-        }
-        RelationalConstraint::StereoBondAllLigands { stereo_bond, .. }
-        | RelationalConstraint::StereoBondAnyLigand { stereo_bond, .. } => {
-            require_reference(contains, Entity::StereoBond(*stereo_bond))
-        }
-    }
-}
-
-fn validate_molecule_constraint_references(
-    constraint: &MoleculeConstraint,
-    contains: &dyn Fn(Entity) -> bool,
-) -> Result<(), Entity> {
-    match constraint {
-        MoleculeConstraint::ChargeSum { atoms, .. }
-        | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
-        | MoleculeConstraint::Connected { atoms } => {
-            require_references(contains, atoms.iter().flatten().copied().map(Entity::Atom))
-        }
-        MoleculeConstraint::BondOrderSum { bonds, .. } => {
-            require_references(contains, bonds.iter().flatten().copied().map(Entity::Bond))
-        }
-    }
-}
-
 impl Molecule {
     /// Empty molecule: zero atoms, zero bonds, zero overlays, zero constraints.
     pub fn new() -> Self {
@@ -2311,6 +2093,224 @@ fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId
     if let Some(first) = atoms.next() {
         for atom in atoms {
             uf.union(first.index(), atom.index());
+        }
+    }
+}
+
+pub(super) fn validate_entry_references(
+    entries: &MoleculeEntries,
+) -> Result<(), MoleculeIntegrityError> {
+    validate_entry_references_inner(entries)
+        .map_err(|entity| MoleculeIntegrityError::InvalidReference { entity })
+}
+
+fn validate_entry_references_inner(entries: &MoleculeEntries) -> Result<(), Entity> {
+    let contains = |entity| match entity {
+        Entity::Atom(id) => id.index() < entries.atoms.len(),
+        Entity::Bond(id) => id.index() < entries.bonds.len(),
+        Entity::DativeBond(id) => id.index() < entries.dative.len(),
+        Entity::AromaticSystem(id) => id.index() < entries.aromatic.len(),
+        Entity::MulticenterBond(id) => id.index() < entries.multicenter.len(),
+        Entity::NoncovalentBond(id) => id.index() < entries.noncovalent.len(),
+        Entity::StereoAtom(id) => id.index() < entries.stereo_atoms.len(),
+        Entity::StereoBond(id) => id.index() < entries.stereo_bonds.len(),
+    };
+
+    for &(first, second, _) in &entries.bonds {
+        require_reference(&contains, Entity::Atom(first))?;
+        require_reference(&contains, Entity::Atom(second))?;
+    }
+    for (donors, acceptor, _) in &entries.dative {
+        require_references(&contains, donors.iter().copied().map(Entity::Atom))?;
+        require_reference(&contains, Entity::Atom(*acceptor))?;
+    }
+    for (atoms, _) in &entries.aromatic {
+        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
+    }
+    for (atoms, _) in &entries.multicenter {
+        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
+    }
+    for (atoms, _) in &entries.noncovalent {
+        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
+    }
+    for (site, ligands, _) in &entries.stereo_atoms {
+        require_reference(&contains, Entity::Atom(*site))?;
+        require_references(
+            &contains,
+            ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)),
+        )?;
+    }
+    for (site, ligands, _) in &entries.stereo_bonds {
+        require_reference(&contains, Entity::Bond(*site))?;
+        require_references(
+            &contains,
+            ligands.iter().map(|ligand| Entity::Atom(ligand.atom_id)),
+        )?;
+    }
+    for constraint in entries.constraints.iter() {
+        validate_constraint_references(constraint, &contains)?;
+    }
+    Ok(())
+}
+
+fn require_reference(contains: &dyn Fn(Entity) -> bool, entity: Entity) -> Result<(), Entity> {
+    if contains(entity) {
+        Ok(())
+    } else {
+        Err(entity)
+    }
+}
+
+fn require_references(
+    contains: &dyn Fn(Entity) -> bool,
+    entities: impl IntoIterator<Item = Entity>,
+) -> Result<(), Entity> {
+    for entity in entities {
+        require_reference(contains, entity)?;
+    }
+    Ok(())
+}
+
+pub(super) fn validate_constraint_references(
+    constraint: &Constraint,
+    contains: &dyn Fn(Entity) -> bool,
+) -> Result<(), Entity> {
+    match constraint {
+        Constraint::Atom(id, _) => require_reference(contains, Entity::Atom(*id)),
+        Constraint::Bond(id, _) => require_reference(contains, Entity::Bond(*id)),
+        Constraint::DativeBond(id, _) => require_reference(contains, Entity::DativeBond(*id)),
+        Constraint::AromaticSystem(id, _) => {
+            require_reference(contains, Entity::AromaticSystem(*id))
+        }
+        Constraint::MulticenterBond(id, _) => {
+            require_reference(contains, Entity::MulticenterBond(*id))
+        }
+        Constraint::NoncovalentBond(id, _) => {
+            require_reference(contains, Entity::NoncovalentBond(*id))
+        }
+        Constraint::StereoAtom(id, _, _) => require_reference(contains, Entity::StereoAtom(*id)),
+        Constraint::StereoBond(id, _, _) => require_reference(contains, Entity::StereoBond(*id)),
+        Constraint::Relational(constraint) => {
+            validate_relational_constraint_references(constraint, contains)
+        }
+        Constraint::Molecule(constraint) => {
+            validate_molecule_constraint_references(constraint, contains)
+        }
+        Constraint::And(constraints) | Constraint::Or(constraints) => {
+            for constraint in constraints {
+                validate_constraint_references(constraint, contains)?;
+            }
+            Ok(())
+        }
+        Constraint::Not(constraint) => validate_constraint_references(constraint, contains),
+    }
+}
+
+fn validate_relational_constraint_references(
+    constraint: &RelationalConstraint,
+    contains: &dyn Fn(Entity) -> bool,
+) -> Result<(), Entity> {
+    match constraint {
+        RelationalConstraint::DativeBondDonors { bond, atoms }
+        | RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
+            require_reference(contains, Entity::DativeBond(*bond))?;
+            require_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::DativeBondDonor { bond, atom }
+        | RelationalConstraint::DativeBondAcceptor { bond, atom } => {
+            require_reference(contains, Entity::DativeBond(*bond))?;
+            require_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::DativeBondAllDonors { bond, .. }
+        | RelationalConstraint::DativeBondAnyDonor { bond, .. }
+        | RelationalConstraint::DativeBondAcceptorSatisfies { bond, .. } => {
+            require_reference(contains, Entity::DativeBond(*bond))
+        }
+        RelationalConstraint::DativeBondParallels { dative, parallel } => {
+            require_reference(contains, Entity::DativeBond(*dative))?;
+            require_reference(contains, Entity::Bond(*parallel))
+        }
+        RelationalConstraint::AromaticSystemAtoms { system, atoms }
+        | RelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
+            require_reference(contains, Entity::AromaticSystem(*system))?;
+            require_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::AromaticSystemContains { system, atom } => {
+            require_reference(contains, Entity::AromaticSystem(*system))?;
+            require_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::AromaticSystemAllAtoms { system, .. }
+        | RelationalConstraint::AromaticSystemAnyAtom { system, .. } => {
+            require_reference(contains, Entity::AromaticSystem(*system))
+        }
+        RelationalConstraint::MulticenterBondAtoms { bond, atoms }
+        | RelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
+            require_reference(contains, Entity::MulticenterBond(*bond))?;
+            require_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::MulticenterBondContains { bond, atom } => {
+            require_reference(contains, Entity::MulticenterBond(*bond))?;
+            require_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::MulticenterBondAllAtoms { bond, .. }
+        | RelationalConstraint::MulticenterBondAnyAtom { bond, .. } => {
+            require_reference(contains, Entity::MulticenterBond(*bond))
+        }
+        RelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
+            require_reference(contains, Entity::NoncovalentBond(*bond))?;
+            require_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::NoncovalentBondContains { bond, atom } => {
+            require_reference(contains, Entity::NoncovalentBond(*bond))?;
+            require_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::NoncovalentBondEndsSatisfy { bond, .. } => {
+            require_reference(contains, Entity::NoncovalentBond(*bond))
+        }
+        RelationalConstraint::StereoAtomSite { stereo_atom, atom }
+        | RelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
+            require_reference(contains, Entity::StereoAtom(*stereo_atom))?;
+            require_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
+            require_reference(contains, Entity::StereoAtom(*stereo_atom))?;
+            require_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::StereoAtomAllLigands { stereo_atom, .. }
+        | RelationalConstraint::StereoAtomAnyLigand { stereo_atom, .. } => {
+            require_reference(contains, Entity::StereoAtom(*stereo_atom))
+        }
+        RelationalConstraint::StereoBondSite { stereo_bond, bond } => {
+            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
+            require_reference(contains, Entity::Bond(*bond))
+        }
+        RelationalConstraint::StereoBondContains { stereo_bond, atom } => {
+            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
+            require_reference(contains, Entity::Atom(*atom))
+        }
+        RelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
+            require_reference(contains, Entity::StereoBond(*stereo_bond))?;
+            require_references(contains, atoms.iter().copied().map(Entity::Atom))
+        }
+        RelationalConstraint::StereoBondAllLigands { stereo_bond, .. }
+        | RelationalConstraint::StereoBondAnyLigand { stereo_bond, .. } => {
+            require_reference(contains, Entity::StereoBond(*stereo_bond))
+        }
+    }
+}
+
+fn validate_molecule_constraint_references(
+    constraint: &MoleculeConstraint,
+    contains: &dyn Fn(Entity) -> bool,
+) -> Result<(), Entity> {
+    match constraint {
+        MoleculeConstraint::ChargeSum { atoms, .. }
+        | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
+        | MoleculeConstraint::Connected { atoms } => {
+            require_references(contains, atoms.iter().flatten().copied().map(Entity::Atom))
+        }
+        MoleculeConstraint::BondOrderSum { bonds, .. } => {
+            require_references(contains, bonds.iter().flatten().copied().map(Entity::Bond))
         }
     }
 }
