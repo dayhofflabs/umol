@@ -6,6 +6,8 @@
 //! `~` and `^` are group actions on the index; the owning configuration's
 //! `normalize` folds closed operator-expressions against the coset algebra.
 
+pub(crate) mod integrity;
+
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::sync::Arc;

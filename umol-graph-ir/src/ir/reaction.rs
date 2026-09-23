@@ -3341,7 +3341,7 @@ mod tests {
             ],
             attributes: StereoAtomForm::default(),
         }),
-        MoleculeIntegrityError::DuplicateStereoLigand {
+        ReactionIntegrityError::DuplicateStereoLigand {
             entity: Entity::StereoAtom(StereoAtomId(0)),
             ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         },
@@ -3356,7 +3356,7 @@ mod tests {
             ],
             attributes: StereoBondForm::default(),
         }),
-        MoleculeIntegrityError::DuplicateStereoLigand {
+        ReactionIntegrityError::DuplicateStereoLigand {
             entity: Entity::StereoBond(StereoBondId(0)),
             ligand: StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
         },
@@ -3370,7 +3370,7 @@ mod tests {
                 .collect(),
             attributes: StereoAtomForm::default(),
         }),
-        MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        ReactionIntegrityError::StereoFrameDegreeTooLarge {
             entity: Entity::StereoAtom(StereoAtomId(0)),
             degree: MAX_DEGREE + 1,
             maximum: MAX_DEGREE,
@@ -3385,7 +3385,7 @@ mod tests {
                 .collect(),
             attributes: StereoBondForm::default(),
         }),
-        MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        ReactionIntegrityError::StereoFrameDegreeTooLarge {
             entity: Entity::StereoBond(StereoBondId(0)),
             degree: MAX_DEGREE + 1,
             maximum: MAX_DEGREE,
@@ -3393,7 +3393,7 @@ mod tests {
     )]
     fn test_reaction_try_new_stereo_add_error(
         #[case] delta: Delta,
-        #[case] expected: MoleculeIntegrityError,
+        #[case] expected: ReactionIntegrityError,
     ) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); MAX_DEGREE + 2],
@@ -3403,7 +3403,7 @@ mod tests {
 
         assert_eq!(
             Reaction::try_new(lhs, Deltas::from_iter([delta])),
-            Err(ReactionIntegrityError::StereoIntegrityError(expected)),
+            Err(expected),
         );
     }
 
@@ -3465,9 +3465,7 @@ mod tests {
 
         assert_eq!(
             Reaction::try_new(lhs, Deltas::from_iter([delta])),
-            Err(ReactionIntegrityError::StereoIntegrityError(
-                MoleculeIntegrityError::StereoKindSiteMismatch { entity, kind },
-            )),
+            Err(ReactionIntegrityError::StereoKindSiteMismatch { entity, kind }),
         );
     }
 
@@ -3561,9 +3559,7 @@ mod tests {
 
         assert_eq!(
             Reaction::try_new(lhs, Deltas::from_iter(deltas)),
-            Err(ReactionIntegrityError::StereoIntegrityError(
-                MoleculeIntegrityError::StereoKindSiteMismatch { entity, kind },
-            )),
+            Err(ReactionIntegrityError::StereoKindSiteMismatch { entity, kind }),
         );
     }
 

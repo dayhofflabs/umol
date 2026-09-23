@@ -2514,7 +2514,7 @@ mod tests {
     use crate::ir::num::NumForm;
     use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
     use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, Stereogenicity};
-    use crate::ir::{MoleculeEntries, MoleculeIntegrityError, ReactionIntegrityError};
+    use crate::ir::{MoleculeEntries, ReactionIntegrityError};
     use crate::mol_dsl;
 
     #[fixture]
@@ -3155,33 +3155,33 @@ mod tests {
     #[rstest]
     #[case::atom_repeated_virtual(
         r##"{:lhs {:atoms ["C" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 [:h 0] [:h 0]] :attrs "Th0"}}}]}"##,
-        ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError::DuplicateStereoLigand {
+        ReactionIntegrityError::DuplicateStereoLigand {
             entity: Entity::StereoAtom(StereoAtomId(0)),
             ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-        }),
+        },
     )]
     #[case::atom_oversized(
         r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I" "N" "O" "S"]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4 5 6 7] :attrs "*"}}}]}"##,
-        ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        ReactionIntegrityError::StereoFrameDegreeTooLarge {
             entity: Entity::StereoAtom(StereoAtomId(0)),
             degree: 7,
             maximum: 6,
-        }),
+        },
     )]
     #[case::bond_repeated_virtual(
         r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 [:h 1] 3 [:h 1]] :attrs "Ct0"}}}]}"##,
-        ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError::DuplicateStereoLigand {
+        ReactionIntegrityError::DuplicateStereoLigand {
             entity: Entity::StereoBond(StereoBondId(0)),
             ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-        }),
+        },
     )]
     #[case::bond_oversized(
         r##"{:lhs {:atoms ["C" "C" "F" "Cl" "Br" "I" "N" "O" "S"] :bonds [[0 1 "2"]]} :deltas [{:stereo-bond {:add {:site 0 :ligands [2 3 4 5 6 7 8] :attrs "*"}}}]}"##,
-        ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        ReactionIntegrityError::StereoFrameDegreeTooLarge {
             entity: Entity::StereoBond(StereoBondId(0)),
             degree: 7,
             maximum: 6,
-        }),
+        },
     )]
     fn test_reaction_input_into_ir_integrity(
         #[case] source: &str,

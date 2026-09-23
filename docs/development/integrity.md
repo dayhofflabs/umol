@@ -115,7 +115,7 @@ It does not require that the deltas can already materialize a consistent reactio
 | `InvalidReference` | A delta or nested constraint refers to neither an lhs entity nor a uniquely added entity. | Delta execution and remapping index entities by id, while removal integrity indexes source-frame maps after reference validation. A missing id would panic or select no source frame. |
 | `DuplicateReference` | An `Add` uses an entity ID already present in the lhs or used by an earlier `Add`. | The same entity reference would name two different entities, giving later deltas and correspondences incompatible meanings. |
 | `ElectronCountLengthMismatch` | A literal electron-count vector in an aromatic or multicenter Add, Remove, or ModifyField has a length different from its owning or explicit local participant frame. | Counts follow participant positions; without one count per position, even identity frame transport can fail or detach counts from atoms. The Reaction error has the same `{ entity, participants, electron_counts }` fields as the Molecule error. |
-| `DuplicateAtom` | A stereo-atom Add uses its site atom as an actual atom ligand. | The site and actual ligand must identify different atoms for the stored incidence to have one interpretation. Virtual ligands anchored at the site remain allowed. |
+| `DuplicateAtom` | A stereo Add repeats an actual atom ligand, or a stereo-atom Add uses its site atom as an actual ligand. | Distinct actual atom occurrences are required for unambiguous incidence and frame actions. Virtual ligands anchored at the site remain allowed. |
 | `DuplicateStereoLigand` | A stereo Add repeats the same complete ligand value. | Equal frame positions do not determine a unique permutation action for reaction transport. |
 | `StereoFrameDegreeTooLarge` | A stereo Add has more ligands than the bounded permutation representation supports. | Frame-action construction would otherwise reach a degree assertion. |
 | `StereoKindSiteMismatch` | A stereo configuration or constraint asserts a kind inadmissible for its atom or bond site type. | Choosing the wrong site action group would misinterpret the payload. |
@@ -130,10 +130,8 @@ as their Molecule counterparts. Molecule and Reaction share the local validation
 rules, but each aggregate owns its reference, incidence, and public error
 contract. Reaction does not wrap `MoleculeIntegrityError` for a delta payload;
 ReactionSpan's `Lhs` and `Rhs` variants still wrap actual failed Molecule
-projections. The current Reaction constructor still uses the broad
-`StereoIntegrityError(MoleculeIntegrityError)` wrapper; its replacement is
-pending. It also reports duplicate `Add` references as `InvalidReference`;
-the `DuplicateReference` split is pending.
+projections. The current Reaction constructor still reports duplicate `Add`
+references as `InvalidReference`; the `DuplicateReference` split is pending.
 
 An overlay removal may record compatible incidence in a participant order different from its source.
 That sequence is an explicit local frame, not malformed representation. Because complete participant

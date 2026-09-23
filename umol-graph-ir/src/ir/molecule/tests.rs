@@ -51,7 +51,8 @@ use super::super::num::NumForm;
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{
-    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind, Topicity,
+    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm,
+    Topicity,
 };
 use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::transact::TransactionError;
@@ -763,6 +764,50 @@ fn test_molecule_try_from_entries_error(
         count: 2,
     },
 )]
+#[case::stereo_term_variable_domain(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].2.configuration = StereoConfigurationForm::kinded(
+            StereoKind::Tetrahedral,
+            StereoCoset::term(StereoTerm::var_in("x", [2])),
+        );
+    },
+    MoleculeIntegrityError::StereoCosetOutOfRange {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        kind: StereoKind::Tetrahedral,
+        coset: 2,
+        count: 2,
+    },
+)]
+#[case::stereo_term_nested_literal_set(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].2.configuration = StereoConfigurationForm::kinded(
+            StereoKind::Tetrahedral,
+            StereoCoset::term(StereoTerm::swap(StereoTerm::mirror(StereoTerm::lit_set([2])))),
+        );
+    },
+    MoleculeIntegrityError::StereoCosetOutOfRange {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        kind: StereoKind::Tetrahedral,
+        coset: 2,
+        count: 2,
+    },
+)]
+#[case::stereo_term_nested_permutation(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].2.configuration = StereoConfigurationForm::kinded(
+            StereoKind::Tetrahedral,
+            StereoCoset::term(StereoTerm::swap(StereoTerm::apply(
+                StereoTerm::var("x"),
+                Permutation::identity(3),
+            ))),
+        );
+    },
+    MoleculeIntegrityError::StereoPermutationDegree {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        expected: 4,
+        actual: 3,
+    },
+)]
 fn test_molecule_try_from_entries_integrity_error(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] invalidate: fn(&mut MoleculeEntries),
@@ -771,6 +816,30 @@ fn test_molecule_try_from_entries_integrity_error(
     invalidate(&mut entries);
 
     assert_eq!(Molecule::try_from_entries(entries), Err(expected));
+}
+
+#[rstest]
+#[case::nested_variable(StereoTerm::swap(StereoTerm::mirror(StereoTerm::apply(
+    StereoTerm::var_in("x", [0, 1]),
+    Permutation::identity(4),
+))))]
+fn test_molecule_try_from_entries_stereo_term(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] term: StereoTerm,
+) {
+    let configuration =
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::term(term));
+    entries.stereo_atoms[0].2.configuration = configuration.clone();
+
+    let molecule = Molecule::try_from_entries(entries).expect("stereo term is in range");
+
+    assert_eq!(
+        &molecule
+            .stereo_atom(StereoAtomId(0))
+            .attributes
+            .configuration,
+        &configuration,
+    );
 }
 
 #[rstest]

@@ -14,11 +14,11 @@ use super::super::edit::{StereoAtomFieldChange, StereoBondFieldChange};
 use super::super::entity::Entity;
 use super::super::id::{AtomId, BondId};
 use super::super::ligand::StereoLigand;
-use super::super::molecule::integrity::{
+use super::super::molecule::Molecule;
+use super::super::stereo::integrity::{
     check_stereo_atom_entry, check_stereo_atom_kind, check_stereo_bond_entry,
-    check_stereo_bond_kind,
+    check_stereo_bond_kind, StereoIntegrityError,
 };
-use super::super::molecule::{Molecule, MoleculeIntegrityError};
 use super::super::stereo::StereoKind;
 use super::Reaction;
 
@@ -51,9 +51,59 @@ pub enum ReactionIntegrityError {
     /// A delta refers to an entity unavailable from either the lhs or the reaction's additions.
     #[error("reaction references unavailable entity {entity:?}")]
     InvalidReference { entity: Entity },
-    /// Stereo data carried by the reaction violates a local representation invariant.
-    #[error("reaction stereo representation is invalid: {0}")]
-    StereoIntegrityError(MoleculeIntegrityError),
+    /// An atom occurs twice in one stereo entity's atom references.
+    #[error("{entity}: participant atom {atom:?} is duplicated")]
+    DuplicateAtom { entity: Entity, atom: AtomId },
+    /// A stereo frame repeats a complete ligand value.
+    #[error("{entity}: stereo ligand {ligand:?} is duplicated in the frame")]
+    DuplicateStereoLigand {
+        entity: Entity,
+        ligand: StereoLigand,
+    },
+    /// A stereo frame exceeds the supported permutation degree.
+    #[error(
+        "{entity}: stereo frame has degree {degree}, exceeding the supported maximum {maximum}"
+    )]
+    StereoFrameDegreeTooLarge {
+        entity: Entity,
+        degree: usize,
+        maximum: usize,
+    },
+    /// A stereo kind cannot be borne by its site type.
+    #[error("{entity}: stereo kind {kind:?} is not admissible for this site type")]
+    StereoKindSiteMismatch { entity: Entity, kind: StereoKind },
+    /// A stereo frame's length differs from its declared kind's degree.
+    #[error("{entity}: stereo frame has {actual} ligands, expected {expected} for {kind:?}")]
+    StereoLigandArity {
+        entity: Entity,
+        kind: StereoKind,
+        expected: usize,
+        actual: usize,
+    },
+    /// A coset index is outside the declared kind's range.
+    #[error("{entity}: coset {coset} is outside 0..{count} for {kind:?}")]
+    StereoCosetOutOfRange {
+        entity: Entity,
+        kind: StereoKind,
+        coset: u32,
+        count: usize,
+    },
+    /// A permutation has a different degree from the frame or kind it acts on.
+    #[error(
+        "{entity}: permutation has degree {actual}, expected {expected} for the stored ligand frame"
+    )]
+    StereoPermutationDegree {
+        entity: Entity,
+        expected: usize,
+        actual: usize,
+    },
+    /// A topicity pair names a position outside its stereo frame.
+    #[error("{entity}: ligand position {position} is outside 0..{degree}")]
+    StereoLigandPositionOutOfRange {
+        entity: Entity,
+        position: usize,
+        degree: usize,
+    },
     /// A removal records incidence incompatible with its source entity's participant structure.
     #[error("reaction incidence does not match source entity {entity:?}")]
     IncidenceMismatch { entity: Entity },
@@ -64,6 +114,71 @@ pub enum ReactionIntegrityError {
         old: StereoKind,
         new: StereoKind,
     },
+}
+
+impl From<StereoIntegrityError> for ReactionIntegrityError {
+    fn from(error: StereoIntegrityError) -> Self {
+        match error {
+            StereoIntegrityError::DuplicateAtom { entity, atom } => {
+                Self::DuplicateAtom { entity, atom }
+            }
+            StereoIntegrityError::DuplicateStereoLigand { entity, ligand } => {
+                Self::DuplicateStereoLigand { entity, ligand }
+            }
+            StereoIntegrityError::StereoFrameDegreeTooLarge {
+                entity,
+                degree,
+                maximum,
+            } => Self::StereoFrameDegreeTooLarge {
+                entity,
+                degree,
+                maximum,
+            },
+            StereoIntegrityError::StereoKindSiteMismatch { entity, kind } => {
+                Self::StereoKindSiteMismatch { entity, kind }
+            }
+            StereoIntegrityError::StereoLigandArity {
+                entity,
+                kind,
+                expected,
+                actual,
+            } => Self::StereoLigandArity {
+                entity,
+                kind,
+                expected,
+                actual,
+            },
+            StereoIntegrityError::StereoCosetOutOfRange {
+                entity,
+                kind,
+                coset,
+                count,
+            } => Self::StereoCosetOutOfRange {
+                entity,
+                kind,
+                coset,
+                count,
+            },
+            StereoIntegrityError::StereoPermutationDegree {
+                entity,
+                expected,
+                actual,
+            } => Self::StereoPermutationDegree {
+                entity,
+                expected,
+                actual,
+            },
+            StereoIntegrityError::StereoLigandPositionOutOfRange {
+                entity,
+                position,
+                degree,
+            } => Self::StereoLigandPositionOutOfRange {
+                entity,
+                position,
+                degree,
+            },
+        }
+    }
 }
 
 /// A stereo entity keeps its kind across a configuration change: the kind names the coordination
@@ -273,7 +388,7 @@ impl ReactionIntegrityCheck {
             }) => check_stereo_bond_kind(Entity::StereoBond(*id), *kind),
             _ => Ok(()),
         };
-        result.map_err(ReactionIntegrityError::StereoIntegrityError)?;
+        result.map_err(ReactionIntegrityError::from)?;
 
         match delta {
             Delta::StereoAtom(StereoAtomDelta::ModifyField { id, change }) => {
@@ -421,12 +536,12 @@ impl ReactionIntegrityCheck {
             Constraint::StereoAtom(id, kind, _) => {
                 self.require_available(lhs, created, Entity::StereoAtom(*id))?;
                 check_stereo_atom_kind(Entity::StereoAtom(*id), *kind)
-                    .map_err(ReactionIntegrityError::StereoIntegrityError)
+                    .map_err(ReactionIntegrityError::from)
             }
             Constraint::StereoBond(id, kind, _) => {
                 self.require_available(lhs, created, Entity::StereoBond(*id))?;
                 check_stereo_bond_kind(Entity::StereoBond(*id), *kind)
-                    .map_err(ReactionIntegrityError::StereoIntegrityError)
+                    .map_err(ReactionIntegrityError::from)
             }
             Constraint::Relational(constraint) => {
                 self.validate_relational_constraint(lhs, created, constraint)

@@ -427,7 +427,7 @@ pinned names.
   exhaustive constraint match. Only the entry and constraint checks with
   consumers outside `molecule::integrity` need crate-private access.
 - Move the local stereo-form checks shared with Reaction out of
-  `molecule::integrity` into a small `stereo::domain` module. Its private error
+  `molecule::integrity` into a small `stereo::integrity` module. Its private error
   vocabulary maps into each aggregate's own public integrity error; it owns no
   aggregate gate. Keep `Molecule::check_integrity` in `molecule::integrity` and
   `Reaction::check_integrity` in `reaction::integrity`. Only entry points used
@@ -1717,21 +1717,33 @@ tests and IO's 4,137 library tests passed; strict Clippy passed for graph-IR,
 IO, and umol-py with Python 3.13 active. Graph-IR rustdoc passed with warnings
 denied.
 
-### S1 — Stereo domains and admitted inputs
+### S1 — Stereo integrity and admitted inputs
 
-- **S1a — stereo::domain, molecule::integrity, reaction::integrity; breaking,
+- **S1a — stereo::integrity, molecule::integrity, reaction::integrity; breaking,
   restored green [dep: S0c].** Move only shared local stereo-frame, kind,
-  configuration, and constraint-domain checks from molecule::integrity into
-  stereo::domain. Give that module a crate-internal local error mapped into
+  configuration, and constraint checks from molecule::integrity into
+  stereo::integrity. Give that module a crate-internal local error mapped into
   each aggregate's own public error variants; replace Reaction's broad
   StereoIntegrityError wrapper with its eight direct variants and migrate
   callers. The aggregate gates stay in their respective integrity modules.
   Check exact existing stereo errors and add the accepted and malformed
   nested-term cases (F9). Add no public helper or checker type.
+  **Complete 2026-09-23.**
 - **S1b — symmetry.rs; green [dep: S1a].** Handle a published kindless stereo
   frame without calling the determined-kind accessor (F14). Keep it admitted
   by Molecule construction and add the public graph_symmetry regression;
   retain unresolved and nonliteral behavior.
+
+#### S1a result (2026-09-23)
+
+The local frame, kind, configuration, and constraint checks now live in
+stereo::integrity. Molecule and Reaction map its eight failures into separate
+public error enums; Reaction no longer wraps MoleculeIntegrityError for stereo
+delta payloads. Reference and site-incidence checks remain in the aggregate
+gates. New Molecule::try_from_entries cases reject malformed nested terms and
+preserve an accepted raw term. The 6,820 active graph-IR library tests, strict
+crate Clippy, rustdoc with warnings denied, and the Python binding crate check
+passed.
 
 ### S2 — Delta and Reaction correctness
 
@@ -1756,7 +1768,7 @@ denied.
   Migrate error consumers and check exact lengths and errors, retaining
   undetermined values.
 - **S2d — reaction::integrity; green [dep: S1a, S2b].** Use the shared local
-  stereo-domain rules for R3–R5: Remove configurations, both ModifyField
+  stereo integrity checks for R3–R5: Remove configurations, both ModifyField
   configurations, entity constraint changes, and top-level ConstraintDelta
   positions/actions against the owning frame. Exact tests distinguish local
   domain failures from deferred old-value and product failures; run Reaction
@@ -1777,7 +1789,7 @@ denied.
 
 ### S4 — Molecule gate allocations and repeated checks
 
-- **S4a — stereo::domain and molecule::integrity; green [dep: S1a, S0a].**
+- **S4a — stereo::integrity and molecule::integrity; green [dep: S1a, S0a].**
   Borrow stored ligand slices (F3), use the bounded prefix uniqueness scan
   (F7), remove the implied second stereo-bond atom set (F5), and use a site
   exclusion scan for stereo atoms (F6). Preserve degree and first-error
