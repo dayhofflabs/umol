@@ -80,14 +80,17 @@ checked operations and translate rejection to `ValueError`; they do not publish 
 
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
-| `DuplicateParticipant` | An entity's actual-atom participant relation repeats an atom: a bond or noncovalent self-loop, a dative atom repeated among the donors or between a donor and the acceptor, a repeated aromatic or multicenter member, a repeated actual stereo ligand, or a stereo-atom site repeated as an actual ligand. | Relation coincidence, incidence, and frame operations assume that every actual-atom occurrence identifies a distinct participant. A dative donor equal to its acceptor creates parallel, differently labelled incidences between the same atom and dative entity; ordinary incidence matching can then select one edge for both roles and return an incorrect result. Other repetitions make identity and participant actions ambiguous or make one occurrence masquerade as two positions. |
-| `BondsParallel` | Two covalent bonds have the same unordered endpoint pair. | The graph-IR molecule gives a covalent bond identity by its endpoints. Single-edge lookup, correspondence induction, and bond matching would otherwise have multiple answers. |
+| `DuplicateParticipant` | An atom occurs twice in one entity's atom references: a bond or noncovalent self-loop, a dative atom repeated among the donors or between a donor and the acceptor, a repeated aromatic or multicenter member, or a stereo-atom site repeated as an actual atom ligand. | Relation coincidence, incidence, and frame operations assume that every actual-atom occurrence identifies a distinct participant. A dative donor equal to its acceptor creates parallel, differently labelled incidences between the same atom and dative entity; ordinary incidence matching can then select one edge for both roles and return an incorrect result. Other repetitions make identity and participant actions ambiguous or make one occurrence masquerade as two positions. |
+| `BondsParallel` | Two localized bonds have the same unordered endpoint pair. | The graph-IR molecule gives a localized bond identity by its endpoints. Single-edge lookup, correspondence induction, and bond matching would otherwise have multiple answers. |
 | `DativeBondsIdentical` | Two dative bonds have the same acceptor and donor multiset, including when their stored donor orders differ. Shared acceptors or donors are permitted when the complete keys differ. | The complete `(acceptor, donor multiset)` is the dative identity and singular coincidence key. Duplicate complete keys would make lookup, correspondence, and delta targeting non-unique. |
 | `NoncovalentBondsParallel` | Two noncovalent bonds have the same unordered endpoint pair, even if their kinds differ. | Noncovalent bond identity is the endpoint pair. Multiple entries would make `coincident_id`, matching, and delta targeting ambiguous. Combined interaction kinds must be represented in one form instead. |
 | `AromaticSystemsOverlap` | One atom belongs to more than one aromatic system. | Aromatic membership names a unique owning system. Algorithms that recover the system from a member atom would otherwise choose an arbitrary incident relation. |
 | `MulticenterBondsIdentical` | Two multicenter bonds have the same participant set. | The participant set is the multicenter bond's uniqueness key. Duplicate sets would make coincidence lookup, correspondence, and delta targeting non-unique. |
 | `StereoAtomSitesDuplicate` | More than one stereo-atom entity is borne by the same atom. | The site identifies the stereo entity. Site-based constraints, lookup, perception, and reaction edits require one answer. |
 | `StereoBondSitesDuplicate` | More than one stereo-bond entity is borne by the same bond. | The site bond identifies the stereo entity. Site-based constraints, lookup, perception, and reaction edits require one answer. |
+
+The approved name for `DuplicateParticipant` is `DuplicateAtom`; this rename is
+pending. Its fields and rejection contract do not change.
 
 ### Stereo frames and domains
 
@@ -112,10 +115,28 @@ It does not require that the deltas can already materialize a consistent reactio
 
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
-| `InvalidReference` | A delta or nested constraint refers to neither an lhs entity nor a uniquely added entity; an added id collides with the lhs or another addition. | Delta execution and remapping index entities by id, while removal integrity indexes source-frame maps after reference validation. Missing ids would panic; colliding created ids would give later deltas and correspondences two incompatible meanings. |
-| `StereoIntegrityError` | A stereo addition has an invalid local frame, configuration, or inline constraint, or a stereo constraint wrapper asserts a kind inadmissible for its site type. | These values enter reaction operations without first becoming a molecule. Reusing the molecule-local checks prevents bounded-permutation panics, invalid position domains, and wrong site-group interpretation before span materialization. |
+| `InvalidReference` | A delta or nested constraint refers to neither an lhs entity nor a uniquely added entity. | Delta execution and remapping index entities by id, while removal integrity indexes source-frame maps after reference validation. A missing id would panic or select no source frame. |
+| `DuplicateReference` | An `Add` uses an entity ID already present in the lhs or used by an earlier `Add`. | The same entity reference would name two different entities, giving later deltas and correspondences incompatible meanings. |
+| `ElectronCountLengthMismatch` | A literal electron-count vector in an aromatic or multicenter Add, Remove, or ModifyField has a length different from its owning or explicit local participant frame. | Counts follow participant positions; without one count per position, even identity frame transport can fail or detach counts from atoms. The Reaction error has the same `{ entity, participants, electron_counts }` fields as the Molecule error. |
+| `DuplicateAtom` | A stereo-atom Add uses its site atom as an actual atom ligand. | The site and actual ligand must identify different atoms for the stored incidence to have one interpretation. Virtual ligands anchored at the site remain allowed. |
+| `DuplicateStereoLigand` | A stereo Add repeats the same complete ligand value. | Equal frame positions do not determine a unique permutation action for reaction transport. |
+| `StereoFrameDegreeTooLarge` | A stereo Add has more ligands than the bounded permutation representation supports. | Frame-action construction would otherwise reach a degree assertion. |
+| `StereoKindSiteMismatch` | A stereo configuration or constraint asserts a kind inadmissible for its atom or bond site type. | Choosing the wrong site action group would misinterpret the payload. |
+| `StereoLigandArity` | A kinded configuration or constraint addresses a frame of another degree. | The value cannot be transported or indexed against that frame. |
+| `StereoCosetOutOfRange` | A literal, set member, or term in a stereo delta names a coset outside its kind. | The value denotes no configuration and later group action would fail for an unrelated reason. |
+| `StereoPermutationDegree` | A stereo constraint or term carries a permutation of the wrong degree. | Composing it with the frame action could assert or transport positions incorrectly. |
+| `StereoLigandPositionOutOfRange` | A stereo topicity pair in a delta names a position outside its owning or explicit local ligand frame. | Positional transport or evaluation would index a nonexistent ligand. |
 | `IncidenceMismatch` | An overlay removal names a site or structured participant incidence different from the lhs entity or same-reaction addition it removes. Factor-local reordering and complete stereo-bond endpoint-block exchange preserve incidence; moving individual ligands between blocks does not. | A removal id and its recorded incidence would describe different entities. Span conversion and application could then delete one entity while matching, transporting, or reporting another. |
-| `StereoKindModified` | One stereo entity's configuration change replaces one determined kind with another. | The old and new configurations would require different action groups, so no single entity frame can transport the change coherently. A kind change is represented by removing the old entity and adding a new one. |
+
+The eight local stereo failures are direct Reaction variants with the same fields
+as their Molecule counterparts. Molecule and Reaction share the local validation
+rules, but each aggregate owns its reference, incidence, and public error
+contract. Reaction does not wrap `MoleculeIntegrityError` for a delta payload;
+ReactionSpan's `Lhs` and `Rhs` variants still wrap actual failed Molecule
+projections. The current Reaction constructor still uses the broad
+`StereoIntegrityError(MoleculeIntegrityError)` wrapper; its replacement is
+pending. It also reports duplicate `Add` references as `InvalidReference`;
+the `DuplicateReference` split is pending.
 
 An overlay removal may record compatible incidence in a participant order different from its source.
 That sequence is an explicit local frame, not malformed representation. Because complete participant
@@ -126,8 +147,12 @@ the removal retains the same relation to its owner. Normalization instead uses t
 action directly to align the removal with that owner before reframing.
 
 Reaction integrity intentionally does not establish delta normal form, old/new continuity,
-constraint satisfiability, two-sided span materializability, DPO gluing conditions, host
-applicability, or chemistry. The operation that first requires one of those properties checks it.
+old/new stereo-kind agreement, constraint satisfiability, two-sided span materializability, DPO
+gluing conditions, host applicability, or chemistry. A ModifyField may carry individually valid
+configurations of different kinds; application rejects the unexecutable change, and span conversion
+rejects a kind change within one shared entity. The operation that first requires each deferred
+property checks it. The current Reaction constructor still rejects differing determined kinds;
+removing that check and adding the electron-count length check are pending.
 
 ## `ReactionSpan` integrity inventory
 

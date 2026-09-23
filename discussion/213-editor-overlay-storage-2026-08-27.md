@@ -7,7 +7,7 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
 [228](228-python-api-parity-2026-09-21.md),
-[229](229-molecule-integrity-review-2026-09-22.md),
+[229](229-aggregate-integrity-review-2026-09-22.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 

@@ -4,7 +4,7 @@ Status: Completed
 Date: 2026-08-28
 Relates: [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
-[229](229-molecule-integrity-review-2026-09-22.md),
+[229](229-aggregate-integrity-review-2026-09-22.md),
 [data-type guide](../docs/development/data-types.md),
 [integrity guide](../docs/development/integrity.md),
 [nomenclature guide](../docs/development/nomenclature.md)
@@ -32,9 +32,8 @@ span rather than faithfully retain independently supplied entries.
 The inventory in the integrity guide has 29 error rows. Against the current executable public
 surface:
 
-- 24 rows pass the admission test without qualification;
+- 25 rows, including `DuplicateParticipant`, pass the admission test without qualification;
 - `ReactionIntegrityError::Lhs` passes only while public molecule mutation can compromise the lhs;
-- `DuplicateParticipant` passes except for its dative donor/acceptor cross-factor case;
 - `ParticipantFrameMismatch` rejects a coherent removal whose explicit local frame can be aligned
   uniquely with its source frame;
 - `EntityCountMismatch` has no independently constructible failure state; and
@@ -66,10 +65,9 @@ structured incidence and carry an explicit local participant frame that aligns u
 source frame; and both reaction-span projections form molecules. Atom/bond attribute parallelism
 remains structurally guaranteed by construction rather than dynamically checked.
 
-For dative bonds, the corrected intrinsic contract is factor-aware:
+For dative bonds:
 
-- donors are pairwise distinct because they occupy one participant frame;
-- the acceptor may also occur as a donor because it belongs to the other distinguished factor; and
+- the complete donors-plus-acceptor participant sequence is pairwise distinct; and
 - two dative entities may share an acceptor and one or more donors, but their complete
   `(acceptor, donor multiset)` identity keys must differ.
 
@@ -143,16 +141,20 @@ and the same donor multiset remain invalid even if their stored donor sequences 
 name should describe duplicate complete identity rather than imply that any shared incidence is
 parallel; `DativeBondsIdentical` is the direct peer of `MulticenterBondsIdentical`.
 
-### Make dative participant uniqueness factor-aware
+### Retain dative participant uniqueness across both factors
 
-The current dative branch passes the flattened donor-plus-acceptor sequence to
-`check_unique_participants`. That correctly rejects repeated donors but also rejects a donor equal
-to the acceptor. The latter lies across distinguished birelation factors: the roles, identity key,
-incidence, and donor-frame action remain unambiguous.
+The complete donors-plus-acceptor participant sequence must be pairwise distinct. Although donor
+and acceptor roles remain distinguished for identity and frame transport, repeating one atom across
+them creates parallel, differently labelled incidences between the same atom and dative entity.
+Ordinary incidence matching can then select one parallel edge for both roles and return an
+incorrect result. This satisfies the admission test for representation integrity rather than a
+deferred chemistry predicate.
 
-Check uniqueness within the donor factor only. Continue to reject a repeated donor. Accept an atom
-that appears once as donor and once as acceptor; any chemistry judgment about that state remains
-lazy.
+`MoleculeIntegrityError::DuplicateParticipant` covers both repeated donors and a donor equal to
+the acceptor. Molecule publication and each reaction-span side projection reject these through the
+existing molecule-integrity gate. A permissive reaction may still carry a prospective product that
+fails when materialized. Distinct dative entities may share participants when their complete
+identity keys differ.
 
 ### Accept compatible reaction removal frames
 
@@ -183,10 +185,15 @@ old value remains an ordinary delta-continuity failure; it is not malformed repr
 Aggregate reaction reframing still exposes one owning frame and one representative action per
 entity id. The lhs frame owns an existing entity and the unique `Add` frame owns a created entity.
 Field and constraint deltas are stated in that owning frame. A `Remove` may use another compatible
-local frame, so reaction transport composes its derived local-to-owner alignment with the supplied
-owner action before transporting the removal sequence and payload. Plain `reframe` derives and
-consumes that composition without allocating a per-delta action vector; `reframe_with_action`
-returns only the per-entity owning actions.
+local frame. For `FrameTransport for Reaction`, let `q` be its local-to-owner action and `a` the
+supplied owner action. The removal consumes `q.compose(a).compose(q.inverse())`. This conjugation
+preserves the relation between the local frame and the moving owner and satisfies identity,
+inverse, and composition. Plain `reframe` derives and consumes the local action without allocating
+a per-delta action vector; `reframe_with_action` returns only the per-entity owning actions.
+
+Direct local-to-owner-to-target composition instead aligns a removal into a target frame for
+normalization and application-specific rule-to-host transport. It is not the group action on a
+raw locally framed reaction.
 
 Consequently, an isolated kind-specific delta is a transport-only consumer of a supplied local
 action, but `Deltas` cannot blindly implement transport under `OverlayFrameActions` without the
@@ -304,9 +311,9 @@ No other integrity row is reopened by this work.
 
 ## Documentation and verification
 
-Update the data-type guide and integrity guide with the corrected dative identity, factor-aware
-participant rule, structurally guaranteed graph/table parallelism, actual mutation closure, and the
-removal of defensive checks and exact removal-frame rejection. Remove stale claims that dense
+Update the data-type guide and integrity guide with the complete dative identity, pairwise-distinct
+donors-plus-acceptor rule, structurally guaranteed graph/table parallelism, actual mutation closure,
+and the removal of defensive checks and exact removal-frame rejection. Remove stale claims that dense
 remapping can receive an invalid closed source. Keep the nomenclature guide aligned where its
 relation identity, integrity, or frame-transport descriptions encode the old rules. Doc 214
 separately owns the remaining removal of repeated-virtual-ligand orbit terminology.
@@ -315,7 +322,7 @@ Each changed behavior receives its own focused test:
 
 - accept two dative bonds that share an acceptor and donor but have different complete donor sets;
 - reject two datives with the same acceptor and donor multiset in different stored frames;
-- accept a donor equal to the acceptor while still rejecting a repeated donor;
+- reject both a repeated donor and a donor equal to the acceptor;
 - accept reordered removals for all six overlay families and transport their payloads into the
   owning frame before comparison;
 - reject a stereo-bond removal that changes endpoint-block incidence as `IncidenceMismatch`;
@@ -335,7 +342,7 @@ runtime checks rather than merely accompanying them. Existing algebraic properti
 remain the authority for normalization, reframing, and canonicalization behavior. Reaction
 properties additionally establish that a compatible reordered removal has the same materialization,
 application, and reversal behavior as its source-framed restatement. Doc 214 S0r-S0t own aggregate
-reaction reframing and the composed local-to-owner-to-target action properties after the common
+reaction reframing and the conjugated local-action properties after the common
 frame-action vocabulary exists.
 
 ## Scope boundary and completion
@@ -385,11 +392,11 @@ S0 ends with the replacement Rust vocabulary available while every existing call
 - **S1a — molecule integrity minimization** (`umol-graph-ir/src/ir/molecule/integrity.rs`, molecule
   integrity tests and property scenarios, direct error consumers): remove `EntityCountMismatch` and
   its unreachable graph/table branches; replace incidence-wide `DativeBondsParallel` with
-  `DativeBondsIdentical` over the complete `(acceptor, donor multiset)` key; and check duplicate
-  participants within the donor factor rather than across donor and acceptor factors. Migrate every
-  exhaustive error match. Exact cases accept shared incidences with distinct complete identities
-  and donor-equals-acceptor, reject reordered duplicate identities and repeated donors, and retain
-  graph/table preservation properties for trusted publishers. **Breaking (red→green).** [dep: none]
+  `DativeBondsIdentical` over the complete `(acceptor, donor multiset)` key; and retain participant
+  uniqueness across the complete donors-plus-acceptor sequence. Migrate every exhaustive error
+  match. Exact cases accept shared incidences with distinct complete identities, reject reordered
+  duplicate identities, repeated donors, and donor-equals-acceptor, and retain graph/table
+  preservation properties for trusted publishers. **Breaking (red→green).** [dep: none]
   **Done.**
 - **S1b — aromatic-system mutation closure** (`umol-graph-ir/src/ir/molecule.rs`,
   `umol-py/src/{aromatic,constraint/aromatic}.rs`, Rust and Python tests): restrict
@@ -489,9 +496,9 @@ or unreachable public diagnostic.
 
 - **S3a — normative and API documentation** (`docs/development/{data-types,integrity,
   nomenclature}.md`, graph-IR rustdoc, Python docs): update the integrity inventory and failure
-  justifications, dative identity and factor rules, checked mutation names and rollback behavior,
-  compatible removal-local frames, crate-private integrity gates, closed-source remapping and
-  canonicalization contracts, and raw-versus-normal reaction-span construction. Remove every stale
+  justifications, dative identity and participant uniqueness, checked mutation names and rollback
+  behavior, compatible removal-local frames, crate-private integrity gates, closed-source remapping
+  and canonicalization contracts, and raw-versus-normal reaction-span construction. Remove every stale
   public error, panic, and defensive-validation claim. **Additive (green).** [dep: S2d] **Done.**
 - **S3b — checkpoint verification and lifecycle closeout** (workspace, doc 215, status index): run
   formatting, graph-IR unit and doctests, the affected property modules, strict relevant clippy,
@@ -503,11 +510,12 @@ or unreachable public diagnostic.
   (green).** [dep: S3a] **Done.**
 
   S3a brought the integrity, data-type, and nomenclature guides into agreement with the implemented
-  26-error inventory and closed-container surface: factor-aware dative identity, checked aromatic
-  and multicenter mutation with rollback, compatible removal-local frames, crate-private aggregate
-  integrity gates, closed-source remapping and canonicalization, and representation-preserving raw
-  reaction-span construction are now explicit. Canonicalization rustdoc no longer advertises
-  unreachable integrity errors. The audit found no stale Python canonicalization error claim.
+  26-error inventory and closed-container surface: complete dative identity and distinct participants,
+  checked aromatic and multicenter mutation with rollback, compatible removal-local frames,
+  crate-private aggregate integrity gates, closed-source remapping and canonicalization, and
+  representation-preserving raw reaction-span construction are now explicit. Canonicalization
+  rustdoc no longer advertises unreachable integrity errors. The audit found no stale Python
+  canonicalization error claim.
 
   S3b ran `cargo fmt --all`, `cargo check --workspace --all-targets`, strict all-target clippy for
   graph IR, graph, I/O, and Python, `cargo test --workspace --no-fail-fast`, the complete
@@ -524,33 +532,3 @@ or unreachable public diagnostic.
 Critical path: S0a/S0b → S1b/S1c → S2a/S2b → S2d → S3a → S3b. S1a, S1d, and S1e may proceed after
 the current doc 214 S0d baseline and converge before their S2 consumers. No stage is deferrable:
 doc 214 S0e and later frame transport rely on the complete corrected integrity and error surface.
-
-## Correction — 2026-08-29
-
-The S1a conclusion that one atom may occur as both a dative donor and its acceptor is superseded.
-The complete donors-plus-acceptor participant sequence must be pairwise distinct. Although the two
-roles remain distinguished for identity and frame transport, repeating one atom across them creates
-parallel, differently labelled donor and acceptor incidences between the same atom and dative
-entity. Ordinary incidence matching can then select one parallel edge for both roles and return an
-incorrect result. This satisfies the admission test for representation integrity rather than a
-deferred chemistry predicate.
-
-`MoleculeIntegrityError::DuplicateParticipant` now covers both repeated donors and a donor equal to
-the acceptor. `Molecule` publication and each `ReactionSpan` side projection therefore reject the
-representation through their existing molecule-integrity gate. A permissive `Reaction` may still
-carry a prospective product that fails when materialized, consistent with the reaction/span
-boundary recorded above. The complete `(acceptor, donor multiset)` identity key and the permission
-for distinct dative entities to share individual participants remain unchanged.
-
-## Correction — 2026-08-29: removal frame transport
-
-The earlier statement that aggregate reaction transport composes a removal's local-to-owner
-alignment directly with the supplied owner action is superseded by doc 214 S0r. That composition
-aligns a removal directly into a target frame and is appropriate to normalization followed by
-application-specific rule-to-host transport, but it does not define a group action on a raw
-locally framed `Reaction`.
-
-For generic `FrameTransport for Reaction`, let `q` be the local-to-owner action and `a` the supplied
-owner action. The removal consumes `q.compose(a).compose(q.inverse())`. This conjugation preserves
-the relation between its local frame and the moving owner and therefore satisfies identity,
-inverse, and composition. The owning action returned by `reframe_with_action` remains unchanged.
