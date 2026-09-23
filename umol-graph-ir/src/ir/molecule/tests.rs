@@ -541,23 +541,23 @@ fn test_molecule_try_from_entries_error(
         electron_counts: 1,
     },
 )]
-#[case::aromatic_duplicate_participant(
+#[case::aromatic_duplicate_atom(
     |entries: &mut MoleculeEntries| entries.aromatic[0].0[2] = AtomId(1),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateAtom {
         entity: Entity::AromaticSystem(AromaticSystemId(0)),
         atom: AtomId(1),
     },
 )]
-#[case::multicenter_duplicate_participant(
+#[case::multicenter_duplicate_atom(
     |entries: &mut MoleculeEntries| entries.multicenter[0].0[2] = AtomId(1),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateAtom {
         entity: Entity::MulticenterBond(MulticenterBondId(0)),
         atom: AtomId(1),
     },
 )]
 #[case::bond_self_loop(
     |entries: &mut MoleculeEntries| entries.bonds[0].1 = AtomId(0),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateAtom {
         entity: Entity::Bond(BondId(0)),
         atom: AtomId(0),
     },
@@ -567,20 +567,20 @@ fn test_molecule_try_from_entries_error(
         entries.bonds[1].0 = AtomId(0);
         entries.bonds[1].1 = AtomId(1);
     },
-    MoleculeIntegrityError::BondsParallel {
+    MoleculeIntegrityError::ParallelBonds {
         atoms: [AtomId(0), AtomId(1)],
     },
 )]
 #[case::dative_donor_duplicate(
     |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(1),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateAtom {
         entity: Entity::DativeBond(DativeBondId(0)),
         atom: AtomId(1),
     },
 )]
 #[case::dative_donor_acceptor_duplicate(
     |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(3),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateAtom {
         entity: Entity::DativeBond(DativeBondId(0)),
         atom: AtomId(3),
     },
@@ -591,7 +591,7 @@ fn test_molecule_try_from_entries_error(
         AtomId(3),
         DativeBondForm::from_order(2),
     )),
-    MoleculeIntegrityError::DativeBondsIdentical {
+    MoleculeIntegrityError::IdenticalDativeBonds {
         acceptor: AtomId(3),
         donors: vec![AtomId(1), AtomId(2)],
     },
@@ -608,13 +608,13 @@ fn test_molecule_try_from_entries_error(
         vec![AtomId(0), AtomId(1), AtomId(2)],
         MulticenterBondForm::default(),
     )),
-    MoleculeIntegrityError::MulticenterBondsIdentical {
+    MoleculeIntegrityError::IdenticalMulticenterBonds {
         atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
     },
 )]
 #[case::noncovalent_self_loop(
     |entries: &mut MoleculeEntries| entries.noncovalent[0].0[1] = AtomId(0),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateAtom {
         entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
         atom: AtomId(0),
     },
@@ -624,14 +624,14 @@ fn test_molecule_try_from_entries_error(
         [AtomId(3), AtomId(0)],
         NoncovalentBondForm::from_kind(NoncovalentBondKind::VanDerWaals),
     )),
-    MoleculeIntegrityError::NoncovalentBondsParallel {
+    MoleculeIntegrityError::ParallelNoncovalentBonds {
         atoms: [AtomId(0), AtomId(3)],
     },
 )]
 #[case::stereo_atom_site_is_atom_ligand(
     |entries: &mut MoleculeEntries| entries.stereo_atoms[0].1[0] =
         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateAtom {
         entity: Entity::StereoAtom(StereoAtomId(0)),
         atom: AtomId(1),
     },
@@ -649,7 +649,7 @@ fn test_molecule_try_from_entries_error(
         let stereo_atom = entries.stereo_atoms[0].clone();
         entries.stereo_atoms.push(stereo_atom);
     },
-    MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: AtomId(1) },
+    MoleculeIntegrityError::DuplicateStereoAtomSites { atom: AtomId(1) },
 )]
 #[case::stereo_bond_ligand_duplicate(
     |entries: &mut MoleculeEntries| entries.stereo_bonds[0].1[1] =
@@ -664,7 +664,7 @@ fn test_molecule_try_from_entries_error(
         let stereo_bond = entries.stereo_bonds[0].clone();
         entries.stereo_bonds.push(stereo_bond);
     },
-    MoleculeIntegrityError::StereoBondSitesDuplicate { bond: BondId(1) },
+    MoleculeIntegrityError::DuplicateStereoBondSites { bond: BondId(1) },
 )]
 #[case::stereo_atom_actual_ligand_incidence(
     |entries: &mut MoleculeEntries| entries.stereo_atoms[0].1[1] =
@@ -3407,7 +3407,7 @@ fn test_molecule_apply(
             attributes: BondForm::from_order(1),
         }],
     }]),
-    MoleculeApplyError::Integrity(MoleculeIntegrityError::BondsParallel {
+    MoleculeApplyError::Integrity(MoleculeIntegrityError::ParallelBonds {
         atoms: [AtomId(0), AtomId(1)],
     }),
 )]
@@ -3713,7 +3713,7 @@ fn test_molecule_editor_tracked_apply_transient() {
     assert_eq!(rolled_back, expected);
     assert_eq!(
         editor.snapshot(),
-        Err(MoleculeIntegrityError::BondsParallel {
+        Err(MoleculeIntegrityError::ParallelBonds {
             atoms: [AtomId(0), AtomId(1)]
         })
     );
@@ -3864,7 +3864,7 @@ fn test_molecule_editor_tracked_build_session() {
 }
 
 #[rstest]
-#[case::parallel_bond(MoleculeIntegrityError::BondsParallel { atoms: [AtomId(0), AtomId(1)] })]
+#[case::parallel_bond(MoleculeIntegrityError::ParallelBonds { atoms: [AtomId(0), AtomId(1)] })]
 fn test_molecule_editor_tracked_snapshot_error(#[case] expected: MoleculeIntegrityError) {
     let source = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
     let mut editor = source.edit();

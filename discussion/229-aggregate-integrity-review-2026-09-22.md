@@ -400,9 +400,9 @@ These are migrations, not additional correctness findings. The nomenclature guid
 defects. The validate_* reference helper names existed at cd64b530f (2026-08-05);
 the Integrity check glossary entry appears at 1257445b0 (2026-08-08).
 
-Approved MoleculeIntegrityError renames:
+MoleculeIntegrityError renames:
 
-| Current | Approved |
+| Previous | Current |
 | --- | --- |
 | BondsParallel | ParallelBonds |
 | NoncovalentBondsParallel | ParallelNoncovalentBonds |
@@ -417,9 +417,8 @@ existing terms and plurals. DuplicateAtom names the actual failure: an AtomId
 occurs twice in one entity's atom references, including a stereo-atom site reused
 as an actual atom ligand. Repeated complete stereo ligands already produce
 DuplicateStereoLigand. Other variants retain their names. Payloads, diagnostics,
-and rejection semantics are unchanged. Apply these renames to callers, tests,
-and the living integrity inventory during implementation; the review evidence
-above uses the pinned names.
+and rejection semantics are unchanged. The review evidence above uses the
+pinned names.
 
 - Move the five molecule validate_* reference functions out of `molecule.rs`
   into `molecule::integrity` and name them check_*: they check representation
@@ -1643,6 +1642,7 @@ counts here so that scratch experiments may be deleted.
   including DuplicateAtom. Migrate constructors, editor errors, DSL and
   Python bindings, rustdoc, and exact error assertions together. Check
   compilation of affected crates and the exact error cases.
+  **Complete 2026-09-23.**
 
 #### S0a baseline (2026-09-23)
 
@@ -1705,6 +1705,17 @@ Complete-operation timings did not show a consistent material gain: the
 constraint stayed at 55.55 versus 55.63 µs. The no-constraint span case moved
 from 55.42 to 56.12 µs. F1 remains a local removal of avoidable dispatch, not
 an end-to-end speedup claim.
+
+#### S0c result (2026-09-23)
+
+All seven MoleculeIntegrityError variants now use the approved names in the
+integrity gate, its Rust consumers, exact error assertions, and the living
+integrity inventory. Their fields, display messages, and rejection paths did
+not change. The Python binding converts MoleculeIntegrityError generically, so
+it had no variant-specific code to migrate. Graph-IR's 6,816 active library
+tests and IO's 4,137 library tests passed; strict Clippy passed for graph-IR,
+IO, and umol-py with Python 3.13 active. Graph-IR rustdoc passed with warnings
+denied.
 
 ### S1 — Stereo domains and admitted inputs
 

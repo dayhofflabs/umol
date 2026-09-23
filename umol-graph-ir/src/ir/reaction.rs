@@ -2104,14 +2104,14 @@ impl Reaction {
         let product = match builder.try_build() {
             Ok(product) => product,
             Err(
-                MoleculeIntegrityError::DuplicateParticipant { .. }
-                | MoleculeIntegrityError::BondsParallel { .. }
-                | MoleculeIntegrityError::DativeBondsIdentical { .. }
-                | MoleculeIntegrityError::NoncovalentBondsParallel { .. }
+                MoleculeIntegrityError::DuplicateAtom { .. }
+                | MoleculeIntegrityError::ParallelBonds { .. }
+                | MoleculeIntegrityError::IdenticalDativeBonds { .. }
+                | MoleculeIntegrityError::ParallelNoncovalentBonds { .. }
                 | MoleculeIntegrityError::AromaticSystemsOverlap { .. }
-                | MoleculeIntegrityError::MulticenterBondsIdentical { .. }
-                | MoleculeIntegrityError::StereoAtomSitesDuplicate { .. }
-                | MoleculeIntegrityError::StereoBondSitesDuplicate { .. }
+                | MoleculeIntegrityError::IdenticalMulticenterBonds { .. }
+                | MoleculeIntegrityError::DuplicateStereoAtomSites { .. }
+                | MoleculeIntegrityError::DuplicateStereoBondSites { .. }
                 | MoleculeIntegrityError::StereoLigandIncidenceMismatch { .. },
             ) => {
                 return Ok(None);

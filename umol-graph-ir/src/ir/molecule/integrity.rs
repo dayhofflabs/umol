@@ -34,24 +34,24 @@ pub enum MoleculeIntegrityError {
         electron_counts: usize,
     },
     #[error("{entity}: participant atom {atom:?} is duplicated")]
-    DuplicateParticipant { entity: Entity, atom: AtomId },
+    DuplicateAtom { entity: Entity, atom: AtomId },
     #[error("bond: parallel bonds on atoms {atoms:?}")]
-    BondsParallel { atoms: [AtomId; 2] },
+    ParallelBonds { atoms: [AtomId; 2] },
     #[error("dative bonds: identical acceptor {acceptor:?} and donor set {donors:?}")]
-    DativeBondsIdentical {
+    IdenticalDativeBonds {
         acceptor: AtomId,
         donors: Vec<AtomId>,
     },
     #[error("noncovalent bond: parallel bonds on atoms {atoms:?}")]
-    NoncovalentBondsParallel { atoms: [AtomId; 2] },
+    ParallelNoncovalentBonds { atoms: [AtomId; 2] },
     #[error("aromatic systems: overlap on atom {atom:?}")]
     AromaticSystemsOverlap { atom: AtomId },
     #[error("multicenter bonds: identical participant set {atoms:?}")]
-    MulticenterBondsIdentical { atoms: Vec<AtomId> },
+    IdenticalMulticenterBonds { atoms: Vec<AtomId> },
     #[error("stereo atom: duplicate site {atom:?}")]
-    StereoAtomSitesDuplicate { atom: AtomId },
+    DuplicateStereoAtomSites { atom: AtomId },
     #[error("stereo bond: duplicate site {bond:?}")]
-    StereoBondSitesDuplicate { bond: BondId },
+    DuplicateStereoBondSites { bond: BondId },
     #[error("{entity}: stereo ligand {ligand:?} is duplicated in the frame")]
     DuplicateStereoLigand {
         entity: Entity,
@@ -125,7 +125,7 @@ impl Molecule {
             check_unique_pair(entity, atoms)?;
             let pair = unordered_pair(atoms);
             if !bond_pairs.insert(pair) {
-                return Err(MoleculeIntegrityError::BondsParallel { atoms: pair });
+                return Err(MoleculeIntegrityError::ParallelBonds { atoms: pair });
             }
         }
 
@@ -137,7 +137,7 @@ impl Molecule {
             check_unique_participants(entity, view.atom_ids())?;
             let donors = view.donor_ids().collect::<BTreeSet<_>>();
             if !dative_identities.insert((acceptor, donors.clone())) {
-                return Err(MoleculeIntegrityError::DativeBondsIdentical {
+                return Err(MoleculeIntegrityError::IdenticalDativeBonds {
                     acceptor,
                     donors: donors.into_iter().collect(),
                 });
@@ -169,7 +169,7 @@ impl Molecule {
             let atoms: Vec<AtomId> = view.atom_ids().collect();
             if !multicenter_participant_sets.insert(atoms.iter().copied().collect::<BTreeSet<_>>())
             {
-                return Err(MoleculeIntegrityError::MulticenterBondsIdentical { atoms });
+                return Err(MoleculeIntegrityError::IdenticalMulticenterBonds { atoms });
             }
             check_electron_count_length(
                 entity,
@@ -186,7 +186,7 @@ impl Molecule {
             check_unique_pair(entity, atoms)?;
             let pair = unordered_pair(atoms);
             if !noncovalent_pairs.insert(pair) {
-                return Err(MoleculeIntegrityError::NoncovalentBondsParallel { atoms: pair });
+                return Err(MoleculeIntegrityError::ParallelNoncovalentBonds { atoms: pair });
             }
         }
 
@@ -204,7 +204,7 @@ impl Molecule {
             )?;
             check_stereo_atom_entry(entity, site, &ligand_frame, view.attributes)?;
             if !stereo_atom_sites.insert(site) {
-                return Err(MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: site });
+                return Err(MoleculeIntegrityError::DuplicateStereoAtomSites { atom: site });
             }
             if ligand_frame
                 .iter()
@@ -228,7 +228,7 @@ impl Molecule {
             )?;
             check_stereo_bond_entry(entity, &ligand_frame, view.attributes)?;
             if !stereo_bond_sites.insert(site) {
-                return Err(MoleculeIntegrityError::StereoBondSitesDuplicate { bond: site });
+                return Err(MoleculeIntegrityError::DuplicateStereoBondSites { bond: site });
             }
             let [first, second] = view.site().atom_ids();
             let matches_endpoint_order = |first, second| {
@@ -284,7 +284,7 @@ fn check_unique_pair(
     [first, second]: [AtomId; 2],
 ) -> Result<(), MoleculeIntegrityError> {
     if first == second {
-        Err(MoleculeIntegrityError::DuplicateParticipant {
+        Err(MoleculeIntegrityError::DuplicateAtom {
             entity,
             atom: first,
         })
@@ -300,7 +300,7 @@ fn check_unique_participants(
     let mut seen = HashSet::new();
     for atom in participants {
         if !seen.insert(atom) {
-            return Err(MoleculeIntegrityError::DuplicateParticipant { entity, atom });
+            return Err(MoleculeIntegrityError::DuplicateAtom { entity, atom });
         }
     }
     Ok(())

@@ -680,8 +680,8 @@ mod tests {
     #[case::repeated_hydrogen(1, vec![TableStereoLigand::ImplicitHydrogen, TableStereoLigand::ImplicitHydrogen, TableStereoLigand::Atom(2), TableStereoLigand::Atom(3)], 1, MoleculeIntegrityError::DuplicateStereoLigand { entity: Entity::StereoAtom(StereoAtomId(0)), ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen) })]
     #[case::missing_site(8, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(8)) })]
     #[case::missing_ligand(1, vec![TableStereoLigand::Atom(8), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(8)) })]
-    #[case::duplicate_site(1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 2, MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: AtomId(1) })]
-    #[case::site_ligand(1, vec![TableStereoLigand::Atom(1), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::DuplicateParticipant { entity: Entity::StereoAtom(StereoAtomId(0)), atom: AtomId(1) })]
+    #[case::duplicate_site(1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 2, MoleculeIntegrityError::DuplicateStereoAtomSites { atom: AtomId(1) })]
+    #[case::site_ligand(1, vec![TableStereoLigand::Atom(1), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::DuplicateAtom { entity: Entity::StereoAtom(StereoAtomId(0)), atom: AtomId(1) })]
     #[case::non_neighbor(1, vec![TableStereoLigand::Atom(5), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity: Entity::StereoAtom(StereoAtomId(0)) })]
     fn test_table_molecule_try_into_ir_frame_error(
         #[case] atom: u32,

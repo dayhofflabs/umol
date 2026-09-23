@@ -2376,7 +2376,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::parallel_bond(MoleculeIntegrityError::BondsParallel {
+    #[case::parallel_bond(MoleculeIntegrityError::ParallelBonds {
         atoms: [AtomId(0), AtomId(1)],
     })]
     fn test_molecule_editor_snapshot_error(
@@ -2389,7 +2389,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::parallel_bond(AtomId(0), AtomId(1), MoleculeIntegrityError::BondsParallel {
+    #[case::parallel_bond(AtomId(0), AtomId(1), MoleculeIntegrityError::ParallelBonds {
         atoms: [AtomId(0), AtomId(1)],
     })]
     fn test_molecule_editor_try_build_error(
