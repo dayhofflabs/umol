@@ -33,7 +33,8 @@ the statuses recorded here remain authoritative.
   first OIDC-authenticated release, CI runtime, published Rust and Python
   documentation, and the eventual arXiv link.
 - [213 - Molecule and reaction mutation](213-editor-overlay-storage-2026-08-27.md)
-  reviews direct and transactional mutation, overlay ownership, and storage delegation.
+  has a draft execution API with consumer mappings, ownership experiments, and explicit
+  cost tradeoffs; review precedes implementation planning.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -251,7 +252,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md)                             | Proposed      | 2026-09-21   | Resume mutation-API design: Undo visibility, names/errors, transformation outcomes, and Python lifecycle. Independent-batch composition remains unresolved. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | Proposed | 2026-09-22 | Write the staged implementation plan for the settled mutation API and consumer/binding integration. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |
@@ -266,3 +267,4 @@ the statuses recorded here remain authoritative.
 | [226-smiles-roundtrip-design-2026-09-10.md](226-smiles-roundtrip-design-2026-09-10.md)                           | Completed     | 2026-09-14  |                                                                                                             |
 | [227-repository-structure-hygiene-2026-09-10.md](227-repository-structure-hygiene-2026-09-10.md)                 | Proposed      | 2026-09-17   | Settle workspace thresholds, exemplar contracts, tooling, tiered gate, and structural order. |
 | [228-python-api-parity-2026-09-21.md](228-python-api-parity-2026-09-21.md) | In Progress | 2026-09-21 | S0/S7 complete; return to 213. Broader audit and ownership/access work remain unscheduled; S1–S6 withdrawn. |
+| [229-molecule-integrity-review-2026-09-22.md](229-molecule-integrity-review-2026-09-22.md) | Proposed | 2026-09-22 | Review the semantic admission audit and fourteen adjudicated findings; implementation has not started. |

@@ -4,6 +4,7 @@ Status: Completed
 Date: 2026-08-28
 Relates: [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
+[229](229-molecule-integrity-review-2026-09-22.md),
 [data-type guide](../docs/development/data-types.md),
 [integrity guide](../docs/development/integrity.md),
 [nomenclature guide](../docs/development/nomenclature.md)
