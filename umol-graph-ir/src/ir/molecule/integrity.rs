@@ -198,22 +198,7 @@ impl Molecule {
 
         check_dative_bonds(self, &contains)?;
 
-        let mut aromatic_membership = HashSet::new();
-        for view in self.aromatic_systems().iter() {
-            let entity = Entity::AromaticSystem(view.id);
-            require_references(&contains, view.atom_ids().map(Entity::Atom))?;
-            check_unique_participants(entity, view.atom_ids())?;
-            for atom in view.atom_ids() {
-                if !aromatic_membership.insert(atom) {
-                    return Err(MoleculeIntegrityError::AromaticSystemsOverlap { atom });
-                }
-            }
-            check_electron_count_length(
-                entity,
-                view.atom_ids().count(),
-                &view.attributes.electrons,
-            )?;
-        }
+        check_aromatic_systems(self, &contains)?;
 
         check_multicenter_bonds(self, &contains)?;
 
@@ -352,6 +337,66 @@ fn check_dative_bonds(
                 donors.sort_unstable();
                 return Err(MoleculeIntegrityError::IdenticalDativeBonds { acceptor, donors });
             }
+        }
+    }
+    Ok(())
+}
+
+fn check_aromatic_systems(
+    molecule: &Molecule,
+    contains: &impl Fn(Entity) -> bool,
+) -> Result<(), MoleculeIntegrityError> {
+    if molecule.atoms.len() <= 128 {
+        let mut membership = [0_u64; 2];
+        for view in molecule.aromatic_systems().iter() {
+            let entity = Entity::AromaticSystem(view.id);
+            require_references(contains, view.atom_ids().map(Entity::Atom))?;
+            let mut row = [0_u64; 2];
+            for atom in view.atom_ids() {
+                let (word, bit) = atom_bit(atom);
+                if row[word] & bit != 0 {
+                    return Err(MoleculeIntegrityError::DuplicateAtom { entity, atom });
+                }
+                row[word] |= bit;
+            }
+            if row[0] & membership[0] != 0 || row[1] & membership[1] != 0 {
+                for atom in view.atom_ids() {
+                    let (word, bit) = atom_bit(atom);
+                    if membership[word] & bit != 0 {
+                        return Err(MoleculeIntegrityError::AromaticSystemsOverlap { atom });
+                    }
+                }
+            }
+            membership[0] |= row[0];
+            membership[1] |= row[1];
+            check_electron_count_length(
+                entity,
+                view.atom_ids().count(),
+                &view.attributes.electrons,
+            )?;
+        }
+    } else {
+        let mut membership = HashSet::new();
+        for view in molecule.aromatic_systems().iter() {
+            let entity = Entity::AromaticSystem(view.id);
+            require_references(contains, view.atom_ids().map(Entity::Atom))?;
+            {
+                let mut row: Vec<_> = view.atom_ids().collect();
+                row.sort_unstable();
+                if row.windows(2).any(|pair| pair[0] == pair[1]) {
+                    check_unique_participants(entity, view.atom_ids())?;
+                }
+            }
+            for atom in view.atom_ids() {
+                if !membership.insert(atom) {
+                    return Err(MoleculeIntegrityError::AromaticSystemsOverlap { atom });
+                }
+            }
+            check_electron_count_length(
+                entity,
+                view.atom_ids().count(),
+                &view.attributes.electrons,
+            )?;
         }
     }
     Ok(())

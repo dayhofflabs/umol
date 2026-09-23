@@ -594,6 +594,97 @@ fn test_molecule_try_from_entries_dative_identity_error(
 }
 
 #[rstest]
+#[case::bitmap(128, AtomId(127))]
+#[case::sorted(129, AtomId(128))]
+fn test_molecule_try_from_entries_aromatic_membership(
+    #[case] atom_count: usize,
+    #[case] last: AtomId,
+) {
+    let molecule = Molecule::try_from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::default(); atom_count],
+        aromatic: vec![
+            (vec![], AromaticSystemForm::default()),
+            (
+                vec![AtomId(0), AtomId(63), last],
+                AromaticSystemForm::default(),
+            ),
+            (vec![AtomId(64)], AromaticSystemForm::default()),
+            (vec![], AromaticSystemForm::default()),
+        ],
+        ..Default::default()
+    })
+    .expect("disjoint aromatic systems");
+
+    assert_eq!(molecule.atoms().count(), atom_count);
+    assert_eq!(
+        molecule
+            .aromatic_systems()
+            .iter()
+            .map(|view| view.atom_ids().collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        vec![
+            vec![],
+            vec![AtomId(0), AtomId(63), last],
+            vec![AtomId(64)],
+            vec![],
+        ],
+    );
+}
+
+#[rstest]
+#[case::bitmap(128, AtomId(127))]
+#[case::sorted(129, AtomId(128))]
+fn test_molecule_try_from_entries_aromatic_membership_error(
+    #[case] atom_count: usize,
+    #[case] last: AtomId,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); atom_count],
+        aromatic: vec![
+            (
+                vec![AtomId(0), AtomId(63), last],
+                AromaticSystemForm::default(),
+            ),
+            (
+                vec![last, AtomId(1), AtomId(0)],
+                AromaticSystemForm::from_electrons(vec![2]),
+            ),
+        ],
+        ..Default::default()
+    };
+
+    assert_eq!(
+        Molecule::try_from_entries(entries),
+        Err(MoleculeIntegrityError::AromaticSystemsOverlap { atom: last }),
+    );
+}
+
+#[rstest]
+#[case::bitmap(128)]
+#[case::sorted(129)]
+fn test_molecule_try_from_entries_aromatic_duplicate_error(#[case] atom_count: usize) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); atom_count],
+        aromatic: vec![
+            (vec![AtomId(1), AtomId(5)], AromaticSystemForm::default()),
+            (
+                vec![AtomId(5), AtomId(3), AtomId(3), AtomId(5)],
+                AromaticSystemForm::from_electrons(vec![2]),
+            ),
+        ],
+        ..Default::default()
+    };
+
+    assert_eq!(
+        Molecule::try_from_entries(entries),
+        Err(MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::AromaticSystem(AromaticSystemId(1)),
+            atom: AtomId(3),
+        }),
+    );
+}
+
+#[rstest]
 #[case::bitmap_reordered(
     128,
     vec![AtomId(1), AtomId(63), AtomId(127)],

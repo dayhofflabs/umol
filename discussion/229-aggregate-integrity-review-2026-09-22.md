@@ -1959,7 +1959,17 @@ delta normal-form property, and strict graph-IR Clippy passed.
   bitmaps for molecules of at most 128 atoms and a sorted row with
   global HashSet above that bound (F15). Check within-row duplicates before
   overlap and electron-count errors; cover the 128/129 boundary and compare
-  complete gate costs.
+  complete gate costs. **Complete 2026-09-23.** The 80-atom overlay-rich Molecule
+  construction benchmark changed from 11.693 to 9.224 µs without a constraint
+  and from 11.645 to 9.306 µs with one constraint (Criterion point estimates,
+  S0a protocol). Allocation calls/requested bytes changed from 136 / 29,676
+  to 111 / 28,256 in both cases. Exact constructor cases cover disjoint and
+  empty systems, first-overlap selection, and duplicate-before-overlap and
+  electron-count precedence on both sides of the 128/129 boundary. The 102
+  focused try_from_entries cases and the full graph-IR unit suite passed
+  (6,919 passed, three ignored), as did strict crate Clippy and formatting.
+  The complete-operation benchmark exercises the common at-most-128 path;
+  the sorted fallback has boundary cases but no separate timing claim.
 - **S4e — molecule::integrity; green [dep: S4a, S4b, S4c, S4d].** Scope each
   family table to its loop (F16), reserve the stereo-atom site table, and use
   existing site incidence for stereo-bond duplicates. Preserve exact
