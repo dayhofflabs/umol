@@ -4,6 +4,7 @@ Status: In Progress
 Date: 2026-09-22
 Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 [215](215-integrity-minimization-2026-08-28.md),
+[230](230-graph-ir-delta-review-2026-09-23.md),
 [review guide](../docs/development/code-reviews.md),
 [integrity guide](../docs/development/integrity.md),
 [data-type guide](../docs/development/data-types.md),
@@ -892,7 +893,8 @@ per instruction, so these logical counts are not scalar instruction counts.
 Standalone key layouts are not compulsory. Graph-core already stores variable
 frames flat with offsets: sorted copies could reuse those offsets, avoiding
 per-row Vec headers/allocations. Existing row lengths could supply fingerprint
-cardinality, leaving only 8/16 digest bytes. Packed sorted storage was not measured.
+cardinality, leaving only 8/16 digest bytes. Packed sorted storage was not measured
+in this first representation probe; the later ownership probe below measures it.
 Four sorted u32 values and the inline bitmap both have 16-byte payloads; the
 40-byte Vec result is not an information lower bound.
 
@@ -900,8 +902,8 @@ A persistent key belongs with its owning storage, which must maintain it on
 addition, participant replacement/restoration, reference remapping/compaction,
 and algebraic construction. Payload mutation and participant permutation need
 not rebuild it. Gate-local keys avoid persistent maintenance but repeat construction
-at each gate. The integrity choice above is gate-local; a persistent graph-core
-index is a separate, unselected design.
+at each gate. S4c uses gate-local keys after the ownership comparison below.
+A global graph-core key-to-id index remains untested.
 
 Generic graph-core coincidence preserves **multisets of complete participant
 values**, separately for each factor. Plain atom bitmaps erase multiplicity and
@@ -910,6 +912,58 @@ and fingerprints with exact multiset fallback can. Dative keys retain acceptor
 versus donors; stereo sites, ligand kinds, and factor boundaries remain distinct.
 Keys compare IDs within one namespace or after explicit transport. Fixed graph
 endpoint pairs already have an exact two-u32 key and do not need a larger bitmap.
+
+#### Gate-local versus retained graph-core keys (2026-09-23)
+
+A scratch prototype wrapped the current VarRelationSet and FixedVarBirelationSet
+with packed sorted multiset keys: one flat NodeId buffer plus row offsets. It
+retained the original participant frames, multiplicity, factor boundaries,
+incidence candidates, and first-match lookup order. The retained path built
+keys with the set, borrowed them for the integrity identity table, and compared
+them in coincidence lookup. The local path built two-word bitmap keys for the
+integrity check and used an exact allocation-free multiset scan for lookups.
+This isolates retention from the current coincidence implementation's candidate
+copying and sorting. The matcher agreed with sorted multiset equality on all
+14,641 pairs of length-0..4 sequences over three IDs; relation lookup,
+duplicate, empty-row, and mutation checks also passed.
+
+Complete relation-set construction, family integrity check, and then Q lookups
+of the last row were timed on four-participant relations with IDs below 128.
+Each cell is local / retained µs, the median of seven runs; input preparation
+was outside timing.
+Sparse anchors have one candidate, while shared anchors have 10 or 20 candidates.
+
+| Set and anchor | Q=0 | Q=10 | Q=100 |
+| --- | ---: | ---: | ---: |
+| Var, 10 rows, sparse | 0.936 / 1.107 | 1.182 / 1.423 | 3.325 / 3.793 |
+| Var, 10 rows, shared | 1.100 / 1.294 | 1.998 / 1.828 | 10.083 / 6.425 |
+| FixedVar, 20 rows, sparse | 2.609 / 2.952 | 2.858 / 3.261 | 4.956 / 5.692 |
+| FixedVar, 20 rows, shared | 2.561 / 2.979 | 4.064 / 3.719 | 16.476 / 9.999 |
+
+The packed cache retained 204 extra requested heap bytes for 10 Var rows
+(524 → 728) and 404 for 20 FixedVar rows (1,476 → 1,880), or 20 bytes per
+four-participant row plus one final offset. Cloning a shared 10-row Var set and
+replacing one row retained 708 bytes without keys versus 960 with keys; peak
+additional requested heap was 1,620 versus 1,872 bytes. Querying the last row
+under a shared anchor made 11/42 allocation calls in the current Var/FixedVar
+lookup, one with retained keys, and zero with the allocation-free matcher.
+
+For 10-row Var mutation, retaining keys added 33 ns to replacement, 131 ns to
+addition, 137 ns to removal, 144 ns to restoration, and 107 ns to compaction in
+the measured prototype. Its removal and restoration paths rebuilt all keys;
+an integrated implementation could maintain them more selectively. The current
+graph-core set still built its incidence index in both paths.
+
+**Decision boundary:** integrity checking alone favors temporary bitmap keys.
+Retained keys repay their construction cost in these shared-anchor, late-match
+fixtures after several lookups, but never do so in the measured sparse-anchor
+fixtures, even after 100. The current copying lookup is not the right sole
+baseline: an allocation-free matcher is faster than retained keys for a single
+candidate and retains no memory. The actual mix of candidate counts and queries
+per relation lifetime has not been measured, so this probe does not select
+persistent graph-core keys. It is a scratch wrapper, not a full Molecule or
+integrated graph-core benchmark; its measured bytes exclude allocator metadata
+and RSS. Its numeric results are recorded here because scratch is disposable.
 
 #### Larger-ID boundary cases
 
@@ -1545,10 +1599,10 @@ HashSet with inline sorted keys; their first-error selection may change. Other
 alternatives remain separately identified above; they do not block the local
 improvements. A later implementation should measure the combined effect on the
 actual gate without conflating it with storage construction or editor rebuilding.
-These decisions and evidence are durable here;
-review scratch files are disposable.
+The evidence and remaining decisions are recorded here; review scratch files
+are disposable.
 
-For F2/F4/F15, choose the gate-local bitmap path when the molecule has at most
+For F2/F4/F15, use gate-local bitmap keys at no more than
 128 atoms. Valid atom references then fit the two words; retain reference checks
 before indexing them. Above 128 atoms, use the unrestricted sorted-key path for
 dative/multicenter identity and aromatic row uniqueness, with an aromatic global
@@ -1556,8 +1610,10 @@ HashSet. Select the path once per family, so the compact bitmap key is not widen
 by a per-key tagged representation. Keep the outer dative/multicenter identity
 HashSets with reserved capacity and existing error order. Do not add an inline
 identity-table branch, a stereo-site bitmap branch, or a dynamic aromatic bitmap
-above 128 atoms on the basis of isolated kernel timings. No permanent
-relation-storage key is part of this local change.
+above 128 atoms on the basis of isolated kernel timings. The ownership probe
+above supports proceeding with temporary keys for S4c. Persistent graph-core
+keys remain a separate possibility if a real workload has sufficiently many
+repeated, crowded-anchor lookups; they are not part of this subitem.
 
 For Reaction, close R2–R5 at `try_new`/`new` by establishing the domain of each
 frame-bearing electron or stereo payload against its owning or explicit local
@@ -1890,7 +1946,15 @@ delta normal-form property, and strict graph-IR Clippy passed.
   at most 128 atoms and sorted keys above that bound (F2, F4). Reserve the
   retained family identity tables. Check duplicate participants, identical relations,
   empty rows, threshold edges, and first-error precedence; compare complete
-  gate costs.
+  gate costs. **Complete 2026-09-23.** The 80-atom overlay-rich Molecule
+  construction benchmark changed from 17.077 to 11.734 µs without a constraint
+  and from 17.010 to 11.695 µs with one constraint (Criterion point estimates,
+  S0a protocol). Allocation calls/requested bytes changed from 261 / 35,284
+  to 136 / 29,676 in both cases. Exact constructor tests cover the 128/129
+  boundary, reordered identities, empty rows, first duplicate, reference-first
+  errors, and identity-before-electron-length precedence. The 96 focused
+  try_from_entries cases and the full graph-IR unit suite passed (6,913 passed,
+  three ignored), as did strict crate Clippy, formatting, and diff checks.
 - **S4d — molecule::integrity; green [dep: S0a, S4c].** Use row and global
   bitmaps for molecules of at most 128 atoms and a sorted row with
   global HashSet above that bound (F15). Check within-row duplicates before

@@ -468,6 +468,217 @@ fn test_molecule_try_from_entries(#[from(equiv_molecule_entries)] mut entries: M
 }
 
 #[rstest]
+#[case::bitmap(128, AtomId(127))]
+#[case::sorted(129, AtomId(128))]
+fn test_molecule_try_from_entries_relation_identity(
+    #[case] atom_count: usize,
+    #[case] last: AtomId,
+) {
+    let molecule = Molecule::try_from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::default(); atom_count],
+        dative: vec![
+            (
+                vec![AtomId(0), AtomId(63), last],
+                AtomId(64),
+                DativeBondForm::default(),
+            ),
+            (
+                vec![last, AtomId(63)],
+                AtomId(64),
+                DativeBondForm::default(),
+            ),
+        ],
+        multicenter: vec![
+            (
+                vec![AtomId(0), AtomId(63), last],
+                MulticenterBondForm::default(),
+            ),
+            (vec![last, AtomId(63)], MulticenterBondForm::default()),
+        ],
+        ..Default::default()
+    })
+    .expect("distinct relation identities");
+
+    assert_eq!(molecule.atoms().count(), atom_count);
+    assert_eq!(
+        molecule
+            .dative_bonds()
+            .iter()
+            .map(|view| (view.donor_ids().collect::<Vec<_>>(), view.acceptor_id()))
+            .collect::<Vec<_>>(),
+        vec![
+            (vec![AtomId(0), AtomId(63), last], AtomId(64)),
+            (vec![last, AtomId(63)], AtomId(64)),
+        ]
+    );
+    assert_eq!(
+        molecule
+            .multicenter_bonds()
+            .iter()
+            .map(|view| view.atom_ids().collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        vec![vec![AtomId(0), AtomId(63), last], vec![last, AtomId(63)]]
+    );
+}
+
+#[rstest]
+#[case::bitmap_reordered(
+    128,
+    vec![AtomId(1), AtomId(63), AtomId(127)],
+    vec![AtomId(127), AtomId(1), AtomId(63)],
+    MoleculeIntegrityError::IdenticalDativeBonds {
+        acceptor: AtomId(64),
+        donors: vec![AtomId(1), AtomId(63), AtomId(127)],
+    },
+)]
+#[case::sorted_reordered(
+    129,
+    vec![AtomId(1), AtomId(63), AtomId(128)],
+    vec![AtomId(128), AtomId(1), AtomId(63)],
+    MoleculeIntegrityError::IdenticalDativeBonds {
+        acceptor: AtomId(64),
+        donors: vec![AtomId(1), AtomId(63), AtomId(128)],
+    },
+)]
+#[case::bitmap_empty(
+    128,
+    vec![],
+    vec![],
+    MoleculeIntegrityError::IdenticalDativeBonds {
+        acceptor: AtomId(64),
+        donors: vec![],
+    },
+)]
+#[case::sorted_first_duplicate(
+    129,
+    vec![AtomId(5), AtomId(5), AtomId(3), AtomId(3)],
+    vec![],
+    MoleculeIntegrityError::DuplicateAtom {
+        entity: Entity::DativeBond(DativeBondId(0)),
+        atom: AtomId(5),
+    },
+)]
+#[case::bitmap_donor_before_acceptor(
+    128,
+    vec![AtomId(5), AtomId(5), AtomId(64)],
+    vec![],
+    MoleculeIntegrityError::DuplicateAtom {
+        entity: Entity::DativeBond(DativeBondId(0)),
+        atom: AtomId(5),
+    },
+)]
+#[case::bitmap_reference_before_duplicate(
+    128,
+    vec![AtomId(5), AtomId(5), AtomId(128)],
+    vec![],
+    MoleculeIntegrityError::InvalidReference {
+        entity: Entity::Atom(AtomId(128)),
+    },
+)]
+fn test_molecule_try_from_entries_dative_identity_error(
+    #[case] atom_count: usize,
+    #[case] first: Vec<AtomId>,
+    #[case] second: Vec<AtomId>,
+    #[case] expected: MoleculeIntegrityError,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); atom_count],
+        dative: vec![
+            (first, AtomId(64), DativeBondForm::default()),
+            (second, AtomId(64), DativeBondForm::default()),
+        ],
+        ..Default::default()
+    };
+
+    assert_eq!(Molecule::try_from_entries(entries), Err(expected));
+}
+
+#[rstest]
+#[case::bitmap_reordered(
+    128,
+    vec![AtomId(1), AtomId(63), AtomId(127)],
+    vec![AtomId(127), AtomId(1), AtomId(63)],
+    MoleculeIntegrityError::IdenticalMulticenterBonds {
+        atoms: vec![AtomId(127), AtomId(1), AtomId(63)],
+    },
+)]
+#[case::sorted_reordered(
+    129,
+    vec![AtomId(1), AtomId(63), AtomId(128)],
+    vec![AtomId(128), AtomId(1), AtomId(63)],
+    MoleculeIntegrityError::IdenticalMulticenterBonds {
+        atoms: vec![AtomId(128), AtomId(1), AtomId(63)],
+    },
+)]
+#[case::bitmap_empty(
+    128,
+    vec![],
+    vec![],
+    MoleculeIntegrityError::IdenticalMulticenterBonds { atoms: vec![] },
+)]
+#[case::sorted_first_duplicate(
+    129,
+    vec![AtomId(5), AtomId(5), AtomId(3), AtomId(3)],
+    vec![],
+    MoleculeIntegrityError::DuplicateAtom {
+        entity: Entity::MulticenterBond(MulticenterBondId(0)),
+        atom: AtomId(5),
+    },
+)]
+#[case::sorted_reference_before_duplicate(
+    129,
+    vec![AtomId(5), AtomId(5), AtomId(129)],
+    vec![],
+    MoleculeIntegrityError::InvalidReference {
+        entity: Entity::Atom(AtomId(129)),
+    },
+)]
+fn test_molecule_try_from_entries_multicenter_identity_error(
+    #[case] atom_count: usize,
+    #[case] first: Vec<AtomId>,
+    #[case] second: Vec<AtomId>,
+    #[case] expected: MoleculeIntegrityError,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); atom_count],
+        multicenter: vec![
+            (first, MulticenterBondForm::default()),
+            (second, MulticenterBondForm::default()),
+        ],
+        ..Default::default()
+    };
+
+    assert_eq!(Molecule::try_from_entries(entries), Err(expected));
+}
+
+#[rstest]
+#[case::bitmap(128, AtomId(127))]
+#[case::sorted(129, AtomId(128))]
+fn test_molecule_try_from_entries_multicenter_identity_error_precedence(
+    #[case] atom_count: usize,
+    #[case] last: AtomId,
+) {
+    let entries = MoleculeEntries {
+        atoms: vec![AtomForm::default(); atom_count],
+        multicenter: vec![
+            (vec![AtomId(1), last], MulticenterBondForm::default()),
+            (
+                vec![last, AtomId(1)],
+                MulticenterBondForm::from_electrons(vec![2]),
+            ),
+        ],
+        ..Default::default()
+    };
+
+    assert_eq!(
+        Molecule::try_from_entries(entries),
+        Err(MoleculeIntegrityError::IdenticalMulticenterBonds {
+            atoms: vec![last, AtomId(1)],
+        }),
+    );
+}
+
+#[rstest]
 #[case::bond_endpoint(
     |entries: &mut MoleculeEntries| entries.bonds[0].0 = AtomId(4),
     Entity::Atom(AtomId(4)),

@@ -1,6 +1,6 @@
 //! Representation-integrity checks for [`Molecule`].
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -196,20 +196,7 @@ impl Molecule {
             }
         }
 
-        let mut dative_identities = HashSet::new();
-        for view in self.dative_bonds().iter() {
-            let entity = Entity::DativeBond(view.id);
-            let acceptor = view.acceptor_id();
-            require_references(&contains, view.atom_ids().map(Entity::Atom))?;
-            check_unique_participants(entity, view.atom_ids())?;
-            let donors = view.donor_ids().collect::<BTreeSet<_>>();
-            if !dative_identities.insert((acceptor, donors.clone())) {
-                return Err(MoleculeIntegrityError::IdenticalDativeBonds {
-                    acceptor,
-                    donors: donors.into_iter().collect(),
-                });
-            }
-        }
+        check_dative_bonds(self, &contains)?;
 
         let mut aromatic_membership = HashSet::new();
         for view in self.aromatic_systems().iter() {
@@ -228,22 +215,7 @@ impl Molecule {
             )?;
         }
 
-        let mut multicenter_participant_sets = HashSet::new();
-        for view in self.multicenter_bonds().iter() {
-            let entity = Entity::MulticenterBond(view.id);
-            require_references(&contains, view.atom_ids().map(Entity::Atom))?;
-            check_unique_participants(entity, view.atom_ids())?;
-            let atoms: Vec<AtomId> = view.atom_ids().collect();
-            if !multicenter_participant_sets.insert(atoms.iter().copied().collect::<BTreeSet<_>>())
-            {
-                return Err(MoleculeIntegrityError::IdenticalMulticenterBonds { atoms });
-            }
-            check_electron_count_length(
-                entity,
-                view.atom_ids().count(),
-                &view.attributes.electrons,
-            )?;
-        }
+        check_multicenter_bonds(self, &contains)?;
 
         let mut noncovalent_pairs: SmallVec<[u64; 16]> =
             SmallVec::with_capacity(self.noncovalent_bonds.count());
@@ -325,6 +297,121 @@ impl Molecule {
         }
         Ok(())
     }
+}
+
+fn check_dative_bonds(
+    molecule: &Molecule,
+    contains: &impl Fn(Entity) -> bool,
+) -> Result<(), MoleculeIntegrityError> {
+    if molecule.atoms.len() <= 128 {
+        let mut identities = HashSet::with_capacity(molecule.dative_bonds.count());
+        for view in molecule.dative_bonds().iter() {
+            let entity = Entity::DativeBond(view.id);
+            let acceptor = view.acceptor_id();
+            require_references(contains, view.atom_ids().map(Entity::Atom))?;
+            let mut donors = [0_u64; 2];
+            for atom in view.donor_ids() {
+                let (word, bit) = atom_bit(atom);
+                if donors[word] & bit != 0 {
+                    return Err(MoleculeIntegrityError::DuplicateAtom { entity, atom });
+                }
+                donors[word] |= bit;
+            }
+            let (word, bit) = atom_bit(acceptor);
+            if donors[word] & bit != 0 {
+                return Err(MoleculeIntegrityError::DuplicateAtom {
+                    entity,
+                    atom: acceptor,
+                });
+            }
+            if !identities.insert((acceptor, donors)) {
+                let mut donors: Vec<_> = view.donor_ids().collect();
+                donors.sort_unstable();
+                return Err(MoleculeIntegrityError::IdenticalDativeBonds { acceptor, donors });
+            }
+        }
+    } else {
+        let mut identities = HashSet::with_capacity(molecule.dative_bonds.count());
+        for view in molecule.dative_bonds().iter() {
+            let entity = Entity::DativeBond(view.id);
+            let acceptor = view.acceptor_id();
+            require_references(contains, view.atom_ids().map(Entity::Atom))?;
+            let mut donors: Vec<_> = view.donor_ids().collect();
+            donors.sort_unstable();
+            if donors.windows(2).any(|pair| pair[0] == pair[1]) {
+                check_unique_participants(entity, view.donor_ids())?;
+            }
+            if donors.binary_search(&acceptor).is_ok() {
+                return Err(MoleculeIntegrityError::DuplicateAtom {
+                    entity,
+                    atom: acceptor,
+                });
+            }
+            if !identities.insert((acceptor, donors)) {
+                let mut donors: Vec<_> = view.donor_ids().collect();
+                donors.sort_unstable();
+                return Err(MoleculeIntegrityError::IdenticalDativeBonds { acceptor, donors });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_multicenter_bonds(
+    molecule: &Molecule,
+    contains: &impl Fn(Entity) -> bool,
+) -> Result<(), MoleculeIntegrityError> {
+    if molecule.atoms.len() <= 128 {
+        let mut identities = HashSet::with_capacity(molecule.multicenter_bonds.count());
+        for view in molecule.multicenter_bonds().iter() {
+            let entity = Entity::MulticenterBond(view.id);
+            require_references(contains, view.atom_ids().map(Entity::Atom))?;
+            let mut atoms = [0_u64; 2];
+            for atom in view.atom_ids() {
+                let (word, bit) = atom_bit(atom);
+                if atoms[word] & bit != 0 {
+                    return Err(MoleculeIntegrityError::DuplicateAtom { entity, atom });
+                }
+                atoms[word] |= bit;
+            }
+            if !identities.insert(atoms) {
+                return Err(MoleculeIntegrityError::IdenticalMulticenterBonds {
+                    atoms: view.atom_ids().collect(),
+                });
+            }
+            check_electron_count_length(
+                entity,
+                view.atom_ids().count(),
+                &view.attributes.electrons,
+            )?;
+        }
+    } else {
+        let mut identities = HashSet::with_capacity(molecule.multicenter_bonds.count());
+        for view in molecule.multicenter_bonds().iter() {
+            let entity = Entity::MulticenterBond(view.id);
+            require_references(contains, view.atom_ids().map(Entity::Atom))?;
+            let mut atoms: Vec<_> = view.atom_ids().collect();
+            atoms.sort_unstable();
+            if atoms.windows(2).any(|pair| pair[0] == pair[1]) {
+                check_unique_participants(entity, view.atom_ids())?;
+            }
+            if !identities.insert(atoms) {
+                return Err(MoleculeIntegrityError::IdenticalMulticenterBonds {
+                    atoms: view.atom_ids().collect(),
+                });
+            }
+            check_electron_count_length(
+                entity,
+                view.atom_ids().count(),
+                &view.attributes.electrons,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn atom_bit(atom: AtomId) -> (usize, u64) {
+    (atom.index() / 64, 1_u64 << (atom.index() % 64))
 }
 
 fn ligand_matches_site(
