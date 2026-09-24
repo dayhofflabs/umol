@@ -28,8 +28,11 @@ use umol_chem::spin::SpinMultiplicity;
 use umol_graph::export::{export_reaction_smiles_with, export_smiles_with, Convey};
 use umol_graph::ingest::{ingest_reaction_smiles_with, ingest_smiles, ingest_smiles_with};
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
+use umol_graph::ops::resolve::isotope::IsotopeProjectError;
 use umol_graph::ops::resolve::valence::ValenceResolver;
-use umol_graph::ops::resolve::{IsotopePolicy, ProjectFlags, ResolveConfig, Resolver};
+use umol_graph::ops::resolve::{
+    IsotopePolicy, ProjectError, ProjectFlags, ResolveConfig, Resolver,
+};
 use umol_graph::ops::valence::{AtomTypeRegistry, ResolveReport, ValenceEntry, ValenceTable};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
@@ -279,6 +282,25 @@ proptest! {
             prop_assert_eq!(&molecule, &original);
         }
     }
+}
+
+#[rstest]
+#[case::late_isotope("[13CH3][C@H](F)/C=C/c1ccccc1")]
+fn test_resolver_project_phase_error(#[case] smiles: &str) {
+    let source = ingest_smiles(smiles).unwrap();
+    let mut editor = source.edit();
+    editor.atom_mut(AtomId(0)).attributes.isotope_mass = IsotopeMassForm::Undetermined;
+    let mut molecule = editor.try_build().unwrap();
+    let original = molecule.clone();
+    let model = ChemistryModel::default();
+
+    assert_eq!(
+        Resolver::new(&model).project(&mut molecule, ProjectFlags::all()),
+        Err(ProjectError::Isotope(
+            IsotopeProjectError::NonGroundIsotope { atom: AtomId(0) }
+        ))
+    );
+    assert_eq!(molecule, original);
 }
 
 proptest! {

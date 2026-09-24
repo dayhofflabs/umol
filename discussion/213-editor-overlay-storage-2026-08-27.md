@@ -1,6 +1,6 @@
 # 213 — Molecule and reaction mutation
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-27
 Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [166](166-molecule-ops-2026-07-27.md),
@@ -31,8 +31,8 @@ an implementation dependency.
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
 | Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
-The next step is a staged implementation plan for these contracts and the
-integration obligations below. Implementation planning has not started. The
+The staged implementation plan below sequences these contracts and integration
+obligations. S0a records the baseline; production API changes have not started. The
 lift_constraints defect and its undetermined-stereo policy are a separate focused
 correction, recorded under [other operations](#other-moleculereaction-operations).
 
@@ -1539,3 +1539,284 @@ work. The earlier atom/bond table copies were 1.99–2.63 µs and 7.6–16.5 KiB
 88 atoms. This supports the operation-sized journal approach for sparse changes,
 while exposing current bookkeeping and entry-size costs. It does not establish
 whole-transformation speedups or require a broader benchmark campaign.
+
+## Staged implementation plan
+
+Graph-core mutation and restoration from 166 and the aggregate integrity gate
+optimized in 229 are prerequisites already implemented. Each subitem includes
+focused tests of its stated behavior, using public operations for property tests.
+Run affected-crate tests and checks as each stage closes; every stage ends green.
+Only breaking signature changes and rewires may leave the tree temporarily red
+within a stage. Python checks use `umol-py/.venv` with Python 3.13. S0 records
+the benchmark baseline before those changes.
+
+### S0 — Baseline and additive types
+
+- **S0a — completed 2026-09-24** (`umol-graph-ir/benches`,
+  `umol-graph/benches`, existing external
+  tests; additive) Record current direct mutation, batch apply, transaction,
+  resolution, and projection costs on sparse and dense fixtures, with unique
+  and shared inputs. Count allocations and journal entries/peak retained bytes
+  where a journal exists. Add exact public-behavior cases for failure recovery,
+  publication, and phase rejection before changing the implementation.
+  [dep: none]
+
+  Baseline at `3c54cff68`, Rust 1.96.0 on aarch64-apple-darwin. The retained
+  [editor benchmark](../umol-graph-ir/benches/editor.rs) uses an 8-atom chain
+  with one atom-field edit and an 80-atom chain with eight edits, eight disjoint
+  aromatic systems, and eight dative bonds. Direct means `edit` + field writes
+  + `try_build`; apply means `Molecule::apply`; transact means `edit` +
+  `transact` + `try_build`. The retained
+  [resolve benchmark](../umol-graph/benches/resolve.rs) uses octane and eight
+  disconnected copies of `[13CH3][C@H](F)/C=C/c1ccccc1`. Unique inputs are
+  independently constructed; shared inputs are cloned from a retained source.
+  Setup and edit-list construction are outside timing. All paths include their
+  current integrity publication checks. Each time is Criterion's point estimate
+  from 10 samples (0.1 s warmup, 0.2 s measurement), in microseconds.
+
+  | Fixture | Input | Direct | Apply | Transact | Resolve | Project |
+  | --- | --- | ---: | ---: | ---: | ---: | ---: |
+  | chain8 / octane | unique | 0.355 | 0.448 | 0.575 | 12.172 | 1.317 |
+  | chain8 / octane | shared | 0.339 | 0.411 | 0.553 | 11.906 | 1.249 |
+  | overlays80 / combined8 | unique | 2.595 | 2.938 | 3.430 | 356.410 | 80.134 |
+  | overlays80 / combined8 | shared | 2.598 | 2.823 | 3.378 | 368.580 | 74.634 |
+
+  A separate untimed counting-System-allocator probe measured allocation calls
+  and requested bytes for one operation after setup. The probe code and text
+  output were removed after recording the results; it did not affect the
+  retained benchmark. Unique/shared allocation counts agreed for each fixture.
+
+  | Fixture | Direct calls / bytes | Apply calls / bytes | Transact calls / bytes | Resolve calls / bytes | Project calls / bytes | Journal entries / inline bytes |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | chain8 / octane | 4 / 1,696 | 6 / 1,816 | 9 / 2,688 | 83 / 39,808 | 11 / 11,024 | 1 / 752 |
+  | overlays80 / combined8 | 7 / 17,208 | 11 / 18,608 | 16 / 26,024 | 6,053 / 1,304,656 | 620 / 438,396 | 8 / 6,016 |
+
+  The returned journal length is the peak entry count for these successful
+  one-batch operations. Inline bytes are `len * size_of::<Undo>()` (752 bytes
+  per entry here); these field-only undos have no nested heap payload. The
+  figure excludes the 24-byte Vec header and any spare capacity. Thus the
+  retained journal footprint requested by the current exact-capacity reservation
+  is 776 / 6,040 bytes for these two cases, excluding allocator metadata.
+  Allocation bytes are request traffic, not peak live memory or RSS. The current
+  `Molecule::edit` shares storage with its input even when that input is unique;
+  its first write detaches the atom table. This explains why unique and shared
+  allocation counts match, and does not predict the proposed owning editor.
+  Exact external cases now pin recovery after a valid edit followed by an
+  invalid handle, publication rejection of parallel localized bonds, and
+  source preservation after late isotope projection on an ingested
+  stereo/aromatic molecule. The existing composite phase-error table also
+  covers stereo and aromatic rejection order.
+
+- **S0b** (`umol-utils::solution`; additive) Add
+  `Solution<T, C, U = T>`, keeping the existing two-parameter behavior and
+  equal-payload methods. Test both equal and distinct payload types and the
+  existing conversion laws. [dep: none]
+
+### S1 — Typed-set storage delegation
+
+- **S1a** (`ir::aromatic`, `ir::multicenter`; additive) Give the owning typed
+  sets the needed add, remove, restore, and atom-list mutation methods, delegating
+  incidence and row compaction to graph-core. Test ordered participants,
+  incidence, compaction, and matching-history restoration. [dep: S0a]
+- **S1b** (`ir::dative`, `ir::noncovalent`; additive) Add the same ownership
+  operations for distinguished acceptor/donors and fixed endpoints. Test each
+  factor independently, including duplicate and temporarily invalid draft
+  participants. [dep: S0a]
+- **S1c** (`ir::stereo`; additive) Add site and ligand operations to the stereo
+  typed sets, preserving stored frames and payloads during ordinary replacement.
+  Test atom and bond sites, virtual ligands, incidence, and restoration.
+  [dep: S0a]
+- **S1d** (`ir::molecule::editor`; internal rewire, red→green) Replace the
+  `*SetStorage` wrappers with the typed sets for reads, additions, removals,
+  compaction, and restoration. Keep the current public editor lifecycle and
+  undo checker for this stage while routing row restoration through typed sets.
+  Test all six overlay kinds against the S0 behavior and rerun the
+  storage-sensitive benchmarks.
+  [dep: S1a, S1b, S1c]
+
+### S2 — Editor entity views
+
+- **S2a** (`ir::view`, `ir::molecule::editor`; breaking, red→green) Make each
+  mutable overlay editor view borrow its owning typed set and id. Replace public
+  fields on immutable and mutable editor views with short-lived accessors,
+  including `attributes_mut`; migrate their Rust and Python callers in this
+  subitem. Test immediate writes and the specified commutation of participant
+  replacement with attribute assignment. [dep: S1d]
+- **S2b** (`ir::view`; additive) Add the local immutable and mutable editor-view
+  getters listed above, including `ligand(position)` and exact-size participant
+  iterators. Test values, ordering, and out-of-range behavior against immutable
+  Molecule views. [dep: S2a]
+- **S2c** (`ir::view`, `ir::id`, typed sets; additive) Add `AtomPosition` and the
+  factor-specific replacement, insertion, and removal methods on mutable views;
+  clarify the current-frame meaning of `StereoLigandPosition`. Test position
+  boundaries, unaffected factors and attributes, immediate incidence
+  maintenance, and constructor-equivalent integrity at the current editor
+  publication gate, not at each draft write.
+  [dep: S2a, S2b]
+
+### S3 — Batch mutation and reaction vocabulary
+
+- **S3a** (`ir::edit`; breaking, red→green) Add the nine whole-component Edit
+  variants and matching saved-value Undo variants. Extend Edits construction
+  without independent-batch composition. Test construction and handle
+  namespaces; execution comparisons belong to S3b. [dep: S1d]
+- **S3b** (`ir::molecule::transact`; breaking, red→green) Realize those edits
+  through typed-set mutation and their undos through saved components. Keep
+  unrelated factors, attributes, constraints, and ids unchanged. Test each
+  forward/undo pair, old-state errors before mutation, and frame alignment.
+  [dep: S2c, S3a]
+- **S3c** (`ir::delta`; breaking, red→green) Add the nine Delta variants and
+  extend frame transport, inversion, normalization, composition, and Add/Remove
+  folding under the settled exact component comparison. Test continuity,
+  contradiction, identity, and created-entity cancellation laws.
+  [dep: S0a]
+- **S3d** (`ir::reaction`, `ir::reaction_span`; breaking, red→green) Lower
+  replacement deltas through before/after materialization and existing
+  correspondence induction and superimposition. Test compatible preserved
+  entities, incompatible removal/addition, application, and roundtrips without
+  asserting that Delta spelling survives span conversion. [dep: S3b, S3c]
+- **S3e** (`umol-py::edit`, delta/reaction bindings; breaking, red→green)
+  Extend the existing Python variant families for the new changes, with
+  Rust-equivalent construction and failure behavior; migrate exhaustive matches
+  and add parity cases. Do not add unrelated Rust API coverage merely for parity.
+  This closes the stage after the enum changes. [dep: S3a, S3c, S3d]
+
+### S4 — Recovery machinery before the public lifecycle switch
+
+- **S4a** (`ir::molecule::editor`, `ir::molecule::transact`; additive internal
+  work) Route topology and relation restoration through the existing graph-core
+  operations and add local attribute, constraint, and target-access guards.
+  Keep the existing detached journal surface until S5. Test matching-history
+  recovery under `normalized_eq` and panic freedom for manipulated undo data
+  without asserting its result.
+  [dep: S1d, S3b]
+- **S4b** (`ir::molecule::transact`; internal rewire, red→green) Separate shared
+  graph-IR mutation kernels from handle realization; prepare fallible data before
+  writes, record progress for multi-row edits and cascades, and avoid initial
+  receiver-sized handle tables until compaction needs them. Test failures and
+  injected unwinds at each completed storage step. [dep: S4a]
+- **S4c** (`ir::molecule::transact`; additive internal work) Build the private
+  scoped recovery guard and journal on those kernels. Verify callback error,
+  cancellation, `mem::forget` of the supplied handle, caught apply panic,
+  commit failure, and restoration before the receiver is observable. Record
+  journal count and peak retained bytes for the dense resolver fixture.
+  [dep: S4b]
+
+### S5 — Borrowed transaction API
+
+- **S5a** (`ir::molecule::transact`, `ir::error`; breaking, red→green) Replace
+  the detached Transaction with `Transaction::run`, immediate `apply`, checked
+  `probe`, `commit`, `tracked_commit`, and `rollback`; add Molecule's prepared-batch
+  `transact` and `tracked_transact`. Retire detached-journal `undos`, `append`,
+  `rollback`, and `tracked_rollback`, plus editor `transact`/`tracked_transact`,
+  without adding Transaction::tracked_apply. Remove `validate_undo` and obsolete
+  rollback errors after S4's local guards. Retain the drafted MoleculeApplyError
+  return type. Test separate batch handle namespaces, whole-transaction
+  correspondence, abort latching, callback value return after no-commit
+  rollback, and checked acceptance. [dep: S4c]
+- **S5b** (`umol-graph-ir` reaction and molecule callers; breaking, red→green)
+  Migrate uses of detached journals. Preserve reaction `Ok(None)` versus error
+  classification and host-to-product correspondence.
+  Test failed applications and product integrity. [dep: S5a]
+- **S5c** (`umol-graph::ops`; breaking, red→green) Migrate existing borrowed
+  resolve/project execution to scoped transactions, sharing the planned
+  batches and using checked probes between phases. Keep their present public
+  signatures in this stage. Test late rejection restores the entry molecule and
+  preserves chemistry diagnostics. [dep: S5a]
+- **S5d** (`umol-py::transaction`, `umol-py::molecule`; breaking, red→green)
+  Replace Python's detached journal with prepared-batch `transact` and
+  `tracked_transact`; give Edits the consumed-input behavior needed to transfer
+  all prepared batches before mutation and expose no Python transaction handle.
+  Test independent New namespaces, rollback on late failure, and tracked result
+  parity. [dep: S5a, S5b]
+
+### S6 — Owning editor and publication
+
+- **S6a** (`ir::molecule`, `ir::molecule::editor`; breaking, red→green) Make
+  `edit(self)` own its Molecule, make Molecule `apply`/`tracked_apply` consume,
+  and replace editor snapshot/build methods with checked `probe`/`finish`.
+  Retain MoleculeBuilder's asserted build and the existing integrity-preserving
+  Molecule mutable methods. Test direct/batch interleaving, invalid probe then
+  repair, destructive failure, and constructor-equivalent publication.
+  [dep: S1d, S5a]
+- **S6b** (`umol-graph-ir` callers, including reaction application; breaking,
+  red→green) Migrate editor construction/publication and remove session
+  correspondence accumulation and public tracked direct removal. Use one
+  source-preserving product candidate where the host survives; keep batch-only
+  tracking distinct from whole-transaction tracking. Test product and
+  correspondence laws. [dep: S6a]
+- **S6c** (`umol-graph`, `umol-io` callers; breaking, red→green) Migrate remaining
+  editor publication sites to `finish` or borrowed transactions without changing
+  their chemistry or boundary outcomes. Test published outputs and rejection
+  behavior. [dep: S6a, S5c]
+- **S6d** (`umol-py::molecule`, `umol-py::transaction`, `umol-py::edit`; breaking,
+  red→green) Transfer Molecule inputs on consuming calls and reuse S5d's Edits
+  transfer; raise `ConsumedError` for the owner and `InvalidatedViewError` for
+  owner-backed accessors. Replace Python snapshot/build with finish, without a blanket
+  consumed-state migration of unrelated forms. Test aliases, nested views,
+  successful and failed consumption, and explicit copies. [dep: S6a, S6b]
+
+### S7 — Resolution, projection, and boundaries
+
+- **S7a** (`umol-graph::ops::resolve` and phase modules; breaking, red→green)
+  Extract shared planning, rename phase `plan` to `plan_resolve`, add the three
+  `plan_project` methods, and implement consuming `resolve`/`project` alongside
+  recovering `resolve_into`/`project_into`. Preserve phase order, rejection
+  priority, and standalone-versus-composite isotope policy. Test accepted
+  outputs, each later-phase rejection, both ownership contracts, and application
+  versus integrity errors through MoleculeApplyError in phase-specific errors.
+  [dep: S0b, S5c, S6a]
+- **S7b** (`umol-graph::ops::resolve`; breaking, red→green) Make reports opt-in
+  with `resolve_with_report` and `resolve_into_with_report`; avoid default
+  report-only collection while retaining resolution candidates. Test equal
+  outcomes and final molecules with and without reports, including
+  underdetermination. [dep: S7a]
+- **S7c** (`umol-graph::ingest`, `parse`, `export`, `umol-io` boundaries; breaking,
+  red→green) Pass owned ingest/parse candidates to report-free resolution; keep
+  one intentional source copy for export projection. Remove report payloads from
+  default underdetermination errors. Test boundary diagnostics and output
+  integrity. [dep: S7a, S7b]
+- **S7d** (`umol-py::resolve` and boundary adapters; breaking, red→green)
+  Mirror the consuming/borrowed names, explicit reporting, and payload-free
+  ingestion underdetermination. Test Python ownership, result shapes, and error
+  parity. [dep: S6d, S7a, S7b, S7c]
+
+### S8 — Transformations and remaining operations
+
+- **S8a** (`umol-graph::ops::transform`; breaking, red→green) Change Transformer
+  to consuming `transform`, recovering `transform_into`, and lazy
+  `transform_iter` returning `impl Iterator`; migrate all trait callers. Test
+  failure ownership, independent iterator outputs, and deferred execution.
+  [dep: S5c, S6a]
+- **S8b** (`umol-graph::ops::transform::{aromatizer,delocalize_charge,kekulizer}`;
+  breaking, red→green) Share each operation's planning between the two routes;
+  use one publication gate and retain existing chemistry errors, including
+  DelocalizeCharge's `Infallible` contract. Test each operation's success,
+  rejection, and checked output. [dep: S8a]
+- **S8c** (`ir::molecule`; additive) Make `combine_from` recover its append/count
+  checkpoints on unwind without an initial whole-molecule copy. Test unchanged
+  receiver after a caught unwind. The separate lift_constraints correction
+  is not part of this subitem. [dep: S6a]
+
+### S9 — Contract and performance closeout
+
+- **S9a** (`docs/development`, public rustdoc, examples; additive) Reconcile
+  the living data-type, nomenclature, integrity, and Python API guides with the
+  implemented lifecycle; remove stale snapshot/detached-journal descriptions.
+  Document precise failure, ownership, and integrity boundaries without citing
+  discussion records from source. Check links and examples. [dep: S5a, S6d, S7d, S8b]
+- **S9b** (workspace gates and benchmarks; additive) Compare the final direct,
+  apply, and transaction paths with S0, including dense resolver journal size
+  and the source-preserving export path. Review the complete diff against 213,
+  run formatting, workspace tests, strict Clippy and rustdoc, explicit feature
+  suites, Python 3.13 build/tests, and the pinned Rust 1.87 gate once at final
+  closeout. Record results and update the discussion status only after the full
+  scope passes. [dep: S8c, S9a]
+
+**Critical path:** S0 → S1 → S2/S3 → S4 → S5 → S6 → S7/S8 → S9.
+S3c can proceed alongside S2; S3b, S3d, and S3e wait for S2c as recorded in
+their dependencies. No speculative optimization stage is required.
+Immutable-view simplification, graph-core bond
+endpoint rewiring, intermediate transaction tracking, an interactive Python
+transaction, Undo compression, and the hydrogen operations in 166 remain outside
+this plan; the 213 mutation surface enables the latter work.

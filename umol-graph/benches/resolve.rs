@@ -220,12 +220,82 @@ fn bench_project(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_resolve_project_ownership(c: &mut Criterion) {
+    let model = ChemistryModel {
+        valence: ValenceModel::smiles(),
+        ..ChemistryModel::default()
+    };
+    let resolver = Resolver::with_config(
+        &model,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
+    );
+    let dense = ["[13CH3][C@H](F)/C=C/c1ccccc1"; 8].join(".");
+    let mut group = c.benchmark_group("resolve_project_ownership");
+    for (name, smiles) in [("sparse8", "CCCCCCCC"), ("dense88", dense.as_str())] {
+        let table = Smiles::parse(smiles).unwrap().into_table_ir();
+        let raw: Molecule = (&table).try_into_ir(&()).unwrap();
+        let projected = ingest_smiles(smiles).unwrap();
+        let mut checked = raw.clone();
+        assert!(matches!(
+            resolver.resolve(&mut checked).unwrap(),
+            Solution::Determined(_)
+        ));
+        let mut checked = projected.clone();
+        assert_eq!(
+            resolver.project(&mut checked, ProjectFlags::all()),
+            Ok(Solution::Determined(()))
+        );
+        for (ownership, unique) in [("unique", true), ("shared", false)] {
+            group.bench_function(
+                BenchmarkId::new(format!("{name}/{ownership}"), "resolve"),
+                |b| {
+                    b.iter_batched_ref(
+                        || {
+                            if unique {
+                                let table = Smiles::parse(smiles).unwrap().into_table_ir();
+                                (&table).try_into_ir(&()).unwrap()
+                            } else {
+                                raw.clone()
+                            }
+                        },
+                        |molecule| black_box(resolver.resolve(molecule).unwrap()),
+                        BatchSize::SmallInput,
+                    );
+                },
+            );
+            group.bench_function(
+                BenchmarkId::new(format!("{name}/{ownership}"), "project"),
+                |b| {
+                    b.iter_batched_ref(
+                        || {
+                            if unique {
+                                ingest_smiles(smiles).unwrap()
+                            } else {
+                                projected.clone()
+                            }
+                        },
+                        |molecule| {
+                            black_box(resolver.project(molecule, ProjectFlags::all()).unwrap())
+                        },
+                        BatchSize::SmallInput,
+                    );
+                },
+            );
+        }
+    }
+    group.finish();
+}
+
 criterion_group!(
     resolve,
     bench_ingest_smiles,
     bench_resolve,
     bench_aromaticity_project,
     bench_stereo_project,
-    bench_project
+    bench_project,
+    bench_resolve_project_ownership
 );
 criterion_main!(resolve);

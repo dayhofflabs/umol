@@ -1,7 +1,8 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use proptest::prelude::*;
-use umol_graph_ir::ir::Transaction;
+use rstest::{fixture, rstest};
+use umol_graph_ir::ir::{MoleculeApplyError, Transaction};
 
 use crate::strategies::*;
 
@@ -915,4 +916,61 @@ proptest! {
             );
         }
     }
+}
+
+#[fixture]
+fn source() -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::default(); 2],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+        ..Default::default()
+    })
+}
+
+#[rstest]
+fn test_molecule_apply_error(source: Molecule) {
+    let edits: Edits = [
+        Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::Charge {
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
+            },
+        },
+        Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(2)),
+            change: AtomFieldChange::Charge {
+                old: NumForm::default(),
+                new: NumForm::Lit(1),
+            },
+        },
+    ]
+    .into_iter()
+    .collect();
+    let expected = TransactionError::HandleOutOfRange {
+        kind: EntityKind::Atom,
+        index: 2,
+        count: 2,
+    };
+
+    assert_eq!(
+        source.apply(edits.clone()),
+        Err(MoleculeApplyError::Transaction(expected.clone()))
+    );
+    let mut editor = source.edit();
+    assert_eq!(editor.transact(edits), Err(expected));
+    assert_eq!(editor.try_build(), Ok(source));
+}
+
+#[rstest]
+fn test_molecule_editor_try_build_error(source: Molecule) {
+    let mut editor = source.edit();
+    editor.add_bond(AtomId(0), AtomId(1), BondForm::default());
+
+    assert_eq!(
+        editor.try_build(),
+        Err(MoleculeIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        })
+    );
 }

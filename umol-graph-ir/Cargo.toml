@@ -96,6 +96,10 @@ harness = false
 name = "integrity"
 harness = false
 
+[[bench]]
+name = "editor"
+harness = false
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"
