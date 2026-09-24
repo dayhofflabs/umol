@@ -1996,6 +1996,13 @@ delta normal-form property, and strict graph-IR Clippy passed.
   the closed-frame arity and uniqueness rechecks (F11, F12), retaining
   nonliteral, action, and normalization failure paths. Run focused
   symmetry/canonicalization cases and their existing public properties.
+  **Complete 2026-09-23.** Removed the redundant frame-length guards in
+  symmetry and canonicalization, and the symmetry-only uniqueness HashSet.
+  Nonliteral configurations, generator compatibility, and coset action and
+  normalization failures retain their existing paths. The symmetry-filtered
+  unit cases (53), canonicalization module cases (280), public stereo properties
+  (five), and public molecule canonicalization properties (seven) passed;
+  properties ran with 256 cases each. Strict crate Clippy passed.
 
 ### S5 — ReactionSpan allocations
 

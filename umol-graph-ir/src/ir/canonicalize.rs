@@ -3530,10 +3530,6 @@ fn canonical_kinded_stereo_frame(
     let Some(kind) = configuration.kind() else {
         return Ok(None);
     };
-    if ligands.len() != kind.degree() {
-        return Ok(None);
-    }
-
     let mut minimum: Option<(Vec<StereoLigand>, StereoConfigurationForm)> = None;
     for permutation in stereo_frame_permutations(kind) {
         let candidate = (
@@ -3600,7 +3596,7 @@ fn structure_candidate(
                 }
                 StereoConfigurationForm::Kinded(..) => {
                     let frame = canonical_kinded_stereo_frame(&ligands, configuration)?
-                        .expect("integrity established the kinded frame degree");
+                        .expect("kinded stereo frames have an allowed permutation");
                     Ok((frame.ligands, frame.configuration))
                 }
             }

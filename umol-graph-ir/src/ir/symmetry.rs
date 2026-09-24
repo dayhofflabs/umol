@@ -1,6 +1,5 @@
 //! Graph-automorphism symmetry of a molecule, graded into proper vs improper.
 
-use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, NodeId};
@@ -121,16 +120,14 @@ impl Molecule {
 
     /// The observable coset of a stereo node under the current orbit partition:
     /// the stored coset reduced by ligand-position swaps that preserve the ligands'
-    /// current classes. `None` for non-stereo / undetermined / malformed nodes.
+    /// current classes. `None` for non-stereo nodes or undetermined and
+    /// nonliteral configurations.
     fn observable_descriptor(&self, entity: Entity, orbits: &[NodeId]) -> Option<u32> {
         let (kind, coset, ligands) = self.stereo_center(entity)?;
         let &StereoCoset::Lit(raw) = coset else {
             return None;
         };
         let coset_space = kind.class_key().space();
-        if ligands.len() != coset_space.degree() {
-            return None;
-        }
         let classes: Vec<(StereoLigandKind, NodeId)> = ligands
             .iter()
             .map(|ligand| (ligand.kind, orbits[ligand.atom_id.index()]))
@@ -190,10 +187,6 @@ impl Molecule {
             return Ok(None);
         };
         let coset_space = kind.class_key().space();
-        if ligands.len() != coset_space.degree() || !all_distinct(&ligands) {
-            return Ok(None);
-        }
-
         let target_entity = incidence.entity(generator[incidence.node_of(entity).index()]);
         let Some((_, target_coset, target_ligands)) = self.stereo_center(target_entity) else {
             return Err(());
@@ -226,11 +219,11 @@ impl Molecule {
         [EntityKind::StereoAtom, EntityKind::StereoBond]
             .into_iter()
             .flat_map(|kind| (0..incidence.entity_count(kind)).map(move |i| kind.with_id(i as u32)))
-            .any(|entity| match self.stereo_center(entity) {
-                Some((kind, StereoCoset::Lit(_), ligands)) => {
-                    ligands.len() == kind.class_key().space().degree() && all_distinct(&ligands)
-                }
-                _ => false,
+            .any(|entity| {
+                matches!(
+                    self.stereo_center(entity),
+                    Some((_, StereoCoset::Lit(_), _))
+                )
             })
     }
 
@@ -523,10 +516,6 @@ fn reexpress(
         Some(StereoCoset::Lit(index)) => Some(index),
         _ => None,
     }
-}
-
-fn all_distinct(ligands: &[StereoLigand]) -> bool {
-    ligands.iter().copied().collect::<HashSet<_>>().len() == ligands.len()
 }
 
 #[cfg(test)]
