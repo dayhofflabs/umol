@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use umol_graph_core::{
-    FixedVarBirelationSet, GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition,
-    RelationId,
+    Compaction, FixedVarBirelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping,
+    NodeId, ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
@@ -92,7 +92,143 @@ impl DativeBonds {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
+}
 
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "editor storage still uses separate wrappers")
+)]
+impl DativeBonds {
+    pub(crate) fn add(
+        &mut self,
+        donors: &[AtomId],
+        acceptor: AtomId,
+        attributes: DativeBondForm,
+    ) -> DativeBondId {
+        let donors: Vec<NodeId> = donors.iter().copied().map(NodeId::from).collect();
+        Arc::make_mut(&mut self.0)
+            .add([acceptor.into()], &donors, attributes)
+            .into()
+    }
+
+    pub(crate) fn remove(&mut self, ids: &[DativeBondId]) {
+        if ids.is_empty() {
+            return;
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        Arc::make_mut(&mut self.0).remove(&ids);
+    }
+
+    pub(crate) fn tracked_remove(&mut self, ids: &[DativeBondId]) -> Compaction<DativeBondId> {
+        if ids.is_empty() {
+            return Compaction::identity(self.count());
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(DativeBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid dative bond ids")
+    }
+
+    /// Reinsert saved entries at their original ids after restoring surviving topology ids.
+    pub(crate) fn restore(
+        &mut self,
+        compaction: &Compaction<DativeBondId>,
+        removed: Vec<(DativeBondId, Vec<AtomId>, AtomId, DativeBondForm)>,
+    ) {
+        if compaction.removed().is_empty() {
+            return;
+        }
+        let relations = Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(RelationId::from)
+                .collect(),
+        )
+        .expect("dative bond compaction contains valid relation ids");
+        let removed = removed
+            .into_iter()
+            .map(|(id, donors, acceptor, attributes)| {
+                (
+                    RelationId::from(id),
+                    [NodeId::from(acceptor)],
+                    donors.into_iter().map(NodeId::from).collect(),
+                    attributes,
+                )
+            })
+            .collect();
+        Arc::make_mut(&mut self.0).restore(&relations, removed);
+    }
+
+    /// Restore the original atom ids in donors and acceptors, preserving entry ids and attributes.
+    pub(crate) fn restore_topology_ids(&mut self, compaction: &GraphCompaction) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        Arc::make_mut(&mut self.0).restore_participants(compaction);
+    }
+
+    pub(crate) fn replace_acceptor(&mut self, id: DativeBondId, acceptor: AtomId) {
+        Arc::make_mut(&mut self.0).replace_participants_1(id.into(), [acceptor.into()]);
+    }
+
+    pub(crate) fn replace_donors(&mut self, id: DativeBondId, donors: &[AtomId]) {
+        let donors: Vec<NodeId> = donors.iter().copied().map(NodeId::from).collect();
+        Arc::make_mut(&mut self.0).replace_participants_2(id.into(), &donors);
+    }
+
+    pub(crate) fn replace_donor(&mut self, id: DativeBondId, position: usize, donor: AtomId) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        Arc::make_mut(&mut self.0).replace_participant_2(id.into(), position, donor.into());
+    }
+
+    pub(crate) fn insert_donor(&mut self, id: DativeBondId, position: usize, donor: AtomId) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        Arc::make_mut(&mut self.0).insert_participant_2(id.into(), position, donor.into());
+    }
+
+    pub(crate) fn remove_donor(&mut self, id: DativeBondId, position: usize) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
+    }
+
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub(crate) fn tracked_compact(
+        &self,
+        compaction: &GraphCompaction,
+    ) -> (Self, Compaction<DativeBondId>) {
+        let (set, relations) = self.0.tracked_compact(compaction);
+        let relations = Compaction::new(
+            relations.source_count(),
+            relations
+                .removed()
+                .iter()
+                .copied()
+                .map(DativeBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid dative bond ids");
+        (Self(Arc::new(set)), relations)
+    }
+}
+
+impl DativeBonds {
     pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, DativeBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
@@ -551,6 +687,276 @@ mod tests {
     use crate::ir::constraint::RingScope;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::{Lattice, Normalize};
+
+    #[rstest]
+    #[case::repeated(vec![AtomId(4), AtomId(1), AtomId(4)], AtomId(4))]
+    #[case::empty(vec![], AtomId(4))]
+    fn test_dative_bonds_add(#[case] donors: Vec<AtomId>, #[case] acceptor: AtomId) {
+        let mut bonds = DativeBonds::default();
+        let attributes = DativeBondForm::from_order(2);
+        let id = bonds.add(&donors, acceptor, attributes.clone());
+
+        assert_eq!(id, DativeBondId(0));
+        assert_eq!(bonds.acceptor(id), acceptor);
+        assert_eq!(bonds.donors(id).collect::<Vec<_>>(), donors);
+        assert_eq!(bonds.attributes(id), &attributes);
+        assert_eq!(bonds.incident_ids(acceptor).collect::<Vec<_>>(), vec![id]);
+    }
+
+    #[rstest]
+    fn test_dative_bonds_tracked_remove() {
+        let original = DativeBonds::new(vec![
+            (
+                vec![AtomId(2), AtomId(1)],
+                AtomId(0),
+                DativeBondForm::from_order(1),
+            ),
+            (vec![AtomId(3)], AtomId(4), DativeBondForm::from_order(2)),
+            (vec![], AtomId(5), DativeBondForm::from_order(3)),
+        ]);
+        let mut bonds = original.clone();
+        let compaction = bonds.tracked_remove(&[DativeBondId(2), DativeBondId(0)]);
+        let mut plain = original.clone();
+        plain.remove(&[DativeBondId(0), DativeBondId(2)]);
+
+        assert_eq!(
+            compaction,
+            Compaction::new(3, vec![DativeBondId(0), DativeBondId(2)]).unwrap()
+        );
+        assert_eq!(bonds, plain);
+        assert_eq!(
+            bonds,
+            DativeBonds::new(vec![(
+                vec![AtomId(3)],
+                AtomId(4),
+                DativeBondForm::from_order(2)
+            ),])
+        );
+        assert_eq!(
+            bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![DativeBondId(0)]
+        );
+        bonds.restore(
+            &compaction,
+            vec![
+                (
+                    DativeBondId(2),
+                    vec![],
+                    AtomId(5),
+                    DativeBondForm::from_order(3),
+                ),
+                (
+                    DativeBondId(0),
+                    vec![AtomId(2), AtomId(1)],
+                    AtomId(0),
+                    DativeBondForm::from_order(1),
+                ),
+            ],
+        );
+        assert_eq!(bonds, original);
+    }
+
+    #[rstest]
+    #[case::donor(AtomId(2))]
+    #[case::other(AtomId(4))]
+    fn test_dative_bonds_replace_acceptor(#[case] acceptor: AtomId) {
+        let original = DativeBonds::new(vec![
+            (
+                vec![AtomId(2), AtomId(1)],
+                AtomId(0),
+                DativeBondForm::from_order(1),
+            ),
+            (vec![AtomId(3)], AtomId(5), DativeBondForm::from_order(2)),
+        ]);
+        let mut bonds = original.clone();
+        bonds.replace_acceptor(DativeBondId(0), acceptor);
+
+        assert_eq!(
+            bonds,
+            DativeBonds::new(vec![
+                (
+                    vec![AtomId(2), AtomId(1)],
+                    acceptor,
+                    DativeBondForm::from_order(1)
+                ),
+                (vec![AtomId(3)], AtomId(5), DativeBondForm::from_order(2)),
+            ])
+        );
+        assert_eq!(original.acceptor(DativeBondId(0)), AtomId(0));
+        assert_eq!(
+            bonds.incident_ids(AtomId(2)).collect::<Vec<_>>(),
+            vec![DativeBondId(0)]
+        );
+        assert_eq!(
+            bonds.incident_ids(acceptor).collect::<Vec<_>>(),
+            vec![DativeBondId(0)]
+        );
+        assert!(!bonds.has_incident(AtomId(0)));
+    }
+
+    #[rstest]
+    #[case::repeated(vec![AtomId(0), AtomId(4), AtomId(4)])]
+    #[case::ordered(vec![AtomId(4), AtomId(1)])]
+    #[case::empty(vec![])]
+    fn test_dative_bonds_replace_donors(#[case] donors: Vec<AtomId>) {
+        let mut bonds = DativeBonds::new(vec![(
+            vec![AtomId(2), AtomId(1)],
+            AtomId(0),
+            DativeBondForm::from_order(2),
+        )]);
+        bonds.replace_donors(DativeBondId(0), &donors);
+
+        assert_eq!(
+            bonds,
+            DativeBonds::new(vec![(donors, AtomId(0), DativeBondForm::from_order(2)),])
+        );
+        assert_eq!(
+            bonds.incident_ids(AtomId(0)).collect::<Vec<_>>(),
+            vec![DativeBondId(0)]
+        );
+        assert!(!bonds.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    fn test_dative_bonds_replace_donor() {
+        let mut bonds = DativeBonds::new(vec![(
+            vec![AtomId(1), AtomId(2)],
+            AtomId(0),
+            DativeBondForm::from_order(2),
+        )]);
+        bonds.replace_donor(DativeBondId(0), 1, AtomId(0));
+
+        assert_eq!(
+            bonds,
+            DativeBonds::new(vec![(
+                vec![AtomId(1), AtomId(0)],
+                AtomId(0),
+                DativeBondForm::from_order(2)
+            ),])
+        );
+        assert_eq!(
+            bonds.incident_ids(AtomId(0)).collect::<Vec<_>>(),
+            vec![DativeBondId(0)]
+        );
+        assert!(!bonds.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    #[case::insert(0, vec![AtomId(0), AtomId(1), AtomId(2)])]
+    #[case::append(2, vec![AtomId(1), AtomId(2), AtomId(0)])]
+    fn test_dative_bonds_insert_donor(#[case] position: usize, #[case] expected: Vec<AtomId>) {
+        let mut bonds = DativeBonds::new(vec![(
+            vec![AtomId(1), AtomId(2)],
+            AtomId(0),
+            DativeBondForm::from_order(2),
+        )]);
+        bonds.insert_donor(DativeBondId(0), position, AtomId(0));
+
+        assert_eq!(
+            bonds,
+            DativeBonds::new(vec![(expected, AtomId(0), DativeBondForm::from_order(2)),])
+        );
+        assert_eq!(
+            bonds.incident_ids(AtomId(0)).collect::<Vec<_>>(),
+            vec![DativeBondId(0)]
+        );
+    }
+
+    #[rstest]
+    #[case::remaining(vec![AtomId(0), AtomId(1)], vec![AtomId(1)])]
+    #[case::last(vec![AtomId(0)], vec![])]
+    fn test_dative_bonds_remove_donor(#[case] donors: Vec<AtomId>, #[case] expected: Vec<AtomId>) {
+        let mut bonds = DativeBonds::new(vec![(donors, AtomId(0), DativeBondForm::from_order(2))]);
+        bonds.remove_donor(DativeBondId(0), 0);
+
+        assert_eq!(
+            bonds,
+            DativeBonds::new(vec![(expected, AtomId(0), DativeBondForm::from_order(2)),])
+        );
+        assert_eq!(
+            bonds.incident_ids(AtomId(0)).collect::<Vec<_>>(),
+            vec![DativeBondId(0)]
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bonds_tracked_compact() {
+        let original = DativeBonds::new(vec![
+            (
+                vec![AtomId(4), AtomId(2)],
+                AtomId(0),
+                DativeBondForm::from_order(1),
+            ),
+            (vec![AtomId(1)], AtomId(3), DativeBondForm::from_order(2)),
+            (vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(3)),
+            (vec![], AtomId(5), DativeBondForm::from_order(4)),
+        ]);
+        let graph = GraphCompaction::new(
+            Compaction::new(6, vec![NodeId(1)]).unwrap(),
+            Compaction::identity(0),
+        );
+        let (mut compacted, rows) = original.tracked_compact(&graph);
+
+        assert_eq!(
+            rows,
+            Compaction::new(4, vec![DativeBondId(1), DativeBondId(2)]).unwrap()
+        );
+        assert_eq!(compacted, original.compact(&graph));
+        assert_eq!(
+            compacted,
+            DativeBonds::new(vec![
+                (
+                    vec![AtomId(3), AtomId(1)],
+                    AtomId(0),
+                    DativeBondForm::from_order(1)
+                ),
+                (vec![], AtomId(4), DativeBondForm::from_order(4)),
+            ])
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(1)).collect::<Vec<_>>(),
+            vec![DativeBondId(0)]
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![DativeBondId(1)]
+        );
+
+        compacted.restore_topology_ids(&graph);
+        assert_eq!(
+            compacted,
+            DativeBonds::new(vec![
+                (
+                    vec![AtomId(4), AtomId(2)],
+                    AtomId(0),
+                    DativeBondForm::from_order(1)
+                ),
+                (vec![], AtomId(5), DativeBondForm::from_order(4)),
+            ])
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(5)).collect::<Vec<_>>(),
+            vec![DativeBondId(1)]
+        );
+        compacted.restore(
+            &rows,
+            vec![
+                (
+                    DativeBondId(2),
+                    vec![AtomId(0)],
+                    AtomId(1),
+                    DativeBondForm::from_order(3),
+                ),
+                (
+                    DativeBondId(1),
+                    vec![AtomId(1)],
+                    AtomId(3),
+                    DativeBondForm::from_order(2),
+                ),
+            ],
+        );
+        assert_eq!(compacted, original);
+    }
 
     #[rstest]
     #[case::covered(None, None)]

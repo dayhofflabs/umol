@@ -13,7 +13,7 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 
 ## Design status — 2026-09-24
 
-This document owns the molecule/reaction mutation redesign. S0 and S1a are
+This document owns the molecule/reaction mutation redesign. S0 and S1a–S1c are
 implemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -22,7 +22,7 @@ an implementation dependency.
 
 | Area | Status | Concrete position |
 | --- | --- | --- |
-| Storage delegation, participant methods, Edit/Delta/Undo variants, local getters | Settled design; S1a complete | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
+| Storage delegation, participant methods, Edit/Delta/Undo variants, local getters | Settled design; S1a–S1c complete | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
 | Molecule attribute methods | Settled: retain current placement | Keep the eight integrity-preserving mutable methods and the nine checked callbacks on Molecule, with their existing guarantees. The editor retains the complete mutation vocabulary. |
@@ -32,10 +32,10 @@ an implementation dependency.
 | Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
 The staged implementation plan below sequences these contracts and integration
-obligations. S0 records the baseline and additive Solution type; S1a adds aromatic
-and multicenter set mutation. Editor and molecule mutation API changes have not
-started. The lift_constraints defect and its undetermined-stereo policy are a
-separate focused correction, recorded under
+obligations. S0 records the baseline and additive Solution type; S1a–S1c add
+typed-set mutation for all six overlay kinds. Editor and molecule
+mutation API changes have not started. The lift_constraints defect and its
+undetermined-stereo policy are a separate focused correction, recorded under
 [other operations](#other-moleculereaction-operations).
 
 ## Editor and transaction API
@@ -1658,7 +1658,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   attribute preservation, compaction, and matching-history restoration.
   The implementation matches the interfaces above. Focused tests, strict
   graph-IR Clippy, nightly formatting, and `git diff --check` pass.
-- **S1b** (`ir::dative`, `ir::noncovalent`; additive) Add the same ownership
+- **S1b — completed 2026-09-24** (`ir::dative`, `ir::noncovalent`; additive) Add the same ownership
   operations for distinguished acceptor/donors and fixed endpoints. Test each
   factor independently, including duplicate and temporarily invalid draft
   atom references. [dep: S0a]
@@ -1697,9 +1697,16 @@ to graph-core's `restore_participants` and `restore`, respectively.
   NoncovalentBonds::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<NoncovalentBondId>)
   ```
 
-  These are proposed crate-private set methods. S2c exposes the domain-level
+  These are crate-private set methods. S2c exposes the domain-level
   editor-view methods with `AtomPosition` after S1d replaces the storage wrappers.
-- **S1c** (`ir::stereo`; additive) Add site and ligand operations to the stereo
+
+  Implemented the recorded interfaces through `FixedVarBirelationSet` and
+  `FixedRelationSet`, preserving copy-on-write ownership. Tests cover independent
+  donor/acceptor changes, ordered and duplicate atoms, empty donors, fixed
+  endpoints, incidence, attribute preservation, and removal/compaction followed
+  by restoration. All 44 focused tests, strict graph-IR Clippy, nightly formatting,
+  and `git diff --check` pass.
+- **S1c — completed 2026-09-24** (`ir::stereo`; additive) Add site and ligand operations to the stereo
   typed sets, preserving stored frames and payloads during ordinary replacement.
   Test atom and bond sites, virtual ligands, incidence, and restoration.
   [dep: S0a]
@@ -1724,10 +1731,17 @@ to graph-core's `restore_participants` and `restore`, respectively.
   ```
 
   StereoBonds restoration translates its bond sites and the atom references in
-  its ligands. These are proposed crate-private set methods. S2c exposes
+  its ligands. These are crate-private set methods. S2c exposes
   `StereoLigandPosition` on the public editor views. Site and ligand replacement
   leave the other factor and payload unchanged; frame-preserving permutation
   remains a separate operation.
+
+  Implemented the recorded interfaces through `FixedVarBirelationSet`, preserving
+  copy-on-write ownership. Tests cover atom and bond sites, all ligand kinds,
+  duplicates and empty frames, shared anchors, independent site/ligand changes,
+  unchanged configuration and constraints, incidence, and restoration after
+  entity removal and topology compaction. All 56 focused tests, strict graph-IR
+  Clippy, nightly formatting, and `git diff --check` pass.
 - **S1d** (`ir::molecule::editor`; internal rewire, red→green) Replace the
   `*SetStorage` wrappers with the typed sets for reads, additions, removals,
   compaction, and restoration. Keep the current public editor lifecycle and

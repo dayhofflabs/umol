@@ -4,7 +4,8 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    FixedRelationSet, GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition, RelationId,
+    Compaction, FixedRelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId,
+    ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
@@ -79,7 +80,122 @@ impl NoncovalentBonds {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
+}
 
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "editor storage still uses separate wrappers")
+)]
+impl NoncovalentBonds {
+    pub(crate) fn add(
+        &mut self,
+        atoms: [AtomId; 2],
+        attributes: NoncovalentBondForm,
+    ) -> NoncovalentBondId {
+        Arc::make_mut(&mut self.0)
+            .add(atoms.map(NodeId::from), attributes)
+            .into()
+    }
+
+    pub(crate) fn remove(&mut self, ids: &[NoncovalentBondId]) {
+        if ids.is_empty() {
+            return;
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        Arc::make_mut(&mut self.0).remove(&ids);
+    }
+
+    pub(crate) fn tracked_remove(
+        &mut self,
+        ids: &[NoncovalentBondId],
+    ) -> Compaction<NoncovalentBondId> {
+        if ids.is_empty() {
+            return Compaction::identity(self.count());
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid noncovalent bond ids")
+    }
+
+    /// Reinsert saved entries at their original ids after restoring surviving topology ids.
+    pub(crate) fn restore(
+        &mut self,
+        compaction: &Compaction<NoncovalentBondId>,
+        removed: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondForm)>,
+    ) {
+        if compaction.removed().is_empty() {
+            return;
+        }
+        let relations = Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(RelationId::from)
+                .collect(),
+        )
+        .expect("noncovalent bond compaction contains valid relation ids");
+        let removed = removed
+            .into_iter()
+            .map(|(id, atoms, attributes)| {
+                (RelationId::from(id), atoms.map(NodeId::from), attributes)
+            })
+            .collect();
+        Arc::make_mut(&mut self.0).restore(&relations, removed);
+    }
+
+    /// Restore the original atom ids in surviving entries, preserving entry ids and attributes.
+    pub(crate) fn restore_topology_ids(&mut self, compaction: &GraphCompaction) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        Arc::make_mut(&mut self.0).restore_participants(compaction);
+    }
+
+    pub(crate) fn replace_atoms(&mut self, id: NoncovalentBondId, atoms: [AtomId; 2]) {
+        Arc::make_mut(&mut self.0).replace_participants(id.into(), atoms.map(NodeId::from));
+    }
+
+    pub(crate) fn replace_atom(&mut self, id: NoncovalentBondId, position: usize, atom: AtomId) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        Arc::make_mut(&mut self.0).replace_participant(id.into(), position, atom.into());
+    }
+
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub(crate) fn tracked_compact(
+        &self,
+        compaction: &GraphCompaction,
+    ) -> (Self, Compaction<NoncovalentBondId>) {
+        let (set, relations) = self.0.tracked_compact(compaction);
+        let relations = Compaction::new(
+            relations.source_count(),
+            relations
+                .removed()
+                .iter()
+                .copied()
+                .map(NoncovalentBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid noncovalent bond ids");
+        (Self(Arc::new(set)), relations)
+    }
+}
+
+impl NoncovalentBonds {
     pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], NoncovalentBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
@@ -592,6 +708,160 @@ mod tests {
 
     use super::*;
     use crate::ir::boolean::BooleanForm;
+
+    #[rstest]
+    #[case::ordered([AtomId(4), AtomId(1)])]
+    #[case::repeated([AtomId(4), AtomId(4)])]
+    fn test_noncovalent_bonds_add(#[case] atoms: [AtomId; 2]) {
+        let mut bonds = NoncovalentBonds::default();
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let id = bonds.add(atoms, attributes.clone());
+
+        assert_eq!(id, NoncovalentBondId(0));
+        assert_eq!(bonds.atoms(id), atoms);
+        assert_eq!(bonds.attributes(id), &attributes);
+        assert_eq!(bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(), vec![id]);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_tracked_remove() {
+        let original = NoncovalentBonds::new(vec![
+            ([AtomId(2), AtomId(0)], NoncovalentBondForm::default()),
+            (
+                [AtomId(3), AtomId(4)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            ([AtomId(5), AtomId(1)], NoncovalentBondForm::default()),
+        ]);
+        let mut bonds = original.clone();
+        let compaction = bonds.tracked_remove(&[NoncovalentBondId(2), NoncovalentBondId(0)]);
+        let mut plain = original.clone();
+        plain.remove(&[NoncovalentBondId(0), NoncovalentBondId(2)]);
+
+        assert_eq!(
+            compaction,
+            Compaction::new(3, vec![NoncovalentBondId(0), NoncovalentBondId(2)]).unwrap()
+        );
+        assert_eq!(bonds, plain);
+        assert_eq!(
+            bonds,
+            NoncovalentBonds::new(vec![(
+                [AtomId(3), AtomId(4)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            ),])
+        );
+        assert_eq!(
+            bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+        bonds.restore(
+            &compaction,
+            vec![
+                (
+                    NoncovalentBondId(2),
+                    [AtomId(5), AtomId(1)],
+                    NoncovalentBondForm::default(),
+                ),
+                (
+                    NoncovalentBondId(0),
+                    [AtomId(2), AtomId(0)],
+                    NoncovalentBondForm::default(),
+                ),
+            ],
+        );
+        assert_eq!(bonds, original);
+    }
+
+    #[rstest]
+    #[case::ordered([AtomId(4), AtomId(1)])]
+    #[case::repeated([AtomId(4), AtomId(4)])]
+    fn test_noncovalent_bonds_replace_atoms(#[case] atoms: [AtomId; 2]) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let original = NoncovalentBonds::new(vec![
+            ([AtomId(1), AtomId(2)], attributes.clone()),
+            ([AtomId(3), AtomId(5)], NoncovalentBondForm::default()),
+        ]);
+        let mut bonds = original.clone();
+        bonds.replace_atoms(NoncovalentBondId(0), atoms);
+
+        assert_eq!(
+            bonds,
+            NoncovalentBonds::new(vec![
+                (atoms, attributes),
+                ([AtomId(3), AtomId(5)], NoncovalentBondForm::default()),
+            ])
+        );
+        assert_eq!(original.atoms(NoncovalentBondId(0)), [AtomId(1), AtomId(2)]);
+        assert_eq!(
+            bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+        assert!(!bonds.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    #[case::first(0, [AtomId(4), AtomId(2)])]
+    #[case::second(1, [AtomId(1), AtomId(4)])]
+    fn test_noncovalent_bonds_replace_atom(#[case] position: usize, #[case] expected: [AtomId; 2]) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let mut bonds = NoncovalentBonds::new(vec![([AtomId(1), AtomId(2)], attributes.clone())]);
+        bonds.replace_atom(NoncovalentBondId(0), position, AtomId(4));
+
+        assert_eq!(bonds, NoncovalentBonds::new(vec![(expected, attributes)]));
+        assert_eq!(
+            bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+        assert!(!bonds.has_incident([AtomId(1), AtomId(2)][position]));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_tracked_compact() {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let original = NoncovalentBonds::new(vec![
+            ([AtomId(3), AtomId(2)], attributes.clone()),
+            ([AtomId(1), AtomId(4)], NoncovalentBondForm::default()),
+        ]);
+        let graph = GraphCompaction::new(
+            Compaction::new(5, vec![NodeId(1)]).unwrap(),
+            Compaction::identity(0),
+        );
+        let (mut compacted, rows) = original.tracked_compact(&graph);
+
+        assert_eq!(
+            rows,
+            Compaction::new(2, vec![NoncovalentBondId(1)]).unwrap()
+        );
+        assert_eq!(compacted, original.compact(&graph));
+        assert_eq!(
+            compacted,
+            NoncovalentBonds::new(vec![([AtomId(2), AtomId(1)], attributes.clone()),])
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(1)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+
+        compacted.restore_topology_ids(&graph);
+        assert_eq!(
+            compacted,
+            NoncovalentBonds::new(vec![([AtomId(3), AtomId(2)], attributes),])
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(3)).collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)]
+        );
+        assert!(!compacted.has_incident(AtomId(1)));
+        compacted.restore(
+            &rows,
+            vec![(
+                NoncovalentBondId(1),
+                [AtomId(1), AtomId(4)],
+                NoncovalentBondForm::default(),
+            )],
+        );
+        assert_eq!(compacted, original);
+    }
 
     #[rstest]
     #[case::covered(None, None)]
