@@ -32,9 +32,10 @@ an implementation dependency.
 | Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
 The staged implementation plan below sequences these contracts and integration
-obligations. S0a records the baseline; production API changes have not started. The
-lift_constraints defect and its undetermined-stereo policy are a separate focused
-correction, recorded under [other operations](#other-moleculereaction-operations).
+obligations. S0 records the baseline and additive Solution type; editor and
+molecule mutation API changes have not started. The lift_constraints defect and
+its undetermined-stereo policy are a separate focused correction, recorded under
+[other operations](#other-moleculereaction-operations).
 
 ## Editor and transaction API
 
@@ -1607,10 +1608,16 @@ the benchmark baseline before those changes.
   stereo/aromatic molecule. The existing composite phase-error table also
   covers stereo and aromatic rejection order.
 
-- **S0b** (`umol-utils::solution`; additive) Add
+- **S0b — completed 2026-09-24** (`umol-utils::solution`; additive) Add
   `Solution<T, C, U = T>`, keeping the existing two-parameter behavior and
   equal-payload methods. Test both equal and distinct payload types and the
   existing conversion laws. [dep: none]
+
+  `Underdetermined` now carries `U`; the two-parameter form still uses `T`.
+  Predicates, contradiction mapping, and conversion methods accept either
+  payload shape. `data`, `into_data`, and `map` retain their equal-payload
+  signatures. Both shapes and their conversion laws pass `umol-utils` tests;
+  the dependent Rust and Python binding crates compile with the default form.
 
 ### S1 — Typed-set storage delegation
 
