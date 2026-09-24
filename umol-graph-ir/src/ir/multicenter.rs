@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use umol_graph_core::{
-    GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition, RelationId, VarRelationSet,
+    Compaction, GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition,
+    RelationId, VarRelationSet,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
@@ -86,7 +87,138 @@ impl MulticenterBonds {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
+}
 
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "editor storage still uses separate wrappers")
+)]
+impl MulticenterBonds {
+    pub(crate) fn add(
+        &mut self,
+        atoms: &[AtomId],
+        attributes: MulticenterBondForm,
+    ) -> MulticenterBondId {
+        let nodes: Vec<NodeId> = atoms.iter().copied().map(NodeId::from).collect();
+        Arc::make_mut(&mut self.0).add(&nodes, attributes).into()
+    }
+
+    pub(crate) fn remove(&mut self, ids: &[MulticenterBondId]) {
+        if ids.is_empty() {
+            return;
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        Arc::make_mut(&mut self.0).remove(&ids);
+    }
+
+    pub(crate) fn tracked_remove(
+        &mut self,
+        ids: &[MulticenterBondId],
+    ) -> Compaction<MulticenterBondId> {
+        if ids.is_empty() {
+            return Compaction::identity(self.count());
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(MulticenterBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid multicenter bond ids")
+    }
+
+    /// Reinsert saved entries at their original ids after restoring surviving topology ids.
+    pub(crate) fn restore(
+        &mut self,
+        compaction: &Compaction<MulticenterBondId>,
+        removed: Vec<(MulticenterBondId, Vec<AtomId>, MulticenterBondForm)>,
+    ) {
+        if compaction.removed().is_empty() {
+            return;
+        }
+        let relations = Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(RelationId::from)
+                .collect(),
+        )
+        .expect("multicenter bond compaction contains valid relation ids");
+        let removed = removed
+            .into_iter()
+            .map(|(id, atoms, attributes)| {
+                (
+                    RelationId::from(id),
+                    atoms.into_iter().map(NodeId::from).collect(),
+                    attributes,
+                )
+            })
+            .collect();
+        Arc::make_mut(&mut self.0).restore(&relations, removed);
+    }
+
+    /// Restore the original atom ids in surviving entries, preserving entry ids and attributes.
+    pub(crate) fn restore_topology_ids(&mut self, compaction: &GraphCompaction) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        Arc::make_mut(&mut self.0).restore_participants(compaction);
+    }
+
+    pub(crate) fn replace_atoms(&mut self, id: MulticenterBondId, atoms: &[AtomId]) {
+        let nodes: Vec<NodeId> = atoms.iter().copied().map(NodeId::from).collect();
+        Arc::make_mut(&mut self.0).replace_participants(id.into(), &nodes);
+    }
+
+    pub(crate) fn replace_atom(&mut self, id: MulticenterBondId, position: usize, atom: AtomId) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        Arc::make_mut(&mut self.0).replace_participant(id.into(), position, atom.into());
+    }
+
+    pub(crate) fn insert_atom(&mut self, id: MulticenterBondId, position: usize, atom: AtomId) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        Arc::make_mut(&mut self.0).insert_participant(id.into(), position, atom.into());
+    }
+
+    pub(crate) fn remove_atom(&mut self, id: MulticenterBondId, position: usize) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        Arc::make_mut(&mut self.0).remove_participant(id.into(), position);
+    }
+
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub(crate) fn tracked_compact(
+        &self,
+        compaction: &GraphCompaction,
+    ) -> (Self, Compaction<MulticenterBondId>) {
+        let (set, relations) = self.0.tracked_compact(compaction);
+        let relations = Compaction::new(
+            relations.source_count(),
+            relations
+                .removed()
+                .iter()
+                .copied()
+                .map(MulticenterBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid multicenter bond ids");
+        (Self(Arc::new(set)), relations)
+    }
+}
+
+impl MulticenterBonds {
     pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, MulticenterBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
@@ -566,6 +698,198 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    #[rstest]
+    fn test_multicenter_bonds_add() {
+        let mut bonds = MulticenterBonds::default();
+        let attributes = MulticenterBondForm::from_electrons(vec![1, 2, 3]);
+        let id = bonds.add(&[AtomId(4), AtomId(1), AtomId(4)], attributes.clone());
+
+        assert_eq!(id, MulticenterBondId(0));
+        assert_eq!(
+            bonds.atoms(id).collect::<Vec<_>>(),
+            vec![AtomId(4), AtomId(1), AtomId(4)]
+        );
+        assert_eq!(bonds.attributes(id), &attributes);
+        assert_eq!(bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(), vec![id]);
+        assert!(!bonds.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_tracked_remove() {
+        let original = MulticenterBonds::new(vec![
+            (
+                vec![AtomId(0)],
+                MulticenterBondForm::from_electrons(vec![1]),
+            ),
+            (
+                vec![AtomId(1)],
+                MulticenterBondForm::from_electrons(vec![2]),
+            ),
+            (
+                vec![AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![3]),
+            ),
+        ]);
+        let mut bonds = original.clone();
+        let compaction = bonds.tracked_remove(&[MulticenterBondId(2), MulticenterBondId(0)]);
+        let mut plain = original.clone();
+        plain.remove(&[MulticenterBondId(0), MulticenterBondId(2)]);
+
+        assert_eq!(
+            compaction,
+            Compaction::new(3, vec![MulticenterBondId(0), MulticenterBondId(2)]).unwrap()
+        );
+        assert_eq!(bonds, plain);
+        assert_eq!(
+            bonds.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1)]
+        );
+        bonds.restore(
+            &compaction,
+            vec![
+                (
+                    MulticenterBondId(2),
+                    vec![AtomId(2)],
+                    original.attributes(MulticenterBondId(2)).clone(),
+                ),
+                (
+                    MulticenterBondId(0),
+                    vec![AtomId(0)],
+                    original.attributes(MulticenterBondId(0)).clone(),
+                ),
+            ],
+        );
+        assert_eq!(bonds, original);
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_replace_atoms() {
+        let first = MulticenterBondForm::from_electrons(vec![1, 2]);
+        let second = MulticenterBondForm::from_electrons(vec![3]);
+        let mut bonds = MulticenterBonds::new(vec![
+            (vec![AtomId(1), AtomId(2)], first.clone()),
+            (vec![AtomId(3)], second.clone()),
+        ]);
+        bonds.replace_atoms(MulticenterBondId(0), &[AtomId(4), AtomId(4), AtomId(1)]);
+
+        assert_eq!(
+            bonds.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(4), AtomId(4), AtomId(1)]
+        );
+        assert_eq!(bonds.attributes(MulticenterBondId(0)), &first);
+        assert_eq!(
+            bonds.atoms(MulticenterBondId(1)).collect::<Vec<_>>(),
+            vec![AtomId(3)]
+        );
+        assert_eq!(bonds.attributes(MulticenterBondId(1)), &second);
+        assert_eq!(
+            bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![MulticenterBondId(0)]
+        );
+        assert!(!bonds.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_replace_atom() {
+        let mut bonds = MulticenterBonds::new(vec![(
+            vec![AtomId(1), AtomId(2)],
+            MulticenterBondForm::default(),
+        )]);
+        bonds.replace_atom(MulticenterBondId(0), 1, AtomId(4));
+        assert_eq!(
+            bonds.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4)]
+        );
+        assert!(!bonds.has_incident(AtomId(2)));
+        assert!(bonds.has_incident(AtomId(4)));
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_insert_atom() {
+        let mut bonds = MulticenterBonds::new(vec![(
+            vec![AtomId(1), AtomId(2)],
+            MulticenterBondForm::default(),
+        )]);
+        bonds.insert_atom(MulticenterBondId(0), 1, AtomId(4));
+        bonds.insert_atom(MulticenterBondId(0), 3, AtomId(5));
+        assert_eq!(
+            bonds.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(2), AtomId(5)]
+        );
+        assert_eq!(
+            bonds.incident_ids(AtomId(5)).collect::<Vec<_>>(),
+            vec![MulticenterBondId(0)]
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_remove_atom() {
+        let mut bonds = MulticenterBonds::new(vec![(
+            vec![AtomId(1), AtomId(2)],
+            MulticenterBondForm::default(),
+        )]);
+        bonds.remove_atom(MulticenterBondId(0), 0);
+        bonds.remove_atom(MulticenterBondId(0), 0);
+        assert_eq!(
+            bonds.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
+            Vec::<AtomId>::new()
+        );
+        assert!(!bonds.has_incident(AtomId(1)));
+        assert!(!bonds.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_tracked_compact() {
+        let original = MulticenterBonds::new(vec![
+            (
+                vec![AtomId(0), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![1, 2]),
+            ),
+            (
+                vec![AtomId(1), AtomId(4)],
+                MulticenterBondForm::from_electrons(vec![3, 4]),
+            ),
+            (
+                vec![AtomId(3), AtomId(5)],
+                MulticenterBondForm::from_electrons(vec![5, 6]),
+            ),
+        ]);
+        let graph = GraphCompaction::new(
+            Compaction::new(6, vec![NodeId(1)]).unwrap(),
+            Compaction::identity(0),
+        );
+        let (mut compacted, rows) = original.tracked_compact(&graph);
+
+        assert_eq!(
+            rows,
+            Compaction::new(3, vec![MulticenterBondId(1)]).unwrap()
+        );
+        assert_eq!(compacted, original.compact(&graph));
+        assert_eq!(
+            compacted.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(0), AtomId(1)]
+        );
+        assert_eq!(
+            compacted.atoms(MulticenterBondId(1)).collect::<Vec<_>>(),
+            vec![AtomId(2), AtomId(4)]
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(1)).collect::<Vec<_>>(),
+            vec![MulticenterBondId(0)]
+        );
+
+        compacted.restore_topology_ids(&graph);
+        compacted.restore(
+            &rows,
+            vec![(
+                MulticenterBondId(1),
+                vec![AtomId(1), AtomId(4)],
+                original.attributes(MulticenterBondId(1)).clone(),
+            )],
+        );
+        assert_eq!(compacted, original);
+    }
 
     #[rstest]
     #[case::covered(None, None)]

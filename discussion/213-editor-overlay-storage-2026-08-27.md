@@ -11,18 +11,18 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
-## Design status — 2026-09-22
+## Design status — 2026-09-24
 
-This document owns the molecule/reaction mutation redesign. No production change
-from this design is implemented. Graph-core mutation and restoration are complete
-in [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
+This document owns the molecule/reaction mutation redesign. S0 and S1a are
+implemented. Graph-core mutation and restoration are complete in
+[166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
 an implementation dependency.
 
 | Area | Status | Concrete position |
 | --- | --- | --- |
-| Storage delegation, participant methods, Edit/Delta/Undo variants, local getters | Settled design | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
+| Storage delegation, participant methods, Edit/Delta/Undo variants, local getters | Settled design; S1a complete | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
 | Molecule attribute methods | Settled: retain current placement | Keep the eight integrity-preserving mutable methods and the nine checked callbacks on Molecule, with their existing guarantees. The editor retains the complete mutation vocabulary. |
@@ -32,9 +32,10 @@ an implementation dependency.
 | Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
 The staged implementation plan below sequences these contracts and integration
-obligations. S0 records the baseline and additive Solution type; editor and
-molecule mutation API changes have not started. The lift_constraints defect and
-its undetermined-stereo policy are a separate focused correction, recorded under
+obligations. S0 records the baseline and additive Solution type; S1a adds aromatic
+and multicenter set mutation. Editor and molecule mutation API changes have not
+started. The lift_constraints defect and its undetermined-stereo policy are a
+separate focused correction, recorded under
 [other operations](#other-moleculereaction-operations).
 
 ## Editor and transaction API
@@ -1621,22 +1622,117 @@ the benchmark baseline before those changes.
 
 ### S1 — Typed-set storage delegation
 
-- **S1a** (`ir::aromatic`, `ir::multicenter`; additive) Give the owning typed
+All six typed sets use `restore_topology_ids` to translate the atom and bond ids
+stored in surviving entries back to their original ids. `restore` then
+reinstates saved entity entries at their original ids. These methods delegate
+to graph-core's `restore_participants` and `restore`, respectively.
+
+- **S1a — completed 2026-09-24** (`ir::aromatic`, `ir::multicenter`; additive) Give the owning typed
   sets the needed add, remove, restore, and atom-list mutation methods, delegating
-  incidence and row compaction to graph-core. Test ordered participants,
+  incidence and row compaction to graph-core. Test ordered atoms,
   incidence, compaction, and matching-history restoration. [dep: S0a]
+
+  The following shorthand applies once for each `(Set, Id, Form)` pair:
+  `(AromaticSystems, AromaticSystemId, AromaticSystemForm)` and
+  `(MulticenterBonds, MulticenterBondId, MulticenterBondForm)`. `position` is a
+  zero-based offset in the selected atom sequence; S2c gives public editor views
+  `AtomPosition` and converts it at this boundary.
+
+  ```text
+  Set::add(&mut self, atoms: &[AtomId], attributes: Form) -> Id
+  Set::remove(&mut self, ids: &[Id])
+  Set::tracked_remove(&mut self, ids: &[Id]) -> Compaction<Id>
+  Set::restore(&mut self, rows: &Compaction<Id>, removed: Vec<(Id, Vec<AtomId>, Form)>)
+  Set::restore_topology_ids(&mut self, graph: &GraphCompaction)
+  Set::replace_atoms(&mut self, id: Id, atoms: &[AtomId])
+  Set::replace_atom(&mut self, id: Id, position: usize, atom: AtomId)
+  Set::insert_atom(&mut self, id: Id, position: usize, atom: AtomId)
+  Set::remove_atom(&mut self, id: Id, position: usize)
+  Set::compact(&self, graph: &GraphCompaction) -> Self
+  Set::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<Id>)
+  ```
+
+  These methods are `pub(crate)`; S2 exposes public mutation through the editor
+  views. They delegate to `VarRelationSet`, retaining the owning set's
+  copy-on-write storage. Focused tests cover order, draft duplicates, incidence,
+  attribute preservation, compaction, and matching-history restoration.
+  The implementation matches the interfaces above. Focused tests, strict
+  graph-IR Clippy, nightly formatting, and `git diff --check` pass.
 - **S1b** (`ir::dative`, `ir::noncovalent`; additive) Add the same ownership
   operations for distinguished acceptor/donors and fixed endpoints. Test each
   factor independently, including duplicate and temporarily invalid draft
-  participants. [dep: S0a]
+  atom references. [dep: S0a]
+
+  `DativeBonds` takes `(donors, acceptor, attributes)` on addition and restores
+  the same fields with their original id. The acceptor is the fixed factor;
+  only donors admit insertion and removal.
+
+  ```text
+  DativeBonds::add(&mut self, donors: &[AtomId], acceptor: AtomId, attributes: DativeBondForm) -> DativeBondId
+  DativeBonds::remove(&mut self, ids: &[DativeBondId])
+  DativeBonds::tracked_remove(&mut self, ids: &[DativeBondId]) -> Compaction<DativeBondId>
+  DativeBonds::restore(&mut self, rows: &Compaction<DativeBondId>, removed: Vec<(DativeBondId, Vec<AtomId>, AtomId, DativeBondForm)>)
+  DativeBonds::restore_topology_ids(&mut self, graph: &GraphCompaction)
+  DativeBonds::replace_acceptor(&mut self, id: DativeBondId, acceptor: AtomId)
+  DativeBonds::replace_donors(&mut self, id: DativeBondId, donors: &[AtomId])
+  DativeBonds::replace_donor(&mut self, id: DativeBondId, position: usize, donor: AtomId)
+  DativeBonds::insert_donor(&mut self, id: DativeBondId, position: usize, donor: AtomId)
+  DativeBonds::remove_donor(&mut self, id: DativeBondId, position: usize)
+  DativeBonds::compact(&self, graph: &GraphCompaction) -> Self
+  DativeBonds::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<DativeBondId>)
+  ```
+
+  `NoncovalentBonds` uses a fixed ordered pair; there is no endpoint insertion
+  or removal. Its row methods follow the same remove/restore/compact contracts.
+
+  ```text
+  NoncovalentBonds::add(&mut self, atoms: [AtomId; 2], attributes: NoncovalentBondForm) -> NoncovalentBondId
+  NoncovalentBonds::remove(&mut self, ids: &[NoncovalentBondId])
+  NoncovalentBonds::tracked_remove(&mut self, ids: &[NoncovalentBondId]) -> Compaction<NoncovalentBondId>
+  NoncovalentBonds::restore(&mut self, rows: &Compaction<NoncovalentBondId>, removed: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondForm)>)
+  NoncovalentBonds::restore_topology_ids(&mut self, graph: &GraphCompaction)
+  NoncovalentBonds::replace_atoms(&mut self, id: NoncovalentBondId, atoms: [AtomId; 2])
+  NoncovalentBonds::replace_atom(&mut self, id: NoncovalentBondId, position: usize, atom: AtomId)
+  NoncovalentBonds::compact(&self, graph: &GraphCompaction) -> Self
+  NoncovalentBonds::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<NoncovalentBondId>)
+  ```
+
+  These are proposed crate-private set methods. S2c exposes the domain-level
+  editor-view methods with `AtomPosition` after S1d replaces the storage wrappers.
 - **S1c** (`ir::stereo`; additive) Add site and ligand operations to the stereo
   typed sets, preserving stored frames and payloads during ordinary replacement.
   Test atom and bond sites, virtual ligands, incidence, and restoration.
   [dep: S0a]
+
+  The shorthand applies to `(Set, Id, Site, Form)` equal to
+  `(StereoAtoms, StereoAtomId, AtomId, StereoAtomForm)` or
+  `(StereoBonds, StereoBondId, BondId, StereoBondForm)`.
+
+  ```text
+  Set::add(&mut self, site: Site, ligands: &[StereoLigand], attributes: Form) -> Id
+  Set::remove(&mut self, ids: &[Id])
+  Set::tracked_remove(&mut self, ids: &[Id]) -> Compaction<Id>
+  Set::restore(&mut self, rows: &Compaction<Id>, removed: Vec<(Id, Site, Vec<StereoLigand>, Form)>)
+  Set::restore_topology_ids(&mut self, graph: &GraphCompaction)
+  Set::replace_site(&mut self, id: Id, site: Site)
+  Set::replace_ligands(&mut self, id: Id, ligands: &[StereoLigand])
+  Set::replace_ligand(&mut self, id: Id, position: usize, ligand: StereoLigand)
+  Set::insert_ligand(&mut self, id: Id, position: usize, ligand: StereoLigand)
+  Set::remove_ligand(&mut self, id: Id, position: usize)
+  Set::compact(&self, graph: &GraphCompaction) -> Self
+  Set::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<Id>)
+  ```
+
+  StereoBonds restoration translates its bond sites and the atom references in
+  its ligands. These are proposed crate-private set methods. S2c exposes
+  `StereoLigandPosition` on the public editor views. Site and ligand replacement
+  leave the other factor and payload unchanged; frame-preserving permutation
+  remains a separate operation.
 - **S1d** (`ir::molecule::editor`; internal rewire, red→green) Replace the
   `*SetStorage` wrappers with the typed sets for reads, additions, removals,
   compaction, and restoration. Keep the current public editor lifecycle and
   undo checker for this stage while routing row restoration through typed sets.
+  Remove the temporary dead-code expectations on the new typed-set methods.
   Test all six overlay kinds against the S0 behavior and rerun the
   storage-sensitive benchmarks.
   [dep: S1a, S1b, S1c]
