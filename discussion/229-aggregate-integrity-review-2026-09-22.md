@@ -2009,7 +2009,31 @@ delta normal-form property, and strict graph-IR Clippy passed.
 - **S5a — reaction_span.rs; green [dep: S0a, S3a].** Skip correspondence
   construction only when no selected top-level constraints or constraint
   deltas need transport (R9). Compare exact empty/nonempty constraint
-  projections and complete operation costs.
+  projections and complete operation costs. **Complete 2026-09-23.**
+  `project_entries` builds the correspondence only when that side selects a
+  top-level constraint; `to_reaction` builds it only for an added or removed
+  constraint delta. Exact four-case projection tests cover empty, unchanged,
+  added, and removed constraints across interleaved atom ids. An unchanged
+  constraint roundtrip covers the no-delta path. The 116 ReactionSpan unit
+  cases, six external cases, strict crate Clippy, and formatting passed.
+
+  With no constraints, complete 80-atom interleaved construction changed
+  from 46.72 to 20.94 µs and 171 to 83 allocations; lhs projection from
+  21.94 to 8.78 µs and 79 to 35 allocations; and `to_reaction` from 44.24
+  to 18.57 µs and 138 to 50 allocations. The unchanged 80-atom case showed
+  the same direction: construction 48.84 to 24.30 µs and 175 to 87
+  allocations. Requested bytes fell by 8,016 per unconstrained construction
+  or `to_reaction` call in the allocation probe.
+
+  With one unchanged constraint, interleaved construction stayed at 47.11
+  versus 47.06 µs and lhs projection at 22.06 versus 22.11 µs; `to_reaction`
+  improved from 44.38 to 31.41 µs because it emits no constraint delta.
+  The separate mixed-constraint allocation probe retained its necessary
+  correspondence: interleaved construction was 176 allocations before and
+  after, with lhs and `to_reaction` within two allocations of baseline.
+  Timings used the S0a Criterion protocol; allocation medians used its
+  separate seven-call probe. The guard therefore removes material work when
+  transport is absent without a material cost when transport is required.
 - **S5b — reaction_span.rs; green [dep: S5a].** Replace dense union-ID
   HashMaps with indexed vectors while preserving present-prefix and absent-ID
   translation (R8). Check interleaved union ordering, dangling references,
