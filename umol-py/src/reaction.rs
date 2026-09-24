@@ -1259,7 +1259,7 @@ mod tests {
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 concat!(
-                    "EDN parse: invalid value: reaction stereo representation is invalid: ",
+                    "EDN parse: invalid value: ",
                     "stereo atom 0: stereo ligand StereoLigand { atom_id: AtomId(0), ",
                     "kind: ImplicitHydrogen } is duplicated in the frame"
                 )

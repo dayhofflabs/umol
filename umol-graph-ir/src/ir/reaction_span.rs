@@ -1315,9 +1315,9 @@ impl ReactionSpan {
     }
 
     /// Recover the operational `Reaction` from the span — the inverse of
-    /// `Reaction::to_reaction_span`, up to delta normal form. The reaction's `lhs` is `self.lhs()`
-    /// (which preserves the original lhs id space); each entity's `EntitySpan` yields its delta, a
-    /// `Modified` one via a form difference of its left/right values.
+    /// `Reaction::to_reaction_span`, up to delta normal form. The reaction's `lhs` is `self.lhs()`,
+    /// whose ids follow the order of lhs-present entries in this span. Each entity's `EntitySpan`
+    /// yields its delta, a `Modified` one via a form difference of its left/right values.
     ///
     /// # Semantic properties
     ///

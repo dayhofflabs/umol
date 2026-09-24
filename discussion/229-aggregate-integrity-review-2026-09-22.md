@@ -1,6 +1,6 @@
 # 229 — Aggregate integrity review
 
-Status: In Progress
+Status: Completed
 Date: 2026-09-22
 Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 [215](215-integrity-minimization-2026-08-28.md),
@@ -12,19 +12,17 @@ Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 
 ## Review result
 
-The Molecule gate review and independent refutation are complete. **The molecule
-gate's accepted domain matches doc 215; its execution still repeats work.**
-Sixteen Molecule findings survived: one downstream consumer panic, twelve local
-efficiency findings, two incorrect documentation claims, and one focused
-regression gap. None calls for tightening or
-weakening integrity, or introducing a checking framework. S0a has established
-the benchmark baseline; no integrity-check behavior has changed.
+At the review snapshot, **the Molecule gate's accepted domain matched doc 215,
+but its execution repeated work.** Sixteen Molecule findings survived: one
+downstream consumer panic, twelve local efficiency findings, two incorrect
+documentation claims, and one focused regression gap. S0–S4 addressed them
+without changing the Molecule admission domain or adding a checking framework.
 
 The separate Reaction and ReactionSpan review at `33ecfe5e03d714d2ac801015d20fa00243ea3a82`
 confirmed five Reaction publication gaps under the then-current contract, one
 Reaction integrity overreach, two incorrect ReactionSpan doc claims, and two
-bounded execution costs. No new
-ReactionSpan admission gap was found.
+bounded execution costs. S2–S5 addressed them. No new ReactionSpan admission
+gap was found.
 The [verdicts](#adversarial-verdicts) distinguish these from the earlier Molecule
 cycle and from deliberately deferred reaction materializability.
 A findings-blind Reaction rereview at the same commit independently confirmed
@@ -32,13 +30,12 @@ the publication gaps and resolved a challenge to the kind-change verdict; its
 additional dispositions are recorded below.
 A subsequent focused review found that removal-incidence agreement can be
 treated as an expected-old precondition, but did not establish that moving its
-check out of Reaction construction is worthwhile now. The existing constructor
-check stays for this work. R1 still requires a constructor fix for removals of
-newly added bonds.
+check out of Reaction construction is worthwhile now. That check stayed in the
+constructor. S2c corrected removals of newly added bonds.
 A second findings-blind boundary review confirmed R2–R5 as local representation
-gaps and found that bare `Deltas::normalize` can erase a same-id `Add` followed
-by `Remove` without checking the removal. That cancellation must be fixed
-independently of Reaction construction.
+gaps and found that bare `Deltas::normalize` could erase a same-id `Add`
+followed by `Remove` without checking the removal. S2a corrected that
+cancellation independently of Reaction construction.
 
 The [small-relation comparison](#small-relation-integrity-checks) covers 2–10
 participants and IDs below 100. Two-word bitmaps remain faster when sorted keys
@@ -2069,7 +2066,39 @@ delta normal-form property, and strict graph-IR Clippy passed.
   the repository Python 3.13 environment. Run the Rust 1.87 CI gate once.
   Re-run complete-operation benchmarks only after the final changes, record
   decisions and remaining limits here, review the full diff against scope,
-  then synchronize this document and the status index.
+  then synchronize this document and the status index. **Complete 2026-09-23.**
+  The default workspace run passed 18,508 tests (nine ignored); the all-features
+  run passed 33,640 (ten ignored) with `PROPTEST_CASES=256`, including the
+  property and conformance targets. Strict workspace Clippy,
+  warnings-denied all-features rustdoc,
+  Python 3.13 `maturin develop` and 1,566 Python tests (two skipped), the
+  exact Rust 1.87 CI check, nightly formatting, and `git diff --check` passed.
+  The workspace run exposed one stale Python assertion for the direct Reaction
+  integrity error; its expected text now matches the Rust error. The focused
+  binding test and full suites passed after that correction.
 
-The correctness work runs through S0–S3. S4 and S5 follow it; both are part of
-this plan and must be complete before S6 closes.
+  Final complete-operation measurements use the S0a protocol and fixtures on
+  arm64 with rustc 1.96.0. Allocation calls and requested bytes are seven-call
+  medians; input preparation is outside both measurements.
+
+  | Operation, 80 atoms | S0a → final time | S0a → final allocations | S0a → final requested bytes |
+  | --- | ---: | ---: | ---: |
+  | Molecule overlays, no constraint | 26.10 → 8.82 µs | 330 → 106 | 40,316 → 28,016 |
+  | Reaction, no constraint, 0 removals | 6.02 → 0.0216 µs | 66 → 0 | 11,220 → 0 |
+  | Reaction, no constraint, 1 removal | 6.00 → 0.0708 µs | 68 → 2 | 11,228 → 8 |
+  | Reaction, no constraint, 20 removals | 7.17 → 0.981 µs | 106 → 40 | 11,380 → 160 |
+  | ReactionSpan interleaved construction, no constraint | 55.42 → 15.22 µs | 183 → 83 | 127,158 → 111,142 |
+  | ReactionSpan interleaved lhs, no constraint | 26.26 → 5.85 µs | 85 → 35 | 54,555 → 46,547 |
+  | ReactionSpan interleaved `to_reaction`, no constraint | 49.13 → 11.46 µs | 145 → 50 | 112,654 → 99,890 |
+  | ReactionSpan interleaved construction, one constraint | 55.55 → 20.35 µs | 185 → 138 | 127,606 → 117,262 |
+
+  All 36 final timing point estimates were below S0a. Allocation calls and
+  requested bytes were no higher in any of the 31 allocator rows. The table
+  supports retaining the chosen integrity-check implementations and dense
+  projection maps, which reduce complete-operation cost on these fixtures.
+  Reaction's removal-incidence check also remains in its constructor. These
+  synthetic fixtures do not establish production workload frequencies;
+  requested bytes are cumulative allocation sizes, not peak live memory.
+  The full 229 implementation diff was reviewed for scope, public surface,
+  module visibility, tests, and naming; no unrelated source change is part of
+  this closeout.
