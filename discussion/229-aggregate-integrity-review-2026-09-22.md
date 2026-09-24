@@ -2038,7 +2038,28 @@ delta normal-form property, and strict graph-IR Clippy passed.
   HashMaps with indexed vectors while preserving present-prefix and absent-ID
   translation (R8). Check interleaved union ordering, dangling references,
   side projections, and exact roundtrips; compare time and allocations for
-  complete construction and projection.
+  complete construction and projection. **Complete 2026-09-23.** The eight
+  projection maps are now indexed vectors. Present entries still occupy each
+  side's valid prefix and absent entries its suffix; constraint transport uses
+  the same ordered images through `Correspondence::from_images`. Two exact
+  interleaved cases check dangling atom and bond references on opposite sides.
+  The 118 ReactionSpan unit cases, six public integration cases, and 11 public
+  properties at 256 cases each passed, as did strict crate Clippy.
+
+  Against S5a, complete 80-atom interleaved construction changed from 20.94
+  to 15.43 µs without constraints and 47.06 to 20.86 µs with one unchanged
+  constraint. Lhs projection changed from 8.78 to 5.85 µs and 22.11 to
+  8.77 µs, respectively; rhs followed the same direction. `to_reaction`
+  changed from 18.57 to 11.43 µs and 31.41 to 14.18 µs. The unchanged-union
+  cases improved in every measured operation as well. With no constraints,
+  allocation counts stayed at 83 for interleaved construction and 35 for lhs
+  projection, while requested bytes fell by 3,368 and 1,684, respectively.
+  In the separate mixed-constraint probe, interleaved construction fell from
+  176 to 142 allocations and lhs projection from 83 to 65; requested bytes
+  fell from 131,918 to 126,262 and 52,531 to 49,647. The S0a Criterion and
+  seven-call allocation protocols measured complete operations with inputs
+  prepared outside the counters. Indexed maps improve both ordinary and
+  correspondence-bearing paths without changing projection semantics.
 
 ### S6 — Final gate and closeout
 

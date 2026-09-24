@@ -505,17 +505,16 @@ fn check_reaction_span_entries(
 /// Map every union id into one projected id space. Present entities occupy the valid dense prefix;
 /// absent entities follow it, so a surviving reference to one is retained but rejected by the
 /// molecule-entry validator.
-fn projected_ids<Id>(presence: impl IntoIterator<Item = bool>) -> HashMap<Id, Id>
+fn projected_ids<Id>(presence: impl IntoIterator<Item = bool>) -> Vec<Id>
 where
-    Id: Copy + Eq + Hash + From<usize>,
+    Id: From<usize>,
 {
     let presence: Vec<bool> = presence.into_iter().collect();
     let mut next_present = 0;
     let mut next_absent = presence.iter().filter(|&&present| present).count();
     presence
         .into_iter()
-        .enumerate()
-        .map(|(index, present)| {
+        .map(|present| {
             let projected = if present {
                 let id = next_present;
                 next_present += 1;
@@ -525,7 +524,7 @@ where
                 next_absent += 1;
                 id
             };
-            (Id::from(index), Id::from(projected))
+            Id::from(projected)
         })
         .collect()
 }
@@ -1328,46 +1327,46 @@ impl ReactionSpan {
     /// constraints, and contains no redundant equivalent `Modified` entry. Otherwise the result
     /// is an lhs-anchored normal form that preserves both side semantics.
     pub fn to_reaction(&self) -> Reaction {
-        let atom_ids: HashMap<AtomId, AtomId> =
+        let atom_ids: Vec<AtomId> =
             projected_ids(self.atoms.iter().map(|span| span.lhs().is_some()));
-        let bond_ids: HashMap<BondId, BondId> =
+        let bond_ids: Vec<BondId> =
             projected_ids(self.bonds.iter().map(|span| span.lhs().is_some()));
-        let dative_ids: HashMap<DativeBondId, DativeBondId> =
+        let dative_ids: Vec<DativeBondId> =
             projected_ids((0..self.dative_bonds.count()).map(|index| {
                 self.dative_bonds
                     .attributes(DativeBondId(index as u32))
                     .lhs()
                     .is_some()
             }));
-        let aromatic_ids: HashMap<AromaticSystemId, AromaticSystemId> =
+        let aromatic_ids: Vec<AromaticSystemId> =
             projected_ids((0..self.aromatic_systems.count()).map(|index| {
                 self.aromatic_systems
                     .attributes(AromaticSystemId(index as u32))
                     .lhs()
                     .is_some()
             }));
-        let multicenter_ids: HashMap<MulticenterBondId, MulticenterBondId> =
+        let multicenter_ids: Vec<MulticenterBondId> =
             projected_ids((0..self.multicenter_bonds.count()).map(|index| {
                 self.multicenter_bonds
                     .attributes(MulticenterBondId(index as u32))
                     .lhs()
                     .is_some()
             }));
-        let noncovalent_ids: HashMap<NoncovalentBondId, NoncovalentBondId> =
+        let noncovalent_ids: Vec<NoncovalentBondId> =
             projected_ids((0..self.noncovalent_bonds.count()).map(|index| {
                 self.noncovalent_bonds
                     .attributes(NoncovalentBondId(index as u32))
                     .lhs()
                     .is_some()
             }));
-        let stereo_atom_ids: HashMap<StereoAtomId, StereoAtomId> =
+        let stereo_atom_ids: Vec<StereoAtomId> =
             projected_ids((0..self.stereo_atoms.count()).map(|index| {
                 self.stereo_atoms
                     .attributes(StereoAtomId(index as u32))
                     .lhs()
                     .is_some()
             }));
-        let stereo_bond_ids: HashMap<StereoBondId, StereoBondId> =
+        let stereo_bond_ids: Vec<StereoBondId> =
             projected_ids((0..self.stereo_bonds.count()).map(|index| {
                 self.stereo_bonds
                     .attributes(StereoBondId(index as u32))
@@ -1380,94 +1379,30 @@ impl ReactionSpan {
             .any(|span| !matches!(span, ConstraintSpan::Unchanged(_)))
             .then(|| {
                 MoleculeCorrespondence::new(
-                    Correspondence::new(
-                        atom_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.atoms.len(),
-                        self.atoms.len(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        bond_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.bonds.len(),
-                        self.bonds.len(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        dative_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.dative_bonds.count(),
-                        self.dative_bonds.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        aromatic_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.aromatic_systems.count(),
-                        self.aromatic_systems.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        multicenter_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.multicenter_bonds.count(),
-                        self.multicenter_bonds.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        noncovalent_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.noncovalent_bonds.count(),
-                        self.noncovalent_bonds.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        stereo_atom_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.stereo_atoms.count(),
-                        self.stereo_atoms.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        stereo_bond_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.stereo_bonds.count(),
-                        self.stereo_bonds.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
+                    Correspondence::from_images(&atom_ids, self.atoms.len()),
+                    Correspondence::from_images(&bond_ids, self.bonds.len()),
+                    Correspondence::from_images(&dative_ids, self.dative_bonds.count()),
+                    Correspondence::from_images(&aromatic_ids, self.aromatic_systems.count()),
+                    Correspondence::from_images(&multicenter_ids, self.multicenter_bonds.count()),
+                    Correspondence::from_images(&noncovalent_ids, self.noncovalent_bonds.count()),
+                    Correspondence::from_images(&stereo_atom_ids, self.stereo_atoms.count()),
+                    Correspondence::from_images(&stereo_bond_ids, self.stereo_bonds.count()),
                 )
             });
 
         let mut deltas = Deltas::new();
         AtomDelta::append_deltas_from_states(
             &self.atoms,
-            |index| atom_ids[&AtomId::from(index)],
+            |index| atom_ids[index],
             |_| (),
             &mut deltas,
         );
         BondDelta::append_deltas_from_states(
             &self.bonds,
-            |index| bond_ids[&BondId::from(index)],
+            |index| bond_ids[index],
             |edge| {
                 let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
-                [atom_ids[&AtomId::from(a)], atom_ids[&AtomId::from(b)]]
+                [atom_ids[a.index()], atom_ids[b.index()]]
             },
             &mut deltas,
         );
@@ -1476,15 +1411,15 @@ impl ReactionSpan {
             .collect();
         DativeBondDelta::append_deltas_from_states(
             &dative_states,
-            |index| dative_ids[&DativeBondId::from(index)],
+            |index| dative_ids[index],
             |index| {
                 let id = DativeBondId(index as u32);
                 (
                     self.dative_bonds
                         .donors(id)
-                        .map(|donor| atom_ids[&donor])
+                        .map(|donor| atom_ids[donor.index()])
                         .collect(),
-                    atom_ids[&self.dative_bonds.acceptor(id)],
+                    atom_ids[self.dative_bonds.acceptor(id).index()],
                 )
             },
             &mut deltas,
@@ -1499,11 +1434,11 @@ impl ReactionSpan {
                 .collect();
         AromaticSystemDelta::append_deltas_from_states(
             &aromatic_states,
-            |index| aromatic_ids[&AromaticSystemId::from(index)],
+            |index| aromatic_ids[index],
             |index| {
                 self.aromatic_systems
                     .atoms(AromaticSystemId(index as u32))
-                    .map(|atom| atom_ids[&atom])
+                    .map(|atom| atom_ids[atom.index()])
                     .collect()
             },
             &mut deltas,
@@ -1518,11 +1453,11 @@ impl ReactionSpan {
                 .collect();
         MulticenterBondDelta::append_deltas_from_states(
             &multicenter_states,
-            |index| multicenter_ids[&MulticenterBondId::from(index)],
+            |index| multicenter_ids[index],
             |index| {
                 self.multicenter_bonds
                     .atoms(MulticenterBondId(index as u32))
-                    .map(|atom| atom_ids[&atom])
+                    .map(|atom| atom_ids[atom.index()])
                     .collect()
             },
             &mut deltas,
@@ -1537,12 +1472,12 @@ impl ReactionSpan {
                 .collect();
         NoncovalentBondDelta::append_deltas_from_states(
             &noncovalent_states,
-            |index| noncovalent_ids[&NoncovalentBondId::from(index)],
+            |index| noncovalent_ids[index],
             |index| {
                 let [a, b] = self
                     .noncovalent_bonds
                     .atoms(NoncovalentBondId(index as u32));
-                [atom_ids[&a], atom_ids[&b]]
+                [atom_ids[a.index()], atom_ids[b.index()]]
             },
             &mut deltas,
         );
@@ -1551,13 +1486,13 @@ impl ReactionSpan {
         // ids are transported from the union frame into the LHS-anchored reaction frame.
         for i in 0..self.stereo_atoms.count() {
             let rid = StereoAtomId(i as u32);
-            let id = stereo_atom_ids[&rid];
-            let site = atom_ids[&self.stereo_atoms.site(rid)];
+            let id = stereo_atom_ids[rid.index()];
+            let site = atom_ids[self.stereo_atoms.site(rid).index()];
             let ligands = self
                 .stereo_atoms
                 .ligands(rid)
                 .iter()
-                .map(|ligand| StereoLigand::new(atom_ids[&ligand.atom_id], ligand.kind))
+                .map(|ligand| StereoLigand::new(atom_ids[ligand.atom_id.index()], ligand.kind))
                 .collect();
             match self.stereo_atoms.attributes(rid) {
                 EntitySpan::Unchanged(_) => {}
@@ -1589,13 +1524,13 @@ impl ReactionSpan {
         }
         for i in 0..self.stereo_bonds.count() {
             let rid = StereoBondId(i as u32);
-            let id = stereo_bond_ids[&rid];
-            let site = bond_ids[&self.stereo_bonds.site(rid)];
+            let id = stereo_bond_ids[rid.index()];
+            let site = bond_ids[self.stereo_bonds.site(rid).index()];
             let ligands = self
                 .stereo_bonds
                 .ligands(rid)
                 .iter()
-                .map(|ligand| StereoLigand::new(atom_ids[&ligand.atom_id], ligand.kind))
+                .map(|ligand| StereoLigand::new(atom_ids[ligand.atom_id.index()], ligand.kind))
                 .collect();
             match self.stereo_bonds.attributes(rid) {
                 EntitySpan::Unchanged(_) => {}
@@ -1645,21 +1580,21 @@ impl ReactionSpan {
     /// to an entity absent from the side map beyond the valid dense prefix so the molecule-entry
     /// validator reports them rather than silently dropping the referring entry.
     fn project_entries(&self, side: Side) -> MoleculeEntries {
-        let atom_ids: HashMap<AtomId, AtomId> = projected_ids(
+        let atom_ids: Vec<AtomId> = projected_ids(
             self.atoms
                 .iter()
                 .map(|span| entity_side(span, side).is_some()),
         );
-        let bond_ids: HashMap<BondId, BondId> = projected_ids(
+        let bond_ids: Vec<BondId> = projected_ids(
             self.bonds
                 .iter()
                 .map(|span| entity_side(span, side).is_some()),
         );
-        let dative_ids: HashMap<DativeBondId, DativeBondId> =
+        let dative_ids: Vec<DativeBondId> =
             projected_ids((0..self.dative_bonds.count()).map(|i| {
                 entity_side(self.dative_bonds.attributes(DativeBondId(i as u32)), side).is_some()
             }));
-        let aromatic_ids: HashMap<AromaticSystemId, AromaticSystemId> =
+        let aromatic_ids: Vec<AromaticSystemId> =
             projected_ids((0..self.aromatic_systems.count()).map(|i| {
                 entity_side(
                     self.aromatic_systems.attributes(AromaticSystemId(i as u32)),
@@ -1667,7 +1602,7 @@ impl ReactionSpan {
                 )
                 .is_some()
             }));
-        let multicenter_ids: HashMap<MulticenterBondId, MulticenterBondId> =
+        let multicenter_ids: Vec<MulticenterBondId> =
             projected_ids((0..self.multicenter_bonds.count()).map(|i| {
                 entity_side(
                     self.multicenter_bonds
@@ -1676,7 +1611,7 @@ impl ReactionSpan {
                 )
                 .is_some()
             }));
-        let noncovalent_ids: HashMap<NoncovalentBondId, NoncovalentBondId> =
+        let noncovalent_ids: Vec<NoncovalentBondId> =
             projected_ids((0..self.noncovalent_bonds.count()).map(|i| {
                 entity_side(
                     self.noncovalent_bonds
@@ -1685,11 +1620,11 @@ impl ReactionSpan {
                 )
                 .is_some()
             }));
-        let stereo_atom_ids: HashMap<StereoAtomId, StereoAtomId> =
+        let stereo_atom_ids: Vec<StereoAtomId> =
             projected_ids((0..self.stereo_atoms.count()).map(|i| {
                 entity_side(self.stereo_atoms.attributes(StereoAtomId(i as u32)), side).is_some()
             }));
-        let stereo_bond_ids: HashMap<StereoBondId, StereoBondId> =
+        let stereo_bond_ids: Vec<StereoBondId> =
             projected_ids((0..self.stereo_bonds.count()).map(|i| {
                 entity_side(self.stereo_bonds.attributes(StereoBondId(i as u32)), side).is_some()
             }));
@@ -1707,8 +1642,8 @@ impl ReactionSpan {
                 let attributes = entity_side(span, side)?;
                 let [first, second] = self.graph.edge_endpoints(EdgeId(index as u32));
                 Some((
-                    atom_ids[&AtomId::from(first)],
-                    atom_ids[&AtomId::from(second)],
+                    atom_ids[first.index()],
+                    atom_ids[second.index()],
                     attributes.clone(),
                 ))
             })
@@ -1720,9 +1655,9 @@ impl ReactionSpan {
                 let donors = self
                     .dative_bonds
                     .donors(id)
-                    .map(|atom| atom_ids[&atom])
+                    .map(|atom| atom_ids[atom.index()])
                     .collect();
-                let acceptor = atom_ids[&self.dative_bonds.acceptor(id)];
+                let acceptor = atom_ids[self.dative_bonds.acceptor(id).index()];
                 Some((donors, acceptor, attributes.clone()))
             })
             .collect();
@@ -1733,7 +1668,7 @@ impl ReactionSpan {
                 let atoms = self
                     .aromatic_systems
                     .atoms(id)
-                    .map(|atom| atom_ids[&atom])
+                    .map(|atom| atom_ids[atom.index()])
                     .collect();
                 Some((atoms, attributes.clone()))
             })
@@ -1745,7 +1680,7 @@ impl ReactionSpan {
                 let atoms = self
                     .multicenter_bonds
                     .atoms(id)
-                    .map(|atom| atom_ids[&atom])
+                    .map(|atom| atom_ids[atom.index()])
                     .collect();
                 Some((atoms, attributes.clone()))
             })
@@ -1755,20 +1690,23 @@ impl ReactionSpan {
                 let id = NoncovalentBondId(index as u32);
                 let attributes = entity_side(self.noncovalent_bonds.attributes(id), side)?;
                 let [first, second] = self.noncovalent_bonds.atoms(id);
-                Some(([atom_ids[&first], atom_ids[&second]], attributes.clone()))
+                Some((
+                    [atom_ids[first.index()], atom_ids[second.index()]],
+                    attributes.clone(),
+                ))
             })
             .collect();
         let remap_ligands = |ligands: &[StereoLigand]| {
             ligands
                 .iter()
-                .map(|ligand| StereoLigand::new(atom_ids[&ligand.atom_id], ligand.kind))
+                .map(|ligand| StereoLigand::new(atom_ids[ligand.atom_id.index()], ligand.kind))
                 .collect()
         };
         let stereo_atoms = (0..self.stereo_atoms.count())
             .filter_map(|index| {
                 let id = StereoAtomId(index as u32);
                 let attributes = entity_side(self.stereo_atoms.attributes(id), side)?;
-                let site = atom_ids[&self.stereo_atoms.site(id)];
+                let site = atom_ids[self.stereo_atoms.site(id).index()];
                 Some((
                     site,
                     remap_ligands(self.stereo_atoms.ligands(id)),
@@ -1780,7 +1718,7 @@ impl ReactionSpan {
             .filter_map(|index| {
                 let id = StereoBondId(index as u32);
                 let attributes = entity_side(self.stereo_bonds.attributes(id), side)?;
-                let site = bond_ids[&self.stereo_bonds.site(id)];
+                let site = bond_ids[self.stereo_bonds.site(id).index()];
                 Some((
                     site,
                     remap_ligands(self.stereo_bonds.ligands(id)),
@@ -1798,78 +1736,14 @@ impl ReactionSpan {
             })
             .then(|| {
                 MoleculeCorrespondence::new(
-                    Correspondence::new(
-                        atom_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.atoms.len(),
-                        self.atoms.len(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        bond_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.bonds.len(),
-                        self.bonds.len(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        dative_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.dative_bonds.count(),
-                        self.dative_bonds.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        aromatic_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.aromatic_systems.count(),
-                        self.aromatic_systems.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        multicenter_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.multicenter_bonds.count(),
-                        self.multicenter_bonds.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        noncovalent_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.noncovalent_bonds.count(),
-                        self.noncovalent_bonds.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        stereo_atom_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.stereo_atoms.count(),
-                        self.stereo_atoms.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
-                    Correspondence::new(
-                        stereo_bond_ids
-                            .iter()
-                            .map(|(&left, &right)| (left, right))
-                            .collect(),
-                        self.stereo_bonds.count(),
-                        self.stereo_bonds.count(),
-                    )
-                    .expect("projection assignment permutes the complete union id space"),
+                    Correspondence::from_images(&atom_ids, self.atoms.len()),
+                    Correspondence::from_images(&bond_ids, self.bonds.len()),
+                    Correspondence::from_images(&dative_ids, self.dative_bonds.count()),
+                    Correspondence::from_images(&aromatic_ids, self.aromatic_systems.count()),
+                    Correspondence::from_images(&multicenter_ids, self.multicenter_bonds.count()),
+                    Correspondence::from_images(&noncovalent_ids, self.noncovalent_bonds.count()),
+                    Correspondence::from_images(&stereo_atom_ids, self.stereo_atoms.count()),
+                    Correspondence::from_images(&stereo_bond_ids, self.stereo_bonds.count()),
                 )
             });
         let constraints = if let Some(correspondence) = &correspondence {
@@ -3729,6 +3603,25 @@ mod tests {
             entity: Entity::Atom(AtomId(1)),
         }),
     )]
+    #[case::bond_interleaved_lhs(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::default()),
+                EntitySpan::Added(AtomForm::default()),
+                EntitySpan::Unchanged(AtomForm::default()),
+                EntitySpan::Removed(AtomForm::default()),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(3)),
+        }),
+    )]
     #[case::dative_rhs(
         ReactionSpanEntries {
             atoms: vec![
@@ -3850,6 +3743,30 @@ mod tests {
         },
         ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::InvalidReference {
             entity: Entity::Bond(BondId(0)),
+        }),
+    )]
+    #[case::stereo_bond_site_interleaved_rhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::default())),
+                (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::default())),
+                (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::default())),
+            ],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Unchanged(StereoBondForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Bond(BondId(2)),
         }),
     )]
     #[case::stereo_bond_ligand_rhs(
