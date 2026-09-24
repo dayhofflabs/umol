@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 use strum::VariantArray;
 use umol_graph_core::{
-    EdgeId, FixedVarBirelationSet, GraphCorrespondence, GraphRemapping, NodeId,
-    ParticipantPosition, RelationId,
+    Compaction, EdgeId, FixedVarBirelationSet, GraphCompaction, GraphCorrespondence,
+    GraphRemapping, NodeId, ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation};
@@ -98,7 +98,151 @@ impl StereoAtoms {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
+}
 
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "editor storage still uses separate wrappers")
+)]
+impl StereoAtoms {
+    pub(crate) fn add(
+        &mut self,
+        site: AtomId,
+        ligands: &[StereoLigand],
+        attributes: StereoAtomForm,
+    ) -> StereoAtomId {
+        Arc::make_mut(&mut self.0)
+            .add([site.into()], ligands, attributes)
+            .into()
+    }
+
+    pub(crate) fn remove(&mut self, ids: &[StereoAtomId]) {
+        if ids.is_empty() {
+            return;
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        Arc::make_mut(&mut self.0).remove(&ids);
+    }
+
+    pub(crate) fn tracked_remove(&mut self, ids: &[StereoAtomId]) -> Compaction<StereoAtomId> {
+        if ids.is_empty() {
+            return Compaction::identity(self.count());
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(StereoAtomId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid stereo atom ids")
+    }
+
+    /// Reinsert saved entries at their original ids after restoring surviving topology ids.
+    pub(crate) fn restore(
+        &mut self,
+        compaction: &Compaction<StereoAtomId>,
+        removed: Vec<(StereoAtomId, AtomId, Vec<StereoLigand>, StereoAtomForm)>,
+    ) {
+        if compaction.removed().is_empty() {
+            return;
+        }
+        let relations = Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(RelationId::from)
+                .collect(),
+        )
+        .expect("stereo atom compaction contains valid relation ids");
+        let removed = removed
+            .into_iter()
+            .map(|(id, site, ligands, attributes)| {
+                (
+                    RelationId::from(id),
+                    [NodeId::from(site)],
+                    ligands,
+                    attributes,
+                )
+            })
+            .collect();
+        Arc::make_mut(&mut self.0).restore(&relations, removed);
+    }
+
+    /// Restore the original atom ids in sites and ligands, preserving entry ids and attributes.
+    pub(crate) fn restore_topology_ids(&mut self, compaction: &GraphCompaction) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        Arc::make_mut(&mut self.0).restore_participants(compaction);
+    }
+
+    pub(crate) fn replace_site(&mut self, id: StereoAtomId, site: AtomId) {
+        Arc::make_mut(&mut self.0).replace_participants_1(id.into(), [site.into()]);
+    }
+
+    pub(crate) fn replace_ligands(&mut self, id: StereoAtomId, ligands: &[StereoLigand]) {
+        Arc::make_mut(&mut self.0).replace_participants_2(id.into(), ligands);
+    }
+
+    pub(crate) fn replace_ligand(
+        &mut self,
+        id: StereoAtomId,
+        position: usize,
+        ligand: StereoLigand,
+    ) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        Arc::make_mut(&mut self.0).replace_participant_2(id.into(), position, ligand);
+    }
+
+    pub(crate) fn insert_ligand(
+        &mut self,
+        id: StereoAtomId,
+        position: usize,
+        ligand: StereoLigand,
+    ) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        Arc::make_mut(&mut self.0).insert_participant_2(id.into(), position, ligand);
+    }
+
+    pub(crate) fn remove_ligand(&mut self, id: StereoAtomId, position: usize) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
+    }
+
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub(crate) fn tracked_compact(
+        &self,
+        compaction: &GraphCompaction,
+    ) -> (Self, Compaction<StereoAtomId>) {
+        let (set, relations) = self.0.tracked_compact(compaction);
+        let relations = Compaction::new(
+            relations.source_count(),
+            relations
+                .removed()
+                .iter()
+                .copied()
+                .map(StereoAtomId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid stereo atom ids");
+        (Self(Arc::new(set)), relations)
+    }
+}
+
+impl StereoAtoms {
     pub(crate) fn into_entries(self) -> Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
@@ -349,7 +493,151 @@ impl StereoBonds {
     pub fn has_incident_to_bond(&self, bond: BondId) -> bool {
         self.0.has_incident_to_edge(EdgeId::from(bond))
     }
+}
 
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "editor storage still uses separate wrappers")
+)]
+impl StereoBonds {
+    pub(crate) fn add(
+        &mut self,
+        site: BondId,
+        ligands: &[StereoLigand],
+        attributes: StereoBondForm,
+    ) -> StereoBondId {
+        Arc::make_mut(&mut self.0)
+            .add([site.into()], ligands, attributes)
+            .into()
+    }
+
+    pub(crate) fn remove(&mut self, ids: &[StereoBondId]) {
+        if ids.is_empty() {
+            return;
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        Arc::make_mut(&mut self.0).remove(&ids);
+    }
+
+    pub(crate) fn tracked_remove(&mut self, ids: &[StereoBondId]) -> Compaction<StereoBondId> {
+        if ids.is_empty() {
+            return Compaction::identity(self.count());
+        }
+        let ids: Vec<RelationId> = ids.iter().copied().map(RelationId::from).collect();
+        let compaction = Arc::make_mut(&mut self.0).tracked_remove(&ids);
+        Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(StereoBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid stereo bond ids")
+    }
+
+    /// Reinsert saved entries at their original ids after restoring surviving topology ids.
+    pub(crate) fn restore(
+        &mut self,
+        compaction: &Compaction<StereoBondId>,
+        removed: Vec<(StereoBondId, BondId, Vec<StereoLigand>, StereoBondForm)>,
+    ) {
+        if compaction.removed().is_empty() {
+            return;
+        }
+        let relations = Compaction::new(
+            compaction.source_count(),
+            compaction
+                .removed()
+                .iter()
+                .copied()
+                .map(RelationId::from)
+                .collect(),
+        )
+        .expect("stereo bond compaction contains valid relation ids");
+        let removed = removed
+            .into_iter()
+            .map(|(id, site, ligands, attributes)| {
+                (
+                    RelationId::from(id),
+                    [EdgeId::from(site)],
+                    ligands,
+                    attributes,
+                )
+            })
+            .collect();
+        Arc::make_mut(&mut self.0).restore(&relations, removed);
+    }
+
+    /// Restore the original atom and bond ids in sites and ligands, preserving entry ids and attributes.
+    pub(crate) fn restore_topology_ids(&mut self, compaction: &GraphCompaction) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        Arc::make_mut(&mut self.0).restore_participants(compaction);
+    }
+
+    pub(crate) fn replace_site(&mut self, id: StereoBondId, site: BondId) {
+        Arc::make_mut(&mut self.0).replace_participants_1(id.into(), [site.into()]);
+    }
+
+    pub(crate) fn replace_ligands(&mut self, id: StereoBondId, ligands: &[StereoLigand]) {
+        Arc::make_mut(&mut self.0).replace_participants_2(id.into(), ligands);
+    }
+
+    pub(crate) fn replace_ligand(
+        &mut self,
+        id: StereoBondId,
+        position: usize,
+        ligand: StereoLigand,
+    ) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        Arc::make_mut(&mut self.0).replace_participant_2(id.into(), position, ligand);
+    }
+
+    pub(crate) fn insert_ligand(
+        &mut self,
+        id: StereoBondId,
+        position: usize,
+        ligand: StereoLigand,
+    ) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        Arc::make_mut(&mut self.0).insert_participant_2(id.into(), position, ligand);
+    }
+
+    pub(crate) fn remove_ligand(&mut self, id: StereoBondId, position: usize) {
+        let position =
+            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
+    }
+
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub(crate) fn tracked_compact(
+        &self,
+        compaction: &GraphCompaction,
+    ) -> (Self, Compaction<StereoBondId>) {
+        let (set, relations) = self.0.tracked_compact(compaction);
+        let relations = Compaction::new(
+            relations.source_count(),
+            relations
+                .removed()
+                .iter()
+                .copied()
+                .map(StereoBondId::from)
+                .collect(),
+        )
+        .expect("relation compaction contains valid stereo bond ids");
+        (Self(Arc::new(set)), relations)
+    }
+}
+
+impl StereoBonds {
     pub(crate) fn into_entries(self) -> Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
@@ -1959,6 +2247,329 @@ mod tests {
     use super::super::ligand::StereoLigandKind;
     use super::*;
 
+    #[fixture]
+    fn stereo_atoms() -> StereoAtoms {
+        StereoAtoms::new(vec![(
+            AtomId(2),
+            vec![
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+                    relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+                }),
+            ),
+        )])
+    }
+
+    #[rstest]
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    fn test_stereo_atoms_add(mut stereo_atoms: StereoAtoms, #[case] kind: StereoLigandKind) {
+        let original = stereo_atoms.clone();
+        let ligand = StereoLigand::new(AtomId(6), kind);
+        let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32);
+        let id = stereo_atoms.add(AtomId(5), &[ligand, ligand], attributes.clone());
+
+        assert_eq!(id, StereoAtomId(1));
+        assert_eq!(
+            stereo_atoms,
+            StereoAtoms::new(vec![
+                (
+                    AtomId(2),
+                    original.ligands(StereoAtomId(0)).to_vec(),
+                    original.attributes(StereoAtomId(0)).clone()
+                ),
+                (AtomId(5), vec![ligand, ligand], attributes),
+            ])
+        );
+        assert_eq!(
+            stereo_atoms.incident_ids(AtomId(6)).collect::<Vec<_>>(),
+            vec![id]
+        );
+        assert_eq!(original.count(), 1);
+    }
+
+    #[rstest]
+    fn test_stereo_atoms_tracked_remove(stereo_atoms: StereoAtoms) {
+        let original = StereoAtoms::new(vec![
+            (AtomId(1), vec![], StereoAtomForm::default()),
+            (
+                AtomId(2),
+                stereo_atoms.ligands(StereoAtomId(0)).to_vec(),
+                stereo_atoms.attributes(StereoAtomId(0)).clone(),
+            ),
+            (AtomId(4), vec![], StereoAtomForm::default()),
+        ]);
+        let mut elements = original.clone();
+        let rows = elements.tracked_remove(&[StereoAtomId(2), StereoAtomId(0)]);
+        let mut plain = original.clone();
+        plain.remove(&[StereoAtomId(0), StereoAtomId(2)]);
+
+        assert_eq!(
+            rows,
+            Compaction::new(3, vec![StereoAtomId(0), StereoAtomId(2)]).unwrap()
+        );
+        assert_eq!(elements, stereo_atoms);
+        assert_eq!(elements, plain);
+        assert_eq!(
+            elements.incident_ids(AtomId(2)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+        elements.restore(
+            &rows,
+            vec![
+                (
+                    StereoAtomId(2),
+                    AtomId(4),
+                    vec![],
+                    StereoAtomForm::default(),
+                ),
+                (
+                    StereoAtomId(0),
+                    AtomId(1),
+                    vec![],
+                    StereoAtomForm::default(),
+                ),
+            ],
+        );
+        assert_eq!(elements, original);
+    }
+
+    #[rstest]
+    #[case::shared_index(AtomId(4))]
+    #[case::other(AtomId(5))]
+    fn test_stereo_atoms_replace_site(mut stereo_atoms: StereoAtoms, #[case] site: AtomId) {
+        let original = stereo_atoms.clone();
+        stereo_atoms.replace_site(StereoAtomId(0), site);
+
+        assert_eq!(
+            stereo_atoms,
+            StereoAtoms::new(vec![(
+                site,
+                original.ligands(StereoAtomId(0)).to_vec(),
+                original.attributes(StereoAtomId(0)).clone()
+            ),])
+        );
+        assert_eq!(original.site(StereoAtomId(0)), AtomId(2));
+        assert_eq!(
+            stereo_atoms.incident_ids(AtomId(2)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+        assert_eq!(
+            stereo_atoms.incident_ids(site).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+    }
+
+    #[rstest]
+    #[case::permuted(vec![
+        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+    ])]
+    #[case::repeated(vec![
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+    ])]
+    #[case::empty(vec![])]
+    fn test_stereo_atoms_replace_ligands(
+        mut stereo_atoms: StereoAtoms,
+        #[case] ligands: Vec<StereoLigand>,
+    ) {
+        let original = stereo_atoms.clone();
+        stereo_atoms.replace_ligands(StereoAtomId(0), &ligands);
+
+        assert_eq!(
+            stereo_atoms,
+            StereoAtoms::new(vec![(
+                AtomId(2),
+                ligands,
+                original.attributes(StereoAtomId(0)).clone()
+            ),])
+        );
+        assert_eq!(original.ligands(StereoAtomId(0)).len(), 4);
+        assert_eq!(
+            stereo_atoms.incident_ids(AtomId(2)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+    }
+
+    #[rstest]
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    fn test_stereo_atoms_replace_ligand(
+        mut stereo_atoms: StereoAtoms,
+        #[case] kind: StereoLigandKind,
+    ) {
+        let original = stereo_atoms.clone();
+        let replacement = StereoLigand::new(AtomId(3), kind);
+        stereo_atoms.replace_ligand(StereoAtomId(0), 1, replacement);
+
+        assert_eq!(
+            stereo_atoms,
+            StereoAtoms::new(vec![(
+                AtomId(2),
+                vec![
+                    original.ligands(StereoAtomId(0))[0],
+                    replacement,
+                    original.ligands(StereoAtomId(0))[2],
+                    original.ligands(StereoAtomId(0))[3]
+                ],
+                original.attributes(StereoAtomId(0)).clone(),
+            )])
+        );
+        assert!(!stereo_atoms.has_incident(AtomId(1)));
+        assert_eq!(
+            stereo_atoms.incident_ids(AtomId(3)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atoms_insert_ligand(mut stereo_atoms: StereoAtoms) {
+        let original = stereo_atoms.clone();
+        let inserted = StereoLigand::new(AtomId(3), StereoLigandKind::LonePair);
+        stereo_atoms.insert_ligand(StereoAtomId(0), 1, inserted);
+        let before = original.ligands(StereoAtomId(0));
+
+        assert_eq!(
+            stereo_atoms,
+            StereoAtoms::new(vec![(
+                AtomId(2),
+                vec![before[0], inserted, before[1], before[2], before[3]],
+                original.attributes(StereoAtomId(0)).clone(),
+            )])
+        );
+        assert_eq!(
+            stereo_atoms.incident_ids(AtomId(3)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+    }
+
+    #[rstest]
+    #[case::shared_anchor(vec![StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)])]
+    #[case::last(vec![])]
+    fn test_stereo_atoms_remove_ligand(
+        stereo_atoms: StereoAtoms,
+        #[case] remaining: Vec<StereoLigand>,
+    ) {
+        let mut ligands = vec![StereoLigand::new(
+            AtomId(2),
+            StereoLigandKind::ImplicitHydrogen,
+        )];
+        ligands.extend_from_slice(&remaining);
+        let attributes = stereo_atoms.attributes(StereoAtomId(0)).clone();
+        let mut elements = StereoAtoms::new(vec![(AtomId(2), ligands, attributes.clone())]);
+        elements.remove_ligand(StereoAtomId(0), 0);
+        assert_eq!(
+            elements.incident_ids(AtomId(2)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+        assert_eq!(
+            elements,
+            StereoAtoms::new(vec![(AtomId(2), remaining, attributes)])
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atoms_tracked_compact(stereo_atoms: StereoAtoms) {
+        let attributes = stereo_atoms.attributes(StereoAtomId(0)).clone();
+        let ligands = vec![
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
+        ];
+        let removed_ligand = StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen);
+        let last_ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
+        let original = StereoAtoms::new(vec![
+            (AtomId(4), ligands.clone(), attributes.clone()),
+            (AtomId(1), vec![], StereoAtomForm::default()),
+            (AtomId(3), vec![removed_ligand], StereoAtomForm::default()),
+            (AtomId(5), vec![last_ligand], StereoAtomForm::default()),
+        ]);
+        let graph = GraphCompaction::new(
+            Compaction::new(6, vec![NodeId(1)]).unwrap(),
+            Compaction::identity(0),
+        );
+        let (mut compacted, rows) = original.tracked_compact(&graph);
+
+        assert_eq!(
+            rows,
+            Compaction::new(4, vec![StereoAtomId(1), StereoAtomId(2)]).unwrap()
+        );
+        assert_eq!(compacted, original.compact(&graph));
+        assert_eq!(
+            compacted,
+            StereoAtoms::new(vec![
+                (
+                    AtomId(3),
+                    vec![
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    attributes.clone()
+                ),
+                (
+                    AtomId(4),
+                    vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
+                    StereoAtomForm::default()
+                ),
+            ])
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(3)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0), StereoAtomId(1)]
+        );
+
+        compacted.restore_topology_ids(&graph);
+        assert_eq!(
+            compacted,
+            StereoAtoms::new(vec![
+                (AtomId(4), ligands, attributes),
+                (AtomId(5), vec![last_ligand], StereoAtomForm::default()),
+            ])
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(4)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+        assert_eq!(
+            compacted.incident_ids(AtomId(5)).collect::<Vec<_>>(),
+            vec![StereoAtomId(0), StereoAtomId(1)]
+        );
+        compacted.restore(
+            &rows,
+            vec![
+                (
+                    StereoAtomId(2),
+                    AtomId(3),
+                    vec![removed_ligand],
+                    StereoAtomForm::default(),
+                ),
+                (
+                    StereoAtomId(1),
+                    AtomId(1),
+                    vec![],
+                    StereoAtomForm::default(),
+                ),
+            ],
+        );
+        assert_eq!(compacted, original);
+    }
+
     #[rstest]
     #[case::covered(None, None)]
     #[case::missing_atom_0(Some(NodeId(0)), None)]
@@ -2208,6 +2819,349 @@ mod tests {
             Correspondence::empty(),
             Correspondence::empty(),
         ));
+    }
+
+    #[fixture]
+    fn stereo_bonds() -> StereoBonds {
+        StereoBonds::new(vec![(
+            BondId(2),
+            vec![
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(
+                StereoBondConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+                    relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+                }),
+            ),
+        )])
+    }
+
+    #[rstest]
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    fn test_stereo_bonds_add(mut stereo_bonds: StereoBonds, #[case] kind: StereoLigandKind) {
+        let original = stereo_bonds.clone();
+        let ligand = StereoLigand::new(AtomId(6), kind);
+        let attributes = StereoBondForm::new(StereoKind::CisTrans, 0_u32);
+        let id = stereo_bonds.add(BondId(5), &[ligand, ligand], attributes.clone());
+
+        assert_eq!(id, StereoBondId(1));
+        assert_eq!(
+            stereo_bonds,
+            StereoBonds::new(vec![
+                (
+                    BondId(2),
+                    original.ligands(StereoBondId(0)).to_vec(),
+                    original.attributes(StereoBondId(0)).clone()
+                ),
+                (BondId(5), vec![ligand, ligand], attributes),
+            ])
+        );
+        assert_eq!(
+            stereo_bonds
+                .incident_to_atom_ids(AtomId(6))
+                .collect::<Vec<_>>(),
+            vec![id]
+        );
+        assert_eq!(original.count(), 1);
+    }
+
+    #[rstest]
+    fn test_stereo_bonds_tracked_remove(stereo_bonds: StereoBonds) {
+        let original = StereoBonds::new(vec![
+            (BondId(1), vec![], StereoBondForm::default()),
+            (
+                BondId(2),
+                stereo_bonds.ligands(StereoBondId(0)).to_vec(),
+                stereo_bonds.attributes(StereoBondId(0)).clone(),
+            ),
+            (BondId(4), vec![], StereoBondForm::default()),
+        ]);
+        let mut elements = original.clone();
+        let rows = elements.tracked_remove(&[StereoBondId(2), StereoBondId(0)]);
+        let mut plain = original.clone();
+        plain.remove(&[StereoBondId(0), StereoBondId(2)]);
+
+        assert_eq!(
+            rows,
+            Compaction::new(3, vec![StereoBondId(0), StereoBondId(2)]).unwrap()
+        );
+        assert_eq!(elements, stereo_bonds);
+        assert_eq!(elements, plain);
+        assert_eq!(
+            elements.incident_to_atom_ids(AtomId(2)).collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+        elements.restore(
+            &rows,
+            vec![
+                (
+                    StereoBondId(2),
+                    BondId(4),
+                    vec![],
+                    StereoBondForm::default(),
+                ),
+                (
+                    StereoBondId(0),
+                    BondId(1),
+                    vec![],
+                    StereoBondForm::default(),
+                ),
+            ],
+        );
+        assert_eq!(elements, original);
+    }
+
+    #[rstest]
+    #[case::shared_index(BondId(4))]
+    #[case::other(BondId(5))]
+    fn test_stereo_bonds_replace_site(mut stereo_bonds: StereoBonds, #[case] site: BondId) {
+        let original = stereo_bonds.clone();
+        stereo_bonds.replace_site(StereoBondId(0), site);
+
+        assert_eq!(
+            stereo_bonds,
+            StereoBonds::new(vec![(
+                site,
+                original.ligands(StereoBondId(0)).to_vec(),
+                original.attributes(StereoBondId(0)).clone()
+            ),])
+        );
+        assert_eq!(original.site(StereoBondId(0)), BondId(2));
+        assert_eq!(
+            stereo_bonds
+                .incident_to_atom_ids(AtomId(2))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+        assert!(!stereo_bonds.has_incident_to_bond(BondId(2)));
+        assert_eq!(
+            stereo_bonds.incident_to_bond_ids(site).collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+    }
+
+    #[rstest]
+    #[case::permuted(vec![
+        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+    ])]
+    #[case::repeated(vec![
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+    ])]
+    #[case::empty(vec![])]
+    fn test_stereo_bonds_replace_ligands(
+        mut stereo_bonds: StereoBonds,
+        #[case] ligands: Vec<StereoLigand>,
+    ) {
+        let original = stereo_bonds.clone();
+        stereo_bonds.replace_ligands(StereoBondId(0), &ligands);
+
+        assert_eq!(
+            stereo_bonds,
+            StereoBonds::new(vec![(
+                BondId(2),
+                ligands,
+                original.attributes(StereoBondId(0)).clone()
+            ),])
+        );
+        assert_eq!(original.ligands(StereoBondId(0)).len(), 4);
+        assert_eq!(
+            stereo_bonds
+                .incident_to_bond_ids(BondId(2))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+    }
+
+    #[rstest]
+    #[case::atom(StereoLigandKind::Atom)]
+    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
+    #[case::lone_pair(StereoLigandKind::LonePair)]
+    fn test_stereo_bonds_replace_ligand(
+        mut stereo_bonds: StereoBonds,
+        #[case] kind: StereoLigandKind,
+    ) {
+        let original = stereo_bonds.clone();
+        let replacement = StereoLigand::new(AtomId(3), kind);
+        stereo_bonds.replace_ligand(StereoBondId(0), 1, replacement);
+
+        assert_eq!(
+            stereo_bonds,
+            StereoBonds::new(vec![(
+                BondId(2),
+                vec![
+                    original.ligands(StereoBondId(0))[0],
+                    replacement,
+                    original.ligands(StereoBondId(0))[2],
+                    original.ligands(StereoBondId(0))[3]
+                ],
+                original.attributes(StereoBondId(0)).clone(),
+            )])
+        );
+        assert!(!stereo_bonds.has_incident_to_atom(AtomId(1)));
+        assert_eq!(
+            stereo_bonds
+                .incident_to_atom_ids(AtomId(3))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bonds_insert_ligand(mut stereo_bonds: StereoBonds) {
+        let original = stereo_bonds.clone();
+        let inserted = StereoLigand::new(AtomId(3), StereoLigandKind::LonePair);
+        stereo_bonds.insert_ligand(StereoBondId(0), 1, inserted);
+        let before = original.ligands(StereoBondId(0));
+
+        assert_eq!(
+            stereo_bonds,
+            StereoBonds::new(vec![(
+                BondId(2),
+                vec![before[0], inserted, before[1], before[2], before[3]],
+                original.attributes(StereoBondId(0)).clone(),
+            )])
+        );
+        assert_eq!(
+            stereo_bonds
+                .incident_to_atom_ids(AtomId(3))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+    }
+
+    #[rstest]
+    #[case::shared_anchor(vec![StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)])]
+    #[case::last(vec![])]
+    fn test_stereo_bonds_remove_ligand(
+        stereo_bonds: StereoBonds,
+        #[case] remaining: Vec<StereoLigand>,
+    ) {
+        let mut ligands = vec![StereoLigand::new(
+            AtomId(2),
+            StereoLigandKind::ImplicitHydrogen,
+        )];
+        ligands.extend_from_slice(&remaining);
+        let attributes = stereo_bonds.attributes(StereoBondId(0)).clone();
+        let mut elements = StereoBonds::new(vec![(BondId(2), ligands, attributes.clone())]);
+        elements.remove_ligand(StereoBondId(0), 0);
+        assert_eq!(
+            elements.has_incident_to_atom(AtomId(2)),
+            !remaining.is_empty()
+        );
+        assert_eq!(
+            elements.incident_to_bond_ids(BondId(2)).collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+        assert_eq!(
+            elements,
+            StereoBonds::new(vec![(BondId(2), remaining, attributes)])
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bonds_tracked_compact(stereo_bonds: StereoBonds) {
+        let attributes = stereo_bonds.attributes(StereoBondId(0)).clone();
+        let ligands = vec![
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
+        ];
+        let removed_ligand = StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen);
+        let first_ligand = StereoLigand::new(AtomId(0), StereoLigandKind::Atom);
+        let last_ligand = StereoLigand::new(AtomId(0), StereoLigandKind::LonePair);
+        let original = StereoBonds::new(vec![
+            (BondId(3), ligands.clone(), attributes.clone()),
+            (BondId(1), vec![first_ligand], StereoBondForm::default()),
+            (BondId(0), vec![removed_ligand], StereoBondForm::default()),
+            (BondId(2), vec![last_ligand], StereoBondForm::default()),
+        ]);
+        let graph = GraphCompaction::new(
+            Compaction::new(6, vec![NodeId(1)]).unwrap(),
+            Compaction::new(4, vec![EdgeId(1)]).unwrap(),
+        );
+        let (mut compacted, rows) = original.tracked_compact(&graph);
+
+        assert_eq!(
+            rows,
+            Compaction::new(4, vec![StereoBondId(1), StereoBondId(2)]).unwrap()
+        );
+        assert_eq!(compacted, original.compact(&graph));
+        assert_eq!(
+            compacted,
+            StereoBonds::new(vec![
+                (
+                    BondId(2),
+                    vec![
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    attributes.clone()
+                ),
+                (BondId(1), vec![last_ligand], StereoBondForm::default()),
+            ])
+        );
+        assert_eq!(
+            compacted
+                .incident_to_atom_ids(AtomId(3))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+        assert_eq!(
+            compacted
+                .incident_to_bond_ids(BondId(1))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(1)]
+        );
+
+        compacted.restore_topology_ids(&graph);
+        assert_eq!(
+            compacted,
+            StereoBonds::new(vec![
+                (BondId(3), ligands, attributes),
+                (BondId(2), vec![last_ligand], StereoBondForm::default()),
+            ])
+        );
+        assert_eq!(
+            compacted
+                .incident_to_atom_ids(AtomId(4))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(0)]
+        );
+        assert_eq!(
+            compacted
+                .incident_to_bond_ids(BondId(2))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(1)]
+        );
+        compacted.restore(
+            &rows,
+            vec![
+                (
+                    StereoBondId(2),
+                    BondId(0),
+                    vec![removed_ligand],
+                    StereoBondForm::default(),
+                ),
+                (
+                    StereoBondId(1),
+                    BondId(1),
+                    vec![first_ligand],
+                    StereoBondForm::default(),
+                ),
+            ],
+        );
+        assert_eq!(compacted, original);
     }
 
     #[rstest]

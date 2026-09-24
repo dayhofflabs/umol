@@ -13,7 +13,7 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 
 ## Design status — 2026-09-24
 
-This document owns the molecule/reaction mutation redesign. S0 and S1a–S1c are
+This document owns the molecule/reaction mutation redesign. S0a–S0b and S1a–S1c are
 implemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -25,17 +25,19 @@ an implementation dependency.
 | Storage delegation, participant methods, Edit/Delta/Undo variants, local getters | Settled design; S1a–S1c complete | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
-| Molecule attribute methods | Settled: retain current placement | Keep the eight integrity-preserving mutable methods and the nine checked callbacks on Molecule, with their existing guarantees. The editor retains the complete mutation vocabulary. |
+| Molecule attribute methods | Removal settled; not implemented | Remove raw mutable access and modify/try_modify callbacks, including private counterparts. Obtain mutable entity views only through MoleculeEditor. Named operations remain. |
+| Mutable-view structures and API | Approved; not implemented | One public ViewMut type per entity kind combines local lookup, attribute mutation, and role-specific sequence mutation. Molecule-dependent queries remain on immutable Molecule views. S0c–S0e replace the former S1d/S2 sequencing. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
 | Python bindings | Prepared-batch transaction interface settled; migration remains | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Molecule and Edits input-transfer changes remain; the editor already supports consumption. |
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
 | Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
 The staged implementation plan below sequences these contracts and integration
-obligations. S0 records the baseline and additive Solution type; S1a–S1c add
-typed-set mutation for all six overlay kinds. Editor and molecule
-mutation API changes have not started. The lift_constraints defect and its
-undetermined-stereo policy are a separate focused correction, recorded under
+obligations. S0a–S0b record the baseline and additive Solution type; S1a–S1c add
+typed-set mutation for all six overlay kinds. The interrupted S1d changes were
+reverted. New S0c–S0e cover Molecule API removal, typed editor storage, and the
+unified views together, without an interim view API. The lift_constraints defect
+and its undetermined-stereo policy are a separate focused correction, recorded under
 [other operations](#other-moleculereaction-operations).
 
 ## Editor and transaction API
@@ -438,18 +440,31 @@ classification, and product correspondence keeps its own pairing semantics.
 
 ## Additional API contracts
 
-### Molecule mutable methods — retain current placement
+### Molecule mutation boundary
 
-Keep the current method placement and guarantees. The editor retains the complete
-mutable vocabulary; these existing methods also remain on Molecule:
+Settled: mutable entity views are obtained only through MoleculeEditor. Remove
+the following Molecule methods rather than retaining private versions or
+replacing them with callbacks:
 
-| Family | Signature shape and guarantee |
+| Family | Removal |
 | --- | --- |
-| atom_mut, bond_mut, dative_bond_mut, noncovalent_bond_mut; modify_atoms, modify_bonds, modify_dative_bonds, modify_noncovalent_bonds | &mut self returns a form view, or takes FnMut(Form) -> Form. Permitted writes preserve current integrity; no finish required. |
-| try_modify_aromatic_system(s), try_modify_multicenter_bond(s), try_modify_stereo_atom(s), try_modify_stereo_bond(s), try_modify_constraints | &mut self plus callback -> Result<(), MoleculeIntegrityError>. Preserve the receiver on rejection; accept only integrity-valid changes. The current implementation checks a private candidate. |
+| Raw access | atom_mut, bond_mut, dative_bond_mut, noncovalent_bond_mut; private aromatic_system_mut, multicenter_bond_mut, stereo_atom_mut, stereo_bond_mut, and test-only constraints_mut |
+| Bulk callbacks | modify_atoms, modify_bonds, modify_dative_bonds, modify_noncovalent_bonds, and private modify_aromatic_systems, modify_multicenter_bonds, modify_stereo_atoms, modify_stereo_bonds |
+| Checked callbacks | try_modify_aromatic_system(s), try_modify_multicenter_bond(s), try_modify_stereo_atom(s), try_modify_stereo_bond(s), try_modify_constraints; private try_modify_checked |
 
-Participant mutation remains on the editor's mutable entity views, as already
-settled. This work does not relocate or redesign the existing Molecule methods.
+Molecule retains immutable views and named operations such as combine_from,
+lift_constraints, and inline_constraints. Their implementations may update their
+own private storage; they do not require an exposed raw mutation interface.
+MoleculeEditor retains constraints_mut() -> &mut Constraints and all entity
+mutation. Publication checks remain at the existing editor gate until S6 installs
+finish/probe; view writes add no gate or recovery mechanism.
+
+Binding consequence proposed for S0c: remove molecule-backed entity setters,
+collection assignment, and mutations through molecule-backed constraint accessors.
+Retain their read access and standalone mutable forms. Do not reproduce the
+removed operations in Python through hidden copy/edit/publication. Existing
+Edits/editor operations remain available; adding Python editor entity views is
+not a prerequisite or an implicit addition to this plan.
 
 ### Python bindings: consuming inputs and prepared-batch transactions
 
@@ -547,9 +562,115 @@ Python retains TransactionError for application failures and InvalidStructureErr
 for integrity failures. Prepared-batch calls return the original failure; they
 expose no interactive handle through which to continue an aborted transaction.
 
-## Settled mutation vocabulary
+## Mutation vocabulary and mutable views
 
-The following contracts are settled design and are not implemented in graph IR.
+The participant, Edit, Delta, and Undo contracts below are settled. The concrete
+view layout and consolidated interface are approved. None of the new view surface
+is implemented.
+
+### Mutable-view structures and access
+
+Use one public mutable-view family, with the existing ViewMut suffix. Remove
+all eight EditorViewMut types; reuse the six existing ViewMut names and add
+StereoAtomViewMut and StereoBondViewMut. Re-export all eight through ir alongside
+the existing immutable molecule views. All fields are private, all accessors and
+mutation methods listed below are public, and there are no public constructors.
+Molecule does not return these views. The immutable molecule views retain their
+current representation and context-dependent methods.
+
+```rust
+pub struct AtomViewMut<'a> {
+    id: AtomId,
+    attributes: &'a mut AtomForm,
+}
+pub struct BondViewMut<'a> {
+    id: BondId,
+    atoms: [AtomId; 2],
+    attributes: &'a mut BondForm,
+}
+pub struct DativeBondViewMut<'a> {
+    id: DativeBondId,
+    set: &'a mut DativeBonds,
+}
+pub struct AromaticSystemViewMut<'a> {
+    id: AromaticSystemId,
+    set: &'a mut AromaticSystems,
+}
+pub struct MulticenterBondViewMut<'a> {
+    id: MulticenterBondId,
+    set: &'a mut MulticenterBonds,
+}
+pub struct NoncovalentBondViewMut<'a> {
+    id: NoncovalentBondId,
+    set: &'a mut NoncovalentBonds,
+}
+pub struct StereoAtomViewMut<'a> {
+    id: StereoAtomId,
+    set: &'a mut StereoAtoms,
+}
+pub struct StereoBondViewMut<'a> {
+    id: StereoBondId,
+    set: &'a mut StereoBonds,
+}
+
+impl MoleculeEditor {
+    pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_>;
+    pub fn bond_mut(&mut self, id: BondId) -> BondViewMut<'_>;
+    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_>;
+    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemViewMut<'_>;
+    pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_>;
+    pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_>;
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_>;
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_>;
+    pub fn constraints_mut(&mut self) -> &mut Constraints;
+}
+```
+
+The editor method names and arguments already exist; the entity return types
+change. Invalid entity ids panic at these entry points. A view borrows the editor,
+so it prevents structural editing elsewhere while alive. It is neither Clone nor
+Copy, owns no draft or journal, and does no work on drop. It is a receiver, never
+a method or callback argument. The bond's private endpoint pair is read-only;
+localized-bond rewiring is not introduced by this design.
+
+Construction stays on the view type, with these crate-private methods. The
+visibility is needed because MoleculeEditor and the view implementations are in
+separate modules; fields remain private. These are the complete construction
+interfaces, not a second set of factories on the typed sets:
+
+| View | pub(crate) constructor on impl<'a> |
+| --- | --- |
+| AtomViewMut | new(id: AtomId, attributes: &'a mut AtomForm) -> Self |
+| BondViewMut | new(id: BondId, atoms: [AtomId; 2], attributes: &'a mut BondForm) -> Self |
+| Each of the six overlay ViewMut types | new(id: Id, set: &'a mut Set) -> Self, using the exact Id/Set pair in its struct |
+
+The editor verifies that the id exists before constructing an overlay view.
+There is no independent entity insertion/removal on a view; those remain editor
+operations. Variable atom/donor/ligand insertion and removal change only the
+selected entity's sequence.
+
+Each view has the following common methods. Id, Form, and ConstraintsForm are
+the corresponding entity types (for example DativeBondId, DativeBondForm, and
+DativeBondConstraintsForm); they are shorthand here, not generic public types:
+
+```rust
+pub fn id(&self) -> Id;
+pub fn attributes(&self) -> &Form;
+pub fn attributes_mut(&mut self) -> &mut Form;
+pub fn constraints(&self) -> &ConstraintsForm;
+pub fn is_ground(&self) -> bool;
+pub fn is_undetermined(&self) -> bool;
+```
+
+All references and iterators borrow the accessor receiver, not the full stored
+'a lifetime. Payload predicates delegate to Form; neither tests whole-molecule
+integrity. Attribute and constraint writes use attributes_mut(), including whole
+form replacement. There are no duplicate field setters or modify callbacks.
+Entity-specific getters are defined under [local getters](#local-getters).
+The existing copy-on-write ownership remains: obtaining a mutable atom/bond form
+may detach its shared attribute table; overlay writes may detach their shared set.
+The view adds no recovery copy, and obtaining an overlay view does not itself
+detach storage.
 
 ### Participant mutation
 
@@ -567,7 +688,7 @@ selected id to delegate through the set to graph-core. Writes take effect
 immediately; dropping the view performs no deferred work. Rust prevents retaining
 a participant borrow across a mutation that may relocate its storage.
 
-StereoAtomEditorViewMut and StereoBondEditorViewMut expose
+StereoAtomViewMut and StereoBondViewMut expose
 ligand(position: StereoLigandPosition) -> StereoLigand. The accessor returns the
 stored value by copy and panics for an out-of-range position. Callers need not
 index a participant slice themselves. This follows the existing ligand(position)
@@ -754,58 +875,83 @@ path over specialized change-history tracing or optimization without demonstrate
 need. Connecting replacement deltas to these existing operations is implementation
 work, not a requirement for another reaction representation or public API.
 
-### Local getters — existing surface and proposed additions
+### Local getters
 
-Provide the same local read conveniences on immutable and mutable editor entity
-views, using the molecule-backed immutable counterparts' names and meanings. Participant
-inspection should not require callers to index slices or unpack attributes merely
-because the entity is being edited.
+The following local getters are approved for both the unified mutable views
+and the existing immutable editor views.
+Immutable molecule views retain their current API. Editor getter methods already
+exist; the local methods on their return values are mostly additions.
 
-MoleculeEditor already provides atom, bond, dative_bond, aromatic_system,
-multicenter_bond, noncovalent_bond, stereo_atom, and stereo_bond, their mutable
-counterparts, entity counts, and constraints access. Those entry points are not
-additions. The additions below are methods on the returned editor entity views,
-both immutable and mutable; they are not yet implemented.
+Currently all editor views expose id and attributes fields. Bond and noncovalent
+views also expose atoms; stereo views expose site and ligands. Dative, aromatic,
+and multicenter editor views already have atom_ids(). Replace editor-view public
+fields with accessors, including the common methods above (attributes_mut only on
+mutable views). Use the same read method signatures on both editor view families.
 
-All current editor entity views expose id and attributes as public fields.
-Mutable views hold a mutable attributes reference. Their remaining local read
-surface and the proposed additions are:
+Immutable editor views keep their existing stored data; their fields become
+private. Construct them through the following crate-private new methods on
+impl<'a>, each returning Self. These constructors take storage data, not views.
+The dative/aromatic/multicenter signatures already exist; the others replace
+struct literals. No new factory methods are added to the typed sets.
 
-| Entity kind | Already available on editor views | Proposed getter additions |
-| --- | --- | --- |
-| Atom | id and attributes fields only | element, isotope_mass, charge, implicit_hydrogens, lone_pairs, unpaired_electrons |
-| Localized bond | atoms field | atom_ids, order, charge, unpaired_electrons |
-| Dative bond | atom_ids() | donor_ids, acceptor_id, donor_count, atom_count, order |
-| Aromatic system and multicenter bond | atom_ids() | atom_count, electrons, electron_count, charge, unpaired_electrons |
-| Noncovalent bond | atoms field | atom_ids, kind |
-| Stereo atom and stereo bond | site and ligands fields | site_id, ligands, ligand_count, ligand, ligand_position, ligand_frame, ligand-kind filters, ids and counts; configuration accessors |
+| Immutable editor view | new arguments |
+| --- | --- |
+| AtomEditorView | id: AtomId, attributes: &'a AtomForm |
+| BondEditorView | id: BondId, atoms: [AtomId; 2], attributes: &'a BondForm |
+| DativeBondEditorView | id: DativeBondId, donors: &'a [NodeId], acceptor: AtomId, attributes: &'a DativeBondForm |
+| AromaticSystemEditorView | id: AromaticSystemId, atoms: &'a [NodeId], attributes: &'a AromaticSystemForm |
+| MulticenterBondEditorView | id: MulticenterBondId, atoms: &'a [NodeId], attributes: &'a MulticenterBondForm |
+| NoncovalentBondEditorView | id: NoncovalentBondId, atoms: [AtomId; 2], attributes: &'a NoncovalentBondForm |
+| StereoAtomEditorView | id: StereoAtomId, site: AtomId, ligands: &'a [StereoLigand], attributes: &'a StereoAtomForm |
+| StereoBondEditorView | id: StereoBondId, site: BondId, ligands: &'a [StereoLigand], attributes: &'a StereoBondForm |
 
-The proposed views replace public field access with id() and attributes(); mutable
-views additionally provide attributes_mut(). These methods are also additions.
-References returned by mutable-view accessors are tied
-to the accessor borrow. atom_ids() returns [AtomId; 2] for localized and noncovalent
-bonds; ordinary variable atom/donor collections use exact-size iterators of AtomId.
-Stereo site_id() returns AtomId or BondId according to the entity kind. ligands()
-returns an exact-size iterator of copied StereoLigand values. ligand_frame()
-returns the owned ordered frame. ligand_position(atom: AtomId) returns
-Option<StereoLigandPosition> for the first matching actual-atom ligand, following
-the existing getter's lookup semantics. Ligand-kind filters return stored ligand
-values; their id and count companions keep the existing names and meanings.
+Every signature below takes &self. Ordinary getters return borrowed stored forms;
+ids and StereoLigand values are copied. Iterator results are lazy and borrow the
+view. Only ligand_frame explicitly allocates an owned collection.
 
-Stereo configuration() returns &StereoConfigurationForm, kind() returns
-Option<StereoKind>, and coset() returns Option<&StereoCoset>. The optional results
-follow the underlying configuration accessors and admit an unfinished undetermined
-configuration without a panic. Other attribute getters borrow the corresponding
-stored forms. Include local payload predicates such as is_ground and
-is_undetermined where their existing meanings apply. constraints() returns a
-reference to the stored entity constraint container, not a molecule-backed
-constraints view.
+| Entity view | Getter signatures |
+| --- | --- |
+| Atom | element() -> &ElementForm; isotope_mass() -> &IsotopeMassForm; charge() -> &NumForm; implicit_hydrogens() -> &NumForm; lone_pairs() -> &NumForm; unpaired_electrons() -> &UnpairedElectronsForm |
+| Localized bond | atom_ids() -> [AtomId; 2]; order() -> &NumForm; charge() -> &NumForm; unpaired_electrons() -> &UnpairedElectronsForm |
+| Dative bond | donor_ids() -> impl ExactSizeIterator<Item = AtomId> + '_; acceptor_id() -> AtomId; atom_ids() -> impl ExactSizeIterator<Item = AtomId> + '_; donor_count() -> usize; atom_count() -> usize; order() -> &NumForm |
+| Aromatic system and multicenter bond | atom_ids() -> impl ExactSizeIterator<Item = AtomId> + '_; atom_count() -> usize; electrons() -> &ElectronCountsForm; electron_count() -> NumForm; charge() -> &NumForm; unpaired_electrons() -> &UnpairedElectronsForm |
+| Noncovalent bond | atom_ids() -> [AtomId; 2]; kind() -> &NoncovalentBondKindForm |
+| Stereo atom and stereo bond | site_id() -> AtomId / BondId respectively; configuration() -> &StereoConfigurationForm; kind() -> Option<StereoKind>; coset() -> Option<&StereoCoset>; plus the ligand methods below |
 
-Methods resolving other entity views or deriving topology-dependent quantities
-(neighbors, aromatic system bonds, valence, or stereo-bond site endpoint atoms)
-need context beyond the owning overlay set. Identify these separately rather than
-expanding the new mutable view's ownership merely for mechanical parity. These
-context-dependent methods remain outside the settled local getter surface.
+Dative atom_ids yields the donors in stored order followed by the acceptor.
+Aromatic/multicenter electron_count follows the existing getter: sum the stored
+literal contributions, otherwise return NumForm::Undetermined. It does not check
+whether the contribution vector fits the atom sequence. Stereo kind/coset follow
+the configuration form's optional accessors, so an undetermined draft is readable.
+
+Both stereo editor view families provide exactly these ligand methods:
+
+```rust
+pub fn ligands(&self) -> impl ExactSizeIterator<Item = StereoLigand> + '_;
+pub fn ligand_count(&self) -> usize;
+pub fn ligand(&self, position: StereoLigandPosition) -> StereoLigand;
+pub fn ligand_position(&self, atom: AtomId) -> Option<StereoLigandPosition>;
+pub fn ligand_frame(&self) -> Vec<StereoLigand>;
+pub fn atom_ligands(&self) -> impl Iterator<Item = StereoLigand> + '_;
+pub fn implicit_hydrogen_ligands(&self) -> impl Iterator<Item = StereoLigand> + '_;
+pub fn lone_pair_ligands(&self) -> impl Iterator<Item = StereoLigand> + '_;
+pub fn atom_ligand_ids(&self) -> impl Iterator<Item = AtomId> + '_;
+pub fn implicit_hydrogen_atom_ids(&self) -> impl Iterator<Item = AtomId> + '_;
+pub fn lone_pair_atom_ids(&self) -> impl Iterator<Item = AtomId> + '_;
+pub fn atom_ligand_count(&self) -> usize;
+pub fn implicit_hydrogen_count(&self) -> usize;
+pub fn lone_pair_count(&self) -> usize;
+```
+
+ligand panics out of range. ligand_position returns the first matching actual-atom
+ligand, not a virtual ligand bearing that atom id. Filters preserve stored order;
+virtual-ligand id accessors return their bearing atom ids. constraints returns the
+stored ConstraintsForm, not a molecule-backed constraint view.
+
+Neighbors, valence, induced bonds, resolved entity views, stereo-bond endpoint
+lookup, and frame-transport queries require more than this local borrow. They
+remain on immutable Molecule views and are not added to either editor view family.
+No additional graph or Molecule borrow is stored merely for getter parity.
 
 ## Storage integration and implementation obligations
 
@@ -1552,7 +1698,7 @@ Only breaking signature changes and rewires may leave the tree temporarily red
 within a stage. Python checks use `umol-py/.venv` with Python 3.13. S0 records
 the benchmark baseline before those changes.
 
-### S0 — Baseline and additive types
+### S0 — Baseline and mutation-interface prerequisites
 
 - **S0a — completed 2026-09-24** (`umol-graph-ir/benches`,
   `umol-graph/benches`, existing external
@@ -1620,6 +1766,100 @@ the benchmark baseline before those changes.
   signatures. Both shapes and their conversion laws pass `umol-utils` tests;
   the dependent Rust and Python binding crates compile with the default form.
 
+The mutable-view interface is approved; implementation of the following proposed
+subitems remains pending. S0a–S0b and S1a–S1c remain completed; their numbers and
+completion records are retained. Execute the new S0c–S0e before S3.
+
+- **S0c — proposed** (`ir::molecule`, Rust callers, Python entity/constraint
+  bindings; breaking, red→green) Remove Molecule raw mutable access and all
+  modify/try_modify callbacks, including private counterparts, as enumerated in
+  [the mutation boundary](#molecule-mutation-boundary). No replacement Molecule
+  mutation signatures are added. Retain editor mutation, the immutable Molecule
+  surface, and the named operations combine_from/lift_constraints/inline_constraints.
+  [dep: S0a]
+
+  | Callers | Migration |
+  | --- | --- |
+  | Molecule's named operations | Access their owned storage internally; remove their dependency on the deleted access methods. Preserve operation behavior. |
+  | MoleculeDsl FromIr/IntoIr | Use one editor for the existing form/default conversion pass and publish once. Preserve defaults, metadata, ordering, and current conversion contracts; no per-entity publication or new bulk callback API. |
+  | Transformations, other Rust consumers, examples, and fixtures | Put raw writes on their editor; group related writes before the existing publication gate. Keep source preservation and operation error behavior. This does not implement S7/S8 signature changes. |
+  | Python molecule-backed entity views and collections | Remove setters and collection assignment; retain reads. Standalone forms remain mutable. |
+  | Python molecule-backed constraints, including nested accessors | Remove write-through mutation on this owner path; retain reads and owned constraint mutation. Remove the Molecule constraints setter. Do not silently mutate a detached copy. |
+
+  Test that all eight Molecule entity kinds and constraints have read-only access
+  in Python and that existing Edits/editor paths still perform the corresponding
+  mutations. Migrate Rust mutation fixtures without weakening their laws. Update
+  the data-type, integrity, nomenclature, and Python guides with this implemented
+  boundary in the same subitem. Do not defer contradictory normative text to S9.
+
+- **S0d — proposed** (`ir::view`, `ir::molecule::editor`, Rust callers;
+  breaking, red→green) Replace editor *SetStorage wrappers with the six typed sets
+  and replace the two mutable-view families with one in this same subitem.
+  [dep: S0c, S1a, S1b, S1c]
+
+  The [approved structures](#mutable-view-structures-and-access) define the
+  full layouts, visibility, and construction signatures. The public return-type
+  changes and the common view interface are:
+
+  | MoleculeEditor entry point, with &mut self | Returned public type |
+  | --- | --- |
+  | atom_mut(id: AtomId) | AtomViewMut<'_> |
+  | bond_mut(id: BondId) | BondViewMut<'_> |
+  | dative_bond_mut(id: DativeBondId) | DativeBondViewMut<'_> |
+  | aromatic_system_mut(id: AromaticSystemId) | AromaticSystemViewMut<'_> |
+  | multicenter_bond_mut(id: MulticenterBondId) | MulticenterBondViewMut<'_> |
+  | noncovalent_bond_mut(id: NoncovalentBondId) | NoncovalentBondViewMut<'_> |
+  | stereo_atom_mut(id: StereoAtomId) | StereoAtomViewMut<'_> |
+  | stereo_bond_mut(id: StereoBondId) | StereoBondViewMut<'_> |
+
+  Each mutable view has id(&self) -> Id, attributes(&self) -> &Form,
+  attributes_mut(&mut self) -> &mut Form, constraints(&self) -> &ConstraintsForm,
+  is_ground(&self) -> bool, and is_undetermined(&self) -> bool. Fields are private.
+  Keep constraints_mut(&mut self) -> &mut Constraints on MoleculeEditor.
+  Replace immutable editor-view public fields with the corresponding read
+  accessors, including atom_ids/site_id/ligands for the old field contents;
+  their representation needs no new whole-molecule borrow.
+
+  Remove all EditorViewMut types and export all eight ViewMut types uniformly.
+  Constructors are crate-private on the view types, with no typed-set view
+  factories, compatibility aliases, callback adapters, or replacement wrappers.
+  Route editor reads, add/remove, compaction, and row restoration through the
+  completed typed-set methods. Retain current editor publication/lifecycle and
+  undo validation until S4/S6; typed fields become the owned Molecule in S6a.
+  Remove dead-code expectations only as the corresponding methods become used.
+
+  Migrate all field-access consumers, including batch execution and benchmarks.
+  Test all eight views' immediate attribute writes and invalid-id panics; show
+  accessor use in rustdoc examples. Cover all six overlay add/remove/restore paths and
+  shared-storage independence. Run the existing editor benchmark once after
+  the storage replacement; record its allocation/performance implications.
+
+- **S0e — proposed** (`ir::view`, `ir::id`, typed sets; additive) Complete local
+  getters and role-specific mutation on the unified views. Use exactly the
+  signatures under [local getters](#local-getters) and
+  [participant mutation](#participant-mutation); no combined-factor methods.
+  [dep: S0d]
+
+  ```rust
+  pub struct AtomPosition(pub u32);
+  impl AtomPosition { pub fn index(self) -> usize; }
+  impl From<usize> for AtomPosition { fn from(value: usize) -> Self; }
+  ```
+
+  Match StereoLigandPosition's value traits and conversion convention. Clarify
+  its current-stored-frame meaning without changing its representation. Variable
+  atom lists use replace_atoms/replace_atom/insert_atom/remove_atom; noncovalent
+  endpoints use replacement only. Dative views use donor/acceptor methods;
+  stereo views use site/ligand methods. Positions are AtomPosition or
+  StereoLigandPosition respectively. All mutation methods take &mut self and
+  return (). Give immutable editor views the same local read getters.
+
+  Test getter values and order, position boundaries, unaffected factors/payloads,
+  immediate incidence maintenance, and the stated commutation of attribute and
+  sequence replacement. Include temporarily invalid drafts repaired before
+  publication, without adding per-write integrity checks. Confirm the existing
+  publication gate rejects unrepaired drafts just as construction does.
+
 ### S1 — Typed-set storage delegation
 
 All six typed sets use `restore_topology_ids` to translate the atom and bond ids
@@ -1635,7 +1875,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   The following shorthand applies once for each `(Set, Id, Form)` pair:
   `(AromaticSystems, AromaticSystemId, AromaticSystemForm)` and
   `(MulticenterBonds, MulticenterBondId, MulticenterBondForm)`. `position` is a
-  zero-based offset in the selected atom sequence; S2c gives public editor views
+  zero-based offset in the selected atom sequence; S0e gives public editor views
   `AtomPosition` and converts it at this boundary.
 
   ```text
@@ -1652,7 +1892,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   Set::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<Id>)
   ```
 
-  These methods are `pub(crate)`; S2 exposes public mutation through the editor
+  These methods are `pub(crate)`; S0e exposes public mutation through the editor
   views. They delegate to `VarRelationSet`, retaining the owning set's
   copy-on-write storage. Focused tests cover order, draft duplicates, incidence,
   attribute preservation, compaction, and matching-history restoration.
@@ -1697,8 +1937,8 @@ to graph-core's `restore_participants` and `restore`, respectively.
   NoncovalentBonds::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<NoncovalentBondId>)
   ```
 
-  These are crate-private set methods. S2c exposes the domain-level
-  editor-view methods with `AtomPosition` after S1d replaces the storage wrappers.
+  These are crate-private set methods. S0e exposes the domain-level
+  editor-view methods with `AtomPosition` after S0d replaces the storage wrappers.
 
   Implemented the recorded interfaces through `FixedVarBirelationSet` and
   `FixedRelationSet`, preserving copy-on-write ownership. Tests cover independent
@@ -1731,7 +1971,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   ```
 
   StereoBonds restoration translates its bond sites and the atom references in
-  its ligands. These are crate-private set methods. S2c exposes
+  its ligands. These are crate-private set methods. S0e exposes
   `StereoLigandPosition` on the public editor views. Site and ligand replacement
   leave the other factor and payload unchanged; frame-preserving permutation
   remains a separate operation.
@@ -1742,46 +1982,28 @@ to graph-core's `restore_participants` and `restore`, respectively.
   unchanged configuration and constraints, incidence, and restoration after
   entity removal and topology compaction. All 56 focused tests, strict graph-IR
   Clippy, nightly formatting, and `git diff --check` pass.
-- **S1d** (`ir::molecule::editor`; internal rewire, red→green) Replace the
-  `*SetStorage` wrappers with the typed sets for reads, additions, removals,
-  compaction, and restoration. Keep the current public editor lifecycle and
-  undo checker for this stage while routing row restoration through typed sets.
-  Remove the temporary dead-code expectations on the new typed-set methods.
-  Test all six overlay kinds against the S0 behavior and rerun the
-  storage-sensitive benchmarks.
-  [dep: S1a, S1b, S1c]
+- **S1d — reverted and replaced by S0d.** The interrupted editor-storage
+  implementation and its temporary view-construction proposal are removed.
+  Storage integration and view restructuring now form one subitem; completed
+  S1a–S1c are retained.
 
-### S2 — Editor entity views
+### S2 — Moved into S0d–S0e
 
-- **S2a** (`ir::view`, `ir::molecule::editor`; breaking, red→green) Make each
-  mutable overlay editor view borrow its owning typed set and id. Replace public
-  fields on immutable and mutable editor views with short-lived accessors,
-  including `attributes_mut`; migrate their Rust and Python callers in this
-  subitem. Test immediate writes and the specified commutation of participant
-  replacement with attribute assignment. [dep: S1d]
-- **S2b** (`ir::view`; additive) Add the local immutable and mutable editor-view
-  getters listed above, including `ligand(position)` and exact-size participant
-  iterators. Test values, ordering, and out-of-range behavior against immutable
-  Molecule views. [dep: S2a]
-- **S2c** (`ir::view`, `ir::id`, typed sets; additive) Add `AtomPosition` and the
-  factor-specific replacement, insertion, and removal methods on mutable views;
-  clarify the current-frame meaning of `StereoLigandPosition`. Test position
-  boundaries, unaffected factors and attributes, immediate incidence
-  maintenance, and constructor-equivalent integrity at the current editor
-  publication gate, not at each draft write.
-  [dep: S2a, S2b]
+The former S2a view restructuring is included in S0d. The former S2b local
+getters and S2c position/mutation surface are included in S0e. These are moved
+items, not completed implementations; there is no separate S2 execution stage.
 
 ### S3 — Batch mutation and reaction vocabulary
 
 - **S3a** (`ir::edit`; breaking, red→green) Add the nine whole-component Edit
   variants and matching saved-value Undo variants. Extend Edits construction
   without independent-batch composition. Test construction and handle
-  namespaces; execution comparisons belong to S3b. [dep: S1d]
+  namespaces; execution comparisons belong to S3b. [dep: S0d]
 - **S3b** (`ir::molecule::transact`; breaking, red→green) Realize those edits
   through typed-set mutation and their undos through saved components. Keep
   unrelated factors, attributes, constraints, and ids unchanged. Test each
   forward/undo pair, old-state errors before mutation, and frame alignment.
-  [dep: S2c, S3a]
+  [dep: S0e, S3a]
 - **S3c** (`ir::delta`; breaking, red→green) Add the nine Delta variants and
   extend frame transport, inversion, normalization, composition, and Add/Remove
   folding under the settled exact component comparison. Test continuity,
@@ -1806,7 +2028,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   Keep the existing detached journal surface until S5. Test matching-history
   recovery under `normalized_eq` and panic freedom for manipulated undo data
   without asserting its result.
-  [dep: S1d, S3b]
+  [dep: S0d, S3b]
 - **S4b** (`ir::molecule::transact`; internal rewire, red→green) Separate shared
   graph-IR mutation kernels from handle realization; prepare fallible data before
   writes, record progress for multi-row edits and cascades, and avoid initial
@@ -1852,10 +2074,10 @@ to graph-core's `restore_participants` and `restore`, respectively.
 - **S6a** (`ir::molecule`, `ir::molecule::editor`; breaking, red→green) Make
   `edit(self)` own its Molecule, make Molecule `apply`/`tracked_apply` consume,
   and replace editor snapshot/build methods with checked `probe`/`finish`.
-  Retain MoleculeBuilder's asserted build and the existing integrity-preserving
-  Molecule mutable methods. Test direct/batch interleaving, invalid probe then
+  Retain MoleculeBuilder's asserted build and the editor-only mutable-view
+  boundary established in S0c–S0e. Test direct/batch interleaving, invalid probe then
   repair, destructive failure, and constructor-equivalent publication.
-  [dep: S1d, S5a]
+  [dep: S0d, S5a]
 - **S6b** (`umol-graph-ir` callers, including reaction application; breaking,
   red→green) Migrate editor construction/publication and remove session
   correspondence accumulation and public tracked direct removal. Use one
@@ -1930,9 +2152,10 @@ to graph-core's `restore_participants` and `restore`, respectively.
   closeout. Record results and update the discussion status only after the full
   scope passes. [dep: S8c, S9a]
 
-**Critical path:** S0 → S1 → S2/S3 → S4 → S5 → S6 → S7/S8 → S9.
-S3c can proceed alongside S2; S3b, S3d, and S3e wait for S2c as recorded in
-their dependencies. No speculative optimization stage is required.
+**Execution order:** completed S0a–S0b/S1a–S1c →
+S0c–S0e → S3 → S4 → S5 → S6 → S7/S8 → S9. S3c is independent of the
+view changes; S3b waits for S0e. S1d and S2 have no remaining separate work.
+No speculative optimization stage is required.
 Immutable-view simplification, graph-core bond
 endpoint rewiring, intermediate transaction tracking, an interactive Python
 transaction, Undo compression, and the hydrogen operations in 166 remain outside
