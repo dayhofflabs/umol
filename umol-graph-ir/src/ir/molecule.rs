@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 pub use build::MoleculeBuilder;
+pub use constraints::ConstraintsViewMut;
 pub use editor::MoleculeEditor;
 pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
@@ -49,6 +50,7 @@ use super::view::{
 };
 
 mod build;
+mod constraints;
 mod editor;
 mod fragment;
 pub(crate) mod integrity;
@@ -59,8 +61,9 @@ pub(crate) mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
-/// Per-entity data are `Arc`-shared (copy-on-write). The molecule itself only allows
-/// attribute mutation; structural edits go through `MoleculeEditor` via [`Molecule::edit`].
+/// Per-entity data are `Arc`-shared (copy-on-write). The molecule allows attribute mutation
+/// and checked constraint mutation; structural edits go through `MoleculeEditor` via
+/// [`Molecule::edit`].
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Molecule {
     graph: Graph,
@@ -821,11 +824,6 @@ impl Molecule {
 
     pub fn constraints(&self) -> &Constraints {
         &self.constraints
-    }
-
-    #[cfg(test)]
-    pub(crate) fn constraints_mut(&mut self) -> &mut Constraints {
-        &mut self.constraints
     }
 
     /// Transactionally modify the molecule-level constraint tree.

@@ -6256,7 +6256,7 @@ fn test_molecule_lift_constraints_appends_to_existing(
         system: AromaticSystemId(0),
         atom: AtomId(0),
     });
-    molecule.constraints_mut().push(prior.clone());
+    molecule.constraints_mut().push(prior.clone()).unwrap();
     molecule
         .atom_mut(AtomId(0))
         .attributes
@@ -6278,18 +6278,27 @@ fn test_molecule_lift_constraints_appends_to_existing(
 fn test_molecule_inline_constraints_drains_top_level_leaves(
     #[from(rich_molecule)] mut molecule: Molecule,
 ) {
-    molecule.constraints_mut().push(Constraint::Atom(
-        AtomId(0),
-        AtomConstraintForm::Valence(NumForm::Lit(4)),
-    ));
-    molecule.constraints_mut().push(Constraint::Bond(
-        BondId(0),
-        BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
-    ));
-    molecule.constraints_mut().push(Constraint::DativeBond(
-        DativeBondId(0),
-        DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
-    ));
+    molecule
+        .constraints_mut()
+        .push(Constraint::Atom(
+            AtomId(0),
+            AtomConstraintForm::Valence(NumForm::Lit(4)),
+        ))
+        .unwrap();
+    molecule
+        .constraints_mut()
+        .push(Constraint::Bond(
+            BondId(0),
+            BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
+        ))
+        .unwrap();
+    molecule
+        .constraints_mut()
+        .push(Constraint::DativeBond(
+            DativeBondId(0),
+            DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
+        ))
+        .unwrap();
 
     molecule.inline_constraints().unwrap();
 
@@ -6315,14 +6324,20 @@ fn test_molecule_inline_constraints_drains_top_level_leaves(
 fn test_molecule_inline_constraints_last_wins_on_collision(
     #[from(rich_molecule)] mut molecule: Molecule,
 ) {
-    molecule.constraints_mut().push(Constraint::Atom(
-        AtomId(0),
-        AtomConstraintForm::Valence(NumForm::Lit(3)),
-    ));
-    molecule.constraints_mut().push(Constraint::Atom(
-        AtomId(0),
-        AtomConstraintForm::Valence(NumForm::Lit(4)),
-    ));
+    molecule
+        .constraints_mut()
+        .push(Constraint::Atom(
+            AtomId(0),
+            AtomConstraintForm::Valence(NumForm::Lit(3)),
+        ))
+        .unwrap();
+    molecule
+        .constraints_mut()
+        .push(Constraint::Atom(
+            AtomId(0),
+            AtomConstraintForm::Valence(NumForm::Lit(4)),
+        ))
+        .unwrap();
 
     molecule.inline_constraints().unwrap();
 
@@ -6352,7 +6367,7 @@ fn test_molecule_inline_constraints_skips_combinator_nested(
             BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
         ),
     ]);
-    molecule.constraints_mut().push(nested.clone());
+    molecule.constraints_mut().push(nested.clone()).unwrap();
 
     molecule.inline_constraints().unwrap();
 
@@ -6374,12 +6389,15 @@ fn test_molecule_inline_constraints_skips_relational_and_molecule(
     let mol = Constraint::Molecule(MoleculeConstraint::Connected {
         atoms: Some(vec![AtomId(0), AtomId(1)]),
     });
-    molecule.constraints_mut().push(rel.clone());
-    molecule.constraints_mut().push(mol.clone());
-    molecule.constraints_mut().push(Constraint::Atom(
-        AtomId(0),
-        AtomConstraintForm::Valence(NumForm::Lit(4)),
-    ));
+    molecule.constraints_mut().push(rel.clone()).unwrap();
+    molecule.constraints_mut().push(mol.clone()).unwrap();
+    molecule
+        .constraints_mut()
+        .push(Constraint::Atom(
+            AtomId(0),
+            AtomConstraintForm::Valence(NumForm::Lit(4)),
+        ))
+        .unwrap();
 
     molecule.inline_constraints().unwrap();
 

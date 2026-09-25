@@ -464,7 +464,7 @@ fn test_molecule_dsl_to_edn_vacuous_constraints(
 ) {
     let mut molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
     for c in pushed {
-        molecule.constraints_mut().push(Constraint::Molecule(c));
+        molecule.constraints_mut().push(Constraint::Molecule(c)).unwrap();
     }
     let dsl = MoleculeDsl::new(molecule, MoleculeMetadata::default()).unwrap();
     let reparsed = Molecule::from_edn(&dsl.to_edn()).unwrap();

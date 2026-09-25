@@ -558,7 +558,8 @@ fn check_electron_count_length(
     Ok(())
 }
 
-fn check_molecule_constraint(
+/// Check stereo wrappers after the constraint's entity references have been checked.
+pub(crate) fn check_molecule_constraint(
     molecule: &Molecule,
     constraint: &Constraint,
 ) -> Result<(), MoleculeIntegrityError> {

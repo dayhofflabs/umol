@@ -1802,8 +1802,12 @@ fn test_canonicalize_structure_stereo_atom_constraints(
     });
     let mut source = stereo_atom_canonicalization_molecule;
     source.stereo_atom_mut(StereoAtomId(0)).constraints = constraint.clone().into();
-    *source.constraints_mut() =
-        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
+    source
+        .constraints_mut()
+        .replace(
+            Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into(),
+        )
+        .unwrap();
     let reframed = source
         .clone()
         .reframe()
@@ -1826,8 +1830,10 @@ fn test_canonicalize_structure_stereo_bond_constraints(
     });
     let mut source = stereo_bond_canonicalization_molecule;
     source.stereo_bond_mut(StereoBondId(0)).constraints = constraint.clone().into();
-    *source.constraints_mut() =
-        Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, constraint).into();
+    source
+        .constraints_mut()
+        .replace(Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, constraint).into())
+        .unwrap();
     let reframed = source
         .clone()
         .reframe()
@@ -1999,8 +2005,12 @@ fn test_molecule_canonicalize_stereo_frame(
     });
     let mut source = stereo_constraint_canonicalization_molecule;
     source.stereo_atom_mut(StereoAtomId(0)).constraints = constraint.clone().into();
-    *source.constraints_mut() =
-        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
+    source
+        .constraints_mut()
+        .replace(
+            Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into(),
+        )
+        .unwrap();
     let reframed = source
         .clone()
         .reframe()

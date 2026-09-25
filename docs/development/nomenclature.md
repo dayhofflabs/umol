@@ -474,13 +474,18 @@ A **constraints view** is the constraint reading of one entity, reached by acces
 the typed getters, `iter`, and `is_empty` read the asserted side — plus the keyed accessors
 `asserted`, `derived`, and `derived_complete` and the comparisons `satisfies` and
 `is_compatible`. Scope lives in the receiver, not in name prefixes: `atom(i).valence()` is the
-derived quantity, `atom(i).constraints().valence()` the asserted payload. Mutation never routes
-through a constraints view; it belongs to the stored container.
+derived quantity, `atom(i).constraints().valence()` the asserted payload. These entity constraint
+views are read-only.
 
-**Not:** the container (`*ConstraintsForm`), which is the storage the view reads; like every view
+Molecule-level `ConstraintsViewMut`, obtained through `Molecule::constraints_mut`, provides
+checked writes to the stored `Constraints`. It borrows the molecule to check incoming entity ids
+and stereo frames before mutation. Immutable molecule-level access remains `&Constraints`;
+there is no separate immutable molecule-level constraints view.
+
+**Not:** the container (`Constraints` or `*ConstraintsForm`), which holds the stored values; like every view
 it is a receiver, never an argument.
 **In code:** `AtomConstraintsView`, `BondConstraintsView`, and the views for every entity kind, from
-`AtomView::constraints` and its peers.
+`AtomView::constraints` and its peers; `ConstraintsViewMut` from `Molecule::constraints_mut`.
 
 ### Contradiction
 
