@@ -45,8 +45,8 @@ the statuses recorded here remain authoritative.
   frame-consumer checks, S2h's aggregate-integrity changes, and S2i1 are complete.
   S2i2–S2i5 are complete, including separate mutable molecule/editor view types.
   All eight entity-view families have aligned id/attribute accessors. S2j's
-  atom, localized-bond, and dative getters and dative structural mutation are
-  complete; the remaining getter inventory awaits review. Uniform unchecked
+  atom, localized-bond, dative, and aromatic getters and dative/aromatic structural
+  mutation are complete; the remaining getter inventory awaits review. Uniform unchecked
   entity-attribute assignment is settled for Rust and Python.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
@@ -265,7 +265,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue S2j for aromatic, multicenter, noncovalent, and stereo entities; atom, localized-bond, and dative scope is complete. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue S2j for multicenter, noncovalent, and stereo entities; atom, localized-bond, dative, and aromatic scope is complete. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

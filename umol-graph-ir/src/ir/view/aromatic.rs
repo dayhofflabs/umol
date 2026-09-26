@@ -10,7 +10,7 @@ use super::super::constraint::{
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsForm;
-use super::super::id::{AromaticSystemId, AtomId, BondId};
+use super::super::id::{AromaticSystemId, AtomId, AtomPosition, BondId};
 use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::spin::UnpairedElectronsForm;
@@ -210,6 +210,7 @@ impl<'a> AromaticSystemView<'a> {
         }
     }
 
+    #[inline]
     pub fn atom_count(&self) -> usize {
         self.atom_ids().len()
     }
@@ -285,8 +286,36 @@ impl<'a> AromaticSystemEditorView<'a> {
     }
 
     #[inline]
+    pub fn electrons(&self) -> &'a ElectronCountsForm {
+        &self.attributes().electrons
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &'a NumForm {
+        &self.attributes().charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
+        &self.attributes().unpaired_electrons
+    }
+
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
         self.aromatic_systems.atoms(self.id)
+    }
+
+    /// Sum of all stored literal electron contributions, or `Undetermined`.
+    pub fn electron_count(&self) -> NumForm {
+        match self.electrons() {
+            ElectronCountsForm::Lit(counts) => NumForm::Lit(counts.iter().sum()),
+            ElectronCountsForm::Undetermined => NumForm::Undetermined,
+        }
+    }
+
+    #[inline]
+    pub fn atom_count(&self) -> usize {
+        self.atom_ids().len()
     }
 }
 
@@ -321,6 +350,21 @@ impl<'a> AromaticSystemViewMut<'a> {
     }
 
     #[inline]
+    pub fn electrons(&self) -> &ElectronCountsForm {
+        &self.attributes().electrons
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &NumForm {
+        &self.attributes().charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &UnpairedElectronsForm {
+        &self.attributes().unpaired_electrons
+    }
+
+    #[inline]
     pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
         &self.attributes().constraints
     }
@@ -329,9 +373,25 @@ impl<'a> AromaticSystemViewMut<'a> {
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         self.aromatic_systems.atoms(self.id)
     }
+
+    /// Sum of all stored literal electron contributions, or `Undetermined`.
+    pub fn electron_count(&self) -> NumForm {
+        match self.electrons() {
+            ElectronCountsForm::Lit(counts) => NumForm::Lit(counts.iter().sum()),
+            ElectronCountsForm::Undetermined => NumForm::Undetermined,
+        }
+    }
+
+    #[inline]
+    pub fn atom_count(&self) -> usize {
+        self.atom_ids().len()
+    }
 }
 
 /// Mutable editor access to an aromatic system.
+///
+/// Structural mutations update incidence and preserve attributes and constraints.
+/// Atom existence, distinctness, and overlap between systems are checked at publication.
 #[derive(Debug)]
 pub struct AromaticSystemEditorViewMut<'a> {
     aromatic_systems: &'a mut AromaticSystems,
@@ -362,6 +422,21 @@ impl<'a> AromaticSystemEditorViewMut<'a> {
     }
 
     #[inline]
+    pub fn electrons(&self) -> &ElectronCountsForm {
+        &self.attributes().electrons
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &NumForm {
+        &self.attributes().charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &UnpairedElectronsForm {
+        &self.attributes().unpaired_electrons
+    }
+
+    #[inline]
     pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
         &self.attributes().constraints
     }
@@ -369,6 +444,53 @@ impl<'a> AromaticSystemEditorViewMut<'a> {
     #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         self.aromatic_systems.atoms(self.id)
+    }
+
+    /// Sum of all stored literal electron contributions, or `Undetermined`.
+    pub fn electron_count(&self) -> NumForm {
+        match self.electrons() {
+            ElectronCountsForm::Lit(counts) => NumForm::Lit(counts.iter().sum()),
+            ElectronCountsForm::Undetermined => NumForm::Undetermined,
+        }
+    }
+
+    #[inline]
+    pub fn atom_count(&self) -> usize {
+        self.atom_ids().len()
+    }
+
+    /// Replace the atom list, preserving the supplied order.
+    pub fn replace_atoms(&mut self, atoms: &[AtomId]) {
+        self.aromatic_systems.replace_atoms(self.id, atoms);
+    }
+
+    /// Replace the atom at `position` without changing the atom count.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `position` is outside the atom list.
+    pub fn replace_atom(&mut self, position: AtomPosition, atom: AtomId) {
+        self.aromatic_systems
+            .replace_atom(self.id, position.index(), atom);
+    }
+
+    /// Insert an atom at `position`, preserving the order of the existing atoms.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `position` exceeds the atom count. Insertion at the end is allowed.
+    pub fn insert_atom(&mut self, position: AtomPosition, atom: AtomId) {
+        self.aromatic_systems
+            .insert_atom(self.id, position.index(), atom);
+    }
+
+    /// Remove the atom at `position`, preserving the order of the remaining atoms.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `position` is outside the atom list.
+    pub fn remove_atom(&mut self, position: AtomPosition) {
+        self.aromatic_systems.remove_atom(self.id, position.index());
     }
 }
 
@@ -408,13 +530,17 @@ mod tests {
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
+    use crate::ir::constraint::AromaticSystemConstraintForm;
     use crate::ir::dative::DativeBondForm;
     use crate::ir::electrons::ElectronCountsForm;
+    use crate::ir::entity::Entity;
     use crate::ir::id::{AromaticSystemId, AtomId, BondId};
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::num::NumForm;
+    use crate::ir::spin::UnpairedElectronsForm;
+    use crate::ir::{AtomPosition, MoleculeIntegrityError};
 
     #[fixture]
     fn molecule() -> Molecule {
@@ -469,6 +595,23 @@ mod tests {
             ],
             ..Default::default()
         })
+    }
+
+    #[fixture]
+    fn aromatic_entries() -> MoleculeEntries {
+        MoleculeEntries {
+            atoms: vec![AtomForm::default(); 5],
+            aromatic: vec![
+                (
+                    vec![AtomId(0), AtomId(2), AtomId(1)],
+                    AromaticSystemForm::from_electrons(vec![2, 1, 1])
+                        .with_charge(-1_i64)
+                        .with_constraint(AromaticSystemConstraintForm::electron_count(4)),
+                ),
+                (vec![AtomId(4)], AromaticSystemForm::default()),
+            ],
+            ..Default::default()
+        }
     }
 
     #[rstest]
@@ -737,6 +880,33 @@ mod tests {
     }
 
     #[rstest]
+    #[case::literal(ElectronCountsForm::Lit(vec![2, 1, 1]), NumForm::Lit(4))]
+    #[case::undetermined(ElectronCountsForm::Undetermined, NumForm::Undetermined)]
+    fn test_aromatic_system_editor_view_electron_count(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] electrons: ElectronCountsForm,
+        #[case] expected: NumForm,
+    ) {
+        aromatic_entries.aromatic[0].1.electrons = electrons.clone();
+        let attributes = aromatic_entries.aromatic[0].1.clone();
+        let editor = Molecule::from_entries(aromatic_entries).edit();
+        let fields = {
+            let view = editor.aromatic_system(AromaticSystemId(0));
+            assert_eq!(view.electron_count(), expected);
+            assert_eq!(view.atom_count(), 3);
+            (view.electrons(), view.charge(), view.unpaired_electrons())
+        };
+        assert_eq!(
+            fields,
+            (
+                &electrons,
+                &attributes.charge,
+                &attributes.unpaired_electrons
+            )
+        );
+    }
+
+    #[rstest]
     #[case(AromaticSystemId(0), vec![AtomId(2), AtomId(0), AtomId(1)])]
     #[case(AromaticSystemId(1), vec![AtomId(5), AtomId(3), AtomId(4)])]
     fn test_aromatic_system_editor_view_atom_ids_order(
@@ -773,13 +943,23 @@ mod tests {
         let expected = AromaticSystemForm {
             electrons: ElectronCountsForm::Lit(vec![2, 1, 1]),
             charge: NumForm::Lit(-2),
+            unpaired_electrons: UnpairedElectronsForm {
+                count: NumForm::Lit(1),
+                multiplicity: NumForm::Lit(2),
+            },
             ..Default::default()
         };
         {
             let mut view = molecule.aromatic_system_mut(id);
             assert_eq!(view.id(), id);
+            assert_eq!(view.electron_count(), NumForm::Undetermined);
+            assert_eq!(view.atom_count(), 3);
             *view.attributes_mut() = expected.clone();
             assert_eq!(view.attributes(), &expected);
+            assert_eq!(view.electrons(), &expected.electrons);
+            assert_eq!(view.charge(), &expected.charge);
+            assert_eq!(view.unpaired_electrons(), &expected.unpaired_electrons);
+            assert_eq!(view.electron_count(), NumForm::Lit(4));
         }
         assert_eq!(molecule.aromatic_system(id).attributes(), &expected);
     }
@@ -807,13 +987,23 @@ mod tests {
         let expected = AromaticSystemForm {
             electrons: ElectronCountsForm::Lit(vec![2, 1, 1]),
             charge: NumForm::Lit(-2),
+            unpaired_electrons: UnpairedElectronsForm {
+                count: NumForm::Lit(1),
+                multiplicity: NumForm::Lit(2),
+            },
             ..Default::default()
         };
         {
             let mut view = editor.aromatic_system_mut(id);
             assert_eq!(view.id(), id);
+            assert_eq!(view.electron_count(), NumForm::Undetermined);
+            assert_eq!(view.atom_count(), 3);
             *view.attributes_mut() = expected.clone();
             assert_eq!(view.attributes(), &expected);
+            assert_eq!(view.electrons(), &expected.electrons);
+            assert_eq!(view.charge(), &expected.charge);
+            assert_eq!(view.unpaired_electrons(), &expected.unpaired_electrons);
+            assert_eq!(view.electron_count(), NumForm::Lit(4));
         }
         assert_eq!(editor.aromatic_system(id).attributes(), &expected);
     }
@@ -847,6 +1037,239 @@ mod tests {
             view.atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
             |id| id,
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![])]
+    #[case::single(vec![AtomId(3)])]
+    #[case::reordered(vec![AtomId(1), AtomId(0), AtomId(2)])]
+    #[case::expanded(vec![AtomId(3), AtomId(0), AtomId(2), AtomId(1)])]
+    fn test_aromatic_system_editor_view_mut_replace_atoms(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] atoms: Vec<AtomId>,
+    ) {
+        let mut editor = Molecule::from_entries(aromatic_entries.clone()).edit();
+        {
+            let mut view = editor.aromatic_system_mut(AromaticSystemId(0));
+            view.replace_atoms(&atoms);
+            assert_eq!(view.atom_ids().collect::<Vec<_>>(), atoms);
+            assert_eq!(view.atom_count(), atoms.len());
+            assert_eq!(view.electron_count(), NumForm::Lit(4));
+        }
+        aromatic_entries.aromatic[0].0 = atoms;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(aromatic_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::missing_atom(vec![AtomId(5)], MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(5)) })]
+    #[case::repeated_atom(vec![AtomId(0), AtomId(0)], MoleculeIntegrityError::DuplicateAtom { entity: Entity::AromaticSystem(AromaticSystemId(0)), atom: AtomId(0) })]
+    #[case::overlap(vec![AtomId(4)], MoleculeIntegrityError::AromaticSystemsOverlap { atom: AtomId(4) })]
+    fn test_aromatic_system_editor_view_mut_replace_atoms_publication(
+        aromatic_entries: MoleculeEntries,
+        #[case] atoms: Vec<AtomId>,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        let mut editor = Molecule::from_entries(aromatic_entries).edit();
+        editor
+            .aromatic_system_mut(AromaticSystemId(0))
+            .replace_atoms(&atoms);
+        assert_eq!(editor.try_build(), Err(expected));
+    }
+
+    #[rstest]
+    #[case::attributes_first(true)]
+    #[case::atoms_first(false)]
+    fn test_aromatic_system_editor_view_mut_replace_atoms_attributes(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] attributes_first: bool,
+    ) {
+        let atoms = [AtomId(3), AtomId(0)];
+        let electrons = ElectronCountsForm::Lit(vec![1, 2]);
+        let mut editor = Molecule::from_entries(aromatic_entries.clone()).edit();
+        {
+            let mut view = editor.aromatic_system_mut(AromaticSystemId(0));
+            if attributes_first {
+                view.attributes_mut().electrons = electrons.clone();
+                view.replace_atoms(&atoms);
+            } else {
+                view.replace_atoms(&atoms);
+                view.attributes_mut().electrons = electrons.clone();
+            }
+            assert_eq!(view.atom_ids().collect::<Vec<_>>(), atoms);
+            assert_eq!(view.electron_count(), NumForm::Lit(3));
+        }
+        aromatic_entries.aromatic[0].0 = atoms.to_vec();
+        aromatic_entries.aromatic[0].1.electrons = electrons;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(aromatic_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::first(AtomPosition(0), vec![AtomId(3), AtomId(2), AtomId(1)])]
+    #[case::last(AtomPosition(2), vec![AtomId(0), AtomId(2), AtomId(3)])]
+    fn test_aromatic_system_editor_view_mut_replace_atom(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] position: AtomPosition,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let mut editor = Molecule::from_entries(aromatic_entries.clone()).edit();
+        editor
+            .aromatic_system_mut(AromaticSystemId(0))
+            .replace_atom(position, AtomId(3));
+        assert_eq!(
+            editor
+                .aromatic_system(AromaticSystemId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            expected
+        );
+        aromatic_entries.aromatic[0].0 = expected;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(aromatic_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![], AtomPosition(0))]
+    #[case::end(vec![AtomId(0)], AtomPosition(1))]
+    #[should_panic]
+    fn test_aromatic_system_editor_view_mut_replace_atom_error(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] atoms: Vec<AtomId>,
+        #[case] position: AtomPosition,
+    ) {
+        aromatic_entries.aromatic[0].0 = atoms;
+        let mut editor = Molecule::from_entries(aromatic_entries).edit();
+        editor
+            .aromatic_system_mut(AromaticSystemId(0))
+            .replace_atom(position, AtomId(3));
+    }
+
+    #[rstest]
+    #[case::first(vec![AtomId(0), AtomId(2)], AtomPosition(0), vec![AtomId(3), AtomId(0), AtomId(2)])]
+    #[case::middle(vec![AtomId(0), AtomId(2)], AtomPosition(1), vec![AtomId(0), AtomId(3), AtomId(2)])]
+    #[case::end(vec![AtomId(0), AtomId(2)], AtomPosition(2), vec![AtomId(0), AtomId(2), AtomId(3)])]
+    #[case::empty(vec![], AtomPosition(0), vec![AtomId(3)])]
+    fn test_aromatic_system_editor_view_mut_insert_atom(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] atoms: Vec<AtomId>,
+        #[case] position: AtomPosition,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        aromatic_entries.aromatic[0].0 = atoms;
+        let mut editor = Molecule::from_entries(aromatic_entries.clone()).edit();
+        editor
+            .aromatic_system_mut(AromaticSystemId(0))
+            .insert_atom(position, AtomId(3));
+        assert_eq!(
+            editor
+                .aromatic_system(AromaticSystemId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            expected
+        );
+        aromatic_entries.aromatic[0].0 = expected;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(aromatic_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![], AtomPosition(1))]
+    #[case::beyond_end(vec![AtomId(0)], AtomPosition(2))]
+    #[should_panic]
+    fn test_aromatic_system_editor_view_mut_insert_atom_error(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] atoms: Vec<AtomId>,
+        #[case] position: AtomPosition,
+    ) {
+        aromatic_entries.aromatic[0].0 = atoms;
+        let mut editor = Molecule::from_entries(aromatic_entries).edit();
+        editor
+            .aromatic_system_mut(AromaticSystemId(0))
+            .insert_atom(position, AtomId(3));
+    }
+
+    #[rstest]
+    #[case::first(vec![AtomId(0), AtomId(2)], AtomPosition(0), vec![AtomId(2)])]
+    #[case::last(vec![AtomId(0), AtomId(2)], AtomPosition(1), vec![AtomId(0)])]
+    #[case::only(vec![AtomId(0)], AtomPosition(0), vec![])]
+    fn test_aromatic_system_editor_view_mut_remove_atom(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] atoms: Vec<AtomId>,
+        #[case] position: AtomPosition,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        aromatic_entries.aromatic[0].0 = atoms;
+        let mut editor = Molecule::from_entries(aromatic_entries.clone()).edit();
+        editor
+            .aromatic_system_mut(AromaticSystemId(0))
+            .remove_atom(position);
+        assert_eq!(
+            editor
+                .aromatic_system(AromaticSystemId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            expected
+        );
+        aromatic_entries.aromatic[0].0 = expected;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(aromatic_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::empty(vec![], AtomPosition(0))]
+    #[case::end(vec![AtomId(0)], AtomPosition(1))]
+    #[should_panic]
+    fn test_aromatic_system_editor_view_mut_remove_atom_error(
+        mut aromatic_entries: MoleculeEntries,
+        #[case] atoms: Vec<AtomId>,
+        #[case] position: AtomPosition,
+    ) {
+        aromatic_entries.aromatic[0].0 = atoms;
+        let mut editor = Molecule::from_entries(aromatic_entries).edit();
+        editor
+            .aromatic_system_mut(AromaticSystemId(0))
+            .remove_atom(position);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_editor_view_mut_replace_atoms_incidence(
+        aromatic_entries: MoleculeEntries,
+    ) {
+        let mut editor = Molecule::from_entries(aromatic_entries).edit();
+        {
+            let mut view = editor.aromatic_system_mut(AromaticSystemId(0));
+            view.replace_atoms(&[AtomId(3), AtomId(0)]);
+            view.replace_atom(AtomPosition(1), AtomId(2));
+            view.insert_atom(AtomPosition(2), AtomId(1));
+            view.remove_atom(AtomPosition(0));
+        }
+        let molecule = editor.try_build().unwrap();
+        let incidence: Vec<Vec<_>> = molecule
+            .atoms()
+            .ids()
+            .map(|atom| molecule.aromatic_systems().incident_ids(atom).collect())
+            .collect();
+        assert_eq!(
+            incidence,
+            vec![
+                vec![],
+                vec![AromaticSystemId(0)],
+                vec![AromaticSystemId(0)],
+                vec![],
+                vec![AromaticSystemId(1)]
+            ]
         );
     }
 }
