@@ -2863,19 +2863,8 @@ fn test_incidence_cmp() {
         Incidence::BondEndpoint,
         Incidence::DativeDonor,
         Incidence::DativeAcceptor,
-        Incidence::AromaticParticipant(NumForm::Undetermined),
-        Incidence::AromaticParticipant(NumForm::Lit(-1)),
-        Incidence::AromaticParticipant(NumForm::Lit(1)),
-        Incidence::AromaticParticipant(NumForm::lit_set([0, 1])),
-        Incidence::AromaticParticipant(NumForm::RangeFrom(0)),
-        Incidence::AromaticParticipant(NumForm::RangeTo(0)),
-        Incidence::AromaticParticipant(NumForm::var("x")),
-        Incidence::AromaticParticipant(NumForm::pred_expr(PredExpr::Rel(
-            ArithExpr::Var("x".into()),
-            RelOp::Eq,
-            ArithExpr::Lit(0),
-        ))),
-        Incidence::MulticenterParticipant(NumForm::Undetermined),
+        Incidence::AromaticAtom,
+        Incidence::MulticenterAtom,
         Incidence::NoncovalentEndpoint,
         Incidence::StereoSite,
         Incidence::StereoLigand(StereoLigandKind::Atom),
@@ -2888,12 +2877,7 @@ fn test_incidence_cmp() {
     }
     for lhs in &incidences {
         for rhs in &incidences {
-            assert_eq!(
-                lhs.cmp(rhs),
-                incidence_key(lhs)
-                    .unwrap()
-                    .cmp(&incidence_key(rhs).unwrap()),
-            );
+            assert_eq!(lhs.cmp(rhs), incidence_key(lhs).cmp(&incidence_key(rhs)));
         }
     }
 }
@@ -3035,9 +3019,16 @@ fn test_initial_colors(
 fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
     let incidence_graph = initial_color_molecule.incidence_graph(IncidenceLevel::Full);
     let colors = initial_colors(&initial_color_molecule, &incidence_graph).unwrap();
+    let contributions = [1, 2, 2, 1, 1, 2, 1, 2, 2, 1];
     let incidences = incidence_graph
         .incidences()
-        .map(|(edge, incidence)| (incidence, colors.incidences[edge.index()]))
+        .map(|(edge, incidence)| {
+            let contribution = edge
+                .index()
+                .checked_sub(14)
+                .and_then(|position| contributions.get(position));
+            ((incidence, contribution), colors.incidences[edge.index()])
+        })
         .collect::<Vec<_>>();
 
     for (lhs, lhs_color) in &incidences {
@@ -5631,6 +5622,111 @@ fn test_molecule_canonicalize_error_from(
     #[case] expected: MoleculeCanonicalizeError,
 ) {
     assert_eq!(actual, expected);
+}
+
+#[rstest]
+#[case::unchanged(
+    EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![1, 2])),
+    EntitySpan::Unchanged(MulticenterBondForm::from_electrons(vec![1, 2])),
+    [(SpanTagPosition::UNCHANGED, vec![NumForm::Lit(1)]),
+     (SpanTagPosition::UNCHANGED, vec![NumForm::Lit(2)])],
+)]
+#[case::added(
+    EntitySpan::Added(AromaticSystemForm::from_electrons(vec![1, 2])),
+    EntitySpan::Added(MulticenterBondForm::from_electrons(vec![1, 2])),
+    [(SpanTagPosition::ADDED, vec![NumForm::Lit(1)]),
+     (SpanTagPosition::ADDED, vec![NumForm::Lit(2)])],
+)]
+#[case::removed(
+    EntitySpan::Removed(AromaticSystemForm::from_electrons(vec![1, 2])),
+    EntitySpan::Removed(MulticenterBondForm::from_electrons(vec![1, 2])),
+    [(SpanTagPosition::REMOVED, vec![NumForm::Lit(1)]),
+     (SpanTagPosition::REMOVED, vec![NumForm::Lit(2)])],
+)]
+#[case::modified(
+    EntitySpan::Modified {
+        lhs: AromaticSystemForm::from_electrons(vec![1, 2]),
+        rhs: AromaticSystemForm::from_electrons(vec![1, 0]),
+    },
+    EntitySpan::Modified {
+        lhs: MulticenterBondForm::from_electrons(vec![1, 2]),
+        rhs: MulticenterBondForm::from_electrons(vec![1, 0]),
+    },
+    [(SpanTagPosition::UNCHANGED, vec![NumForm::Lit(1)]),
+     (SpanTagPosition::MODIFIED, vec![NumForm::Lit(2), NumForm::Lit(0)])],
+)]
+#[case::undetermined(
+    EntitySpan::Unchanged(AromaticSystemForm::default()),
+    EntitySpan::Unchanged(MulticenterBondForm::default()),
+    [(SpanTagPosition::UNCHANGED, vec![NumForm::Undetermined]),
+     (SpanTagPosition::UNCHANGED, vec![NumForm::Undetermined])],
+)]
+fn test_reaction_span_entity_keys_incidence(
+    #[case] aromatic: EntitySpan<AromaticSystemForm>,
+    #[case] multicenter: EntitySpan<MulticenterBondForm>,
+    #[case] expected: [(SpanTagPosition, Vec<NumForm>); 2],
+) {
+    let span = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        aromatic: vec![(vec![AtomId(1), AtomId(0)], aromatic)],
+        multicenter: vec![(vec![AtomId(0), AtomId(1)], multicenter)],
+        ..Default::default()
+    });
+    let incidence = span.incidence_graph(IncidenceLevel::Constitution);
+    let (_, keys) = reaction_span_entity_keys(&span, &incidence).unwrap();
+    assert_eq!(
+        incidence
+            .incidences()
+            .map(|(_, role)| role.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            Incidence::AromaticAtom,
+            Incidence::AromaticAtom,
+            Incidence::MulticenterAtom,
+            Incidence::MulticenterAtom
+        ],
+    );
+    let expected = expected.map(|(position, values)| {
+        CanonicalKeyValue::Span(SpanKey {
+            position,
+            values: values.iter().map(num_form_key).collect(),
+        })
+    });
+    assert_eq!(
+        incidence
+            .incidences()
+            .map(|(edge, _)| {
+                let [atom, owner] = incidence.graph().edge_endpoints(edge);
+                (
+                    incidence.entity(atom),
+                    incidence.entity(owner),
+                    keys[edge.index()].clone(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                Entity::Atom(AtomId(1)),
+                Entity::AromaticSystem(AromaticSystemId(0)),
+                InitialColorKey::Incidence(variant(3, [expected[0].clone()]))
+            ),
+            (
+                Entity::Atom(AtomId(0)),
+                Entity::AromaticSystem(AromaticSystemId(0)),
+                InitialColorKey::Incidence(variant(3, [expected[1].clone()]))
+            ),
+            (
+                Entity::Atom(AtomId(0)),
+                Entity::MulticenterBond(MulticenterBondId(0)),
+                InitialColorKey::Incidence(variant(4, [expected[0].clone()]))
+            ),
+            (
+                Entity::Atom(AtomId(1)),
+                Entity::MulticenterBond(MulticenterBondId(0)),
+                InitialColorKey::Incidence(variant(4, [expected[1].clone()]))
+            ),
+        ],
+    );
 }
 
 #[rstest]

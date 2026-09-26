@@ -5,12 +5,9 @@ use std::cmp::Ordering;
 use strum::EnumCount;
 use umol_graph_core::{EdgeId, Graph, NodeId};
 
-use super::delta::EntitySpan;
-use super::electrons::ElectronCountsForm;
 use super::entity::{Entity, EntityKind};
 use super::ligand::StereoLigandKind;
 use super::molecule::Molecule;
-use super::num::NumForm;
 use super::reaction_span::ReactionSpan;
 
 /// Structural level represented by an [`IncidenceGraph`].
@@ -27,25 +24,24 @@ pub enum IncidenceLevel {
     Full,
 }
 
-/// The complete meaning of one edge in an [`IncidenceGraph`].
+/// The chemical role of one edge in an [`IncidenceGraph`].
 ///
 /// Each value describes one participant occurrence. Parallel occurrences remain
-/// separate graph edges and therefore have separate `Incidence` values.
+/// separate graph edges. Electron contributions and reaction-side attributes
+/// remain in the owning entity forms; they are not incidence labels.
 ///
 /// # Semantic properties
 ///
 /// The total order uses the frozen aggregate-canonicalization schema rather
-/// than enum declaration order. For normalized values, it agrees with the
-/// typed incidence keys used to form canonicalization colors.
+/// than enum declaration order. Canonicalization augments these roles with
+/// the owning forms' electron contributions when constructing colors.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Incidence {
     BondEndpoint,
     DativeDonor,
     DativeAcceptor,
-    AromaticParticipant(NumForm),
-    AromaticParticipantSpan(EntitySpan<NumForm>),
-    MulticenterParticipant(NumForm),
-    MulticenterParticipantSpan(EntitySpan<NumForm>),
+    AromaticAtom,
+    MulticenterAtom,
     NoncovalentEndpoint,
     StereoSite,
     StereoLigand(StereoLigandKind),
@@ -57,8 +53,8 @@ impl Incidence {
             Self::BondEndpoint => 0,
             Self::DativeDonor => 1,
             Self::DativeAcceptor => 2,
-            Self::AromaticParticipant(_) | Self::AromaticParticipantSpan(_) => 3,
-            Self::MulticenterParticipant(_) | Self::MulticenterParticipantSpan(_) => 4,
+            Self::AromaticAtom => 3,
+            Self::MulticenterAtom => 4,
             Self::NoncovalentEndpoint => 5,
             Self::StereoSite => 6,
             Self::StereoLigand(_) => 7,
@@ -71,55 +67,10 @@ impl Ord for Incidence {
         self.position()
             .cmp(&other.position())
             .then_with(|| match (self, other) {
-                (Self::AromaticParticipant(lhs), Self::AromaticParticipant(rhs))
-                | (Self::MulticenterParticipant(lhs), Self::MulticenterParticipant(rhs)) => {
-                    lhs.cmp(rhs)
-                }
-                (Self::AromaticParticipantSpan(lhs), Self::AromaticParticipantSpan(rhs))
-                | (Self::MulticenterParticipantSpan(lhs), Self::MulticenterParticipantSpan(rhs)) => {
-                    entity_span_cmp(lhs, rhs)
-                }
-                (Self::AromaticParticipant(_), Self::AromaticParticipantSpan(_))
-                | (Self::MulticenterParticipant(_), Self::MulticenterParticipantSpan(_)) => {
-                    Ordering::Less
-                }
-                (Self::AromaticParticipantSpan(_), Self::AromaticParticipant(_))
-                | (Self::MulticenterParticipantSpan(_), Self::MulticenterParticipant(_)) => {
-                    Ordering::Greater
-                }
                 (Self::StereoLigand(lhs), Self::StereoLigand(rhs)) => lhs.cmp(rhs),
                 _ => Ordering::Equal,
             })
     }
-}
-
-fn entity_span_cmp<T: Ord>(left: &EntitySpan<T>, right: &EntitySpan<T>) -> Ordering {
-    let position = |span: &EntitySpan<T>| match span {
-        EntitySpan::Unchanged(_) => 0,
-        EntitySpan::Added(_) => 1,
-        EntitySpan::Removed(_) => 2,
-        EntitySpan::Modified { .. } => 3,
-    };
-    position(left)
-        .cmp(&position(right))
-        .then_with(|| match (left, right) {
-            (EntitySpan::Unchanged(left), EntitySpan::Unchanged(right))
-            | (EntitySpan::Added(left), EntitySpan::Added(right))
-            | (EntitySpan::Removed(left), EntitySpan::Removed(right)) => left.cmp(right),
-            (
-                EntitySpan::Modified {
-                    lhs: left_lhs,
-                    rhs: left_rhs,
-                },
-                EntitySpan::Modified {
-                    lhs: right_lhs,
-                    rhs: right_rhs,
-                },
-            ) => left_lhs
-                .cmp(right_lhs)
-                .then_with(|| left_rhs.cmp(right_rhs)),
-            _ => Ordering::Equal,
-        })
 }
 
 impl PartialOrd for Incidence {
@@ -195,6 +146,7 @@ impl Molecule {
     /// bonds and included overlays become entity nodes wired to every participant
     /// occurrence. Stereo elements attach to their site and every ligand-bearing
     /// atom; the incidence type distinguishes the site and ligand roles.
+    /// Electron contributions remain in the owning forms and do not affect this graph.
     pub fn incidence_graph(&self, level: IncidenceLevel) -> IncidenceGraph {
         let atom_count = self.raw_graph().node_count();
         let constitution = matches!(level, IncidenceLevel::Constitution | IncidenceLevel::Full);
@@ -267,30 +219,14 @@ impl Molecule {
                 node += 1;
             }
             for v in self.aromatic_systems().iter() {
-                for (position, atom) in v.atom_ids().enumerate() {
-                    let electrons = match v.electrons() {
-                        ElectronCountsForm::Undetermined => NumForm::Undetermined,
-                        ElectronCountsForm::Lit(counts) => NumForm::Lit(counts[position]),
-                    };
-                    push(
-                        node,
-                        atom.index() as u32,
-                        Incidence::AromaticParticipant(electrons),
-                    );
+                for atom in v.atom_ids() {
+                    push(node, atom.index() as u32, Incidence::AromaticAtom);
                 }
                 node += 1;
             }
             for v in self.multicenter_bonds().iter() {
-                for (position, atom) in v.atom_ids().enumerate() {
-                    let electrons = match v.electrons() {
-                        ElectronCountsForm::Undetermined => NumForm::Undetermined,
-                        ElectronCountsForm::Lit(counts) => NumForm::Lit(counts[position]),
-                    };
-                    push(
-                        node,
-                        atom.index() as u32,
-                        Incidence::MulticenterParticipant(electrons),
-                    );
+                for atom in v.atom_ids() {
+                    push(node, atom.index() as u32, Incidence::MulticenterAtom);
                 }
                 node += 1;
             }
@@ -343,8 +279,8 @@ impl Molecule {
 
 impl ReactionSpan {
     /// Build the incidence graph of the union frame at the selected structural level.
-    /// Entity-span tags and both sides of positional electron-count values remain available to
-    /// canonicalization through the typed entity and incidence values.
+    /// Edges identify bond endpoints, dative donors and acceptors, overlay atoms,
+    /// and stereo sites and ligands.
     pub fn incidence_graph(&self, level: IncidenceLevel) -> IncidenceGraph {
         let atom_count = self.graph().node_count();
         let constitution = matches!(level, IncidenceLevel::Constitution | IncidenceLevel::Full);
@@ -412,30 +348,14 @@ impl ReactionSpan {
                 node += 1;
             }
             for id in self.aromatic_systems().ids() {
-                for (position, atom) in self.aromatic_systems().atoms(id).enumerate() {
-                    push(
-                        node,
-                        atom.0,
-                        Incidence::AromaticParticipantSpan(electron_span(
-                            self.aromatic_systems().attributes(id),
-                            position,
-                            |value| &value.electrons,
-                        )),
-                    );
+                for atom in self.aromatic_systems().atoms(id) {
+                    push(node, atom.0, Incidence::AromaticAtom);
                 }
                 node += 1;
             }
             for id in self.multicenter_bonds().ids() {
-                for (position, atom) in self.multicenter_bonds().atoms(id).enumerate() {
-                    push(
-                        node,
-                        atom.0,
-                        Incidence::MulticenterParticipantSpan(electron_span(
-                            self.multicenter_bonds().attributes(id),
-                            position,
-                            |value| &value.electrons,
-                        )),
-                    );
+                for atom in self.multicenter_bonds().atoms(id) {
+                    push(node, atom.0, Incidence::MulticenterAtom);
                 }
                 node += 1;
             }
@@ -473,26 +393,6 @@ impl ReactionSpan {
             entity_counts,
             incidences,
         }
-    }
-}
-
-fn electron_span<T>(
-    span: &EntitySpan<T>,
-    position: usize,
-    electrons: impl Fn(&T) -> &ElectronCountsForm,
-) -> EntitySpan<NumForm> {
-    let at = |value: &T| match electrons(value) {
-        ElectronCountsForm::Undetermined => NumForm::Undetermined,
-        ElectronCountsForm::Lit(counts) => NumForm::Lit(counts[position]),
-    };
-    match span {
-        EntitySpan::Unchanged(value) => EntitySpan::Unchanged(at(value)),
-        EntitySpan::Added(value) => EntitySpan::Added(at(value)),
-        EntitySpan::Removed(value) => EntitySpan::Removed(at(value)),
-        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
-            lhs: at(lhs),
-            rhs: at(rhs),
-        },
     }
 }
 
@@ -616,8 +516,8 @@ mod tests {
     #[case::bond(EdgeId(0), Incidence::BondEndpoint)]
     #[case::dative_donor(EdgeId(6), Incidence::DativeDonor)]
     #[case::dative_acceptor(EdgeId(7), Incidence::DativeAcceptor)]
-    #[case::aromatic(EdgeId(8), Incidence::AromaticParticipant(NumForm::Lit(1)))]
-    #[case::multicenter(EdgeId(11), Incidence::MulticenterParticipant(NumForm::Lit(2)))]
+    #[case::aromatic(EdgeId(8), Incidence::AromaticAtom)]
+    #[case::multicenter(EdgeId(11), Incidence::MulticenterAtom)]
     #[case::noncovalent(EdgeId(14), Incidence::NoncovalentEndpoint)]
     #[case::stereo_site(EdgeId(16), Incidence::StereoSite)]
     #[case::stereo_ligand(
@@ -640,7 +540,7 @@ mod tests {
             aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::default())],
             ..Default::default()
         }),
-        Incidence::AromaticParticipant(NumForm::Undetermined),
+        Incidence::AromaticAtom,
     )]
     #[case::multicenter(
         Molecule::from_entries(MoleculeEntries {
@@ -648,7 +548,7 @@ mod tests {
             multicenter: vec![(vec![AtomId(0)], MulticenterBondForm::default())],
             ..Default::default()
         }),
-        Incidence::MulticenterParticipant(NumForm::Undetermined),
+        Incidence::MulticenterAtom,
     )]
     fn test_incidence_graph_incidence_electrons(
         #[case] molecule: Molecule,
@@ -676,21 +576,12 @@ mod tests {
                 (EdgeId(5), Incidence::BondEndpoint),
                 (EdgeId(6), Incidence::DativeDonor),
                 (EdgeId(7), Incidence::DativeAcceptor),
-                (EdgeId(8), Incidence::AromaticParticipant(NumForm::Lit(1)),),
-                (EdgeId(9), Incidence::AromaticParticipant(NumForm::Lit(0)),),
-                (EdgeId(10), Incidence::AromaticParticipant(NumForm::Lit(2)),),
-                (
-                    EdgeId(11),
-                    Incidence::MulticenterParticipant(NumForm::Lit(2)),
-                ),
-                (
-                    EdgeId(12),
-                    Incidence::MulticenterParticipant(NumForm::Lit(0)),
-                ),
-                (
-                    EdgeId(13),
-                    Incidence::MulticenterParticipant(NumForm::Lit(1)),
-                ),
+                (EdgeId(8), Incidence::AromaticAtom,),
+                (EdgeId(9), Incidence::AromaticAtom,),
+                (EdgeId(10), Incidence::AromaticAtom,),
+                (EdgeId(11), Incidence::MulticenterAtom,),
+                (EdgeId(12), Incidence::MulticenterAtom,),
+                (EdgeId(13), Incidence::MulticenterAtom,),
                 (EdgeId(14), Incidence::NoncovalentEndpoint),
                 (EdgeId(15), Incidence::NoncovalentEndpoint),
                 (EdgeId(16), Incidence::StereoSite),

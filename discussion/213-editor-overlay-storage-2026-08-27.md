@@ -15,8 +15,8 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 ## Design status — 2026-09-26
 
 This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
-S2a, the revised S2b, and S2c are implemented. The previous S2b mutable-view
-attempt was reverted. S2d is next; S2f is cancelled and the remaining S2 work is
+S2a, the revised S2b, S2c, and S2d are implemented. The previous S2b mutable-view
+attempt was reverted. S2g is next; S2f is cancelled and the remaining S2 work is
 unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -56,9 +56,9 @@ focused correction, recorded under
 Replacement verbs and payloads in the Edit/reaction DSLs are approved in S3.
 Python consumption, counter-based accessor invalidation, and storage names are
 approved below. S2b is complete: Rust's unit error is NoJoinError and Python
-join raises NoJoinError. S2c's bounded coset-operation fixes are complete;
-S2d is next and S2f is cancelled. S2g's frame-consumer decisions remain approved
-and unimplemented.
+join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
+incidence/count-aware consumers are complete. S2f is cancelled. S2g is next; its
+frame-consumer decisions remain approved and unimplemented.
 
 ## Editor and transaction API
 
@@ -2693,7 +2693,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   formatting, diff checks, and full scope review pass. No workspace, Python,
   or MSRV gate was run for this Rust-only subitem.
 
-- **S2d — Role-only incidence and count-aware consumers** (`ir::incidence`,
+- **S2d — completed 2026-09-26: Role-only incidence and count-aware consumers** (`ir::incidence`,
   `ir::canonicalize`, `ir::substructure`; breaking, red→green).
   [dep: S0a, S2c]
 
@@ -2763,13 +2763,14 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   Preserve that path's association of atom images with contributions when sorting
   occurrences. Final molecule/span comparison continues reading the owning forms.
 
-  Incidence matching uses role labels and the existing verify_overlays check of
-  transported attributes. Remove the edge-payload count filter; do not introduce
-  a public matching error merely for a rejected overlay candidate. At that
-  candidate check, literal count/frame disagreement on either matched entity
-  rejects the candidate through the existing Option path. Both matching
-  algorithms must return identical valid-input match sets. Public matching
-  signatures and SubstructureMatchError remain unchanged.
+  Incidence matching uses role labels and reads aromatic/multicenter contributions
+  from owning forms during edge comparison. Check each literal vector's length
+  before looking up the incident atom's contribution; mismatch on either side
+  rejects the tentative pairing. Undetermined pattern counts impose no contribution
+  restriction. The existing verify_overlays comparison of transported attributes
+  remains authoritative for completed candidates, including length disagreement
+  through its Option path. Both matching algorithms must return identical
+  valid-input match sets. Public signatures and SubstructureMatchError are unchanged.
 
   **Verification at S2d.** Exact incidence labels and unchanged topology for
   constructible molecules/spans, canonical keys distinguishing atom/count
@@ -2782,6 +2783,86 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   pruning can affect search work. Record a decision-relevant regression, not
   precision measurements of invalid-input behavior. Symmetry receives no new
   count checks or error return.
+
+  Implemented the role-only enum and both incidence builders. The entity-key
+  pass checks each selected literal count vector before incidence lookup and
+  candidate enumeration; modified spans check both sides. Contribution-bearing
+  keys retain the stored atom/count association and existing span normalization.
+  Matching now prunes count-incompatible pairings during search by reading owning
+  forms, and still checks both matched forms before transport through verify_overlays.
+  Operation signatures, matching errors, symmetry checks, and normalization are unchanged.
+  Malformed aggregate tests remain in S2h, as specified above.
+
+  **Measured tradeoff.** The initial role-only implementation removed count-based
+  edge pruning and slowed incidence matching when counts distinguished otherwise
+  interchangeable atoms. The follow-up below restores pruning in the matcher
+  while retaining role-only incidence storage. Both strategies remain explicit
+  caller choices; no public API was added.
+
+  Criterion, VF2, 20 samples, 1 s warm-up, 2 s requested measurement (corpus
+  measurements automatically ran longer); times rounded:
+
+  | Matching case | Strategy | Before | After |
+  | --- | --- | ---: | ---: |
+  | Six-carbon ring, counts [2,1,0,1,0,1], self-match | Incidence | 21.4 µs | 32.3 µs |
+  | Same ring | GraphAndOverlays | 20.5 µs | 20.2 µs |
+  | Three-carbon multicenter, counts [2,0,1], self-match | Incidence | 1.59 µs | 4.78 µs |
+  | Same multicenter | GraphAndOverlays | 3.81 µs | 3.78 µs |
+  | Existing phenol pattern over OpenSMILES corpus | Incidence | 727 ms | 707 ms |
+  | Same corpus/pattern | GraphAndOverlays | 236 ms | 239 ms |
+
+  The new bounded cases live in the existing umol-graph substructure benchmark;
+  the corpus pattern has no count-bearing overlay and cannot expose this loss
+  of pruning. The corpus changes were not statistically distinguishable.
+  Incidence construction also carries smaller labels and no copied contributions.
+  The existing canonicalize benchmark was run before/after for ordinary_naphthalene
+  and overlay_heavy: complete canonicalization measured 48.5→22.6 µs and
+  194→137 µs; constitution incidence construction measured 1.59→0.525 µs and
+  1.64→0.562 µs. The initial canonicalization run overlapped another crate's
+  compilation, so those differences do **not** establish a speedup. Matching
+  measurements above ran after compilation without concurrent benchmark work.
+
+  Verification: 39 incidence-related unit tests, 286 canonicalization tests,
+  and 55 matching tests pass. The new exact cases cover span categories,
+  nonuniform contributions, reordered atom lists, and undetermined counts.
+  Canonicalization and matching property filters pass 24 and 2 tests respectively
+  (PROPTEST_CASES=128), including reframing/remapping laws and algorithm agreement.
+  Rustdoc with warnings denied, nightly formatting, diff checks, and full scope
+  review pass. No workspace, Python, or MSRV gate was run.
+
+  **Early filtering — tested and adopted 2026-09-26.** The edge comparator reads
+  the contribution from each edge's owning form: identify the overlay and atom,
+  check the literal vector length against the atom list, then locate that atom's
+  position. A length mismatch rejects the tentative edge match. Undetermined
+  pattern counts impose no contribution restriction. No incidence payload,
+  contribution cache, heap allocation, or public API was added; verify_overlays
+  still checks completed candidates. This restores early rejection of atom
+  permutations with incompatible contributions without changing incidence storage.
+
+  Repeated the bounded VF2 cases with uniform and undetermined controls, using
+  the same Criterion settings and sequential, isolated measurements:
+
+  | Incidence matching case | Late check only | Adopted early filter |
+  | --- | ---: | ---: |
+  | Aromatic ring, nonuniform counts | 31.61 µs | 20.97 µs |
+  | Aromatic ring, uniform counts | 32.59 µs | 34.34 µs |
+  | Aromatic ring, undetermined counts | 31.80 µs | 32.49 µs |
+  | Multicenter, nonuniform counts | 4.71 µs | 1.61 µs |
+  | Multicenter, uniform counts | 5.17 µs | 5.37 µs |
+  | Multicenter, undetermined counts | 4.75 µs | 5.02 µs |
+
+  The nonuniform cases improve by 34% and 66%; controls pay 2–6% for lookups
+  that cannot prune. GraphAndOverlays control timings remain within about 1.3%.
+  These examples support matcher-side early filtering, with a small measured
+  cost when contributions do not distinguish atoms. They do not establish a
+  workload-wide gain. The tested comparator is now implemented in
+  visit_substructure_matches_incidence, with no new helper or cache. The expanded
+  benchmark and exact permutation tests remain. All 63 matching unit tests pass
+  with either implementation, including all six graph algorithms; early filtering
+  also passes both matching properties with PROPTEST_CASES=128.
+  Short/long-vector aggregate tests remain scheduled for S2h,
+  when public construction admits those values. Results here survive deletion of
+  the temporary prototype and logs in scratch/s2d-early-filter.
 
 - **S2e — moved to S2h.** Existing electron-use boundaries and getter behavior
   require verification after aggregate construction admits the relevant forms.

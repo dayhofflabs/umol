@@ -1673,33 +1673,17 @@ fn stereo_ligand_key(atom: u32, kind: StereoLigandKind) -> CanonicalKeyValue {
     ])
 }
 
-fn incidence_key(incidence: &Incidence) -> Result<CanonicalKeyValue, Contradiction> {
-    Ok(match incidence {
+fn incidence_key(incidence: &Incidence) -> CanonicalKeyValue {
+    match incidence {
         Incidence::BondEndpoint => variant(0, []),
         Incidence::DativeDonor => variant(1, []),
         Incidence::DativeAcceptor => variant(2, []),
-        Incidence::AromaticParticipant(value) => {
-            variant(3, [num_form_key(value.normalized()?.as_ref())])
-        }
-        Incidence::AromaticParticipantSpan(value) => variant(
-            3,
-            [normalized_entity_span_key(value, |value| {
-                Ok(num_form_key(value.normalized()?.as_ref()))
-            })?],
-        ),
-        Incidence::MulticenterParticipant(value) => {
-            variant(4, [num_form_key(value.normalized()?.as_ref())])
-        }
-        Incidence::MulticenterParticipantSpan(value) => variant(
-            4,
-            [normalized_entity_span_key(value, |value| {
-                Ok(num_form_key(value.normalized()?.as_ref()))
-            })?],
-        ),
+        Incidence::AromaticAtom => variant(3, []),
+        Incidence::MulticenterAtom => variant(4, []),
         Incidence::NoncovalentEndpoint => variant(5, []),
         Incidence::StereoSite => variant(6, []),
         Incidence::StereoLigand(kind) => variant(7, [stereo_ligand_kind_key(*kind)]),
-    })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2562,8 +2546,52 @@ fn initial_color_keys(
         .collect::<Result<Vec<_>, _>>()?;
     let incidence_keys = incidence_graph
         .incidences()
-        .map(|(_, incidence)| incidence_key(incidence).map(InitialColorKey::Incidence))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|(edge, incidence)| {
+            let value = match incidence {
+                Incidence::AromaticAtom | Incidence::MulticenterAtom => {
+                    let [first, second] = incidence_graph.graph().edge_endpoints(edge);
+                    let (owner, atom) = match (
+                        incidence_graph.entity(first),
+                        incidence_graph.entity(second),
+                    ) {
+                        (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
+                        _ => {
+                            unreachable!("an electron contribution connects an overlay to an atom")
+                        }
+                    };
+                    let (tag, position, electrons) = match owner {
+                        Entity::AromaticSystem(id) => (
+                            3,
+                            molecule
+                                .aromatic_system(id)
+                                .atom_ids()
+                                .position(|id| id == atom),
+                            &molecule.aromatic_system(id).attributes.electrons,
+                        ),
+                        Entity::MulticenterBond(id) => (
+                            4,
+                            molecule
+                                .multicenter_bond(id)
+                                .atom_ids()
+                                .position(|id| id == atom),
+                            &molecule.multicenter_bond(id).attributes.electrons,
+                        ),
+                        _ => unreachable!(
+                            "electron contributions belong to aromatic or multicenter entities"
+                        ),
+                    };
+                    let position = position.expect("incidence atom belongs to its overlay");
+                    let contribution = match electrons {
+                        ElectronCountsForm::Undetermined => NumForm::Undetermined,
+                        ElectronCountsForm::Lit(counts) => NumForm::Lit(counts[position]),
+                    };
+                    variant(tag, [num_form_key(&contribution)])
+                }
+                incidence => incidence_key(incidence),
+            };
+            InitialColorKey::Incidence(value)
+        })
+        .collect();
 
     Ok((entity_keys, incidence_keys))
 }
@@ -2692,13 +2720,7 @@ fn constitution_partition_descriptors(
             SubdivisionNodeSource::Edge(edge) => {
                 let value = match incidence_graph.incidence(edge) {
                     Incidence::DativeDonor | Incidence::DativeAcceptor => variant(1, []),
-                    Incidence::AromaticParticipant(_) | Incidence::AromaticParticipantSpan(_) => {
-                        variant(3, [])
-                    }
-                    Incidence::MulticenterParticipant(_)
-                    | Incidence::MulticenterParticipantSpan(_) => variant(4, []),
-                    incidence => incidence_key(incidence)
-                        .expect("initial colors established incidence normalization"),
+                    incidence => incidence_key(incidence),
                 };
                 InitialColorKey::Incidence(value)
             }
@@ -2824,9 +2846,7 @@ fn structure_partition_descriptors(
             SubdivisionNodeSource::Edge(edge) => {
                 let value = match incidence_graph.incidence(edge) {
                     Incidence::DativeDonor | Incidence::DativeAcceptor => variant(1, []),
-                    Incidence::AromaticParticipant(_) => variant(3, []),
-                    Incidence::MulticenterParticipant(_) => variant(4, []),
-                    incidence => incidence_key(incidence)?,
+                    incidence => incidence_key(incidence),
                 };
                 Ok(InitialColorKey::Incidence(value))
             }
@@ -3060,6 +3080,11 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .get(id)
                 .expect("incidence aromatic system is in range")
                 .attributes;
+            if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+                if counts.len() != molecule.aromatic_system(id).atom_ids().len())
+            {
+                return Err(Contradiction);
+            }
             (
                 EntityBlockPosition::AROMATIC_SYSTEM,
                 positioned_product([
@@ -3079,6 +3104,11 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .get(id)
                 .expect("incidence multicenter bond is in range")
                 .attributes;
+            if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+                if counts.len() != molecule.multicenter_bond(id).atom_ids().len())
+            {
+                return Err(Contradiction);
+            }
             (
                 EntityBlockPosition::MULTICENTER_BOND,
                 positioned_product([
@@ -3172,6 +3202,11 @@ fn reaction_span_entity_color_key(
         Entity::AromaticSystem(id) => (
             EntityBlockPosition::AROMATIC_SYSTEM,
             normalized_entity_span_key(span.aromatic_systems().attributes(id), |attributes| {
+                if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+                    if counts.len() != span.aromatic_systems().atoms(id).len())
+                {
+                    return Err(Contradiction);
+                }
                 Ok(positioned_product([
                     (2, num_form_key(attributes.charge.normalized()?.as_ref())),
                     (
@@ -3186,6 +3221,11 @@ fn reaction_span_entity_color_key(
         Entity::MulticenterBond(id) => (
             EntityBlockPosition::MULTICENTER_BOND,
             normalized_entity_span_key(span.multicenter_bonds().attributes(id), |attributes| {
+                if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+                    if counts.len() != span.multicenter_bonds().atoms(id).len())
+                {
+                    return Err(Contradiction);
+                }
                 Ok(positioned_product([
                     (2, num_form_key(attributes.charge.normalized()?.as_ref())),
                     (
@@ -4233,8 +4273,78 @@ fn reaction_span_entity_keys(
         .collect::<Result<Vec<_>, _>>()?;
     let incidence_keys = incidence_graph
         .incidences()
-        .map(|(_, incidence)| incidence_key(incidence).map(InitialColorKey::Incidence))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|(edge, incidence)| {
+            let value = match incidence {
+                Incidence::AromaticAtom | Incidence::MulticenterAtom => {
+                    let [first, second] = incidence_graph.graph().edge_endpoints(edge);
+                    let (owner, atom) = match (
+                        incidence_graph.entity(first),
+                        incidence_graph.entity(second),
+                    ) {
+                        (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
+                        _ => {
+                            unreachable!("an electron contribution connects an overlay to an atom")
+                        }
+                    };
+                    match owner {
+                        Entity::AromaticSystem(id) => {
+                            let position = span
+                                .aromatic_systems()
+                                .atoms(id)
+                                .position(|id| id == atom)
+                                .expect("incidence atom belongs to its overlay");
+                            variant(
+                                3,
+                                [normalized_entity_span_key(
+                                    span.aromatic_systems().attributes(id),
+                                    |attributes| {
+                                        let contribution = match &attributes.electrons {
+                                            ElectronCountsForm::Undetermined => {
+                                                NumForm::Undetermined
+                                            }
+                                            ElectronCountsForm::Lit(counts) => {
+                                                NumForm::Lit(counts[position])
+                                            }
+                                        };
+                                        Ok(num_form_key(&contribution))
+                                    },
+                                )?],
+                            )
+                        }
+                        Entity::MulticenterBond(id) => {
+                            let position = span
+                                .multicenter_bonds()
+                                .atoms(id)
+                                .position(|id| id == atom)
+                                .expect("incidence atom belongs to its overlay");
+                            variant(
+                                4,
+                                [normalized_entity_span_key(
+                                    span.multicenter_bonds().attributes(id),
+                                    |attributes| {
+                                        let contribution = match &attributes.electrons {
+                                            ElectronCountsForm::Undetermined => {
+                                                NumForm::Undetermined
+                                            }
+                                            ElectronCountsForm::Lit(counts) => {
+                                                NumForm::Lit(counts[position])
+                                            }
+                                        };
+                                        Ok(num_form_key(&contribution))
+                                    },
+                                )?],
+                            )
+                        }
+                        _ => unreachable!(
+                            "electron contributions belong to aromatic or multicenter entities"
+                        ),
+                    }
+                }
+                incidence => incidence_key(incidence),
+            };
+            Ok(InitialColorKey::Incidence(value))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
     Ok((entity_keys, incidence_keys))
 }
 
@@ -4689,7 +4799,7 @@ impl Canonicalize for Molecule {
 /// Failure to construct a canonical [`Molecule`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeCanonicalizeError {
-    /// Intrinsic normalization of a carried value reached a contradiction.
+    /// A carried value is contradictory or literal electron counts do not match their atom list.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
 }
@@ -4697,7 +4807,7 @@ pub enum MoleculeCanonicalizeError {
 /// Failure to construct a canonical [`ReactionSpan`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionSpanCanonicalizeError {
-    /// Intrinsic normalization of a carried value reached a contradiction.
+    /// A carried value is contradictory or literal electron counts do not match their atom list.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
 }
@@ -4878,7 +4988,8 @@ impl Canonicalize for ReactionSpan {
 /// Failure to construct a canonical [`Reaction`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionCanonicalizeError {
-    /// Intrinsic normalization or span materialization reached a contradiction.
+    /// Normalization or span materialization failed, or literal electron counts
+    /// do not match their atom list.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
 }
