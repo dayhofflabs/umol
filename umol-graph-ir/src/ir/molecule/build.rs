@@ -360,7 +360,7 @@ mod tests {
 
         assert_eq!(bond, MulticenterBondId(0));
         assert_eq!(
-            mol.multicenter_bond(bond).attributes,
+            mol.multicenter_bond(bond).attributes(),
             &MulticenterBondForm::from_electrons(vec![1, 1, 1])
         );
     }

@@ -520,7 +520,7 @@ fn convey_molecule(
     }
     if let Some(bond) = molecule.multicenter_bonds().iter().next() {
         return Err(ConveyError::Entity {
-            entity: Entity::MulticenterBond(bond.id),
+            entity: Entity::MulticenterBond(bond.id()),
         });
     }
     for bond in molecule.noncovalent_bonds().iter() {

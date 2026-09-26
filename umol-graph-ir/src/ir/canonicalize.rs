@@ -201,7 +201,7 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
         || molecule
             .multicenter_bonds()
             .iter()
-            .any(|bond| !bond.attributes.constraints.is_empty())
+            .any(|bond| !bond.attributes().constraints.is_empty())
         || molecule
             .noncovalent_bonds()
             .iter()
@@ -1686,11 +1686,24 @@ fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
             value: sequence(rows),
         });
     }
-    inline_block!(
-        ConstraintBlockPosition::MULTICENTER_BOND,
-        molecule.multicenter_bonds(),
-        multicenter_bond_constraint_form_key
-    );
+    let rows = molecule
+        .multicenter_bonds()
+        .iter()
+        .flat_map(|bond| {
+            bond.attributes().constraints.iter().map(move |constraint| {
+                product([
+                    index_key(bond.id().index()),
+                    multicenter_bond_constraint_form_key(constraint),
+                ])
+            })
+        })
+        .collect::<Vec<_>>();
+    if !rows.is_empty() {
+        blocks.push(PositionedKey {
+            position: ConstraintBlockPosition::MULTICENTER_BOND,
+            value: sequence(rows),
+        });
+    }
     inline_block!(
         ConstraintBlockPosition::NONCOVALENT_BOND,
         molecule.noncovalent_bonds(),
@@ -2631,7 +2644,7 @@ fn initial_color_keys(
                                 .multicenter_bond(id)
                                 .atom_ids()
                                 .position(|id| id == atom),
-                            &molecule.multicenter_bond(id).attributes.electrons,
+                            &molecule.multicenter_bond(id).attributes().electrons,
                         ),
                         _ => unreachable!(
                             "electron contributions belong to aromatic or multicenter entities"
@@ -3167,7 +3180,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .multicenter_bonds()
                 .get(id)
                 .expect("incidence multicenter bond is in range")
-                .attributes;
+                .attributes();
             if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
                 if counts.len() != molecule.multicenter_bond(id).atom_ids().len())
             {
@@ -3597,8 +3610,8 @@ fn constitution_candidate(
             ]);
             Ok((
                 CanonicalKeyValue::Product(fields),
-                bond.id,
-                incidence_graph.node_of(Entity::MulticenterBond(bond.id)),
+                bond.id(),
+                incidence_graph.node_of(Entity::MulticenterBond(bond.id())),
             ))
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;

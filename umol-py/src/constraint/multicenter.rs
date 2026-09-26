@@ -524,7 +524,7 @@ impl MulticenterBondConstraintsView {
                     .multicenter_bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("multicenter bond id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
             MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
                 let bond = bond.bind(py).borrow();

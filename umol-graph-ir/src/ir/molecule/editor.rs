@@ -271,8 +271,11 @@ impl MoleculeEditor {
     }
 
     pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondEditorView<'_> {
-        let set = &self.molecule.multicenter_bonds;
-        MulticenterBondEditorView::new(id, set.atom_nodes(id), set.attributes(id))
+        assert!(
+            self.molecule.multicenter_bonds.contains(id),
+            "invalid multicenter bond id"
+        );
+        MulticenterBondEditorView::new(&self.molecule.multicenter_bonds, id)
     }
 
     pub fn multicenter_bond_mut(

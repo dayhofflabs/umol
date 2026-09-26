@@ -76,7 +76,7 @@ fn test_molecule_electron_attributes(
         (&view.attributes().electrons, view.electron_count())
     } else {
         let view = molecule.multicenter_bond(MulticenterBondId(0));
-        (&view.attributes.electrons, view.electron_count())
+        (&view.attributes().electrons, view.electron_count())
     };
     assert_eq!(stored, &ElectronCountsForm::Lit(counts.clone()));
     assert_eq!(sum, NumForm::Lit(total));
@@ -269,7 +269,7 @@ fn test_reaction_span_electron_attributes(
         } else {
             &molecule
                 .multicenter_bond(MulticenterBondId(0))
-                .attributes
+                .attributes()
                 .electrons
         };
         assert_eq!(stored, &ElectronCountsForm::Lit(expected));

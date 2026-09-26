@@ -953,7 +953,7 @@ pub(crate) fn induced_multicenter_bonds(
     induce_by_key(
         left.multicenter_bonds().iter().filter_map(|multicenter| {
             Some((
-                multicenter.id,
+                multicenter.id(),
                 sorted_atoms(map_atoms(atoms, multicenter.atom_ids())?),
             ))
         }),
@@ -961,7 +961,7 @@ pub(crate) fn induced_multicenter_bonds(
         right
             .multicenter_bonds()
             .iter()
-            .map(|multicenter| (multicenter.id, sorted_atoms(multicenter.atom_ids()))),
+            .map(|multicenter| (multicenter.id(), sorted_atoms(multicenter.atom_ids()))),
         right.multicenter_bonds().count(),
     )
 }

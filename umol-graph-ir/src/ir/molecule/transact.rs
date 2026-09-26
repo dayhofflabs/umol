@@ -1106,7 +1106,7 @@ impl MoleculeEditor {
                 Ok(Undo::RemoveAddedMulticenterBond(AddedMulticenterBond {
                     id,
                     atoms: view.atom_ids().collect(),
-                    attributes: view.attributes.clone(),
+                    attributes: view.attributes().clone(),
                 }))
             }
             Edit::RemoveMulticenterBonds { removes } => {
@@ -1126,7 +1126,7 @@ impl MoleculeEditor {
                     removed.push(RemovedMulticenterBond {
                         id,
                         atoms: current_atoms,
-                        attributes: view.attributes.clone(),
+                        attributes: view.attributes().clone(),
                     });
                     ids.push(id);
                 }
@@ -1490,7 +1490,7 @@ impl MoleculeEditor {
                     .then(|| RemovedMulticenterBond {
                         id,
                         atoms,
-                        attributes: view.attributes.clone(),
+                        attributes: view.attributes().clone(),
                     })
             })
             .collect();
@@ -2990,7 +2990,7 @@ mod tests {
         assert_eq!(
             editor
                 .multicenter_bond(MulticenterBondId(0))
-                .attributes
+                .attributes()
                 .charge,
             NumForm::Lit(-1)
         );
@@ -4478,7 +4478,7 @@ mod tests {
         assert_eq!(
             diatomic_with_overlays
                 .multicenter_bond(MulticenterBondId(0))
-                .attributes
+                .attributes()
                 .charge,
             NumForm::Lit(-1),
         );
@@ -4884,7 +4884,7 @@ mod tests {
         assert_eq!(
             diatomic_with_overlays
                 .multicenter_bond(MulticenterBondId(0))
-                .attributes
+                .attributes()
                 .constraints
                 .iter()
                 .cloned()

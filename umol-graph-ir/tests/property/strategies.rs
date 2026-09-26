@@ -5330,7 +5330,7 @@ fn build_reaction(
         deltas.push(Delta::MulticenterBond(MulticenterBondDelta::Remove {
             id,
             atoms: view.atom_ids().collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for &id in &removed_noncovalent {
@@ -5448,7 +5448,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.multicenter_bond(id).attributes.charge.clone();
+        let old = lhs.multicenter_bond(id).attributes().charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::MulticenterBond(MulticenterBondDelta::ModifyField {

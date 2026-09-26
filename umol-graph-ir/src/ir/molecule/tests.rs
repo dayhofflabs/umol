@@ -1127,7 +1127,7 @@ fn test_molecule_try_from_entries_attributes(
         &entries.aromatic[0].1
     );
     assert_eq!(
-        molecule.multicenter_bond(MulticenterBondId(0)).attributes,
+        molecule.multicenter_bond(MulticenterBondId(0)).attributes(),
         &entries.multicenter[0].1
     );
     assert_eq!(
@@ -2636,7 +2636,7 @@ fn test_molecule_aromatic_systems(#[from(rich_molecule)] molecule: Molecule) {
 #[rstest]
 fn test_molecule_multicenter_bond(#[from(rich_molecule)] molecule: Molecule) {
     let mv = molecule.multicenter_bond(MulticenterBondId(0));
-    assert_eq!(mv.id, MulticenterBondId(0));
+    assert_eq!(mv.id(), MulticenterBondId(0));
     assert_eq!(
         mv.atom_ids().collect::<Vec<_>>(),
         vec![AtomId(0), AtomId(1), AtomId(2)]
@@ -2648,7 +2648,7 @@ fn test_molecule_multicenter_bonds(#[from(rich_molecule)] molecule: Molecule) {
     let projected: Vec<(MulticenterBondId, Vec<AtomId>)> = molecule
         .multicenter_bonds()
         .iter()
-        .map(|v| (v.id, v.atom_ids().collect()))
+        .map(|v| (v.id(), v.atom_ids().collect()))
         .collect();
     assert_eq!(
         projected,
@@ -2958,7 +2958,7 @@ fn test_multicenter_bond_views_incident(
     let got: Vec<MulticenterBondId> = molecule
         .multicenter_bonds()
         .incident(atom)
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     assert_eq!(got, expected);
 }
@@ -2975,7 +2975,7 @@ fn test_multicenter_bond_views_of(
     #[case] expected: Option<MulticenterBondId>,
 ) {
     assert_eq!(
-        molecule.multicenter_bonds().of(atoms).map(|v| v.id),
+        molecule.multicenter_bonds().of(atoms).map(|v| v.id()),
         expected,
     );
 }
@@ -2992,7 +2992,7 @@ fn test_multicenter_bond_views_induced(
         .multicenter_bonds()
         .induced(&atoms)
         .into_iter()
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     assert_eq!(got, expected);
 }
@@ -5404,7 +5404,7 @@ fn test_molecule_editor_multicenter_bond_mut(#[from(rich_molecule)] molecule: Mo
     assert_eq!(
         result
             .multicenter_bond(MulticenterBondId(0))
-            .attributes
+            .attributes()
             .electrons,
         ElectronCountsForm::Lit(vec![1, 1, 0]),
     );
@@ -5796,7 +5796,7 @@ fn test_molecule_index_multicenter_bond(#[from(rich_molecule)] molecule: Molecul
     assert_eq!(
         molecule
             .multicenter_bond(MulticenterBondId(0))
-            .attributes
+            .attributes()
             .electrons,
         ElectronCountsForm::Undetermined
     );
@@ -6296,7 +6296,7 @@ fn test_molecule_multicenter_bond_mut(#[from(rich_molecule)] mut molecule: Molec
     assert_eq!(
         molecule
             .multicenter_bond(MulticenterBondId(0))
-            .attributes
+            .attributes()
             .electrons,
         ElectronCountsForm::Lit(vec![1, 1, 0]),
     );
@@ -6311,7 +6311,7 @@ fn test_molecule_modify_multicenter_bonds(#[from(rich_molecule)] mut molecule: M
     let electrons: Vec<ElectronCountsForm> = molecule
         .multicenter_bonds()
         .iter()
-        .map(|v| v.attributes.electrons.clone())
+        .map(|v| v.attributes().electrons.clone())
         .collect();
     assert_eq!(electrons, vec![ElectronCountsForm::Lit(vec![1, 1, 0])],);
 }
@@ -6327,7 +6327,7 @@ fn test_molecule_try_modify_multicenter_bond(#[from(rich_molecule)] mut molecule
     assert_eq!(
         molecule
             .multicenter_bond(MulticenterBondId(0))
-            .attributes
+            .attributes()
             .electrons,
         ElectronCountsForm::Lit(vec![2, 0, 0]),
     );
@@ -6367,7 +6367,7 @@ fn test_molecule_try_modify_multicenter_bonds(#[from(rich_molecule)] mut molecul
         molecule
             .multicenter_bonds()
             .iter()
-            .map(|view| view.attributes.electrons.clone())
+            .map(|view| view.attributes().electrons.clone())
             .collect::<Vec<_>>(),
         vec![ElectronCountsForm::Lit(vec![2, 0, 0])],
     );
@@ -6385,7 +6385,7 @@ fn test_molecule_try_modify_multicenter_bonds_attributes(
     assert_eq!(
         molecule
             .multicenter_bond(MulticenterBondId(0))
-            .attributes
+            .attributes()
             .electrons,
         electrons
     );

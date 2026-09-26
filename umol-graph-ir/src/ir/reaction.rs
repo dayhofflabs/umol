@@ -618,9 +618,9 @@ fn reaction_frame_action(
         }
     }
     for view in lhs.multicenter_bonds().iter() {
-        if domain.is_none_or(|domain| domain.contains_multicenter_bond(view.id)) {
+        if domain.is_none_or(|domain| domain.contains_multicenter_bond(view.id())) {
             multicenter_bonds.insert(
-                view.id,
+                view.id(),
                 multicenter_bond_representative_action(view.atom_ids().collect()),
             );
         }
@@ -1518,7 +1518,7 @@ impl Reaction {
                         let host_id = host_multicenter(*id)?;
                         sets.update_multicenter_bond(
                             MulticenterBondHandle::Id(host_id),
-                            host.multicenter_bond(host_id).attributes,
+                            host.multicenter_bond(host_id).attributes(),
                             &update,
                         );
                     }
@@ -1530,7 +1530,7 @@ impl Reaction {
                             let host_id = host_multicenter(*id)?;
                             sets.update_multicenter_bond(
                                 MulticenterBondHandle::Id(host_id),
-                                host.multicenter_bond(host_id).attributes,
+                                host.multicenter_bond(host_id).attributes(),
                                 &MulticenterBondUpdate {
                                     constraints: constraint.into(),
                                     ..Default::default()
@@ -2385,9 +2385,9 @@ fn application_frame_actions(
     for rule_view in lhs
         .multicenter_bonds()
         .iter()
-        .filter(|view| domain.contains_multicenter_bond(view.id))
+        .filter(|view| domain.contains_multicenter_bond(view.id()))
     {
-        let id = rule_view.id;
+        let id = rule_view.id();
         let entity = Entity::MulticenterBond(id);
         let host_id = correspondence
             .multicenter_bonds()
@@ -2631,7 +2631,7 @@ fn reframe_application_deltas(
                         .multicenter_bonds()
                         .get(host_id)
                         .ok_or(ApplyError::CorrespondenceMismatch { entity })?
-                        .attributes;
+                        .attributes();
                     match &mut delta {
                         MulticenterBondDelta::Remove { attributes, .. } => {
                             if !attributes.matches(host_attributes) {

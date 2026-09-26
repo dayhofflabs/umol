@@ -444,7 +444,7 @@ proptest! {
         }
         if kinds.contains(&EntityKind::MulticenterBond) {
             prop_assert_eq!(
-                &editor.multicenter_bond(MulticenterBondId(0)).attributes.charge,
+                &editor.multicenter_bond(MulticenterBondId(0)).attributes().charge,
                 &NumForm::Lit(-1),
             );
         }
@@ -538,7 +538,7 @@ proptest! {
             prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.multicenter_bonds().iter() {
-            prop_assert!(view.attributes.constraints.is_empty());
+            prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.noncovalent_bonds().iter() {
             prop_assert!(view.attributes.constraints.is_empty());
@@ -911,7 +911,7 @@ proptest! {
         }
         for (id, key) in multicenter_keys {
             prop_assert!(
-                a.multicenter_bond(id).attributes.constraints.contains(key),
+                a.multicenter_bond(id).attributes().constraints.contains(key),
                 "multicenter bond {id:?} missing key {key:?} after inline",
             );
         }

@@ -102,7 +102,7 @@ impl SpinInvariantsValidator {
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
                         SpinInvariantsContradiction::MulticenterBond {
-                            bond: bond.id,
+                            bond: bond.id(),
                             error,
                         },
                     ));

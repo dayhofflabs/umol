@@ -885,10 +885,10 @@ fn render_multicenter(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'stat
         .iter()
         .map(|view| {
             render_multicenter_entry(
-                view.id,
+                view.id(),
                 view.atom_ids(),
                 Edn::Str(Cow::Owned(
-                    MulticenterBondDsl::from_ref(view.attributes).to_string(),
+                    MulticenterBondDsl::from_ref(view.attributes()).to_string(),
                 )),
                 meta,
             )

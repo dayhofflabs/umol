@@ -715,7 +715,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.multicenter_bond(MulticenterBondId(0)).attributes,
+            mol.multicenter_bond(MulticenterBondId(0)).attributes(),
             &MulticenterBondForm::from_electrons(vec![1, 1, 1])
         );
     }

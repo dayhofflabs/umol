@@ -886,7 +886,7 @@ impl ReactionInput {
                     resolved.push(Delta::MulticenterBond(MulticenterBondDelta::Remove {
                         id,
                         atoms: view.atom_ids().collect(),
-                        attributes: lhs.multicenter_bond(id).attributes.clone(),
+                        attributes: lhs.multicenter_bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::MulticenterBondModify(r, rhs) => {
@@ -900,7 +900,7 @@ impl ReactionInput {
                     }
                     for d in MulticenterBondDelta::for_update(
                         id,
-                        lhs.multicenter_bond(id).attributes,
+                        lhs.multicenter_bond(id).attributes(),
                         &rhs,
                     ) {
                         resolved.push(Delta::MulticenterBond(d));

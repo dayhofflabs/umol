@@ -501,7 +501,7 @@ pub(crate) fn multicenter_valence(molecule: &Molecule, id: AtomId) -> NumForm {
         let Some(pos) = view.atom_ids().position(|atom_id| atom_id == id) else {
             return NumForm::Undetermined;
         };
-        let term = match &view.attributes.electrons {
+        let term = match &view.attributes().electrons {
             ElectronCountsForm::Lit(counts) => counts
                 .get(pos)
                 .map(|&n| NumForm::Lit(n))
@@ -1071,7 +1071,7 @@ mod tests {
         assert_exact_size_by(
             molecule.atom(atom).multicenter_bonds(),
             expected.clone(),
-            |view| view.id,
+            |view| view.id(),
         );
         assert_exact_size_by(molecule.atom(atom).multicenter_bond_ids(), expected, |id| {
             id

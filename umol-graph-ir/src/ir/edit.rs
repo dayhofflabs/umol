@@ -3299,7 +3299,7 @@ mod tests {
             .expect("multicenter-bond update edits should apply");
 
         assert_eq!(
-            editor.multicenter_bond(MulticenterBondId(0)).attributes,
+            editor.multicenter_bond(MulticenterBondId(0)).attributes(),
             &expected_attributes,
         );
     }

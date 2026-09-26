@@ -427,7 +427,7 @@ fn test_molecule_dsl_edn_parse_electrons_undetermined(#[case] source: &str) {
         .chain(
             molecule.multicenter_bonds()
                 .iter()
-                .map(|v| v.attributes.electrons.clone()),
+                .map(|v| v.attributes().electrons.clone()),
         )
         .next()
         .unwrap();

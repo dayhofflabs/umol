@@ -308,7 +308,7 @@ impl Molecule {
     }
 
     pub fn multicenter_bonds(&self) -> MulticenterBondViews<'_> {
-        MulticenterBondViews::new(self, &self.multicenter_bonds)
+        MulticenterBondViews::new(self)
     }
 
     /// View of the multicenter bond with `id`.
@@ -400,7 +400,7 @@ impl Molecule {
             .multicenter_bonds()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_noncovalent_bonds: Vec<NoncovalentBondId> = self
             .noncovalent_bonds()
@@ -698,7 +698,7 @@ impl Molecule {
             self.multicenter_bonds.contains(id),
             "invalid multicenter bond id"
         );
-        MulticenterBondViewMut::new(id, &mut self.multicenter_bonds)
+        MulticenterBondViewMut::new(&mut self.multicenter_bonds, id)
     }
 
     fn multicenter_bond_view_mut(
@@ -709,7 +709,7 @@ impl Molecule {
             self.multicenter_bonds.contains(id),
             "invalid multicenter bond id"
         );
-        MulticenterBondEditorViewMut::new(id, &mut self.multicenter_bonds)
+        MulticenterBondEditorViewMut::new(&mut self.multicenter_bonds, id)
     }
 
     /// Replace every multicenter bond with `f(bond)` in place.
@@ -1149,7 +1149,7 @@ impl Molecule {
                 Constraint::MulticenterBond(id, inner) => {
                     let met = match self
                         .multicenter_bond(*id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                     {
@@ -1397,7 +1397,7 @@ impl Molecule {
                 .extend(molecule.multicenter_bonds().iter().map(|bond| {
                     (
                         bond.atom_ids().map(shift_atom).collect(),
-                        bond.attributes.clone(),
+                        bond.attributes().clone(),
                     )
                 }));
             entries
@@ -1557,7 +1557,7 @@ impl Molecule {
         for bond in other.multicenter_bonds().iter() {
             editor.add_multicenter_bond(
                 &bond.atom_ids().map(shift_atom).collect::<Vec<_>>(),
-                bond.attributes.clone(),
+                bond.attributes().clone(),
             );
         }
         for bond in other.noncovalent_bonds().iter() {
@@ -1804,9 +1804,9 @@ impl Molecule {
                     {
                         let added = editor.add_multicenter_bond(
                             &members.iter().map(|a| map_atom(*a)).collect::<Vec<_>>(),
-                            bond.attributes.clone(),
+                            bond.attributes().clone(),
                         );
-                        multicenter_pairs.push((bond.id, added));
+                        multicenter_pairs.push((bond.id(), added));
                     }
                 }
                 let mut noncovalent_pairs = Vec::new();

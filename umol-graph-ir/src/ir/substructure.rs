@@ -502,10 +502,10 @@ impl Molecule {
                 .collect();
             let action = DynPermutation::between(&pat_atoms, &host_frame)?;
             if !p_view
-                .attributes
+                .attributes()
                 .clone()
                 .reframe_by(&action)?
-                .matches(h_view.attributes)
+                .matches(h_view.attributes())
             {
                 return None;
             }

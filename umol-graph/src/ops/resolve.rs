@@ -514,9 +514,9 @@ impl<'a> Resolver<'a> {
             })
             .chain(molecule.multicenter_bonds().iter().map(|bond| {
                 (
-                    Entity::MulticenterBond(bond.id),
-                    &bond.attributes.charge,
-                    &bond.attributes.unpaired_electrons,
+                    Entity::MulticenterBond(bond.id()),
+                    &bond.attributes().charge,
+                    &bond.attributes().unpaired_electrons,
                 )
             }));
         for (entity, charge, spin) in bonds {
@@ -794,7 +794,12 @@ impl<'a> Resolver<'a> {
             }
         }
         for id in molecule.multicenter_bonds().ids() {
-            for asserted in molecule.multicenter_bond(id).attributes.constraints.iter() {
+            for asserted in molecule
+                .multicenter_bond(id)
+                .attributes()
+                .constraints
+                .iter()
+            {
                 let Some(derived) = molecule
                     .multicenter_bond(id)
                     .constraints()
@@ -813,7 +818,7 @@ impl<'a> Resolver<'a> {
                         update.constraints.set(asserted.as_undetermined());
                         edits.update_multicenter_bond(
                             MulticenterBondHandle::Id(id),
-                            molecule.multicenter_bond(id).attributes,
+                            molecule.multicenter_bond(id).attributes(),
                             &update,
                         );
                     }
@@ -1023,7 +1028,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
                 let stored = multicenter.remove(&(id, inner.key())).or_else(|| {
                     molecule
                         .multicenter_bond(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                         .cloned()
@@ -1133,7 +1138,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
         update.constraints.set(form);
         edits.update_multicenter_bond(
             MulticenterBondHandle::Id(id),
-            molecule.multicenter_bond(id).attributes,
+            molecule.multicenter_bond(id).attributes(),
             &update,
         );
     }

@@ -380,7 +380,7 @@ fn check_multicenter_bonds(
     if molecule.atoms.len() <= 128 {
         let mut identities = HashSet::with_capacity(molecule.multicenter_bonds.count());
         for view in molecule.multicenter_bonds().iter() {
-            let entity = Entity::MulticenterBond(view.id);
+            let entity = Entity::MulticenterBond(view.id());
             require_references(contains, view.atom_ids().map(Entity::Atom))?;
             let mut atoms = [0_u64; 2];
             for atom in view.atom_ids() {
@@ -399,7 +399,7 @@ fn check_multicenter_bonds(
     } else {
         let mut identities = HashSet::with_capacity(molecule.multicenter_bonds.count());
         for view in molecule.multicenter_bonds().iter() {
-            let entity = Entity::MulticenterBond(view.id);
+            let entity = Entity::MulticenterBond(view.id());
             require_references(contains, view.atom_ids().map(Entity::Atom))?;
             let mut atoms: Vec<_> = view.atom_ids().collect();
             atoms.sort_unstable();

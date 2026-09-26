@@ -56,7 +56,7 @@ impl MulticenterBondsResolver {
 
         let mut edits = Edits::new();
         for bond_id in molecule.multicenter_bonds().ids() {
-            let bond = molecule.multicenter_bond(bond_id).attributes;
+            let bond = molecule.multicenter_bond(bond_id).attributes();
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = MulticenterBondUpdate::default();
             if matches!(bond.charge, NumForm::Undetermined) {

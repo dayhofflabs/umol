@@ -622,7 +622,7 @@ impl ReactionSpan {
                     .map(|view| {
                         (
                             view.atom_ids().map(NodeId::from).collect(),
-                            view.attributes.clone(),
+                            view.attributes().clone(),
                         )
                     })
                     .collect(),
@@ -767,7 +767,7 @@ impl ReactionSpan {
             let participants: Vec<AtomId> = view.atom_ids().collect();
             // The span carries one participant frame per entity, the lhs one, so the rhs form is
             // restated into it before the two sides are compared.
-            let rhs_attributes = match multicenter_corr.right_of(view.id) {
+            let rhs_attributes = match multicenter_corr.right_of(view.id()) {
                 Some(id) => {
                     let relation_id = RelationId::from(id);
                     let rhs_frame: Vec<AtomId> = remapped_rhs_multicenter
@@ -788,7 +788,7 @@ impl ReactionSpan {
             };
             multicenter.push((
                 participants,
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes().clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &multicenter_corr.right_unmatched() {
@@ -2304,10 +2304,10 @@ impl Reaction {
                 .atom_ids()
                 .map(|a| AtomId(atom_index[&a] as u32))
                 .collect();
-            if let Some(attributes) = removed_multicenter.get(&view.id) {
+            if let Some(attributes) = removed_multicenter.get(&view.id()) {
                 multicenter.push((participants, EntitySpan::Removed(attributes.clone())));
-            } else if let Some(changes) = multicenter_changes.get(&view.id) {
-                let left = view.attributes.clone();
+            } else if let Some(changes) = multicenter_changes.get(&view.id()) {
+                let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_multicenter_change(&mut right, change)?;
@@ -2320,7 +2320,10 @@ impl Reaction {
                     },
                 ));
             } else {
-                multicenter.push((participants, EntitySpan::Unchanged(view.attributes.clone())));
+                multicenter.push((
+                    participants,
+                    EntitySpan::Unchanged(view.attributes().clone()),
+                ));
             }
         }
         for (atoms, attributes) in added_multicenter.into_values() {

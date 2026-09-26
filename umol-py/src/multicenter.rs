@@ -364,7 +364,7 @@ impl MulticenterBondView {
         Ok(ElectronCountsForm::from_rust(
             &self
                 .multicenter_bond(molecule.to_rust())?
-                .attributes
+                .attributes()
                 .electrons,
         ))
     }
@@ -384,7 +384,10 @@ impl MulticenterBondView {
         let molecule = self.owner.bind(py).borrow();
         NumForm::from_rust(
             py,
-            &self.multicenter_bond(molecule.to_rust())?.attributes.charge,
+            &self
+                .multicenter_bond(molecule.to_rust())?
+                .attributes()
+                .charge,
         )
     }
 
@@ -405,7 +408,7 @@ impl MulticenterBondView {
             py,
             &self
                 .multicenter_bond(molecule.to_rust())?
-                .attributes
+                .attributes()
                 .unpaired_electrons,
         )
     }
@@ -456,7 +459,7 @@ impl MulticenterBondView {
     /// symmetric with `MulticenterBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let bond = self.multicenter_bond(molecule.to_rust())?.attributes;
+        let bond = self.multicenter_bond(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item("electrons", ElectronCountsForm::from_rust(&bond.electrons))?;
         dict.set_item("charge", NumForm::from_rust(py, &bond.charge)?)?;
