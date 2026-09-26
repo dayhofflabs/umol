@@ -247,13 +247,11 @@ impl MoleculeEditor {
     }
 
     pub fn dative_bond(&self, id: DativeBondId) -> DativeBondEditorView<'_> {
-        let set = &self.molecule.dative_bonds;
-        DativeBondEditorView::new(
-            id,
-            set.donor_nodes(id),
-            set.acceptor(id),
-            set.attributes(id),
-        )
+        assert!(
+            self.molecule.dative_bonds.contains(id),
+            "invalid dative bond id"
+        );
+        DativeBondEditorView::new(&self.molecule.dative_bonds, id)
     }
 
     pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
@@ -1923,7 +1921,7 @@ mod tests {
         let removed = RemovedDativeBond {
             id: DativeBondId(0),
             atoms: view.atom_ids().collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         };
 
         b.remove_dative_bonds(&[DativeBondId(0)]);

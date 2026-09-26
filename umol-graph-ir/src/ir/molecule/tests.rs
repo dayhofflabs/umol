@@ -2579,14 +2579,14 @@ fn test_molecule_bonds(#[from(rich_molecule)] molecule: Molecule) {
 #[rstest]
 fn test_molecule_dative_bond(#[from(rich_molecule)] molecule: Molecule) {
     let dv = molecule.dative_bond(DativeBondId(0));
-    assert_eq!(dv.id, DativeBondId(0));
+    assert_eq!(dv.id(), DativeBondId(0));
     assert_eq!(dv.acceptor_id(), AtomId(3));
     assert_eq!(dv.donor_ids().collect::<Vec<_>>(), vec![AtomId(2)]);
     assert_eq!(
         dv.atom_ids().collect::<Vec<_>>(),
         vec![AtomId(2), AtomId(3)]
     );
-    assert_eq!(dv.attributes.order, NumForm::Lit(1));
+    assert_eq!(dv.attributes().order, NumForm::Lit(1));
 }
 
 #[rstest]
@@ -2594,7 +2594,7 @@ fn test_molecule_dative_bonds(#[from(rich_molecule)] molecule: Molecule) {
     let projected: Vec<(DativeBondId, Vec<AtomId>, AtomId)> = molecule
         .dative_bonds()
         .iter()
-        .map(|v| (v.id, v.donor_ids().collect(), v.acceptor_id()))
+        .map(|v| (v.id(), v.donor_ids().collect(), v.acceptor_id()))
         .collect();
     assert_eq!(
         projected,
@@ -2857,7 +2857,7 @@ fn test_dative_bond_views_incident(
     let got: Vec<DativeBondId> = molecule
         .dative_bonds()
         .incident(atom)
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     assert_eq!(got, expected);
 }
@@ -2872,7 +2872,10 @@ fn test_dative_bond_views_of(
     #[case] expected: Option<DativeBondId>,
 ) {
     assert_eq!(
-        molecule.dative_bonds().of(acceptor, &donors).map(|v| v.id),
+        molecule
+            .dative_bonds()
+            .of(acceptor, &donors)
+            .map(|v| v.id()),
         expected
     );
 }
@@ -2889,7 +2892,7 @@ fn test_dative_bond_views_induced(
         .dative_bonds()
         .induced(&atoms)
         .into_iter()
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     assert_eq!(got, expected);
 }
@@ -3745,7 +3748,7 @@ fn test_molecule_induced_subgraph_preserves_dative(#[from(rich_molecule)] molecu
     let dv = extracted.dative_bond(DativeBondId(0));
     assert_eq!(dv.acceptor_id(), AtomId(1));
     assert_eq!(dv.donor_ids().collect::<Vec<_>>(), vec![AtomId(0)]);
-    assert_eq!(dv.attributes.order, NumForm::Lit(1));
+    assert_eq!(dv.attributes().order, NumForm::Lit(1));
 }
 
 #[rstest]
@@ -5365,12 +5368,12 @@ fn test_molecule_editor_dative_bond_mut(#[from(rich_molecule)] molecule: Molecul
     let result = b.build();
     assert!(!result
         .dative_bond(DativeBondId(0))
-        .attributes
+        .attributes()
         .constraints
         .is_empty());
     assert!(molecule
         .dative_bond(DativeBondId(0))
-        .attributes
+        .attributes()
         .constraints
         .is_empty());
 }
@@ -5772,7 +5775,7 @@ fn test_molecule_index_bond(#[from(rich_molecule)] molecule: Molecule) {
 #[rstest]
 fn test_molecule_index_dative_bond(#[from(rich_molecule)] molecule: Molecule) {
     assert_eq!(
-        molecule.dative_bond(DativeBondId(0)).attributes.order,
+        molecule.dative_bond(DativeBondId(0)).attributes().order,
         NumForm::Lit(1)
     );
 }
@@ -6169,7 +6172,10 @@ fn test_molecule_dative_bond_mut(#[from(rich_molecule)] mut molecule: Molecule) 
             1,
         ));
     assert_eq!(
-        molecule.dative_bond(DativeBondId(0)).attributes.constraints,
+        molecule
+            .dative_bond(DativeBondId(0))
+            .attributes()
+            .constraints,
         DativeBondConstraintsForm::from_iter([DativeBondConstraintForm::ring_membership(
             RingScope::Size(6),
             1
@@ -6608,7 +6614,7 @@ fn test_molecule_lift_constraints_drains_inline_stores(
     assert!(molecule.bond(BondId(0)).attributes().constraints.is_empty());
     assert!(molecule
         .dative_bond(DativeBondId(0))
-        .attributes
+        .attributes()
         .constraints
         .is_empty());
 
@@ -6689,7 +6695,10 @@ fn test_molecule_inline_constraints_drains_top_level_leaves(
         BondConstraintsForm::from_iter([BondConstraintForm::Aromatic(BooleanForm::Lit(true))])
     );
     assert_eq!(
-        molecule.dative_bond(DativeBondId(0)).attributes.constraints,
+        molecule
+            .dative_bond(DativeBondId(0))
+            .attributes()
+            .constraints,
         DativeBondConstraintsForm::from_iter([DativeBondConstraintForm::ring_membership(
             RingScope::Size(5),
             1

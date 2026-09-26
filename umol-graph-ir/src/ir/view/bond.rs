@@ -324,12 +324,9 @@ impl<'a> BondEditorViewMut<'a> {
     }
 }
 
-// Derivation layer beneath the bond facades: functions of the molecule and
-// bond id, presented by `BondView` (typed) and `BondConstraintsView` (keyed).
-
-/// Stored constraint container of `bond`.
-pub(crate) fn bond_asserted_constraints(molecule: &Molecule, bond: BondId) -> &BondConstraintsForm {
-    &molecule.bond(bond).attributes().constraints
+/// Stored constraint container of bond `id`.
+pub(crate) fn bond_asserted_constraints(molecule: &Molecule, id: BondId) -> &BondConstraintsForm {
+    &molecule.bond(id).attributes().constraints
 }
 
 /// Asserted side of one bond constraint key under resolution's closed-world
@@ -338,10 +335,10 @@ pub(crate) fn bond_asserted_constraints(molecule: &Molecule, bond: BondId) -> &B
 /// without its own `#a` assertion reads `Lit(false)`.
 pub(crate) fn bond_asserted_complete_constraint(
     molecule: &Molecule,
-    bond: BondId,
+    id: BondId,
     key: BondConstraintKey,
 ) -> Option<BondConstraintForm> {
-    if let Some(asserted) = bond_asserted_constraints(molecule, bond).get(key) {
+    if let Some(asserted) = bond_asserted_constraints(molecule, id).get(key) {
         return Some(asserted.clone());
     }
     match key {
@@ -363,14 +360,14 @@ pub(crate) fn bond_asserted_complete_constraint(
 /// the caller scanning keys decides whether to build the ring set.
 pub(crate) fn bond_derived_constraint(
     molecule: &Molecule,
-    bond: BondId,
+    id: BondId,
     rings: Option<&RingSet>,
     key: BondConstraintKey,
     complete: bool,
 ) -> Option<BondConstraintForm> {
     match key {
         BondConstraintKey::Aromatic => {
-            if molecule.bond(bond).is_in_aromatic_system() {
+            if molecule.bond(id).is_in_aromatic_system() {
                 Some(BondConstraintForm::aromatic(BooleanForm::Lit(true)))
             } else if complete {
                 Some(BondConstraintForm::aromatic(BooleanForm::Lit(false)))
@@ -381,7 +378,7 @@ pub(crate) fn bond_derived_constraint(
         BondConstraintKey::CisTransStereo => {
             // Total over staging entities: an undetermined kind or coset is
             // an open claim, not the absence of one.
-            if let Some(stereo) = molecule.stereo_bonds().at(bond) {
+            if let Some(stereo) = molecule.stereo_bonds().at(id) {
                 let form = match (
                     stereo.attributes.configuration.kind(),
                     stereo.attributes.configuration.coset(),
@@ -407,7 +404,7 @@ pub(crate) fn bond_derived_constraint(
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
             Some(BondConstraintForm::ring_membership(
                 scope,
-                bond_ring_membership(rings, bond, scope),
+                bond_ring_membership(rings, id, scope),
             ))
         }
     }

@@ -18,7 +18,7 @@ This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c
 S2a, the revised S2b, S2c, S2d, S2g, S2h, and S2i1 are implemented. The previous S2b mutable-view
 attempt was reverted. S2i2–S2i4 are complete; the migration compiles and its
 verification passes. S2i5 is complete: mutable molecule/editor views are separate
-types. Atom and localized-bond views expose private ids and attribute borrows
+types. Atom, localized-bond, and dative-bond views expose private ids and attribute borrows
 through matching accessors. The S2j attempt is reverted; the rest of its revised getter inventory
 awaits review. S2f is cancelled and the remaining
 S2 work is unimplemented. Graph-core mutation and restoration are complete in
@@ -1281,17 +1281,27 @@ new takes those three arguments. All four expose atom_ids() -> [AtomId; 2],
 copying only the two ids, without allocation. All fields are private, and matching
 accessors use #[inline]. Python properties and setters are unchanged.
 
+DativeBondView stores molecule and id. DativeBondEditorView stores dative_bonds:
+&DativeBonds and id; both mutable views store dative_bonds: &mut DativeBonds and
+id. Fields and constructor arguments put the owning borrow first. All fields are
+private. All four expose id(), attributes(), donor_ids(), acceptor_id(), and
+atom_ids(), with #[inline] on matching accessors. Donor and combined-atom getters
+return lazy exact-size iterators in stored donor order; atom_ids appends the
+acceptor. Readonly references/iterators retain 'a; mutable-view accessor borrows
+last for the method borrow. Both mutable views expose attributes_mut(). Public
+entity lookup preserves invalid-id panics; the namespace's get remains optional.
+
 The readonly storage design retains a separately supplied attribute borrow for
 atoms and localized bonds. Relation views can retrieve their attributes from the
-owning entity set through molecule and id. These changes cover atom and
-localized-bond views; other immutable views retain their current fields and methods.
+owning entity set through molecule and id. These changes cover atom, localized-bond,
+and dative-bond views; other immutable views retain their current fields and methods.
 
 For the remaining proposed getter work, make the editor's
 atoms, site, and ligands fields private and migrate their reads to atom_ids(),
 site_id(), and ligand_frame(). These match the molecule views. The immutable
 editor views retain their existing local storage, without a Molecule borrow.
 
-Retain the existing crate-private dative/aromatic/multicenter constructors. For
+Retain the existing crate-private aromatic/multicenter constructors. For
 the three remaining editor views whose public structural fields become private, add
 crate-private new methods on impl<'a>, returning Self with these arguments:
 
@@ -3325,7 +3335,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   | --- | --- | --- |
   | AtomViewMut<'a> | AtomEditorViewMut<'a> | id: AtomId; attributes: &'a mut AtomForm |
   | BondViewMut<'a> | BondEditorViewMut<'a> | id: BondId; atoms: [AtomId; 2]; attributes: &'a mut BondForm |
-  | DativeBondViewMut<'a> | DativeBondEditorViewMut<'a> | id: DativeBondId; dative_bonds: &'a mut DativeBonds |
+  | DativeBondViewMut<'a> | DativeBondEditorViewMut<'a> | dative_bonds: &'a mut DativeBonds; id: DativeBondId |
   | AromaticSystemViewMut<'a> | AromaticSystemEditorViewMut<'a> | id: AromaticSystemId; aromatic_systems: &'a mut AromaticSystems |
   | MulticenterBondViewMut<'a> | MulticenterBondEditorViewMut<'a> | id: MulticenterBondId; multicenter_bonds: &'a mut MulticenterBonds |
   | NoncovalentBondViewMut<'a> | NoncovalentBondEditorViewMut<'a> | id: NoncovalentBondId; noncovalent_bonds: &'a mut NoncovalentBonds |
@@ -3405,6 +3415,15 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   graph-IR rustdoc with warnings denied pass. Strict Clippy for the four affected
   crates, nightly formatting, and git diff --check pass. Reviewed the full diff;
   callers preserve their operations and assertions.
+
+  **Dative accessor alignment — completed 2026-09-26.** The four dative views
+  expose matching id, attribute, donor-id, acceptor-id, and combined-atom accessors.
+  Callers are migrated; invalid-id panics and Python properties are preserved.
+  The 34 added cases cover row selection, readonly borrow lifetimes, donor order,
+  empty donor lists, and write-through mutation. Graph-IR unit tests pass
+  (7,122 passed, three ignored), along with 37 Python dative tests after rebuilding.
+  Feature-enabled workspace all-target compilation, affected-crate strict Clippy,
+  graph-IR rustdoc, nightly formatting, and diff checks pass. Full diff reviewed.
 
 - **S2j — Local getters and editor structural mutation**
   (`ir::{id,view}`, typed sets, ligand_frame callers and bindings; additive

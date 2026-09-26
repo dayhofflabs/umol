@@ -907,12 +907,12 @@ pub(crate) fn induced_dative_bonds(
             ) else {
                 return None;
             };
-            Some((dative.id, (acceptor, sorted_atoms(donors))))
+            Some((dative.id(), (acceptor, sorted_atoms(donors))))
         }),
         left.dative_bonds().count(),
         right.dative_bonds().iter().map(|dative| {
             (
-                dative.id,
+                dative.id(),
                 (dative.acceptor_id(), sorted_atoms(dative.donor_ids())),
             )
         }),

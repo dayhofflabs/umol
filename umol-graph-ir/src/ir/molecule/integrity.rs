@@ -272,7 +272,7 @@ fn check_dative_bonds(
     if molecule.atoms.len() <= 128 {
         let mut identities = HashSet::with_capacity(molecule.dative_bonds.count());
         for view in molecule.dative_bonds().iter() {
-            let entity = Entity::DativeBond(view.id);
+            let entity = Entity::DativeBond(view.id());
             let acceptor = view.acceptor_id();
             require_references(contains, view.atom_ids().map(Entity::Atom))?;
             let mut donors = [0_u64; 2];
@@ -299,7 +299,7 @@ fn check_dative_bonds(
     } else {
         let mut identities = HashSet::with_capacity(molecule.dative_bonds.count());
         for view in molecule.dative_bonds().iter() {
-            let entity = Entity::DativeBond(view.id);
+            let entity = Entity::DativeBond(view.id());
             let acceptor = view.acceptor_id();
             require_references(contains, view.atom_ids().map(Entity::Atom))?;
             let mut donors: Vec<_> = view.donor_ids().collect();

@@ -602,9 +602,9 @@ fn reaction_frame_action(
     let mut stereo_bonds = BTreeMap::new();
 
     for view in lhs.dative_bonds().iter() {
-        if domain.is_none_or(|domain| domain.contains_dative_bond(view.id)) {
+        if domain.is_none_or(|domain| domain.contains_dative_bond(view.id())) {
             dative_bonds.insert(
-                view.id,
+                view.id(),
                 dative_bond_representative_action(view.donor_ids().collect()),
             );
         }
@@ -1420,7 +1420,7 @@ impl Reaction {
                         let host_id = host_dative(*id)?;
                         sets.update_dative_bond(
                             DativeBondHandle::Id(host_id),
-                            host.dative_bond(host_id).attributes,
+                            host.dative_bond(host_id).attributes(),
                             &update,
                         );
                     }
@@ -1432,7 +1432,7 @@ impl Reaction {
                             let host_id = host_dative(*id)?;
                             sets.update_dative_bond(
                                 DativeBondHandle::Id(host_id),
-                                host.dative_bond(host_id).attributes,
+                                host.dative_bond(host_id).attributes(),
                                 &DativeBondUpdate {
                                     constraints: constraint.into(),
                                     ..Default::default()
@@ -2323,9 +2323,9 @@ fn application_frame_actions(
     for rule_view in lhs
         .dative_bonds()
         .iter()
-        .filter(|view| domain.contains_dative_bond(view.id))
+        .filter(|view| domain.contains_dative_bond(view.id()))
     {
-        let id = rule_view.id;
+        let id = rule_view.id();
         let entity = Entity::DativeBond(id);
         let host_id = correspondence
             .dative_bonds()
@@ -2548,7 +2548,7 @@ fn reframe_application_deltas(
                             .dative_bonds()
                             .get(host_id)
                             .ok_or(ApplyError::CorrespondenceMismatch { entity })?
-                            .attributes;
+                            .attributes();
                         if !attributes.matches(host_attributes) {
                             return Err(ApplyError::CorrespondenceMismatch { entity });
                         }

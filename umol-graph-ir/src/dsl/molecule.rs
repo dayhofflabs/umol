@@ -798,10 +798,10 @@ fn render_dative(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
         .iter()
         .map(|view| {
             render_dative_entry(
-                view.id,
+                view.id(),
                 view.donor_ids(),
                 view.acceptor_id(),
-                DativeBondDsl::from_ref(view.attributes).to_edn(),
+                DativeBondDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })

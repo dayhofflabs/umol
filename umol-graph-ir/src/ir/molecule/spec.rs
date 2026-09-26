@@ -685,7 +685,7 @@ mod tests {
 
         assert_eq!(mol.dative_bonds().count(), 1);
         assert_eq!(
-            mol.dative_bond(DativeBondId(0)).attributes,
+            mol.dative_bond(DativeBondId(0)).attributes(),
             &DativeBondForm::default()
         );
     }

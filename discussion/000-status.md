@@ -44,7 +44,7 @@ the statuses recorded here remain authoritative.
   and S2d's role-only incidence/count-aware consumers are complete. S2g's
   frame-consumer checks, S2h's aggregate-integrity changes, and S2i1 are complete.
   S2i2–S2i5 are complete, including separate mutable molecule/editor view types.
-  Atom and localized-bond id/attribute accessors are aligned; the S2j attempt is
+  Atom, localized-bond, and dative-bond id/attribute accessors are aligned; the S2j attempt is
   reverted and the rest of its revised getter inventory awaits review. Uniform unchecked
   entity-attribute assignment is settled for Rust and Python.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)

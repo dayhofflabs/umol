@@ -596,7 +596,7 @@ impl ReactionSpan {
                         (
                             [NodeId::from(view.acceptor_id())],
                             view.donor_ids().map(NodeId::from).collect(),
-                            view.attributes.clone(),
+                            view.attributes().clone(),
                         )
                     })
                     .collect(),
@@ -834,12 +834,12 @@ impl ReactionSpan {
             let acceptor = view.acceptor_id();
             let donors = view.donor_ids().collect();
             let rhs_attributes = dative_corr
-                .right_of(view.id)
+                .right_of(view.id())
                 .map(|id| remapped_rhs_dative.data(id.into()).clone());
             dative.push((
                 donors,
                 acceptor,
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes().clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &dative_corr.right_unmatched() {
@@ -2366,10 +2366,10 @@ impl Reaction {
                 .donor_ids()
                 .map(|a| AtomId(atom_index[&a] as u32))
                 .collect();
-            if let Some(attributes) = removed_dative.get(&view.id) {
+            if let Some(attributes) = removed_dative.get(&view.id()) {
                 dative.push((donors, acceptor, EntitySpan::Removed(attributes.clone())));
-            } else if let Some(changes) = dative_changes.get(&view.id) {
-                let left = view.attributes.clone();
+            } else if let Some(changes) = dative_changes.get(&view.id()) {
+                let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_dative_change(&mut right, change)?;
@@ -2386,7 +2386,7 @@ impl Reaction {
                 dative.push((
                     donors,
                     acceptor,
-                    EntitySpan::Unchanged(view.attributes.clone()),
+                    EntitySpan::Unchanged(view.attributes().clone()),
                 ));
             }
         }

@@ -71,7 +71,7 @@ impl RingConstraintInvariantsValidator {
             }) {
                 return Err(
                     ConstraintInvariantsError::DativeBondRingMembershipUnsupported {
-                        bond: bond.id,
+                        bond: bond.id(),
                     },
                 );
             }

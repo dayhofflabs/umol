@@ -495,7 +495,7 @@ fn convey_molecule(
         table.bonds.push(lowered);
     }
     for bond in molecule.dative_bonds().iter() {
-        let entity = Entity::DativeBond(bond.id);
+        let entity = Entity::DativeBond(bond.id());
         let mut donors = bond.donor_ids();
         let Some(donor) = donors.next() else {
             return Err(ConveyError::Entity { entity });
@@ -503,10 +503,10 @@ fn convey_molecule(
         if donors.next().is_some() {
             return Err(ConveyError::Entity { entity });
         }
-        for constraint in bond.attributes.constraints.iter() {
+        for constraint in bond.attributes().constraints.iter() {
             if !constraint.is_undetermined() {
                 return Err(ConveyError::Constraint(Constraint::DativeBond(
-                    bond.id,
+                    bond.id(),
                     constraint.clone(),
                 )));
             }
@@ -514,7 +514,7 @@ fn convey_molecule(
         table.bonds.push(Bond::new_dative(
             donor.0,
             bond.acceptor_id().0,
-            lower_order(&bond.attributes.order, entity)?,
+            lower_order(&bond.attributes().order, entity)?,
             BondDonation::Donating,
         ));
     }

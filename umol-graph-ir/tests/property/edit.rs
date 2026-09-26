@@ -432,7 +432,7 @@ proptest! {
         }
         if kinds.contains(&EntityKind::DativeBond) {
             prop_assert_eq!(
-                &editor.dative_bond(DativeBondId(0)).attributes.order,
+                &editor.dative_bond(DativeBondId(0)).attributes().order,
                 &NumForm::Lit(2),
             );
         }
@@ -532,7 +532,7 @@ proptest! {
             prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.dative_bonds().iter() {
-            prop_assert!(view.attributes.constraints.is_empty());
+            prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.aromatic_systems().iter() {
             prop_assert!(view.attributes.constraints.is_empty());
@@ -899,7 +899,7 @@ proptest! {
         }
         for (id, key) in dative_keys {
             prop_assert!(
-                a.dative_bond(id).attributes.constraints.contains(key),
+                a.dative_bond(id).attributes().constraints.contains(key),
                 "dative bond {id:?} missing key {key:?} after inline",
             );
         }

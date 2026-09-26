@@ -725,7 +725,7 @@ impl<'a> Resolver<'a> {
             }
         }
         for id in molecule.dative_bonds().ids() {
-            for asserted in molecule.dative_bond(id).attributes.constraints.iter() {
+            for asserted in molecule.dative_bond(id).attributes().constraints.iter() {
                 let Some(derived) = molecule
                     .dative_bond(id)
                     .constraints()
@@ -757,7 +757,7 @@ impl<'a> Resolver<'a> {
                         update.constraints.set(asserted.as_undetermined());
                         edits.update_dative_bond(
                             DativeBondHandle::Id(id),
-                            molecule.dative_bond(id).attributes,
+                            molecule.dative_bond(id).attributes(),
                             &update,
                         );
                     }
@@ -987,7 +987,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
                 let stored = dative.remove(&(id, inner.key())).or_else(|| {
                     molecule
                         .dative_bond(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                         .cloned()
@@ -1115,7 +1115,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
         update.constraints.set(form);
         edits.update_dative_bond(
             DativeBondHandle::Id(id),
-            molecule.dative_bond(id).attributes,
+            molecule.dative_bond(id).attributes(),
             &update,
         );
     }

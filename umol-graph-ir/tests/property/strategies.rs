@@ -5314,7 +5314,7 @@ fn build_reaction(
             id,
             donors: view.donor_ids().collect(),
             acceptor: view.acceptor_id(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for &id in &removed_aromatic {
@@ -5418,7 +5418,7 @@ fn build_reaction(
             continue;
         }
         let Some(order) = new_order else { continue };
-        let old = lhs.dative_bond(id).attributes.order.clone();
+        let old = lhs.dative_bond(id).attributes().order.clone();
         let new = NumForm::Lit(order);
         if old != new {
             deltas.push(Delta::DativeBond(DativeBondDelta::ModifyField {
@@ -5466,7 +5466,7 @@ fn build_reaction(
         }
         let has_aromatic = lhs
             .dative_bond(id)
-            .attributes
+            .attributes()
             .constraints
             .iter()
             .any(|c| matches!(c, DativeBondConstraintForm::Aromatic(_)));

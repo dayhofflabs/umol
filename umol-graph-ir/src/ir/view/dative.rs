@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::iter;
 
-use umol_graph_core::{NodeId, RelationId};
+use umol_graph_core::NodeId;
 
 use super::super::constraint::{
     DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsForm,
@@ -41,14 +41,9 @@ impl<'a> DativeBondViews<'a> {
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = DativeBondView<'a>> {
         let molecule = self.molecule;
-        let set = self.dative_bonds;
-        set.ids().map(move |id| DativeBondView {
-            id,
-            attributes: set.attributes(id),
-            acceptor: set.acceptor_node(id),
-            donors: set.donor_nodes(id),
-            molecule,
-        })
+        self.dative_bonds
+            .ids()
+            .map(move |id| DativeBondView { molecule, id })
     }
 
     pub fn contains(&self, id: DativeBondId) -> bool {
@@ -59,13 +54,9 @@ impl<'a> DativeBondViews<'a> {
         if !self.contains(id) {
             return None;
         }
-        let _rid = RelationId::from(id);
         Some(DativeBondView {
-            id,
-            attributes: self.dative_bonds.attributes(id),
-            acceptor: self.dative_bonds.acceptor_node(id),
-            donors: self.dative_bonds.donor_nodes(id),
             molecule: self.molecule,
+            id,
         })
     }
 
@@ -82,17 +73,8 @@ impl<'a> DativeBondViews<'a> {
     /// Views of dative bonds incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl ExactSizeIterator<Item = DativeBondView<'a>> + 'a {
         let molecule = self.molecule;
-        let set = self.dative_bonds;
-        self.incident_ids(atom).map(move |id| {
-            let _rid = RelationId::from(id);
-            DativeBondView {
-                id,
-                attributes: set.attributes(id),
-                acceptor: set.acceptor_node(id),
-                donors: set.donor_nodes(id),
-                molecule,
-            }
-        })
+        self.incident_ids(atom)
+            .map(move |id| DativeBondView { molecule, id })
     }
 
     /// Id of the dative bond with exactly this acceptor and donor set, if any. Per-factor: the
@@ -141,17 +123,27 @@ impl<'a> DativeBondViews<'a> {
 /// the full participant set (donors then acceptor) via `atoms()` / `atom_ids()`.
 #[derive(Clone, Copy, Debug)]
 pub struct DativeBondView<'a> {
-    pub id: DativeBondId,
-    acceptor: NodeId,
-    donors: &'a [NodeId],
-    pub attributes: &'a DativeBondForm,
     molecule: &'a Molecule,
+    id: DativeBondId,
 }
 
 impl<'a> DativeBondView<'a> {
     #[inline]
+    pub fn id(&self) -> DativeBondId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &'a DativeBondForm {
+        self.molecule
+            .dative_bonds()
+            .dative_bonds
+            .attributes(self.id)
+    }
+
+    #[inline]
     pub fn order(&self) -> &'a NumForm {
-        &self.attributes.order
+        &self.attributes().order
     }
 
     /// Constraint reading of this dative bond: the container's read API
@@ -163,25 +155,20 @@ impl<'a> DativeBondView<'a> {
     }
 
     /// Donor atom ids.
+    #[inline]
     pub fn donor_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.donors.iter().map(|&n| AtomId::from(n))
+        self.molecule.dative_bonds().dative_bonds.donors(self.id)
     }
 
+    #[inline]
     pub fn acceptor_id(&self) -> AtomId {
-        AtomId::from(self.acceptor)
+        self.molecule.dative_bonds().dative_bonds.acceptor(self.id)
     }
 
     /// All atoms in this dative bond: the donors followed by the acceptor.
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        let donors = self.donors;
-        let acceptor = self.acceptor;
-        (0..donors.len() + 1).map(move |index| {
-            AtomId::from(if index < donors.len() {
-                donors[index]
-            } else {
-                acceptor
-            })
-        })
+        dative_bond_atom_ids(self.molecule.dative_bonds().dative_bonds, self.id)
     }
 
     /// Donor atom views.
@@ -202,7 +189,7 @@ impl<'a> DativeBondView<'a> {
     }
 
     pub fn donor_count(&self) -> usize {
-        self.donors.len()
+        self.donor_ids().len()
     }
 
     pub fn atom_count(&self) -> usize {
@@ -211,144 +198,176 @@ impl<'a> DativeBondView<'a> {
 
     /// Is dative bond ground
     pub fn is_ground(&self) -> bool {
-        self.attributes.is_ground()
+        self.attributes().is_ground()
     }
 
     /// Is dative bond undetermined
     pub fn is_undetermined(&self) -> bool {
-        self.attributes.is_undetermined()
+        self.attributes().is_undetermined()
     }
 }
 
 /// Read-only editor access to a dative bond.
 pub struct DativeBondEditorView<'a> {
-    pub id: DativeBondId,
-    donors: &'a [NodeId],
-    acceptor: AtomId,
-    pub attributes: &'a DativeBondForm,
+    dative_bonds: &'a DativeBonds,
+    id: DativeBondId,
 }
 
 impl<'a> DativeBondEditorView<'a> {
-    pub(crate) fn new(
-        id: DativeBondId,
-        donors: &'a [NodeId],
-        acceptor: AtomId,
-        attributes: &'a DativeBondForm,
-    ) -> Self {
-        Self {
-            id,
-            donors,
-            acceptor,
-            attributes,
-        }
+    pub(crate) fn new(dative_bonds: &'a DativeBonds, id: DativeBondId) -> Self {
+        Self { dative_bonds, id }
+    }
+
+    #[inline]
+    pub fn id(&self) -> DativeBondId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &'a DativeBondForm {
+        self.dative_bonds.attributes(self.id)
+    }
+
+    /// Donor atom ids.
+    #[inline]
+    pub fn donor_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
+        self.dative_bonds.donors(self.id)
+    }
+
+    #[inline]
+    pub fn acceptor_id(&self) -> AtomId {
+        self.dative_bonds.acceptor(self.id)
     }
 
     /// All atoms: donors followed by the acceptor.
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        let donors = self.donors;
-        let acceptor = self.acceptor;
-        (0..donors.len() + 1).map(move |index| {
-            if index < donors.len() {
-                AtomId::from(donors[index])
-            } else {
-                acceptor
-            }
-        })
+        dative_bond_atom_ids(self.dative_bonds, self.id)
     }
 }
 
 /// Mutable attribute access to a dative bond.
 #[derive(Debug)]
 pub struct DativeBondViewMut<'a> {
-    id: DativeBondId,
     dative_bonds: &'a mut DativeBonds,
+    id: DativeBondId,
 }
 
 impl<'a> DativeBondViewMut<'a> {
-    pub(crate) fn new(id: DativeBondId, dative_bonds: &'a mut DativeBonds) -> Self {
-        Self { id, dative_bonds }
+    pub(crate) fn new(dative_bonds: &'a mut DativeBonds, id: DativeBondId) -> Self {
+        Self { dative_bonds, id }
     }
 
+    #[inline]
     pub fn id(&self) -> DativeBondId {
         self.id
     }
 
+    #[inline]
     pub fn attributes(&self) -> &DativeBondForm {
         self.dative_bonds.attributes(self.id)
     }
 
+    #[inline]
     pub fn attributes_mut(&mut self) -> &mut DativeBondForm {
         self.dative_bonds.attributes_mut(self.id)
     }
 
+    #[inline]
     pub fn constraints(&self) -> &DativeBondConstraintsForm {
         &self.attributes().constraints
     }
 
+    /// Donor atom ids.
+    #[inline]
+    pub fn donor_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.dative_bonds.donors(self.id)
+    }
+
+    #[inline]
+    pub fn acceptor_id(&self) -> AtomId {
+        self.dative_bonds.acceptor(self.id)
+    }
+
     /// All atoms: donors followed by the acceptor.
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
-        let donors = self.dative_bonds.donor_nodes(self.id);
-        let acceptor = self.dative_bonds.acceptor(self.id);
-        (0..donors.len() + 1).map(move |index| {
-            if index < donors.len() {
-                AtomId::from(donors[index])
-            } else {
-                acceptor
-            }
-        })
+        dative_bond_atom_ids(self.dative_bonds, self.id)
     }
 }
 
 /// Mutable editor access to a dative bond.
 #[derive(Debug)]
 pub struct DativeBondEditorViewMut<'a> {
-    id: DativeBondId,
     dative_bonds: &'a mut DativeBonds,
+    id: DativeBondId,
 }
 
 impl<'a> DativeBondEditorViewMut<'a> {
-    pub(crate) fn new(id: DativeBondId, dative_bonds: &'a mut DativeBonds) -> Self {
-        Self { id, dative_bonds }
+    pub(crate) fn new(dative_bonds: &'a mut DativeBonds, id: DativeBondId) -> Self {
+        Self { dative_bonds, id }
     }
 
+    #[inline]
     pub fn id(&self) -> DativeBondId {
         self.id
     }
 
+    #[inline]
     pub fn attributes(&self) -> &DativeBondForm {
         self.dative_bonds.attributes(self.id)
     }
 
+    #[inline]
     pub fn attributes_mut(&mut self) -> &mut DativeBondForm {
         self.dative_bonds.attributes_mut(self.id)
     }
 
+    #[inline]
     pub fn constraints(&self) -> &DativeBondConstraintsForm {
         &self.attributes().constraints
     }
 
+    /// Donor atom ids.
+    #[inline]
+    pub fn donor_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.dative_bonds.donors(self.id)
+    }
+
+    #[inline]
+    pub fn acceptor_id(&self) -> AtomId {
+        self.dative_bonds.acceptor(self.id)
+    }
+
     /// All atoms: donors followed by the acceptor.
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
-        let donors = self.dative_bonds.donor_nodes(self.id);
-        let acceptor = self.dative_bonds.acceptor(self.id);
-        (0..donors.len() + 1).map(move |index| {
-            if index < donors.len() {
-                AtomId::from(donors[index])
-            } else {
-                acceptor
-            }
-        })
+        dative_bond_atom_ids(self.dative_bonds, self.id)
     }
 }
 
-// Derivation layer beneath the dative-bond facades.
+#[inline]
+fn dative_bond_atom_ids(
+    dative_bonds: &DativeBonds,
+    id: DativeBondId,
+) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+    let donors = dative_bonds.donor_nodes(id);
+    let acceptor = dative_bonds.acceptor(id);
+    (0..donors.len() + 1).map(move |index| {
+        if index < donors.len() {
+            AtomId::from(donors[index])
+        } else {
+            acceptor
+        }
+    })
+}
 
 /// Stored constraint container of `bond`.
 pub(crate) fn dative_bond_asserted_constraints(
     molecule: &Molecule,
-    bond: DativeBondId,
+    id: DativeBondId,
 ) -> &DativeBondConstraintsForm {
-    &molecule.dative_bond(bond).attributes.constraints
+    &molecule.dative_bond(id).attributes().constraints
 }
 
 /// Asserted side of one dative-bond constraint key under resolution's
@@ -356,10 +375,10 @@ pub(crate) fn dative_bond_asserted_constraints(
 /// its definite negative. Never reads relations.
 pub(crate) fn dative_bond_asserted_complete_constraint(
     molecule: &Molecule,
-    bond: DativeBondId,
+    id: DativeBondId,
     key: DativeBondConstraintKey,
 ) -> Option<DativeBondConstraintForm> {
-    if let Some(asserted) = dative_bond_asserted_constraints(molecule, bond).get(key) {
+    if let Some(asserted) = dative_bond_asserted_constraints(molecule, id).get(key) {
         return Some(asserted.clone());
     }
     match key {
@@ -374,13 +393,13 @@ pub(crate) fn dative_bond_asserted_complete_constraint(
 /// has no projection; both read vacuous under either mode where undefined.
 pub(crate) fn dative_bond_derived_constraint(
     molecule: &Molecule,
-    bond: DativeBondId,
+    id: DativeBondId,
     key: DativeBondConstraintKey,
     complete: bool,
 ) -> Option<DativeBondConstraintForm> {
     match key {
         DativeBondConstraintKey::Aromatic => {
-            let view = molecule.dative_bond(bond);
+            let view = molecule.dative_bond(id);
             if view.donor_count() != 1 {
                 return None;
             }
@@ -404,10 +423,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::NodeId;
 
     use super::super::assert_exact_size_by;
-    use super::DativeBondEditorView;
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
@@ -416,6 +433,7 @@ mod tests {
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
+    use crate::ir::num::NumForm;
 
     #[fixture]
     fn molecule() -> Molecule {
@@ -448,6 +466,23 @@ mod tests {
         })
     }
 
+    #[fixture]
+    fn dative_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            dative: vec![
+                (vec![AtomId(1)], AtomId(0), DativeBondForm::from_order(1)),
+                (
+                    vec![AtomId(3), AtomId(1)],
+                    AtomId(2),
+                    DativeBondForm::from_order(2),
+                ),
+                (vec![], AtomId(3), DativeBondForm::default()),
+            ],
+            ..Default::default()
+        })
+    }
+
     #[rstest]
     fn test_dative_bond_views_count(molecule: Molecule) {
         assert_eq!(molecule.dative_bonds().count(), 1);
@@ -464,12 +499,12 @@ mod tests {
     #[rstest]
     fn test_dative_bond_views_iter(molecule: Molecule) {
         assert_exact_size_by(Molecule::default().dative_bonds().iter(), vec![], |view| {
-            (view.id, view.acceptor_id(), view.attributes.clone())
+            (view.id(), view.acceptor_id(), view.attributes().clone())
         });
         assert_exact_size_by(
             molecule.dative_bonds().iter(),
             vec![(DativeBondId(0), AtomId(3), DativeBondForm::from_order(1))],
-            |view| (view.id, view.acceptor_id(), view.attributes.clone()),
+            |view| (view.id(), view.acceptor_id(), view.attributes().clone()),
         );
     }
 
@@ -487,7 +522,7 @@ mod tests {
             |id| id,
         );
         assert_exact_size_by(molecule.dative_bonds().incident(atom), expected, |view| {
-            view.id
+            view.id()
         });
     }
 
@@ -507,7 +542,7 @@ mod tests {
         let res = molecule.dative_bonds().get(DativeBondId(0));
         assert!(res.is_some());
         let view = res.unwrap();
-        assert_eq!(view.id, DativeBondId(0));
+        assert_eq!(view.id(), DativeBondId(0));
         assert_eq!(view.acceptor_id(), AtomId(3));
     }
 
@@ -515,6 +550,33 @@ mod tests {
     fn test_dative_bond_views_get_none(molecule: Molecule) {
         let res = molecule.dative_bonds().get(DativeBondId(99));
         assert!(res.is_none());
+    }
+
+    #[rstest]
+    #[case(DativeBondId(0))]
+    #[case(DativeBondId(1))]
+    #[case(DativeBondId(2))]
+    fn test_dative_bond_view_id(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+    ) {
+        assert_eq!(molecule.dative_bond(id).id(), id);
+    }
+
+    #[rstest]
+    #[case(DativeBondId(0), DativeBondForm { order: NumForm::Lit(1), ..Default::default() })]
+    #[case(DativeBondId(1), DativeBondForm { order: NumForm::Lit(2), ..Default::default() })]
+    #[case(DativeBondId(2), DativeBondForm::default())]
+    fn test_dative_bond_view_attributes(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+        #[case] expected: DativeBondForm,
+    ) {
+        let attributes = {
+            let view = molecule.dative_bond(id);
+            view.attributes()
+        };
+        assert_eq!(attributes, &expected);
     }
 
     #[rstest]
@@ -575,15 +637,175 @@ mod tests {
     }
 
     #[rstest]
+    #[case(DativeBondId(0))]
+    #[case(DativeBondId(1))]
+    #[case(DativeBondId(2))]
+    fn test_dative_bond_editor_view_id(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+    ) {
+        let editor = molecule.edit();
+        assert_eq!(editor.dative_bond(id).id(), id);
+    }
+
+    #[rstest]
+    #[case(DativeBondId(0), DativeBondForm { order: NumForm::Lit(1), ..Default::default() })]
+    #[case(DativeBondId(1), DativeBondForm { order: NumForm::Lit(2), ..Default::default() })]
+    #[case(DativeBondId(2), DativeBondForm::default())]
+    fn test_dative_bond_editor_view_attributes(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+        #[case] expected: DativeBondForm,
+    ) {
+        let editor = molecule.edit();
+        let attributes = {
+            let view = editor.dative_bond(id);
+            view.attributes()
+        };
+        assert_eq!(attributes, &expected);
+    }
+
+    #[rstest]
+    #[case::single(DativeBondId(0), vec![AtomId(1)])]
+    #[case::multiple(DativeBondId(1), vec![AtomId(3), AtomId(1)])]
+    #[case::empty(DativeBondId(2), vec![])]
+    fn test_dative_bond_editor_view_donor_ids(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let editor = molecule.edit();
+        let view = editor.dative_bond(id);
+        assert_exact_size_by(view.donor_ids(), expected, |id| id);
+    }
+
+    #[rstest]
+    #[case(DativeBondId(0), AtomId(0))]
+    #[case(DativeBondId(1), AtomId(2))]
+    #[case(DativeBondId(2), AtomId(3))]
+    fn test_dative_bond_editor_view_acceptor_id(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+        #[case] expected: AtomId,
+    ) {
+        let editor = molecule.edit();
+        let view = editor.dative_bond(id);
+        assert_eq!(view.acceptor_id(), expected);
+    }
+
+    #[rstest]
     fn test_dative_bond_editor_view_atom_ids() {
-        let donors = [NodeId(1), NodeId(2)];
-        let attributes = DativeBondForm::from_order(1);
-        let view = DativeBondEditorView::new(DativeBondId(0), &donors, AtomId(3), &attributes);
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            dative: vec![(
+                vec![AtomId(1), AtomId(2)],
+                AtomId(3),
+                DativeBondForm::from_order(1),
+            )],
+            ..Default::default()
+        });
+        let editor = molecule.edit();
+        let view = editor.dative_bond(DativeBondId(0));
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(1), AtomId(2), AtomId(3)],
             |id| id,
         );
+    }
+
+    #[rstest]
+    #[case(DativeBondId(0))]
+    #[case(DativeBondId(1))]
+    fn test_dative_bond_view_mut_attributes_mut(
+        #[from(dative_molecule)] mut molecule: Molecule,
+        #[case] id: DativeBondId,
+    ) {
+        let expected = DativeBondForm {
+            order: NumForm::Lit(3),
+            ..Default::default()
+        };
+        {
+            let mut view = molecule.dative_bond_mut(id);
+            assert_eq!(view.id(), id);
+            *view.attributes_mut() = expected.clone();
+            assert_eq!(view.attributes(), &expected);
+        }
+        assert_eq!(molecule.dative_bond(id).attributes(), &expected);
+    }
+
+    #[rstest]
+    #[case::single(DativeBondId(0), vec![AtomId(1)])]
+    #[case::multiple(DativeBondId(1), vec![AtomId(3), AtomId(1)])]
+    #[case::empty(DativeBondId(2), vec![])]
+    fn test_dative_bond_view_mut_donor_ids(
+        #[from(dative_molecule)] mut molecule: Molecule,
+        #[case] id: DativeBondId,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let view = molecule.dative_bond_mut(id);
+        assert_exact_size_by(view.donor_ids(), expected, |id| id);
+    }
+
+    #[rstest]
+    #[case(DativeBondId(0), AtomId(0))]
+    #[case(DativeBondId(1), AtomId(2))]
+    #[case(DativeBondId(2), AtomId(3))]
+    fn test_dative_bond_view_mut_acceptor_id(
+        #[from(dative_molecule)] mut molecule: Molecule,
+        #[case] id: DativeBondId,
+        #[case] expected: AtomId,
+    ) {
+        let view = molecule.dative_bond_mut(id);
+        assert_eq!(view.acceptor_id(), expected);
+    }
+
+    #[rstest]
+    #[case(DativeBondId(0))]
+    #[case(DativeBondId(1))]
+    fn test_dative_bond_editor_view_mut_attributes_mut(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+    ) {
+        let mut editor = molecule.edit();
+        let expected = DativeBondForm {
+            order: NumForm::Lit(3),
+            ..Default::default()
+        };
+        {
+            let mut view = editor.dative_bond_mut(id);
+            assert_eq!(view.id(), id);
+            *view.attributes_mut() = expected.clone();
+            assert_eq!(view.attributes(), &expected);
+        }
+        assert_eq!(editor.dative_bond(id).attributes(), &expected);
+    }
+
+    #[rstest]
+    #[case::single(DativeBondId(0), vec![AtomId(1)])]
+    #[case::multiple(DativeBondId(1), vec![AtomId(3), AtomId(1)])]
+    #[case::empty(DativeBondId(2), vec![])]
+    fn test_dative_bond_editor_view_mut_donor_ids(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let mut editor = molecule.edit();
+        let view = editor.dative_bond_mut(id);
+        assert_exact_size_by(view.donor_ids(), expected, |id| id);
+    }
+
+    #[rstest]
+    #[case(DativeBondId(0), AtomId(0))]
+    #[case(DativeBondId(1), AtomId(2))]
+    #[case(DativeBondId(2), AtomId(3))]
+    fn test_dative_bond_editor_view_mut_acceptor_id(
+        #[from(dative_molecule)] molecule: Molecule,
+        #[case] id: DativeBondId,
+        #[case] expected: AtomId,
+    ) {
+        let mut editor = molecule.edit();
+        let view = editor.dative_bond_mut(id);
+        assert_eq!(view.acceptor_id(), expected);
     }
 
     #[rstest]

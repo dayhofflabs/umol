@@ -432,8 +432,8 @@ impl Molecule {
         for &(p, h) in dative_bonds.matched_pairs() {
             if !pattern
                 .dative_bond(p)
-                .attributes
-                .matches(host.dative_bond(h).attributes)
+                .attributes()
+                .matches(host.dative_bond(h).attributes())
             {
                 return None;
             }

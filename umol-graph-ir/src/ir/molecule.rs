@@ -212,10 +212,10 @@ impl Molecule {
             .is_some_and(|remapped| remapped.framed_eq(other))
     }
 
-    /// Neighbors of `atom`, ordered by ascending neighbor atom id.
-    pub fn neighbors(&self, atom: AtomId) -> impl ExactSizeIterator<Item = NeighborView<'_>> {
+    /// Neighbors of atom `id`, ordered by ascending neighbor atom id.
+    pub fn neighbors(&self, id: AtomId) -> impl ExactSizeIterator<Item = NeighborView<'_>> {
         self.graph
-            .neighbors(NodeId::from(atom))
+            .neighbors(NodeId::from(id))
             .iter()
             .map(move |n| NeighborView::new(AtomId::from(n.node), BondId::from(n.edge), self))
     }
@@ -358,7 +358,7 @@ impl Molecule {
             .dative_bonds()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_aromatic_systems: Vec<AromaticSystemId> = self
             .aromatic_systems()
@@ -567,12 +567,12 @@ impl Molecule {
     /// Panics if `id` is out of range.
     pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_> {
         assert!(self.dative_bonds.contains(id), "invalid dative bond id");
-        DativeBondViewMut::new(id, &mut self.dative_bonds)
+        DativeBondViewMut::new(&mut self.dative_bonds, id)
     }
 
     fn dative_bond_view_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
         assert!(self.dative_bonds.contains(id), "invalid dative bond id");
-        DativeBondEditorViewMut::new(id, &mut self.dative_bonds)
+        DativeBondEditorViewMut::new(&mut self.dative_bonds, id)
     }
 
     /// Replace every dative bond with `f(bond)` in place.
@@ -1095,7 +1095,7 @@ impl Molecule {
                 Constraint::DativeBond(id, inner) => {
                     let met = match self
                         .dative_bond(*id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                     {
@@ -1351,7 +1351,7 @@ impl Molecule {
                     (
                         bond.donors().map(|donor| shift_atom(donor.id())).collect(),
                         shift_atom(bond.acceptor_id()),
-                        bond.attributes.clone(),
+                        bond.attributes().clone(),
                     )
                 }));
             entries
@@ -1515,7 +1515,7 @@ impl Molecule {
                     .map(|donor| shift_atom(donor.id()))
                     .collect::<Vec<_>>(),
                 shift_atom(bond.acceptor_id()),
-                bond.attributes.clone(),
+                bond.attributes().clone(),
             );
         }
         for system in other.aromatic_systems().iter() {
@@ -1746,9 +1746,9 @@ impl Molecule {
                         let added = editor.add_dative_bond(
                             &donors,
                             map_atom(dative.acceptor_id()),
-                            dative.attributes.clone(),
+                            dative.attributes().clone(),
                         );
-                        dative_pairs.push((dative.id, added));
+                        dative_pairs.push((dative.id(), added));
                     }
                 }
                 let mut aromatic_pairs = Vec::new();

@@ -990,7 +990,7 @@ impl MoleculeEditor {
                 Ok(Undo::RemoveAddedDativeBond(AddedDativeBond {
                     id,
                     atoms: view.atom_ids().collect(),
-                    attributes: view.attributes.clone(),
+                    attributes: view.attributes().clone(),
                 }))
             }
             Edit::RemoveDativeBonds { removes } => {
@@ -1016,7 +1016,7 @@ impl MoleculeEditor {
                     removed.push(RemovedDativeBond {
                         id,
                         atoms: current_atoms,
-                        attributes: view.attributes.clone(),
+                        attributes: view.attributes().clone(),
                     });
                     ids.push(id);
                 }
@@ -1460,7 +1460,7 @@ impl MoleculeEditor {
                     .then(|| RemovedDativeBond {
                         id,
                         atoms,
-                        attributes: view.attributes.clone(),
+                        attributes: view.attributes().clone(),
                     })
             })
             .collect();
@@ -2977,7 +2977,7 @@ mod tests {
         assert_eq!(editor.atom(AtomId(0)).attributes().charge, NumForm::Lit(1));
         assert_eq!(editor.bond(BondId(0)).attributes().order, NumForm::Lit(2));
         assert_eq!(
-            editor.dative_bond(DativeBondId(0)).attributes.order,
+            editor.dative_bond(DativeBondId(0)).attributes().order,
             NumForm::Lit(2)
         );
         assert_eq!(
@@ -4434,7 +4434,7 @@ mod tests {
         assert_eq!(
             diatomic_with_overlays
                 .dative_bond(DativeBondId(0))
-                .attributes
+                .attributes()
                 .order,
             NumForm::Lit(2),
         );
@@ -4839,7 +4839,7 @@ mod tests {
             .unwrap();
         assert!(diatomic_with_overlays
             .dative_bond(DativeBondId(0))
-            .attributes
+            .attributes()
             .constraints
             .iter()
             .any(|c| *c == DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))));

@@ -796,7 +796,7 @@ impl ReactionInput {
                         id,
                         donors: view.donor_ids().collect(),
                         acceptor: view.acceptor_id(),
-                        attributes: lhs.dative_bond(id).attributes.clone(),
+                        attributes: lhs.dative_bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::DativeBondModify(r, update) => {
@@ -809,7 +809,7 @@ impl ReactionInput {
                         });
                     }
                     for d in
-                        DativeBondDelta::for_update(id, lhs.dative_bond(id).attributes, &update)
+                        DativeBondDelta::for_update(id, lhs.dative_bond(id).attributes(), &update)
                     {
                         resolved.push(Delta::DativeBond(d));
                     }

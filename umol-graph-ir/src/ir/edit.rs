@@ -3119,7 +3119,7 @@ mod tests {
             .expect("dative-bond update edits should apply");
 
         assert_eq!(
-            editor.dative_bond(DativeBondId(0)).attributes,
+            editor.dative_bond(DativeBondId(0)).attributes(),
             &expected_attributes
         );
     }

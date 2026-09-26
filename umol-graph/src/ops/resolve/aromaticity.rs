@@ -451,7 +451,7 @@ impl AromaticityResolver {
             })
             || molecule.dative_bonds().iter().any(|bond| {
                 matches!(
-                    bond.attributes.constraints.aromatic(),
+                    bond.attributes().constraints.aromatic(),
                     BooleanForm::Lit(true)
                 )
             });

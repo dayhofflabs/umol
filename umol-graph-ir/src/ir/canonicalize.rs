@@ -193,7 +193,7 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
         || molecule
             .dative_bonds()
             .iter()
-            .any(|bond| !bond.attributes.constraints.is_empty())
+            .any(|bond| !bond.attributes().constraints.is_empty())
         || molecule
             .aromatic_systems()
             .iter()
@@ -1646,11 +1646,24 @@ fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
             value: sequence(rows),
         });
     }
-    inline_block!(
-        ConstraintBlockPosition::DATIVE_BOND,
-        molecule.dative_bonds(),
-        dative_bond_constraint_form_key
-    );
+    let rows = molecule
+        .dative_bonds()
+        .iter()
+        .flat_map(|bond| {
+            bond.attributes().constraints.iter().map(move |constraint| {
+                product([
+                    index_key(bond.id().index()),
+                    dative_bond_constraint_form_key(constraint),
+                ])
+            })
+        })
+        .collect::<Vec<_>>();
+    if !rows.is_empty() {
+        blocks.push(PositionedKey {
+            position: ConstraintBlockPosition::DATIVE_BOND,
+            value: sequence(rows),
+        });
+    }
     inline_block!(
         ConstraintBlockPosition::AROMATIC_SYSTEM,
         molecule.aromatic_systems(),
@@ -3102,7 +3115,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .dative_bonds()
                 .get(id)
                 .expect("incidence dative bond is in range")
-                .attributes;
+                .attributes();
             (
                 EntityBlockPosition::DATIVE_BOND,
                 positioned_product([(2, num_form_key(attributes.order.normalized()?.as_ref()))]),
@@ -3509,8 +3522,8 @@ fn constitution_candidate(
             ];
             Ok((
                 CanonicalKeyValue::Product(fields),
-                bond.id,
-                incidence_graph.node_of(Entity::DativeBond(bond.id)),
+                bond.id(),
+                incidence_graph.node_of(Entity::DativeBond(bond.id())),
             ))
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;

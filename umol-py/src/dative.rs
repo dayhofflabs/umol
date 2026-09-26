@@ -321,7 +321,10 @@ impl DativeBondView {
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        NumForm::from_rust(py, &self.dative_bond(molecule.to_rust())?.attributes.order)
+        NumForm::from_rust(
+            py,
+            &self.dative_bond(molecule.to_rust())?.attributes().order,
+        )
     }
 
     #[setter]
@@ -363,7 +366,7 @@ impl DativeBondView {
     /// symmetric with `DativeBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let bond = self.dative_bond(molecule.to_rust())?.attributes;
+        let bond = self.dative_bond(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
         dict.set_item(

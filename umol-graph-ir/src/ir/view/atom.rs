@@ -426,60 +426,56 @@ impl<'a> AtomEditorViewMut<'a> {
     }
 }
 
-// Derivation layer beneath the atom facades: per-quantity functions of the
-// molecule and atom id, presented by `AtomView` (typed quantities) and
-// `AtomConstraintsView` (constraint readings).
-
-/// Stored constraint container of `atom`.
-pub(crate) fn atom_asserted_constraints(molecule: &Molecule, atom: AtomId) -> &AtomConstraintsForm {
-    &molecule.atom(atom).attributes().constraints
+/// Stored constraint container of `id`.
+pub(crate) fn atom_asserted_constraints(molecule: &Molecule, id: AtomId) -> &AtomConstraintsForm {
+    &molecule.atom(id).attributes().constraints
 }
 
-/// Localized valence of `atom`: sum of incident bond orders.
-pub(crate) fn valence(molecule: &Molecule, atom: AtomId) -> NumForm {
+/// Localized valence of `id`: sum of incident bond orders.
+pub(crate) fn valence(molecule: &Molecule, id: AtomId) -> NumForm {
     molecule
-        .neighbors(atom)
+        .neighbors(id)
         .map(|n| n.bond().attributes().order.clone())
         .fold(NumForm::Lit(0), |acc, order| acc + order)
 }
 
-/// Donated-pair sum of `atom` over single-donor dative bonds (doc 117 stub for
+/// Donated-pair sum of `id` over single-donor dative bonds (doc 117 stub for
 /// multi-donor entries).
-pub(crate) fn donated_pairs(molecule: &Molecule, atom: AtomId) -> NumForm {
+pub(crate) fn donated_pairs(molecule: &Molecule, id: AtomId) -> NumForm {
     let mut sum = NumForm::Lit(0);
-    for view in molecule.dative_bonds().incident(atom) {
+    for view in molecule.dative_bonds().incident(id) {
         let donor_ids: Vec<AtomId> = view.donor_ids().collect();
-        if donor_ids.len() != 1 || donor_ids[0] != atom {
+        if donor_ids.len() != 1 || donor_ids[0] != id {
             continue;
         }
-        sum = sum + view.attributes.order.clone();
+        sum = sum + view.attributes().order.clone();
     }
     sum
 }
 
-/// Accepted-pair sum of `atom` over incident dative bonds.
-pub(crate) fn accepted_pairs(molecule: &Molecule, atom: AtomId) -> NumForm {
+/// Accepted-pair sum of `id` over incident dative bonds.
+pub(crate) fn accepted_pairs(molecule: &Molecule, id: AtomId) -> NumForm {
     let mut sum = NumForm::Lit(0);
-    for view in molecule.dative_bonds().incident(atom) {
-        if view.acceptor_id() != atom {
+    for view in molecule.dative_bonds().incident(id) {
+        if view.acceptor_id() != id {
             continue;
         }
-        sum = sum + view.attributes.order.clone();
+        sum = sum + view.attributes().order.clone();
     }
     sum
 }
 
-/// Electron contribution of `atom` to its aromatic system; `Lit(0)` outside
+/// Electron contribution of `id` to its aromatic system; `Lit(0)` outside
 /// any system.
-pub(crate) fn aromatic_valence(molecule: &Molecule, atom: AtomId) -> NumForm {
-    let Some(id) = molecule.aromatic_systems().incident_ids(atom).next() else {
+pub(crate) fn aromatic_valence(molecule: &Molecule, id: AtomId) -> NumForm {
+    let Some(aromatic_system_id) = molecule.aromatic_systems().incident_ids(id).next() else {
         return NumForm::Lit(0);
     };
-    let sys = molecule.aromatic_system(id);
-    let Some(pos) = sys.atom_ids().position(|a| a == atom) else {
+    let aromatic_system = molecule.aromatic_system(aromatic_system_id);
+    let Some(pos) = aromatic_system.atom_ids().position(|atom_id| atom_id == id) else {
         return NumForm::Undetermined;
     };
-    match &sys.attributes.electrons {
+    match &aromatic_system.attributes.electrons {
         ElectronCountsForm::Lit(counts) => counts
             .get(pos)
             .map(|&n| NumForm::Lit(n))
@@ -488,21 +484,21 @@ pub(crate) fn aromatic_valence(molecule: &Molecule, atom: AtomId) -> NumForm {
     }
 }
 
-/// Multicenter co-participant count of `atom`. Always `Lit`.
-pub(crate) fn multicenter_degree(molecule: &Molecule, atom: AtomId) -> NumForm {
+/// Multicenter co-participant count of `id`. Always `Lit`.
+pub(crate) fn multicenter_degree(molecule: &Molecule, id: AtomId) -> NumForm {
     let count: usize = molecule
         .multicenter_bonds()
-        .incident(atom)
+        .incident(id)
         .map(|mc| mc.atom_count().saturating_sub(1))
         .sum();
     NumForm::Lit(count as i64)
 }
 
-/// Per-atom contribution sum of `atom` over incident multicenter bonds.
-pub(crate) fn multicenter_valence(molecule: &Molecule, atom: AtomId) -> NumForm {
+/// Per-atom contribution sum of `id` over incident multicenter bonds.
+pub(crate) fn multicenter_valence(molecule: &Molecule, id: AtomId) -> NumForm {
     let mut sum = NumForm::Lit(0);
-    for view in molecule.multicenter_bonds().incident(atom) {
-        let Some(pos) = view.atom_ids().position(|a| a == atom) else {
+    for view in molecule.multicenter_bonds().incident(id) {
+        let Some(pos) = view.atom_ids().position(|atom_id| atom_id == id) else {
             return NumForm::Undetermined;
         };
         let term = match &view.attributes.electrons {
@@ -517,24 +513,22 @@ pub(crate) fn multicenter_valence(molecule: &Molecule, atom: AtomId) -> NumForm 
     sum
 }
 
-/// Incident localized-bond count of `atom`. Always `Lit`.
-pub(crate) fn degree(molecule: &Molecule, atom: AtomId) -> NumForm {
-    NumForm::Lit(molecule.neighbors(atom).count() as i64)
+/// Incident localized-bond count of `id`. Always `Lit`.
+pub(crate) fn degree(molecule: &Molecule, id: AtomId) -> NumForm {
+    NumForm::Lit(molecule.neighbors(id).count() as i64)
 }
 
-/// `degree` + implicit hydrogens + `multicenter_degree` of `atom`.
-pub(crate) fn total_degree(molecule: &Molecule, atom: AtomId) -> NumForm {
-    degree(molecule, atom)
-        + molecule.atom(atom).implicit_hydrogens()
-        + multicenter_degree(molecule, atom)
+/// `degree` + implicit hydrogens + `multicenter_degree` of `id`.
+pub(crate) fn total_degree(molecule: &Molecule, id: AtomId) -> NumForm {
+    degree(molecule, id) + molecule.atom(id).implicit_hydrogens() + multicenter_degree(molecule, id)
 }
 
-/// Explicit hydrogen neighbors plus implicit hydrogens of `atom`. A neighbor
+/// Explicit hydrogen neighbors plus implicit hydrogens of `id`. A neighbor
 /// with a non-literal element may be a hydrogen, so it contributes
 /// `Undetermined`.
-pub(crate) fn total_hydrogens(molecule: &Molecule, atom: AtomId) -> NumForm {
-    let mut sum = molecule.atom(atom).implicit_hydrogens().clone();
-    for neighbor in molecule.neighbors(atom) {
+pub(crate) fn total_hydrogens(molecule: &Molecule, id: AtomId) -> NumForm {
+    let mut sum = molecule.atom(id).implicit_hydrogens().clone();
+    for neighbor in molecule.neighbors(id) {
         sum = sum
             + match neighbor.atom().element() {
                 ElementForm::Lit(Element::H) => NumForm::Lit(1),
@@ -562,16 +556,16 @@ pub(crate) fn total_valence(molecule: &Molecule, atom: AtomId) -> NumForm {
 /// keys have no absence cell. Never reads relations.
 pub(crate) fn atom_asserted_complete_constraint(
     molecule: &Molecule,
-    atom: AtomId,
+    id: AtomId,
     key: AtomConstraintKey,
 ) -> Option<AtomConstraintForm> {
-    if let Some(asserted) = atom_asserted_constraints(molecule, atom).get(key) {
+    if let Some(asserted) = atom_asserted_constraints(molecule, id).get(key) {
         return Some(asserted.clone());
     }
     match key {
         AtomConstraintKey::AromaticValence => {
             let bond_marked = molecule
-                .neighbors(atom)
+                .neighbors(id)
                 .any(|n| matches!(n.bond().constraints().aromatic(), BooleanForm::Lit(true)));
             Some(AtomConstraintForm::aromatic_valence(if bond_marked {
                 AromaticValenceForm::aromatic(NumForm::Undetermined)
@@ -607,24 +601,23 @@ pub(crate) fn atom_asserted_complete_constraint(
 /// decides whether to build the ring set.
 pub(crate) fn atom_derived_constraint(
     molecule: &Molecule,
-    atom: AtomId,
+    id: AtomId,
     rings: Option<&RingSet>,
     key: AtomConstraintKey,
     complete: bool,
 ) -> Option<AtomConstraintForm> {
     match key {
-        AtomConstraintKey::Valence => Some(AtomConstraintForm::valence(valence(molecule, atom))),
-        AtomConstraintKey::DonatedPairs => (molecule.dative_bonds().has_incident(atom) || complete)
-            .then(|| AtomConstraintForm::donated_pairs(donated_pairs(molecule, atom))),
-        AtomConstraintKey::AcceptedPairs => (molecule.dative_bonds().has_incident(atom)
-            || complete)
-            .then(|| AtomConstraintForm::accepted_pairs(accepted_pairs(molecule, atom))),
+        AtomConstraintKey::Valence => Some(AtomConstraintForm::valence(valence(molecule, id))),
+        AtomConstraintKey::DonatedPairs => (molecule.dative_bonds().has_incident(id) || complete)
+            .then(|| AtomConstraintForm::donated_pairs(donated_pairs(molecule, id))),
+        AtomConstraintKey::AcceptedPairs => (molecule.dative_bonds().has_incident(id) || complete)
+            .then(|| AtomConstraintForm::accepted_pairs(accepted_pairs(molecule, id))),
         AtomConstraintKey::AromaticValence => {
             // Derived reads relations only: bond-carried aromatic marks are
             // assertions and merge on the `asserted_complete` side.
-            if molecule.aromatic_systems().has_incident(atom) {
+            if molecule.aromatic_systems().has_incident(id) {
                 Some(AtomConstraintForm::aromatic_valence(
-                    AromaticValenceForm::aromatic(aromatic_valence(molecule, atom)),
+                    AromaticValenceForm::aromatic(aromatic_valence(molecule, id)),
                 ))
             } else if complete {
                 Some(AtomConstraintForm::aromatic_valence(
@@ -635,9 +628,9 @@ pub(crate) fn atom_derived_constraint(
             }
         }
         AtomConstraintKey::MulticenterValence => {
-            if molecule.multicenter_bonds().has_incident(atom) {
+            if molecule.multicenter_bonds().has_incident(id) {
                 Some(AtomConstraintForm::multicenter_valence(
-                    MulticenterValenceForm::multicenter(multicenter_valence(molecule, atom)),
+                    MulticenterValenceForm::multicenter(multicenter_valence(molecule, id)),
                 ))
             } else if complete {
                 Some(AtomConstraintForm::multicenter_valence(
@@ -650,7 +643,7 @@ pub(crate) fn atom_derived_constraint(
         AtomConstraintKey::TetrahedralStereo => {
             // Total over staging entities: an undetermined kind or coset is
             // an open claim, not the absence of one.
-            if let Some(stereo) = molecule.stereo_atoms().at(atom) {
+            if let Some(stereo) = molecule.stereo_atoms().at(id) {
                 let form = match (
                     stereo.attributes.configuration.kind(),
                     stereo.attributes.configuration.coset(),
@@ -672,33 +665,33 @@ pub(crate) fn atom_derived_constraint(
                 None
             }
         }
-        AtomConstraintKey::Degree => Some(AtomConstraintForm::degree(degree(molecule, atom))),
-        AtomConstraintKey::TotalDegree => Some(AtomConstraintForm::total_degree(total_degree(
-            molecule, atom,
-        ))),
+        AtomConstraintKey::Degree => Some(AtomConstraintForm::degree(degree(molecule, id))),
+        AtomConstraintKey::TotalDegree => {
+            Some(AtomConstraintForm::total_degree(total_degree(molecule, id)))
+        }
         AtomConstraintKey::TotalValence => Some(AtomConstraintForm::total_valence(total_valence(
-            molecule, atom,
+            molecule, id,
         ))),
         AtomConstraintKey::TotalHydrogens => Some(AtomConstraintForm::total_hydrogens(
-            total_hydrogens(molecule, atom),
+            total_hydrogens(molecule, id),
         )),
         AtomConstraintKey::RingDegree => {
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
             Some(AtomConstraintForm::ring_degree(atom_ring_degree(
-                molecule, rings, atom,
+                molecule, rings, id,
             )))
         }
         AtomConstraintKey::RingValence => {
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
             Some(AtomConstraintForm::ring_valence(atom_ring_valence(
-                molecule, rings, atom,
+                molecule, rings, id,
             )))
         }
         AtomConstraintKey::RingMembership(scope) => {
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
             Some(AtomConstraintForm::ring_membership(
                 scope,
-                atom_ring_membership(rings, atom, scope),
+                atom_ring_membership(rings, id, scope),
             ))
         }
     }
@@ -1062,7 +1055,7 @@ mod tests {
         assert_exact_size_by(
             molecule.atom(atom).dative_bonds(),
             expected.clone(),
-            |view| view.id,
+            |view| view.id(),
         );
         assert_exact_size_by(molecule.atom(atom).dative_bond_ids(), expected, |id| id);
     }

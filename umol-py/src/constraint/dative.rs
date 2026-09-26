@@ -553,7 +553,7 @@ impl DativeBondConstraintsView {
                     .dative_bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("dative bond id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
             DativeBondConstraintsBacking::DativeBond(bond) => {
                 let bond = bond.bind(py).borrow();
@@ -825,7 +825,7 @@ impl DativeBondRingSizeCounts {
                     .dative_bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("dative bond id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
             DativeBondRingSizeBacking::DativeBond(bond) => {
                 f(&bond.bind(py).borrow().to_rust().constraints)

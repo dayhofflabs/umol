@@ -38,7 +38,7 @@ impl<'a> RingViews<'a> {
         self.rings.get(id).is_some()
     }
 
-    /// The ring situation of `atom`.
+    /// The ring atom view of atom `id`.
     pub fn atom(&self, id: AtomId) -> RingAtomView<'_> {
         RingAtomView {
             rings: &self.rings,
@@ -47,7 +47,7 @@ impl<'a> RingViews<'a> {
         }
     }
 
-    /// The ring situation of `bond`.
+    /// The ring bond view of bond `id`.
     pub fn bond(&self, id: BondId) -> RingBondView<'_> {
         RingBondView {
             rings: &self.rings,
@@ -130,8 +130,8 @@ impl<'a> RingAtomView<'a> {
         self.ring_membership(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> NumForm {
-        self.ring_membership(RingScope::Size(s))
+    pub fn ring_size_count(&self, size: u8) -> NumForm {
+        self.ring_membership(RingScope::Size(size))
     }
 
     /// Smallest containing ring size, or `None` if this atom is in no ring.
@@ -149,49 +149,6 @@ impl<'a> RingAtomView<'a> {
     pub fn ring_valence(&self) -> NumForm {
         atom_ring_valence(self.molecule, self.rings, self.id)
     }
-}
-
-// Derivation layer beneath the ring-atom facades: per-quantity functions of the
-// ring set, molecule, and atom id, presented by `RingAtomView` (typed) and
-// `AtomConstraintsView` (keyed).
-
-/// Count of rings containing `atom` and matching `scope`. Always `Lit`.
-pub(crate) fn atom_ring_membership(rings: &RingSet, atom: AtomId, scope: RingScope) -> NumForm {
-    let containing = rings.iter().filter(|v| v.atoms().contains(&atom));
-    let count = match scope {
-        RingScope::All => containing.count(),
-        RingScope::Size(s) => containing.filter(|r| r.len() == s as usize).count(),
-    };
-    NumForm::Lit(count as i64)
-}
-
-/// Count of incident bonds of `atom` that lie in a ring. Always `Lit`.
-pub(crate) fn atom_ring_degree(molecule: &Molecule, rings: &RingSet, atom: AtomId) -> NumForm {
-    let count = molecule
-        .neighbors(atom)
-        .filter(|n| rings.contains_bond(n.bond().id()))
-        .count();
-    NumForm::Lit(count as i64)
-}
-
-/// Sum of bond orders of incident bonds of `atom` that lie in a ring.
-/// `Undetermined` if any contributing bond's order is non-`Lit`.
-pub(crate) fn atom_ring_valence(molecule: &Molecule, rings: &RingSet, atom: AtomId) -> NumForm {
-    molecule
-        .neighbors(atom)
-        .filter(|n| rings.contains_bond(n.bond().id()))
-        .map(|n| n.bond().order().clone())
-        .fold(NumForm::Lit(0), |acc, order| acc + order)
-}
-
-/// Count of rings containing `bond` and matching `scope`. Always `Lit`.
-pub(crate) fn bond_ring_membership(rings: &RingSet, bond: BondId, scope: RingScope) -> NumForm {
-    let containing = rings.iter().filter(|v| v.bonds().contains(&bond));
-    let count = match scope {
-        RingScope::All => containing.count(),
-        RingScope::Size(s) => containing.filter(|r| r.len() == s as usize).count(),
-    };
-    NumForm::Lit(count as i64)
 }
 
 /// Ring bond data with reference to ring set.
@@ -232,6 +189,45 @@ impl<'a> RingBondView<'a> {
     pub fn smallest_ring_size(&self) -> Option<usize> {
         self.rings.bond_smallest_ring_size(self.id)
     }
+}
+
+/// Count of rings containing atom `id` and matching `scope`. Always `Lit`.
+pub(crate) fn atom_ring_membership(rings: &RingSet, id: AtomId, scope: RingScope) -> NumForm {
+    let containing = rings.iter().filter(|v| v.atoms().contains(&id));
+    let count = match scope {
+        RingScope::All => containing.count(),
+        RingScope::Size(s) => containing.filter(|r| r.len() == s as usize).count(),
+    };
+    NumForm::Lit(count as i64)
+}
+
+/// Count of incident bonds of atom `id` that lie in a ring. Always `Lit`.
+pub(crate) fn atom_ring_degree(molecule: &Molecule, rings: &RingSet, id: AtomId) -> NumForm {
+    let count = molecule
+        .neighbors(id)
+        .filter(|n| rings.contains_bond(n.bond().id()))
+        .count();
+    NumForm::Lit(count as i64)
+}
+
+/// Sum of bond orders of incident bonds of atom `id` that lie in a ring.
+/// `Undetermined` if any contributing bond's order is non-`Lit`.
+pub(crate) fn atom_ring_valence(molecule: &Molecule, rings: &RingSet, id: AtomId) -> NumForm {
+    molecule
+        .neighbors(id)
+        .filter(|n| rings.contains_bond(n.bond().id()))
+        .map(|n| n.bond().order().clone())
+        .fold(NumForm::Lit(0), |acc, order| acc + order)
+}
+
+/// Count of rings containing bond `id` and matching `scope`. Always `Lit`.
+pub(crate) fn bond_ring_membership(rings: &RingSet, id: BondId, scope: RingScope) -> NumForm {
+    let containing = rings.iter().filter(|v| v.bonds().contains(&id));
+    let count = match scope {
+        RingScope::All => containing.count(),
+        RingScope::Size(s) => containing.filter(|r| r.len() == s as usize).count(),
+    };
+    NumForm::Lit(count as i64)
 }
 
 #[cfg(test)]
