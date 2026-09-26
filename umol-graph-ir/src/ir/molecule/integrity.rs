@@ -179,7 +179,7 @@ impl Molecule {
             let mut noncovalent_pairs: SmallVec<[u64; 16]> =
                 SmallVec::with_capacity(self.noncovalent_bonds.count());
             for view in self.noncovalent_bonds().iter() {
-                let entity = Entity::NoncovalentBond(view.id);
+                let entity = Entity::NoncovalentBond(view.id());
                 let atoms = view.atom_ids();
                 require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
                 check_unique_pair(entity, atoms)?;

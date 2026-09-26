@@ -5338,7 +5338,7 @@ fn build_reaction(
         deltas.push(Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
             id,
             atoms: view.atom_ids(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     // A removed atom also takes its incident stereo entities (site OR ligand incidence), else

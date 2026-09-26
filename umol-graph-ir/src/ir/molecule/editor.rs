@@ -286,12 +286,11 @@ impl MoleculeEditor {
     }
 
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondEditorView<'_> {
-        let set = &self.molecule.noncovalent_bonds;
-        NoncovalentBondEditorView {
-            id,
-            attributes: set.attributes(id),
-            atoms: set.atoms(id),
-        }
+        assert!(
+            self.molecule.noncovalent_bonds.contains(id),
+            "invalid noncovalent bond id"
+        );
+        NoncovalentBondEditorView::new(&self.molecule.noncovalent_bonds, id)
     }
 
     pub fn noncovalent_bond_mut(

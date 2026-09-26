@@ -827,7 +827,12 @@ impl<'a> Resolver<'a> {
             }
         }
         for id in molecule.noncovalent_bonds().ids() {
-            for asserted in molecule.noncovalent_bond(id).attributes.constraints.iter() {
+            for asserted in molecule
+                .noncovalent_bond(id)
+                .attributes()
+                .constraints
+                .iter()
+            {
                 let Some(derived) = molecule
                     .noncovalent_bond(id)
                     .constraints()
@@ -846,7 +851,7 @@ impl<'a> Resolver<'a> {
                         update.constraints.set(asserted.as_undetermined());
                         edits.update_noncovalent_bond(
                             NoncovalentBondHandle::Id(id),
-                            molecule.noncovalent_bond(id).attributes,
+                            molecule.noncovalent_bond(id).attributes(),
                             &update,
                         );
                     }
@@ -1046,7 +1051,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
                 let stored = noncovalent.remove(&(id, inner.key())).or_else(|| {
                     molecule
                         .noncovalent_bond(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                         .cloned()
@@ -1147,7 +1152,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
         update.constraints.set(form);
         edits.update_noncovalent_bond(
             NoncovalentBondHandle::Id(id),
-            molecule.noncovalent_bond(id).attributes,
+            molecule.noncovalent_bond(id).attributes(),
             &update,
         );
     }

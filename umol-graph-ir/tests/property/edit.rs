@@ -450,7 +450,7 @@ proptest! {
         }
         if kinds.contains(&EntityKind::NoncovalentBond) {
             prop_assert_eq!(
-                &editor.noncovalent_bond(NoncovalentBondId(0)).attributes.kind,
+                &editor.noncovalent_bond(NoncovalentBondId(0)).attributes().kind,
                 &NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
             );
         }
@@ -541,7 +541,7 @@ proptest! {
             prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.noncovalent_bonds().iter() {
-            prop_assert!(view.attributes.constraints.is_empty());
+            prop_assert!(view.attributes().constraints.is_empty());
         }
     }
 

@@ -928,7 +928,7 @@ impl ReactionInput {
                     resolved.push(Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                         id,
                         atoms: lhs.noncovalent_bond(id).atom_ids(),
-                        attributes: lhs.noncovalent_bond(id).attributes.clone(),
+                        attributes: lhs.noncovalent_bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::NoncovalentBondModify(r, rhs) => {
@@ -942,7 +942,7 @@ impl ReactionInput {
                     }
                     for d in NoncovalentBondDelta::for_update(
                         id,
-                        lhs.noncovalent_bond(id).attributes,
+                        lhs.noncovalent_bond(id).attributes(),
                         &rhs,
                     ) {
                         resolved.push(Delta::NoncovalentBond(d));

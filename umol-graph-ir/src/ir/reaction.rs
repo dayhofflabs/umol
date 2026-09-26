@@ -626,9 +626,9 @@ fn reaction_frame_action(
         }
     }
     for view in lhs.noncovalent_bonds().iter() {
-        if domain.is_none_or(|domain| domain.contains_noncovalent_bond(view.id)) {
+        if domain.is_none_or(|domain| domain.contains_noncovalent_bond(view.id())) {
             noncovalent_bonds.insert(
-                view.id,
+                view.id(),
                 noncovalent_bond_representative_action(view.atom_ids()),
             );
         }
@@ -1554,7 +1554,7 @@ impl Reaction {
                         let host_id = host_noncovalent(*id)?;
                         sets.update_noncovalent_bond(
                             NoncovalentBondHandle::Id(host_id),
-                            host.noncovalent_bond(host_id).attributes,
+                            host.noncovalent_bond(host_id).attributes(),
                             &update,
                         );
                     }
@@ -1566,7 +1566,7 @@ impl Reaction {
                             let host_id = host_noncovalent(*id)?;
                             sets.update_noncovalent_bond(
                                 NoncovalentBondHandle::Id(host_id),
-                                host.noncovalent_bond(host_id).attributes,
+                                host.noncovalent_bond(host_id).attributes(),
                                 &NoncovalentBondUpdate {
                                     constraints: constraint.into(),
                                     ..Default::default()
@@ -2417,9 +2417,9 @@ fn application_frame_actions(
     for rule_view in lhs
         .noncovalent_bonds()
         .iter()
-        .filter(|view| domain.contains_noncovalent_bond(view.id))
+        .filter(|view| domain.contains_noncovalent_bond(view.id()))
     {
-        let id = rule_view.id;
+        let id = rule_view.id();
         let entity = Entity::NoncovalentBond(id);
         let host_id = correspondence
             .noncovalent_bonds()
@@ -2680,7 +2680,7 @@ fn reframe_application_deltas(
                             .noncovalent_bonds()
                             .get(host_id)
                             .ok_or(ApplyError::CorrespondenceMismatch { entity })?
-                            .attributes;
+                            .attributes();
                         if !attributes.matches(host_attributes) {
                             return Err(ApplyError::CorrespondenceMismatch { entity });
                         }

@@ -924,9 +924,9 @@ fn render_noncovalent(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'stat
         .iter()
         .map(|view| {
             render_noncovalent_entry(
-                view.id,
+                view.id(),
                 view.atom_ids(),
-                NoncovalentBondDsl::from_ref(view.attributes).to_edn(),
+                NoncovalentBondDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })

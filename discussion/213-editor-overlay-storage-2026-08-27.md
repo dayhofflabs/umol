@@ -18,9 +18,9 @@ This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c
 S2a, the revised S2b, S2c, S2d, S2g, S2h, and S2i1 are implemented. The previous S2b mutable-view
 attempt was reverted. S2i2–S2i4 are complete; the migration compiles and its
 verification passes. S2i5 is complete: mutable molecule/editor views are separate
-types. Atom, localized-bond, dative-bond, aromatic-system, and multicenter-bond views
-expose private ids and attribute borrows through matching accessors. The S2j attempt
-is reverted; the rest of its revised getter inventory awaits review. S2f is cancelled and the remaining
+types. Atom, localized-bond, dative-bond, aromatic-system, multicenter-bond, and
+noncovalent-bond views expose private ids and attribute borrows through matching
+accessors. The S2j attempt is reverted; the rest of its revised getter inventory awaits review. S2f is cancelled and the remaining
 S2 work is unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -1314,23 +1314,32 @@ atom_ids(), with matching #[inline] annotations. Readonly borrows retain 'a;
 mutable-view accessor borrows last for the method borrow. Both mutable views
 retain unrestricted attributes_mut(). Public lookup preserves invalid-id panics.
 
+NoncovalentBondViews stores only molecule; its constructor takes that borrow alone.
+NoncovalentBondView stores molecule and id. Both access the set through
+raw_noncovalent_bonds(). NoncovalentBondEditorView stores noncovalent_bonds:
+&NoncovalentBonds and id; both mutable views store noncovalent_bonds:
+&mut NoncovalentBonds and id. All fields are private, with the owning borrow first
+in fields and constructors. All four expose id(), attributes(), and
+atom_ids() -> [AtomId; 2], with matching #[inline] annotations. Readonly attribute
+borrows retain 'a; mutable-view accessor borrows last for the method borrow.
+Both mutable views retain unrestricted attributes_mut(). Public lookup preserves
+invalid-id panics; atom_ids preserves stored endpoint order without allocation.
+
 The readonly storage design retains a separately supplied attribute borrow for
 atoms and localized bonds. Relation views can retrieve their attributes from the
 owning entity set through molecule and id. These changes cover atom, localized-bond,
-dative-bond, aromatic-system, and multicenter-bond views; other immutable views
-retain their current fields and methods.
+dative-bond, aromatic-system, multicenter-bond, and noncovalent-bond views; stereo
+views retain their current fields and methods.
 
-For the remaining proposed getter work, make the editor's
-atoms, site, and ligands fields private and migrate their reads to atom_ids(),
-site_id(), and ligand_frame(). These match the molecule views. The immutable
-editor views retain their existing local storage, without a Molecule borrow.
+For the remaining proposed getter work, make the editor's stereo site and ligands
+fields private and migrate their reads to site_id() and ligand_frame(). These match
+the molecule views. The immutable editor views retain their existing local storage, without a Molecule borrow.
 
-For the three remaining editor views whose public structural fields become private, add
+For the two remaining editor views whose public structural fields become private, add
 crate-private new methods on impl<'a>, returning Self with these arguments:
 
 | View | new arguments |
 | --- | --- |
-| NoncovalentBondEditorView | id: NoncovalentBondId, atoms: [AtomId; 2], attributes: &'a NoncovalentBondForm |
 | StereoAtomEditorView | id: StereoAtomId, site: AtomId, ligands: &'a [StereoLigand], attributes: &'a StereoAtomForm |
 | StereoBondEditorView | id: StereoBondId, site: BondId, ligands: &'a [StereoLigand], attributes: &'a StereoBondForm |
 
@@ -3361,7 +3370,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   | DativeBondViewMut<'a> | DativeBondEditorViewMut<'a> | dative_bonds: &'a mut DativeBonds; id: DativeBondId |
   | AromaticSystemViewMut<'a> | AromaticSystemEditorViewMut<'a> | aromatic_systems: &'a mut AromaticSystems; id: AromaticSystemId |
   | MulticenterBondViewMut<'a> | MulticenterBondEditorViewMut<'a> | multicenter_bonds: &'a mut MulticenterBonds; id: MulticenterBondId |
-  | NoncovalentBondViewMut<'a> | NoncovalentBondEditorViewMut<'a> | id: NoncovalentBondId; noncovalent_bonds: &'a mut NoncovalentBonds |
+  | NoncovalentBondViewMut<'a> | NoncovalentBondEditorViewMut<'a> | noncovalent_bonds: &'a mut NoncovalentBonds; id: NoncovalentBondId |
   | StereoAtomViewMut<'a> | StereoAtomEditorViewMut<'a> | id: StereoAtomId; stereo_atoms: &'a mut StereoAtoms |
   | StereoBondViewMut<'a> | StereoBondEditorViewMut<'a> | id: StereoBondId; stereo_bonds: &'a mut StereoBonds |
 
@@ -3468,6 +3477,17 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   after rebuilding. Feature-enabled workspace all-target compilation, affected-crate
   strict Clippy, graph-IR rustdoc, nightly formatting, and diff checks pass.
   Full diff reviewed.
+
+  **Noncovalent accessor alignment — completed 2026-09-26.** The plural view
+  holds only molecule; molecule-backed views use raw_noncovalent_bonds(). All four
+  entity views expose matching id/attribute accessors and atom_ids() -> [AtomId; 2].
+  Callers are migrated; Python properties, unrestricted attribute mutation, and
+  invalid-id panics are preserved. Twenty added cases cover bond selection,
+  readonly attribute-borrow lifetimes, endpoint order, and write-through mutation.
+  Graph-IR unit tests pass (7,182 passed, three ignored), along with 40 Python
+  noncovalent tests after rebuilding. Feature-enabled workspace all-target
+  compilation, affected-crate strict Clippy, graph-IR rustdoc, nightly formatting,
+  and diff checks pass. Full diff reviewed.
 
 - **S2j — Local getters and editor structural mutation**
   (`ir::{id,view}`, typed sets, ligand_frame callers and bindings; additive

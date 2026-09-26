@@ -636,7 +636,7 @@ impl ReactionSpan {
                         let [first, second] = view.atom_ids();
                         (
                             [NodeId::from(first), NodeId::from(second)],
-                            view.attributes.clone(),
+                            view.attributes().clone(),
                         )
                     })
                     .collect(),
@@ -811,11 +811,11 @@ impl ReactionSpan {
         for view in lhs.noncovalent_bonds().iter() {
             let [a, b] = view.atom_ids();
             let rhs_attributes = noncovalent_corr
-                .right_of(view.id)
+                .right_of(view.id())
                 .map(|id| remapped_rhs_noncovalent.data(id.into()).clone());
             noncovalent.push((
                 [a, b],
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes().clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &noncovalent_corr.right_unmatched() {
@@ -2336,10 +2336,10 @@ impl Reaction {
             let [a, b] = view.atom_ids();
             let first = AtomId(atom_index[&a] as u32);
             let second = AtomId(atom_index[&b] as u32);
-            if let Some(attributes) = removed_noncovalent.get(&view.id) {
+            if let Some(attributes) = removed_noncovalent.get(&view.id()) {
                 noncovalent.push(([first, second], EntitySpan::Removed(attributes.clone())));
-            } else if let Some(changes) = noncovalent_changes.get(&view.id) {
-                let left = view.attributes.clone();
+            } else if let Some(changes) = noncovalent_changes.get(&view.id()) {
+                let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_noncovalent_change(&mut right, change)?;
@@ -2354,7 +2354,7 @@ impl Reaction {
             } else {
                 noncovalent.push((
                     [first, second],
-                    EntitySpan::Unchanged(view.attributes.clone()),
+                    EntitySpan::Unchanged(view.attributes().clone()),
                 ));
             }
         }

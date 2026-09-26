@@ -421,7 +421,7 @@ impl NoncovalentBondView {
     fn kind(&self, py: Python<'_>) -> PyResult<NoncovalentBondKindForm> {
         let molecule = self.owner.bind(py).borrow();
         Ok(NoncovalentBondKindForm::from_rust(
-            &self.noncovalent_bond(molecule.to_rust())?.attributes.kind,
+            &self.noncovalent_bond(molecule.to_rust())?.attributes().kind,
         ))
     }
 
@@ -468,7 +468,7 @@ impl NoncovalentBondView {
     /// symmetric with `NoncovalentBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let bond = self.noncovalent_bond(molecule.to_rust())?.attributes;
+        let bond = self.noncovalent_bond(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item("kind", NoncovalentBondKindForm::from_rust(&bond.kind))?;
         dict.set_item(
@@ -1400,7 +1400,7 @@ mod tests {
                     .borrow()
                     .to_rust()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .attributes
+                    .attributes()
                     .constraints
                     .intramolecular(),
                 GraphIrBooleanForm::Lit(true)
@@ -1429,7 +1429,7 @@ mod tests {
                     .borrow()
                     .to_rust()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .attributes
+                    .attributes()
                     .constraints
                     .intramolecular(),
                 GraphIrBooleanForm::Lit(false)
@@ -1475,7 +1475,7 @@ mod tests {
                     .borrow()
                     .to_rust()
                     .noncovalent_bond(GraphIrNoncovalentBondId(0))
-                    .attributes
+                    .attributes()
                     .constraints
                     .intramolecular(),
                 GraphIrBooleanForm::Lit(true)

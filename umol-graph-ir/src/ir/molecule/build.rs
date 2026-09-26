@@ -379,7 +379,7 @@ mod tests {
 
         assert_eq!(bond, NoncovalentBondId(0));
         assert_eq!(
-            mol.noncovalent_bond(bond).attributes,
+            mol.noncovalent_bond(bond).attributes(),
             &NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
         );
     }

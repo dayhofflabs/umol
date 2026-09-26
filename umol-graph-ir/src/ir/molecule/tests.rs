@@ -2659,7 +2659,7 @@ fn test_molecule_multicenter_bonds(#[from(rich_molecule)] molecule: Molecule) {
 #[rstest]
 fn test_molecule_noncovalent_bond(#[from(rich_molecule)] molecule: Molecule) {
     let nv = molecule.noncovalent_bond(NoncovalentBondId(0));
-    assert_eq!(nv.id, NoncovalentBondId(0));
+    assert_eq!(nv.id(), NoncovalentBondId(0));
     assert_eq!(nv.atom_ids(), [AtomId(0), AtomId(3)]);
 }
 
@@ -2668,7 +2668,7 @@ fn test_molecule_noncovalent_bonds(#[from(rich_molecule)] molecule: Molecule) {
     let projected: Vec<(NoncovalentBondId, [AtomId; 2])> = molecule
         .noncovalent_bonds()
         .iter()
-        .map(|v| (v.id, v.atom_ids()))
+        .map(|v| (v.id(), v.atom_ids()))
         .collect();
     assert_eq!(
         projected,
@@ -3009,7 +3009,7 @@ fn test_noncovalent_bond_views_incident(
     let got: Vec<NoncovalentBondId> = molecule
         .noncovalent_bonds()
         .incident(atom)
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     assert_eq!(got, expected);
 }
@@ -3025,7 +3025,7 @@ fn test_noncovalent_bond_views_of(
     #[case] expected: Option<NoncovalentBondId>,
 ) {
     assert_eq!(
-        molecule.noncovalent_bonds().of(a, b).map(|v| v.id),
+        molecule.noncovalent_bonds().of(a, b).map(|v| v.id()),
         expected,
     );
 }
@@ -3042,7 +3042,7 @@ fn test_noncovalent_bond_views_induced(
         .noncovalent_bonds()
         .induced(&atoms)
         .into_iter()
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     assert_eq!(got, expected);
 }
@@ -5420,7 +5420,7 @@ fn test_molecule_editor_noncovalent_bond_mut(#[from(rich_molecule)] molecule: Mo
     assert_eq!(
         result
             .noncovalent_bond(NoncovalentBondId(0))
-            .attributes
+            .attributes()
             .kind,
         NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
     );
@@ -5807,7 +5807,7 @@ fn test_molecule_index_noncovalent_bond(#[from(rich_molecule)] molecule: Molecul
     assert_eq!(
         molecule
             .noncovalent_bond(NoncovalentBondId(0))
-            .attributes
+            .attributes()
             .kind,
         NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)
     );
@@ -6400,7 +6400,7 @@ fn test_molecule_noncovalent_bond_mut(#[from(rich_molecule)] mut molecule: Molec
     assert_eq!(
         molecule
             .noncovalent_bond(NoncovalentBondId(0))
-            .attributes
+            .attributes()
             .kind,
         NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)
     );

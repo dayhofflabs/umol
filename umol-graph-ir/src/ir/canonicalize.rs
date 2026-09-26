@@ -205,7 +205,7 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
         || molecule
             .noncovalent_bonds()
             .iter()
-            .any(|bond| !bond.attributes.constraints.is_empty())
+            .any(|bond| !bond.attributes().constraints.is_empty())
         || molecule
             .stereo_atoms()
             .iter()
@@ -1704,11 +1704,24 @@ fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
             value: sequence(rows),
         });
     }
-    inline_block!(
-        ConstraintBlockPosition::NONCOVALENT_BOND,
-        molecule.noncovalent_bonds(),
-        noncovalent_bond_constraint_form_key
-    );
+    let rows = molecule
+        .noncovalent_bonds()
+        .iter()
+        .flat_map(|bond| {
+            bond.attributes().constraints.iter().map(move |constraint| {
+                product([
+                    index_key(bond.id().index()),
+                    noncovalent_bond_constraint_form_key(constraint),
+                ])
+            })
+        })
+        .collect::<Vec<_>>();
+    if !rows.is_empty() {
+        blocks.push(PositionedKey {
+            position: ConstraintBlockPosition::NONCOVALENT_BOND,
+            value: sequence(rows),
+        });
+    }
     inline_block!(
         ConstraintBlockPosition::STEREO_ATOM,
         molecule.stereo_atoms(),
@@ -3204,7 +3217,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .noncovalent_bonds()
                 .get(id)
                 .expect("incidence noncovalent bond is in range")
-                .attributes;
+                .attributes();
             (
                 EntityBlockPosition::NONCOVALENT_BOND,
                 positioned_product([(
@@ -3641,8 +3654,8 @@ fn constitution_candidate(
             ];
             Ok((
                 CanonicalKeyValue::Product(fields),
-                bond.id,
-                incidence_graph.node_of(Entity::NoncovalentBond(bond.id)),
+                bond.id(),
+                incidence_graph.node_of(Entity::NoncovalentBond(bond.id())),
             ))
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;

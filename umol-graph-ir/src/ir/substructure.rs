@@ -518,8 +518,8 @@ impl Molecule {
         for &(p, h) in noncovalent_bonds.matched_pairs() {
             if !pattern
                 .noncovalent_bond(p)
-                .attributes
-                .matches(host.noncovalent_bond(h).attributes)
+                .attributes()
+                .matches(host.noncovalent_bond(h).attributes())
             {
                 return None;
             }

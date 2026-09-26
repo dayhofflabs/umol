@@ -524,14 +524,14 @@ fn convey_molecule(
         });
     }
     for bond in molecule.noncovalent_bonds().iter() {
-        let entity = Entity::NoncovalentBond(bond.id);
+        let entity = Entity::NoncovalentBond(bond.id());
         if bond.kind() != &NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond) {
             return Err(ConveyError::Entity { entity });
         }
-        for constraint in bond.attributes.constraints.iter() {
+        for constraint in bond.attributes().constraints.iter() {
             if !constraint.is_undetermined() {
                 return Err(ConveyError::Constraint(Constraint::NoncovalentBond(
-                    bond.id,
+                    bond.id(),
                     constraint.clone(),
                 )));
             }

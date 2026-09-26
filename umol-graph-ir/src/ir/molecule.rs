@@ -322,7 +322,7 @@ impl Molecule {
     }
 
     pub fn noncovalent_bonds(&self) -> NoncovalentBondViews<'_> {
-        NoncovalentBondViews::new(self, &self.noncovalent_bonds)
+        NoncovalentBondViews::new(self)
     }
 
     /// View of the noncovalent bond with `id`.
@@ -409,7 +409,7 @@ impl Molecule {
                 let [a, b] = v.atom_ids();
                 atom_set.contains(&a) && atom_set.contains(&b)
             })
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_stereo_atoms: Vec<StereoAtomId> = self
             .stereo_atoms()
@@ -774,7 +774,7 @@ impl Molecule {
             self.noncovalent_bonds.contains(id),
             "invalid noncovalent bond id"
         );
-        NoncovalentBondViewMut::new(id, &mut self.noncovalent_bonds)
+        NoncovalentBondViewMut::new(&mut self.noncovalent_bonds, id)
     }
 
     fn noncovalent_bond_view_mut(
@@ -785,7 +785,7 @@ impl Molecule {
             self.noncovalent_bonds.contains(id),
             "invalid noncovalent bond id"
         );
-        NoncovalentBondEditorViewMut::new(id, &mut self.noncovalent_bonds)
+        NoncovalentBondEditorViewMut::new(&mut self.noncovalent_bonds, id)
     }
 
     /// Replace every noncovalent bond with `f(bond)` in place.
@@ -1161,7 +1161,7 @@ impl Molecule {
                 Constraint::NoncovalentBond(id, inner) => {
                     let met = match self
                         .noncovalent_bond(*id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                     {
@@ -1406,7 +1406,7 @@ impl Molecule {
                     let [first, second] = bond.atom_ids();
                     (
                         [shift_atom(first), shift_atom(second)],
-                        bond.attributes.clone(),
+                        bond.attributes().clone(),
                     )
                 }));
             for id in molecule.stereo_atoms.ids() {
@@ -1564,7 +1564,7 @@ impl Molecule {
             let [first, second] = bond.atom_ids();
             editor.add_noncovalent_bond(
                 [shift_atom(first), shift_atom(second)],
-                bond.attributes.clone(),
+                bond.attributes().clone(),
             );
         }
 
@@ -1815,9 +1815,9 @@ impl Molecule {
                     if component_of(a) == component {
                         let added = editor.add_noncovalent_bond(
                             [map_atom(a), map_atom(b)],
-                            bond.attributes.clone(),
+                            bond.attributes().clone(),
                         );
-                        noncovalent_pairs.push((bond.id, added));
+                        noncovalent_pairs.push((bond.id(), added));
                     }
                 }
                 let mut stereo_atom_pairs = Vec::new();

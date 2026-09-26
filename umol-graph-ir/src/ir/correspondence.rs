@@ -977,7 +977,7 @@ pub(crate) fn induced_noncovalent_bonds(
         left.noncovalent_bonds().iter().filter_map(|noncovalent| {
             let [first, second] = noncovalent.atom_ids();
             Some((
-                noncovalent.id,
+                noncovalent.id(),
                 ordered_pair(map_atom(atoms, first)?, map_atom(atoms, second)?),
             ))
         }),
@@ -985,7 +985,7 @@ pub(crate) fn induced_noncovalent_bonds(
         right
             .noncovalent_bonds()
             .iter()
-            .map(|noncovalent| (noncovalent.id, ordered_pair_from(noncovalent.atom_ids()))),
+            .map(|noncovalent| (noncovalent.id(), ordered_pair_from(noncovalent.atom_ids()))),
         right.noncovalent_bonds().count(),
     )
 }

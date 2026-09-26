@@ -1090,7 +1090,7 @@ mod tests {
         assert_exact_size_by(
             molecule.atom(atom).noncovalent_bonds(),
             expected.clone(),
-            |view| view.id,
+            |view| view.id(),
         );
         assert_exact_size_by(molecule.atom(atom).noncovalent_bond_ids(), expected, |id| {
             id

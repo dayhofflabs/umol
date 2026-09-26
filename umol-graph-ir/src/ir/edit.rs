@@ -3375,7 +3375,7 @@ mod tests {
             .expect("noncovalent-bond update edits should apply");
 
         assert_eq!(
-            editor.noncovalent_bond(NoncovalentBondId(0)).attributes,
+            editor.noncovalent_bond(NoncovalentBondId(0)).attributes(),
             &expected_attributes,
         );
     }

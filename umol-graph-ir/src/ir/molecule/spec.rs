@@ -731,7 +731,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.noncovalent_bond(NoncovalentBondId(0)).attributes,
+            mol.noncovalent_bond(NoncovalentBondId(0)).attributes(),
             &NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
         );
     }

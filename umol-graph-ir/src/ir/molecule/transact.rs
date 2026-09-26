@@ -1158,8 +1158,8 @@ impl MoleculeEditor {
                 let view = self.noncovalent_bond(id);
                 Ok(Undo::RemoveAddedNoncovalentBond(AddedNoncovalentBond {
                     id,
-                    atoms: view.atoms,
-                    attributes: view.attributes.clone(),
+                    atoms: view.atom_ids(),
+                    attributes: view.attributes().clone(),
                 }))
             }
             Edit::RemoveNoncovalentBonds { removes } => {
@@ -1175,8 +1175,8 @@ impl MoleculeEditor {
                     let view = self.noncovalent_bond(id);
                     removed.push(RemovedNoncovalentBond {
                         id,
-                        atoms: view.atoms,
-                        attributes: view.attributes.clone(),
+                        atoms: view.atom_ids(),
+                        attributes: view.attributes().clone(),
                     });
                     ids.push(id);
                 }
@@ -1498,13 +1498,13 @@ impl MoleculeEditor {
             .map(NoncovalentBondId::from)
             .filter_map(|id| {
                 let view = self.noncovalent_bond(id);
-                view.atoms
+                view.atom_ids()
                     .iter()
                     .any(|a| atom_set.contains(a))
                     .then(|| RemovedNoncovalentBond {
                         id,
-                        atoms: view.atoms,
-                        attributes: view.attributes.clone(),
+                        atoms: view.atom_ids(),
+                        attributes: view.attributes().clone(),
                     })
             })
             .collect();
@@ -2997,7 +2997,7 @@ mod tests {
         assert_eq!(
             editor
                 .noncovalent_bond(NoncovalentBondId(0))
-                .attributes
+                .attributes()
                 .kind,
             NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)
         );
@@ -4500,7 +4500,7 @@ mod tests {
         assert_eq!(
             diatomic_with_overlays
                 .noncovalent_bond(NoncovalentBondId(0))
-                .attributes
+                .attributes()
                 .kind,
             NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
         );
