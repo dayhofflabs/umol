@@ -653,8 +653,8 @@ impl ReactionSpan {
                 .map(|view| {
                     (
                         [NodeId::from(view.site_id())],
-                        view.ligand_frame(),
-                        view.attributes.clone(),
+                        view.ligand_frame().to_vec(),
+                        view.attributes().clone(),
                     )
                 })
                 .collect(),
@@ -671,8 +671,8 @@ impl ReactionSpan {
                 .map(|view| {
                     (
                         [EdgeId::from(view.site_id())],
-                        view.ligand_frame(),
-                        view.attributes.clone(),
+                        view.ligand_frame().to_vec(),
+                        view.attributes().clone(),
                     )
                 })
                 .collect(),
@@ -864,12 +864,12 @@ impl ReactionSpan {
             Vec::new();
         for view in lhs.stereo_atoms().iter() {
             let lhs_frame = view.ligand_frame();
-            let rhs_attributes = match stereo_atom_corr.right_of(view.id) {
+            let rhs_attributes = match stereo_atom_corr.right_of(view.id()) {
                 Some(id) => {
                     let relation_id = RelationId::from(id);
                     let action = Permutation::between(
                         remapped_rhs_stereo_atoms.participants_2(relation_id),
-                        &lhs_frame,
+                        lhs_frame,
                     )?;
                     Some(
                         remapped_rhs_stereo_atoms
@@ -882,8 +882,8 @@ impl ReactionSpan {
             };
             stereo_atoms.push((
                 view.site_id(),
-                view.ligand_frame(),
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
+                view.ligand_frame().to_vec(),
+                EntitySpan::superimpose(Some(view.attributes().clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &stereo_atom_corr.right_unmatched() {
@@ -905,12 +905,12 @@ impl ReactionSpan {
             Vec::new();
         for view in lhs.stereo_bonds().iter() {
             let lhs_frame = view.ligand_frame();
-            let rhs_attributes = match stereo_bond_corr.right_of(view.id) {
+            let rhs_attributes = match stereo_bond_corr.right_of(view.id()) {
                 Some(id) => {
                     let relation_id = RelationId::from(id);
                     let action = Permutation::between(
                         remapped_rhs_stereo_bonds.participants_2(relation_id),
-                        &lhs_frame,
+                        lhs_frame,
                     )?;
                     Some(
                         remapped_rhs_stereo_bonds
@@ -923,8 +923,8 @@ impl ReactionSpan {
             };
             stereo_bonds.push((
                 view.site_id(),
-                view.ligand_frame(),
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
+                view.ligand_frame().to_vec(),
+                EntitySpan::superimpose(Some(view.attributes().clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &stereo_bond_corr.right_unmatched() {
@@ -2411,11 +2411,11 @@ impl Reaction {
             Vec::new();
         for view in lhs.stereo_atoms().iter() {
             let site = view.site_id();
-            let ligands = view.ligand_frame();
-            if let Some(attributes) = removed_stereo_atom.get(&view.id) {
+            let ligands = view.ligand_frame().to_vec();
+            if let Some(attributes) = removed_stereo_atom.get(&view.id()) {
                 stereo_atoms.push((site, ligands, EntitySpan::Removed(attributes.clone())));
-            } else if let Some(changes) = stereo_atom_changes.get(&view.id) {
-                let left = view.attributes.clone();
+            } else if let Some(changes) = stereo_atom_changes.get(&view.id()) {
+                let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_stereo_atom_change(&mut right, change)?;
@@ -2432,7 +2432,7 @@ impl Reaction {
                 stereo_atoms.push((
                     site,
                     ligands,
-                    EntitySpan::Unchanged(view.attributes.clone()),
+                    EntitySpan::Unchanged(view.attributes().clone()),
                 ));
             }
         }
@@ -2449,11 +2449,11 @@ impl Reaction {
             Vec::new();
         for view in lhs.stereo_bonds().iter() {
             let site = view.site_id();
-            let ligands = view.ligand_frame();
-            if let Some(attributes) = removed_stereo_bond.get(&view.id) {
+            let ligands = view.ligand_frame().to_vec();
+            if let Some(attributes) = removed_stereo_bond.get(&view.id()) {
                 stereo_bonds.push((site, ligands, EntitySpan::Removed(attributes.clone())));
-            } else if let Some(changes) = stereo_bond_changes.get(&view.id) {
-                let left = view.attributes.clone();
+            } else if let Some(changes) = stereo_bond_changes.get(&view.id()) {
+                let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_stereo_bond_change(&mut right, change)?;
@@ -2470,7 +2470,7 @@ impl Reaction {
                 stereo_bonds.push((
                     site,
                     ligands,
-                    EntitySpan::Unchanged(view.attributes.clone()),
+                    EntitySpan::Unchanged(view.attributes().clone()),
                 ));
             }
         }

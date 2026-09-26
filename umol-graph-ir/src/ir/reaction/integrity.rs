@@ -502,7 +502,7 @@ impl ReactionIntegrityCheck {
                 let entity = Entity::StereoAtom(*id);
                 let matches = if let Some(view) = lhs.stereo_atoms().get(*id) {
                     view.site_id() == *site
-                        && unordered_ligands(view.ligand_frame())
+                        && unordered_ligands(view.ligand_frame().iter().copied())
                             == unordered_ligands(ligands.iter().copied())
                 } else {
                     let Delta::StereoAtom(StereoAtomDelta::Add {
@@ -525,7 +525,7 @@ impl ReactionIntegrityCheck {
                 let entity = Entity::StereoBond(*id);
                 let matches = if let Some(view) = lhs.stereo_bonds().get(*id) {
                     view.site_id() == *site
-                        && stereo_bond_frames_match(&view.ligand_frame(), ligands)
+                        && stereo_bond_frames_match(view.ligand_frame(), ligands)
                 } else {
                     let Delta::StereoBond(StereoBondDelta::Add {
                         site: added_site,

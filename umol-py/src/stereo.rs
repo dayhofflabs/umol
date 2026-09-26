@@ -1402,7 +1402,8 @@ macro_rules! stereo_view {
                 Ok(self
                     .view(molecule.to_rust())?
                     .ligand_frame()
-                    .into_iter()
+                    .iter()
+                    .copied()
                     .map(StereoLigand::from_rust)
                     .collect())
             }
@@ -1427,7 +1428,7 @@ macro_rules! stereo_view {
                 let molecule = self.owner.bind(py).borrow();
                 StereoConfigurationForm::from_rust(
                     py,
-                    &self.view(molecule.to_rust())?.attributes.configuration,
+                    &self.view(molecule.to_rust())?.attributes().configuration,
                 )
             }
 
@@ -1481,7 +1482,7 @@ macro_rules! stereo_view {
             /// entries — symmetric with the value pyclass's `asdict`, read through the view.
             fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                 let molecule = self.owner.bind(py).borrow();
-                let attributes = self.view(molecule.to_rust())?.attributes;
+                let attributes = self.view(molecule.to_rust())?.attributes();
                 let dict = PyDict::new(py);
                 dict.set_item(
                     "configuration",

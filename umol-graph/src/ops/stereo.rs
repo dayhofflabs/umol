@@ -139,19 +139,20 @@ impl StereoPerception {
                 stereo_atoms.push((atom, ligands.clone(), stereo.clone()));
             }
             for relation in relations {
-                let entity_candidate =
-                    if relation.attributes.configuration.kind() == Some(StereoKind::Tetrahedral) {
-                        self.derive_stereo_atom(molecule, atom, &StereoCoset::Undetermined)
-                            .and_then(|(ligands, _)| {
-                                let coset = relation.coset_for(ligands.iter().copied())?;
-                                Some((ligands, StereoAtomForm::new(StereoKind::Tetrahedral, coset)))
-                            })
-                    } else {
-                        None
-                    };
+                let entity_candidate = if relation.attributes().configuration.kind()
+                    == Some(StereoKind::Tetrahedral)
+                {
+                    self.derive_stereo_atom(molecule, atom, &StereoCoset::Undetermined)
+                        .and_then(|(ligands, _)| {
+                            let coset = relation.coset_for(ligands.iter().copied())?;
+                            Some((ligands, StereoAtomForm::new(StereoKind::Tetrahedral, coset)))
+                        })
+                } else {
+                    None
+                };
                 let Some((entity_ligands, entity_stereo)) = entity_candidate else {
                     inconsistencies.insert(StereoInconsistency::StereoAtomFailure {
-                        stereo_atom: relation.id,
+                        stereo_atom: relation.id(),
                     });
                     continue;
                 };
@@ -181,7 +182,7 @@ impl StereoPerception {
                 if mismatch {
                     inconsistencies.insert(StereoInconsistency::TetrahedralStereoMismatch {
                         atom,
-                        stereo_atom: relation.id,
+                        stereo_atom: relation.id(),
                     });
                 }
             }
@@ -218,7 +219,7 @@ impl StereoPerception {
             }
             for relation in relations {
                 let entity_candidate =
-                    if relation.attributes.configuration.kind() == Some(StereoKind::CisTrans) {
+                    if relation.attributes().configuration.kind() == Some(StereoKind::CisTrans) {
                         self.derive_stereo_bond(molecule, bond, &StereoCoset::Undetermined)
                             .and_then(|(ligands, _)| {
                                 let coset = relation.coset_for(ligands.iter().copied())?;
@@ -229,7 +230,7 @@ impl StereoPerception {
                     };
                 let Some((entity_ligands, entity_stereo)) = entity_candidate else {
                     inconsistencies.insert(StereoInconsistency::StereoBondFailure {
-                        stereo_bond: relation.id,
+                        stereo_bond: relation.id(),
                     });
                     continue;
                 };
@@ -260,7 +261,7 @@ impl StereoPerception {
                 if mismatch {
                     inconsistencies.insert(StereoInconsistency::CisTransStereoMismatch {
                         bond,
-                        stereo_bond: relation.id,
+                        stereo_bond: relation.id(),
                     });
                 }
             }

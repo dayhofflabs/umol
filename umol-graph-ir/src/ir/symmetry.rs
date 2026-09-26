@@ -239,7 +239,7 @@ impl Molecule {
         match entity {
             Entity::StereoAtom(id) => {
                 let view = self.stereo_atoms().get(id)?;
-                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes.configuration
+                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes().configuration
                 else {
                     return None;
                 };
@@ -251,7 +251,7 @@ impl Molecule {
             }
             Entity::StereoBond(id) => {
                 let view = self.stereo_bonds().get(id)?;
-                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes.configuration
+                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes().configuration
                 else {
                     return None;
                 };

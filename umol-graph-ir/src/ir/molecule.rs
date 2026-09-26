@@ -336,7 +336,7 @@ impl Molecule {
     }
 
     pub fn stereo_atoms(&self) -> StereoAtomViews<'_> {
-        StereoAtomViews::new(self, &self.stereo_atoms)
+        StereoAtomViews::new(self)
     }
 
     /// View of the stereo atom with `id`.
@@ -350,7 +350,7 @@ impl Molecule {
     }
 
     pub fn stereo_bonds(&self) -> StereoBondViews<'_> {
-        StereoBondViews::new(self, &self.stereo_bonds)
+        StereoBondViews::new(self)
     }
 
     /// View of the stereo bond with `id`.
@@ -415,13 +415,13 @@ impl Molecule {
             .stereo_atoms()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_stereo_bonds: Vec<StereoBondId> = self
             .stereo_bonds()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
 
         MoleculeCorrespondence::new(
@@ -805,12 +805,12 @@ impl Molecule {
     /// Panics if `id` is out of range.
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_> {
         assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
-        StereoAtomViewMut::new(id, &mut self.stereo_atoms)
+        StereoAtomViewMut::new(&mut self.stereo_atoms, id)
     }
 
     fn stereo_atom_view_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
         assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
-        StereoAtomEditorViewMut::new(id, &mut self.stereo_atoms)
+        StereoAtomEditorViewMut::new(&mut self.stereo_atoms, id)
     }
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
@@ -872,12 +872,12 @@ impl Molecule {
     /// Panics if `id` is out of range.
     pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_> {
         assert!(self.stereo_bonds.contains(id), "invalid stereo bond id");
-        StereoBondViewMut::new(id, &mut self.stereo_bonds)
+        StereoBondViewMut::new(&mut self.stereo_bonds, id)
     }
 
     fn stereo_bond_view_mut(&mut self, id: StereoBondId) -> StereoBondEditorViewMut<'_> {
         assert!(self.stereo_bonds.contains(id), "invalid stereo bond id");
-        StereoBondEditorViewMut::new(id, &mut self.stereo_bonds)
+        StereoBondEditorViewMut::new(&mut self.stereo_bonds, id)
     }
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.
@@ -1173,7 +1173,7 @@ impl Molecule {
                 Constraint::StereoAtom(id, kind, inner) => {
                     let met = match self
                         .stereo_atom(*id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                     {
@@ -1185,7 +1185,7 @@ impl Molecule {
                 Constraint::StereoBond(id, kind, inner) => {
                     let met = match self
                         .stereo_bond(*id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                     {

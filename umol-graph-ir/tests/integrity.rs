@@ -191,7 +191,7 @@ fn test_molecule_stereo_attributes(#[case] degree: u32, #[case] form: StereoAtom
         ..Default::default()
     })
     .unwrap();
-    assert_eq!(molecule.stereo_atom(StereoAtomId(0)).attributes, &form);
+    assert_eq!(molecule.stereo_atom(StereoAtomId(0)).attributes(), &form);
     assert_eq!(span.lhs(), molecule);
     assert_eq!(span.rhs(), molecule);
     assert_eq!(molecule.clone().edit().try_build().unwrap(), molecule);

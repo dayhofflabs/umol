@@ -318,7 +318,7 @@ impl<'a> AtomView<'a> {
     }
 
     pub fn stereo_atom_id(&self) -> Option<StereoAtomId> {
-        self.stereo_atom().map(|s| s.id)
+        self.stereo_atom().map(|s| s.id())
     }
 
     /// The stereo atom sited on this atom, if any — any coordination geometry. An
@@ -645,8 +645,8 @@ pub(crate) fn atom_derived_constraint(
             // an open claim, not the absence of one.
             if let Some(stereo) = molecule.stereo_atoms().at(id) {
                 let form = match (
-                    stereo.attributes.configuration.kind(),
-                    stereo.attributes.configuration.coset(),
+                    stereo.attributes().configuration.kind(),
+                    stereo.attributes().configuration.coset(),
                 ) {
                     (Some(StereoKind::Tetrahedral), Some(coset)) => {
                         TetrahedralStereoForm::stereo(coset.clone())
@@ -1165,10 +1165,10 @@ mod tests {
     fn test_atom_view_stereo_atom(stereo_molecule: Molecule) {
         // kind-generic: returns the sited stereo atom of any coordination geometry
         let tetrahedral = stereo_molecule.atom(AtomId(0)).stereo_atom().unwrap();
-        assert_eq!(tetrahedral.id, StereoAtomId(0));
+        assert_eq!(tetrahedral.id(), StereoAtomId(0));
         assert_eq!(tetrahedral.kind(), StereoKind::Tetrahedral);
         let square_planar = stereo_molecule.atom(AtomId(5)).stereo_atom().unwrap();
-        assert_eq!(square_planar.id, StereoAtomId(1));
+        assert_eq!(square_planar.id(), StereoAtomId(1));
         assert_eq!(square_planar.kind(), StereoKind::SquarePlanar);
         assert!(stereo_molecule.atom(AtomId(1)).stereo_atom().is_none());
     }

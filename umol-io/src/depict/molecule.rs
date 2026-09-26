@@ -170,7 +170,7 @@ fn tetrahedral_wedges(
         .iter()
         .filter(|stereo| {
             stereo
-                .attributes
+                .attributes()
                 .configuration
                 .as_lit()
                 .is_some_and(|configuration| configuration.kind == StereoKind::Tetrahedral)
@@ -264,7 +264,7 @@ fn tetrahedral_candidates(
     wedges.sort_by_key(|wedge| (tetrahedral_sites[wedge.base.index()], wedge.bond.index()));
 
     TetrahedralCandidates {
-        stereo_atom: stereo.id,
+        stereo_atom: stereo.id(),
         site: stereo.site_id(),
         wedges,
     }

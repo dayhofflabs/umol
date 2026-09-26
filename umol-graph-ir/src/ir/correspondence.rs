@@ -170,13 +170,16 @@ impl MoleculeCorrespondence {
                 ) else {
                     return None;
                 };
-                Some((stereo.id, (site, sorted_ligands(ligands))))
+                Some((stereo.id(), (site, sorted_ligands(ligands))))
             }),
             lhs.stereo_atoms().count(),
             rhs.stereo_atoms().iter().map(|stereo| {
                 (
-                    stereo.id,
-                    (stereo.site_id(), sorted_ligands(stereo.ligand_frame())),
+                    stereo.id(),
+                    (
+                        stereo.site_id(),
+                        sorted_ligands(stereo.ligand_frame().iter().copied()),
+                    ),
                 )
             }),
             rhs.stereo_atoms().count(),
@@ -188,10 +191,10 @@ impl MoleculeCorrespondence {
                 .copied()
                 .filter(|&(left, right)| {
                     lhs.stereo_atom(left)
-                        .attributes
+                        .attributes()
                         .configuration
                         .kind()
-                        .zip(rhs.stereo_atom(right).attributes.configuration.kind())
+                        .zip(rhs.stereo_atom(right).attributes().configuration.kind())
                         .is_none_or(|(left, right)| left == right)
                 })
                 .collect(),
@@ -208,13 +211,16 @@ impl MoleculeCorrespondence {
                 ) else {
                     return None;
                 };
-                Some((stereo.id, (site, sorted_ligands(ligands))))
+                Some((stereo.id(), (site, sorted_ligands(ligands))))
             }),
             lhs.stereo_bonds().count(),
             rhs.stereo_bonds().iter().map(|stereo| {
                 (
-                    stereo.id,
-                    (stereo.site_id(), sorted_ligands(stereo.ligand_frame())),
+                    stereo.id(),
+                    (
+                        stereo.site_id(),
+                        sorted_ligands(stereo.ligand_frame().iter().copied()),
+                    ),
                 )
             }),
             rhs.stereo_bonds().count(),
@@ -226,10 +232,10 @@ impl MoleculeCorrespondence {
                 .copied()
                 .filter(|&(left, right)| {
                     lhs.stereo_bond(left)
-                        .attributes
+                        .attributes()
                         .configuration
                         .kind()
-                        .zip(rhs.stereo_bond(right).attributes.configuration.kind())
+                        .zip(rhs.stereo_bond(right).attributes().configuration.kind())
                         .is_none_or(|(left, right)| left == right)
                 })
                 .collect(),
@@ -701,9 +707,10 @@ impl MoleculeCorrespondence {
             right.sort_unstable();
             mapped == right
         };
-        let same_ligand_set = |left: Vec<StereoLigand>, mut right: Vec<StereoLigand>| {
+        let same_ligand_set = |left: &[StereoLigand], right: &[StereoLigand]| {
+            let mut right = right.to_vec();
             let Some(mut mapped): Option<Vec<_>> = left
-                .into_iter()
+                .iter()
                 .map(|ligand| {
                     atoms
                         .right_of(ligand.atom_id)
@@ -1007,10 +1014,10 @@ fn map_atoms(
 /// atom is unmatched.
 pub(crate) fn map_ligands(
     atoms: &Correspondence<AtomId>,
-    ligands: Vec<StereoLigand>,
+    ligands: &[StereoLigand],
 ) -> Option<Vec<StereoLigand>> {
     ligands
-        .into_iter()
+        .iter()
         .map(|ligand| {
             map_atom(atoms, ligand.atom_id).map(|atom| StereoLigand::new(atom, ligand.kind))
         })

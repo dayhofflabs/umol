@@ -771,7 +771,7 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         assert_eq!(
-            view.attributes.configuration,
+            view.attributes().configuration,
             StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)
         );
     }
@@ -796,7 +796,7 @@ mod tests {
                                 .ligands()
                                 .map(|ligand| (ligand.atom_id(), ligand.kind()))
                                 .collect::<Vec<_>>(),
-                            frame.attributes.clone(),
+                            frame.attributes().clone(),
                         )
                     })
                     .collect();

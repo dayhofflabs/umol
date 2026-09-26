@@ -415,7 +415,7 @@ mod tests {
             vec![c, f, cl, br, i]
         );
         assert_eq!(
-            mol.stereo_atom(stereo).attributes,
+            mol.stereo_atom(stereo).attributes(),
             &StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
     }
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(mol.stereo_bonds().count(), 1);
         assert_eq!(mol.stereo_bond(stereo).site_id(), bond);
         assert_eq!(
-            mol.stereo_bond(stereo).attributes,
+            mol.stereo_bond(stereo).attributes(),
             &StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1))
         );
     }

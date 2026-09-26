@@ -106,7 +106,7 @@ proptest! {
         }).unwrap();
 
         prop_assert_eq!(
-            &molecule.stereo_atom(StereoAtomId(0)).attributes.configuration,
+            &molecule.stereo_atom(StereoAtomId(0)).attributes().configuration,
             &StereoConfigurationForm::kinded(StereoKind::Tetrahedral, coset),
         );
     }

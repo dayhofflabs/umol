@@ -199,7 +199,7 @@ impl MoleculeColoring for ConstitutionColoring {
                     mol.stereo_atoms()
                         .get(id)
                         .expect("stereo atom id in range")
-                        .attributes
+                        .attributes()
                         .configuration
                         .kind()
                         .hash(&mut hasher);
@@ -213,7 +213,7 @@ impl MoleculeColoring for ConstitutionColoring {
                     mol.stereo_bonds()
                         .get(id)
                         .expect("stereo bond id in range")
-                        .attributes
+                        .attributes()
                         .configuration
                         .kind()
                         .hash(&mut hasher);

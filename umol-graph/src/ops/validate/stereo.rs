@@ -173,7 +173,7 @@ impl StereoConformanceValidator {
         let ligand_symmetries: Vec<LigandSymmetryForm> =
             constraints.ligand_symmetries().cloned().collect();
         if view
-            .attributes
+            .attributes()
             .configuration
             .coset()
             .and_then(AsLit::as_lit)
@@ -198,7 +198,7 @@ impl StereoConformanceValidator {
         let ligand_symmetries: Vec<LigandSymmetryForm> =
             constraints.ligand_symmetries().cloned().collect();
         if view
-            .attributes
+            .attributes()
             .configuration
             .coset()
             .and_then(AsLit::as_lit)

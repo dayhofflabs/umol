@@ -58,7 +58,7 @@ pub(crate) fn layout(molecule: &Molecule) -> Result<MoleculeLayout, CoordgenErro
 }
 
 fn cis_trans_bond(molecule: &Molecule, stereo: StereoBondView<'_>) -> Option<CisTransBond> {
-    if stereo.attributes.configuration.kind() != Some(StereoKind::CisTrans) {
+    if stereo.attributes().configuration.kind() != Some(StereoKind::CisTrans) {
         return None;
     }
     let ligands = stereo

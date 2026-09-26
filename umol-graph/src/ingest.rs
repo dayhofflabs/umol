@@ -1130,7 +1130,7 @@ mod tests {
             molecule
                 .stereo_bonds()
                 .iter()
-                .map(|bond| (usize::from(bond.site_id()), bond.attributes.clone()))
+                .map(|bond| (usize::from(bond.site_id()), bond.attributes().clone()))
                 .collect::<Vec<_>>(),
             expected
                 .into_iter()

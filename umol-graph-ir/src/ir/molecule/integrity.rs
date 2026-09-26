@@ -199,9 +199,9 @@ impl Molecule {
         {
             let mut stereo_atom_sites = HashSet::with_capacity(self.stereo_atoms.count());
             for view in self.stereo_atoms().iter() {
-                let entity = Entity::StereoAtom(view.id);
+                let entity = Entity::StereoAtom(view.id());
                 let site = view.site_id();
-                let ligand_frame = self.stereo_atoms.ligands(view.id);
+                let ligand_frame = self.stereo_atoms.ligands(view.id());
                 require_reference(&contains, Entity::Atom(site))?;
                 require_references(
                     &contains,
@@ -223,9 +223,9 @@ impl Molecule {
         }
 
         for view in self.stereo_bonds().iter() {
-            let entity = Entity::StereoBond(view.id);
+            let entity = Entity::StereoBond(view.id());
             let site = view.site_id();
-            let ligand_frame = self.stereo_bonds.ligands(view.id);
+            let ligand_frame = self.stereo_bonds.ligands(view.id());
             require_reference(&contains, Entity::Bond(site))?;
             require_references(
                 &contains,
@@ -238,7 +238,7 @@ impl Molecule {
                 .stereo_bonds
                 .incident_to_bond_ids(site)
                 .next()
-                .is_some_and(|id| id < view.id)
+                .is_some_and(|id| id < view.id())
             {
                 return Err(MoleculeIntegrityError::DuplicateStereoBondSites { bond: site });
             }

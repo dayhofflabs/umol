@@ -980,7 +980,7 @@ impl ReactionInput {
                             .ligands()
                             .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                             .collect(),
-                        attributes: lhs.stereo_atom(id).attributes.clone(),
+                        attributes: lhs.stereo_atom(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::StereoAtomModify(r, rhs) => {
@@ -992,7 +992,8 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    for d in StereoAtomDelta::for_update(id, lhs.stereo_atom(id).attributes, &rhs) {
+                    for d in StereoAtomDelta::for_update(id, lhs.stereo_atom(id).attributes(), &rhs)
+                    {
                         resolved.push(Delta::StereoAtom(d));
                     }
                 }
@@ -1028,7 +1029,7 @@ impl ReactionInput {
                             .ligands()
                             .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                             .collect(),
-                        attributes: lhs.stereo_bond(id).attributes.clone(),
+                        attributes: lhs.stereo_bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::StereoBondModify(r, rhs) => {
@@ -1040,7 +1041,8 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    for d in StereoBondDelta::for_update(id, lhs.stereo_bond(id).attributes, &rhs) {
+                    for d in StereoBondDelta::for_update(id, lhs.stereo_bond(id).attributes(), &rhs)
+                    {
                         resolved.push(Delta::StereoBond(d));
                     }
                 }

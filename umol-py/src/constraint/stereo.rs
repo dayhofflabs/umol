@@ -999,7 +999,7 @@ macro_rules! stereo_constraints {
                             .$namespace()
                             .get(*id)
                             .ok_or_else(|| PyIndexError::new_err($id_error))?;
-                        f(&view.attributes.constraints)
+                        f(&view.attributes().constraints)
                     }
                     $backing::Value(entity) => {
                         let entity = entity.bind(py).borrow();

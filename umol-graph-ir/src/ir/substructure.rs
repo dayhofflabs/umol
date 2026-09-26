@@ -537,10 +537,10 @@ impl Molecule {
             let sh = host.atom(host_site).stereo_atom()?;
             let frame = map_ligands(&atoms, sp.ligand_frame())
                 .expect("matched pattern ligands are matched");
-            let action = Permutation::between(&sh.ligand_frame(), &frame)?;
-            let restated = sh.attributes.clone().reframe_by(&action)?;
-            sp.attributes.matches(&restated).then_some(())?;
-            stereo_atom.push((sp.id, sh.id));
+            let action = Permutation::between(sh.ligand_frame(), &frame)?;
+            let restated = sh.attributes().clone().reframe_by(&action)?;
+            sp.attributes().matches(&restated).then_some(())?;
+            stereo_atom.push((sp.id(), sh.id()));
         }
         let stereo_atoms = Correspondence::new(
             stereo_atom,
@@ -557,10 +557,10 @@ impl Molecule {
             let sh = host.bond(host_site).stereo_bond()?;
             let frame = map_ligands(&atoms, sp.ligand_frame())
                 .expect("matched pattern ligands are matched");
-            let action = Permutation::between(&sh.ligand_frame(), &frame)?;
-            let restated = sh.attributes.clone().reframe_by(&action)?;
-            sp.attributes.matches(&restated).then_some(())?;
-            stereo_bond.push((sp.id, sh.id));
+            let action = Permutation::between(sh.ligand_frame(), &frame)?;
+            let restated = sh.attributes().clone().reframe_by(&action)?;
+            sp.attributes().matches(&restated).then_some(())?;
+            stereo_bond.push((sp.id(), sh.id()));
         }
         let stereo_bonds = Correspondence::new(
             stereo_bond,

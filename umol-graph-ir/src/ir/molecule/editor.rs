@@ -302,22 +302,14 @@ impl MoleculeEditor {
 
     pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomEditorView<'_> {
         let set = &self.molecule.stereo_atoms;
-        StereoAtomEditorView {
-            id,
-            attributes: set.attributes(id),
-            site: set.site(id),
-            ligands: set.ligands(id),
-        }
+        assert!(set.contains(id), "invalid stereo atom id");
+        StereoAtomEditorView::new(set, id)
     }
 
     pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondEditorView<'_> {
         let set = &self.molecule.stereo_bonds;
-        StereoBondEditorView {
-            id,
-            attributes: set.attributes(id),
-            site: set.site(id),
-            ligands: set.ligands(id),
-        }
+        assert!(set.contains(id), "invalid stereo bond id");
+        StereoBondEditorView::new(set, id)
     }
 
     /// `true` iff noncovalent bond `id` structurally equals `(atoms, attributes)` — participants (unordered)

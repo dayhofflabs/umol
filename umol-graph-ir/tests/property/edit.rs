@@ -456,7 +456,7 @@ proptest! {
         }
         if kinds.contains(&EntityKind::StereoAtom) {
             prop_assert_eq!(
-                &editor.stereo_atom(StereoAtomId(0)).attributes.configuration,
+                &editor.stereo_atom(StereoAtomId(0)).attributes().configuration,
                 &StereoConfigurationForm::kinded(
                     StereoKind::Tetrahedral,
                     StereoCoset::Lit(0),
@@ -465,7 +465,7 @@ proptest! {
         }
         if kinds.contains(&EntityKind::StereoBond) {
             prop_assert_eq!(
-                &editor.stereo_bond(StereoBondId(0)).attributes.configuration,
+                &editor.stereo_bond(StereoBondId(0)).attributes().configuration,
                 &StereoConfigurationForm::kinded(
                     StereoKind::CisTrans,
                     StereoCoset::Lit(0),

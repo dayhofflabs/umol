@@ -327,14 +327,12 @@ impl<'a> MulticenterBondEditorViewMut<'a> {
     }
 }
 
-// Derivation layer beneath the multicenter-bond facades.
-
 /// Stored constraint container of `bond`.
 pub(crate) fn multicenter_bond_asserted_constraints(
     molecule: &Molecule,
-    bond: MulticenterBondId,
+    id: MulticenterBondId,
 ) -> &MulticenterBondConstraintsForm {
-    &molecule.multicenter_bond(bond).attributes().constraints
+    &molecule.multicenter_bond(id).attributes().constraints
 }
 
 /// Derived side of one multicenter-bond constraint key: the electron count is
@@ -342,14 +340,14 @@ pub(crate) fn multicenter_bond_asserted_constraints(
 /// absence cell, so both modes agree.
 pub(crate) fn multicenter_bond_derived_constraint(
     molecule: &Molecule,
-    bond: MulticenterBondId,
+    id: MulticenterBondId,
     key: MulticenterBondConstraintKey,
     _complete: bool,
 ) -> Option<MulticenterBondConstraintForm> {
     match key {
         MulticenterBondConstraintKey::ElectronCount => {
             Some(MulticenterBondConstraintForm::electron_count(
-                molecule.multicenter_bond(bond).electron_count(),
+                molecule.multicenter_bond(id).electron_count(),
             ))
         }
     }

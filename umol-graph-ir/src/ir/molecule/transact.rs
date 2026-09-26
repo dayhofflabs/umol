@@ -1229,9 +1229,9 @@ impl MoleculeEditor {
                     let view = self.stereo_atom(id);
                     removed.push(RemovedStereoAtom {
                         id,
-                        site: view.site,
-                        ligands: view.ligands.to_vec(),
-                        attributes: view.attributes.clone(),
+                        site: view.site_id(),
+                        ligands: view.ligand_frame().to_vec(),
+                        attributes: view.attributes().clone(),
                     });
                     ids.push(id);
                 }
@@ -1284,9 +1284,9 @@ impl MoleculeEditor {
                     let view = self.stereo_bond(id);
                     removed.push(RemovedStereoBond {
                         id,
-                        site: view.site,
-                        ligands: view.ligands.to_vec(),
-                        attributes: view.attributes.clone(),
+                        site: view.site_id(),
+                        ligands: view.ligand_frame().to_vec(),
+                        attributes: view.attributes().clone(),
                     });
                     ids.push(id);
                 }
@@ -1516,13 +1516,16 @@ impl MoleculeEditor {
             .map(StereoAtomId::from)
             .filter_map(|id| {
                 let view = self.stereo_atom(id);
-                let dropped = atom_set.contains(&view.site)
-                    || view.ligands.iter().any(|l| atom_set.contains(&l.atom_id));
+                let dropped = atom_set.contains(&view.site_id())
+                    || view
+                        .ligand_frame()
+                        .iter()
+                        .any(|l| atom_set.contains(&l.atom_id));
                 dropped.then(|| RemovedStereoAtom {
                     id,
-                    site: view.site,
-                    ligands: view.ligands.to_vec(),
-                    attributes: view.attributes.clone(),
+                    site: view.site_id(),
+                    ligands: view.ligand_frame().to_vec(),
+                    attributes: view.attributes().clone(),
                 })
             })
             .collect();
@@ -1530,19 +1533,22 @@ impl MoleculeEditor {
             .map(StereoBondId::from)
             .filter_map(|id| {
                 let view = self.stereo_bond(id);
-                let site = view.site;
+                let site = view.site_id();
                 let site_dropped = bond_set.contains(&site)
                     || self
                         .bond(site)
                         .atom_ids()
                         .iter()
                         .any(|a| atom_set.contains(a));
-                let ligand_dropped = view.ligands.iter().any(|l| atom_set.contains(&l.atom_id));
+                let ligand_dropped = view
+                    .ligand_frame()
+                    .iter()
+                    .any(|l| atom_set.contains(&l.atom_id));
                 (site_dropped || ligand_dropped).then(|| RemovedStereoBond {
                     id,
                     site,
-                    ligands: view.ligands.to_vec(),
-                    attributes: view.attributes.clone(),
+                    ligands: view.ligand_frame().to_vec(),
+                    attributes: view.attributes().clone(),
                 })
             })
             .collect();
@@ -3002,11 +3008,17 @@ mod tests {
             NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)
         );
         assert_eq!(
-            editor.stereo_atom(StereoAtomId(0)).attributes.configuration,
+            editor
+                .stereo_atom(StereoAtomId(0))
+                .attributes()
+                .configuration,
             StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
         assert_eq!(
-            editor.stereo_bond(StereoBondId(0)).attributes.configuration,
+            editor
+                .stereo_bond(StereoBondId(0))
+                .attributes()
+                .configuration,
             StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
         );
 
@@ -3844,7 +3856,7 @@ mod tests {
         assert_eq!(
             stereo_atom_skeleton
                 .stereo_atom(StereoAtomId(0))
-                .attributes
+                .attributes()
                 .configuration,
             StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0),),
         );
@@ -3907,7 +3919,7 @@ mod tests {
         assert_eq!(
             stereo_bond_skeleton
                 .stereo_bond(StereoBondId(0))
-                .attributes
+                .attributes()
                 .configuration,
             StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
         );

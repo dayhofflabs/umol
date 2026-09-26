@@ -281,7 +281,7 @@ impl StereoResolver {
                             view.ligands()
                                 .map(|ligand| (AtomHandle::Id(ligand.atom_id()), ligand.kind()))
                                 .collect(),
-                            view.attributes.clone(),
+                            view.attributes().clone(),
                         )
                     })
                     .collect(),
@@ -299,7 +299,7 @@ impl StereoResolver {
                             view.ligands()
                                 .map(|ligand| (AtomHandle::Id(ligand.atom_id()), ligand.kind()))
                                 .collect(),
-                            view.attributes.clone(),
+                            view.attributes().clone(),
                         )
                     })
                     .collect(),
@@ -309,13 +309,13 @@ impl StereoResolver {
         let retained_atom_sites: BTreeSet<_> = molecule
             .stereo_atoms()
             .iter()
-            .filter(|view| !remove_stereo_atoms.contains(&view.id))
+            .filter(|view| !remove_stereo_atoms.contains(&view.id()))
             .map(|view| view.site_id())
             .collect();
         let retained_bond_sites: BTreeSet<_> = molecule
             .stereo_bonds()
             .iter()
-            .filter(|view| !remove_stereo_bonds.contains(&view.id))
+            .filter(|view| !remove_stereo_bonds.contains(&view.id()))
             .map(|view| view.site_id())
             .collect();
 
@@ -427,8 +427,8 @@ impl StereoResolver {
         }
         let mut edits = Edits::new();
         for stereo in molecule.stereo_atoms().iter() {
-            let stereo_atom = stereo.id;
-            if stereo.attributes.configuration.kind() != Some(StereoKind::Tetrahedral) {
+            let stereo_atom = stereo.id();
+            if stereo.attributes().configuration.kind() != Some(StereoKind::Tetrahedral) {
                 return Err(StereoProjectError::UnsupportedStereoAtom { stereo_atom });
             }
             let atom = stereo.site_id();
@@ -454,8 +454,8 @@ impl StereoResolver {
             edits.update_atom(AtomHandle::Id(atom), attributes, &update);
         }
         for stereo in molecule.stereo_bonds().iter() {
-            let stereo_bond = stereo.id;
-            if stereo.attributes.configuration.kind() != Some(StereoKind::CisTrans) {
+            let stereo_bond = stereo.id();
+            if stereo.attributes().configuration.kind() != Some(StereoKind::CisTrans) {
                 return Err(StereoProjectError::UnsupportedStereoBond { stereo_bond });
             }
             let bond = stereo.site_id();
@@ -487,13 +487,13 @@ impl StereoResolver {
                     .iter()
                     .map(|stereo| {
                         (
-                            StereoAtomHandle::Id(stereo.id),
+                            StereoAtomHandle::Id(stereo.id()),
                             AtomHandle::Id(stereo.site_id()),
                             stereo
                                 .ligands()
                                 .map(|ligand| (AtomHandle::Id(ligand.atom_id()), ligand.kind()))
                                 .collect(),
-                            stereo.attributes.clone(),
+                            stereo.attributes().clone(),
                         )
                     })
                     .collect(),
@@ -506,13 +506,13 @@ impl StereoResolver {
                     .iter()
                     .map(|stereo| {
                         (
-                            StereoBondHandle::Id(stereo.id),
+                            StereoBondHandle::Id(stereo.id()),
                             BondHandle::Id(stereo.site_id()),
                             stereo
                                 .ligands()
                                 .map(|ligand| (AtomHandle::Id(ligand.atom_id()), ligand.kind()))
                                 .collect(),
-                            stereo.attributes.clone(),
+                            stereo.attributes().clone(),
                         )
                     })
                     .collect(),

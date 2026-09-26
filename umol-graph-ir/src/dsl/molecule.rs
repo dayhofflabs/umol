@@ -960,13 +960,14 @@ fn render_stereo_atoms(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'sta
         .iter()
         .map(|view| {
             render_stereo_atom_entry(
-                view.id,
+                view.id(),
                 view.site_id(),
                 view.ligand_frame()
-                    .into_iter()
+                    .iter()
+                    .copied()
                     .map(|l| render_stereo_ligand(l, meta))
                     .collect(),
-                StereoAtomDsl::from_ref(view.attributes).to_edn(),
+                StereoAtomDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })
@@ -1000,13 +1001,14 @@ fn render_stereo_bonds(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'sta
         .iter()
         .map(|view| {
             render_stereo_bond_entry(
-                view.id,
+                view.id(),
                 view.site_id(),
                 view.ligand_frame()
-                    .into_iter()
+                    .iter()
+                    .copied()
                     .map(|l| render_stereo_ligand(l, meta))
                     .collect(),
-                StereoBondDsl::from_ref(view.attributes).to_edn(),
+                StereoBondDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })

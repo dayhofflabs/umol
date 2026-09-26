@@ -209,11 +209,11 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
         || molecule
             .stereo_atoms()
             .iter()
-            .any(|stereo| !stereo.attributes.constraints.is_empty())
+            .any(|stereo| !stereo.attributes().constraints.is_empty())
         || molecule
             .stereo_bonds()
             .iter()
-            .any(|stereo| !stereo.attributes.constraints.is_empty());
+            .any(|stereo| !stereo.attributes().constraints.is_empty());
 
     if has_inline_constraints || molecule.has_constraints() {
         DescriptionLevel::Full
@@ -1596,9 +1596,13 @@ fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
             let rows = $entities
                 .iter()
                 .flat_map(|entity| {
-                    entity.attributes.constraints.iter().map(move |constraint| {
-                        product([index_key(entity.id.index()), $key(constraint)])
-                    })
+                    entity
+                        .attributes()
+                        .constraints
+                        .iter()
+                        .map(move |constraint| {
+                            product([index_key(entity.id().index()), $key(constraint)])
+                        })
                 })
                 .collect::<Vec<_>>();
             if !rows.is_empty() {
@@ -1996,9 +2000,9 @@ fn generator_preserves_stereo(
 ) -> bool {
     let entity_image =
         |entity| incidence_graph.entity(generator[incidence_graph.node_of(entity).index()]);
-    let frame_action = |source: Vec<StereoLigand>, target: Vec<StereoLigand>| {
+    let frame_action = |source: &[StereoLigand], target: &[StereoLigand]| {
         let mapped = source
-            .into_iter()
+            .iter()
             .map(|ligand| {
                 let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
                     return None;
@@ -2006,7 +2010,7 @@ fn generator_preserves_stereo(
                 Some(StereoLigand::new(atom_id, ligand.kind))
             })
             .collect::<Option<Vec<_>>>()?;
-        Permutation::between(&mapped, &target)
+        Permutation::between(&mapped, target)
     };
     let configuration_preserved = |source: &StereoConfigurationForm,
                                    target: &StereoConfigurationForm,
@@ -2018,7 +2022,7 @@ fn generator_preserves_stereo(
     };
 
     for source in molecule.stereo_atoms().iter() {
-        let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source.id)) else {
+        let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source.id())) else {
             return false;
         };
         let target = molecule.stereo_atom(target_id);
@@ -2029,8 +2033,8 @@ fn generator_preserves_stereo(
             return false;
         };
         if !configuration_preserved(
-            &source.attributes.configuration,
-            &target.attributes.configuration,
+            &source.attributes().configuration,
+            &target.attributes().configuration,
             action,
         ) {
             return false;
@@ -2038,7 +2042,7 @@ fn generator_preserves_stereo(
     }
 
     for source in molecule.stereo_bonds().iter() {
-        let Entity::StereoBond(target_id) = entity_image(Entity::StereoBond(source.id)) else {
+        let Entity::StereoBond(target_id) = entity_image(Entity::StereoBond(source.id())) else {
             return false;
         };
         let target = molecule.stereo_bond(target_id);
@@ -2049,8 +2053,8 @@ fn generator_preserves_stereo(
             return false;
         };
         if !configuration_preserved(
-            &source.attributes.configuration,
-            &target.attributes.configuration,
+            &source.attributes().configuration,
+            &target.attributes().configuration,
             action,
         ) {
             return false;
@@ -2909,7 +2913,7 @@ fn structure_partition_descriptors(
                         stereo_refinement_descriptor(
                             entity_class(Entity::Atom(stereo.site_id())),
                             &ligand_classes,
-                            &stereo.attributes.configuration,
+                            &stereo.attributes().configuration,
                         )?
                     }
                     Entity::StereoBond(id) => {
@@ -2926,7 +2930,7 @@ fn structure_partition_descriptors(
                         stereo_refinement_descriptor(
                             entity_class(Entity::Bond(stereo.site_id())),
                             &ligand_classes,
-                            &stereo.attributes.configuration,
+                            &stereo.attributes().configuration,
                         )?
                     }
                     _ => product([CanonicalKeyValue::Unsigned(entity_class(entity).into())]),
@@ -2990,7 +2994,7 @@ fn para_stereo_partition_descriptors(
                         Some(stereo_refinement_descriptor(
                             entity_class(Entity::Atom(stereo.site_id())),
                             &ligand_classes(Entity::StereoAtom(id)),
-                            &stereo.attributes.configuration,
+                            &stereo.attributes().configuration,
                         )?)
                     }
                     Entity::StereoBond(id) => {
@@ -3001,7 +3005,7 @@ fn para_stereo_partition_descriptors(
                         Some(stereo_refinement_descriptor(
                             entity_class(Entity::Bond(stereo.site_id())),
                             &ligand_classes(Entity::StereoBond(id)),
-                            &stereo.attributes.configuration,
+                            &stereo.attributes().configuration,
                         )?)
                     }
                     _ => None,
@@ -3231,7 +3235,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .stereo_atoms()
                 .get(id)
                 .expect("incidence stereo atom is in range")
-                .attributes;
+                .attributes();
             if let Some(kind) = attributes.configuration.kind() {
                 check_stereo_atom_kind(Entity::StereoAtom(id), kind).map_err(|_| Contradiction)?;
             }
@@ -3254,7 +3258,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .stereo_bonds()
                 .get(id)
                 .expect("incidence stereo bond is in range")
-                .attributes;
+                .attributes();
             if let Some(kind) = attributes.configuration.kind() {
                 check_stereo_bond_kind(Entity::StereoBond(id), kind).map_err(|_| Contradiction)?;
             }
@@ -3744,9 +3748,9 @@ fn structure_candidate(
         }
     }
 
-    let remap_ligands = |ligands: Vec<StereoLigand>| {
+    let remap_ligands = |ligands: &[StereoLigand]| {
         ligands
-            .into_iter()
+            .iter()
             .map(|ligand| {
                 StereoLigand::new(
                     AtomId(atom_images[ligand.atom_id.index()] as u32),
@@ -3756,7 +3760,7 @@ fn structure_candidate(
             .collect::<Vec<_>>()
     };
     let canonical_frame =
-        |ligands: Vec<StereoLigand>,
+        |ligands: &[StereoLigand],
          configuration: &StereoConfigurationForm|
          -> Result<(Vec<StereoLigand>, StereoConfigurationForm), Contradiction> {
             let mut ligands = remap_ligands(ligands);
@@ -3778,7 +3782,7 @@ fn structure_candidate(
         .iter()
         .map(|stereo| {
             let (ligands, configuration) =
-                canonical_frame(stereo.ligand_frame(), &stereo.attributes.configuration)?;
+                canonical_frame(stereo.ligand_frame(), &stereo.attributes().configuration)?;
             let fields = vec![
                 field(
                     0,
@@ -3796,8 +3800,8 @@ fn structure_candidate(
             ];
             Ok((
                 CanonicalKeyValue::Product(fields),
-                stereo.id,
-                incidence_graph.node_of(Entity::StereoAtom(stereo.id)),
+                stereo.id(),
+                incidence_graph.node_of(Entity::StereoAtom(stereo.id())),
             ))
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;
@@ -3812,7 +3816,7 @@ fn structure_candidate(
         .iter()
         .map(|stereo| {
             let (ligands, configuration) =
-                canonical_frame(stereo.ligand_frame(), &stereo.attributes.configuration)?;
+                canonical_frame(stereo.ligand_frame(), &stereo.attributes().configuration)?;
             let fields = vec![
                 field(
                     0,
@@ -3830,8 +3834,8 @@ fn structure_candidate(
             ];
             Ok((
                 CanonicalKeyValue::Product(fields),
-                stereo.id,
-                incidence_graph.node_of(Entity::StereoBond(stereo.id)),
+                stereo.id(),
+                incidence_graph.node_of(Entity::StereoBond(stereo.id())),
             ))
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;

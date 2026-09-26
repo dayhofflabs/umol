@@ -1131,7 +1131,7 @@ fn test_molecule_try_from_entries_attributes(
         &entries.multicenter[0].1
     );
     assert_eq!(
-        molecule.stereo_atom(StereoAtomId(0)).attributes,
+        molecule.stereo_atom(StereoAtomId(0)).attributes(),
         &entries.stereo_atoms[0].2
     );
     assert_eq!(
@@ -1159,7 +1159,7 @@ fn test_molecule_try_from_entries_stereo_term(
     assert_eq!(
         &molecule
             .stereo_atom(StereoAtomId(0))
-            .attributes
+            .attributes()
             .configuration,
         &configuration,
     );
@@ -1425,8 +1425,8 @@ fn test_molecule_try_from_entries_stereo_kind_attributes(
 
     let molecule = Molecule::try_from_entries(entries).unwrap();
     let stored = match entity {
-        Entity::StereoAtom(id) => &molecule.stereo_atom(id).attributes.configuration,
-        Entity::StereoBond(id) => &molecule.stereo_bond(id).attributes.configuration,
+        Entity::StereoAtom(id) => &molecule.stereo_atom(id).attributes().configuration,
+        Entity::StereoBond(id) => &molecule.stereo_bond(id).attributes().configuration,
         _ => unreachable!("test cases contain only stereo entities"),
     };
     assert_eq!(
@@ -6418,7 +6418,7 @@ fn test_molecule_try_modify_stereo_atom(#[from(equiv_molecule_entries)] entries:
     assert_eq!(
         molecule
             .stereo_atom(StereoAtomId(0))
-            .attributes
+            .attributes()
             .configuration,
         StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
     );
@@ -6433,7 +6433,7 @@ fn test_molecule_try_modify_stereo_atom(#[from(equiv_molecule_entries)] entries:
     assert_eq!(
         molecule
             .stereo_atom(StereoAtomId(0))
-            .attributes
+            .attributes()
             .configuration,
         StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
     );
@@ -6465,7 +6465,7 @@ fn test_molecule_try_modify_stereo_atoms(#[from(equiv_molecule_entries)] entries
     assert_eq!(
         molecule
             .stereo_atom(StereoAtomId(0))
-            .attributes
+            .attributes()
             .configuration,
         StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
     );
@@ -6483,7 +6483,7 @@ fn test_molecule_try_modify_stereo_bond(#[from(equiv_molecule_entries)] entries:
     assert_eq!(
         molecule
             .stereo_bond(StereoBondId(0))
-            .attributes
+            .attributes()
             .configuration,
         StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
     );
@@ -6498,7 +6498,7 @@ fn test_molecule_try_modify_stereo_bond(#[from(equiv_molecule_entries)] entries:
     assert_eq!(
         molecule
             .stereo_bond(StereoBondId(0))
-            .attributes
+            .attributes()
             .configuration,
         StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
     );
@@ -6530,7 +6530,7 @@ fn test_molecule_try_modify_stereo_bonds(#[from(equiv_molecule_entries)] entries
     assert_eq!(
         molecule
             .stereo_bond(StereoBondId(0))
-            .attributes
+            .attributes()
             .configuration,
         StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
     );

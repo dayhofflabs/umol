@@ -862,7 +862,7 @@ impl<'a> Resolver<'a> {
         // Stereo entity constraint keys derive vacuous, so their assertions
         // are always kept; the loops exist for the uniform surface.
         for id in molecule.stereo_atoms().ids() {
-            for asserted in molecule.stereo_atom(id).attributes.constraints.iter() {
+            for asserted in molecule.stereo_atom(id).attributes().constraints.iter() {
                 if molecule
                     .stereo_atom(id)
                     .constraints()
@@ -874,7 +874,7 @@ impl<'a> Resolver<'a> {
             }
         }
         for id in molecule.stereo_bonds().ids() {
-            for asserted in molecule.stereo_bond(id).attributes.constraints.iter() {
+            for asserted in molecule.stereo_bond(id).attributes().constraints.iter() {
                 if molecule
                     .stereo_bond(id)
                     .constraints()
@@ -1069,7 +1069,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
                 let stored = stereo_atoms.remove(&(id, kind, inner.key())).or_else(|| {
                     molecule
                         .stereo_atom(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                         .cloned()
@@ -1087,7 +1087,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
                 let stored = stereo_bonds.remove(&(id, kind, inner.key())).or_else(|| {
                     molecule
                         .stereo_bond(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                         .cloned()
@@ -1161,7 +1161,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
         update.constraints.set(form);
         edits.update_stereo_atom(
             StereoAtomHandle::Id(id),
-            molecule.stereo_atom(id).attributes,
+            molecule.stereo_atom(id).attributes(),
             &update,
         );
     }
@@ -1170,7 +1170,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
         update.constraints.set(form);
         edits.update_stereo_bond(
             StereoBondHandle::Id(id),
-            molecule.stereo_bond(id).attributes,
+            molecule.stereo_bond(id).attributes(),
             &update,
         );
     }

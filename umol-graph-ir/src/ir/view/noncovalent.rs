@@ -286,14 +286,12 @@ impl<'a> NoncovalentBondEditorViewMut<'a> {
     }
 }
 
-// Derivation layer beneath the noncovalent-bond facades.
-
 /// Stored constraint container of `bond`.
 pub(crate) fn noncovalent_bond_asserted_constraints(
     molecule: &Molecule,
-    bond: NoncovalentBondId,
+    id: NoncovalentBondId,
 ) -> &NoncovalentBondConstraintsForm {
-    &molecule.noncovalent_bond(bond).attributes().constraints
+    &molecule.noncovalent_bond(id).attributes().constraints
 }
 
 /// Derived side of one noncovalent-bond constraint key: intramolecularity is
@@ -301,13 +299,13 @@ pub(crate) fn noncovalent_bond_asserted_constraints(
 /// the topology with no absence cell, so both modes agree.
 pub(crate) fn noncovalent_bond_derived_constraint(
     molecule: &Molecule,
-    bond: NoncovalentBondId,
+    id: NoncovalentBondId,
     key: NoncovalentBondConstraintKey,
     _complete: bool,
 ) -> Option<NoncovalentBondConstraintForm> {
     match key {
         NoncovalentBondConstraintKey::Intramolecular => {
-            let [a, b] = molecule.noncovalent_bond(bond).atom_ids();
+            let [a, b] = molecule.noncovalent_bond(id).atom_ids();
             Some(NoncovalentBondConstraintForm::intramolecular(
                 same_bond_component(molecule, a, b),
             ))

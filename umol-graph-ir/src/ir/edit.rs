@@ -3461,7 +3461,7 @@ mod tests {
             .expect("stereo-atom update edits should apply");
 
         assert_eq!(
-            editor.stereo_atom(StereoAtomId(0)).attributes,
+            editor.stereo_atom(StereoAtomId(0)).attributes(),
             &expected_attributes
         );
     }
@@ -3551,7 +3551,7 @@ mod tests {
             .expect("stereo-bond update edits should apply");
 
         assert_eq!(
-            editor.stereo_bond(StereoBondId(0)).attributes,
+            editor.stereo_bond(StereoBondId(0)).attributes(),
             &expected_attributes
         );
     }

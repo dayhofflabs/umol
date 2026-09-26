@@ -186,7 +186,7 @@ impl<'a> BondView<'a> {
     }
 
     pub fn stereo_bond_id(&self) -> Option<StereoBondId> {
-        self.stereo_bond().map(|s| s.id)
+        self.stereo_bond().map(|s| s.id())
     }
 
     /// The stereo bond sited on this bond, if any — any bond-centered geometry. A
@@ -380,8 +380,8 @@ pub(crate) fn bond_derived_constraint(
             // an open claim, not the absence of one.
             if let Some(stereo) = molecule.stereo_bonds().at(id) {
                 let form = match (
-                    stereo.attributes.configuration.kind(),
-                    stereo.attributes.configuration.coset(),
+                    stereo.attributes().configuration.kind(),
+                    stereo.attributes().configuration.coset(),
                 ) {
                     (Some(StereoKind::CisTrans), Some(coset)) => {
                         CisTransStereoForm::stereo(coset.clone())
@@ -600,7 +600,7 @@ mod tests {
     #[rstest]
     fn test_bond_view_stereo_bond(stereo_molecule: Molecule) {
         let view = stereo_molecule.bond(BondId(1)).stereo_bond().unwrap();
-        assert_eq!(view.id, StereoBondId(0));
+        assert_eq!(view.id(), StereoBondId(0));
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert!(stereo_molecule.bond(BondId(0)).stereo_bond().is_none());
     }

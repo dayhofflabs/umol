@@ -2704,12 +2704,12 @@ fn molecule_entity_incidence_is_unique(molecule: &Molecule) -> bool {
         molecule
             .stereo_atoms()
             .iter()
-            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
+            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame().to_vec()))),
     ) && all_unique(
         molecule
             .stereo_bonds()
             .iter()
-            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame()))),
+            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame().to_vec()))),
     )
 }
 
@@ -5359,7 +5359,7 @@ fn build_reaction(
                 .ligands()
                 .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                 .collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for &id in &removed_stereo_bond {
@@ -5371,7 +5371,7 @@ fn build_reaction(
                 .ligands()
                 .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                 .collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for (index, new_charge) in charges.into_iter().enumerate() {
@@ -5489,7 +5489,7 @@ fn build_reaction(
         }
         let Some(target) = target else { continue };
         let kind = lhs.stereo_atom(id).kind();
-        let old = lhs.stereo_atom(id).attributes.configuration.clone();
+        let old = lhs.stereo_atom(id).attributes().configuration.clone();
         let new = StereoConfigurationForm::kinded(kind, target);
         let delta = StereoAtomDelta::ModifyField {
             id,
@@ -5509,7 +5509,7 @@ fn build_reaction(
         }
         let Some(target) = target else { continue };
         let kind = lhs.stereo_bond(id).kind();
-        let old = lhs.stereo_bond(id).attributes.configuration.clone();
+        let old = lhs.stereo_bond(id).attributes().configuration.clone();
         let new = StereoConfigurationForm::kinded(kind, target);
         let delta = StereoBondDelta::ModifyField {
             id,

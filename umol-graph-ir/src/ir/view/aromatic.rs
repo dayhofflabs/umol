@@ -372,8 +372,6 @@ impl<'a> AromaticSystemEditorViewMut<'a> {
     }
 }
 
-// Derivation layer beneath the aromatic-system facades.
-
 /// Stored constraint container of aromatic system `id`.
 pub(crate) fn aromatic_system_asserted_constraints(
     molecule: &Molecule,

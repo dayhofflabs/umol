@@ -312,11 +312,11 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
     if lhs
         .stereo_atoms()
         .iter()
-        .any(|view| !configuration_is_valid(&view.attributes.configuration))
+        .any(|view| !configuration_is_valid(&view.attributes().configuration))
         || lhs
             .stereo_bonds()
             .iter()
-            .any(|view| !configuration_is_valid(&view.attributes.configuration))
+            .any(|view| !configuration_is_valid(&view.attributes().configuration))
     {
         return false;
     }
@@ -329,7 +329,7 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
             let lhs_configuration = lhs
                 .stereo_atoms()
                 .get(*id)
-                .map(|view| &view.attributes.configuration);
+                .map(|view| &view.attributes().configuration);
             configurations_are_compatible(
                 lhs_configuration,
                 &attributes.configuration,
@@ -342,7 +342,7 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
         }) => configurations_are_compatible(
             lhs.stereo_atoms()
                 .get(*id)
-                .map(|view| &view.attributes.configuration),
+                .map(|view| &view.attributes().configuration),
             old,
             new,
         ),
@@ -353,7 +353,7 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
             let lhs_configuration = lhs
                 .stereo_bonds()
                 .get(*id)
-                .map(|view| &view.attributes.configuration);
+                .map(|view| &view.attributes().configuration);
             configurations_are_compatible(
                 lhs_configuration,
                 &attributes.configuration,
@@ -366,7 +366,7 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
         }) => configurations_are_compatible(
             lhs.stereo_bonds()
                 .get(*id)
-                .map(|view| &view.attributes.configuration),
+                .map(|view| &view.attributes().configuration),
             old,
             new,
         ),
@@ -508,15 +508,19 @@ pub(super) fn normalize_reaction_deltas(
                     .stereo_atoms()
                     .get(*id)
                     .map(|view| (view.site_id(), view.ligand_frame()))
-                    .or_else(|| stereo_atom_adds.get(id).cloned())
+                    .or_else(|| {
+                        stereo_atom_adds
+                            .get(id)
+                            .map(|(site, ligands)| (*site, ligands.as_slice()))
+                    })
                     .ok_or(Contradiction)?;
-                let action = Permutation::between(ligands, &owner.1).ok_or(Contradiction)?;
+                let action = Permutation::between(ligands, owner.1).ok_or(Contradiction)?;
                 *attributes = attributes
                     .clone()
                     .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *site = owner.0;
-                *ligands = owner.1;
+                *ligands = owner.1.to_vec();
             }
             Delta::StereoBond(StereoBondDelta::Remove {
                 id,
@@ -528,15 +532,19 @@ pub(super) fn normalize_reaction_deltas(
                     .stereo_bonds()
                     .get(*id)
                     .map(|view| (view.site_id(), view.ligand_frame()))
-                    .or_else(|| stereo_bond_adds.get(id).cloned())
+                    .or_else(|| {
+                        stereo_bond_adds
+                            .get(id)
+                            .map(|(site, ligands)| (*site, ligands.as_slice()))
+                    })
                     .ok_or(Contradiction)?;
-                let action = Permutation::between(ligands, &owner.1).ok_or(Contradiction)?;
+                let action = Permutation::between(ligands, owner.1).ok_or(Contradiction)?;
                 *attributes = attributes
                     .clone()
                     .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *site = owner.0;
-                *ligands = owner.1;
+                *ligands = owner.1.to_vec();
             }
             _ => {}
         }
@@ -634,19 +642,19 @@ fn reaction_frame_action(
         }
     }
     for view in lhs.stereo_atoms().iter() {
-        if domain.is_none_or(|domain| domain.contains_stereo_atom(view.id)) {
+        if domain.is_none_or(|domain| domain.contains_stereo_atom(view.id())) {
             stereo_atoms.insert(
-                view.id,
-                stereo_atom_representative_action(&view.ligand_frame())
+                view.id(),
+                stereo_atom_representative_action(view.ligand_frame())
                     .expect("integrity-valid stereo-atom frames fit the bounded action"),
             );
         }
     }
     for view in lhs.stereo_bonds().iter() {
-        if domain.is_none_or(|domain| domain.contains_stereo_bond(view.id)) {
+        if domain.is_none_or(|domain| domain.contains_stereo_bond(view.id())) {
             stereo_bonds.insert(
-                view.id,
-                stereo_bond_representative_action(&view.ligand_frame())
+                view.id(),
+                stereo_bond_representative_action(view.ligand_frame())
                     .expect("integrity-valid stereo-bond frames admit a standard-frame action"),
             );
         }
@@ -833,11 +841,15 @@ fn reframe_reaction_deltas(
                         .stereo_atoms()
                         .get(id)
                         .map(|view| (view.site_id(), view.ligand_frame()))
-                        .or_else(|| stereo_atom_adds.get(&id).cloned())?;
+                        .or_else(|| {
+                            stereo_atom_adds
+                                .get(&id)
+                                .map(|(site, ligands)| (*site, ligands.as_slice()))
+                        })?;
                     let StereoAtomDelta::Remove { ligands, .. } = &delta else {
                         unreachable!()
                     };
-                    let local_to_owner = Permutation::between(ligands, &owner.1)?;
+                    let local_to_owner = Permutation::between(ligands, owner.1)?;
                     let owner_to_target = *actions.stereo_atoms().action(id)?;
                     (local_to_owner.degree() == owner_to_target.degree()).then_some(())?;
                     let local_action = local_to_owner
@@ -851,11 +863,15 @@ fn reframe_reaction_deltas(
                         .stereo_bonds()
                         .get(id)
                         .map(|view| (view.site_id(), view.ligand_frame()))
-                        .or_else(|| stereo_bond_adds.get(&id).cloned())?;
+                        .or_else(|| {
+                            stereo_bond_adds
+                                .get(&id)
+                                .map(|(site, ligands)| (*site, ligands.as_slice()))
+                        })?;
                     let StereoBondDelta::Remove { ligands, .. } = &delta else {
                         unreachable!()
                     };
-                    let local_to_owner = Permutation::between(ligands, &owner.1)?;
+                    let local_to_owner = Permutation::between(ligands, owner.1)?;
                     let owner_to_target = *actions.stereo_bonds().action(id)?;
                     (local_to_owner.degree() == owner_to_target.degree()).then_some(())?;
                     let local_action = local_to_owner
@@ -1589,7 +1605,7 @@ impl Reaction {
                         sets.push(Edit::ModifyStereoAtomField {
                             id: StereoAtomHandle::Id(host_id),
                             change: StereoAtomFieldChange::Configuration {
-                                old: host.stereo_atom(host_id).attributes.configuration.clone(),
+                                old: host.stereo_atom(host_id).attributes().configuration.clone(),
                                 new: new.clone(),
                             },
                         })
@@ -1602,7 +1618,7 @@ impl Reaction {
                                 kind: *kind,
                                 old: host
                                     .stereo_atom(host_id)
-                                    .attributes
+                                    .attributes()
                                     .constraints
                                     .get(constraint.key())
                                     .cloned(),
@@ -1622,7 +1638,7 @@ impl Reaction {
                         sets.push(Edit::ModifyStereoBondField {
                             id: StereoBondHandle::Id(host_id),
                             change: StereoBondFieldChange::Configuration {
-                                old: host.stereo_bond(host_id).attributes.configuration.clone(),
+                                old: host.stereo_bond(host_id).attributes().configuration.clone(),
                                 new: new.clone(),
                             },
                         })
@@ -1635,7 +1651,7 @@ impl Reaction {
                                 kind: *kind,
                                 old: host
                                     .stereo_bond(host_id)
-                                    .attributes
+                                    .attributes()
                                     .constraints
                                     .get(constraint.key())
                                     .cloned(),
@@ -2449,9 +2465,9 @@ fn application_frame_actions(
     for rule_view in lhs
         .stereo_atoms()
         .iter()
-        .filter(|view| domain.contains_stereo_atom(view.id))
+        .filter(|view| domain.contains_stereo_atom(view.id()))
     {
-        let id = rule_view.id;
+        let id = rule_view.id();
         let entity = Entity::StereoAtom(id);
         let host_id = correspondence
             .stereo_atoms()
@@ -2461,8 +2477,8 @@ fn application_frame_actions(
             .stereo_atoms()
             .get(host_id)
             .ok_or(ApplyError::CorrespondenceMismatch { entity })?;
-        let mapped = mapped_ligands(&rule_view.ligand_frame(), entity)?;
-        let action = Permutation::between(&mapped, &host_view.ligand_frame())
+        let mapped = mapped_ligands(rule_view.ligand_frame(), entity)?;
+        let action = Permutation::between(&mapped, host_view.ligand_frame())
             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
         actions.insert_stereo_atom(id, action);
     }
@@ -2475,9 +2491,9 @@ fn application_frame_actions(
     for rule_view in lhs
         .stereo_bonds()
         .iter()
-        .filter(|view| domain.contains_stereo_bond(view.id))
+        .filter(|view| domain.contains_stereo_bond(view.id()))
     {
-        let id = rule_view.id;
+        let id = rule_view.id();
         let entity = Entity::StereoBond(id);
         let host_id = correspondence
             .stereo_bonds()
@@ -2487,8 +2503,8 @@ fn application_frame_actions(
             .stereo_bonds()
             .get(host_id)
             .ok_or(ApplyError::CorrespondenceMismatch { entity })?;
-        let mapped = mapped_ligands(&rule_view.ligand_frame(), entity)?;
-        let action = Permutation::between(&mapped, &host_view.ligand_frame())
+        let mapped = mapped_ligands(rule_view.ligand_frame(), entity)?;
+        let action = Permutation::between(&mapped, host_view.ligand_frame())
             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
         actions.insert_stereo_bond(id, action);
     }
@@ -2710,7 +2726,7 @@ fn reframe_application_deltas(
                         .stereo_atoms()
                         .get(host_id)
                         .ok_or(ApplyError::CorrespondenceMismatch { entity })?
-                        .attributes;
+                        .attributes();
                     match &mut delta {
                         StereoAtomDelta::Remove { attributes, .. } => {
                             if !attributes.matches(host_attributes) {
@@ -2762,7 +2778,7 @@ fn reframe_application_deltas(
                         .stereo_bonds()
                         .get(host_id)
                         .ok_or(ApplyError::CorrespondenceMismatch { entity })?
-                        .attributes;
+                        .attributes();
                     match &mut delta {
                         StereoBondDelta::Remove { attributes, .. } => {
                             if !attributes.matches(host_attributes) {
