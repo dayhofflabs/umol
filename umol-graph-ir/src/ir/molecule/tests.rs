@@ -5267,7 +5267,70 @@ fn test_molecule_editor_push_constraint_and_constraints_mut(
             sum: NumForm::Lit(0),
         }));
     let result = b.build();
-    assert_eq!(result.constraints().len(), 2);
+    assert_eq!(
+        result.constraints(),
+        &Constraints::from(vec![
+            Constraint::Molecule(MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(0), AtomId(1)]),
+            }),
+            Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(0)]),
+                sum: NumForm::Lit(0),
+            }),
+        ])
+    );
+}
+
+#[rstest]
+#[case::reference(
+    Constraint::Atom(AtomId(99), AtomConstraintForm::valence(4)),
+    MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(99)) }
+)]
+#[case::kind(
+    Constraint::StereoAtom(StereoAtomId(0), StereoKind::CisTrans,
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+    MoleculeIntegrityError::StereoKindSiteMismatch {
+        entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::CisTrans,
+    }
+)]
+#[case::arity(
+    Constraint::StereoAtom(StereoAtomId(0), StereoKind::TrigonalBipyramidal,
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+    MoleculeIntegrityError::StereoLigandArity {
+        entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::TrigonalBipyramidal,
+        expected: 5, actual: 4,
+    }
+)]
+#[case::permutation(
+    Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
+        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
+            permutation: LigandPermutation(Permutation::identity(3)),
+            active: BooleanForm::Lit(true),
+        })),
+    MoleculeIntegrityError::StereoPermutationDegree {
+        entity: Entity::StereoAtom(StereoAtomId(0)), expected: 4, actual: 3,
+    }
+)]
+#[case::position(
+    Constraint::Not(Box::new(Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans,
+        StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(0usize.into(), 4usize.into()),
+            relation: TopicityRelationForm::Undetermined,
+        })))),
+    MoleculeIntegrityError::StereoLigandPositionOutOfRange {
+        entity: Entity::StereoBond(StereoBondId(0)), position: 4, degree: 4,
+    }
+)]
+fn test_molecule_editor_try_build_constraints_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] constraint: Constraint,
+    #[case] expected: MoleculeIntegrityError,
+) {
+    let molecule = Molecule::from_entries(entries);
+    let mut editor = molecule.edit();
+    editor.constraints_mut().push(constraint);
+    assert_eq!(editor.snapshot(), Err(expected.clone()));
+    assert_eq!(editor.try_build(), Err(expected));
 }
 
 #[rstest]
@@ -6233,20 +6296,20 @@ fn test_molecule_lift_constraints_drains_inline_stores(
 }
 
 #[rstest]
-fn test_molecule_lift_constraints_appends_to_existing(
-    #[from(rich_molecule)] mut molecule: Molecule,
-) {
+fn test_molecule_lift_constraints_appends_to_existing(#[from(rich_molecule)] molecule: Molecule) {
+    let mut editor = molecule.edit();
     let prior = Constraint::Relational(RelationalConstraint::AromaticSystemContains {
         system: AromaticSystemId(0),
         atom: AtomId(0),
     });
-    molecule.constraints_mut().push(prior.clone()).unwrap();
-    molecule
+    editor.constraints_mut().push(prior.clone());
+    editor
         .atom_mut(AtomId(0))
         .attributes
         .constraints
         .set(AtomConstraintForm::Valence(NumForm::Lit(4)));
 
+    let mut molecule = editor.try_build().unwrap();
     molecule.lift_constraints();
 
     let mut expected = Constraints::new();
@@ -6260,30 +6323,23 @@ fn test_molecule_lift_constraints_appends_to_existing(
 
 #[rstest]
 fn test_molecule_inline_constraints_drains_top_level_leaves(
-    #[from(rich_molecule)] mut molecule: Molecule,
+    #[from(rich_molecule)] molecule: Molecule,
 ) {
-    molecule
-        .constraints_mut()
-        .push(Constraint::Atom(
-            AtomId(0),
-            AtomConstraintForm::Valence(NumForm::Lit(4)),
-        ))
-        .unwrap();
-    molecule
-        .constraints_mut()
-        .push(Constraint::Bond(
-            BondId(0),
-            BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
-        ))
-        .unwrap();
-    molecule
-        .constraints_mut()
-        .push(Constraint::DativeBond(
-            DativeBondId(0),
-            DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
-        ))
-        .unwrap();
+    let mut editor = molecule.edit();
+    editor.constraints_mut().push(Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::Valence(NumForm::Lit(4)),
+    ));
+    editor.constraints_mut().push(Constraint::Bond(
+        BondId(0),
+        BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
+    ));
+    editor.constraints_mut().push(Constraint::DativeBond(
+        DativeBondId(0),
+        DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
+    ));
 
+    let mut molecule = editor.try_build().unwrap();
     molecule.inline_constraints().unwrap();
 
     assert!(molecule.constraints().is_empty());
@@ -6306,23 +6362,19 @@ fn test_molecule_inline_constraints_drains_top_level_leaves(
 
 #[rstest]
 fn test_molecule_inline_constraints_last_wins_on_collision(
-    #[from(rich_molecule)] mut molecule: Molecule,
+    #[from(rich_molecule)] molecule: Molecule,
 ) {
-    molecule
-        .constraints_mut()
-        .push(Constraint::Atom(
-            AtomId(0),
-            AtomConstraintForm::Valence(NumForm::Lit(3)),
-        ))
-        .unwrap();
-    molecule
-        .constraints_mut()
-        .push(Constraint::Atom(
-            AtomId(0),
-            AtomConstraintForm::Valence(NumForm::Lit(4)),
-        ))
-        .unwrap();
+    let mut editor = molecule.edit();
+    editor.constraints_mut().push(Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::Valence(NumForm::Lit(3)),
+    ));
+    editor.constraints_mut().push(Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::Valence(NumForm::Lit(4)),
+    ));
 
+    let mut molecule = editor.try_build().unwrap();
     molecule.inline_constraints().unwrap();
 
     // Only one Valence survives; with two competing inserts of the same kind,
@@ -6341,8 +6393,9 @@ fn test_molecule_inline_constraints_last_wins_on_collision(
 
 #[rstest]
 fn test_molecule_inline_constraints_skips_combinator_nested(
-    #[from(rich_molecule)] mut molecule: Molecule,
+    #[from(rich_molecule)] molecule: Molecule,
 ) {
+    let mut editor = molecule.edit();
     let leaf = Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(4)));
     let nested = Constraint::And(vec![
         leaf.clone(),
@@ -6351,8 +6404,9 @@ fn test_molecule_inline_constraints_skips_combinator_nested(
             BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
         ),
     ]);
-    molecule.constraints_mut().push(nested.clone()).unwrap();
+    editor.constraints_mut().push(nested.clone());
 
+    let mut molecule = editor.try_build().unwrap();
     molecule.inline_constraints().unwrap();
 
     let mut expected = Constraints::new();
@@ -6364,8 +6418,9 @@ fn test_molecule_inline_constraints_skips_combinator_nested(
 
 #[rstest]
 fn test_molecule_inline_constraints_skips_relational_and_molecule(
-    #[from(rich_molecule)] mut molecule: Molecule,
+    #[from(rich_molecule)] molecule: Molecule,
 ) {
+    let mut editor = molecule.edit();
     let rel = Constraint::Relational(RelationalConstraint::AromaticSystemContains {
         system: AromaticSystemId(0),
         atom: AtomId(0),
@@ -6373,16 +6428,14 @@ fn test_molecule_inline_constraints_skips_relational_and_molecule(
     let mol = Constraint::Molecule(MoleculeConstraint::Connected {
         atoms: Some(vec![AtomId(0), AtomId(1)]),
     });
-    molecule.constraints_mut().push(rel.clone()).unwrap();
-    molecule.constraints_mut().push(mol.clone()).unwrap();
-    molecule
-        .constraints_mut()
-        .push(Constraint::Atom(
-            AtomId(0),
-            AtomConstraintForm::Valence(NumForm::Lit(4)),
-        ))
-        .unwrap();
+    editor.constraints_mut().push(rel.clone());
+    editor.constraints_mut().push(mol.clone());
+    editor.constraints_mut().push(Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::Valence(NumForm::Lit(4)),
+    ));
 
+    let mut molecule = editor.try_build().unwrap();
     molecule.inline_constraints().unwrap();
 
     let mut expected = Constraints::new();

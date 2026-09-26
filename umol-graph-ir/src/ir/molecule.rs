@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 pub use build::MoleculeBuilder;
-pub use constraints::ConstraintsViewMut;
 pub use editor::MoleculeEditor;
 pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
@@ -50,7 +49,6 @@ use super::view::{
 };
 
 mod build;
-mod constraints;
 mod editor;
 mod fragment;
 pub(crate) mod integrity;
@@ -826,6 +824,10 @@ impl Molecule {
         &self.constraints
     }
 
+    fn constraints_mut(&mut self) -> &mut Constraints {
+        &mut self.constraints
+    }
+
     /// Transactionally modify the molecule-level constraint tree.
     ///
     /// The callback operates on a private candidate. The candidate replaces this molecule only if
@@ -839,7 +841,7 @@ impl Molecule {
         &mut self,
         f: impl FnOnce(&mut Constraints),
     ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| f(&mut candidate.constraints))
+        self.try_modify_checked(|candidate| f(candidate.constraints_mut()))
     }
 
     fn try_modify_checked(

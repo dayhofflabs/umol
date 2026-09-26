@@ -462,10 +462,11 @@ fn test_molecule_dsl_to_edn_vacuous_constraints(
     #[case] pushed: Vec<MoleculeConstraint>,
     #[case] expected: Vec<MoleculeConstraint>,
 ) {
-    let mut molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+    let mut editor = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#).edit();
     for c in pushed {
-        molecule.constraints_mut().push(Constraint::Molecule(c)).unwrap();
+        editor.constraints_mut().push(Constraint::Molecule(c));
     }
+    let molecule = editor.try_build().unwrap();
     let dsl = MoleculeDsl::new(molecule, MoleculeMetadata::default()).unwrap();
     let reparsed = Molecule::from_edn(&dsl.to_edn()).unwrap();
     let surviving: Vec<MoleculeConstraint> = reparsed

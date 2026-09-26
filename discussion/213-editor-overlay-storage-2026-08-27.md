@@ -15,8 +15,8 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 ## Design status — 2026-09-26
 
 This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
-S2a, the revised S2b, S2c, S2d, S2g, and S2h are implemented. The previous S2b mutable-view
-attempt was reverted. S2i1 is next; S2f is cancelled and the remaining S2 work is
+S2a, the revised S2b, S2c, S2d, S2g, S2h, and S2i1 are implemented. The previous S2b mutable-view
+attempt was reverted. S2i2 is next; S2f is cancelled and the remaining S2 work is
 unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -29,8 +29,8 @@ an implementation dependency.
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
 | Molecule attribute methods | Uniform unchecked attribute mutation settled; implementation remains | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Remove modify/try_modify callbacks. |
-| Mutable-view structures and API | Settled design; S2i remains to implement | One const-generic mutable-view family. EDITOR controls structural mutation only; all attributes are freely mutable for both values. |
-| Molecule-level constraint mutation | Editor-only design settled; S2a API scheduled for removal | Retain Molecule::constraints for reads and editor &mut Constraints for writes. S2i1 removes the public checked constraint view; S2k/S2l migrate callback callers and S2m removes try_modify_constraints. |
+| Mutable-view structures and API | Settled design; S2i2–S2i4 remain to implement | One const-generic mutable-view family. EDITOR controls structural mutation only; all attributes are freely mutable for both values. |
+| Molecule-level constraint mutation | S2i1 complete; callback migration remains | Molecule::constraints provides reads; the editor exposes &mut Constraints. The public checked constraint view is removed. S2k/S2l migrate callback callers and S2m removes try_modify_constraints. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
 | Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation remains | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Molecule and Edits input-transfer changes remain; the editor already supports consumption. |
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
@@ -58,7 +58,7 @@ Python consumption, counter-based accessor invalidation, and storage names are
 approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
-checks and S2h's aggregate-integrity changes are implemented; S2i1 is next.
+checks, S2h's aggregate-integrity changes, and S2i1 are implemented; S2i2 is next.
 
 ## Editor and transaction API
 
@@ -3061,6 +3061,18 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
 
   Verify editor top-level mutation and checked publication, retained read-only
   Molecule access, and absence of the checked view/type export.
+
+  **Implemented and verified — 2026-09-26.** Removed ConstraintsViewMut,
+  its exports/module, and its API-specific tests. Test setup uses the editor
+  and checked publication. Molecule retains a private constraints_mut accessor,
+  used by the existing checked callback; editor delegation follows in S2i3.
+  Constructor rejection cases remain, and editor publication tests cover invalid
+  references, stereo kinds, frame sizes, permutation degrees, and positions.
+  Removed the checked-view description from the nomenclature guide.
+
+  Passed 7,059 graph-IR unit tests (3 ignored) and all 5 publication properties
+  at 128 cases. Strict Clippy, rustdoc with warnings denied, nightly formatting,
+  and git diff --check passed.
 
 - **S2i2 — Shared mutable-view types and Molecule access** (`ir::{view,molecule}`, exports; breaking, green at S2i4). [dep: S1a, S1b, S1c, S2i1]
 

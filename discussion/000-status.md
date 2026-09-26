@@ -36,13 +36,14 @@ the statuses recorded here remain authoritative.
   has a settled execution API, consumer mappings, ownership experiments, and a
   staged implementation plan; S0a–S0b and S1a–S1c are complete. S1d and S0c are
   reverted. S2 now orders consumer checks, shared entity views, caller migration,
-  and callback removal. S2a is implemented but its checked top-level constraint
-  view is scheduled for removal in S2m; top-level writes belong in the editor.
+  and callback removal. S2i1 removed the checked molecule constraint view;
+  callback migration and removal remain in S2k–S2m.
   The earlier S2b implementation is reverted; the proposed join migration is
   withdrawn and S2f is cancelled. Revised S2b is complete: NoJoinError names the
   Rust unit error and Python join exception. S2c's bounded coset-operation fixes
   and S2d's role-only incidence/count-aware consumers are complete. S2g's
-  frame-consumer checks and S2h's aggregate-integrity changes are complete; S2i1 is next. Uniform unchecked
+  frame-consumer checks, S2h's aggregate-integrity changes, and S2i1 are complete.
+  S2i2 is next. Uniform unchecked
   entity-attribute assignment is settled for Rust and Python.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
@@ -261,7 +262,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Next implementation subitem: S2i1 retires the public checked constraint view. S2b–S2d and S2g–S2h complete; S2f cancelled. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Next implementation subitem: S2i2 shared mutable-view types and Molecule access. S2i1 complete; S2f cancelled. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |
