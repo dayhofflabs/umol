@@ -334,7 +334,7 @@ mod tests {
         assert_eq!(system, AromaticSystemId(0));
         assert_eq!(mol.aromatic_systems().count(), 1);
         assert_eq!(
-            mol.aromatic_system(system).attributes,
+            mol.aromatic_system(system).attributes(),
             &AromaticSystemForm::from_electrons(vec![1, 1])
         );
         assert_eq!(

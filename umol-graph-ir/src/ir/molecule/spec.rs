@@ -700,7 +700,7 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(
-            mol.aromatic_system(AromaticSystemId(0)).attributes,
+            mol.aromatic_system(AromaticSystemId(0)).attributes(),
             &AromaticSystemForm::from_electrons(vec![1, 1])
         );
     }

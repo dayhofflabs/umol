@@ -1051,7 +1051,7 @@ impl MoleculeEditor {
                 Ok(Undo::RemoveAddedAromaticSystem(AddedAromaticSystem {
                     id,
                     atoms: view.atom_ids().collect(),
-                    attributes: view.attributes.clone(),
+                    attributes: view.attributes().clone(),
                 }))
             }
             Edit::RemoveAromaticSystems { removes } => {
@@ -1071,7 +1071,7 @@ impl MoleculeEditor {
                     removed.push(RemovedAromaticSystem {
                         id,
                         atoms: current_atoms,
-                        attributes: view.attributes.clone(),
+                        attributes: view.attributes().clone(),
                     });
                     ids.push(id);
                 }
@@ -1475,7 +1475,7 @@ impl MoleculeEditor {
                     .then(|| RemovedAromaticSystem {
                         id,
                         atoms,
-                        attributes: view.attributes.clone(),
+                        attributes: view.attributes().clone(),
                     })
             })
             .collect();
@@ -2983,7 +2983,7 @@ mod tests {
         assert_eq!(
             editor
                 .aromatic_system(AromaticSystemId(0))
-                .attributes
+                .attributes()
                 .charge,
             NumForm::Lit(1)
         );
@@ -4456,7 +4456,7 @@ mod tests {
         assert_eq!(
             diatomic_with_overlays
                 .aromatic_system(AromaticSystemId(0))
-                .attributes
+                .attributes()
                 .charge,
             NumForm::Lit(1),
         );
@@ -4859,7 +4859,7 @@ mod tests {
         assert_eq!(
             diatomic_with_overlays
                 .aromatic_system(AromaticSystemId(0))
-                .attributes
+                .attributes()
                 .constraints
                 .iter()
                 .cloned()

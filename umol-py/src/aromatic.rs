@@ -355,7 +355,7 @@ impl AromaticSystemView {
         Ok(ElectronCountsForm::from_rust(
             &self
                 .aromatic_system(molecule.to_rust())?
-                .attributes
+                .attributes()
                 .electrons,
         ))
     }
@@ -375,7 +375,10 @@ impl AromaticSystemView {
         let molecule = self.owner.bind(py).borrow();
         NumForm::from_rust(
             py,
-            &self.aromatic_system(molecule.to_rust())?.attributes.charge,
+            &self
+                .aromatic_system(molecule.to_rust())?
+                .attributes()
+                .charge,
         )
     }
 
@@ -396,7 +399,7 @@ impl AromaticSystemView {
             py,
             &self
                 .aromatic_system(molecule.to_rust())?
-                .attributes
+                .attributes()
                 .unpaired_electrons,
         )
     }
@@ -447,7 +450,7 @@ impl AromaticSystemView {
     /// symmetric with `AromaticSystemForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let system = self.aromatic_system(molecule.to_rust())?.attributes;
+        let system = self.aromatic_system(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item(
             "electrons",

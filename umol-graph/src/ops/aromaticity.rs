@@ -265,7 +265,7 @@ impl AromaticityPerceiver {
             )
         }) || molecule.aromatic_systems().iter().any(|system| {
             matches!(
-                system.attributes.electrons,
+                system.attributes().electrons,
                 ElectronCountsForm::Undetermined
             )
         }) {
@@ -316,13 +316,14 @@ impl AromaticityPerceiver {
 
         let mut valid_existing = Vec::new();
         for existing in molecule.aromatic_systems().iter() {
-            let ElectronCountsForm::Lit(existing_electrons) = &existing.attributes.electrons else {
+            let ElectronCountsForm::Lit(existing_electrons) = &existing.attributes().electrons
+            else {
                 return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
             };
             let existing_atoms: Vec<AtomId> = existing.atom_ids().collect();
             if existing_electrons.len() != existing_atoms.len() {
                 inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
-                    system: existing.id,
+                    system: existing.id(),
                 });
                 continue;
             }
@@ -347,7 +348,7 @@ impl AromaticityPerceiver {
                 }
                 Solution::Contradictory(_) => {
                     inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
-                        system: existing.id,
+                        system: existing.id(),
                     });
                     continue;
                 }
@@ -377,10 +378,10 @@ impl AromaticityPerceiver {
                     })
             });
             if valid {
-                valid_existing.push((existing.id, existing_contributions));
+                valid_existing.push((existing.id(), existing_contributions));
             } else {
                 inconsistencies.insert(AromaticityInconsistency::AromaticSystemFailure {
-                    system: existing.id,
+                    system: existing.id(),
                 });
             }
         }
@@ -1063,9 +1064,9 @@ mod tests {
         any_hueckel().add_systems(&mut molecule, systems);
 
         let system = molecule.aromatic_system(AromaticSystemId(0));
-        assert_eq!(system.attributes.charge, NumForm::Lit(system_charge));
+        assert_eq!(system.attributes().charge, NumForm::Lit(system_charge));
         assert_eq!(
-            system.attributes.electrons,
+            system.attributes().electrons,
             ElectronCountsForm::Lit(electrons)
         );
         for (i, (q, k)) in atom_charges

@@ -5322,7 +5322,7 @@ fn build_reaction(
         deltas.push(Delta::AromaticSystem(AromaticSystemDelta::Remove {
             id,
             atoms: view.atom_ids().collect(),
-            attributes: view.attributes.clone(),
+            attributes: view.attributes().clone(),
         }));
     }
     for &id in &removed_multicenter {
@@ -5433,7 +5433,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.aromatic_system(id).attributes.charge.clone();
+        let old = lhs.aromatic_system(id).attributes().charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::AromaticSystem(AromaticSystemDelta::ModifyField {

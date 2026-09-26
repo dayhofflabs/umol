@@ -438,7 +438,7 @@ proptest! {
         }
         if kinds.contains(&EntityKind::AromaticSystem) {
             prop_assert_eq!(
-                &editor.aromatic_system(AromaticSystemId(0)).attributes.charge,
+                &editor.aromatic_system(AromaticSystemId(0)).attributes().charge,
                 &NumForm::Lit(1),
             );
         }
@@ -535,7 +535,7 @@ proptest! {
             prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.aromatic_systems().iter() {
-            prop_assert!(view.attributes.constraints.is_empty());
+            prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.multicenter_bonds().iter() {
             prop_assert!(view.attributes.constraints.is_empty());
@@ -905,7 +905,7 @@ proptest! {
         }
         for (id, key) in aromatic_keys {
             prop_assert!(
-                a.aromatic_system(id).attributes.constraints.contains(key),
+                a.aromatic_system(id).attributes().constraints.contains(key),
                 "aromatic system {id:?} missing key {key:?} after inline",
             );
         }

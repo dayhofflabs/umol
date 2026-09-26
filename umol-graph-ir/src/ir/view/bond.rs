@@ -536,7 +536,7 @@ mod tests {
         #[case] bond: BondId,
         #[case] expected: Option<AromaticSystemId>,
     ) {
-        let id = molecule.bond(bond).aromatic_system().map(|v| v.id);
+        let id = molecule.bond(bond).aromatic_system().map(|v| v.id());
         assert_eq!(id, expected);
     }
 

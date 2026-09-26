@@ -198,6 +198,36 @@ impl Molecule {
         &self.graph
     }
 
+    /// Underlying dative-bond set.
+    pub fn raw_dative_bonds(&self) -> &DativeBonds {
+        &self.dative_bonds
+    }
+
+    /// Underlying aromatic-system set.
+    pub fn raw_aromatic_systems(&self) -> &AromaticSystems {
+        &self.aromatic_systems
+    }
+
+    /// Underlying multicenter-bond set.
+    pub fn raw_multicenter_bonds(&self) -> &MulticenterBonds {
+        &self.multicenter_bonds
+    }
+
+    /// Underlying noncovalent-bond set.
+    pub fn raw_noncovalent_bonds(&self) -> &NoncovalentBonds {
+        &self.noncovalent_bonds
+    }
+
+    /// Underlying stereo-atom set.
+    pub fn raw_stereo_atoms(&self) -> &StereoAtoms {
+        &self.stereo_atoms
+    }
+
+    /// Underlying stereo-bond set.
+    pub fn raw_stereo_bonds(&self) -> &StereoBonds {
+        &self.stereo_bonds
+    }
+
     /// Complete framed equality under an entity-id remapping from `self` to `other`.
     ///
     /// Returns `false` when a component length differs from `self`'s entity count or the
@@ -250,7 +280,7 @@ impl Molecule {
     }
 
     pub fn dative_bonds(&self) -> DativeBondViews<'_> {
-        DativeBondViews::new(self, &self.dative_bonds)
+        DativeBondViews::new(self)
     }
 
     /// View of the dative bond with `id`.
@@ -364,7 +394,7 @@ impl Molecule {
             .aromatic_systems()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         let host_multicenter_bonds: Vec<MulticenterBondId> = self
             .multicenter_bonds()
@@ -592,7 +622,7 @@ impl Molecule {
             self.aromatic_systems.contains(id),
             "invalid aromatic system id"
         );
-        AromaticSystemViewMut::new(id, &mut self.aromatic_systems)
+        AromaticSystemViewMut::new(&mut self.aromatic_systems, id)
     }
 
     fn aromatic_system_view_mut(
@@ -603,7 +633,7 @@ impl Molecule {
             self.aromatic_systems.contains(id),
             "invalid aromatic system id"
         );
-        AromaticSystemEditorViewMut::new(id, &mut self.aromatic_systems)
+        AromaticSystemEditorViewMut::new(&mut self.aromatic_systems, id)
     }
 
     /// Replace every aromatic system with `f(system)` in place.
@@ -1107,7 +1137,7 @@ impl Molecule {
                 Constraint::AromaticSystem(id, inner) => {
                     let met = match self
                         .aromatic_system(*id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                     {
@@ -1359,7 +1389,7 @@ impl Molecule {
                 .extend(molecule.aromatic_systems().iter().map(|system| {
                     (
                         system.atom_ids().map(shift_atom).collect(),
-                        system.attributes.clone(),
+                        system.attributes().clone(),
                     )
                 }));
             entries
@@ -1521,7 +1551,7 @@ impl Molecule {
         for system in other.aromatic_systems().iter() {
             editor.add_aromatic_system(
                 &system.atom_ids().map(shift_atom).collect::<Vec<_>>(),
-                system.attributes.clone(),
+                system.attributes().clone(),
             );
         }
         for bond in other.multicenter_bonds().iter() {
@@ -1760,9 +1790,9 @@ impl Molecule {
                     {
                         let added = editor.add_aromatic_system(
                             &members.iter().map(|a| map_atom(*a)).collect::<Vec<_>>(),
-                            system.attributes.clone(),
+                            system.attributes().clone(),
                         );
-                        aromatic_pairs.push((system.id, added));
+                        aromatic_pairs.push((system.id(), added));
                     }
                 }
                 let mut multicenter_pairs = Vec::new();

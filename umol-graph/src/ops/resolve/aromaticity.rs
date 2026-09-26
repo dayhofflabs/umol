@@ -211,7 +211,7 @@ impl AromaticityResolver {
                             (
                                 AromaticSystemHandle::Id(system),
                                 view.atom_ids().map(AtomHandle::Id).collect(),
-                                view.attributes.clone(),
+                                view.attributes().clone(),
                             )
                         })
                         .collect();
@@ -246,7 +246,7 @@ impl AromaticityResolver {
                 let retained_existing: BTreeSet<Vec<AtomId>> = molecule
                     .aromatic_systems()
                     .iter()
-                    .filter(|system| !replaced_entities.contains(&system.id))
+                    .filter(|system| !replaced_entities.contains(&system.id()))
                     .map(|system| {
                         let mut atoms: Vec<AtomId> = system.atom_ids().collect();
                         atoms.sort_unstable();
@@ -329,15 +329,21 @@ impl AromaticityResolver {
                         multiplicity: NumForm::Lit(multiplicity),
                     },
                 constraints: _,
-            } = system.attributes
+            } = system.attributes()
             else {
-                return Err(AromaticityProjectError::NonConcreteSystem { system: system.id });
+                return Err(AromaticityProjectError::NonConcreteSystem {
+                    system: system.id(),
+                });
             };
             if *charge != 0 {
-                return Err(AromaticityProjectError::ChargedSystem { system: system.id });
+                return Err(AromaticityProjectError::ChargedSystem {
+                    system: system.id(),
+                });
             }
             if *unpaired != 0 || *multiplicity != 1 {
-                return Err(AromaticityProjectError::SystemSpin { system: system.id });
+                return Err(AromaticityProjectError::SystemSpin {
+                    system: system.id(),
+                });
             }
             for (atom, &electrons) in system.atom_ids().zip(electrons) {
                 let attributes = molecule.atom(atom).attributes();
@@ -374,9 +380,9 @@ impl AromaticityResolver {
                 .iter()
                 .map(|system| {
                     (
-                        AromaticSystemHandle::Id(system.id),
+                        AromaticSystemHandle::Id(system.id()),
                         system.atom_ids().map(AtomHandle::Id).collect(),
-                        system.attributes.clone(),
+                        system.attributes().clone(),
                     )
                 })
                 .collect(),
@@ -543,7 +549,7 @@ impl AromaticityResolver {
             .map(|system| {
                 let mut atoms: Vec<AtomId> = system.atom_ids().collect();
                 atoms.sort_unstable();
-                (system.id, atoms)
+                (system.id(), atoms)
             })
             .collect();
 
@@ -1557,7 +1563,7 @@ mod tests {
         assert_eq!(
             molecule
                 .aromatic_system(AromaticSystemId(0))
-                .attributes
+                .attributes()
                 .charge,
             expected_system_charge
         );

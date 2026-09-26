@@ -766,7 +766,7 @@ impl<'a> Resolver<'a> {
             }
         }
         for id in molecule.aromatic_systems().ids() {
-            for asserted in molecule.aromatic_system(id).attributes.constraints.iter() {
+            for asserted in molecule.aromatic_system(id).attributes().constraints.iter() {
                 let Some(derived) = molecule
                     .aromatic_system(id)
                     .constraints()
@@ -785,7 +785,7 @@ impl<'a> Resolver<'a> {
                         update.constraints.set(asserted.as_undetermined());
                         edits.update_aromatic_system(
                             AromaticSystemHandle::Id(id),
-                            molecule.aromatic_system(id).attributes,
+                            molecule.aromatic_system(id).attributes(),
                             &update,
                         );
                     }
@@ -1005,7 +1005,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
                 let stored = aromatic.remove(&(id, inner.key())).or_else(|| {
                     molecule
                         .aromatic_system(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                         .cloned()
@@ -1124,7 +1124,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
         update.constraints.set(form);
         edits.update_aromatic_system(
             AromaticSystemHandle::Id(id),
-            molecule.aromatic_system(id).attributes,
+            molecule.aromatic_system(id).attributes(),
             &update,
         );
     }

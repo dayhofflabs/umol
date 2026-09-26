@@ -20,34 +20,31 @@ use super::constraints::DativeBondConstraintsView;
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
     molecule: &'a Molecule,
-    dative_bonds: &'a DativeBonds,
 }
 
 impl<'a> DativeBondViews<'a> {
-    pub(crate) fn new(molecule: &'a Molecule, dative_bonds: &'a DativeBonds) -> Self {
-        Self {
-            molecule,
-            dative_bonds,
-        }
+    pub(crate) fn new(molecule: &'a Molecule) -> Self {
+        Self { molecule }
     }
 
     pub fn count(&self) -> usize {
-        self.dative_bonds.count()
+        self.molecule.raw_dative_bonds().count()
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = DativeBondId> {
-        self.dative_bonds.ids()
+        self.molecule.raw_dative_bonds().ids()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = DativeBondView<'a>> {
         let molecule = self.molecule;
-        self.dative_bonds
+        self.molecule
+            .raw_dative_bonds()
             .ids()
             .map(move |id| DativeBondView { molecule, id })
     }
 
     pub fn contains(&self, id: DativeBondId) -> bool {
-        self.dative_bonds.contains(id)
+        self.molecule.raw_dative_bonds().contains(id)
     }
 
     pub fn get(&self, id: DativeBondId) -> Option<DativeBondView<'a>> {
@@ -62,12 +59,12 @@ impl<'a> DativeBondViews<'a> {
 
     /// Ids of dative bonds incident on `atom`.
     pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = DativeBondId> + 'a {
-        self.dative_bonds.incident_ids(atom)
+        self.molecule.raw_dative_bonds().incident_ids(atom)
     }
 
     /// Whether any dative bond is incident on `atom`.
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.dative_bonds.has_incident(atom)
+        self.molecule.raw_dative_bonds().has_incident(atom)
     }
 
     /// Views of dative bonds incident on `atom`.
@@ -80,7 +77,9 @@ impl<'a> DativeBondViews<'a> {
     /// Id of the dative bond with exactly this acceptor and donor set, if any. Per-factor: the
     /// donor/acceptor roles are matched, not the merged atom set.
     pub fn of_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
-        self.dative_bonds.coincident_id(acceptor, donors)
+        self.molecule
+            .raw_dative_bonds()
+            .coincident_id(acceptor, donors)
     }
 
     /// View of the dative bond with exactly this acceptor and donor set, if any.
@@ -95,11 +94,12 @@ impl<'a> DativeBondViews<'a> {
     /// Ids of dative bonds whose participants all lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<DativeBondId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.dative_bonds
+        let dative_bonds = self.molecule.raw_dative_bonds();
+        dative_bonds
             .ids()
             .filter(|&id| {
-                iter::once(&self.dative_bonds.acceptor_node(id))
-                    .chain(self.dative_bonds.donor_nodes(id))
+                iter::once(&dative_bonds.acceptor_node(id))
+                    .chain(dative_bonds.donor_nodes(id))
                     .all(|p| set.contains(p))
             })
             .collect()
@@ -135,10 +135,7 @@ impl<'a> DativeBondView<'a> {
 
     #[inline]
     pub fn attributes(&self) -> &'a DativeBondForm {
-        self.molecule
-            .dative_bonds()
-            .dative_bonds
-            .attributes(self.id)
+        self.molecule.raw_dative_bonds().attributes(self.id)
     }
 
     #[inline]
@@ -157,18 +154,18 @@ impl<'a> DativeBondView<'a> {
     /// Donor atom ids.
     #[inline]
     pub fn donor_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.molecule.dative_bonds().dative_bonds.donors(self.id)
+        self.molecule.raw_dative_bonds().donors(self.id)
     }
 
     #[inline]
     pub fn acceptor_id(&self) -> AtomId {
-        self.molecule.dative_bonds().dative_bonds.acceptor(self.id)
+        self.molecule.raw_dative_bonds().acceptor(self.id)
     }
 
     /// All atoms in this dative bond: the donors followed by the acceptor.
     #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        dative_bond_atom_ids(self.molecule.dative_bonds().dative_bonds, self.id)
+        dative_bond_atom_ids(self.molecule.raw_dative_bonds(), self.id)
     }
 
     /// Donor atom views.

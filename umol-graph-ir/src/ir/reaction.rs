@@ -610,9 +610,9 @@ fn reaction_frame_action(
         }
     }
     for view in lhs.aromatic_systems().iter() {
-        if domain.is_none_or(|domain| domain.contains_aromatic_system(view.id)) {
+        if domain.is_none_or(|domain| domain.contains_aromatic_system(view.id())) {
             aromatic_systems.insert(
-                view.id,
+                view.id(),
                 aromatic_system_representative_action(view.atom_ids().collect()),
             );
         }
@@ -1468,7 +1468,7 @@ impl Reaction {
                         let host_id = host_aromatic(*id)?;
                         sets.update_aromatic_system(
                             AromaticSystemHandle::Id(host_id),
-                            host.aromatic_system(host_id).attributes,
+                            host.aromatic_system(host_id).attributes(),
                             &update,
                         );
                     }
@@ -1480,7 +1480,7 @@ impl Reaction {
                             let host_id = host_aromatic(*id)?;
                             sets.update_aromatic_system(
                                 AromaticSystemHandle::Id(host_id),
-                                host.aromatic_system(host_id).attributes,
+                                host.aromatic_system(host_id).attributes(),
                                 &AromaticSystemUpdate {
                                     constraints: constraint.into(),
                                     ..Default::default()
@@ -2353,9 +2353,9 @@ fn application_frame_actions(
     for rule_view in lhs
         .aromatic_systems()
         .iter()
-        .filter(|view| domain.contains_aromatic_system(view.id))
+        .filter(|view| domain.contains_aromatic_system(view.id()))
     {
-        let id = rule_view.id;
+        let id = rule_view.id();
         let entity = Entity::AromaticSystem(id);
         let host_id = correspondence
             .aromatic_systems()
@@ -2583,7 +2583,7 @@ fn reframe_application_deltas(
                         .aromatic_systems()
                         .get(host_id)
                         .ok_or(ApplyError::CorrespondenceMismatch { entity })?
-                        .attributes;
+                        .attributes();
                     match &mut delta {
                         AromaticSystemDelta::Remove { attributes, .. } => {
                             if !attributes.matches(host_attributes) {

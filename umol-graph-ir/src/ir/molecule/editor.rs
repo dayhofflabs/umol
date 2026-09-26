@@ -259,8 +259,11 @@ impl MoleculeEditor {
     }
 
     pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemEditorView<'_> {
-        let set = &self.molecule.aromatic_systems;
-        AromaticSystemEditorView::new(id, set.atom_nodes(id), set.attributes(id))
+        assert!(
+            self.molecule.aromatic_systems.contains(id),
+            "invalid aromatic system id"
+        );
+        AromaticSystemEditorView::new(&self.molecule.aromatic_systems, id)
     }
 
     pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemEditorViewMut<'_> {

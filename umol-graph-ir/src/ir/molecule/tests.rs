@@ -1123,7 +1123,7 @@ fn test_molecule_try_from_entries_attributes(
     change(&mut entries);
     let molecule = Molecule::try_from_entries(entries.clone()).unwrap();
     assert_eq!(
-        molecule.aromatic_system(AromaticSystemId(0)).attributes,
+        molecule.aromatic_system(AromaticSystemId(0)).attributes(),
         &entries.aromatic[0].1
     );
     assert_eq!(
@@ -2605,7 +2605,7 @@ fn test_molecule_dative_bonds(#[from(rich_molecule)] molecule: Molecule) {
 #[rstest]
 fn test_molecule_aromatic_system(#[from(rich_molecule)] molecule: Molecule) {
     let av = molecule.aromatic_system(AromaticSystemId(0));
-    assert_eq!(av.id, AromaticSystemId(0));
+    assert_eq!(av.id(), AromaticSystemId(0));
     assert_eq!(
         av.atom_ids().collect::<Vec<_>>(),
         vec![AtomId(0), AtomId(1), AtomId(2)]
@@ -2621,7 +2621,7 @@ fn test_molecule_aromatic_systems(#[from(rich_molecule)] molecule: Molecule) {
     let projected: Vec<(AromaticSystemId, Vec<AtomId>, Vec<BondId>)> = molecule
         .aromatic_systems()
         .iter()
-        .map(|v| (v.id, v.atom_ids().collect(), v.bond_ids().collect()))
+        .map(|v| (v.id(), v.atom_ids().collect(), v.bond_ids().collect()))
         .collect();
     assert_eq!(
         projected,
@@ -2908,7 +2908,7 @@ fn test_aromatic_system_views_incident(
     let got: Vec<AromaticSystemId> = molecule
         .aromatic_systems()
         .incident(atom)
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     assert_eq!(got, expected);
 }
@@ -2925,7 +2925,7 @@ fn test_aromatic_system_views_of(
     #[case] expected: Option<AromaticSystemId>,
 ) {
     assert_eq!(
-        molecule.aromatic_systems().of(atoms).map(|v| v.id),
+        molecule.aromatic_systems().of(atoms).map(|v| v.id()),
         expected
     );
 }
@@ -2942,7 +2942,7 @@ fn test_aromatic_system_views_induced(
         .aromatic_systems()
         .induced(&atoms)
         .into_iter()
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     assert_eq!(got, expected);
 }
@@ -5388,7 +5388,7 @@ fn test_molecule_editor_aromatic_system_mut(#[from(rich_molecule)] molecule: Mol
     assert_eq!(
         result
             .aromatic_system(AromaticSystemId(0))
-            .attributes
+            .attributes()
             .charge,
         NumForm::Lit(0)
     );
@@ -5785,7 +5785,7 @@ fn test_molecule_index_aromatic_system(#[from(rich_molecule)] molecule: Molecule
     assert_eq!(
         molecule
             .aromatic_system(AromaticSystemId(0))
-            .attributes
+            .attributes()
             .electrons,
         ElectronCountsForm::Undetermined
     );
@@ -6192,7 +6192,7 @@ fn test_molecule_aromatic_system_mut(#[from(rich_molecule)] mut molecule: Molecu
     assert_eq!(
         molecule
             .aromatic_system(AromaticSystemId(0))
-            .attributes
+            .attributes()
             .electrons,
         ElectronCountsForm::Lit(vec![1, 1, 1]),
     );
@@ -6207,7 +6207,7 @@ fn test_molecule_modify_aromatic_systems(#[from(rich_molecule)] mut molecule: Mo
     let electrons: Vec<ElectronCountsForm> = molecule
         .aromatic_systems()
         .iter()
-        .map(|v| v.attributes.electrons.clone())
+        .map(|v| v.attributes().electrons.clone())
         .collect();
     assert_eq!(electrons, vec![ElectronCountsForm::Lit(vec![1; 3])]);
 }
@@ -6223,7 +6223,7 @@ fn test_molecule_try_modify_aromatic_system(#[from(rich_molecule)] mut molecule:
     assert_eq!(
         molecule
             .aromatic_system(AromaticSystemId(0))
-            .attributes
+            .attributes()
             .electrons,
         ElectronCountsForm::Lit(vec![2, 1, 0]),
     );
@@ -6263,7 +6263,7 @@ fn test_molecule_try_modify_aromatic_systems(#[from(rich_molecule)] mut molecule
         molecule
             .aromatic_systems()
             .iter()
-            .map(|view| view.attributes.electrons.clone())
+            .map(|view| view.attributes().electrons.clone())
             .collect::<Vec<_>>(),
         vec![ElectronCountsForm::Lit(vec![2, 1, 0])],
     );
@@ -6281,7 +6281,7 @@ fn test_molecule_try_modify_aromatic_systems_attributes(
     assert_eq!(
         molecule
             .aromatic_system(AromaticSystemId(0))
-            .attributes
+            .attributes()
             .electrons,
         electrons
     );

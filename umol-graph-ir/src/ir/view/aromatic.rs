@@ -44,13 +44,9 @@ impl<'a> AromaticSystemViews<'a> {
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = AromaticSystemView<'a>> {
         let molecule = self.molecule;
-        let set = self.aromatic_systems;
-        set.ids().map(move |id| AromaticSystemView {
-            id,
-            attributes: set.attributes(id),
-            atoms: set.atom_nodes(id),
-            molecule,
-        })
+        self.aromatic_systems
+            .ids()
+            .map(move |id| AromaticSystemView { molecule, id })
     }
 
     pub fn contains(&self, id: AromaticSystemId) -> bool {
@@ -62,10 +58,8 @@ impl<'a> AromaticSystemViews<'a> {
             return None;
         }
         Some(AromaticSystemView {
-            id,
-            attributes: self.aromatic_systems.attributes(id),
-            atoms: self.aromatic_systems.atom_nodes(id),
             molecule: self.molecule,
+            id,
         })
     }
 
@@ -88,13 +82,8 @@ impl<'a> AromaticSystemViews<'a> {
         atom: AtomId,
     ) -> impl ExactSizeIterator<Item = AromaticSystemView<'a>> + 'a {
         let molecule = self.molecule;
-        let set = self.aromatic_systems;
-        self.incident_ids(atom).map(move |id| AromaticSystemView {
-            id,
-            attributes: set.attributes(id),
-            atoms: set.atom_nodes(id),
-            molecule,
-        })
+        self.incident_ids(atom)
+            .map(move |id| AromaticSystemView { molecule, id })
     }
 
     /// Id of the aromatic system whose atom set equals `atoms`, if any.
@@ -144,26 +133,37 @@ impl<'a> AromaticSystemViews<'a> {
 /// `bonds()`.
 #[derive(Clone, Copy, Debug)]
 pub struct AromaticSystemView<'a> {
-    pub id: AromaticSystemId,
-    atoms: &'a [NodeId],
-    pub attributes: &'a AromaticSystemForm,
     molecule: &'a Molecule,
+    id: AromaticSystemId,
 }
 
 impl<'a> AromaticSystemView<'a> {
     #[inline]
+    pub fn id(&self) -> AromaticSystemId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &'a AromaticSystemForm {
+        self.molecule
+            .aromatic_systems()
+            .aromatic_systems
+            .attributes(self.id)
+    }
+
+    #[inline]
     pub fn electrons(&self) -> &'a ElectronCountsForm {
-        &self.attributes.electrons
+        &self.attributes().electrons
     }
 
     #[inline]
     pub fn charge(&self) -> &'a NumForm {
-        &self.attributes.charge
+        &self.attributes().charge
     }
 
     #[inline]
     pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
-        &self.attributes.unpaired_electrons
+        &self.attributes().unpaired_electrons
     }
 
     /// Constraint reading of this aromatic system: the container's read API
@@ -174,21 +174,28 @@ impl<'a> AromaticSystemView<'a> {
         AromaticSystemConstraintsView::new(self.molecule, self.id)
     }
 
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.atoms.iter().map(|&n| AtomId::from(n))
+        self.molecule
+            .aromatic_systems()
+            .aromatic_systems
+            .atoms(self.id)
     }
 
     pub fn atoms(&self) -> impl ExactSizeIterator<Item = AtomView<'a>> + 'a {
         let molecule = self.molecule;
-        self.atoms
-            .iter()
-            .map(move |&n| molecule.atom(AtomId::from(n)))
+        self.atom_ids().map(move |id| molecule.atom(id))
     }
 
     pub fn bond_ids(&self) -> impl Iterator<Item = BondId> + 'a {
         self.molecule
             .raw_graph()
-            .induced_edges(self.atoms)
+            .induced_edges(
+                self.molecule
+                    .aromatic_systems()
+                    .aromatic_systems
+                    .atom_nodes(self.id),
+            )
             .map(BondId::from)
     }
 
@@ -196,7 +203,12 @@ impl<'a> AromaticSystemView<'a> {
         let molecule = self.molecule;
         self.molecule
             .raw_graph()
-            .induced_edges(self.atoms)
+            .induced_edges(
+                self.molecule
+                    .aromatic_systems()
+                    .aromatic_systems
+                    .atom_nodes(self.id),
+            )
             .map(move |edge| molecule.bond(BondId::from(edge)))
     }
 
@@ -210,14 +222,14 @@ impl<'a> AromaticSystemView<'a> {
     /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
     /// Includes every stored count, including counts beyond the atom list.
     pub fn electron_count(&self) -> NumForm {
-        match &self.attributes.electrons {
+        match &self.attributes().electrons {
             ElectronCountsForm::Lit(counts) => NumForm::Lit(counts.iter().sum()),
             ElectronCountsForm::Undetermined => NumForm::Undetermined,
         }
     }
 
     pub fn atom_count(&self) -> usize {
-        self.atoms.len()
+        self.atom_ids().len()
     }
 
     pub fn bond_count(&self) -> usize {
@@ -233,9 +245,7 @@ impl<'a> AromaticSystemView<'a> {
         'a: 's,
     {
         let molecule = self.molecule;
-        self.atoms
-            .iter()
-            .map(|&n| AtomId::from(n))
+        self.atom_ids()
             .filter(move |a| subset.contains(a))
             .map(move |id| molecule.atom(id))
     }
@@ -251,7 +261,12 @@ impl<'a> AromaticSystemView<'a> {
         let molecule = self.molecule;
         self.molecule
             .raw_graph()
-            .induced_edges(self.atoms)
+            .induced_edges(
+                self.molecule
+                    .aromatic_systems()
+                    .aromatic_systems
+                    .atom_nodes(self.id),
+            )
             .map(BondId::from)
             .filter(move |b| subset.contains(b))
             .map(move |id| molecule.bond(id))
@@ -259,71 +274,81 @@ impl<'a> AromaticSystemView<'a> {
 
     /// Is aromatic system ground
     pub fn is_ground(&self) -> bool {
-        self.attributes.is_ground()
+        self.attributes().is_ground()
     }
 
     /// Is aromatic system undetermined
     pub fn is_undetermined(&self) -> bool {
-        self.attributes.is_undetermined()
+        self.attributes().is_undetermined()
     }
 }
 
 /// Read-only editor access to an aromatic system.
 pub struct AromaticSystemEditorView<'a> {
-    pub id: AromaticSystemId,
-    atoms: &'a [NodeId],
-    pub attributes: &'a AromaticSystemForm,
+    aromatic_systems: &'a AromaticSystems,
+    id: AromaticSystemId,
 }
 
 impl<'a> AromaticSystemEditorView<'a> {
-    pub(crate) fn new(
-        id: AromaticSystemId,
-        atoms: &'a [NodeId],
-        attributes: &'a AromaticSystemForm,
-    ) -> Self {
+    pub(crate) fn new(aromatic_systems: &'a AromaticSystems, id: AromaticSystemId) -> Self {
         Self {
+            aromatic_systems,
             id,
-            atoms,
-            attributes,
         }
     }
 
+    #[inline]
+    pub fn id(&self) -> AromaticSystemId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &'a AromaticSystemForm {
+        self.aromatic_systems.attributes(self.id)
+    }
+
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.atoms.iter().map(|&n| AtomId::from(n))
+        self.aromatic_systems.atoms(self.id)
     }
 }
 
 /// Mutable attribute access to an aromatic system.
 #[derive(Debug)]
 pub struct AromaticSystemViewMut<'a> {
-    id: AromaticSystemId,
     aromatic_systems: &'a mut AromaticSystems,
+    id: AromaticSystemId,
 }
 
 impl<'a> AromaticSystemViewMut<'a> {
-    pub(crate) fn new(id: AromaticSystemId, aromatic_systems: &'a mut AromaticSystems) -> Self {
+    pub(crate) fn new(aromatic_systems: &'a mut AromaticSystems, id: AromaticSystemId) -> Self {
         Self {
-            id,
             aromatic_systems,
+            id,
         }
     }
 
+    #[inline]
     pub fn id(&self) -> AromaticSystemId {
         self.id
     }
 
+    #[inline]
     pub fn attributes(&self) -> &AromaticSystemForm {
         self.aromatic_systems.attributes(self.id)
     }
 
+    #[inline]
     pub fn attributes_mut(&mut self) -> &mut AromaticSystemForm {
         self.aromatic_systems.attributes_mut(self.id)
     }
 
+    #[inline]
     pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
         &self.attributes().constraints
     }
 
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         self.aromatic_systems.atoms(self.id)
     }
@@ -332,34 +357,39 @@ impl<'a> AromaticSystemViewMut<'a> {
 /// Mutable editor access to an aromatic system.
 #[derive(Debug)]
 pub struct AromaticSystemEditorViewMut<'a> {
-    id: AromaticSystemId,
     aromatic_systems: &'a mut AromaticSystems,
+    id: AromaticSystemId,
 }
 
 impl<'a> AromaticSystemEditorViewMut<'a> {
-    pub(crate) fn new(id: AromaticSystemId, aromatic_systems: &'a mut AromaticSystems) -> Self {
+    pub(crate) fn new(aromatic_systems: &'a mut AromaticSystems, id: AromaticSystemId) -> Self {
         Self {
-            id,
             aromatic_systems,
+            id,
         }
     }
 
+    #[inline]
     pub fn id(&self) -> AromaticSystemId {
         self.id
     }
 
+    #[inline]
     pub fn attributes(&self) -> &AromaticSystemForm {
         self.aromatic_systems.attributes(self.id)
     }
 
+    #[inline]
     pub fn attributes_mut(&mut self) -> &mut AromaticSystemForm {
         self.aromatic_systems.attributes_mut(self.id)
     }
 
+    #[inline]
     pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
         &self.attributes().constraints
     }
 
+    #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         self.aromatic_systems.atoms(self.id)
     }
@@ -367,12 +397,12 @@ impl<'a> AromaticSystemEditorViewMut<'a> {
 
 // Derivation layer beneath the aromatic-system facades.
 
-/// Stored constraint container of `system`.
+/// Stored constraint container of aromatic system `id`.
 pub(crate) fn aromatic_system_asserted_constraints(
     molecule: &Molecule,
-    system: AromaticSystemId,
+    id: AromaticSystemId,
 ) -> &AromaticSystemConstraintsForm {
-    &molecule.aromatic_system(system).attributes.constraints
+    &molecule.aromatic_system(id).attributes().constraints
 }
 
 /// Derived side of one aromatic-system constraint key: the electron count is
@@ -380,14 +410,14 @@ pub(crate) fn aromatic_system_asserted_constraints(
 /// absence cell, so both modes agree.
 pub(crate) fn aromatic_system_derived_constraint(
     molecule: &Molecule,
-    system: AromaticSystemId,
+    id: AromaticSystemId,
     key: AromaticSystemConstraintKey,
     _complete: bool,
 ) -> Option<AromaticSystemConstraintForm> {
     match key {
         AromaticSystemConstraintKey::ElectronCount => {
             Some(AromaticSystemConstraintForm::electron_count(
-                molecule.aromatic_system(system).electron_count(),
+                molecule.aromatic_system(id).electron_count(),
             ))
         }
     }
@@ -398,14 +428,13 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::NodeId;
 
     use super::super::assert_exact_size_by;
-    use super::AromaticSystemEditorView;
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
+    use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::id::{AromaticSystemId, AtomId, BondId};
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
@@ -439,6 +468,30 @@ mod tests {
                 [AtomId(0), AtomId(3)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
+            ..Default::default()
+        })
+    }
+
+    #[fixture]
+    fn aromatic_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 6],
+            aromatic: vec![
+                (
+                    vec![AtomId(2), AtomId(0), AtomId(1)],
+                    AromaticSystemForm {
+                        charge: NumForm::Lit(1),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    vec![AtomId(5), AtomId(3), AtomId(4)],
+                    AromaticSystemForm {
+                        charge: NumForm::Lit(-1),
+                        ..Default::default()
+                    },
+                ),
+            ],
             ..Default::default()
         })
     }
@@ -521,6 +574,46 @@ mod tests {
     fn test_aromatic_system_views_get_none(molecule: Molecule) {
         let res = molecule.aromatic_systems().get(AromaticSystemId(99));
         assert!(res.is_none());
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0))]
+    #[case(AromaticSystemId(1))]
+    fn test_aromatic_system_view_id(
+        #[from(aromatic_molecule)] molecule: Molecule,
+        #[case] id: AromaticSystemId,
+    ) {
+        assert_eq!(molecule.aromatic_system(id).id(), id);
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0), AromaticSystemForm { charge: NumForm::Lit(1), ..Default::default() })]
+    #[case(AromaticSystemId(1), AromaticSystemForm { charge: NumForm::Lit(-1), ..Default::default() })]
+    fn test_aromatic_system_view_attributes(
+        #[from(aromatic_molecule)] molecule: Molecule,
+        #[case] id: AromaticSystemId,
+        #[case] expected: AromaticSystemForm,
+    ) {
+        let attributes = {
+            let view = molecule.aromatic_system(id);
+            view.attributes()
+        };
+        assert_eq!(attributes, &expected);
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0), vec![AtomId(2), AtomId(0), AtomId(1)])]
+    #[case(AromaticSystemId(1), vec![AtomId(5), AtomId(3), AtomId(4)])]
+    fn test_aromatic_system_view_atom_ids_order(
+        #[from(aromatic_molecule)] molecule: Molecule,
+        #[case] id: AromaticSystemId,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let atom_ids = {
+            let view = molecule.aromatic_system(id);
+            view.atom_ids()
+        };
+        assert_exact_size_by(atom_ids, expected, |id| id);
     }
 
     #[rstest]
@@ -642,15 +735,125 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_editor_view_atom_ids() {
-        let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let attributes = AromaticSystemForm::default();
-        let view = AromaticSystemEditorView::new(AromaticSystemId(0), &atoms, &attributes);
+    #[case(AromaticSystemId(0))]
+    #[case(AromaticSystemId(1))]
+    fn test_aromatic_system_editor_view_id(
+        #[from(aromatic_molecule)] molecule: Molecule,
+        #[case] id: AromaticSystemId,
+    ) {
+        let editor = molecule.edit();
+        assert_eq!(editor.aromatic_system(id).id(), id);
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0), AromaticSystemForm { charge: NumForm::Lit(1), ..Default::default() })]
+    #[case(AromaticSystemId(1), AromaticSystemForm { charge: NumForm::Lit(-1), ..Default::default() })]
+    fn test_aromatic_system_editor_view_attributes(
+        #[from(aromatic_molecule)] molecule: Molecule,
+        #[case] id: AromaticSystemId,
+        #[case] expected: AromaticSystemForm,
+    ) {
+        let editor = molecule.edit();
+        let attributes = {
+            let view = editor.aromatic_system(id);
+            view.attributes()
+        };
+        assert_eq!(attributes, &expected);
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0), vec![AtomId(2), AtomId(0), AtomId(1)])]
+    #[case(AromaticSystemId(1), vec![AtomId(5), AtomId(3), AtomId(4)])]
+    fn test_aromatic_system_editor_view_atom_ids_order(
+        #[from(aromatic_molecule)] molecule: Molecule,
+        #[case] id: AromaticSystemId,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let editor = molecule.edit();
+        let atom_ids = {
+            let view = editor.aromatic_system(id);
+            view.atom_ids()
+        };
+        assert_exact_size_by(atom_ids, expected, |id| id);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_editor_view_atom_ids(molecule: Molecule) {
+        let editor = molecule.edit();
+        let view = editor.aromatic_system(AromaticSystemId(0));
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
             |id| id,
         );
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0))]
+    #[case(AromaticSystemId(1))]
+    fn test_aromatic_system_view_mut_attributes_mut(
+        #[from(aromatic_molecule)] mut molecule: Molecule,
+        #[case] id: AromaticSystemId,
+    ) {
+        let expected = AromaticSystemForm {
+            electrons: ElectronCountsForm::Lit(vec![2, 1, 1]),
+            charge: NumForm::Lit(-2),
+            ..Default::default()
+        };
+        {
+            let mut view = molecule.aromatic_system_mut(id);
+            assert_eq!(view.id(), id);
+            *view.attributes_mut() = expected.clone();
+            assert_eq!(view.attributes(), &expected);
+        }
+        assert_eq!(molecule.aromatic_system(id).attributes(), &expected);
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0), vec![AtomId(2), AtomId(0), AtomId(1)])]
+    #[case(AromaticSystemId(1), vec![AtomId(5), AtomId(3), AtomId(4)])]
+    fn test_aromatic_system_view_mut_atom_ids_order(
+        #[from(aromatic_molecule)] mut molecule: Molecule,
+        #[case] id: AromaticSystemId,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let view = molecule.aromatic_system_mut(id);
+        assert_exact_size_by(view.atom_ids(), expected, |id| id);
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0))]
+    #[case(AromaticSystemId(1))]
+    fn test_aromatic_system_editor_view_mut_attributes_mut(
+        #[from(aromatic_molecule)] molecule: Molecule,
+        #[case] id: AromaticSystemId,
+    ) {
+        let mut editor = molecule.edit();
+        let expected = AromaticSystemForm {
+            electrons: ElectronCountsForm::Lit(vec![2, 1, 1]),
+            charge: NumForm::Lit(-2),
+            ..Default::default()
+        };
+        {
+            let mut view = editor.aromatic_system_mut(id);
+            assert_eq!(view.id(), id);
+            *view.attributes_mut() = expected.clone();
+            assert_eq!(view.attributes(), &expected);
+        }
+        assert_eq!(editor.aromatic_system(id).attributes(), &expected);
+    }
+
+    #[rstest]
+    #[case(AromaticSystemId(0), vec![AtomId(2), AtomId(0), AtomId(1)])]
+    #[case(AromaticSystemId(1), vec![AtomId(5), AtomId(3), AtomId(4)])]
+    fn test_aromatic_system_editor_view_mut_atom_ids_order(
+        #[from(aromatic_molecule)] molecule: Molecule,
+        #[case] id: AromaticSystemId,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let mut editor = molecule.edit();
+        let view = editor.aromatic_system_mut(id);
+        assert_exact_size_by(view.atom_ids(), expected, |id| id);
     }
 
     #[rstest]

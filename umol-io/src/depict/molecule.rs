@@ -476,7 +476,7 @@ fn aromatic_contour(
         points,
         closed: true,
         references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
-            system.id,
+            system.id(),
         ))],
     })
 }
@@ -535,7 +535,7 @@ fn aromatic_annotation(
         position,
         text,
         references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
-            system.id,
+            system.id(),
         ))],
     })
 }

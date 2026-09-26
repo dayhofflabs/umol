@@ -609,7 +609,7 @@ impl ReactionSpan {
                     .map(|view| {
                         (
                             view.atom_ids().map(NodeId::from).collect(),
-                            view.attributes.clone(),
+                            view.attributes().clone(),
                         )
                     })
                     .collect(),
@@ -722,7 +722,7 @@ impl ReactionSpan {
             let participants: Vec<AtomId> = view.atom_ids().collect();
             // The span carries one participant frame per entity, the lhs one, so the rhs form is
             // restated into it before the two sides are compared.
-            let rhs_attributes = match aromatic_corr.right_of(view.id) {
+            let rhs_attributes = match aromatic_corr.right_of(view.id()) {
                 Some(id) => {
                     let relation_id = RelationId::from(id);
                     let rhs_frame: Vec<AtomId> = remapped_rhs_aromatic
@@ -743,7 +743,7 @@ impl ReactionSpan {
             };
             aromatic.push((
                 participants,
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes().clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &aromatic_corr.right_unmatched() {
@@ -2271,10 +2271,10 @@ impl Reaction {
                 .atom_ids()
                 .map(|a| AtomId(atom_index[&a] as u32))
                 .collect();
-            if let Some(attributes) = removed_aromatic.get(&view.id) {
+            if let Some(attributes) = removed_aromatic.get(&view.id()) {
                 aromatic.push((participants, EntitySpan::Removed(attributes.clone())));
-            } else if let Some(changes) = aromatic_changes.get(&view.id) {
-                let left = view.attributes.clone();
+            } else if let Some(changes) = aromatic_changes.get(&view.id()) {
+                let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_aromatic_change(&mut right, change)?;
@@ -2287,7 +2287,10 @@ impl Reaction {
                     },
                 ));
             } else {
-                aromatic.push((participants, EntitySpan::Unchanged(view.attributes.clone())));
+                aromatic.push((
+                    participants,
+                    EntitySpan::Unchanged(view.attributes().clone()),
+                ));
             }
         }
         for (atoms, attributes) in added_aromatic.into_values() {

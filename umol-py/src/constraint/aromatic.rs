@@ -514,7 +514,7 @@ impl AromaticSystemConstraintsView {
                     .aromatic_systems()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
                 let system = system.bind(py).borrow();

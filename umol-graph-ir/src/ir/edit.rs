@@ -3209,7 +3209,7 @@ mod tests {
             .expect("aromatic-system update edits should apply");
 
         assert_eq!(
-            editor.aromatic_system(AromaticSystemId(0)).attributes,
+            editor.aromatic_system(AromaticSystemId(0)).attributes(),
             &expected_attributes,
         );
     }

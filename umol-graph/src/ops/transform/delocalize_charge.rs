@@ -36,13 +36,13 @@ impl DelocalizationPlan {
             return None;
         }
 
-        let ElectronCountsForm::Lit(old_electrons) = &view.attributes.electrons else {
+        let ElectronCountsForm::Lit(old_electrons) = &view.attributes().electrons else {
             return None;
         };
         if old_electrons.len() != atom_ids.len() {
             return None;
         }
-        let NumForm::Lit(mut charge) = view.attributes.charge else {
+        let NumForm::Lit(mut charge) = view.attributes().charge else {
             return None;
         };
 

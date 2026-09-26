@@ -930,7 +930,7 @@ pub(crate) fn induced_aromatic_systems(
     induce_by_key(
         left.aromatic_systems().iter().filter_map(|aromatic| {
             Some((
-                aromatic.id,
+                aromatic.id(),
                 sorted_atoms(map_atoms(atoms, aromatic.atom_ids())?),
             ))
         }),
@@ -938,7 +938,7 @@ pub(crate) fn induced_aromatic_systems(
         right
             .aromatic_systems()
             .iter()
-            .map(|aromatic| (aromatic.id, sorted_atoms(aromatic.atom_ids()))),
+            .map(|aromatic| (aromatic.id(), sorted_atoms(aromatic.atom_ids()))),
         right.aromatic_systems().count(),
     )
 }

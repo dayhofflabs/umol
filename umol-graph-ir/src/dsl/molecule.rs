@@ -841,10 +841,10 @@ fn render_aromatic(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static>
         .iter()
         .map(|view| {
             render_aromatic_entry(
-                view.id,
+                view.id(),
                 view.atom_ids(),
                 Edn::Str(Cow::Owned(
-                    AromaticSystemDsl::from_ref(view.attributes).to_string(),
+                    AromaticSystemDsl::from_ref(view.attributes()).to_string(),
                 )),
                 meta,
             )

@@ -365,7 +365,7 @@ impl Kekulizer {
     fn plan_systems(&self, molecule: &Molecule) -> Result<Vec<SystemPlan>, KekulizeError> {
         let mut plans = Vec::with_capacity(molecule.aromatic_systems().count());
         for view in molecule.aromatic_systems().iter() {
-            let system_idx = view.id;
+            let system_idx = view.id();
             let system_atoms: Vec<AtomId> = view.atom_ids().collect();
             let bonds: Vec<BondId> = view.bond_ids().collect();
             let atom_set: HashSet<AtomId> = system_atoms.iter().copied().collect();
@@ -397,7 +397,7 @@ impl Kekulizer {
                 });
             }
 
-            let matching_input = MatchingInput::from_system(molecule, view.id)?;
+            let matching_input = MatchingInput::from_system(molecule, view.id())?;
             let mobile_charge = match (matching_input.mode, view.charge()) {
                 (MatchingInputMode::OneMobileExposure, NumForm::Lit(charge)) => Some(*charge),
                 (MatchingInputMode::Prescribed, _) => None,

@@ -88,7 +88,7 @@ impl SpinInvariantsValidator {
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
                         SpinInvariantsContradiction::AromaticSystem {
-                            system: system.id,
+                            system: system.id(),
                             error,
                         },
                     ));

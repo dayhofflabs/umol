@@ -197,7 +197,7 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
         || molecule
             .aromatic_systems()
             .iter()
-            .any(|system| !system.attributes.constraints.is_empty())
+            .any(|system| !system.attributes().constraints.is_empty())
         || molecule
             .multicenter_bonds()
             .iter()
@@ -1664,11 +1664,28 @@ fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
             value: sequence(rows),
         });
     }
-    inline_block!(
-        ConstraintBlockPosition::AROMATIC_SYSTEM,
-        molecule.aromatic_systems(),
-        aromatic_system_constraint_form_key
-    );
+    let rows = molecule
+        .aromatic_systems()
+        .iter()
+        .flat_map(|system| {
+            system
+                .attributes()
+                .constraints
+                .iter()
+                .map(move |constraint| {
+                    product([
+                        index_key(system.id().index()),
+                        aromatic_system_constraint_form_key(constraint),
+                    ])
+                })
+        })
+        .collect::<Vec<_>>();
+    if !rows.is_empty() {
+        blocks.push(PositionedKey {
+            position: ConstraintBlockPosition::AROMATIC_SYSTEM,
+            value: sequence(rows),
+        });
+    }
     inline_block!(
         ConstraintBlockPosition::MULTICENTER_BOND,
         molecule.multicenter_bonds(),
@@ -2606,7 +2623,7 @@ fn initial_color_keys(
                                 .aromatic_system(id)
                                 .atom_ids()
                                 .position(|id| id == atom),
-                            &molecule.aromatic_system(id).attributes.electrons,
+                            &molecule.aromatic_system(id).attributes().electrons,
                         ),
                         Entity::MulticenterBond(id) => (
                             4,
@@ -3126,7 +3143,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .aromatic_systems()
                 .get(id)
                 .expect("incidence aromatic system is in range")
-                .attributes;
+                .attributes();
             if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
                 if counts.len() != molecule.aromatic_system(id).atom_ids().len())
             {
@@ -3551,8 +3568,8 @@ fn constitution_candidate(
             ]);
             Ok((
                 CanonicalKeyValue::Product(fields),
-                system.id,
-                incidence_graph.node_of(Entity::AromaticSystem(system.id)),
+                system.id(),
+                incidence_graph.node_of(Entity::AromaticSystem(system.id())),
             ))
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;

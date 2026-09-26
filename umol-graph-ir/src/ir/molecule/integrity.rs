@@ -330,7 +330,7 @@ fn check_aromatic_systems(
     if molecule.atoms.len() <= 128 {
         let mut membership = [0_u64; 2];
         for view in molecule.aromatic_systems().iter() {
-            let entity = Entity::AromaticSystem(view.id);
+            let entity = Entity::AromaticSystem(view.id());
             require_references(contains, view.atom_ids().map(Entity::Atom))?;
             let mut row = [0_u64; 2];
             for atom in view.atom_ids() {
@@ -354,7 +354,7 @@ fn check_aromatic_systems(
     } else {
         let mut membership = HashSet::new();
         for view in molecule.aromatic_systems().iter() {
-            let entity = Entity::AromaticSystem(view.id);
+            let entity = Entity::AromaticSystem(view.id());
             require_references(contains, view.atom_ids().map(Entity::Atom))?;
             {
                 let mut row: Vec<_> = view.atom_ids().collect();

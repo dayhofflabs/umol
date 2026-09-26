@@ -365,7 +365,7 @@ fn test_kekulization_fixture_output(
             input
                 .aromatic_systems()
                 .iter()
-                .map(|system| match system.attributes.charge {
+                .map(|system| match system.attributes().charge {
                     NumForm::Lit(charge) => charge,
                     _ => panic!("input aromatic-system charge is undetermined"),
                 }),
@@ -384,7 +384,7 @@ fn test_kekulization_fixture_output(
         .iter()
         .next()
         .unwrap()
-        .attributes
+        .attributes()
         .charge
     {
         NumForm::Lit(charge) => charge,

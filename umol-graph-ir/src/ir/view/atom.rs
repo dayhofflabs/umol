@@ -475,7 +475,7 @@ pub(crate) fn aromatic_valence(molecule: &Molecule, id: AtomId) -> NumForm {
     let Some(pos) = aromatic_system.atom_ids().position(|atom_id| atom_id == id) else {
         return NumForm::Undetermined;
     };
-    match &aromatic_system.attributes.electrons {
+    match &aromatic_system.attributes().electrons {
         ElectronCountsForm::Lit(counts) => counts
             .get(pos)
             .map(|&n| NumForm::Lit(n))
@@ -1039,7 +1039,7 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: Option<AromaticSystemId>,
     ) {
-        let id = molecule.atom(atom).aromatic_system().map(|v| v.id);
+        let id = molecule.atom(atom).aromatic_system().map(|v| v.id());
         assert_eq!(id, expected);
     }
 

@@ -840,7 +840,7 @@ impl ReactionInput {
                     resolved.push(Delta::AromaticSystem(AromaticSystemDelta::Remove {
                         id,
                         atoms: view.atom_ids().collect(),
-                        attributes: lhs.aromatic_system(id).attributes.clone(),
+                        attributes: lhs.aromatic_system(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::AromaticSystemModify(r, rhs) => {
@@ -854,7 +854,7 @@ impl ReactionInput {
                     }
                     for d in AromaticSystemDelta::for_update(
                         id,
-                        lhs.aromatic_system(id).attributes,
+                        lhs.aromatic_system(id).attributes(),
                         &rhs,
                     ) {
                         resolved.push(Delta::AromaticSystem(d));

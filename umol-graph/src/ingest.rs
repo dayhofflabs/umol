@@ -1073,7 +1073,7 @@ mod tests {
         assert_eq!(
             molecule
                 .aromatic_system(AromaticSystemId(0))
-                .attributes
+                .attributes()
                 .charge,
             expected_system_charge
         );

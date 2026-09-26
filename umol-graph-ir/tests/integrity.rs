@@ -73,7 +73,7 @@ fn test_molecule_electron_attributes(
     assert_eq!(contributions, per_atom);
     let (stored, sum) = if aromatic {
         let view = molecule.aromatic_system(AromaticSystemId(0));
-        (&view.attributes.electrons, view.electron_count())
+        (&view.attributes().electrons, view.electron_count())
     } else {
         let view = molecule.multicenter_bond(MulticenterBondId(0));
         (&view.attributes.electrons, view.electron_count())
@@ -264,7 +264,7 @@ fn test_reaction_span_electron_attributes(
         let stored = if aromatic {
             &molecule
                 .aromatic_system(AromaticSystemId(0))
-                .attributes
+                .attributes()
                 .electrons
         } else {
             &molecule
