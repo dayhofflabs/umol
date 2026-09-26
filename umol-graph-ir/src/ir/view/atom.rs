@@ -358,6 +358,36 @@ impl<'a> AtomEditorView<'a> {
     pub fn attributes(&self) -> &'a AtomForm {
         self.attributes
     }
+
+    #[inline]
+    pub fn element(&self) -> &'a ElementForm {
+        &self.attributes.element
+    }
+
+    #[inline]
+    pub fn isotope_mass(&self) -> &'a IsotopeMassForm {
+        &self.attributes.isotope_mass
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &'a NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn implicit_hydrogens(&self) -> &'a NumForm {
+        &self.attributes.implicit_hydrogens
+    }
+
+    #[inline]
+    pub fn lone_pairs(&self) -> &'a NumForm {
+        &self.attributes.lone_pairs
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
+    }
 }
 
 /// Mutable attribute access to an atom.
@@ -385,6 +415,36 @@ impl<'a> AtomViewMut<'a> {
     #[inline]
     pub fn attributes_mut(&mut self) -> &mut AtomForm {
         self.attributes
+    }
+
+    #[inline]
+    pub fn element(&self) -> &ElementForm {
+        &self.attributes.element
+    }
+
+    #[inline]
+    pub fn isotope_mass(&self) -> &IsotopeMassForm {
+        &self.attributes.isotope_mass
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn implicit_hydrogens(&self) -> &NumForm {
+        &self.attributes.implicit_hydrogens
+    }
+
+    #[inline]
+    pub fn lone_pairs(&self) -> &NumForm {
+        &self.attributes.lone_pairs
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
     }
 
     #[inline]
@@ -418,6 +478,36 @@ impl<'a> AtomEditorViewMut<'a> {
     #[inline]
     pub fn attributes_mut(&mut self) -> &mut AtomForm {
         self.attributes
+    }
+
+    #[inline]
+    pub fn element(&self) -> &ElementForm {
+        &self.attributes.element
+    }
+
+    #[inline]
+    pub fn isotope_mass(&self) -> &IsotopeMassForm {
+        &self.attributes.isotope_mass
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn implicit_hydrogens(&self) -> &NumForm {
+        &self.attributes.implicit_hydrogens
+    }
+
+    #[inline]
+    pub fn lone_pairs(&self) -> &NumForm {
+        &self.attributes.lone_pairs
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
     }
 
     #[inline]
@@ -705,7 +795,7 @@ mod tests {
 
     use super::super::assert_exact_size_by;
     use crate::ir::aromatic::AromaticSystemForm;
-    use crate::ir::atom::AtomForm;
+    use crate::ir::atom::{AtomForm, ElementForm, IsotopeMassForm};
     use crate::ir::bond::BondForm;
     use crate::ir::constraint::{AromaticValenceForm, AtomConstraintForm, MulticenterValenceForm};
     use crate::ir::dative::DativeBondForm;
@@ -719,6 +809,7 @@ mod tests {
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::num::NumForm;
+    use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::stereo::{StereoAtomForm, StereoCoset, StereoKind};
     use crate::mol_dsl;
 
@@ -751,6 +842,22 @@ mod tests {
             )],
             ..Default::default()
         })
+    }
+
+    #[fixture]
+    fn attributes() -> AtomForm {
+        AtomForm {
+            element: ElementForm::Lit(Element::N),
+            isotope_mass: IsotopeMassForm::Lit(15),
+            charge: NumForm::Lit(-1),
+            implicit_hydrogens: NumForm::Lit(2),
+            lone_pairs: NumForm::Lit(3),
+            unpaired_electrons: UnpairedElectronsForm {
+                count: NumForm::Lit(1),
+                multiplicity: NumForm::Lit(2),
+            },
+            ..Default::default()
+        }
     }
 
     #[rstest]
@@ -1419,5 +1526,95 @@ mod tests {
             molecule.atom(AtomId(0)).multicenter_degree(),
             NumForm::Lit(2),
         );
+    }
+
+    #[rstest]
+    fn test_atom_editor_view_attributes(attributes: AtomForm) {
+        let editor = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![attributes.clone()],
+            ..Default::default()
+        })
+        .edit();
+        let fields = {
+            let view = editor.atom(AtomId(0));
+            (
+                view.element(),
+                view.isotope_mass(),
+                view.charge(),
+                view.implicit_hydrogens(),
+                view.lone_pairs(),
+                view.unpaired_electrons(),
+            )
+        };
+        assert_eq!(
+            fields,
+            (
+                &attributes.element,
+                &attributes.isotope_mass,
+                &attributes.charge,
+                &attributes.implicit_hydrogens,
+                &attributes.lone_pairs,
+                &attributes.unpaired_electrons,
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_mut_attributes_mut(mut molecule: Molecule, attributes: AtomForm) {
+        {
+            let mut view = molecule.atom_mut(AtomId(0));
+            for expected in [attributes, AtomForm::default()] {
+                *view.attributes_mut() = expected.clone();
+                assert_eq!(
+                    (
+                        view.element(),
+                        view.isotope_mass(),
+                        view.charge(),
+                        view.implicit_hydrogens(),
+                        view.lone_pairs(),
+                        view.unpaired_electrons()
+                    ),
+                    (
+                        &expected.element,
+                        &expected.isotope_mass,
+                        &expected.charge,
+                        &expected.implicit_hydrogens,
+                        &expected.lone_pairs,
+                        &expected.unpaired_electrons
+                    ),
+                );
+            }
+        }
+        assert_eq!(molecule.atom(AtomId(0)).attributes(), &AtomForm::default());
+    }
+
+    #[rstest]
+    fn test_atom_editor_view_mut_attributes_mut(molecule: Molecule, attributes: AtomForm) {
+        let mut editor = molecule.edit();
+        {
+            let mut view = editor.atom_mut(AtomId(0));
+            for expected in [attributes, AtomForm::default()] {
+                *view.attributes_mut() = expected.clone();
+                assert_eq!(
+                    (
+                        view.element(),
+                        view.isotope_mass(),
+                        view.charge(),
+                        view.implicit_hydrogens(),
+                        view.lone_pairs(),
+                        view.unpaired_electrons()
+                    ),
+                    (
+                        &expected.element,
+                        &expected.isotope_mass,
+                        &expected.charge,
+                        &expected.implicit_hydrogens,
+                        &expected.lone_pairs,
+                        &expected.unpaired_electrons
+                    ),
+                );
+            }
+        }
+        assert_eq!(editor.atom(AtomId(0)).attributes(), &AtomForm::default());
     }
 }

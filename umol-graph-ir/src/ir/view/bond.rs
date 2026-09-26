@@ -233,6 +233,21 @@ impl<'a> BondEditorView<'a> {
     }
 
     #[inline]
+    pub fn order(&self) -> &'a NumForm {
+        &self.attributes.order
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &'a NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &'a UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
+    }
+
+    #[inline]
     pub fn atom_ids(&self) -> [AtomId; 2] {
         self.atoms
     }
@@ -268,6 +283,21 @@ impl<'a> BondViewMut<'a> {
     #[inline]
     pub fn attributes_mut(&mut self) -> &mut BondForm {
         self.attributes
+    }
+
+    #[inline]
+    pub fn order(&self) -> &NumForm {
+        &self.attributes.order
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
     }
 
     #[inline]
@@ -311,6 +341,21 @@ impl<'a> BondEditorViewMut<'a> {
     #[inline]
     pub fn attributes_mut(&mut self) -> &mut BondForm {
         self.attributes
+    }
+
+    #[inline]
+    pub fn order(&self) -> &NumForm {
+        &self.attributes.order
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &NumForm {
+        &self.attributes.charge
+    }
+
+    #[inline]
+    pub fn unpaired_electrons(&self) -> &UnpairedElectronsForm {
+        &self.attributes.unpaired_electrons
     }
 
     #[inline]
@@ -426,6 +471,8 @@ mod tests {
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
+    use crate::ir::num::NumForm;
+    use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::stereo::{StereoBondForm, StereoCoset, StereoKind};
 
     #[fixture]
@@ -457,6 +504,19 @@ mod tests {
             )],
             ..Default::default()
         })
+    }
+
+    #[fixture]
+    fn attributes() -> BondForm {
+        BondForm {
+            order: NumForm::Lit(2),
+            charge: NumForm::Lit(-1),
+            unpaired_electrons: UnpairedElectronsForm {
+                count: NumForm::Lit(1),
+                multiplicity: NumForm::Lit(2),
+            },
+            ..Default::default()
+        }
     }
 
     #[rstest]
@@ -603,5 +663,66 @@ mod tests {
         assert_eq!(view.id(), StereoBondId(0));
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert!(stereo_molecule.bond(BondId(0)).stereo_bond().is_none());
+    }
+
+    #[rstest]
+    fn test_bond_editor_view_attributes(attributes: BondForm) {
+        let editor = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 2],
+            bonds: vec![(AtomId(0), AtomId(1), attributes.clone())],
+            ..Default::default()
+        })
+        .edit();
+        let fields = {
+            let view = editor.bond(BondId(0));
+            (view.order(), view.charge(), view.unpaired_electrons())
+        };
+        assert_eq!(
+            fields,
+            (
+                &attributes.order,
+                &attributes.charge,
+                &attributes.unpaired_electrons
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_bond_view_mut_attributes_mut(mut molecule: Molecule, attributes: BondForm) {
+        {
+            let mut view = molecule.bond_mut(BondId(0));
+            for expected in [attributes, BondForm::default()] {
+                *view.attributes_mut() = expected.clone();
+                assert_eq!(
+                    (view.order(), view.charge(), view.unpaired_electrons()),
+                    (
+                        &expected.order,
+                        &expected.charge,
+                        &expected.unpaired_electrons
+                    ),
+                );
+            }
+        }
+        assert_eq!(molecule.bond(BondId(0)).attributes(), &BondForm::default());
+    }
+
+    #[rstest]
+    fn test_bond_editor_view_mut_attributes_mut(molecule: Molecule, attributes: BondForm) {
+        let mut editor = molecule.edit();
+        {
+            let mut view = editor.bond_mut(BondId(0));
+            for expected in [attributes, BondForm::default()] {
+                *view.attributes_mut() = expected.clone();
+                assert_eq!(
+                    (view.order(), view.charge(), view.unpaired_electrons()),
+                    (
+                        &expected.order,
+                        &expected.charge,
+                        &expected.unpaired_electrons
+                    ),
+                );
+            }
+        }
+        assert_eq!(editor.bond(BondId(0)).attributes(), &BondForm::default());
     }
 }
