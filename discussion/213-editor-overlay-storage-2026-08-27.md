@@ -16,7 +16,7 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 
 This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
 S2a, the revised S2b, S2c, S2d, S2g, S2h, and S2i1 are implemented. The previous S2b mutable-view
-attempt was reverted. S2i2 is implemented; S2i3 is next. The S2i2–S2i4 migration
+attempt was reverted. S2i2–S2i3 are implemented; S2i4 is next. The S2i2–S2i4 migration
 is not yet compiling; verification is at S2i4. S2f is cancelled and the remaining
 S2 work is unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -30,7 +30,7 @@ an implementation dependency.
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
 | Molecule attribute methods | Uniform unchecked attribute mutation settled; implementation remains | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Remove modify/try_modify callbacks. |
-| Mutable-view structures and API | S2i2 implemented; S2i3–S2i4 pending | One const-generic mutable-view family. EDITOR controls structural mutation only; all attributes are freely mutable for both values. Group compilation and verification remain at S2i4. |
+| Mutable-view structures and API | S2i2–S2i3 implemented; S2i4 pending | One const-generic mutable-view family. EDITOR controls structural mutation only; all attributes are freely mutable for both values. Group compilation and verification remain at S2i4. |
 | Molecule-level constraint mutation | S2i1 complete; callback migration remains | Molecule::constraints provides reads; the editor exposes &mut Constraints. The public checked constraint view is removed. S2k/S2l migrate callback callers and S2m removes try_modify_constraints. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
 | Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation remains | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Molecule and Edits input-transfer changes remain; the editor already supports consumption. |
@@ -59,7 +59,7 @@ Python consumption, counter-based accessor invalidation, and storage names are
 approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
-checks, S2h's aggregate-integrity changes, and S2i1–S2i2 are implemented; S2i3 is next.
+checks, S2h's aggregate-integrity changes, and S2i1–S2i3 are implemented; S2i4 is next.
 
 ## Editor and transaction API
 
@@ -3207,6 +3207,23 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
 
   Migrate editor construction/read/write paths and test typed-set incidence and
   preservation of current publication behavior. No new public names.
+
+  **Implemented — 2026-09-26; group verification pending S2i4.** MoleculeEditor
+  holds a private Molecule draft and its existing correspondence. The three
+  storage-wrapper types and their Arc conversions are removed. All eight mutable
+  accessors delegate to Molecule's private constructors with EDITOR=true;
+  constraints_mut delegates to Molecule's private accessor. Overlay additions,
+  removals, compaction, and restoration use the typed sets. Equivalence checks
+  retain frame transport and normalized comparison. Snapshot and build check
+  integrity before returning a Molecule; edit's ownership contract is unchanged.
+
+  Six new tests cover live incidence after addition, dense removal, and restoration
+  for every overlay kind, plus snapshot independence and whole-molecule publication.
+  The wrapper-materialization tests are removed with their types; existing
+  publication/error and frame-equivalence tests remain. Formatting and diff checks
+  pass. The library check still fails on field-based mutable-view callers in
+  molecule.rs and molecule/transact.rs, scheduled for S2i4; it reports no errors in
+  editor.rs. Tests have not run; the group remains noncompiling until S2i4.
 
 - **S2i4 — Slice additions and caller migration** (editor callers across Rust/Python; breaking, red→green). [dep: S2i3]
 

@@ -51,12 +51,6 @@ impl StereoAtoms {
         )))
     }
 
-    pub(crate) fn from_arc(
-        set: Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>>,
-    ) -> Self {
-        Self(set)
-    }
-
     pub fn count(&self) -> usize {
         self.0.count()
     }
@@ -102,7 +96,7 @@ impl StereoAtoms {
 
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "editor storage still uses separate wrappers")
+    expect(dead_code, reason = "entity-set mutation primitives")
 )]
 impl StereoAtoms {
     pub(crate) fn add(
@@ -279,12 +273,6 @@ impl StereoAtoms {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
-    pub(crate) fn into_arc(
-        self,
-    ) -> Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>> {
-        self.0
-    }
-
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: a coinciding entry has
     /// its configuration reframed into the retained `self` ligand frame and then meets, a
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
@@ -423,12 +411,6 @@ impl StereoBonds {
         )))
     }
 
-    pub(crate) fn from_arc(
-        set: Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>>,
-    ) -> Self {
-        Self(set)
-    }
-
     pub fn count(&self) -> usize {
         self.0.count()
     }
@@ -497,7 +479,7 @@ impl StereoBonds {
 
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "editor storage still uses separate wrappers")
+    expect(dead_code, reason = "entity-set mutation primitives")
 )]
 impl StereoBonds {
     pub(crate) fn add(
@@ -672,12 +654,6 @@ impl StereoBonds {
 
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
-    }
-
-    pub(crate) fn into_arc(
-        self,
-    ) -> Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>> {
-        self.0
     }
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: a coinciding entry has

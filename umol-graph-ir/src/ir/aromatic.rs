@@ -40,10 +40,6 @@ impl AromaticSystems {
         )))
     }
 
-    pub(crate) fn from_arc(set: Arc<VarRelationSet<NodeId, AromaticSystemForm>>) -> Self {
-        Self(set)
-    }
-
     pub fn count(&self) -> usize {
         self.0.count()
     }
@@ -90,7 +86,7 @@ impl AromaticSystems {
 
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "editor storage still uses separate wrappers")
+    expect(dead_code, reason = "entity-set mutation primitives")
 )]
 impl AromaticSystems {
     pub(crate) fn add(
@@ -258,10 +254,6 @@ impl AromaticSystems {
 
     pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
-    }
-
-    pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, AromaticSystemForm>> {
-        self.0
     }
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding systems meet,
