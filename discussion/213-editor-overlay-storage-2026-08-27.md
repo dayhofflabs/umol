@@ -15,8 +15,8 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 ## Design status — 2026-09-26
 
 This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
-S2a, the revised S2b, S2c, S2d, and S2g are implemented. The previous S2b mutable-view
-attempt was reverted. S2h is next; S2f is cancelled and the remaining S2 work is
+S2a, the revised S2b, S2c, S2d, S2g, and S2h are implemented. The previous S2b mutable-view
+attempt was reverted. S2i1 is next; S2f is cancelled and the remaining S2 work is
 unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -58,7 +58,7 @@ Python consumption, counter-based accessor invalidation, and storage names are
 approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
-checks are implemented; S2h is next.
+checks and S2h's aggregate-integrity changes are implemented; S2i1 is next.
 
 ## Editor and transaction API
 
@@ -2990,9 +2990,11 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   here. Remove documentation promising later constructor rejection.
 
   **Verification.** Constructor/editor publication/Reaction/ReactionSpan agreement on
-  newly admissible count and coset payloads; faithful storage and serialization;
+  newly admissible count and coset payloads; faithful storage and valid-input serialization;
   continued rejection of structural defects. Exercise the first-use rejections
   through public APIs after construction, and the unchanged getter behavior.
+  Malformed inputs require panic freedom, not correct results or faithful text
+  round-tripping.
   This subitem owns the deferred aggregate cases from S2d/S2g and all
   former S2e coverage. Construct inputs through the public constructors now
   admitting them, using the current editor publication API until S6 introduces
@@ -3017,6 +3019,20 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   and the retained structural-rejection cases must pass in the same subitem.
   Update data-types.md and integrity.md with the actual retained checks now;
   do not leave normative guides contradicting the implementation until S9.
+
+  **Implemented and verified — 2026-09-26.** Removed attribute-agreement checks
+  and the two obsolete error variants. Structural and top-level constraint
+  checks remain. Constructors and current editor publication preserve supplied
+  forms; reaction payloads and both span projections follow the same contract.
+  Canonicalization checks stereo frame transport before its infallible search
+  callbacks. Existing electron-use failures and getter behavior are unchanged.
+  The normative guides and affected Rust/Python tests now reflect this contract.
+
+  Passed 7,087 graph-IR unit tests (3 ignored), 19 public construction/consumer
+  regressions, 417 property tests at 128 cases (1 ignored), 1,959 graph tests,
+  259 TableIR raise tests, and 259 Python tests
+  against a rebuilt Python 3.13 extension. Strict Clippy and rustdoc passed for
+  graph-ir/graph/io; nightly formatting and git diff --check passed.
 
 - **S2i — Uniform mutable attribute access and typed editor storage**
   (`ir::{view,molecule,molecule::editor}`, ir exports; group; breaking, green at S2i4).

@@ -10,21 +10,14 @@ use super::super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
-use super::super::edit::{
-    AromaticSystemFieldChange, MulticenterBondFieldChange, StereoAtomFieldChange,
-    StereoBondFieldChange,
-};
-use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::id::{AtomId, StereoAtomId, StereoBondId};
 use super::super::ligand::StereoLigand;
 use super::super::molecule::Molecule;
 use super::super::stereo::integrity::{
-    check_stereo_atom_configuration_on_frame, check_stereo_atom_constraint,
     check_stereo_atom_constraint_on_frame, check_stereo_atom_entry, check_stereo_atom_kind,
-    check_stereo_bond_configuration_on_frame, check_stereo_bond_constraint,
     check_stereo_bond_constraint_on_frame, check_stereo_bond_entry, check_stereo_bond_kind,
-    check_stereo_frame_arity, StereoIntegrityError,
+    StereoIntegrityError,
 };
 use super::super::stereo::StereoKind;
 use super::Reaction;
@@ -42,15 +35,6 @@ pub enum ReactionIntegrityError {
     /// An addition reuses an entity ID from the lhs or an earlier addition.
     #[error("reaction adds duplicate entity reference {entity:?}")]
     DuplicateReference { entity: Entity },
-    /// A literal electron-count vector has a different length from its participant frame.
-    #[error(
-        "{entity}: electron-count vector has length {electron_counts}, expected {participants}"
-    )]
-    ElectronCountLengthMismatch {
-        entity: Entity,
-        participants: usize,
-        electron_counts: usize,
-    },
     /// An atom occurs twice in one stereo entity's atom references.
     #[error("{entity}: participant atom {atom:?} is duplicated")]
     DuplicateAtom { entity: Entity, atom: AtomId },
@@ -69,10 +53,10 @@ pub enum ReactionIntegrityError {
         degree: usize,
         maximum: usize,
     },
-    /// A stereo kind cannot be borne by its site type.
+    /// A stereo kind is incompatible with its site type.
     #[error("{entity}: stereo kind {kind:?} is not admissible for this site type")]
     StereoKindSiteMismatch { entity: Entity, kind: StereoKind },
-    /// A stereo frame's length differs from its declared kind's degree.
+    /// A ligand frame's length differs from the stereo kind's degree.
     #[error("{entity}: stereo frame has {actual} ligands, expected {expected} for {kind:?}")]
     StereoLigandArity {
         entity: Entity,
@@ -80,15 +64,7 @@ pub enum ReactionIntegrityError {
         expected: usize,
         actual: usize,
     },
-    /// A coset index is outside the declared kind's range.
-    #[error("{entity}: coset {coset} is outside 0..{count} for {kind:?}")]
-    StereoCosetOutOfRange {
-        entity: Entity,
-        kind: StereoKind,
-        coset: u32,
-        count: usize,
-    },
-    /// A permutation has a different degree from the frame or kind it acts on.
+    /// A permutation's degree differs from the ligand frame's length.
     #[error(
         "{entity}: permutation has degree {actual}, expected {expected} for the stored ligand frame"
     )]
@@ -97,7 +73,7 @@ pub enum ReactionIntegrityError {
         expected: usize,
         actual: usize,
     },
-    /// A topicity pair names a position outside its stereo frame.
+    /// A topicity pair names a position outside its ligand frame.
     #[error("{entity}: ligand position {position} is outside 0..{degree}")]
     StereoLigandPositionOutOfRange {
         entity: Entity,
@@ -141,17 +117,6 @@ impl From<StereoIntegrityError> for ReactionIntegrityError {
                 expected,
                 actual,
             },
-            StereoIntegrityError::StereoCosetOutOfRange {
-                entity,
-                kind,
-                coset,
-                count,
-            } => Self::StereoCosetOutOfRange {
-                entity,
-                kind,
-                coset,
-                count,
-            },
             StereoIntegrityError::StereoPermutationDegree {
                 entity,
                 expected,
@@ -187,9 +152,6 @@ impl ReactionIntegrityCheck {
 
         for delta in deltas.iter() {
             self.validate_references(lhs, &added, delta)?;
-        }
-        for delta in deltas.iter() {
-            self.validate_electron_count_delta(lhs, &added, delta)?;
         }
         for delta in deltas.iter() {
             self.validate_stereo_delta(lhs, &added, delta)?;
@@ -336,85 +298,6 @@ impl ReactionIntegrityCheck {
         Ok(())
     }
 
-    fn validate_electron_count_delta(
-        &self,
-        lhs: &Molecule,
-        added: &HashMap<Entity, &Delta>,
-        delta: &Delta,
-    ) -> Result<(), ReactionIntegrityError> {
-        match delta {
-            Delta::AromaticSystem(
-                AromaticSystemDelta::Add {
-                    id,
-                    atoms,
-                    attributes,
-                }
-                | AromaticSystemDelta::Remove {
-                    id,
-                    atoms,
-                    attributes,
-                },
-            ) => check_electron_count_length(
-                Entity::AromaticSystem(*id),
-                atoms.len(),
-                &attributes.electrons,
-            ),
-            Delta::MulticenterBond(
-                MulticenterBondDelta::Add {
-                    id,
-                    atoms,
-                    attributes,
-                }
-                | MulticenterBondDelta::Remove {
-                    id,
-                    atoms,
-                    attributes,
-                },
-            ) => check_electron_count_length(
-                Entity::MulticenterBond(*id),
-                atoms.len(),
-                &attributes.electrons,
-            ),
-            Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
-                id,
-                change: AromaticSystemFieldChange::Electrons { old, new },
-            }) => {
-                let entity = Entity::AromaticSystem(*id);
-                let participants = if let Some(view) = lhs.aromatic_systems().get(*id) {
-                    view.atom_ids().len()
-                } else {
-                    let Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, .. }) =
-                        added[&entity]
-                    else {
-                        unreachable!("reference check found the added aromatic system")
-                    };
-                    atoms.len()
-                };
-                check_electron_count_length(entity, participants, old)?;
-                check_electron_count_length(entity, participants, new)
-            }
-            Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
-                id,
-                change: MulticenterBondFieldChange::Electrons { old, new },
-            }) => {
-                let entity = Entity::MulticenterBond(*id);
-                let participants = if let Some(view) = lhs.multicenter_bonds().get(*id) {
-                    view.atom_ids().len()
-                } else {
-                    let Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, .. }) =
-                        added[&entity]
-                    else {
-                        unreachable!("reference check found the added multicenter bond")
-                    };
-                    atoms.len()
-                };
-                check_electron_count_length(entity, participants, old)?;
-                check_electron_count_length(entity, participants, new)
-            }
-            _ => Ok(()),
-        }
-    }
-
     fn validate_stereo_delta(
         &self,
         lhs: &Molecule,
@@ -427,65 +310,29 @@ impl ReactionIntegrityCheck {
                     id,
                     site,
                     ligands,
-                    attributes,
+                    attributes: _,
                 }
                 | StereoAtomDelta::Remove {
                     id,
                     site,
                     ligands,
-                    attributes,
+                    attributes: _,
                 },
-            ) => check_stereo_atom_entry(Entity::StereoAtom(*id), *site, ligands, attributes)?,
-            Delta::StereoAtom(StereoAtomDelta::ModifyField { id, change }) => {
-                let entity = Entity::StereoAtom(*id);
-                let ligand_count = self.stereo_atom_ligand_count(lhs, added, *id)?;
-                let StereoAtomFieldChange::Configuration { old, new } = change;
-                check_stereo_atom_configuration_on_frame(entity, ligand_count, old)?;
-                check_stereo_atom_configuration_on_frame(entity, ligand_count, new)?;
-            }
-            Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { id, kind, old, new }) => {
-                let entity = Entity::StereoAtom(*id);
-                let ligand_count = self.stereo_atom_ligand_count(lhs, added, *id)?;
-                if let Some(kind) = kind {
-                    check_stereo_atom_kind(entity, *kind)?;
-                    check_stereo_frame_arity(entity, ligand_count, *kind)?;
-                }
-                for constraint in old.iter().chain(new) {
-                    check_stereo_atom_constraint(entity, ligand_count, constraint)?;
-                }
-            }
+            ) => check_stereo_atom_entry(Entity::StereoAtom(*id), *site, ligands)?,
             Delta::StereoBond(
                 StereoBondDelta::Add {
                     id,
                     site: _,
                     ligands,
-                    attributes,
+                    attributes: _,
                 }
                 | StereoBondDelta::Remove {
                     id,
                     site: _,
                     ligands,
-                    attributes,
+                    attributes: _,
                 },
-            ) => check_stereo_bond_entry(Entity::StereoBond(*id), ligands, attributes)?,
-            Delta::StereoBond(StereoBondDelta::ModifyField { id, change }) => {
-                let entity = Entity::StereoBond(*id);
-                let ligand_count = self.stereo_bond_ligand_count(lhs, added, *id)?;
-                let StereoBondFieldChange::Configuration { old, new } = change;
-                check_stereo_bond_configuration_on_frame(entity, ligand_count, old)?;
-                check_stereo_bond_configuration_on_frame(entity, ligand_count, new)?;
-            }
-            Delta::StereoBond(StereoBondDelta::ModifyConstraint { id, kind, old, new }) => {
-                let entity = Entity::StereoBond(*id);
-                let ligand_count = self.stereo_bond_ligand_count(lhs, added, *id)?;
-                if let Some(kind) = kind {
-                    check_stereo_bond_kind(entity, *kind)?;
-                    check_stereo_frame_arity(entity, ligand_count, *kind)?;
-                }
-                for constraint in old.iter().chain(new) {
-                    check_stereo_bond_constraint(entity, ligand_count, constraint)?;
-                }
-            }
+            ) => check_stereo_bond_entry(Entity::StereoBond(*id), ligands)?,
             Delta::Constraint(ConstraintDelta::Add(constraint))
             | Delta::Constraint(ConstraintDelta::Remove(constraint)) => {
                 self.validate_stereo_constraint(lhs, added, constraint)?;
@@ -895,23 +742,6 @@ fn added_entity(delta: &Delta) -> Option<Entity> {
         Delta::StereoBond(StereoBondDelta::Add { id, .. }) => Some(Entity::StereoBond(*id)),
         _ => None,
     }
-}
-
-fn check_electron_count_length(
-    entity: Entity,
-    participants: usize,
-    electrons: &ElectronCountsForm,
-) -> Result<(), ReactionIntegrityError> {
-    if let ElectronCountsForm::Lit(counts) = electrons {
-        if counts.len() != participants {
-            return Err(ReactionIntegrityError::ElectronCountLengthMismatch {
-                entity,
-                participants,
-                electron_counts: counts.len(),
-            });
-        }
-    }
-    Ok(())
 }
 
 fn contains_entity(molecule: &Molecule, entity: Entity) -> bool {

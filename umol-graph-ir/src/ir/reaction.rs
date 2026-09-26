@@ -916,8 +916,8 @@ impl Reaction {
 
     /// Construct a reaction after checking its representation integrity.
     ///
-    /// The check covers delta references, positional electron-count lengths, local stereo payloads
-    /// in additions, removals, modifications, and constraints, and removal incidence compatible
+    /// The check covers delta references, stereo-frame structure, top-level constraints,
+    /// and removal incidence compatible
     /// with each source entity's participant structure. The lhs is an already closed [`Molecule`].
     /// Removal payloads are interpreted in their recorded local frame.
     /// A stereo configuration change may name different kinds on its two sides; application and
@@ -3505,8 +3505,6 @@ mod tests {
             atoms: vec![AtomId(3), AtomId(4), AtomId(5)],
             attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
         })],
-        Entity::AromaticSystem(AromaticSystemId(1)),
-        3,
     )]
     #[case::aromatic_remove(
         vec![Delta::AromaticSystem(AromaticSystemDelta::Remove {
@@ -3514,8 +3512,6 @@ mod tests {
             atoms: vec![AtomId(2), AtomId(0), AtomId(1)],
             attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
         })],
-        Entity::AromaticSystem(AromaticSystemId(0)),
-        3,
     )]
     #[case::aromatic_modify_old(
         vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
@@ -3525,8 +3521,6 @@ mod tests {
                 new: ElectronCountsForm::Lit(vec![1, 1, 1]),
             },
         })],
-        Entity::AromaticSystem(AromaticSystemId(0)),
-        3,
     )]
     #[case::aromatic_modify_new(
         vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
@@ -3536,8 +3530,6 @@ mod tests {
                 new: ElectronCountsForm::Lit(vec![1, 1]),
             },
         })],
-        Entity::AromaticSystem(AromaticSystemId(0)),
-        3,
     )]
     #[case::aromatic_modify_forward_add(
         vec![
@@ -3554,8 +3546,6 @@ mod tests {
                 attributes: AromaticSystemForm::default(),
             }),
         ],
-        Entity::AromaticSystem(AromaticSystemId(1)),
-        4,
     )]
     #[case::multicenter_add(
         vec![Delta::MulticenterBond(MulticenterBondDelta::Add {
@@ -3563,8 +3553,6 @@ mod tests {
             atoms: vec![AtomId(3), AtomId(4), AtomId(5)],
             attributes: MulticenterBondForm::from_electrons(vec![1, 1]),
         })],
-        Entity::MulticenterBond(MulticenterBondId(1)),
-        3,
     )]
     #[case::multicenter_remove(
         vec![Delta::MulticenterBond(MulticenterBondDelta::Remove {
@@ -3572,8 +3560,6 @@ mod tests {
             atoms: vec![AtomId(2), AtomId(0), AtomId(1)],
             attributes: MulticenterBondForm::from_electrons(vec![1, 1]),
         })],
-        Entity::MulticenterBond(MulticenterBondId(0)),
-        3,
     )]
     #[case::multicenter_modify_old(
         vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
@@ -3583,8 +3569,6 @@ mod tests {
                 new: ElectronCountsForm::Lit(vec![1, 1, 1]),
             },
         })],
-        Entity::MulticenterBond(MulticenterBondId(0)),
-        3,
     )]
     #[case::multicenter_modify_new(
         vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
@@ -3594,8 +3578,6 @@ mod tests {
                 new: ElectronCountsForm::Lit(vec![1, 1]),
             },
         })],
-        Entity::MulticenterBond(MulticenterBondId(0)),
-        3,
     )]
     #[case::multicenter_modify_forward_add(
         vec![
@@ -3612,14 +3594,8 @@ mod tests {
                 attributes: MulticenterBondForm::default(),
             }),
         ],
-        Entity::MulticenterBond(MulticenterBondId(1)),
-        4,
     )]
-    fn test_reaction_try_new_electron_count_length_error(
-        #[case] deltas: Vec<Delta>,
-        #[case] entity: Entity,
-        #[case] participants: usize,
-    ) {
+    fn test_reaction_try_new_electron_count_length_attributes(#[case] deltas: Vec<Delta>) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 7],
             aromatic: vec![(
@@ -3633,14 +3609,10 @@ mod tests {
             ..Default::default()
         });
 
-        assert_eq!(
-            Reaction::try_new(lhs, Deltas::from_iter(deltas)),
-            Err(ReactionIntegrityError::ElectronCountLengthMismatch {
-                entity,
-                participants,
-                electron_counts: 2,
-            }),
-        );
+        let deltas = Deltas::from_iter(deltas);
+        let reaction = Reaction::try_new(lhs.clone(), deltas.clone()).unwrap();
+        assert_eq!(reaction.lhs(), &lhs);
+        assert_eq!(reaction.deltas(), &deltas);
     }
 
     #[rstest]
@@ -3797,12 +3769,6 @@ mod tests {
                 .collect(),
             attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 2u32),
         }),
-        ReactionIntegrityError::StereoCosetOutOfRange {
-            entity: Entity::StereoAtom(StereoAtomId(0)),
-            kind: StereoKind::Tetrahedral,
-            coset: 2,
-            count: 2,
-        },
     )]
     #[case::bond(
         Delta::StereoBond(StereoBondDelta::Remove {
@@ -3813,22 +3779,15 @@ mod tests {
                 .collect(),
             attributes: StereoBondForm::new(StereoKind::CisTrans, 2u32),
         }),
-        ReactionIntegrityError::StereoCosetOutOfRange {
-            entity: Entity::StereoBond(StereoBondId(0)),
-            kind: StereoKind::CisTrans,
-            coset: 2,
-            count: 2,
-        },
     )]
-    fn test_reaction_try_new_stereo_remove_domain_error(
+    fn test_reaction_try_new_stereo_remove_domain_attributes(
         #[case] delta: Delta,
-        #[case] expected: ReactionIntegrityError,
         stereo_domain_lhs: Molecule,
     ) {
-        assert_eq!(
-            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
-            Err(expected),
-        );
+        let deltas = Deltas::from_iter([delta]);
+        let reaction = Reaction::try_new(stereo_domain_lhs.clone(), deltas.clone()).unwrap();
+        assert_eq!(reaction.lhs(), &stereo_domain_lhs);
+        assert_eq!(reaction.deltas(), &deltas);
     }
 
     #[rstest]
@@ -3840,8 +3799,6 @@ mod tests {
                 new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
             },
         }),
-        Entity::StereoAtom(StereoAtomId(0)),
-        StereoKind::Tetrahedral,
     )]
     #[case::atom_new(
         Delta::StereoAtom(StereoAtomDelta::ModifyField {
@@ -3851,8 +3808,6 @@ mod tests {
                 new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 2u32),
             },
         }),
-        Entity::StereoAtom(StereoAtomId(0)),
-        StereoKind::Tetrahedral,
     )]
     #[case::bond_old(
         Delta::StereoBond(StereoBondDelta::ModifyField {
@@ -3862,8 +3817,6 @@ mod tests {
                 new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32),
             },
         }),
-        Entity::StereoBond(StereoBondId(0)),
-        StereoKind::CisTrans,
     )]
     #[case::bond_new(
         Delta::StereoBond(StereoBondDelta::ModifyField {
@@ -3873,24 +3826,15 @@ mod tests {
                 new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 2u32),
             },
         }),
-        Entity::StereoBond(StereoBondId(0)),
-        StereoKind::CisTrans,
     )]
-    fn test_reaction_try_new_stereo_modify_field_domain_error(
+    fn test_reaction_try_new_stereo_modify_field_domain_attributes(
         #[case] delta: Delta,
-        #[case] entity: Entity,
-        #[case] kind: StereoKind,
         stereo_domain_lhs: Molecule,
     ) {
-        assert_eq!(
-            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
-            Err(ReactionIntegrityError::StereoCosetOutOfRange {
-                entity,
-                kind,
-                coset: 2,
-                count: 2,
-            }),
-        );
+        let deltas = Deltas::from_iter([delta]);
+        let reaction = Reaction::try_new(stereo_domain_lhs.clone(), deltas.clone()).unwrap();
+        assert_eq!(reaction.lhs(), &stereo_domain_lhs);
+        assert_eq!(reaction.deltas(), &deltas);
     }
 
     #[rstest]
@@ -3902,12 +3846,6 @@ mod tests {
                 new: StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32),
             },
         }),
-        ReactionIntegrityError::StereoLigandArity {
-            entity: Entity::StereoAtom(StereoAtomId(0)),
-            kind: StereoKind::Octahedral,
-            expected: 6,
-            actual: 4,
-        },
     )]
     #[case::bond_site_kind(
         Delta::StereoBond(StereoBondDelta::ModifyField {
@@ -3917,20 +3855,15 @@ mod tests {
                 new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
             },
         }),
-        ReactionIntegrityError::StereoKindSiteMismatch {
-            entity: Entity::StereoBond(StereoBondId(0)),
-            kind: StereoKind::Tetrahedral,
-        },
     )]
-    fn test_reaction_try_new_stereo_modify_field_kind_error(
+    fn test_reaction_try_new_stereo_modify_field_kind_attributes(
         #[case] delta: Delta,
-        #[case] expected: ReactionIntegrityError,
         stereo_domain_lhs: Molecule,
     ) {
-        assert_eq!(
-            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
-            Err(expected),
-        );
+        let deltas = Deltas::from_iter([delta]);
+        let reaction = Reaction::try_new(stereo_domain_lhs.clone(), deltas.clone()).unwrap();
+        assert_eq!(reaction.lhs(), &stereo_domain_lhs);
+        assert_eq!(reaction.deltas(), &deltas);
     }
 
     #[rstest]
@@ -3941,8 +3874,6 @@ mod tests {
             old: None,
             new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
         }),
-        Entity::StereoAtom(StereoAtomId(0)),
-        StereoKind::CisTrans,
     )]
     #[case::bond(
         Delta::StereoBond(StereoBondDelta::ModifyConstraint {
@@ -3951,14 +3882,8 @@ mod tests {
             old: None,
             new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
         }),
-        Entity::StereoBond(StereoBondId(0)),
-        StereoKind::Tetrahedral,
     )]
-    fn test_reaction_try_new_stereo_modify_constraint_error(
-        #[case] delta: Delta,
-        #[case] entity: Entity,
-        #[case] kind: StereoKind,
-    ) {
+    fn test_reaction_try_new_stereo_modify_constraint_attributes(#[case] delta: Delta) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 7],
             bonds: vec![
@@ -3989,10 +3914,10 @@ mod tests {
             ..Default::default()
         });
 
-        assert_eq!(
-            Reaction::try_new(lhs, Deltas::from_iter([delta])),
-            Err(ReactionIntegrityError::StereoKindSiteMismatch { entity, kind }),
-        );
+        let deltas = Deltas::from_iter([delta]);
+        let reaction = Reaction::try_new(lhs.clone(), deltas.clone()).unwrap();
+        assert_eq!(reaction.lhs(), &lhs);
+        assert_eq!(reaction.deltas(), &deltas);
     }
 
     #[rstest]
@@ -4006,11 +3931,6 @@ mod tests {
             })),
             new: None,
         }),
-        ReactionIntegrityError::StereoLigandPositionOutOfRange {
-            entity: Entity::StereoAtom(StereoAtomId(0)),
-            position: 99,
-            degree: 4,
-        },
     )]
     #[case::atom_new_action(
         Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
@@ -4022,11 +3942,6 @@ mod tests {
                 active: BooleanForm::Undetermined,
             })),
         }),
-        ReactionIntegrityError::StereoPermutationDegree {
-            entity: Entity::StereoAtom(StereoAtomId(0)),
-            expected: 4,
-            actual: 3,
-        },
     )]
     #[case::bond_old_position(
         Delta::StereoBond(StereoBondDelta::ModifyConstraint {
@@ -4038,11 +3953,6 @@ mod tests {
             })),
             new: None,
         }),
-        ReactionIntegrityError::StereoLigandPositionOutOfRange {
-            entity: Entity::StereoBond(StereoBondId(0)),
-            position: 99,
-            degree: 4,
-        },
     )]
     #[case::bond_new_action(
         Delta::StereoBond(StereoBondDelta::ModifyConstraint {
@@ -4054,11 +3964,6 @@ mod tests {
                 active: BooleanForm::Undetermined,
             })),
         }),
-        ReactionIntegrityError::StereoPermutationDegree {
-            entity: Entity::StereoBond(StereoBondId(0)),
-            expected: 4,
-            actual: 3,
-        },
     )]
     #[case::atom_kind_arity(
         Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
@@ -4067,22 +3972,15 @@ mod tests {
             old: None,
             new: None,
         }),
-        ReactionIntegrityError::StereoLigandArity {
-            entity: Entity::StereoAtom(StereoAtomId(0)),
-            kind: StereoKind::Octahedral,
-            expected: 6,
-            actual: 4,
-        },
     )]
-    fn test_reaction_try_new_stereo_modify_constraint_domain_error(
+    fn test_reaction_try_new_stereo_modify_constraint_domain_attributes(
         #[case] delta: Delta,
-        #[case] expected: ReactionIntegrityError,
         stereo_domain_lhs: Molecule,
     ) {
-        assert_eq!(
-            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta])),
-            Err(expected),
-        );
+        let deltas = Deltas::from_iter([delta]);
+        let reaction = Reaction::try_new(stereo_domain_lhs.clone(), deltas.clone()).unwrap();
+        assert_eq!(reaction.lhs(), &stereo_domain_lhs);
+        assert_eq!(reaction.deltas(), &deltas);
     }
 
     #[rstest]
@@ -4239,11 +4137,7 @@ mod tests {
                 relation: TopicityRelationForm::Lit(Topicity::Homotopic),
             })),
         }),
-        ReactionIntegrityError::StereoLigandPositionOutOfRange {
-            entity: Entity::StereoAtom(StereoAtomId(1)),
-            position: 3,
-            degree: 3,
-        },
+        None,
     )]
     #[case::top_level_constraint(
         Delta::Constraint(ConstraintDelta::Add(Constraint::StereoAtom(
@@ -4251,16 +4145,16 @@ mod tests {
             StereoKind::Tetrahedral,
             StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
         ))),
-        ReactionIntegrityError::StereoLigandArity {
+        Some(ReactionIntegrityError::StereoLigandArity {
             entity: Entity::StereoAtom(StereoAtomId(1)),
             kind: StereoKind::Tetrahedral,
             expected: 4,
             actual: 3,
-        },
+        }),
     )]
-    fn test_reaction_try_new_stereo_forward_add_domain_error(
+    fn test_reaction_try_new_stereo_forward_add_domain(
         #[case] delta: Delta,
-        #[case] expected: ReactionIntegrityError,
+        #[case] expected: Option<ReactionIntegrityError>,
         stereo_domain_lhs: Molecule,
     ) {
         let addition = Delta::StereoAtom(StereoAtomDelta::Add {
@@ -4273,10 +4167,16 @@ mod tests {
             attributes: StereoAtomForm::default(),
         });
 
-        assert_eq!(
-            Reaction::try_new(stereo_domain_lhs, Deltas::from_iter([delta, addition])),
-            Err(expected),
-        );
+        let deltas = Deltas::from_iter([delta, addition]);
+        match expected {
+            Some(error) => assert_eq!(Reaction::try_new(stereo_domain_lhs, deltas), Err(error)),
+            None => assert_eq!(
+                Reaction::try_new(stereo_domain_lhs, deltas.clone())
+                    .unwrap()
+                    .deltas(),
+                &deltas
+            ),
+        }
     }
 
     #[rstest]

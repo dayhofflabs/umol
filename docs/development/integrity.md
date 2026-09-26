@@ -60,12 +60,10 @@ contract by construction and test that preservation. A new public raw constructo
 hatch is not harmless convenience: it reopens the container and would require defensive checks
 throughout its operations.
 
-Integrity-sensitive live mutation follows the same rule. Raw whole-form aromatic-system and
-multicenter-bond mutation is restricted to graph IR. The public singular and aggregate-wide
-`try_modify_aromatic_system*` and `try_modify_multicenter_bond*` operations modify a private
-candidate, publish it only after the authoritative check succeeds, return the exact
-`MoleculeIntegrityError` on rejection, and leave the source unchanged. Python live views use those
-checked operations and translate rejection to `ValueError`; they do not publish a partial change.
+Entity attributes and entity-level constraints do not establish frame agreement. Constructors
+preserve supplied electron counts, configurations, and constraints without padding, truncation,
+normalization, or repair. Length, coset, kind/site, action-degree, and local constraint-position
+checks belong to the operations that need them. Top-level constraints retain their integrity checks.
 
 ## `Molecule` integrity inventory
 
@@ -74,7 +72,6 @@ checked operations and translate rejection to `ValueError`; they do not publish 
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
 | `InvalidReference` | A bond endpoint, relation participant or site, stereo-ligand anchor, or constraint refers to an entity outside the owning molecule. | Internal entity, relation, constraint, remapping, and projection code uses dense ids to index aggregate storage. A dangling stored id would otherwise become an out-of-bounds panic or be remapped as the wrong entity. |
-| `ElectronCountLengthMismatch` | A literal aromatic or multicenter electron-count vector does not have one value per participant. | Counts are transported position by position with the participant frame. A mismatch currently turns reframing into `None` or leaves `permute` unchanged; accepting it would silently detach counts from atoms and later surface as an unrelated contradiction. |
 
 ### Fixed entity identity
 
@@ -96,13 +93,12 @@ checked operations and translate rejection to `ValueError`; they do not publish 
 | `DuplicateStereoLigand` | A stereo frame repeats the same `StereoLigand`, including an identical implicit hydrogen or lone pair anchored at the same atom. | Equal frame positions do not determine a unique permutation action. Accepting them would require orbit search in every reframe, comparison, matching, pushout, and canonicalization path and could silently transport configurations or constraints by different actions. |
 | `StereoFrameDegreeTooLarge` | A stereo frame has more than `umol_perm::MAX_DEGREE` ligands, whether or not a kind is asserted. | `Permutation` is a bounded representation whose constructors and actions assert the maximum degree. Rejecting at publication prevents degree assertions and fixed-array indexing failures in later frame operations. |
 | `StereoLigandIncidenceMismatch` | A stereo-atom ligand is not borne by or adjacent to its site as required, or a stereo-bond frame is not two consecutive endpoint blocks with each ligand borne by or adjacent to the corresponding endpoint. | Stereo frames are site-relative, and bond frame actions preserve or swap whole endpoint blocks. Invalid incidence would attach a ligand value to the wrong site or endpoint and make reframing, matching, and application return incorrect stereochemistry. |
-| `StereoKindSiteMismatch` | A kind is asserted on a site type that cannot carry its geometry. | The kind selects the action group and frame interpretation. Treating, for example, an atom as a `CisTrans` bond site would apply the wrong group despite the same numerical degree and produce incorrect transport. |
-| `StereoLigandArity` | A kinded configuration or stereo constraint is paired with a frame whose length differs from the kind's degree. | Coset and permutation actions are defined for one degree. A mismatch would turn malformed input into `None` or `Contradiction`, or index a frame under the wrong action domain. |
-| `StereoCosetOutOfRange` | A literal coset, literal set, or variable domain contains an index outside the kind's dense coset range. | The value does not name a configuration in the selected kind. Without the check, group action and normalization would report an unrelated failed action or contradiction instead of malformed representation. |
-| `StereoPermutationDegree` | A ligand-symmetry, fluxionality, or expression permutation has a degree different from the frame or kind it acts on. | Applying the permutation would use positions from a different action domain, causing a failed action, an indexing panic in positional code, or incorrect constraint transport. |
-| `StereoLigandPositionOutOfRange` | A topicity pair names a position outside its stereo frame. | Topicity evaluation and frame transport use these positions to address ligands or inverse actions. The check prevents out-of-bounds access and prevents a missing position from being misreported as no match or contradiction. |
+| `StereoKindSiteMismatch` | A top-level stereo constraint asserts a kind inadmissible for its atom or bond site. | Top-level constraint interpretation requires the named site action group. |
+| `StereoLigandArity` | A top-level stereo constraint declares a kind whose degree differs from its referenced frame. | Positional interpretation requires agreement with the referenced frame. |
+| `StereoPermutationDegree` | A top-level stereo constraint has a permutation of the wrong degree. | Constraint transport composes that permutation with the referenced frame action. |
+| `StereoLigandPositionOutOfRange` | A top-level topicity constraint names a position outside its referenced frame. | Constraint evaluation and transport index those positions. |
 
-These checks define only whether the stereo representation can be interpreted. They do not decide
+These checks establish structural frames and top-level constraint integrity. They do not decide
 whether the site is stereogenic, physically realizable, or accepted by a stereo model.
 
 ## `Reaction` integrity inventory
@@ -114,18 +110,16 @@ It does not require that the deltas can already materialize a consistent reactio
 | --- | --- | --- |
 | `InvalidReference` | A delta or nested constraint refers to neither an lhs entity nor a uniquely added entity. | Delta execution and remapping index entities by id, while removal integrity reads the source from the lhs or its addition after reference validation. A missing id would panic or select no source. |
 | `DuplicateReference` | An `Add` uses an entity ID already present in the lhs or used by an earlier `Add`. | The same entity reference would name two different entities, giving later deltas and correspondences incompatible meanings. |
-| `ElectronCountLengthMismatch` | A literal electron-count vector in an aromatic or multicenter Add, Remove, or ModifyField has a length different from its owning or explicit local participant frame. | Counts follow participant positions; without one count per position, even identity frame transport can fail or detach counts from atoms. The Reaction error has the same `{ entity, participants, electron_counts }` fields as the Molecule error. |
 | `DuplicateAtom` | A stereo Add or Remove repeats an actual atom ligand, or a stereo-atom entry uses its site atom as an actual ligand. | Distinct actual atom occurrences are required for unambiguous incidence and frame actions. Virtual ligands anchored at the site remain allowed. |
 | `DuplicateStereoLigand` | A stereo Add or Remove repeats the same complete ligand value. | Equal frame positions do not determine a unique permutation action for reaction transport. |
 | `StereoFrameDegreeTooLarge` | A stereo Add or Remove has more ligands than the bounded permutation representation supports. | Frame-action construction would otherwise reach a degree assertion. |
-| `StereoKindSiteMismatch` | A stereo configuration or constraint asserts a kind inadmissible for its atom or bond site type. | Choosing the wrong site action group would misinterpret the payload. |
-| `StereoLigandArity` | A kinded configuration or constraint addresses a frame of another degree. | The value cannot be transported or indexed against that frame. |
-| `StereoCosetOutOfRange` | A literal, set member, or term in a stereo delta names a coset outside its kind. | The value denotes no configuration and later group action would fail for an unrelated reason. |
-| `StereoPermutationDegree` | A stereo constraint or term carries a permutation of the wrong degree. | Composing it with the frame action could assert or transport positions incorrectly. |
-| `StereoLigandPositionOutOfRange` | A stereo topicity pair in an entity or top-level constraint delta names a position outside its owning or explicit local ligand frame. | Positional transport or evaluation would index a nonexistent ligand. |
+| `StereoKindSiteMismatch` | A top-level stereo constraint asserts a kind inadmissible for its atom or bond site. | Top-level constraint interpretation requires the named site action group. |
+| `StereoLigandArity` | A top-level stereo constraint declares a kind whose degree differs from its referenced frame. | Positional interpretation requires agreement with the referenced frame. |
+| `StereoPermutationDegree` | A top-level stereo constraint has a permutation of the wrong degree. | Constraint transport composes that permutation with the referenced frame action. |
+| `StereoLigandPositionOutOfRange` | A top-level topicity constraint names a position outside its referenced frame. | Constraint evaluation and transport index those positions. |
 | `IncidenceMismatch` | A bond or overlay removal records endpoints, a site, or structured participant incidence different from the lhs entity or same-reaction addition it removes. Factor-local reordering and complete stereo-bond endpoint-block exchange preserve incidence; moving individual ligands between blocks does not. | A removal id and its recorded incidence would describe different entities. Span conversion and application could then delete one entity while matching, transporting, or reporting another. |
 
-The eight local stereo failures are direct Reaction variants with the same fields
+The local stereo failures are direct Reaction variants with the same fields
 as their Molecule counterparts. Molecule and Reaction share the local validation
 rules, but each aggregate owns its reference, incidence, and public error
 contract. Reaction does not wrap `MoleculeIntegrityError` for a delta payload;
@@ -143,7 +137,8 @@ action directly to align the removal with that owner before reframing.
 Reaction integrity does not establish delta normal form, old/new continuity, constraint
 satisfiability, two-sided span materializability, DPO gluing conditions, host applicability, or
 chemistry. The operation that first requires each deferred property checks it. A ModifyField may
-carry individually valid old and new stereo configurations of different kinds. Application checks
+carry old and new stereo configurations of different kinds or configurations incompatible with
+their frame. Application checks
 whether that change can execute, and span conversion checks whether it can form one preserved
 stereo entity.
 

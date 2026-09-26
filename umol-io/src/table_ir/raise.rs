@@ -471,6 +471,7 @@ mod tests {
     use umol_graph_core::{EdgeId, GraphRemapping, NodeId, Remapping};
     use umol_graph_ir::ir::{
         AtomConstraintsForm, BondId, Entity, MoleculeRemapping, NoncovalentBondKind, StereoAtomId,
+        StereoConfigurationForm,
     };
 
     use super::*;
@@ -611,6 +612,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty_frame(
+        parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap(),
+        1, vec![], Winding::Clockwise, vec![], 1
+    )]
+    #[case::five_ligands(
+        parse_mol_bytes_to_table_ir(CFCLBRI_MIXED_WEDGE_MOL.as_bytes()).unwrap(),
+        1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4), TableStereoLigand::ImplicitHydrogen], Winding::Clockwise,
+        vec![(0, StereoLigandKind::Atom), (2, StereoLigandKind::Atom), (3, StereoLigandKind::Atom), (4, StereoLigandKind::Atom), (1, StereoLigandKind::ImplicitHydrogen)], 1
+    )]
     #[case::actual(
         Smiles::parse("[C@](F)(Cl)(Br)I").unwrap().into_table_ir(), 0,
         vec![TableStereoLigand::Atom(4), TableStereoLigand::Atom(2), TableStereoLigand::Atom(1), TableStereoLigand::Atom(3)], Winding::Clockwise,
@@ -675,8 +685,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(1, vec![], 1, MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 0 })]
-    #[case::oversized(1, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4), TableStereoLigand::ImplicitHydrogen], 1, MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 5 })]
     #[case::repeated_hydrogen(1, vec![TableStereoLigand::ImplicitHydrogen, TableStereoLigand::ImplicitHydrogen, TableStereoLigand::Atom(2), TableStereoLigand::Atom(3)], 1, MoleculeIntegrityError::DuplicateStereoLigand { entity: Entity::StereoAtom(StereoAtomId(0)), ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen) })]
     #[case::missing_site(8, vec![TableStereoLigand::Atom(0), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(8)) })]
     #[case::missing_ligand(1, vec![TableStereoLigand::Atom(8), TableStereoLigand::Atom(2), TableStereoLigand::Atom(3), TableStereoLigand::Atom(4)], 1, MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(8)) })]
@@ -737,20 +745,35 @@ mod tests {
             ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         })
     )]
-    #[case::incomplete(
-        Smiles::parse("[C@]").unwrap().into_table_ir(),
-        RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 0 })
-    )]
-    #[case::oversized(
-        Smiles::parse("[C@](F)(Cl)(Br)(I)N").unwrap().into_table_ir(),
-        RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 5 })
-    )]
     fn test_table_molecule_try_into_ir_error(
         #[case] molecule: TableMolecule,
         #[case] expected: RaiseError,
     ) {
         let actual: Result<Molecule, RaiseError> = (&molecule).try_into_ir(&());
         assert_eq!(actual, Err(expected));
+    }
+
+    #[rstest]
+    #[case::empty("[C@]", vec![])]
+    #[case::five_ligands("[C@](F)(Cl)(Br)(I)N", vec![1, 2, 3, 4, 5])]
+    fn test_table_molecule_try_into_ir_stereo_attributes(
+        #[case] input: &str,
+        #[case] ligands: Vec<u32>,
+    ) {
+        let table = Smiles::parse(input).unwrap().into_table_ir();
+        let molecule: Molecule = table.try_into_ir(&()).unwrap();
+        let view = molecule.stereo_atom(StereoAtomId(0));
+        assert_eq!(
+            view.ligand_frame(),
+            ligands
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            view.attributes.configuration,
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)
+        );
     }
 
     #[rstest]

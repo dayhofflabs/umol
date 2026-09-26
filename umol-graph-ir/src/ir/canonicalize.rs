@@ -45,6 +45,7 @@ use super::reaction::Reaction;
 use super::reaction_span::ReactionSpan;
 use super::remap::MoleculeRemapping;
 use super::spin::UnpairedElectronsForm;
+use super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
 use super::stereo::{
     CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
     StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
@@ -3149,6 +3150,15 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .get(id)
                 .expect("incidence stereo atom is in range")
                 .attributes;
+            if let Some(kind) = attributes.configuration.kind() {
+                check_stereo_atom_kind(Entity::StereoAtom(id), kind).map_err(|_| Contradiction)?;
+            }
+            attributes
+                .clone()
+                .reframe_by(&Permutation::identity(
+                    molecule.stereo_atom(id).ligand_count(),
+                ))
+                .ok_or(Contradiction)?;
             (
                 EntityBlockPosition::STEREO_ATOM,
                 positioned_product([(
@@ -3163,6 +3173,15 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .get(id)
                 .expect("incidence stereo bond is in range")
                 .attributes;
+            if let Some(kind) = attributes.configuration.kind() {
+                check_stereo_bond_kind(Entity::StereoBond(id), kind).map_err(|_| Contradiction)?;
+            }
+            attributes
+                .clone()
+                .reframe_by(&Permutation::identity(
+                    molecule.stereo_bond(id).ligand_count(),
+                ))
+                .ok_or(Contradiction)?;
             (
                 EntityBlockPosition::STEREO_BOND,
                 positioned_product([(
@@ -3256,6 +3275,16 @@ fn reaction_span_entity_color_key(
         Entity::StereoAtom(id) => (
             EntityBlockPosition::STEREO_ATOM,
             normalized_entity_span_key(span.stereo_atoms().attributes(id), |attributes| {
+                if let Some(kind) = attributes.configuration.kind() {
+                    check_stereo_atom_kind(Entity::StereoAtom(id), kind)
+                        .map_err(|_| Contradiction)?;
+                }
+                attributes
+                    .clone()
+                    .reframe_by(&Permutation::identity(
+                        span.stereo_atoms().ligands(id).len(),
+                    ))
+                    .ok_or(Contradiction)?;
                 Ok(positioned_product([(
                     2,
                     option(attributes.configuration.kind().map(stereo_kind_key)),
@@ -3265,6 +3294,16 @@ fn reaction_span_entity_color_key(
         Entity::StereoBond(id) => (
             EntityBlockPosition::STEREO_BOND,
             normalized_entity_span_key(span.stereo_bonds().attributes(id), |attributes| {
+                if let Some(kind) = attributes.configuration.kind() {
+                    check_stereo_bond_kind(Entity::StereoBond(id), kind)
+                        .map_err(|_| Contradiction)?;
+                }
+                attributes
+                    .clone()
+                    .reframe_by(&Permutation::identity(
+                        span.stereo_bonds().ligands(id).len(),
+                    ))
+                    .ok_or(Contradiction)?;
                 Ok(positioned_product([(
                     2,
                     option(attributes.configuration.kind().map(stereo_kind_key)),

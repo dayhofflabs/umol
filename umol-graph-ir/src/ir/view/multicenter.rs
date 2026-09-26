@@ -184,6 +184,7 @@ impl<'a> MulticenterBondView<'a> {
 
     /// Sum of per-atom electron contributions on this multicenter bond.
     /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
+    /// Includes every stored count, including counts beyond the atom list.
     pub fn electron_count(&self) -> NumForm {
         match &self.attributes.electrons {
             ElectronCountsForm::Lit(counts) => NumForm::Lit(counts.iter().sum()),

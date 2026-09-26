@@ -879,6 +879,22 @@ mod tests {
             inconsistencies: vec![],
         }),
     )]
+    #[case::short_counts(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,2]"}]}"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![],
+            inconsistencies: vec![AromaticityInconsistency::AromaticSystemFailure { system: AromaticSystemId(0) }],
+        }),
+    )]
+    #[case::long_counts(
+        AromaticityModel::daylight(),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,2,0,5]"}]}"#),
+        Solution::Determined(AromaticityDerivation {
+            systems: vec![],
+            inconsistencies: vec![AromaticityInconsistency::AromaticSystemFailure { system: AromaticSystemId(0) }],
+        }),
+    )]
     #[case::existing_system_rejected(
         AromaticityModel::mdl(),
         mol_dsl!(r#"{

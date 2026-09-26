@@ -315,7 +315,9 @@ mod tests {
         StereoContradiction, StereoResolveConfig, ValenceContradiction,
     };
     use crate::ops::stereo::StereoInconsistency;
-    use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, AtomTypingError, ResolveReport};
+    use crate::ops::valence::{
+        AtomCompletions, AtomTypeRegistry, AtomTypingError, CountsError, ResolveReport,
+    };
 
     #[rstest]
     #[case::model_conversion(
@@ -741,24 +743,6 @@ mod tests {
             product_count: 2,
         },
     )]
-    #[case::reactants_model_conversion(
-        "C[S@]C>>",
-        ChemistryModel::default(),
-        ReactionInterpretationError::Reactants(
-            MoleculeInterpretationError::ModelConversion(
-                RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }),
-            ),
-        ),
-    )]
-    #[case::products_model_conversion(
-        ">>C[S@]C",
-        ChemistryModel::default(),
-        ReactionInterpretationError::Products(
-            MoleculeInterpretationError::ModelConversion(
-                RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }),
-            ),
-        ),
-    )]
     #[case::reactants_underdetermined(
         "*>>",
         ChemistryModel::default(),
@@ -848,6 +832,29 @@ mod tests {
 
         assert_eq!(
             reaction.interpret(&model, &ResolveConfig::default()),
+            Err(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::reactants("C[S@]C>>", true)]
+    #[case::products(">>C[S@]C", false)]
+    fn test_reaction_smiles_interpret_stereo_error(#[case] input: &str, #[case] reactants: bool) {
+        let model = ChemistryModel::default();
+        let config = ResolveConfig::default();
+        let error = Smiles::parse("C[S@]C")
+            .unwrap()
+            .interpret(&model, &config)
+            .unwrap_err();
+        let expected = if reactants {
+            ReactionInterpretationError::Reactants(error)
+        } else {
+            ReactionInterpretationError::Products(error)
+        };
+        assert_eq!(
+            ReactionSmiles::parse(input)
+                .unwrap()
+                .interpret(&model, &config),
             Err(expected)
         );
     }
@@ -943,9 +950,9 @@ mod tests {
 
     #[rstest]
     #[case::syntax(" C", SmilesInputError::Syntax(SmilesParseError::LeadingWhitespace))]
-    #[case::model_conversion(
+    #[case::incomplete_stereo(
         "C[S@]C",
-        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(MoleculeIntegrityError::StereoLigandArity { entity: Entity::StereoAtom(StereoAtomId(0)), kind: StereoKind::Tetrahedral, expected: 4, actual: 2 }))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
     #[case::underdetermined(
         "*",
@@ -969,29 +976,16 @@ mod tests {
     )]
     #[case::two_carbon_substituents(
         "[C@](F)Cl",
-        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
-            MoleculeIntegrityError::StereoLigandArity {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-                kind: StereoKind::Tetrahedral, expected: 4, actual: 2,
-            },
-        ))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
     #[case::one_carbon_substituent(
         "[C@]F",
-        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
-            MoleculeIntegrityError::StereoLigandArity {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-                kind: StereoKind::Tetrahedral, expected: 4, actual: 1,
-            },
-        ))
+        SmilesInputError::Contradiction(ResolveContradiction::Stereo(StereoContradiction::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) })))
     )]
     #[case::five_ligands(
         "[C@H](F)(Cl)(Br)I",
-        SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
-            MoleculeIntegrityError::StereoLigandArity {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-                kind: StereoKind::Tetrahedral, expected: 4, actual: 5,
-            },
+        SmilesInputError::Contradiction(ResolveContradiction::Valence(
+            ValenceContradiction::Counts(CountsError::NoMatch)
         ))
     )]
     #[case::duplicate_bracket_h(

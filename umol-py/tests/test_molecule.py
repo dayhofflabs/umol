@@ -28,10 +28,8 @@ from umol import (
     ElementForm,
     ElementScope,
     Entity,
-    InvalidStructureError,
     MaximumIndependentSetAlgorithm,
     MetadataError,
-    ModelConversionError,
     IsotopePolicy,
     Molecule,
     MoleculeCompaction,
@@ -421,26 +419,25 @@ def test_molecule_canonicalize_error():
         molecule.tracked_canonicalize()
 
 
-def test_molecule_stereo_mutation_integrity_error():
+def test_molecule_stereo_mutation_attributes():
     molecule = Molecule.parse(
         '{:atoms ["C" "F" "Cl" "Br" "I"] '
         ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
         ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}'
     )
-    with pytest.raises(InvalidStructureError, match="ligands"):
-        molecule.stereo_atoms[0].configuration = (
-            StereoConfigurationForm.Kinded(
-                StereoKind.Octahedral,
-                StereoCoset.Lit(0),
-            )
-        )
-
-    assert molecule.stereo_atoms[0].configuration == StereoConfigurationForm.Kinded(
-        StereoKind.Tetrahedral,
+    molecule.stereo_atoms[0].configuration = StereoConfigurationForm.Kinded(
+        StereoKind.Octahedral,
         StereoCoset.Lit(0),
     )
-    molecule.canonicalize()
-    molecule.tracked_canonicalize()
+
+    assert molecule.stereo_atoms[0].configuration == StereoConfigurationForm.Kinded(
+        StereoKind.Octahedral,
+        StereoCoset.Lit(0),
+    )
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        molecule.canonicalize()
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        molecule.tracked_canonicalize()
 
 
 def test_molecule_from_smiles():
@@ -832,8 +829,8 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
         (
             "C[S@]C",
             {},
-            ModelConversionError,
-            "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral",
+            ContradictionError,
+            "stereo inconsistency: stereo atom StereoAtomId(0) cannot be realized",
         ),
         (
             "[nH]1cccc1",

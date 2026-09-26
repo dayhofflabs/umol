@@ -84,11 +84,11 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_try_from_entries_rejects_stereo_coset_out_of_range(
+    fn test_molecule_try_from_entries_preserves_stereo_coset(
         elements in prop::collection::vec(element_strategy(), 4),
         coset in 2u32..=32,
     ) {
-        let result = Molecule::try_from_entries(MoleculeEntries {
+        let molecule = Molecule::try_from_entries(MoleculeEntries {
             atoms: iter::once(AtomForm::from_element(Element::C))
                 .chain(elements.into_iter().map(AtomForm::from_element))
                 .collect(),
@@ -103,16 +103,11 @@ proptest! {
                 StereoAtomForm::new(StereoKind::Tetrahedral, coset),
             )],
             ..Default::default()
-        });
+        }).unwrap();
 
         prop_assert_eq!(
-            result,
-            Err(MoleculeIntegrityError::StereoCosetOutOfRange {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-                kind: StereoKind::Tetrahedral,
-                coset,
-                count: 2,
-            }),
+            &molecule.stereo_atom(StereoAtomId(0)).attributes.configuration,
+            &StereoConfigurationForm::kinded(StereoKind::Tetrahedral, coset),
         );
     }
 

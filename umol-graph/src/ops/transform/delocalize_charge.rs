@@ -191,6 +191,8 @@ mod tests {
     }
 
     #[rstest]
+    #[case::short_counts(mol_dsl!(r#"{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,2]"}]}"#))]
+    #[case::long_counts(mol_dsl!(r#"{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,2,0,5]"}]}"#))]
     #[case::already_delocalized(mol_dsl_concrete!(r#"{
         :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
         :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]

@@ -590,6 +590,14 @@ mod tests {
     }
 
     #[rstest]
+    #[case::short_counts(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,2]"}]}"#),
+        KekulizeError::ElectronCountMismatch { system: AromaticSystemId(0), member_count: 3, electron_count: 2 }
+    )]
+    #[case::long_counts(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,2,0,5]"}]}"#),
+        KekulizeError::ElectronCountMismatch { system: AromaticSystemId(0), member_count: 3, electron_count: 4 }
+    )]
     #[case::undetermined_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "*#c0#u0#s1"}]}"#),
         KekulizeError::UndeterminedElectrons(AromaticSystemId(0))

@@ -2,9 +2,7 @@
 
 use umol_perm::{Permutation, MAX_DEGREE};
 
-use super::{
-    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm,
-};
+use super::StereoKind;
 use crate::ir::constraint::{StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair};
 use crate::ir::entity::Entity;
 use crate::ir::id::AtomId;
@@ -34,12 +32,6 @@ pub(crate) enum StereoIntegrityError {
         kind: StereoKind,
         expected: usize,
         actual: usize,
-    },
-    StereoCosetOutOfRange {
-        entity: Entity,
-        kind: StereoKind,
-        coset: u32,
-        count: usize,
     },
     StereoPermutationDegree {
         entity: Entity,
@@ -77,7 +69,6 @@ pub(crate) fn check_stereo_atom_entry(
     entity: Entity,
     site: AtomId,
     ligand_frame: &[StereoLigand],
-    attributes: &StereoAtomForm,
 ) -> Result<(), StereoIntegrityError> {
     check_stereo_frame(entity, ligand_frame)?;
     if ligand_frame
@@ -86,16 +77,14 @@ pub(crate) fn check_stereo_atom_entry(
     {
         return Err(StereoIntegrityError::DuplicateAtom { entity, atom: site });
     }
-    check_stereo_atom(entity, ligand_frame.len(), attributes)
+    Ok(())
 }
 
 pub(crate) fn check_stereo_bond_entry(
     entity: Entity,
     ligand_frame: &[StereoLigand],
-    attributes: &StereoBondForm,
 ) -> Result<(), StereoIntegrityError> {
-    check_stereo_frame(entity, ligand_frame)?;
-    check_stereo_bond(entity, ligand_frame.len(), attributes)
+    check_stereo_frame(entity, ligand_frame)
 }
 
 pub(crate) fn check_stereo_atom_kind(
@@ -110,48 +99,6 @@ pub(crate) fn check_stereo_bond_kind(
     kind: StereoKind,
 ) -> Result<(), StereoIntegrityError> {
     check_stereo_site_kind(entity, kind, StereoSite::Bond)
-}
-
-fn check_stereo_atom(
-    entity: Entity,
-    ligand_count: usize,
-    attributes: &StereoAtomForm,
-) -> Result<(), StereoIntegrityError> {
-    check_stereo_atom_configuration_on_frame(entity, ligand_count, &attributes.configuration)?;
-    for constraint in attributes.constraints.iter() {
-        check_stereo_atom_constraint(entity, ligand_count, constraint)?;
-    }
-    Ok(())
-}
-
-fn check_stereo_bond(
-    entity: Entity,
-    ligand_count: usize,
-    attributes: &StereoBondForm,
-) -> Result<(), StereoIntegrityError> {
-    check_stereo_bond_configuration_on_frame(entity, ligand_count, &attributes.configuration)?;
-    for constraint in attributes.constraints.iter() {
-        check_stereo_bond_constraint(entity, ligand_count, constraint)?;
-    }
-    Ok(())
-}
-
-pub(crate) fn check_stereo_atom_configuration_on_frame(
-    entity: Entity,
-    ligand_count: usize,
-    configuration: &StereoConfigurationForm,
-) -> Result<(), StereoIntegrityError> {
-    check_configuration_site_kind(entity, configuration, StereoSite::Atom)?;
-    check_configuration(entity, ligand_count, configuration)
-}
-
-pub(crate) fn check_stereo_bond_configuration_on_frame(
-    entity: Entity,
-    ligand_count: usize,
-    configuration: &StereoConfigurationForm,
-) -> Result<(), StereoIntegrityError> {
-    check_configuration_site_kind(entity, configuration, StereoSite::Bond)?;
-    check_configuration(entity, ligand_count, configuration)
 }
 
 pub(crate) fn check_stereo_atom_constraint_on_frame(
@@ -182,23 +129,6 @@ pub(crate) fn check_stereo_bond_constraint_on_frame(
 enum StereoSite {
     Atom,
     Bond,
-}
-
-/// A stereo kind describes a coordination geometry, and a geometry belongs to an atom or to a bond.
-/// Arity cannot separate them: `Tetrahedral`, `CisTrans`, `Axial`, and `SquarePlanar` all have
-/// degree 4. `Axial` is admissible on both, since axial chirality arises at an allene's central
-/// atom and about an atropisomeric biaryl bond.
-///
-/// Matched exhaustively so that a new stereo kind must decide its site here.
-fn check_configuration_site_kind(
-    entity: Entity,
-    configuration: &StereoConfigurationForm,
-    site: StereoSite,
-) -> Result<(), StereoIntegrityError> {
-    let Some(kind) = configuration.kind() else {
-        return Ok(());
-    };
-    check_stereo_site_kind(entity, kind, site)
 }
 
 fn check_stereo_site_kind(
@@ -232,7 +162,7 @@ fn check_stereo_site_kind(
     }
 }
 
-pub(crate) fn check_stereo_frame_arity(
+fn check_stereo_frame_arity(
     entity: Entity,
     ligand_count: usize,
     kind: StereoKind,
@@ -248,7 +178,7 @@ pub(crate) fn check_stereo_frame_arity(
     Ok(())
 }
 
-pub(crate) fn check_stereo_atom_constraint(
+fn check_stereo_atom_constraint(
     entity: Entity,
     ligand_count: usize,
     constraint: &StereoAtomConstraintForm,
@@ -265,7 +195,7 @@ pub(crate) fn check_stereo_atom_constraint(
     }
 }
 
-pub(crate) fn check_stereo_bond_constraint(
+fn check_stereo_bond_constraint(
     entity: Entity,
     ligand_count: usize,
     constraint: &StereoBondConstraintForm,
@@ -279,83 +209,6 @@ pub(crate) fn check_stereo_bond_constraint(
         }
         StereoBondConstraintForm::Topicity(value) => check_pair(entity, ligand_count, value.pair),
         StereoBondConstraintForm::Stereogenicity(_) => Ok(()),
-    }
-}
-
-fn check_configuration(
-    entity: Entity,
-    ligand_count: usize,
-    configuration: &StereoConfigurationForm,
-) -> Result<(), StereoIntegrityError> {
-    let StereoConfigurationForm::Kinded(kind, coset) = configuration else {
-        return Ok(());
-    };
-    check_stereo_frame_arity(entity, ligand_count, *kind)?;
-    check_coset(entity, *kind, coset)?;
-    Ok(())
-}
-
-fn check_coset(
-    entity: Entity,
-    kind: StereoKind,
-    coset: &StereoCoset,
-) -> Result<(), StereoIntegrityError> {
-    match coset {
-        StereoCoset::Undetermined => Ok(()),
-        StereoCoset::Lit(value) => check_coset_index(entity, kind, *value),
-        StereoCoset::LitSet(values) => {
-            for &value in values {
-                check_coset_index(entity, kind, value)?;
-            }
-            Ok(())
-        }
-        StereoCoset::Term(term) => check_term(entity, kind, term),
-    }
-}
-
-fn check_term(
-    entity: Entity,
-    kind: StereoKind,
-    term: &StereoTerm,
-) -> Result<(), StereoIntegrityError> {
-    match term {
-        StereoTerm::Var(value) => {
-            if let Some(domain) = &value.1 {
-                for &coset in domain {
-                    check_coset_index(entity, kind, coset)?;
-                }
-            }
-            Ok(())
-        }
-        StereoTerm::Lit(value) => check_coset_index(entity, kind, *value),
-        StereoTerm::LitSet(values) => {
-            for &value in values {
-                check_coset_index(entity, kind, value)?;
-            }
-            Ok(())
-        }
-        StereoTerm::Swap(inner) | StereoTerm::Mirror(inner) => check_term(entity, kind, inner),
-        StereoTerm::Apply(inner, permutation) => {
-            check_permutation(entity, kind.degree(), *permutation)?;
-            check_term(entity, kind, inner)
-        }
-    }
-}
-
-fn check_coset_index(
-    entity: Entity,
-    kind: StereoKind,
-    coset: u32,
-) -> Result<(), StereoIntegrityError> {
-    if coset as usize >= kind.count() {
-        Err(StereoIntegrityError::StereoCosetOutOfRange {
-            entity,
-            kind,
-            coset,
-            count: kind.count(),
-        })
-    } else {
-        Ok(())
     }
 }
 

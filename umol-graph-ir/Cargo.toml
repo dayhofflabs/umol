@@ -68,6 +68,9 @@ name = "canonicalization"
 [[test]]
 name = "reaction_span"
 
+[[test]]
+name = "integrity"
+
 [[bench]]
 name = "parsing"
 harness = false

@@ -7,7 +7,6 @@ use thiserror::Error;
 use umol_graph_core::NodeId;
 
 use super::super::constraint::{Constraint, MoleculeConstraint, RelationalConstraint};
-use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::id::{AtomId, BondId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
@@ -23,14 +22,6 @@ use super::{Molecule, MoleculeEntries};
 pub enum MoleculeIntegrityError {
     #[error("molecule references unavailable {entity}")]
     InvalidReference { entity: Entity },
-    #[error(
-        "{entity}: electron-count vector has length {electron_counts}, expected {participants}"
-    )]
-    ElectronCountLengthMismatch {
-        entity: Entity,
-        participants: usize,
-        electron_counts: usize,
-    },
     #[error("{entity}: participant atom {atom:?} is duplicated")]
     DuplicateAtom { entity: Entity, atom: AtomId },
     #[error("bond: parallel bonds on atoms {atoms:?}")]
@@ -73,13 +64,6 @@ pub enum MoleculeIntegrityError {
         kind: StereoKind,
         expected: usize,
         actual: usize,
-    },
-    #[error("{entity}: coset {coset} is outside 0..{count} for {kind:?}")]
-    StereoCosetOutOfRange {
-        entity: Entity,
-        kind: StereoKind,
-        coset: u32,
-        count: usize,
     },
     #[error(
         "{entity}: permutation has degree {actual}, expected {expected} for the stored ligand frame"
@@ -128,17 +112,6 @@ impl From<StereoIntegrityError> for MoleculeIntegrityError {
                 kind,
                 expected,
                 actual,
-            },
-            StereoIntegrityError::StereoCosetOutOfRange {
-                entity,
-                kind,
-                coset,
-                count,
-            } => Self::StereoCosetOutOfRange {
-                entity,
-                kind,
-                coset,
-                count,
             },
             StereoIntegrityError::StereoPermutationDegree {
                 entity,
@@ -236,7 +209,7 @@ impl Molecule {
                         .iter()
                         .map(|ligand| Entity::Atom(ligand.atom_id)),
                 )?;
-                check_stereo_atom_entry(entity, site, ligand_frame, view.attributes)?;
+                check_stereo_atom_entry(entity, site, ligand_frame)?;
                 if !stereo_atom_sites.insert(site) {
                     return Err(MoleculeIntegrityError::DuplicateStereoAtomSites { atom: site });
                 }
@@ -260,7 +233,7 @@ impl Molecule {
                     .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
-            check_stereo_bond_entry(entity, ligand_frame, view.attributes)?;
+            check_stereo_bond_entry(entity, ligand_frame)?;
             if self
                 .stereo_bonds
                 .incident_to_bond_ids(site)
@@ -377,11 +350,6 @@ fn check_aromatic_systems(
             }
             membership[0] |= row[0];
             membership[1] |= row[1];
-            check_electron_count_length(
-                entity,
-                view.atom_ids().count(),
-                &view.attributes.electrons,
-            )?;
         }
     } else {
         let mut membership = HashSet::new();
@@ -400,11 +368,6 @@ fn check_aromatic_systems(
                     return Err(MoleculeIntegrityError::AromaticSystemsOverlap { atom });
                 }
             }
-            check_electron_count_length(
-                entity,
-                view.atom_ids().count(),
-                &view.attributes.electrons,
-            )?;
         }
     }
     Ok(())
@@ -432,11 +395,6 @@ fn check_multicenter_bonds(
                     atoms: view.atom_ids().collect(),
                 });
             }
-            check_electron_count_length(
-                entity,
-                view.atom_ids().count(),
-                &view.attributes.electrons,
-            )?;
         }
     } else {
         let mut identities = HashSet::with_capacity(molecule.multicenter_bonds.count());
@@ -453,11 +411,6 @@ fn check_multicenter_bonds(
                     atoms: view.atom_ids().collect(),
                 });
             }
-            check_electron_count_length(
-                entity,
-                view.atom_ids().count(),
-                &view.attributes.electrons,
-            )?;
         }
     }
     Ok(())
@@ -537,23 +490,6 @@ fn require_references(
 ) -> Result<(), MoleculeIntegrityError> {
     for entity in entities {
         require_reference(contains, entity)?;
-    }
-    Ok(())
-}
-
-fn check_electron_count_length(
-    entity: Entity,
-    participants: usize,
-    electrons: &ElectronCountsForm,
-) -> Result<(), MoleculeIntegrityError> {
-    if let ElectronCountsForm::Lit(counts) = electrons {
-        if counts.len() != participants {
-            return Err(MoleculeIntegrityError::ElectronCountLengthMismatch {
-                entity,
-                participants,
-                electron_counts: counts.len(),
-            });
-        }
     }
     Ok(())
 }

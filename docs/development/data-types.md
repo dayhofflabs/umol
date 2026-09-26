@@ -84,8 +84,8 @@ failure belongs to that conversion.
 
 Tier 1 is representation integrity. It is an invariant of the data type and is established by every
 public constructor, conversion, and mutation that produces the type. It includes resolvable stored
-references, required collection shapes, participant-frame arity, and values lying in the
-kind-dependent domain needed to interpret their representation. A checked constructor returns an
+references, topology/attribute storage alignment, fixed relation structure, and the bounded
+size of stereo ligand frames. A checked constructor returns an
 error for a violation; an asserted constructor may panic when its documented producer contract is
 broken.
 
@@ -114,13 +114,15 @@ endpoint pairs regardless of interaction kind; and stereo-atom and stereo-bond s
 within their kinds. These are not deferred semantic judgments. They define the stored relation
 represented by each entity kind and are established whenever a `Molecule` is published.
 
-For stereo, a ligand-frame length different from the declared kind's degree and a concrete coset
-outside that kind's coset space are representation-integrity failures. The same applies to an
-explicit coset set or variable domain containing an out-of-range member and to an explicit frame
-permutation of the wrong degree. These values do not denote malformed-but-chemically-questionable
-stereo configurations; they fail to denote configurations at all. Whether a structurally valid
-configuration is stereogenic, physically realizable, or admitted by a selected stereo model belongs
-to the later tiers.
+Entity attributes are open forms. Electron-count lengths, stereo kind/site and kind/frame
+agreement, coset indices, expression-permutation degrees, and entity-level constraint positions
+are not aggregate integrity requirements. Constructors store them faithfully. Frame transport,
+canonicalization, matching, and chemistry operations check the relationships their results require;
+normalization does not validate coset ranges. Infallible symmetry queries do not promise meaningful
+classification for incompatible stereo attributes.
+
+Top-level stereo constraints retain their kind/site, frame-degree, permutation-degree, and
+position checks. Their scope differs from freely mutable entity-level constraints.
 
 Tier 2 contains universal conditions over an otherwise coherent representation, such as electron
 and angular-momentum consistency and agreement between independently meaningful stored constraints
@@ -140,10 +142,9 @@ Representation integrity has one authoritative implementation in the crate that 
 It is the crate-private `check_integrity` operation with a corresponding public `*IntegrityError`;
 there is no public validator or `*Checker` object. An integrity check returns
 `Result<(), *IntegrityError>`, never `Solution`,
-`Underdetermined`, or `Contradictory`. It includes stored entity and constraint references, parallel
-collection shapes such as participant and electron-count lengths, fixed entity-relation semantics,
-and kind-dependent data needed to interpret a value such as stereo frame arity, coset domains, and
-permutation degree.
+`Underdetermined`, or `Contradictory`. It includes stored entity and constraint references,
+topology/attribute storage alignment, fixed entity-relation semantics, bounded stereo-frame size,
+and the positions and degrees in top-level stereo constraints.
 
 Every path that publishes an aggregate IR value uses that same implementation:
 
@@ -164,8 +165,6 @@ Every path that publishes an aggregate IR value uses that same implementation:
 
 For `Molecule`, this places the same gate behind direct checked entry construction, molecule-DSL
 raise, TableIR raise, Python construction from entries, and finalization of builders and editors.
-The public aromatic-system and multicenter-bond mutation operations use a private candidate and
-commit only after the same gate succeeds; their raw whole-form mutation kernels remain crate-private.
 Reaction code uses the molecule constructor whenever it materializes a molecule side or projection;
 it does not grow a reaction-specific copy of molecule integrity. A route that already establishes
 the contract may use the asserted constructor, but the asserted and checked routes must share the
@@ -181,14 +180,14 @@ is checked by the shared integrity gate.
 Those assertions must eventually be realized against an integrity-valid stereo frame. They do not
 create distinguishable occurrences of an equal virtual ligand. If perception could satisfy `#T` or
 `#C` only by repeating an implicit hydrogen or lone pair, it perceives no such stereo entity and
-follows the operation's existing absence policy. Any boundary that supplies an explicit repeated or
-oversized frame instead rejects it during raise; it must not normalize, deduplicate, or choose an
+follows the operation's existing absence policy. Any boundary that supplies an explicit repeated
+ligand or a frame exceeding `umol_perm::MAX_DEGREE` rejects it during raise; it must not normalize, deduplicate, or choose an
 arbitrary coset for malformed input.
 
 Canonicalization is a transformation of a closed, representation-integrity-valid value. It does not
 repair or revalidate malformed representation state, and its error types contain no unreachable
-integrity arm. Canonicalization preserves tier-2 and tier-3 invalid states; intrinsic normalization
-or reaction-span materialization may still report `Contradiction`.
+integrity arm. Canonicalization preserves tier-2 and tier-3 invalid states; intrinsic normalization,
+frame transport, or reaction-span materialization may still report `Contradiction`.
 
 ## Representation ownership and crate layering
 

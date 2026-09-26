@@ -173,7 +173,8 @@ impl<'a> AtomView<'a> {
 
     /// Electron contribution from the aromatic system this atom belongs to.
     /// `NumForm::Lit(0)` if the atom is not in any aromatic system;
-    /// `Undetermined` if the system's per-atom electron count is non-`Lit`.
+    /// `Undetermined` if the system's per-atom electron count is non-`Lit` or missing.
+    /// Counts beyond the atom list do not contribute.
     pub fn aromatic_valence(&self) -> NumForm {
         aromatic_valence(self.molecule, self.id)
     }
@@ -196,7 +197,8 @@ impl<'a> AtomView<'a> {
 
     /// Sum of per-atom contributions across incident multicenter bonds.
     /// `NumForm::Lit(0)` when not in any multicenter bond; collapses to
-    /// `Undetermined` if any contribution is non-`Lit`.
+    /// `Undetermined` if any contribution is non-`Lit` or missing.
+    /// Counts beyond each atom list do not contribute.
     pub fn multicenter_valence(&self) -> NumForm {
         multicenter_valence(self.molecule, self.id)
     }

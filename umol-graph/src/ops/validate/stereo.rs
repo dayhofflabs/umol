@@ -680,4 +680,76 @@ mod tests {
             }),
         );
     }
+    #[rstest]
+    #[case::second_position(0, 4)]
+    #[case::both_positions(4, 5)]
+    fn test_stereo_conformance_validator_validate_topicity_error(
+        #[case] first: u32,
+        #[case] second: u32,
+        #[values(false, true)] bond: bool,
+    ) {
+        let mut molecule = mol_dsl_concrete!(if bond { BUTENE } else { CFCLBRI });
+        let pair = StereoLigandPair::new(StereoLigandPosition(first), StereoLigandPosition(second));
+        let assertion = TopicityForm {
+            pair,
+            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+        };
+        if bond {
+            molecule
+                .try_modify_stereo_bond(StereoBondId(0), |form| {
+                    form.constraints
+                        .set(StereoBondConstraintForm::Topicity(assertion));
+                })
+                .unwrap();
+        } else {
+            molecule
+                .try_modify_stereo_atom(StereoAtomId(0), |form| {
+                    form.constraints
+                        .set(StereoAtomConstraintForm::Topicity(assertion));
+                })
+                .unwrap();
+        }
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
+            Ok(Solution::Contradictory(
+                StereoConformanceContradiction::TopicityPositionOutOfRange { pair, degree: 4 }
+            ))
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_conformance_validator_validate_ligand_symmetry_error(
+        #[values(false, true)] invariant: bool,
+        #[values(false, true)] bond: bool,
+    ) {
+        let mut molecule = mol_dsl_concrete!(if bond { BUTENE } else { CFCLBRI });
+        let asserted = LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::identity(3)),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(invariant),
+        };
+        if bond {
+            molecule
+                .try_modify_stereo_bond(StereoBondId(0), |form| {
+                    form.constraints
+                        .set(StereoBondConstraintForm::LigandSymmetry(asserted));
+                })
+                .unwrap();
+        } else {
+            molecule
+                .try_modify_stereo_atom(StereoAtomId(0), |form| {
+                    form.constraints
+                        .set(StereoAtomConstraintForm::LigandSymmetry(asserted));
+                })
+                .unwrap();
+        }
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
+            Ok(Solution::Contradictory(
+                StereoConformanceContradiction::LigandSymmetryViolation { asserted }
+            ))
+        );
+    }
 }

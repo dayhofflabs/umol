@@ -824,26 +824,6 @@ fn test_molecule_try_from_entries_error(
 }
 
 #[rstest]
-#[case::aromatic_electron_count(
-    |entries: &mut MoleculeEntries| {
-        entries.aromatic[0].1.electrons = ElectronCountsForm::Lit(vec![2]);
-    },
-    MoleculeIntegrityError::ElectronCountLengthMismatch {
-        entity: Entity::AromaticSystem(AromaticSystemId(0)),
-        participants: 3,
-        electron_counts: 1,
-    },
-)]
-#[case::multicenter_electron_count(
-    |entries: &mut MoleculeEntries| {
-        entries.multicenter[0].1.electrons = ElectronCountsForm::Lit(vec![2]);
-    },
-    MoleculeIntegrityError::ElectronCountLengthMismatch {
-        entity: Entity::MulticenterBond(MulticenterBondId(0)),
-        participants: 3,
-        electron_counts: 1,
-    },
-)]
 #[case::aromatic_duplicate_atom(
     |entries: &mut MoleculeEntries| entries.aromatic[0].0[2] = AtomId(1),
     MoleculeIntegrityError::DuplicateAtom {
@@ -1069,15 +1049,30 @@ fn test_molecule_try_from_entries_error(
         degree: 4,
     },
 )]
+fn test_molecule_try_from_entries_integrity_error(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] invalidate: fn(&mut MoleculeEntries),
+    #[case] expected: MoleculeIntegrityError,
+) {
+    invalidate(&mut entries);
+
+    assert_eq!(Molecule::try_from_entries(entries), Err(expected));
+}
+
+#[rstest]
+#[case::aromatic_electron_count(
+    |entries: &mut MoleculeEntries| {
+        entries.aromatic[0].1.electrons = ElectronCountsForm::Lit(vec![2]);
+    },
+)]
+#[case::multicenter_electron_count(
+    |entries: &mut MoleculeEntries| {
+        entries.multicenter[0].1.electrons = ElectronCountsForm::Lit(vec![2]);
+    },
+)]
 #[case::stereo_ligand_arity(
     |entries: &mut MoleculeEntries| {
         entries.stereo_atoms[0].1.pop();
-    },
-    MoleculeIntegrityError::StereoLigandArity {
-        entity: Entity::StereoAtom(StereoAtomId(0)),
-        kind: StereoKind::Tetrahedral,
-        expected: 4,
-        actual: 3,
     },
 )]
 #[case::stereo_coset(
@@ -1087,12 +1082,6 @@ fn test_molecule_try_from_entries_error(
             StereoCoset::Lit(2),
         );
     },
-    MoleculeIntegrityError::StereoCosetOutOfRange {
-        entity: Entity::StereoAtom(StereoAtomId(0)),
-        kind: StereoKind::Tetrahedral,
-        coset: 2,
-        count: 2,
-    },
 )]
 #[case::stereo_term_variable_domain(
     |entries: &mut MoleculeEntries| {
@@ -1101,12 +1090,6 @@ fn test_molecule_try_from_entries_error(
             StereoCoset::term(StereoTerm::var_in("x", [2])),
         );
     },
-    MoleculeIntegrityError::StereoCosetOutOfRange {
-        entity: Entity::StereoAtom(StereoAtomId(0)),
-        kind: StereoKind::Tetrahedral,
-        coset: 2,
-        count: 2,
-    },
 )]
 #[case::stereo_term_nested_literal_set(
     |entries: &mut MoleculeEntries| {
@@ -1114,12 +1097,6 @@ fn test_molecule_try_from_entries_error(
             StereoKind::Tetrahedral,
             StereoCoset::term(StereoTerm::swap(StereoTerm::mirror(StereoTerm::lit_set([2])))),
         );
-    },
-    MoleculeIntegrityError::StereoCosetOutOfRange {
-        entity: Entity::StereoAtom(StereoAtomId(0)),
-        kind: StereoKind::Tetrahedral,
-        coset: 2,
-        count: 2,
     },
 )]
 #[case::stereo_term_nested_permutation(
@@ -1132,20 +1109,30 @@ fn test_molecule_try_from_entries_error(
             ))),
         );
     },
-    MoleculeIntegrityError::StereoPermutationDegree {
-        entity: Entity::StereoAtom(StereoAtomId(0)),
-        expected: 4,
-        actual: 3,
-    },
 )]
-fn test_molecule_try_from_entries_integrity_error(
+fn test_molecule_try_from_entries_attributes(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
-    #[case] invalidate: fn(&mut MoleculeEntries),
-    #[case] expected: MoleculeIntegrityError,
+    #[case] change: fn(&mut MoleculeEntries),
 ) {
-    invalidate(&mut entries);
-
-    assert_eq!(Molecule::try_from_entries(entries), Err(expected));
+    change(&mut entries);
+    let molecule = Molecule::try_from_entries(entries.clone()).unwrap();
+    assert_eq!(
+        molecule.aromatic_system(AromaticSystemId(0)).attributes,
+        &entries.aromatic[0].1
+    );
+    assert_eq!(
+        molecule.multicenter_bond(MulticenterBondId(0)).attributes,
+        &entries.multicenter[0].1
+    );
+    assert_eq!(
+        molecule.stereo_atom(StereoAtomId(0)).attributes,
+        &entries.stereo_atoms[0].2
+    );
+    assert_eq!(
+        molecule.stereo_atom(StereoAtomId(0)).ligand_frame(),
+        entries.stereo_atoms[0].1
+    );
+    assert_eq!(molecule.clone().edit().try_build().unwrap(), molecule);
 }
 
 #[rstest]
@@ -1404,9 +1391,6 @@ fn test_molecule_try_from_entries_stereo_bond_kind(
     assert_eq!(molecule.stereo_bond(StereoBondId(0)).kind(), kind);
 }
 
-/// A stereo kind names a coordination geometry, and a geometry belongs to an atom or to a bond.
-/// Arity cannot separate them: every kind below shares degree 4 with the fixture's frame, so the
-/// arity check passes and only the site-kind rule rejects the pairing.
 #[rstest]
 #[case::cis_trans_on_atom(Entity::StereoAtom(StereoAtomId(0)), StereoKind::CisTrans)]
 #[case::tetrahedral_on_bond(Entity::StereoBond(StereoBondId(0)), StereoKind::Tetrahedral)]
@@ -1416,7 +1400,7 @@ fn test_molecule_try_from_entries_stereo_bond_kind(
     StereoKind::TrigonalBipyramidal
 )]
 #[case::octahedral_on_bond(Entity::StereoBond(StereoBondId(0)), StereoKind::Octahedral)]
-fn test_molecule_try_from_entries_stereo_kind_error(
+fn test_molecule_try_from_entries_stereo_kind_attributes(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] entity: Entity,
     #[case] kind: StereoKind,
@@ -1433,9 +1417,15 @@ fn test_molecule_try_from_entries_stereo_kind_error(
         _ => unreachable!("test cases contain only stereo entities"),
     }
 
+    let molecule = Molecule::try_from_entries(entries).unwrap();
+    let stored = match entity {
+        Entity::StereoAtom(id) => &molecule.stereo_atom(id).attributes.configuration,
+        Entity::StereoBond(id) => &molecule.stereo_bond(id).attributes.configuration,
+        _ => unreachable!("test cases contain only stereo entities"),
+    };
     assert_eq!(
-        Molecule::try_from_entries(entries),
-        Err(MoleculeIntegrityError::StereoKindSiteMismatch { entity, kind }),
+        stored,
+        &StereoConfigurationForm::kinded(kind, StereoCoset::Lit(0))
     );
 }
 
@@ -5841,15 +5831,6 @@ fn test_molecule_try_modify_aromatic_system(#[from(rich_molecule)] mut molecule:
         entity: Entity::AromaticSystem(AromaticSystemId(1)),
     },
 )]
-#[case::electron_count_length(
-    AromaticSystemId(0),
-    ElectronCountsForm::Lit(vec![2, 1]),
-    MoleculeIntegrityError::ElectronCountLengthMismatch {
-        entity: Entity::AromaticSystem(AromaticSystemId(0)),
-        participants: 3,
-        electron_counts: 2,
-    },
-)]
 fn test_molecule_try_modify_aromatic_system_error(
     #[from(rich_molecule)] mut molecule: Molecule,
     #[case] id: AromaticSystemId,
@@ -5883,19 +5864,21 @@ fn test_molecule_try_modify_aromatic_systems(#[from(rich_molecule)] mut molecule
 }
 
 #[rstest]
-fn test_molecule_try_modify_aromatic_systems_error(#[from(rich_molecule)] mut molecule: Molecule) {
-    let before = molecule.clone();
+fn test_molecule_try_modify_aromatic_systems_attributes(
+    #[from(rich_molecule)] mut molecule: Molecule,
+) {
+    let electrons = ElectronCountsForm::Lit(vec![2, 1]);
     assert_eq!(
-        molecule.try_modify_aromatic_systems(|form| {
-            form.electrons = ElectronCountsForm::Lit(vec![2, 1]);
-        }),
-        Err(MoleculeIntegrityError::ElectronCountLengthMismatch {
-            entity: Entity::AromaticSystem(AromaticSystemId(0)),
-            participants: 3,
-            electron_counts: 2,
-        }),
+        molecule.try_modify_aromatic_systems(|form| form.electrons = electrons.clone()),
+        Ok(())
     );
-    assert_eq!(molecule, before);
+    assert_eq!(
+        molecule
+            .aromatic_system(AromaticSystemId(0))
+            .attributes
+            .electrons,
+        electrons
+    );
 }
 
 #[rstest]
@@ -5952,15 +5935,6 @@ fn test_molecule_try_modify_multicenter_bond(#[from(rich_molecule)] mut molecule
         entity: Entity::MulticenterBond(MulticenterBondId(1)),
     },
 )]
-#[case::electron_count_length(
-    MulticenterBondId(0),
-    ElectronCountsForm::Lit(vec![2, 0]),
-    MoleculeIntegrityError::ElectronCountLengthMismatch {
-        entity: Entity::MulticenterBond(MulticenterBondId(0)),
-        participants: 3,
-        electron_counts: 2,
-    },
-)]
 fn test_molecule_try_modify_multicenter_bond_error(
     #[from(rich_molecule)] mut molecule: Molecule,
     #[case] id: MulticenterBondId,
@@ -5994,19 +5968,21 @@ fn test_molecule_try_modify_multicenter_bonds(#[from(rich_molecule)] mut molecul
 }
 
 #[rstest]
-fn test_molecule_try_modify_multicenter_bonds_error(#[from(rich_molecule)] mut molecule: Molecule) {
-    let before = molecule.clone();
+fn test_molecule_try_modify_multicenter_bonds_attributes(
+    #[from(rich_molecule)] mut molecule: Molecule,
+) {
+    let electrons = ElectronCountsForm::Lit(vec![2, 1]);
     assert_eq!(
-        molecule.try_modify_multicenter_bonds(|form| {
-            form.electrons = ElectronCountsForm::Lit(vec![2, 0]);
-        }),
-        Err(MoleculeIntegrityError::ElectronCountLengthMismatch {
-            entity: Entity::MulticenterBond(MulticenterBondId(0)),
-            participants: 3,
-            electron_counts: 2,
-        }),
+        molecule.try_modify_multicenter_bonds(|form| form.electrons = electrons.clone()),
+        Ok(())
     );
-    assert_eq!(molecule, before);
+    assert_eq!(
+        molecule
+            .multicenter_bond(MulticenterBondId(0))
+            .attributes
+            .electrons,
+        electrons
+    );
 }
 
 #[rstest]
@@ -6041,18 +6017,20 @@ fn test_molecule_try_modify_stereo_atom(#[from(equiv_molecule_entries)] entries:
         StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
     );
 
-    let before = molecule.clone();
     assert_eq!(
         molecule.try_modify_stereo_atom(StereoAtomId(0), |form| {
             form.configuration =
                 StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
         }),
-        Err(MoleculeIntegrityError::StereoKindSiteMismatch {
-            entity: Entity::StereoAtom(StereoAtomId(0)),
-            kind: StereoKind::CisTrans,
-        }),
+        Ok(()),
     );
-    assert_eq!(molecule, before);
+    assert_eq!(
+        molecule
+            .stereo_atom(StereoAtomId(0))
+            .attributes
+            .configuration,
+        StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
+    );
     assert_eq!(
         molecule.try_modify_stereo_atom(StereoAtomId(1), |_| {}),
         Err(MoleculeIntegrityError::InvalidReference {
@@ -6071,18 +6049,20 @@ fn test_molecule_try_modify_stereo_atoms(#[from(equiv_molecule_entries)] entries
         })
         .expect("tetrahedral configurations satisfy atom-site integrity");
 
-    let before = molecule.clone();
     assert_eq!(
         molecule.try_modify_stereo_atoms(|form| {
             form.configuration =
                 StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
         }),
-        Err(MoleculeIntegrityError::StereoKindSiteMismatch {
-            entity: Entity::StereoAtom(StereoAtomId(0)),
-            kind: StereoKind::CisTrans,
-        }),
+        Ok(()),
     );
-    assert_eq!(molecule, before);
+    assert_eq!(
+        molecule
+            .stereo_atom(StereoAtomId(0))
+            .attributes
+            .configuration,
+        StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
+    );
 }
 
 #[rstest]
@@ -6102,18 +6082,20 @@ fn test_molecule_try_modify_stereo_bond(#[from(equiv_molecule_entries)] entries:
         StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
     );
 
-    let before = molecule.clone();
     assert_eq!(
         molecule.try_modify_stereo_bond(StereoBondId(0), |form| {
             form.configuration =
                 StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
         }),
-        Err(MoleculeIntegrityError::StereoKindSiteMismatch {
-            entity: Entity::StereoBond(StereoBondId(0)),
-            kind: StereoKind::Tetrahedral,
-        }),
+        Ok(()),
     );
-    assert_eq!(molecule, before);
+    assert_eq!(
+        molecule
+            .stereo_bond(StereoBondId(0))
+            .attributes
+            .configuration,
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+    );
     assert_eq!(
         molecule.try_modify_stereo_bond(StereoBondId(1), |_| {}),
         Err(MoleculeIntegrityError::InvalidReference {
@@ -6132,18 +6114,20 @@ fn test_molecule_try_modify_stereo_bonds(#[from(equiv_molecule_entries)] entries
         })
         .expect("cis/trans configurations satisfy bond-site integrity");
 
-    let before = molecule.clone();
     assert_eq!(
         molecule.try_modify_stereo_bonds(|form| {
             form.configuration =
                 StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
         }),
-        Err(MoleculeIntegrityError::StereoKindSiteMismatch {
-            entity: Entity::StereoBond(StereoBondId(0)),
-            kind: StereoKind::Tetrahedral,
-        }),
+        Ok(()),
     );
-    assert_eq!(molecule, before);
+    assert_eq!(
+        molecule
+            .stereo_bond(StereoBondId(0))
+            .attributes
+            .configuration,
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+    );
 }
 
 #[rstest]
