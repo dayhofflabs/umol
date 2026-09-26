@@ -35,9 +35,14 @@ the statuses recorded here remain authoritative.
 - [213 - Molecule and reaction mutation](213-editor-overlay-storage-2026-08-27.md)
   has a settled execution API, consumer mappings, ownership experiments, and a
   staged implementation plan; S0a–S0b and S1a–S1c are complete. S1d and S0c are
-  reverted. S2 now orders checked constraint access, shared entity views, callers,
-  Python delegation, and callback removal. S2a is complete; settle the remaining
-  entity-field interfaces before S2b.
+  reverted. S2 now orders consumer checks, shared entity views, caller migration,
+  and callback removal. S2a is implemented but its checked top-level constraint
+  view is scheduled for removal in S2m; top-level writes belong in the editor.
+  The earlier S2b implementation is reverted; the proposed join migration is
+  withdrawn and S2f is cancelled. S2c is next, limited to coset-operation fixes.
+  Uniform unchecked entity-attribute assignment is settled for Rust and Python.
+  S2g's frame-consumer policy remains approved. Implementation of the replacement
+  subitems has not started.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -208,7 +213,7 @@ the statuses recorded here remain authoritative.
 | [163-release-preparation-2026-07-26.md](163-release-preparation-2026-07-26.md)                                   | In Progress   | 2026-08-16   | 0.6.0 collateral, metadata, CI, and resumable crates.io publication are prepared; registry credentials, CI runtime tuning, and release execution remain. |
 | [164-dsl-edn-worklist-2026-07-27.md](164-dsl-edn-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated DSL, EDN, specification, and parsing-infrastructure work.                                     |
 | [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
-| [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | In Progress   | 2026-09-19   | Continue molecule/reaction mutation design and editor delegation in doc 213, then return here for non-transactional operation work and hydrogen folder/unfolder. |
+| [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | In Progress   | 2026-09-25   | Continue molecule/reaction mutation design and editor delegation in doc 213, then return here for operation work and hydrogen folder/unfolder. Stereo resolver/validator naming review and DelocalizeCharge → ChargeDelocalizer are also recorded here. |
 | [167-graph-alg-execution-2026-07-27.md](167-graph-alg-execution-2026-07-27.md)                                   | Completed     | 2026-07-27   |                                                                                                            |
 | [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-08-29   | Crate boundaries, visibility, re-exports, errors, and diagnostics; includes `Normalize` error typing and one private-link rustdoc correction. |
 | [169-dsl-metadata-context-2026-07-27.md](169-dsl-metadata-context-2026-07-27.md)                                 | Completed     | 2026-07-28   |                                                                                                            |
@@ -255,7 +260,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-24 | S2a complete; settle remaining field interfaces before S2b. S2 sequences replacements before caller migration and callback removal. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-25 | Next implementation subitem: S2c coset-operation fixes. S2b withdrawn; S2f cancelled. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |
@@ -272,3 +277,4 @@ the statuses recorded here remain authoritative.
 | [228-python-api-parity-2026-09-21.md](228-python-api-parity-2026-09-21.md) | In Progress | 2026-09-21 | S0/S7 complete; return to 213. Broader audit and ownership/access work remain unscheduled; S1–S6 withdrawn. |
 | [229-aggregate-integrity-review-2026-09-22.md](229-aggregate-integrity-review-2026-09-22.md) | Completed | 2026-09-23 | |
 | [230-graph-ir-delta-review-2026-09-23.md](230-graph-ir-delta-review-2026-09-23.md) | Proposed | 2026-09-23 | Awaiting triage of the surviving findings. |
+| [231-view-arguments-2026-09-25.md](231-view-arguments-2026-09-25.md) | Proposed | 2026-09-25 | Awaiting interface and scheduling decisions; doc 213 S2f is cancelled. |

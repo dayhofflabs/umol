@@ -7,7 +7,7 @@ Date: 2026-07-13
 Relates: 137 (Python-binding R1 audit — where this surfaced), 113/095 (lazy
 canonicalization; structural vs canonical equality), 114 (interning; the future
 immutable/finalized molecule form), 143 (vendored nauty — the canonical-numbering
-oracle)
+oracle), [231](231-view-arguments-2026-09-25.md) (view arguments in operations)
 
 ## Context
 
