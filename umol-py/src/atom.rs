@@ -708,7 +708,7 @@ impl AtomView {
             .borrow_mut(py)
             .to_rust_mut()
             .atom_mut(self.id)
-            .attributes
+            .attributes_mut()
             .element = value.to_rust(py);
     }
 
@@ -726,7 +726,7 @@ impl AtomView {
             .borrow_mut(py)
             .to_rust_mut()
             .atom_mut(self.id)
-            .attributes
+            .attributes_mut()
             .isotope_mass = value.to_rust(py);
     }
 
@@ -742,7 +742,7 @@ impl AtomView {
             .borrow_mut(py)
             .to_rust_mut()
             .atom_mut(self.id)
-            .attributes
+            .attributes_mut()
             .charge = value.to_rust(py);
     }
 
@@ -758,7 +758,7 @@ impl AtomView {
             .borrow_mut(py)
             .to_rust_mut()
             .atom_mut(self.id)
-            .attributes
+            .attributes_mut()
             .implicit_hydrogens = value.to_rust(py);
     }
 
@@ -774,7 +774,7 @@ impl AtomView {
             .borrow_mut(py)
             .to_rust_mut()
             .atom_mut(self.id)
-            .attributes
+            .attributes_mut()
             .lone_pairs = value.to_rust(py);
     }
 
@@ -790,7 +790,7 @@ impl AtomView {
             .borrow_mut(py)
             .to_rust_mut()
             .atom_mut(self.id)
-            .attributes
+            .attributes_mut()
             .unpaired_electrons = value.to_rust(py);
     }
 
@@ -814,7 +814,7 @@ impl AtomView {
             .borrow_mut(py)
             .to_rust_mut()
             .atom_mut(self.id)
-            .attributes
+            .attributes_mut()
             .constraints = value.to_rust(py)?;
         Ok(())
     }
@@ -900,7 +900,7 @@ impl AtomViews {
     fn __setitem__(&self, py: Python<'_>, index: isize, atom: PyRef<'_, AtomForm>) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_atom_index(molecule.to_rust(), index)?;
-        *molecule.to_rust_mut().atom_mut(id).attributes = atom.to_rust().clone();
+        *molecule.to_rust_mut().atom_mut(id).attributes_mut() = atom.to_rust().clone();
         Ok(())
     }
 

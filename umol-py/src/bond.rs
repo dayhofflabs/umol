@@ -393,7 +393,7 @@ impl BondView {
             .borrow_mut(py)
             .to_rust_mut()
             .bond_mut(self.id)
-            .attributes
+            .attributes_mut()
             .order = value.to_rust(py);
     }
 
@@ -409,7 +409,7 @@ impl BondView {
             .borrow_mut(py)
             .to_rust_mut()
             .bond_mut(self.id)
-            .attributes
+            .attributes_mut()
             .charge = value.to_rust(py);
     }
 
@@ -425,7 +425,7 @@ impl BondView {
             .borrow_mut(py)
             .to_rust_mut()
             .bond_mut(self.id)
-            .attributes
+            .attributes_mut()
             .unpaired_electrons = value.to_rust(py);
     }
 
@@ -449,7 +449,7 @@ impl BondView {
             .borrow_mut(py)
             .to_rust_mut()
             .bond_mut(self.id)
-            .attributes
+            .attributes_mut()
             .constraints = value.to_rust(py)?;
         Ok(())
     }
@@ -526,7 +526,7 @@ impl BondViews {
     fn __setitem__(&self, py: Python<'_>, index: isize, bond: PyRef<'_, BondForm>) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_bond_index(molecule.to_rust(), index)?;
-        *molecule.to_rust_mut().bond_mut(id).attributes = bond.to_rust().clone();
+        *molecule.to_rust_mut().bond_mut(id).attributes_mut() = bond.to_rust().clone();
         Ok(())
     }
 

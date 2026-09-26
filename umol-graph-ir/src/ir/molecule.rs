@@ -986,37 +986,52 @@ impl Molecule {
         let mut additions: Vec<Constraint> = Vec::new();
         for i in 0..atom_count {
             let id = AtomId::from(i);
-            for c in self.atom_mut(id).attributes.constraints.take() {
+            for c in self.atom_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::Atom(id, c));
             }
         }
         for i in 0..bond_count {
             let id = BondId::from(i);
-            for c in self.bond_mut(id).attributes.constraints.take() {
+            for c in self.bond_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::Bond(id, c));
             }
         }
         for i in 0..dative_count {
             let id = DativeBondId::from(i);
-            for c in self.dative_bond_mut(id).attributes.constraints.take() {
+            for c in self.dative_bond_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::DativeBond(id, c));
             }
         }
         for i in 0..aromatic_count {
             let id = AromaticSystemId::from(i);
-            for c in self.aromatic_system_mut(id).attributes.constraints.take() {
+            for c in self
+                .aromatic_system_mut(id)
+                .attributes_mut()
+                .constraints
+                .take()
+            {
                 additions.push(Constraint::AromaticSystem(id, c));
             }
         }
         for i in 0..multicenter_count {
             let id = MulticenterBondId::from(i);
-            for c in self.multicenter_bond_mut(id).attributes.constraints.take() {
+            for c in self
+                .multicenter_bond_mut(id)
+                .attributes_mut()
+                .constraints
+                .take()
+            {
                 additions.push(Constraint::MulticenterBond(id, c));
             }
         }
         for i in 0..noncovalent_count {
             let id = NoncovalentBondId::from(i);
-            for c in self.noncovalent_bond_mut(id).attributes.constraints.take() {
+            for c in self
+                .noncovalent_bond_mut(id)
+                .attributes_mut()
+                .constraints
+                .take()
+            {
                 additions.push(Constraint::NoncovalentBond(id, c));
             }
         }
@@ -1024,10 +1039,11 @@ impl Molecule {
             let id = StereoAtomId::from(i);
             let kind = self
                 .stereo_atom_mut(id)
+                .attributes_mut()
                 .configuration
                 .kind()
                 .expect("molecule stereo atom has a concrete kind");
-            for c in self.stereo_atom_mut(id).constraints.take() {
+            for c in self.stereo_atom_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::StereoAtom(id, kind, c));
             }
         }
@@ -1035,10 +1051,11 @@ impl Molecule {
             let id = StereoBondId::from(i);
             let kind = self
                 .stereo_bond_mut(id)
+                .attributes_mut()
                 .configuration
                 .kind()
                 .expect("molecule stereo bond has a concrete kind");
-            for c in self.stereo_bond_mut(id).constraints.take() {
+            for c in self.stereo_bond_mut(id).attributes_mut().constraints.take() {
                 additions.push(Constraint::StereoBond(id, kind, c));
             }
         }
@@ -1157,39 +1174,48 @@ impl Molecule {
         for c in planned {
             match c {
                 Constraint::Atom(id, inner) => {
-                    self.atom_mut(id).attributes.constraints.set(inner);
+                    self.atom_mut(id).attributes_mut().constraints.set(inner);
                 }
                 Constraint::Bond(id, inner) => {
-                    self.bond_mut(id).attributes.constraints.set(inner);
+                    self.bond_mut(id).attributes_mut().constraints.set(inner);
                 }
                 Constraint::DativeBond(id, inner) => {
-                    self.dative_bond_mut(id).attributes.constraints.set(inner);
+                    self.dative_bond_mut(id)
+                        .attributes_mut()
+                        .constraints
+                        .set(inner);
                 }
                 Constraint::AromaticSystem(id, inner) => {
                     self.aromatic_system_mut(id)
-                        .attributes
+                        .attributes_mut()
                         .constraints
                         .set(inner);
                 }
                 Constraint::MulticenterBond(id, inner) => {
                     self.multicenter_bond_mut(id)
-                        .attributes
+                        .attributes_mut()
                         .constraints
                         .set(inner);
                 }
                 Constraint::NoncovalentBond(id, inner) => {
                     self.noncovalent_bond_mut(id)
-                        .attributes
+                        .attributes_mut()
                         .constraints
                         .set(inner);
                 }
                 // The carried kind is dropped here; kind/degree consistency
                 // against the element is the C4 validator's job.
                 Constraint::StereoAtom(id, _kind, inner) => {
-                    self.stereo_atom_mut(id).constraints.set(inner);
+                    self.stereo_atom_mut(id)
+                        .attributes_mut()
+                        .constraints
+                        .set(inner);
                 }
                 Constraint::StereoBond(id, _kind, inner) => {
-                    self.stereo_bond_mut(id).constraints.set(inner);
+                    self.stereo_bond_mut(id)
+                        .attributes_mut()
+                        .constraints
+                        .set(inner);
                 }
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)
@@ -1478,20 +1504,23 @@ impl Molecule {
         }
         for bond in other.dative_bonds().iter() {
             editor.add_dative_bond(
-                bond.donors().map(|donor| shift_atom(donor.id)).collect(),
+                &bond
+                    .donors()
+                    .map(|donor| shift_atom(donor.id))
+                    .collect::<Vec<_>>(),
                 shift_atom(bond.acceptor_id()),
                 bond.attributes.clone(),
             );
         }
         for system in other.aromatic_systems().iter() {
             editor.add_aromatic_system(
-                system.atom_ids().map(shift_atom).collect(),
+                &system.atom_ids().map(shift_atom).collect::<Vec<_>>(),
                 system.attributes.clone(),
             );
         }
         for bond in other.multicenter_bonds().iter() {
             editor.add_multicenter_bond(
-                bond.atom_ids().map(shift_atom).collect(),
+                &bond.atom_ids().map(shift_atom).collect::<Vec<_>>(),
                 bond.attributes.clone(),
             );
         }
@@ -1517,23 +1546,23 @@ impl Molecule {
         );
         for id in other.stereo_atoms.ids() {
             let site = shift_atom(other.stereo_atoms.site(id));
-            let ligands = other
+            let ligands: Vec<_> = other
                 .stereo_atoms
                 .ligands(id)
                 .iter()
                 .map(|ligand| ligand.map(&participant_correspondence))
                 .collect();
-            editor.add_stereo_atom(site, ligands, other.stereo_atoms.attributes(id).clone());
+            editor.add_stereo_atom(site, &ligands, other.stereo_atoms.attributes(id).clone());
         }
         for id in other.stereo_bonds.ids() {
             let site = BondId(other.stereo_bonds.site(id).0 + bond_offset as u32);
-            let ligands = other
+            let ligands: Vec<_> = other
                 .stereo_bonds
                 .ligands(id)
                 .iter()
                 .map(|ligand| ligand.map(&participant_correspondence))
                 .collect();
-            editor.add_stereo_bond(site, ligands, other.stereo_bonds.attributes(id).clone());
+            editor.add_stereo_bond(site, &ligands, other.stereo_bonds.attributes(id).clone());
         }
 
         let correspondence = MoleculeCorrespondence::new(
@@ -1707,9 +1736,9 @@ impl Molecule {
                 let mut dative_pairs = Vec::new();
                 for dative in self.dative_bonds().iter() {
                     if component_of(dative.acceptor_id()) == component {
-                        let donors = dative.donors().map(|d| map_atom(d.id)).collect();
+                        let donors: Vec<_> = dative.donors().map(|d| map_atom(d.id)).collect();
                         let added = editor.add_dative_bond(
-                            donors,
+                            &donors,
                             map_atom(dative.acceptor_id()),
                             dative.attributes.clone(),
                         );
@@ -1724,7 +1753,7 @@ impl Molecule {
                         .is_some_and(|a| component_of(*a) == component)
                     {
                         let added = editor.add_aromatic_system(
-                            members.iter().map(|a| map_atom(*a)).collect(),
+                            &members.iter().map(|a| map_atom(*a)).collect::<Vec<_>>(),
                             system.attributes.clone(),
                         );
                         aromatic_pairs.push((system.id, added));
@@ -1738,7 +1767,7 @@ impl Molecule {
                         .is_some_and(|a| component_of(*a) == component)
                     {
                         let added = editor.add_multicenter_bond(
-                            members.iter().map(|a| map_atom(*a)).collect(),
+                            &members.iter().map(|a| map_atom(*a)).collect::<Vec<_>>(),
                             bond.attributes.clone(),
                         );
                         multicenter_pairs.push((bond.id, added));
@@ -1767,7 +1796,7 @@ impl Molecule {
                             .collect();
                         let added = editor.add_stereo_atom(
                             map_atom(site),
-                            ligands,
+                            &ligands,
                             self.stereo_atoms.attributes(rid).clone(),
                         );
                         stereo_atom_pairs.push((rid, added));
@@ -1788,7 +1817,7 @@ impl Molecule {
                             bond_correspondence
                                 .right_of(bond)
                                 .expect("the component contains the routed stereo-bond site"),
-                            ligands,
+                            &ligands,
                             self.stereo_bonds.attributes(rid).clone(),
                         );
                         stereo_bond_pairs.push((rid, added));

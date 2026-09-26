@@ -315,6 +315,10 @@ impl<'a, const EDITOR: bool> BondViewMut<'a, EDITOR> {
     pub fn constraints(&self) -> &BondConstraintsForm {
         &self.attributes().constraints
     }
+
+    pub fn atom_ids(&self) -> [AtomId; 2] {
+        self.atoms
+    }
 }
 
 // Editor-scope view bundles for bonds.

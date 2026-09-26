@@ -1100,16 +1100,16 @@ mod tests {
                 editor.add_bond(AtomId(base + a), AtomId(base + b), BondForm::from_order(1));
             }
             editor.add_dative_bond(
-                vec![AtomId(base)],
+                &[AtomId(base)],
                 AtomId(base + 1),
                 DativeBondForm::from_order(1),
             );
             editor.add_aromatic_system(
-                vec![AtomId(base), AtomId(base + 1), AtomId(base + 2)],
+                &[AtomId(base), AtomId(base + 1), AtomId(base + 2)],
                 AromaticSystemForm::from_electrons(vec![1, 2, 1]),
             );
             editor.add_multicenter_bond(
-                vec![AtomId(base), AtomId(base + 1), AtomId(base + 3)],
+                &[AtomId(base), AtomId(base + 1), AtomId(base + 3)],
                 MulticenterBondForm::from_electrons(vec![1, 0, 1]),
             );
             editor.add_noncovalent_bond(
@@ -1118,16 +1118,14 @@ mod tests {
             );
             editor.add_stereo_atom(
                 AtomId(base),
-                [1, 2, 3, 4]
-                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom))
-                    .to_vec(),
+                &[1, 2, 3, 4]
+                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom)),
                 StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
             );
             editor.add_stereo_bond(
                 BondId(base),
-                [2, 3, 4, 5]
-                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom))
-                    .to_vec(),
+                &[2, 3, 4, 5]
+                    .map(|idx| StereoLigand::new(AtomId(base + idx), StereoLigandKind::Atom)),
                 StereoBondForm::default(),
             );
         }

@@ -442,7 +442,7 @@ fn test_kekulization_fixture_output_cage(#[case] source: &str) {
     let system_atoms: Vec<AtomId> = input.atoms().ids().collect();
     let system_bonds: Vec<BondId> = input.bonds().ids().collect();
     for bond in system_bonds {
-        input.bond_mut(bond).attributes.order = NumForm::Lit(1);
+        input.bond_mut(bond).attributes_mut().order = NumForm::Lit(1);
     }
     AromaticityPerceiver::new(&AromaticityModel::daylight()).add_systems(
         &mut input,
@@ -529,8 +529,8 @@ fn test_kekulization_fixture_output_error(
         .parse()
         .unwrap();
     let mut input = dsl.into_ir(&MoleculeDefaults::concrete());
-    input.atom_mut(AtomId(4)).attributes.charge = exposed_charge;
-    input.atom_mut(AtomId(4)).attributes.lone_pairs = exposed_lone_pairs;
+    input.atom_mut(AtomId(4)).attributes_mut().charge = exposed_charge;
+    input.atom_mut(AtomId(4)).attributes_mut().lone_pairs = exposed_lone_pairs;
     let original = input.clone();
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
 

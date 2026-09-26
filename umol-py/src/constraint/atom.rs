@@ -1201,7 +1201,7 @@ impl AtomConstraintsView {
                 .borrow_mut(py)
                 .to_rust_mut()
                 .atom_mut(*id)
-                .attributes
+                .attributes_mut()
                 .constraints)),
             AtomConstraintsBacking::Atom(atom) => {
                 Ok(f(&mut atom.borrow_mut(py).to_rust_mut()?.constraints))
@@ -1664,7 +1664,7 @@ impl AtomRingSizeCounts {
                 .borrow_mut(py)
                 .to_rust_mut()
                 .atom_mut(*id)
-                .attributes
+                .attributes_mut()
                 .constraints),
             AtomRingSizeBacking::Atom(atom) => {
                 f(&mut atom.borrow_mut(py).to_rust_mut()?.constraints)

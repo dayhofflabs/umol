@@ -3191,8 +3191,10 @@ mod tests {
         let expected_first = first.to_rust();
         let expected_second = second.to_rust();
         let mut detached = first.clone();
-        *detached.to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
-            GraphIrAtomForm::from_element(ChemElement::F);
+        *detached
+            .to_rust_mut()
+            .atom_mut(GraphIrAtomId(0))
+            .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::F);
         assert_eq!(first.to_rust(), expected_first);
         assert_eq!(second.to_rust(), expected_second);
     }
@@ -3383,8 +3385,10 @@ mod tests {
         assert_eq!(products.__next__().unwrap(), None);
         assert_eq!(products.__next__().unwrap(), None);
 
-        *first[0].to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
-            GraphIrAtomForm::from_element(ChemElement::F);
+        *first[0]
+            .to_rust_mut()
+            .atom_mut(GraphIrAtomId(0))
+            .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::F);
         assert_eq!(host, expected_host);
         assert_eq!(
             second[0].to_rust(),

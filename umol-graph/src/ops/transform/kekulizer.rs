@@ -267,22 +267,26 @@ impl Transformer for Kekulizer {
                     .all(|atom| !plan.exposed_atoms.contains(atom))
             }));
             for &bid in &plan.matched_bonds {
-                let bond = candidate.bond_mut(bid).attributes;
+                let mut view = candidate.bond_mut(bid);
+                let bond = view.attributes_mut();
                 bond.order = NumForm::Lit(2);
                 bond.constraints.remove(BondConstraintKey::Aromatic);
             }
             for &bid in &plan.unmatched_bonds {
-                let bond = candidate.bond_mut(bid).attributes;
+                let mut view = candidate.bond_mut(bid);
+                let bond = view.attributes_mut();
                 bond.order = NumForm::Lit(1);
                 bond.constraints.remove(BondConstraintKey::Aromatic);
             }
             for &aidx in &plan.atoms {
-                let atom = candidate.atom_mut(aidx).attributes;
+                let mut view = candidate.atom_mut(aidx);
+                let atom = view.attributes_mut();
                 atom.constraints.remove(AtomConstraintKey::AromaticValence);
             }
             if let Some(system_charge) = plan.mobile_charge {
                 let exposed = plan.exposed_atoms[0];
-                let atom = candidate.atom_mut(exposed).attributes;
+                let mut view = candidate.atom_mut(exposed);
+                let atom = view.attributes_mut();
                 let NumForm::Lit(local_charge) = atom.charge else {
                     return Err(KekulizeError::UndeterminedExposedAtomCharge {
                         system: plan.system_idx,

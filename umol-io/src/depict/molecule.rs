@@ -1578,7 +1578,7 @@ mod tests {
         let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
         let mut editor = molecule.edit();
         editor.add_aromatic_system(
-            (0..60).map(AtomId).collect(),
+            &(0..60).map(AtomId).collect::<Vec<_>>(),
             AromaticSystemForm {
                 electrons: ElectronCountsForm::Lit(vec![1; 60]),
                 ..Default::default()

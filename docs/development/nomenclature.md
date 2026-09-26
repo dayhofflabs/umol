@@ -164,9 +164,10 @@ groups the per-relation accessors — `count`, `ids`, `iter`, `get`, `Index` —
 be buried on `Molecule` itself. Adding an entity kind therefore adds a `*Views` namespace rather
 than five more methods on the molecule.
 
-`*ViewMut` is the mutable form; `*EditorView` and `*EditorViewMut` are the editor-scope bundles used
-inside an edit session. Views also exist over derived things, not only entities: `GraphView`,
-`RingView`, `RingViews`, `NeighborView`, `StereoLigandView`.
+`*ViewMut` provides mutable entity access in both molecules and editors; its const EDITOR
+parameter distinguishes the two contexts. `*EditorView` provides read-only local access inside
+an edit session. Views also exist over derived things: `GraphView`, `RingView`, `RingViews`,
+`NeighborView`, `StereoLigandView`.
 
 **Views are receivers, never arguments.** A function takes ids and the molecule, or takes the owned
 `*Form`; it does not take a view. A view borrows its molecule and exists to be called *on*, so passing
@@ -179,7 +180,7 @@ facade's implementation never builds another facade. Accessor chains that *retur
 in the receiver, not in name prefixes.
 
 **Not:** the owned representation, which is the `*Form` type. A view does not survive its molecule.
-**In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`, `AtomEditorViewMut`.
+**In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`.
 
 ### Delta and Update
 

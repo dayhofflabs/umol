@@ -137,11 +137,11 @@ impl MoleculeEditor {
     /// are factor 2. Their supplied order is retained as the stored frame.
     pub fn add_dative_bond(
         &mut self,
-        donors: Vec<AtomId>,
+        donors: &[AtomId],
         acceptor: AtomId,
         bond: DativeBondForm,
     ) -> DativeBondId {
-        let id = self.molecule.dative_bonds.add(&donors, acceptor, bond);
+        let id = self.molecule.dative_bonds.add(donors, acceptor, bond);
         self.correspondence =
             mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
                 .extend_right(EntityKind::DativeBond, 1);
@@ -151,10 +151,10 @@ impl MoleculeEditor {
     /// Append an aromatic-system overlay directly to the editor.
     pub fn add_aromatic_system(
         &mut self,
-        atoms: Vec<AtomId>,
+        atoms: &[AtomId],
         data: AromaticSystemForm,
     ) -> AromaticSystemId {
-        let id = self.molecule.aromatic_systems.add(&atoms, data);
+        let id = self.molecule.aromatic_systems.add(atoms, data);
         self.correspondence =
             mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
                 .extend_right(EntityKind::AromaticSystem, 1);
@@ -164,10 +164,10 @@ impl MoleculeEditor {
     /// Append a multicenter-bond overlay directly to the editor.
     pub fn add_multicenter_bond(
         &mut self,
-        atoms: Vec<AtomId>,
+        atoms: &[AtomId],
         data: MulticenterBondForm,
     ) -> MulticenterBondId {
-        let id = self.molecule.multicenter_bonds.add(&atoms, data);
+        let id = self.molecule.multicenter_bonds.add(atoms, data);
         self.correspondence =
             mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
                 .extend_right(EntityKind::MulticenterBond, 1);
@@ -191,10 +191,10 @@ impl MoleculeEditor {
     pub fn add_stereo_atom(
         &mut self,
         site: AtomId,
-        ligands: Vec<StereoLigand>,
+        ligands: &[StereoLigand],
         attributes: StereoAtomForm,
     ) -> StereoAtomId {
-        let id = self.molecule.stereo_atoms.add(site, &ligands, attributes);
+        let id = self.molecule.stereo_atoms.add(site, ligands, attributes);
         self.correspondence =
             mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
                 .extend_right(EntityKind::StereoAtom, 1);
@@ -205,10 +205,10 @@ impl MoleculeEditor {
     pub fn add_stereo_bond(
         &mut self,
         site: BondId,
-        ligands: Vec<StereoLigand>,
+        ligands: &[StereoLigand],
         attributes: StereoBondForm,
     ) -> StereoBondId {
-        let id = self.molecule.stereo_bonds.add(site, &ligands, attributes);
+        let id = self.molecule.stereo_bonds.add(site, ligands, attributes);
         self.correspondence =
             mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
                 .extend_right(EntityKind::StereoBond, 1);
@@ -1077,9 +1077,10 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
     use crate::ir::ligand::StereoLigandKind;
+    use crate::ir::molecule::MoleculeEntries;
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::stereo::StereoKind;
-    use crate::{mol_dsl, MoleculeEntries};
+    use crate::mol_dsl;
 
     #[fixture]
     fn triatomic() -> MoleculeEditor {
@@ -1112,8 +1113,8 @@ mod tests {
             ..Default::default()
         };
         let expected = Molecule::from_entries(entries.clone());
-        let first = triatomic.add_dative_bond(vec![AtomId(0)], AtomId(1), attributes.clone());
-        let second = triatomic.add_dative_bond(vec![AtomId(2)], AtomId(1), attributes.clone());
+        let first = triatomic.add_dative_bond(&[AtomId(0)], AtomId(1), attributes.clone());
+        let second = triatomic.add_dative_bond(&[AtomId(2)], AtomId(1), attributes.clone());
         assert_eq!((first, second), (DativeBondId(0), DativeBondId(1)));
         assert_eq!(
             triatomic
@@ -1182,8 +1183,8 @@ mod tests {
             ..Default::default()
         };
         let expected = Molecule::from_entries(entries.clone());
-        let first = triatomic.add_aromatic_system(vec![AtomId(0)], attributes.clone());
-        let second = triatomic.add_aromatic_system(vec![AtomId(1), AtomId(2)], attributes.clone());
+        let first = triatomic.add_aromatic_system(&[AtomId(0)], attributes.clone());
+        let second = triatomic.add_aromatic_system(&[AtomId(1), AtomId(2)], attributes.clone());
         assert_eq!((first, second), (AromaticSystemId(0), AromaticSystemId(1)));
         assert_eq!(
             triatomic
@@ -1252,8 +1253,8 @@ mod tests {
             ..Default::default()
         };
         let expected = Molecule::from_entries(entries.clone());
-        let first = triatomic.add_multicenter_bond(vec![AtomId(0), AtomId(1)], attributes.clone());
-        let second = triatomic.add_multicenter_bond(vec![AtomId(1), AtomId(2)], attributes.clone());
+        let first = triatomic.add_multicenter_bond(&[AtomId(0), AtomId(1)], attributes.clone());
+        let second = triatomic.add_multicenter_bond(&[AtomId(1), AtomId(2)], attributes.clone());
         assert_eq!(
             (first, second),
             (MulticenterBondId(0), MulticenterBondId(1))
@@ -1408,12 +1409,12 @@ mod tests {
         let expected = Molecule::from_entries(entries.clone());
         let first = triatomic.add_stereo_atom(
             AtomId(0),
-            vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            &[StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
             attributes.clone(),
         );
         let second = triatomic.add_stereo_atom(
             AtomId(1),
-            vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
+            &[StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
             attributes.clone(),
         );
         assert_eq!((first, second), (StereoAtomId(0), StereoAtomId(1)));
@@ -1505,7 +1506,7 @@ mod tests {
         let expected = Molecule::from_entries(entries.clone());
         let first = triatomic.add_stereo_bond(
             BondId(0),
-            vec![
+            &[
                 StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                 StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                 StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
@@ -1515,7 +1516,7 @@ mod tests {
         );
         let second = triatomic.add_stereo_bond(
             BondId(1),
-            vec![
+            &[
                 StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                 StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
                 StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
@@ -1600,7 +1601,7 @@ mod tests {
             editor.add_atom(AtomForm::from_element(Element::C));
         }
         editor.add_aromatic_system(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
+            &[AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemForm::from_electrons(vec![10, 20, 30]),
         );
         let offered = AromaticSystemForm::from_electrons(electrons);
@@ -1626,7 +1627,7 @@ mod tests {
             editor.add_atom(AtomForm::from_element(Element::C));
         }
         editor.add_multicenter_bond(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
+            &[AtomId(0), AtomId(1), AtomId(2)],
             MulticenterBondForm::from_electrons(vec![10, 20, 30]),
         );
         let offered = MulticenterBondForm::from_electrons(electrons);
@@ -1674,7 +1675,7 @@ mod tests {
             editor.add_atom(AtomForm::from_element(Element::C));
         }
         editor.add_dative_bond(
-            vec![AtomId(1), AtomId(2)],
+            &[AtomId(1), AtomId(2)],
             AtomId(0),
             DativeBondForm::from_order(1),
         );
@@ -1703,7 +1704,7 @@ mod tests {
             editor.add_atom(AtomForm::from_element(Element::C));
         }
         editor.add_aromatic_system(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
+            &[AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemForm::default(),
         );
 
@@ -1730,7 +1731,7 @@ mod tests {
             editor.add_atom(AtomForm::from_element(Element::C));
         }
         editor.add_multicenter_bond(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
+            &[AtomId(0), AtomId(1), AtomId(2)],
             MulticenterBondForm::default(),
         );
 
@@ -1757,9 +1758,9 @@ mod tests {
         }
         b.add_stereo_atom(
             AtomId(0),
-            (1..=4)
+            &(1..=4)
                 .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-                .collect(),
+                .collect::<Vec<_>>(),
             StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
         );
         b
@@ -1848,9 +1849,7 @@ mod tests {
         }
         editor.add_stereo_bond(
             BondId(0),
-            [2, 3, 4, 5]
-                .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
-                .to_vec(),
+            &[2, 3, 4, 5].map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom)),
             StereoBondForm::default(),
         );
         let ligands = ligand_ids
@@ -1923,8 +1922,8 @@ mod tests {
         let mut b = Molecule::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_atom(AtomForm::from_element(Element::N));
-        b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1));
-        b.add_dative_bond(vec![AtomId(1)], AtomId(0), DativeBondForm::from_order(2));
+        b.add_dative_bond(&[AtomId(0)], AtomId(1), DativeBondForm::from_order(1));
+        b.add_dative_bond(&[AtomId(1)], AtomId(0), DativeBondForm::from_order(2));
         let expected = b.clone().build();
         let view = b.dative_bond(DativeBondId(0));
         let removed = RemovedDativeBond {

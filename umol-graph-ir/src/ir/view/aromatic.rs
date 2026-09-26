@@ -323,6 +323,10 @@ impl<'a, const EDITOR: bool> AromaticSystemViewMut<'a, EDITOR> {
     pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
         &self.attributes().constraints
     }
+
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.set.atoms(self.id)
+    }
 }
 
 // Editor-scope view bundles for aromatic systems.
@@ -359,7 +363,7 @@ mod tests {
     use umol_graph_core::NodeId;
 
     use super::super::assert_exact_size_by;
-    use super::{AromaticSystemEditorView, AromaticSystemEditorViewMut};
+    use super::AromaticSystemEditorView;
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
@@ -612,10 +616,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_editor_view_mut_atom_ids() {
-        let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let mut attributes = AromaticSystemForm::default();
-        let view = AromaticSystemEditorViewMut::new(AromaticSystemId(0), &atoms, &mut attributes);
+    fn test_aromatic_system_view_mut_atom_ids() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 3],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::default(),
+            )],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let view = editor.aromatic_system_mut(AromaticSystemId(0));
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],

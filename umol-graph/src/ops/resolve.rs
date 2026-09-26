@@ -2185,17 +2185,17 @@ mod tests {
         let mut editor = source.edit();
         editor
             .stereo_atom_mut(StereoAtomId(0))
-            .attributes
+            .attributes_mut()
             .configuration = stereo;
         editor
             .aromatic_system_mut(AromaticSystemId(0))
-            .attributes
+            .attributes_mut()
             .charge = charge;
         editor
             .aromatic_system_mut(AromaticSystemId(0))
-            .attributes
+            .attributes_mut()
             .unpaired_electrons = spin;
-        editor.atom_mut(AtomId(0)).attributes.isotope_mass = isotope;
+        editor.atom_mut(AtomId(0)).attributes_mut().isotope_mass = isotope;
         let mut molecule = editor.build();
         let original = molecule.clone();
         let model = ChemistryModel::default();

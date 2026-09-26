@@ -602,7 +602,7 @@ impl NoncovalentBondConstraintsView {
                 .borrow_mut(py)
                 .to_rust_mut()
                 .noncovalent_bond_mut(*id)
-                .attributes
+                .attributes_mut()
                 .constraints)),
             NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
                 Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))

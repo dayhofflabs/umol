@@ -1723,11 +1723,13 @@ fn test_canonicalize_structure_para_stereo(
 #[rstest]
 fn test_structure_comparison_key(stereo_atom_canonicalization_molecule: Molecule) {
     let mut constrained = stereo_atom_canonicalization_molecule.clone();
-    constrained.stereo_atom_mut(StereoAtomId(0)).constraints =
-        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Stereogenic,
-        ))
-        .into();
+    constrained
+        .stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .constraints = StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+        Stereogenicity::Stereogenic,
+    ))
+    .into();
     let incidence_graph =
         stereo_atom_canonicalization_molecule.incidence_graph(IncidenceLevel::Full);
     let constrained_incidence_graph = constrained.incidence_graph(IncidenceLevel::Full);
@@ -1783,8 +1785,10 @@ fn test_canonicalize_structure_configuration(
     stereo_atom_canonicalization_molecule: Molecule,
 ) {
     let mut opposite = stereo_atom_canonicalization_molecule.clone();
-    opposite.stereo_atom_mut(StereoAtomId(0)).configuration =
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32);
+    opposite
+        .stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32);
 
     assert_ne!(
         canonicalize_structure(
@@ -1841,7 +1845,7 @@ fn test_canonicalize_structure_stereo_atom_constraints(
     let mut editor = stereo_atom_canonicalization_molecule.edit();
     editor
         .stereo_atom_mut(StereoAtomId(0))
-        .attributes
+        .attributes_mut()
         .constraints = constraint.clone().into();
     *editor.constraints_mut() =
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
@@ -1869,7 +1873,7 @@ fn test_canonicalize_structure_stereo_bond_constraints(
     let mut editor = stereo_bond_canonicalization_molecule.edit();
     editor
         .stereo_bond_mut(StereoBondId(0))
-        .attributes
+        .attributes_mut()
         .constraints = constraint.clone().into();
     *editor.constraints_mut() =
         Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, constraint).into();
@@ -2046,7 +2050,7 @@ fn test_molecule_canonicalize_stereo_frame(
     let mut editor = stereo_constraint_canonicalization_molecule.edit();
     editor
         .stereo_atom_mut(StereoAtomId(0))
-        .attributes
+        .attributes_mut()
         .constraints = constraint.clone().into();
     *editor.constraints_mut() =
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
@@ -2113,7 +2117,7 @@ fn test_molecule_canonical_eq_remapping_witness(
     });
     let mut right = left.remap(&reverse_remapping(&left));
     if distinguish {
-        right.atom_mut(AtomId(0)).attributes.element = ElementForm::Lit(Element::F);
+        right.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::Lit(Element::F);
     }
 
     assert!(left.clone().canonicalize(&canonicalize_context).is_ok());
@@ -2131,7 +2135,10 @@ fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
         atoms: vec![AtomForm::from_element(Element::C)],
         ..Default::default()
     });
-    left_contradiction.atom_mut(AtomId(0)).attributes.charge = NumForm::lit_set(Vec::<i64>::new());
+    left_contradiction
+        .atom_mut(AtomId(0))
+        .attributes_mut()
+        .charge = NumForm::lit_set(Vec::<i64>::new());
     let mut right_contradiction = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::N),
@@ -2139,7 +2146,10 @@ fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
         ],
         ..Default::default()
     });
-    right_contradiction.atom_mut(AtomId(0)).attributes.charge = NumForm::lit_set(Vec::<i64>::new());
+    right_contradiction
+        .atom_mut(AtomId(0))
+        .attributes_mut()
+        .charge = NumForm::lit_set(Vec::<i64>::new());
     let valid = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
         ..Default::default()
@@ -2692,7 +2702,10 @@ fn test_canonicalize_structure_stereo_frame(
     #[case] configuration: StereoConfigurationForm,
 ) {
     let mut source = stereo_constraint_canonicalization_molecule;
-    source.stereo_atom_mut(StereoAtomId(0)).configuration = configuration;
+    source
+        .stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .configuration = configuration;
     let reframed = source
         .clone()
         .reframe()
@@ -5594,7 +5607,7 @@ fn test_colored_encoding_dense_remapping_equivalence(#[case] level: IncidenceLev
     assert!(explicitly_dense_equivalent(&molecule, &remapped));
 
     let mut distinguished = remapped;
-    distinguished.atom_mut(AtomId(0)).attributes.element = ElementForm::Lit(Element::O);
+    distinguished.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::Lit(Element::O);
     assert_eq!(
         colored_encoding_equivalent(&molecule, &distinguished, level),
         explicitly_dense_equivalent(&molecule, &distinguished),
@@ -5629,7 +5642,7 @@ fn test_colored_encoding_exhaustive_graph_domain(#[case] atom_count: usize) {
         );
 
         let mut distinguished = remapped;
-        distinguished.atom_mut(AtomId(0)).attributes.element = ElementForm::Lit(Element::O);
+        distinguished.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::Lit(Element::O);
         assert_eq!(
             colored_encoding_equivalent(&molecule, &distinguished, IncidenceLevel::Topology,),
             explicitly_dense_equivalent(&molecule, &distinguished),

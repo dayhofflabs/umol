@@ -448,7 +448,7 @@ impl AromaticityPerceiver {
         let mut builder = molecule.edit();
         let new_indices: Vec<AromaticSystemId> = systems
             .into_iter()
-            .map(|(atoms, system_form)| builder.add_aromatic_system(atoms, system_form))
+            .map(|(atoms, system_form)| builder.add_aromatic_system(&atoms, system_form))
             .collect();
         *molecule = builder.build();
 
@@ -457,8 +457,8 @@ impl AromaticityPerceiver {
             .flat_map(|&id| molecule.aromatic_system(id).bond_ids().collect::<Vec<_>>())
             .collect();
         for bond_id in bond_ids {
-            let bond = molecule.bond_mut(bond_id);
-            bond.attributes
+            let mut bond = molecule.bond_mut(bond_id);
+            bond.attributes_mut()
                 .constraints
                 .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
         }

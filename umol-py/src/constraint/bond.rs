@@ -578,7 +578,7 @@ impl BondConstraintsView {
                 .borrow_mut(py)
                 .to_rust_mut()
                 .bond_mut(*id)
-                .attributes
+                .attributes_mut()
                 .constraints)),
             BondConstraintsBacking::Bond(bond) => {
                 Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
@@ -851,7 +851,7 @@ impl BondRingSizeCounts {
                 .borrow_mut(py)
                 .to_rust_mut()
                 .bond_mut(*id)
-                .attributes
+                .attributes_mut()
                 .constraints),
             BondRingSizeBacking::Bond(bond) => {
                 f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints)

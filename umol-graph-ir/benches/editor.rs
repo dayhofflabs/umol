@@ -86,8 +86,10 @@ fn bench_editor(c: &mut Criterion) {
                     |molecule| {
                         let mut editor = molecule.edit();
                         for index in 0..edits {
-                            editor.atom_mut(AtomId(index as u32)).attributes.charge =
-                                NumForm::Lit(1);
+                            editor
+                                .atom_mut(AtomId(index as u32))
+                                .attributes_mut()
+                                .charge = NumForm::Lit(1);
                         }
                         black_box(editor.try_build().unwrap())
                     },

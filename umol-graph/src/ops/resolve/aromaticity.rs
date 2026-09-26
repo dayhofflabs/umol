@@ -1694,7 +1694,9 @@ mod tests {
     ) {
         let model = AromaticityModel::daylight();
         let mut editor = resolved_benzene.edit();
-        *editor.aromatic_system_mut(AromaticSystemId(0)).attributes = form.parse().unwrap();
+        *editor
+            .aromatic_system_mut(AromaticSystemId(0))
+            .attributes_mut() = form.parse().unwrap();
         let mut molecule = editor.build();
         let original = molecule.clone();
         assert_eq!(
@@ -1720,10 +1722,18 @@ mod tests {
         let model = AromaticityModel::daylight();
         let mut editor = resolved_benzene.edit();
         if let Some(form) = atom {
-            editor.atom_mut(AtomId(5)).attributes.constraints.set(form);
+            editor
+                .atom_mut(AtomId(5))
+                .attributes_mut()
+                .constraints
+                .set(form);
         }
         if let Some(form) = bond {
-            editor.bond_mut(BondId(5)).attributes.constraints.set(form);
+            editor
+                .bond_mut(BondId(5))
+                .attributes_mut()
+                .constraints
+                .set(form);
         }
         let mut molecule = editor.build();
         let original = molecule.clone();

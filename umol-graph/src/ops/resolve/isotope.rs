@@ -257,7 +257,7 @@ mod tests {
         else {
             panic!("fixture must produce a determined edit plan");
         };
-        molecule.atom_mut(AtomId(1)).attributes.isotope_mass = IsotopeMassForm::Lit(18);
+        molecule.atom_mut(AtomId(1)).attributes_mut().isotope_mass = IsotopeMassForm::Lit(18);
         let expected = molecule.clone();
         let mut editor = molecule.edit();
         assert_eq!(

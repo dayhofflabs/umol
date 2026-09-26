@@ -947,10 +947,10 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
         pytest.param(
             "C[S@]C>>",
             {},
-            ModelConversionError,
-            "reactants: stereo atom 0: stereo frame has 2 ligands, "
-            "expected 4 for Tetrahedral",
-            id="model-conversion",
+            ContradictionError,
+            "reactants: stereo inconsistency: stereo atom StereoAtomId(0) "
+            "cannot be realized",
+            id="stereo-frame",
         ),
         pytest.param(
             "[nH]1cccc1>>",

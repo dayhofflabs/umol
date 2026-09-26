@@ -305,6 +305,19 @@ impl<'a, const EDITOR: bool> DativeBondViewMut<'a, EDITOR> {
     pub fn constraints(&self) -> &DativeBondConstraintsForm {
         &self.attributes().constraints
     }
+
+    /// All atoms: donors followed by the acceptor.
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        let donors = self.set.donor_nodes(self.id);
+        let acceptor = self.set.acceptor(self.id);
+        (0..donors.len() + 1).map(move |index| {
+            if index < donors.len() {
+                AtomId::from(donors[index])
+            } else {
+                acceptor
+            }
+        })
+    }
 }
 
 // Editor-scope view bundles for dative bonds.
@@ -353,7 +366,7 @@ mod tests {
     use umol_graph_core::NodeId;
 
     use super::super::assert_exact_size_by;
-    use super::{DativeBondEditorView, DativeBondEditorViewMut};
+    use super::DativeBondEditorView;
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
@@ -533,11 +546,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_editor_view_mut_atom_ids() {
-        let donors = [NodeId(1), NodeId(2)];
-        let mut attributes = DativeBondForm::from_order(1);
-        let view =
-            DativeBondEditorViewMut::new(DativeBondId(0), &donors, AtomId(3), &mut attributes);
+    fn test_dative_bond_view_mut_atom_ids() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 4],
+            dative: vec![(
+                vec![AtomId(1), AtomId(2)],
+                AtomId(3),
+                DativeBondForm::from_order(1),
+            )],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let view = editor.dative_bond_mut(DativeBondId(0));
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(1), AtomId(2), AtomId(3)],

@@ -393,8 +393,10 @@ mod tests {
         let snapshot = editor.snapshot().unwrap();
 
         let mut built = editor.build().unwrap();
-        *built.to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
-            GraphIrAtomForm::from_element(ChemElement::N);
+        *built
+            .to_rust_mut()
+            .atom_mut(GraphIrAtomId(0))
+            .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::N);
         let snapshot_error = editor.snapshot().unwrap_err();
         let build_error = editor.build().unwrap_err();
 

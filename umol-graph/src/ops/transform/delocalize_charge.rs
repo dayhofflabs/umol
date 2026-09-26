@@ -81,7 +81,8 @@ impl DelocalizationPlan {
 
     fn apply(self, molecule: &mut Molecule) {
         for (atom_id, contribution) in self.atoms {
-            let atom = &mut molecule.atom_mut(atom_id).attributes;
+            let mut view = molecule.atom_mut(atom_id);
+            let atom = view.attributes_mut();
             atom.charge = NumForm::Lit(0);
             atom.constraints.set(AtomConstraintForm::AromaticValence(
                 AromaticValenceForm::Aromatic(NumForm::Lit(contribution)),

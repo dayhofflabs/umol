@@ -130,7 +130,7 @@ mod tests {
     fn test_bonds_resolver_plan_stale() {
         let mut molecule = mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
         let edits = BondsResolver::new().plan(&molecule);
-        molecule.bond_mut(BondId(1)).attributes.charge = NumForm::Lit(9);
+        molecule.bond_mut(BondId(1)).attributes_mut().charge = NumForm::Lit(9);
         let expected = molecule.clone();
         let mut editor = molecule.edit();
         assert_eq!(

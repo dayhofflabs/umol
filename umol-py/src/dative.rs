@@ -330,7 +330,7 @@ impl DativeBondView {
             .borrow_mut(py)
             .to_rust_mut()
             .dative_bond_mut(self.id)
-            .attributes
+            .attributes_mut()
             .order = value.to_rust(py);
     }
 
@@ -354,7 +354,7 @@ impl DativeBondView {
             .borrow_mut(py)
             .to_rust_mut()
             .dative_bond_mut(self.id)
-            .attributes
+            .attributes_mut()
             .constraints = value.to_rust(py)?;
         Ok(())
     }
@@ -445,7 +445,7 @@ impl DativeBondViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_dative_bond_index(molecule.to_rust(), index)?;
-        *molecule.to_rust_mut().dative_bond_mut(id).attributes = bond.to_rust().clone();
+        *molecule.to_rust_mut().dative_bond_mut(id).attributes_mut() = bond.to_rust().clone();
         Ok(())
     }
 

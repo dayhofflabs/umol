@@ -278,6 +278,10 @@ impl<'a, const EDITOR: bool> MulticenterBondViewMut<'a, EDITOR> {
     pub fn constraints(&self) -> &MulticenterBondConstraintsForm {
         &self.attributes().constraints
     }
+
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.set.atoms(self.id)
+    }
 }
 
 // Builder-scope view bundles for multicenter bonds.
@@ -314,7 +318,7 @@ mod tests {
     use umol_graph_core::NodeId;
 
     use super::super::assert_exact_size_by;
-    use super::{MulticenterBondEditorView, MulticenterBondEditorViewMut};
+    use super::MulticenterBondEditorView;
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
@@ -504,10 +508,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_editor_view_mut_atom_ids() {
-        let atoms = [NodeId(0), NodeId(1), NodeId(2)];
-        let mut attributes = MulticenterBondForm::default();
-        let view = MulticenterBondEditorViewMut::new(MulticenterBondId(0), &atoms, &mut attributes);
+    fn test_multicenter_bond_view_mut_atom_ids() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 3],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondForm::default(),
+            )],
+            ..Default::default()
+        });
+        let mut editor = molecule.edit();
+        let view = editor.multicenter_bond_mut(MulticenterBondId(0));
         assert_exact_size_by(
             view.atom_ids(),
             vec![AtomId(0), AtomId(1), AtomId(2)],

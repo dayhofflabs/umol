@@ -99,8 +99,11 @@ impl MoleculeBuilder {
         acceptor: AtomId,
         attributes: impl Into<DativeBondForm>,
     ) -> DativeBondId {
-        self.editor
-            .add_dative_bond(donors.into_iter().collect(), acceptor, attributes.into())
+        self.editor.add_dative_bond(
+            &donors.into_iter().collect::<Vec<_>>(),
+            acceptor,
+            attributes.into(),
+        )
     }
 
     /// Wire `atoms` into a path of single bonds (each consecutive pair). Returns the
@@ -133,7 +136,7 @@ impl MoleculeBuilder {
         attributes: impl Into<AromaticSystemForm>,
     ) -> AromaticSystemId {
         self.editor
-            .add_aromatic_system(atoms.into_iter().collect(), attributes.into())
+            .add_aromatic_system(&atoms.into_iter().collect::<Vec<_>>(), attributes.into())
     }
 
     /// Add a multicenter-bond overlay over `atoms`, carrying `attributes` (a `MulticenterBondForm` or a DSL
@@ -144,7 +147,7 @@ impl MoleculeBuilder {
         attributes: impl Into<MulticenterBondForm>,
     ) -> MulticenterBondId {
         self.editor
-            .add_multicenter_bond(atoms.into_iter().collect(), attributes.into())
+            .add_multicenter_bond(&atoms.into_iter().collect::<Vec<_>>(), attributes.into())
     }
 
     /// Add a noncovalent-bond overlay between `first` and `second`, carrying `attributes` (a
@@ -167,8 +170,11 @@ impl MoleculeBuilder {
         ligands: impl IntoIterator<Item = StereoLigand>,
         attributes: impl Into<StereoAtomForm>,
     ) -> StereoAtomId {
-        self.editor
-            .add_stereo_atom(site, ligands.into_iter().collect(), attributes.into())
+        self.editor.add_stereo_atom(
+            site,
+            &ligands.into_iter().collect::<Vec<_>>(),
+            attributes.into(),
+        )
     }
 
     /// Add a stereo-bond overlay: a bond `site` with its ordered `ligands` and a configuration
@@ -179,8 +185,11 @@ impl MoleculeBuilder {
         ligands: impl IntoIterator<Item = StereoLigand>,
         attributes: impl Into<StereoBondForm>,
     ) -> StereoBondId {
-        self.editor
-            .add_stereo_bond(site, ligands.into_iter().collect(), attributes.into())
+        self.editor.add_stereo_bond(
+            site,
+            &ligands.into_iter().collect::<Vec<_>>(),
+            attributes.into(),
+        )
     }
 
     /// Finalize into a `Molecule`. Unspecified atom fields stay open for resolution.

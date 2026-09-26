@@ -573,7 +573,7 @@ impl DativeBondConstraintsView {
                 .borrow_mut(py)
                 .to_rust_mut()
                 .dative_bond_mut(*id)
-                .attributes
+                .attributes_mut()
                 .constraints)),
             DativeBondConstraintsBacking::DativeBond(bond) => {
                 Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
@@ -845,7 +845,7 @@ impl DativeBondRingSizeCounts {
                 .borrow_mut(py)
                 .to_rust_mut()
                 .dative_bond_mut(*id)
-                .attributes
+                .attributes_mut()
                 .constraints),
             DativeBondRingSizeBacking::DativeBond(bond) => {
                 f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints)

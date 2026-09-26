@@ -42,12 +42,12 @@ fn indole_with_bool_expr_fields() -> Molecule {
     // is_arithmetic()).
     let mut molecule = indole_concrete();
     let mut b = molecule.edit();
-    b.atom_mut(AtomId(0)).attributes.charge = NumForm::pred_expr(PredExpr::Rel(
+    b.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::pred_expr(PredExpr::Rel(
         ArithExpr::Var("c".into()),
         RelOp::Eq,
         ArithExpr::Lit(0),
     ));
-    b.atom_mut(AtomId(2)).attributes.lone_pairs = NumForm::pred_expr(PredExpr::Mem(
+    b.atom_mut(AtomId(2)).attributes_mut().lone_pairs = NumForm::pred_expr(PredExpr::Mem(
         ArithExpr::Var("n".into()),
         MemOp::In,
         BTreeSet::from([0, 1, 2]),

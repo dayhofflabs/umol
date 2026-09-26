@@ -2560,13 +2560,22 @@ pub(crate) fn intrinsic_contradiction_scenario_strategy(
 ) -> impl Strategy<Value = IntrinsicContradictionScenario> {
     standardization_scenario_strategy().prop_map(|scenario| {
         let mut first = scenario.molecule.clone();
-        first.atom_mut(AtomId(10)).attributes.charge = NumForm::lit_set([]);
-        first.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(0);
+        first.atom_mut(AtomId(10)).attributes_mut().charge = NumForm::lit_set([]);
+        first
+            .atom_mut(AtomId(10))
+            .attributes_mut()
+            .implicit_hydrogens = NumForm::Lit(0);
         let mut second = scenario.molecule;
-        second.atom_mut(AtomId(10)).attributes.charge = NumForm::lit_set([]);
-        second.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(1);
+        second.atom_mut(AtomId(10)).attributes_mut().charge = NumForm::lit_set([]);
+        second
+            .atom_mut(AtomId(10))
+            .attributes_mut()
+            .implicit_hydrogens = NumForm::Lit(1);
         let mut third = second.clone();
-        third.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(2);
+        third
+            .atom_mut(AtomId(10))
+            .attributes_mut()
+            .implicit_hydrogens = NumForm::Lit(2);
         let first_reaction = Reaction::new(first.clone(), Deltas::new());
         let second_reaction = Reaction::new(second.clone(), Deltas::new());
         let third_reaction = Reaction::new(third.clone(), Deltas::new());
