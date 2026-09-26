@@ -2501,7 +2501,7 @@ pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = Stand
             .remap(&incompatible_remapping)
             .representative_action();
 
-        let original_charge = molecule.atom(AtomId(10)).attributes.charge.clone();
+        let original_charge = molecule.atom(AtomId(10)).attributes().charge.clone();
         let erased_attributes = MulticenterBondForm::from_electrons(vec![10, 9, 8]);
         let reaction = Reaction::new(
             molecule.clone(),
@@ -5283,7 +5283,7 @@ fn build_reaction(
     for &id in &removed_atoms {
         deltas.push(Delta::Atom(AtomDelta::Remove {
             id,
-            attributes: lhs.atom(id).attributes.clone(),
+            attributes: lhs.atom(id).attributes().clone(),
         }));
     }
     for &id in &removed_bonds {
@@ -5380,7 +5380,7 @@ fn build_reaction(
             continue;
         }
         let Some(charge) = new_charge else { continue };
-        let old = lhs.atom(id).attributes.charge.clone();
+        let old = lhs.atom(id).attributes().charge.clone();
         let new = NumForm::Lit(charge);
         if old != new {
             deltas.push(Delta::Atom(AtomDelta::ModifyField {

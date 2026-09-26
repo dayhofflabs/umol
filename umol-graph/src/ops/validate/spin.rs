@@ -62,7 +62,7 @@ impl SpinInvariantsValidator {
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(
                         SpinInvariantsContradiction::MoleculeAtom {
-                            atom: atom.id,
+                            atom: atom.id(),
                             error,
                         },
                     ));

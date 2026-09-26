@@ -490,7 +490,7 @@ proptest! {
         let stored = if open { StereoCoset::Undetermined } else { StereoCoset::Lit(coset) };
         let projected = if open { StereoCoset::Undetermined } else { StereoCoset::Lit(coset ^ (inversions % 2) as u32) };
         let mut molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: base.atoms().iter().map(|atom| atom.attributes.clone()).collect(),
+            atoms: base.atoms().iter().map(|atom| atom.attributes().clone()).collect(),
             bonds: base.bonds().iter().map(|bond| {
                 let [first, second] = bond.atom_ids();
                 (first, second, bond.attributes.clone())
@@ -540,7 +540,7 @@ proptest! {
         let stored = if open { StereoCoset::Undetermined } else { StereoCoset::Lit(coset) };
         let projected = if open { StereoCoset::Undetermined } else { StereoCoset::Lit(coset ^ u32::from(first_swap) ^ u32::from(second_swap)) };
         let mut molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: base.atoms().iter().map(|atom| atom.attributes.clone()).collect(),
+            atoms: base.atoms().iter().map(|atom| atom.attributes().clone()).collect(),
             bonds: base.bonds().iter().map(|bond| {
                 let [first, second] = bond.atom_ids();
                 (first, second, bond.attributes.clone())

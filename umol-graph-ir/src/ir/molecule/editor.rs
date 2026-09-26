@@ -35,10 +35,11 @@ use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
 use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::super::traits::{FrameTransport, Normalize};
 use super::super::view::{
-    AromaticSystemEditorView, AromaticSystemViewMut, AtomEditorView, AtomViewMut, BondEditorView,
-    BondViewMut, DativeBondEditorView, DativeBondViewMut, MulticenterBondEditorView,
-    MulticenterBondViewMut, NoncovalentBondEditorView, NoncovalentBondViewMut,
-    StereoAtomEditorView, StereoAtomViewMut, StereoBondEditorView, StereoBondViewMut,
+    AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,
+    BondEditorView, BondEditorViewMut, DativeBondEditorView, DativeBondEditorViewMut,
+    MulticenterBondEditorView, MulticenterBondEditorViewMut, NoncovalentBondEditorView,
+    NoncovalentBondEditorViewMut, StereoAtomEditorView, StereoAtomEditorViewMut,
+    StereoBondEditorView, StereoBondEditorViewMut,
 };
 use super::{Molecule, MoleculeIntegrityError};
 
@@ -228,14 +229,11 @@ impl MoleculeEditor {
     // the editor itself because dense removal can compact many unrelated ids.
 
     pub fn atom(&self, id: AtomId) -> AtomEditorView<'_> {
-        AtomEditorView {
-            id,
-            attributes: &self.molecule.atoms[id.index()],
-        }
+        AtomEditorView::new(id, &self.molecule.atoms[id.index()])
     }
 
-    pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_, true> {
-        self.molecule.atom_view_mut::<true>(id)
+    pub fn atom_mut(&mut self, id: AtomId) -> AtomEditorViewMut<'_> {
+        self.molecule.atom_view_mut(id)
     }
 
     pub fn bond(&self, id: BondId) -> BondEditorView<'_> {
@@ -248,8 +246,8 @@ impl MoleculeEditor {
         }
     }
 
-    pub fn bond_mut(&mut self, id: BondId) -> BondViewMut<'_, true> {
-        self.molecule.bond_view_mut::<true>(id)
+    pub fn bond_mut(&mut self, id: BondId) -> BondEditorViewMut<'_> {
+        self.molecule.bond_view_mut(id)
     }
 
     pub fn dative_bond(&self, id: DativeBondId) -> DativeBondEditorView<'_> {
@@ -262,8 +260,8 @@ impl MoleculeEditor {
         )
     }
 
-    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_, true> {
-        self.molecule.dative_bond_view_mut::<true>(id)
+    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
+        self.molecule.dative_bond_view_mut(id)
     }
 
     pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemEditorView<'_> {
@@ -271,8 +269,8 @@ impl MoleculeEditor {
         AromaticSystemEditorView::new(id, set.atom_nodes(id), set.attributes(id))
     }
 
-    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemViewMut<'_, true> {
-        self.molecule.aromatic_system_view_mut::<true>(id)
+    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemEditorViewMut<'_> {
+        self.molecule.aromatic_system_view_mut(id)
     }
 
     pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondEditorView<'_> {
@@ -283,8 +281,8 @@ impl MoleculeEditor {
     pub fn multicenter_bond_mut(
         &mut self,
         id: MulticenterBondId,
-    ) -> MulticenterBondViewMut<'_, true> {
-        self.molecule.multicenter_bond_view_mut::<true>(id)
+    ) -> MulticenterBondEditorViewMut<'_> {
+        self.molecule.multicenter_bond_view_mut(id)
     }
 
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondEditorView<'_> {
@@ -299,8 +297,8 @@ impl MoleculeEditor {
     pub fn noncovalent_bond_mut(
         &mut self,
         id: NoncovalentBondId,
-    ) -> NoncovalentBondViewMut<'_, true> {
-        self.molecule.noncovalent_bond_view_mut::<true>(id)
+    ) -> NoncovalentBondEditorViewMut<'_> {
+        self.molecule.noncovalent_bond_view_mut(id)
     }
 
     pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomEditorView<'_> {
@@ -418,12 +416,12 @@ impl MoleculeEditor {
                 .is_some_and(|restated| restated.normalized_eq(set.attributes(id)))
     }
 
-    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_, true> {
-        self.molecule.stereo_atom_view_mut::<true>(id)
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
+        self.molecule.stereo_atom_view_mut(id)
     }
 
-    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_, true> {
-        self.molecule.stereo_bond_view_mut::<true>(id)
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondEditorViewMut<'_> {
+        self.molecule.stereo_bond_view_mut(id)
     }
 
     pub fn constraints(&self) -> &Constraints {
@@ -1873,7 +1871,7 @@ mod tests {
         let expected = triatomic.clone().build();
         let removed_atoms = vec![RemovedAtom {
             id: AtomId(1),
-            attributes: triatomic.atom(AtomId(1)).attributes.clone(),
+            attributes: triatomic.atom(AtomId(1)).attributes().clone(),
         }];
         let removed_bonds = vec![
             RemovedBond {

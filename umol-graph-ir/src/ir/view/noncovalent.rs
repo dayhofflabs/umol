@@ -183,6 +183,77 @@ impl<'a> NoncovalentBondView<'a> {
     }
 }
 
+/// Read-only editor access to a noncovalent bond.
+pub struct NoncovalentBondEditorView<'a> {
+    pub id: NoncovalentBondId,
+    pub atoms: [AtomId; 2],
+    pub attributes: &'a NoncovalentBondForm,
+}
+
+/// Mutable attribute access to a noncovalent bond.
+#[derive(Debug)]
+pub struct NoncovalentBondViewMut<'a> {
+    id: NoncovalentBondId,
+    noncovalent_bonds: &'a mut NoncovalentBonds,
+}
+
+impl<'a> NoncovalentBondViewMut<'a> {
+    pub(crate) fn new(id: NoncovalentBondId, noncovalent_bonds: &'a mut NoncovalentBonds) -> Self {
+        Self {
+            id,
+            noncovalent_bonds,
+        }
+    }
+
+    pub fn id(&self) -> NoncovalentBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &NoncovalentBondForm {
+        self.noncovalent_bonds.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut NoncovalentBondForm {
+        self.noncovalent_bonds.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &NoncovalentBondConstraintsForm {
+        &self.attributes().constraints
+    }
+}
+
+/// Mutable editor access to a noncovalent bond.
+#[derive(Debug)]
+pub struct NoncovalentBondEditorViewMut<'a> {
+    id: NoncovalentBondId,
+    noncovalent_bonds: &'a mut NoncovalentBonds,
+}
+
+impl<'a> NoncovalentBondEditorViewMut<'a> {
+    pub(crate) fn new(id: NoncovalentBondId, noncovalent_bonds: &'a mut NoncovalentBonds) -> Self {
+        Self {
+            id,
+            noncovalent_bonds,
+        }
+    }
+
+    pub fn id(&self) -> NoncovalentBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &NoncovalentBondForm {
+        self.noncovalent_bonds.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut NoncovalentBondForm {
+        self.noncovalent_bonds.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &NoncovalentBondConstraintsForm {
+        &self.attributes().constraints
+    }
+}
+
 // Derivation layer beneath the noncovalent-bond facades.
 
 /// Stored constraint container of `bond`.
@@ -234,43 +305,6 @@ fn same_bond_component(molecule: &Molecule, a: AtomId, b: AtomId) -> bool {
         }
     }
     false
-}
-
-/// Mutable attribute access to a noncovalent bond.
-#[derive(Debug)]
-pub struct NoncovalentBondViewMut<'a, const EDITOR: bool = false> {
-    id: NoncovalentBondId,
-    set: &'a mut NoncovalentBonds,
-}
-
-impl<'a, const EDITOR: bool> NoncovalentBondViewMut<'a, EDITOR> {
-    pub(crate) fn new(id: NoncovalentBondId, set: &'a mut NoncovalentBonds) -> Self {
-        Self { id, set }
-    }
-
-    pub fn id(&self) -> NoncovalentBondId {
-        self.id
-    }
-
-    pub fn attributes(&self) -> &NoncovalentBondForm {
-        self.set.attributes(self.id)
-    }
-
-    pub fn attributes_mut(&mut self) -> &mut NoncovalentBondForm {
-        self.set.attributes_mut(self.id)
-    }
-
-    pub fn constraints(&self) -> &NoncovalentBondConstraintsForm {
-        &self.attributes().constraints
-    }
-}
-
-// Builder-scope view bundles for noncovalent bonds.
-
-pub struct NoncovalentBondEditorView<'a> {
-    pub id: NoncovalentBondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a NoncovalentBondForm,
 }
 
 #[cfg(test)]
@@ -416,7 +450,7 @@ mod tests {
         let ids = molecule
             .noncovalent_bond(NoncovalentBondId(0))
             .atoms()
-            .map(|v| v.id);
+            .map(|v| v.id());
         assert_eq!(ids, [AtomId(0), AtomId(3)]);
     }
 }

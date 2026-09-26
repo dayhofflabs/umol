@@ -74,14 +74,14 @@ impl HmoAromaticity {
             .atoms()
             .iter()
             .filter_map(|view| {
-                let element = match view.attributes.element {
+                let element = match view.attributes().element {
                     ElementForm::Lit(e) => e,
                     _ => return None,
                 };
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                electrons_at(view.id).map(|_| view.id)
+                electrons_at(view.id()).map(|_| view.id())
             })
             .collect();
 
@@ -159,7 +159,7 @@ impl HmoAromaticity {
         let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(n);
         for (i, &atom) in pi_atoms.iter().enumerate() {
             let view = molecule.atom(atom);
-            let element = match view.attributes.element {
+            let element = match view.attributes().element {
                 ElementForm::Lit(e) => e,
                 _ => {
                     return Err(HmoError::UndeterminedAtom(
@@ -167,7 +167,7 @@ impl HmoAromaticity {
                     ))
                 }
             };
-            let valence = electrons_at(view.id).ok_or_else(|| {
+            let valence = electrons_at(view.id()).ok_or_else(|| {
                 HmoError::UndeterminedAtom("undetermined aromatic valence".to_string())
             })?;
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
@@ -374,7 +374,7 @@ mod tests {
         model
             .build_calculator(molecule, &atoms, &|v| match molecule
                 .atom(v)
-                .attributes
+                .attributes()
                 .constraints
                 .aromatic_valence()
                 .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -530,7 +530,7 @@ mod tests {
                 ConnectedComponentsAlgorithm::Bfs,
                 &|v| match molecule
                     .atom(v)
-                    .attributes
+                    .attributes()
                     .constraints
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -576,7 +576,7 @@ mod tests {
         let calc = hmo_model
             .build_calculator(&pyridine, &atoms, &|v| match pyridine
                 .atom(v)
-                .attributes
+                .attributes()
                 .constraints
                 .aromatic_valence()
                 .unwrap_or(&AromaticValenceForm::Undetermined)

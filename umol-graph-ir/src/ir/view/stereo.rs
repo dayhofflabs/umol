@@ -311,6 +311,72 @@ impl<'a> StereoAtomView<'a> {
     }
 }
 
+/// Read-only editor access to a stereo atom.
+pub struct StereoAtomEditorView<'a> {
+    pub id: StereoAtomId,
+    pub site: AtomId,
+    pub ligands: &'a [StereoLigand],
+    pub attributes: &'a StereoAtomForm,
+}
+
+/// Mutable attribute access to a stereo atom.
+#[derive(Debug)]
+pub struct StereoAtomViewMut<'a> {
+    id: StereoAtomId,
+    stereo_atoms: &'a mut StereoAtoms,
+}
+
+impl<'a> StereoAtomViewMut<'a> {
+    pub(crate) fn new(id: StereoAtomId, stereo_atoms: &'a mut StereoAtoms) -> Self {
+        Self { id, stereo_atoms }
+    }
+
+    pub fn id(&self) -> StereoAtomId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &StereoAtomForm {
+        self.stereo_atoms.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut StereoAtomForm {
+        self.stereo_atoms.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &StereoAtomConstraintsForm {
+        &self.attributes().constraints
+    }
+}
+
+/// Mutable editor access to a stereo atom.
+#[derive(Debug)]
+pub struct StereoAtomEditorViewMut<'a> {
+    id: StereoAtomId,
+    stereo_atoms: &'a mut StereoAtoms,
+}
+
+impl<'a> StereoAtomEditorViewMut<'a> {
+    pub(crate) fn new(id: StereoAtomId, stereo_atoms: &'a mut StereoAtoms) -> Self {
+        Self { id, stereo_atoms }
+    }
+
+    pub fn id(&self) -> StereoAtomId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &StereoAtomForm {
+        self.stereo_atoms.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut StereoAtomForm {
+        self.stereo_atoms.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &StereoAtomConstraintsForm {
+        &self.attributes().constraints
+    }
+}
+
 /// Namespace accessor for stereo-bond views on a `Molecule`.
 #[derive(Clone, Copy)]
 pub struct StereoBondViews<'a> {
@@ -636,6 +702,72 @@ impl<'a> StereoBondView<'a> {
     }
 }
 
+/// Read-only editor access to a stereo bond.
+pub struct StereoBondEditorView<'a> {
+    pub id: StereoBondId,
+    pub site: BondId,
+    pub ligands: &'a [StereoLigand],
+    pub attributes: &'a StereoBondForm,
+}
+
+/// Mutable attribute access to a stereo bond.
+#[derive(Debug)]
+pub struct StereoBondViewMut<'a> {
+    id: StereoBondId,
+    stereo_bonds: &'a mut StereoBonds,
+}
+
+impl<'a> StereoBondViewMut<'a> {
+    pub(crate) fn new(id: StereoBondId, stereo_bonds: &'a mut StereoBonds) -> Self {
+        Self { id, stereo_bonds }
+    }
+
+    pub fn id(&self) -> StereoBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &StereoBondForm {
+        self.stereo_bonds.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut StereoBondForm {
+        self.stereo_bonds.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &StereoBondConstraintsForm {
+        &self.attributes().constraints
+    }
+}
+
+/// Mutable editor access to a stereo bond.
+#[derive(Debug)]
+pub struct StereoBondEditorViewMut<'a> {
+    id: StereoBondId,
+    stereo_bonds: &'a mut StereoBonds,
+}
+
+impl<'a> StereoBondEditorViewMut<'a> {
+    pub(crate) fn new(id: StereoBondId, stereo_bonds: &'a mut StereoBonds) -> Self {
+        Self { id, stereo_bonds }
+    }
+
+    pub fn id(&self) -> StereoBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &StereoBondForm {
+        self.stereo_bonds.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut StereoBondForm {
+        self.stereo_bonds.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &StereoBondConstraintsForm {
+        &self.attributes().constraints
+    }
+}
+
 /// Stereo query methods shared by `StereoAtomView` and `StereoBondView`. The
 /// orbit/stereogenicity queries are pure reads over a per-carrier `StereoSymmetry`
 /// the caller has already computed (`Molecule::stereo_atom_symmetry` /
@@ -764,78 +896,6 @@ pub(crate) fn stereo_bond_derived_constraint(
     _complete: bool,
 ) -> Option<StereoBondConstraintForm> {
     None
-}
-
-/// Mutable attribute access to a stereo atom.
-#[derive(Debug)]
-pub struct StereoAtomViewMut<'a, const EDITOR: bool = false> {
-    id: StereoAtomId,
-    set: &'a mut StereoAtoms,
-}
-
-impl<'a, const EDITOR: bool> StereoAtomViewMut<'a, EDITOR> {
-    pub(crate) fn new(id: StereoAtomId, set: &'a mut StereoAtoms) -> Self {
-        Self { id, set }
-    }
-
-    pub fn id(&self) -> StereoAtomId {
-        self.id
-    }
-
-    pub fn attributes(&self) -> &StereoAtomForm {
-        self.set.attributes(self.id)
-    }
-
-    pub fn attributes_mut(&mut self) -> &mut StereoAtomForm {
-        self.set.attributes_mut(self.id)
-    }
-
-    pub fn constraints(&self) -> &StereoAtomConstraintsForm {
-        &self.attributes().constraints
-    }
-}
-
-pub struct StereoAtomEditorView<'a> {
-    pub id: StereoAtomId,
-    pub site: AtomId,
-    pub ligands: &'a [StereoLigand],
-    pub attributes: &'a StereoAtomForm,
-}
-
-/// Mutable attribute access to a stereo bond.
-#[derive(Debug)]
-pub struct StereoBondViewMut<'a, const EDITOR: bool = false> {
-    id: StereoBondId,
-    set: &'a mut StereoBonds,
-}
-
-impl<'a, const EDITOR: bool> StereoBondViewMut<'a, EDITOR> {
-    pub(crate) fn new(id: StereoBondId, set: &'a mut StereoBonds) -> Self {
-        Self { id, set }
-    }
-
-    pub fn id(&self) -> StereoBondId {
-        self.id
-    }
-
-    pub fn attributes(&self) -> &StereoBondForm {
-        self.set.attributes(self.id)
-    }
-
-    pub fn attributes_mut(&mut self) -> &mut StereoBondForm {
-        self.set.attributes_mut(self.id)
-    }
-
-    pub fn constraints(&self) -> &StereoBondConstraintsForm {
-        &self.attributes().constraints
-    }
-}
-
-pub struct StereoBondEditorView<'a> {
-    pub id: StereoBondId,
-    pub site: BondId,
-    pub ligands: &'a [StereoLigand],
-    pub attributes: &'a StereoBondForm,
 }
 
 #[cfg(test)]
@@ -1095,8 +1155,8 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_view_site(molecule: Molecule) {
         let view = molecule.stereo_atom(StereoAtomId(0)).site();
-        assert_eq!(view.id, AtomId(0));
-        assert_eq!(view.attributes, &AtomForm::from_element(Element::C));
+        assert_eq!(view.id(), AtomId(0));
+        assert_eq!(view.attributes(), &AtomForm::from_element(Element::C));
     }
 
     #[rstest]
@@ -1212,8 +1272,8 @@ mod tests {
             .next()
             .unwrap();
         let atom = ligand.atom();
-        assert_eq!(atom.id, AtomId(1));
-        assert_eq!(atom.attributes, &AtomForm::from_element(Element::C));
+        assert_eq!(atom.id(), AtomId(1));
+        assert_eq!(atom.attributes(), &AtomForm::from_element(Element::C));
     }
 
     #[rstest]

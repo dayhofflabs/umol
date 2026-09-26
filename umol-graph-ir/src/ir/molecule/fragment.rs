@@ -309,7 +309,7 @@ mod tests {
         // the free port became a wildcard atom double-bonded to the carbon
         assert_eq!(pattern.atoms().count(), 2);
         assert_eq!(
-            pattern.atom(AtomId(1)).attributes,
+            pattern.atom(AtomId(1)).attributes(),
             &AtomForm::new(ElementForm::undetermined())
         );
         assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);

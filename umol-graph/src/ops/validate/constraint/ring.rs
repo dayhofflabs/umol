@@ -40,7 +40,7 @@ impl RingConstraintInvariantsValidator {
                 validate_atom_constraints(
                     &rings.atom(id),
                     id,
-                    &molecule.atom(id).attributes.constraints,
+                    &molecule.atom(id).attributes().constraints,
                 ),
                 &mut any_underdetermined,
             ) {
@@ -112,7 +112,7 @@ impl RingConstraintInvariantsValidator {
         Ok(validate_atom_constraints(
             &rings.atom(atom_id),
             atom_id,
-            &atom.attributes.constraints,
+            &atom.attributes().constraints,
         ))
     }
 

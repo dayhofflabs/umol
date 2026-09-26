@@ -83,7 +83,7 @@ impl Transformer for Aromatizer {
 ///   `None`, marking the atom as not aromatic-eligible.
 pub fn electrons_from_kekule(molecule: &Molecule, atom: AtomId) -> Option<u8> {
     let view = molecule.atom(atom);
-    let ElementForm::Lit(element) = view.attributes.element else {
+    let ElementForm::Lit(element) = view.attributes().element else {
         return None;
     };
     let double_count = view
@@ -96,7 +96,7 @@ pub fn electrons_from_kekule(molecule: &Molecule, atom: AtomId) -> Option<u8> {
             Element::N | Element::O | Element::S | Element::Se | Element::P | Element::As => {
                 Some(2)
             }
-            Element::C if matches!(view.attributes.charge, NumForm::Lit(1)) => Some(0),
+            Element::C if matches!(view.attributes().charge, NumForm::Lit(1)) => Some(0),
             _ => None,
         },
         _ => None,

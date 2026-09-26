@@ -92,9 +92,9 @@ pub(crate) fn depict(
             continue;
         };
         items.push(DepictionItem::Atom(AtomItem {
-            position: position(layout, atom.id),
+            position: position(layout, atom.id()),
             label,
-            references: vec![DepictionReference::Molecule(Entity::Atom(atom.id))],
+            references: vec![DepictionReference::Molecule(Entity::Atom(atom.id()))],
         }));
     }
 
@@ -598,7 +598,7 @@ fn annotation_position_is_clear(
 ) -> bool {
     let clearance_squared = AROMATIC_ANNOTATION_CLEARANCE.powi(2);
     if molecule.atoms().iter().any(|atom| {
-        squared_length(difference(candidate, position(layout, atom.id))) < clearance_squared
+        squared_length(difference(candidate, position(layout, atom.id()))) < clearance_squared
     }) {
         return false;
     }

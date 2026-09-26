@@ -117,7 +117,7 @@ impl StereoPerception {
                 .collect();
             let assertion = molecule
                 .atom(atom)
-                .attributes
+                .attributes()
                 .constraints
                 .tetrahedral_stereo()
                 .unwrap_or(&TetrahedralStereoForm::Undetermined);

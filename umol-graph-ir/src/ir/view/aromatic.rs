@@ -268,6 +268,103 @@ impl<'a> AromaticSystemView<'a> {
     }
 }
 
+/// Read-only editor access to an aromatic system.
+pub struct AromaticSystemEditorView<'a> {
+    pub id: AromaticSystemId,
+    atoms: &'a [NodeId],
+    pub attributes: &'a AromaticSystemForm,
+}
+
+impl<'a> AromaticSystemEditorView<'a> {
+    pub(crate) fn new(
+        id: AromaticSystemId,
+        atoms: &'a [NodeId],
+        attributes: &'a AromaticSystemForm,
+    ) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
+    }
+
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
+        self.atoms.iter().map(|&n| AtomId::from(n))
+    }
+}
+
+/// Mutable attribute access to an aromatic system.
+#[derive(Debug)]
+pub struct AromaticSystemViewMut<'a> {
+    id: AromaticSystemId,
+    aromatic_systems: &'a mut AromaticSystems,
+}
+
+impl<'a> AromaticSystemViewMut<'a> {
+    pub(crate) fn new(id: AromaticSystemId, aromatic_systems: &'a mut AromaticSystems) -> Self {
+        Self {
+            id,
+            aromatic_systems,
+        }
+    }
+
+    pub fn id(&self) -> AromaticSystemId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &AromaticSystemForm {
+        self.aromatic_systems.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut AromaticSystemForm {
+        self.aromatic_systems.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
+        &self.attributes().constraints
+    }
+
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.aromatic_systems.atoms(self.id)
+    }
+}
+
+/// Mutable editor access to an aromatic system.
+#[derive(Debug)]
+pub struct AromaticSystemEditorViewMut<'a> {
+    id: AromaticSystemId,
+    aromatic_systems: &'a mut AromaticSystems,
+}
+
+impl<'a> AromaticSystemEditorViewMut<'a> {
+    pub(crate) fn new(id: AromaticSystemId, aromatic_systems: &'a mut AromaticSystems) -> Self {
+        Self {
+            id,
+            aromatic_systems,
+        }
+    }
+
+    pub fn id(&self) -> AromaticSystemId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &AromaticSystemForm {
+        self.aromatic_systems.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut AromaticSystemForm {
+        self.aromatic_systems.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
+        &self.attributes().constraints
+    }
+
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.aromatic_systems.atoms(self.id)
+    }
+}
+
 // Derivation layer beneath the aromatic-system facades.
 
 /// Stored constraint container of `system`.
@@ -293,65 +390,6 @@ pub(crate) fn aromatic_system_derived_constraint(
                 molecule.aromatic_system(system).electron_count(),
             ))
         }
-    }
-}
-
-/// Mutable attribute access to an aromatic system.
-#[derive(Debug)]
-pub struct AromaticSystemViewMut<'a, const EDITOR: bool = false> {
-    id: AromaticSystemId,
-    set: &'a mut AromaticSystems,
-}
-
-impl<'a, const EDITOR: bool> AromaticSystemViewMut<'a, EDITOR> {
-    pub(crate) fn new(id: AromaticSystemId, set: &'a mut AromaticSystems) -> Self {
-        Self { id, set }
-    }
-
-    pub fn id(&self) -> AromaticSystemId {
-        self.id
-    }
-
-    pub fn attributes(&self) -> &AromaticSystemForm {
-        self.set.attributes(self.id)
-    }
-
-    pub fn attributes_mut(&mut self) -> &mut AromaticSystemForm {
-        self.set.attributes_mut(self.id)
-    }
-
-    pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
-        &self.attributes().constraints
-    }
-
-    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
-        self.set.atoms(self.id)
-    }
-}
-
-// Editor-scope view bundles for aromatic systems.
-
-pub struct AromaticSystemEditorView<'a> {
-    pub id: AromaticSystemId,
-    atoms: &'a [NodeId],
-    pub attributes: &'a AromaticSystemForm,
-}
-
-impl<'a> AromaticSystemEditorView<'a> {
-    pub(crate) fn new(
-        id: AromaticSystemId,
-        atoms: &'a [NodeId],
-        attributes: &'a AromaticSystemForm,
-    ) -> Self {
-        Self {
-            id,
-            atoms,
-            attributes,
-        }
-    }
-
-    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
 
@@ -499,7 +537,7 @@ mod tests {
         assert_exact_size_by(
             molecule.aromatic_system(AromaticSystemId(0)).atoms(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            |atom| atom.id,
+            |atom| atom.id(),
         );
     }
 
@@ -581,7 +619,7 @@ mod tests {
         let ids: Vec<AtomId> = molecule
             .aromatic_system(AromaticSystemId(0))
             .overlapping_atoms(&subset)
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         assert_eq!(ids, expected);
     }
@@ -616,7 +654,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_mut_atom_ids() {
+    fn test_aromatic_system_editor_view_mut_atom_ids() {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(); 3],
             aromatic: vec![(

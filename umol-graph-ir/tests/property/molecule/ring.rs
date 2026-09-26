@@ -51,7 +51,7 @@ proptest! {
             }
         }
         for atom in molecule.atoms().iter() {
-            let view = rings.atom(atom.id);
+            let view = rings.atom(atom.id());
             let containing: Vec<_> = view.rings().collect();
             prop_assert_eq!(view.is_in_ring(), !containing.is_empty());
             prop_assert_eq!(view.ring_count(), NumForm::Lit(containing.len() as i64));

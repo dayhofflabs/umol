@@ -41,8 +41,8 @@ impl ClarAromaticity {
         F: Fn(AtomId) -> Option<u8>,
     {
         let has_non_benzenoid = molecule.atoms().iter().any(|view| {
-            !matches!(view.attributes.element, ElementForm::Lit(Element::C))
-                && electrons_at(view.id).is_some()
+            !matches!(view.attributes().element, ElementForm::Lit(Element::C))
+                && electrons_at(view.id()).is_some()
         });
         if has_non_benzenoid {
             return Err(ClarError::NonBenzenoid(
@@ -60,8 +60,8 @@ impl ClarAromaticity {
                 cycle.len() == 6
                     && cycle.atoms().iter().all(|&id| {
                         let a = molecule.atom(id);
-                        matches!(a.attributes.element, ElementForm::Lit(Element::C))
-                            && electrons_at(a.id).is_some()
+                        matches!(a.attributes().element, ElementForm::Lit(Element::C))
+                            && electrons_at(a.id()).is_some()
                     })
             })
             .collect();
@@ -209,7 +209,7 @@ mod tests {
                     cycle.len() == 6
                         && cycle.atoms().iter().all(|&atom| {
                             matches!(
-                                molecule.atom(atom).attributes.element,
+                                molecule.atom(atom).attributes().element,
                                 ElementForm::Lit(Element::C)
                             )
                         })
@@ -303,7 +303,7 @@ mod tests {
                 MaximumIndependentSetAlgorithm::BranchAndBound,
                 &|v| match molecule
                     .atom(v)
-                    .attributes
+                    .attributes()
                     .constraints
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -372,7 +372,7 @@ mod tests {
                 &|v| {
                     match molecule
                         .atom(v)
-                        .attributes
+                        .attributes()
                         .constraints
                         .aromatic_valence()
                         .unwrap_or(&AromaticValenceForm::Undetermined)

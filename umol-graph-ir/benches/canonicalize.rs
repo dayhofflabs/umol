@@ -588,7 +588,7 @@ fn retained_scaling_corpus() -> Vec<CorpusCase> {
                     && molecule
                         .atoms()
                         .iter()
-                        .all(|atom| atom.attributes.constraints.is_empty())
+                        .all(|atom| atom.attributes().constraints.is_empty())
                     && molecule
                         .bonds()
                         .iter()

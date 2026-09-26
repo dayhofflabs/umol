@@ -259,7 +259,7 @@ impl AromaticityPerceiver {
     ) -> Result<Solution<AromaticityDerivation, AromaticityContradiction>, AromaticityError> {
         if molecule.atoms().iter().any(|atom| {
             matches!(
-                atom.attributes.constraints.aromatic_valence(),
+                atom.attributes().constraints.aromatic_valence(),
                 Some(AromaticValenceForm::Aromatic(valence))
                     if valence.as_lit().is_none()
             )
@@ -274,7 +274,7 @@ impl AromaticityPerceiver {
 
         let systems = match self.find_systems(molecule, config, |atom| {
             let view = molecule.atom(atom);
-            match view.attributes.constraints.aromatic_valence() {
+            match view.attributes().constraints.aromatic_valence() {
                 Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
                     u8::try_from(*valence).ok()
                 }
@@ -305,12 +305,12 @@ impl AromaticityPerceiver {
 
         for atom in molecule.atoms().iter() {
             if matches!(
-                atom.attributes.constraints.aromatic_valence(),
+                atom.attributes().constraints.aromatic_valence(),
                 Some(AromaticValenceForm::Aromatic(_))
-            ) && !accepted_atoms.contains(&atom.id)
+            ) && !accepted_atoms.contains(&atom.id())
             {
                 inconsistencies
-                    .insert(AromaticityInconsistency::AromaticValenceFailure { atom: atom.id });
+                    .insert(AromaticityInconsistency::AromaticValenceFailure { atom: atom.id() });
             }
         }
 
@@ -390,7 +390,7 @@ impl AromaticityPerceiver {
             let has_matching_candidate =
                 system_members.iter().any(|candidate| candidate == &members);
             for atom in molecule.atoms().iter() {
-                let Some(constraint) = atom.attributes.constraints.aromatic_valence() else {
+                let Some(constraint) = atom.attributes().constraints.aromatic_valence() else {
                     continue;
                 };
                 let mismatch = match constraint {
@@ -399,7 +399,7 @@ impl AromaticityPerceiver {
                             && contributions
                                 .iter()
                                 .find_map(|&(candidate, actual)| {
-                                    (candidate == atom.id).then_some(actual)
+                                    (candidate == atom.id()).then_some(actual)
                                 })
                                 .is_some_and(|actual| actual != *expected)
                     }
@@ -409,7 +409,7 @@ impl AromaticityPerceiver {
                 };
                 if mismatch {
                     inconsistencies.insert(AromaticityInconsistency::AromaticValenceMismatch {
-                        atom: atom.id,
+                        atom: atom.id(),
                         system,
                     });
                 }
@@ -639,7 +639,7 @@ mod tests {
     fn aromatic_valence_lit(molecule: &Molecule, id: AtomId) -> Option<i64> {
         match molecule
             .atom(id)
-            .attributes
+            .attributes()
             .constraints
             .get(AtomConstraintKey::AromaticValence)?
         {
@@ -698,7 +698,7 @@ mod tests {
             .find_systems(molecule, AromaticityConfig::default(), |v| {
                 match molecule
                     .atom(v)
-                    .attributes
+                    .attributes()
                     .constraints
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -1048,7 +1048,7 @@ mod tests {
         let outcome = any_hueckel()
             .find_systems(&molecule, AromaticityConfig::default(), |v| match molecule
                 .atom(v)
-                .attributes
+                .attributes()
                 .constraints
                 .aromatic_valence()
                 .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -1074,7 +1074,7 @@ mod tests {
             .enumerate()
         {
             let id = AtomId(i as u32);
-            assert_eq!(molecule.atom(id).attributes.charge, NumForm::Lit(*q));
+            assert_eq!(molecule.atom(id).attributes().charge, NumForm::Lit(*q));
             assert_eq!(aromatic_valence_lit(&molecule, id), Some(*k));
         }
     }

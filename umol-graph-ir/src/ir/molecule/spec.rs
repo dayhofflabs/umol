@@ -818,6 +818,6 @@ mod tests {
     fn test_molecule_spec_concrete(#[case] spec: MoleculeSpec, #[case] expected_charge: NumForm) {
         let mol = spec.build();
 
-        assert_eq!(mol.atom(AtomId(0)).attributes.charge, expected_charge);
+        assert_eq!(mol.atom(AtomId(0)).attributes().charge, expected_charge);
     }
 }

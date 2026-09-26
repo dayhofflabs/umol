@@ -74,11 +74,11 @@ fn test_mol_anonymous_atoms() {
     assert_eq!(molecule.atoms().count(), 2);
     assert_eq!(molecule.bonds().count(), 1);
     assert_eq!(
-        molecule.atom(AtomId(0)).attributes,
+        molecule.atom(AtomId(0)).attributes(),
         &"C".parse::<AtomForm>().unwrap()
     );
     assert_eq!(
-        molecule.atom(AtomId(1)).attributes,
+        molecule.atom(AtomId(1)).attributes(),
         &"O".parse::<AtomForm>().unwrap()
     );
     assert_eq!(molecule.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
@@ -90,11 +90,11 @@ fn test_mol_anonymous_spec() {
     let molecule: Molecule = mol!("C#h3" - "O#h");
 
     assert_eq!(
-        molecule.atom(AtomId(0)).attributes,
+        molecule.atom(AtomId(0)).attributes(),
         &"C#h3".parse::<AtomForm>().unwrap()
     );
     assert_eq!(
-        molecule.atom(AtomId(1)).attributes,
+        molecule.atom(AtomId(1)).attributes(),
         &"O#h".parse::<AtomForm>().unwrap()
     );
     assert_eq!(
@@ -135,7 +135,7 @@ fn test_mol_aromatic() {
         molecule
             .aromatic_system(AromaticSystemId(0))
             .atoms()
-            .map(|view| view.id)
+            .map(|view| view.id())
             .collect::<Vec<_>>(),
         vec![AtomId(0), AtomId(1)]
     );

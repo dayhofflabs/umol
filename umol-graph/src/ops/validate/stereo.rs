@@ -115,7 +115,7 @@ impl StereoConformanceValidator {
                     let atom = molecule.stereo_atom(stereo_atom).site_id();
                     molecule
                         .atom(atom)
-                        .attributes
+                        .attributes()
                         .constraints
                         .tetrahedral_stereo()
                         .is_some_and(|constraint| !constraint.is_undetermined())

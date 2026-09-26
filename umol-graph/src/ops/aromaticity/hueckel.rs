@@ -116,7 +116,7 @@ impl HueckelAromaticity {
         F: Fn(AtomId) -> Option<u8>,
     {
         let view = molecule.atom(id);
-        let element = match view.attributes.element {
+        let element = match view.attributes().element {
             ElementForm::Lit(e) => e,
             _ => return false,
         };
@@ -585,7 +585,7 @@ mod tests {
         let model = daylight_model();
         let systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
-            .attributes
+            .attributes()
             .constraints
             .aromatic_valence()
             .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -619,7 +619,7 @@ mod tests {
             .into_ring_set();
         let systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
-            .attributes
+            .attributes()
             .constraints
             .aromatic_valence()
             .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -652,7 +652,7 @@ mod tests {
             .into_ring_set();
         let systems = daylight_model().find_from_rings(&molecule, &rings, &|v| match molecule
             .atom(v)
-            .attributes
+            .attributes()
             .constraints
             .aromatic_valence()
             .unwrap_or(&AromaticValenceForm::Undetermined)
@@ -685,7 +685,7 @@ mod tests {
             .into_ring_set();
         let systems = permissive_model().find_from_rings(&borazine, &rings, &|v| match borazine
             .atom(v)
-            .attributes
+            .attributes()
             .constraints
             .aromatic_valence()
             .unwrap_or(&AromaticValenceForm::Undetermined)

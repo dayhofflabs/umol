@@ -682,14 +682,14 @@ impl ReactionSpan {
         // Atoms
         let mut atoms: Vec<EntitySpan<AtomForm>> = Vec::new();
         for i in 0..lhs_atom_count {
-            let lhs_attributes = lhs.atom(AtomId(i as u32)).attributes.clone();
+            let lhs_attributes = lhs.atom(AtomId(i as u32)).attributes().clone();
             let rhs_attributes = atoms_corr
                 .right_of(AtomId(i as u32))
-                .map(|r| rhs.atom(r).attributes.clone());
+                .map(|r| rhs.atom(r).attributes().clone());
             atoms.push(EntitySpan::superimpose(Some(lhs_attributes), rhs_attributes).unwrap());
         }
         for &r in &atoms_corr.right_unmatched() {
-            atoms.push(EntitySpan::Added(rhs.atom(r).attributes.clone()));
+            atoms.push(EntitySpan::Added(rhs.atom(r).attributes().clone()));
         }
 
         // Bonds
@@ -2207,7 +2207,7 @@ impl Reaction {
             if let Some(attributes) = removed_atoms.get(&id) {
                 atoms.push(EntitySpan::Removed(attributes.clone()));
             } else if let Some(changes) = atom_changes.get(&id) {
-                let left = lhs.atom(id).attributes.clone();
+                let left = lhs.atom(id).attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_atom_change(&mut right, change)?;
@@ -2217,7 +2217,7 @@ impl Reaction {
                     rhs: right,
                 });
             } else {
-                atoms.push(EntitySpan::Unchanged(lhs.atom(id).attributes.clone()));
+                atoms.push(EntitySpan::Unchanged(lhs.atom(id).attributes().clone()));
             }
         }
         for attributes in added_atoms.into_values() {

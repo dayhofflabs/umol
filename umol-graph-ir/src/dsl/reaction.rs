@@ -713,7 +713,7 @@ impl ReactionInput {
                     }
                     resolved.push(Delta::Atom(AtomDelta::Remove {
                         id,
-                        attributes: lhs.atom(id).attributes.clone(),
+                        attributes: lhs.atom(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::AtomModify(r, update) => {
@@ -725,7 +725,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    for d in AtomDelta::for_update(id, lhs.atom(id).attributes, &update) {
+                    for d in AtomDelta::for_update(id, lhs.atom(id).attributes(), &update) {
                         resolved.push(Delta::Atom(d));
                     }
                 }

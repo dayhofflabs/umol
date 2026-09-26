@@ -91,7 +91,7 @@ mod tests {
     #[rstest]
     fn test_featurize_reaction_difference() {
         let lhs = ingest_smiles("CCO").unwrap();
-        let oxygen = lhs.atom(AtomId(2)).attributes.clone();
+        let oxygen = lhs.atom(AtomId(2)).attributes().clone();
         let bond = lhs.bond(BondId(1)).attributes.clone();
         let reaction = Reaction::new(
             lhs,

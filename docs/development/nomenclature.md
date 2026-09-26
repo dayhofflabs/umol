@@ -164,10 +164,10 @@ groups the per-relation accessors — `count`, `ids`, `iter`, `get`, `Index` —
 be buried on `Molecule` itself. Adding an entity kind therefore adds a `*Views` namespace rather
 than five more methods on the molecule.
 
-`*ViewMut` provides mutable entity access in both molecules and editors; its const EDITOR
-parameter distinguishes the two contexts. `*EditorView` provides read-only local access inside
-an edit session. Views also exist over derived things: `GraphView`, `RingView`, `RingViews`,
-`NeighborView`, `StereoLigandView`.
+`*ViewMut` provides mutable entity access on a molecule; `*EditorViewMut` provides it
+inside an edit session. `*EditorView` provides read-only local access inside an edit session.
+Shared molecule/editor view methods have the same signatures and semantics. Views also exist
+over derived things: `GraphView`, `RingView`, `RingViews`, `NeighborView`, `StereoLigandView`.
 
 **Views are receivers, never arguments.** A function takes ids and the molecule, or takes the owned
 `*Form`; it does not take a view. A view borrows its molecule and exists to be called *on*, so passing

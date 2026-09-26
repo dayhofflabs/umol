@@ -185,7 +185,7 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
     let has_inline_constraints = molecule
         .atoms()
         .iter()
-        .any(|atom| !atom.attributes.constraints.is_empty())
+        .any(|atom| !atom.attributes().constraints.is_empty())
         || molecule
             .bonds()
             .iter()
@@ -1610,11 +1610,24 @@ fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
         }};
     }
 
-    inline_block!(
-        ConstraintBlockPosition::ATOM,
-        molecule.atoms(),
-        atom_constraint_form_key
-    );
+    let rows = molecule
+        .atoms()
+        .iter()
+        .flat_map(|atom| {
+            atom.attributes().constraints.iter().map(move |constraint| {
+                product([
+                    index_key(atom.id().index()),
+                    atom_constraint_form_key(constraint),
+                ])
+            })
+        })
+        .collect::<Vec<_>>();
+    if !rows.is_empty() {
+        blocks.push(PositionedKey {
+            position: ConstraintBlockPosition::ATOM,
+            value: sequence(rows),
+        });
+    }
     inline_block!(
         ConstraintBlockPosition::BOND,
         molecule.bonds(),
@@ -3058,7 +3071,7 @@ fn bond_inherent_fields(attributes: &BondForm) -> Result<Vec<FieldKey>, Contradi
 fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorKey, Contradiction> {
     let (position, value) = match entity {
         Entity::Atom(id) => {
-            let attributes = molecule.atom(id).attributes;
+            let attributes = molecule.atom(id).attributes();
             (
                 EntityBlockPosition::ATOM,
                 CanonicalKeyValue::Product(atom_inherent_fields(attributes)?),
@@ -3369,7 +3382,7 @@ fn topology_candidate(
         .iter()
         .copied()
         .map(|id| {
-            atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
+            atom_inherent_fields(molecule.atom(id).attributes()).map(CanonicalKeyValue::Product)
         })
         .collect::<Result<Vec<_>, _>>()?;
     let bonds = topology_bond_key_rows(molecule, incidence_graph, &atom_images)?;

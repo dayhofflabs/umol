@@ -72,17 +72,17 @@ impl IsotopeResolver {
         let mut determined = true;
         for atom in molecule.atoms().iter() {
             if self.policy == IsotopePolicy::Natural
-                && atom.attributes.isotope_mass.is_undetermined()
+                && atom.attributes().isotope_mass.is_undetermined()
             {
                 edits.update_atom(
-                    AtomHandle::Id(atom.id),
-                    atom.attributes,
+                    AtomHandle::Id(atom.id()),
+                    atom.attributes(),
                     &AtomUpdate {
                         isotope_mass: Some(IsotopeMassForm::Natural),
                         ..Default::default()
                     },
                 );
-            } else if !atom.attributes.isotope_mass.is_ground() {
+            } else if !atom.attributes().isotope_mass.is_ground() {
                 determined = false;
             }
         }
@@ -135,15 +135,15 @@ impl IsotopeResolver {
     ) -> Result<Solution<(), IsotopeContradiction>, IsotopeProjectError> {
         let mut edits = Edits::new();
         for atom in molecule.atoms().iter() {
-            if !atom.attributes.isotope_mass.is_ground() {
-                return Err(IsotopeProjectError::NonGroundIsotope { atom: atom.id });
+            if !atom.attributes().isotope_mass.is_ground() {
+                return Err(IsotopeProjectError::NonGroundIsotope { atom: atom.id() });
             }
             if self.policy == IsotopePolicy::Natural
-                && matches!(atom.attributes.isotope_mass, IsotopeMassForm::Natural)
+                && matches!(atom.attributes().isotope_mass, IsotopeMassForm::Natural)
             {
                 edits.update_atom(
-                    AtomHandle::Id(atom.id),
-                    atom.attributes,
+                    AtomHandle::Id(atom.id()),
+                    atom.attributes(),
                     &AtomUpdate {
                         isotope_mass: Some(IsotopeMassForm::Undetermined),
                         ..Default::default()

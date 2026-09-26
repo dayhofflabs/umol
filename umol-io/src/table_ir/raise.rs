@@ -816,7 +816,7 @@ mod tests {
                 assert_eq!(
                     molecule
                         .atom(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .tetrahedral_stereo(),
                     None
@@ -843,7 +843,7 @@ mod tests {
         match entity {
             Entity::Atom(id) => assert!(molecule
                 .atom(id)
-                .attributes
+                .attributes()
                 .constraints
                 .tetrahedral_stereo()
                 .is_some()),
@@ -961,7 +961,7 @@ mod tests {
         assert_eq!(
             molecule
                 .atom(AtomId(0))
-                .attributes
+                .attributes()
                 .constraints
                 .aromatic_valence(),
             expected.as_ref()
@@ -989,7 +989,7 @@ mod tests {
         mol.atoms.push(atom);
         let molecule: Molecule = (&mol).try_into_ir(&()).unwrap();
         assert_eq!(
-            molecule.atom(AtomId(0)).attributes.implicit_hydrogens,
+            molecule.atom(AtomId(0)).attributes().implicit_hydrogens,
             expected
         );
     }
@@ -1017,7 +1017,7 @@ mod tests {
         for i in 0..2 {
             assert!(molecule
                 .atom(AtomId(i))
-                .attributes
+                .attributes()
                 .constraints
                 .aromatic_valence()
                 .is_none());
@@ -1030,7 +1030,7 @@ mod tests {
     #[case::carbon_h0(CARBON_H0_EXPLICIT_MOL, "C#i=#c0#h0")]
     fn test_parse_mol_to_ir(#[case] input: &str, #[case] expected_atom: &str) {
         let molecule = parse_mol_to_ir(input).unwrap();
-        let atom = molecule.atom(AtomId(0)).attributes;
+        let atom = molecule.atom(AtomId(0)).attributes();
         assert_eq!(atom.charge, NumForm::Lit(0));
         assert!(atom.constraints.aromatic_valence().is_none());
         assert_eq!(atom.to_string(), expected_atom);
@@ -1041,7 +1041,7 @@ mod tests {
     fn test_table_molecule_try_into_ir_smiles(#[case] input: &str, #[case] expected_atom: &str) {
         let smiles = Smiles::parse(input).unwrap();
         let molecule: Molecule = smiles.as_table_ir().try_into_ir(&()).unwrap();
-        let atom = molecule.atom(AtomId(0)).attributes;
+        let atom = molecule.atom(AtomId(0)).attributes();
         assert_eq!(atom.charge, NumForm::Lit(0));
         assert!(matches!(atom.implicit_hydrogens, NumForm::Undetermined));
         assert!(matches!(
@@ -1080,7 +1080,7 @@ mod tests {
         let molecule: Molecule = table.try_into_ir(&()).unwrap();
 
         assert_eq!(
-            molecule.atom(AtomId(0)).attributes,
+            molecule.atom(AtomId(0)).attributes(),
             &AtomForm {
                 element: ElementForm::Undetermined,
                 isotope_mass,

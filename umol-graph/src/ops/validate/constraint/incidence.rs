@@ -292,12 +292,12 @@ pub fn validate_atom_constraint(
     // Multi-donor dative incidence has no defined per-atom projection pending
     // the coordination/haptic entity split in discussion doc 117.
     let unsupported = match constraint {
-        AtomConstraintForm::DonatedPairs(_) => atom
-            .dative_bonds()
-            .any(|bond| bond.donor_count() != 1 && bond.donor_ids().any(|donor| donor == atom.id)),
+        AtomConstraintForm::DonatedPairs(_) => atom.dative_bonds().any(|bond| {
+            bond.donor_count() != 1 && bond.donor_ids().any(|donor| donor == atom.id())
+        }),
         AtomConstraintForm::AcceptedPairs(_) => atom
             .dative_bonds()
-            .any(|bond| bond.donor_count() != 1 && bond.acceptor_id() == atom.id),
+            .any(|bond| bond.donor_count() != 1 && bond.acceptor_id() == atom.id()),
         _ => false,
     };
     if unsupported {

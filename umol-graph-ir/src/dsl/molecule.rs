@@ -684,7 +684,7 @@ fn render_atoms(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = molecule
         .atoms()
         .iter()
-        .map(|view| render_atom_entry(view.id, view.attributes, meta))
+        .map(|view| render_atom_entry(view.id(), view.attributes(), meta))
         .collect();
     Edn::Vector(entries.into())
 }

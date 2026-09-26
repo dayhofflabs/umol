@@ -397,8 +397,8 @@ fn convey_molecule(
     table.bonds.reserve(molecule.bonds().count());
     let mut labels = labels.peekable();
     for atom in molecule.atoms().iter() {
-        let entity = Entity::Atom(atom.id);
-        let form = atom.attributes;
+        let entity = Entity::Atom(atom.id());
+        let form = atom.attributes();
         let mut lowered = match &form.element {
             ElementForm::Undetermined => Atom::wildcard(),
             ElementForm::Lit(element) => Atom::from_element(*element),
@@ -443,21 +443,21 @@ fn convey_molecule(
                 AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(coset)) => {
                     table
                         .stereo_atoms
-                        .push(lower_stereo_atom(molecule, atom.id, coset)?);
+                        .push(lower_stereo_atom(molecule, atom.id(), coset)?);
                 }
                 value if value.is_undetermined() => {}
                 value => {
                     return Err(ConveyError::Constraint(Constraint::Atom(
-                        atom.id,
+                        atom.id(),
                         value.clone(),
                     )))
                 }
             }
         }
-        if labels.peek().is_some_and(|&(id, _)| id == atom.id) {
+        if labels.peek().is_some_and(|&(id, _)| id == atom.id()) {
             lowered.class = labels.next().map(|(_, class)| class);
         }
-        elide_implicit_hydrogens(molecule, atom.id, resolver, &mut lowered);
+        elide_implicit_hydrogens(molecule, atom.id(), resolver, &mut lowered);
         table.atoms.push(lowered);
     }
     for bond in molecule.bonds().iter() {
@@ -559,8 +559,10 @@ fn elide_implicit_hydrogens(
         return;
     };
     let atom = molecule.atom(atom_id);
-    if !matches!(atom.attributes.isotope_mass, IsotopeMassForm::Undetermined)
-        || lowered.charge != Some(0)
+    if !matches!(
+        atom.attributes().isotope_mass,
+        IsotopeMassForm::Undetermined
+    ) || lowered.charge != Some(0)
         || lowered.unpaired_electrons != Some(0)
         || (lowered.aromatic == Some(true) && lowered.element != Some(Element::C))
         || lowered.class.is_some()

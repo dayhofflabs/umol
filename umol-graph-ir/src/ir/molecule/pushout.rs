@@ -69,10 +69,10 @@ impl Molecule {
             ) {
                 (Some(l), Some(r)) => self
                     .atom(AtomId::from(l))
-                    .attributes
-                    .meet(other.atom(AtomId::from(r)).attributes)?,
-                (Some(l), None) => self.atom(AtomId::from(l)).attributes.clone(),
-                (None, Some(r)) => other.atom(AtomId::from(r)).attributes.clone(),
+                    .attributes()
+                    .meet(other.atom(AtomId::from(r)).attributes())?,
+                (Some(l), None) => self.atom(AtomId::from(l)).attributes().clone(),
+                (None, Some(r)) => other.atom(AtomId::from(r)).attributes().clone(),
                 (None, None) => unreachable!("a glued node originates from a side"),
             };
             atoms.push(atom);

@@ -1066,7 +1066,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.charge.clone())
+                .map(|atom| atom.attributes().charge.clone())
                 .collect::<Vec<_>>(),
             expected_atom_charges
         );
@@ -1171,7 +1171,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             expected
         );
@@ -1491,7 +1491,7 @@ mod tests {
             &ResolveConfig::default(),
         )
         .unwrap();
-        assert_eq!(molecule.atom(AtomId(0)).attributes, &expected);
+        assert_eq!(molecule.atom(AtomId(0)).attributes(), &expected);
         assert_eq!(
             molecule.stereo_atoms().ids().collect::<Vec<_>>(),
             vec![StereoAtomId(0)]
@@ -1531,7 +1531,7 @@ mod tests {
             &ResolveConfig::default(),
         )
         .unwrap();
-        assert_eq!(molecule.atom(AtomId(0)).attributes, &expected);
+        assert_eq!(molecule.atom(AtomId(0)).attributes(), &expected);
         assert_eq!(
             molecule.stereo_atoms().ids().collect::<Vec<_>>(),
             vec![StereoAtomId(0)]
@@ -1663,7 +1663,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 5]
         );
@@ -1725,7 +1725,7 @@ mod tests {
         assert_eq!(
             molecule
                 .atom(AtomId(1))
-                .attributes
+                .attributes()
                 .constraints
                 .tetrahedral_stereo()
                 .cloned(),
@@ -2134,7 +2134,7 @@ mod tests {
                 .lhs()
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 5]
         );

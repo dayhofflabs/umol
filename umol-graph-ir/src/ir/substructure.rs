@@ -146,7 +146,7 @@ impl Molecule {
         let needs_rings = self
             .atoms()
             .iter()
-            .flat_map(|atom| atom.attributes.constraints.iter())
+            .flat_map(|atom| atom.attributes().constraints.iter())
             .any(|constraint| {
                 matches!(
                     constraint,
@@ -188,11 +188,11 @@ impl Molecule {
         let atoms = self
             .atoms()
             .iter()
-            .any(|a| !a.attributes.constraints.is_empty())
+            .any(|a| !a.attributes().constraints.is_empty())
             .then(|| {
                 let mut table = vec![true; self.atoms().count() * host_atom_count];
                 for p in self.atoms().iter() {
-                    if p.attributes.constraints.is_empty() {
+                    if p.attributes().constraints.is_empty() {
                         continue;
                     }
                     for h in host.atoms().iter() {
@@ -200,8 +200,8 @@ impl Molecule {
                         if let Some(rings) = rings {
                             reading = reading.with_rings(rings);
                         }
-                        table[p.id.index() * host_atom_count + h.id.index()] =
-                            reading.satisfies(&p.attributes.constraints);
+                        table[p.id().index() * host_atom_count + h.id().index()] =
+                            reading.satisfies(&p.attributes().constraints);
                     }
                 }
                 table
@@ -252,7 +252,7 @@ impl Molecule {
             &mut |query_node, host_node| {
                 let pa = AtomId::from(query_node);
                 let ha = AtomId::from(host_node);
-                atom_fields_match(pattern.atom(pa).attributes, host.atom(ha).attributes)
+                atom_fields_match(pattern.atom(pa).attributes(), host.atom(ha).attributes())
                     && atom_table
                         .as_ref()
                         .is_none_or(|table| table[pa.index() * host_atom_count + ha.index()])
@@ -316,7 +316,7 @@ impl Molecule {
             // kind only (the exact form/participation check is `verify_overlays`).
             &mut |pq, hq| match (pattern_levi.entity(pq), host_levi.entity(hq)) {
                 (Entity::Atom(pa), Entity::Atom(ha)) => {
-                    atom_fields_match(pattern.atom(pa).attributes, host.atom(ha).attributes)
+                    atom_fields_match(pattern.atom(pa).attributes(), host.atom(ha).attributes())
                         && atom_table
                             .as_ref()
                             .is_none_or(|table| table[pa.index() * host_atom_count + ha.index()])

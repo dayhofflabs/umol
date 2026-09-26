@@ -141,7 +141,7 @@ impl<'a> CountsValence<'a> {
             }
             let mut candidates = SmallVec::new();
             for &aromatic_valence in &entry.aromatic_valences {
-                let mut candidate = atom.attributes.clone();
+                let mut candidate = atom.attributes().clone();
                 candidate
                     .constraints
                     .set(AtomConstraintForm::aromatic_valence(
@@ -162,7 +162,7 @@ impl<'a> CountsValence<'a> {
             return Ok(None);
         }
         let input = CountsInput::for_molecule_atom(molecule, atom_id);
-        let candidates = self.candidate_states(atom.attributes, input)?;
+        let candidates = self.candidate_states(atom.attributes(), input)?;
         Ok(Some(candidates))
     }
 
@@ -300,7 +300,7 @@ impl<'a> CountsValence<'a> {
         };
         let charge = atom.charge().as_lit().unwrap_or(0);
         let input = CountsInput::for_molecule_atom(molecule, atom_id);
-        match self.candidate_states(atom.attributes, input) {
+        match self.candidate_states(atom.attributes(), input) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
                 element,

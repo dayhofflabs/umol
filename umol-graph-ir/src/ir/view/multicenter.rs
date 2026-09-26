@@ -223,6 +223,103 @@ impl<'a> MulticenterBondView<'a> {
     }
 }
 
+/// Read-only editor access to a multicenter bond.
+pub struct MulticenterBondEditorView<'a> {
+    pub id: MulticenterBondId,
+    atoms: &'a [NodeId],
+    pub attributes: &'a MulticenterBondForm,
+}
+
+impl<'a> MulticenterBondEditorView<'a> {
+    pub(crate) fn new(
+        id: MulticenterBondId,
+        atoms: &'a [NodeId],
+        attributes: &'a MulticenterBondForm,
+    ) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
+    }
+
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
+        self.atoms.iter().map(|&n| AtomId::from(n))
+    }
+}
+
+/// Mutable attribute access to a multicenter bond.
+#[derive(Debug)]
+pub struct MulticenterBondViewMut<'a> {
+    id: MulticenterBondId,
+    multicenter_bonds: &'a mut MulticenterBonds,
+}
+
+impl<'a> MulticenterBondViewMut<'a> {
+    pub(crate) fn new(id: MulticenterBondId, multicenter_bonds: &'a mut MulticenterBonds) -> Self {
+        Self {
+            id,
+            multicenter_bonds,
+        }
+    }
+
+    pub fn id(&self) -> MulticenterBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &MulticenterBondForm {
+        self.multicenter_bonds.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut MulticenterBondForm {
+        self.multicenter_bonds.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &MulticenterBondConstraintsForm {
+        &self.attributes().constraints
+    }
+
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.multicenter_bonds.atoms(self.id)
+    }
+}
+
+/// Mutable editor access to a multicenter bond.
+#[derive(Debug)]
+pub struct MulticenterBondEditorViewMut<'a> {
+    id: MulticenterBondId,
+    multicenter_bonds: &'a mut MulticenterBonds,
+}
+
+impl<'a> MulticenterBondEditorViewMut<'a> {
+    pub(crate) fn new(id: MulticenterBondId, multicenter_bonds: &'a mut MulticenterBonds) -> Self {
+        Self {
+            id,
+            multicenter_bonds,
+        }
+    }
+
+    pub fn id(&self) -> MulticenterBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &MulticenterBondForm {
+        self.multicenter_bonds.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut MulticenterBondForm {
+        self.multicenter_bonds.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &MulticenterBondConstraintsForm {
+        &self.attributes().constraints
+    }
+
+    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.multicenter_bonds.atoms(self.id)
+    }
+}
+
 // Derivation layer beneath the multicenter-bond facades.
 
 /// Stored constraint container of `bond`.
@@ -248,65 +345,6 @@ pub(crate) fn multicenter_bond_derived_constraint(
                 molecule.multicenter_bond(bond).electron_count(),
             ))
         }
-    }
-}
-
-/// Mutable attribute access to a multicenter bond.
-#[derive(Debug)]
-pub struct MulticenterBondViewMut<'a, const EDITOR: bool = false> {
-    id: MulticenterBondId,
-    set: &'a mut MulticenterBonds,
-}
-
-impl<'a, const EDITOR: bool> MulticenterBondViewMut<'a, EDITOR> {
-    pub(crate) fn new(id: MulticenterBondId, set: &'a mut MulticenterBonds) -> Self {
-        Self { id, set }
-    }
-
-    pub fn id(&self) -> MulticenterBondId {
-        self.id
-    }
-
-    pub fn attributes(&self) -> &MulticenterBondForm {
-        self.set.attributes(self.id)
-    }
-
-    pub fn attributes_mut(&mut self) -> &mut MulticenterBondForm {
-        self.set.attributes_mut(self.id)
-    }
-
-    pub fn constraints(&self) -> &MulticenterBondConstraintsForm {
-        &self.attributes().constraints
-    }
-
-    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
-        self.set.atoms(self.id)
-    }
-}
-
-// Builder-scope view bundles for multicenter bonds.
-
-pub struct MulticenterBondEditorView<'a> {
-    pub id: MulticenterBondId,
-    atoms: &'a [NodeId],
-    pub attributes: &'a MulticenterBondForm,
-}
-
-impl<'a> MulticenterBondEditorView<'a> {
-    pub(crate) fn new(
-        id: MulticenterBondId,
-        atoms: &'a [NodeId],
-        attributes: &'a MulticenterBondForm,
-    ) -> Self {
-        Self {
-            id,
-            atoms,
-            attributes,
-        }
-    }
-
-    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
 
@@ -456,7 +494,7 @@ mod tests {
         assert_exact_size_by(
             molecule.multicenter_bond(MulticenterBondId(0)).atoms(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            |atom| atom.id,
+            |atom| atom.id(),
         );
     }
 
@@ -490,7 +528,7 @@ mod tests {
         let ids: Vec<AtomId> = molecule
             .multicenter_bond(MulticenterBondId(0))
             .overlapping_atoms(&subset)
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         assert_eq!(ids, expected);
     }
@@ -508,7 +546,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_view_mut_atom_ids() {
+    fn test_multicenter_bond_editor_view_mut_atom_ids() {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(); 3],
             multicenter: vec![(

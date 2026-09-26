@@ -194,6 +194,89 @@ impl<'a> BondView<'a> {
     }
 }
 
+/// Read-only editor access to a bond.
+pub struct BondEditorView<'a> {
+    pub id: BondId,
+    pub atoms: [AtomId; 2],
+    pub attributes: &'a BondForm,
+}
+
+/// Mutable attribute access to a bond.
+#[derive(Debug)]
+pub struct BondViewMut<'a> {
+    id: BondId,
+    atoms: [AtomId; 2],
+    attributes: &'a mut BondForm,
+}
+
+impl<'a> BondViewMut<'a> {
+    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], attributes: &'a mut BondForm) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
+    }
+
+    pub fn id(&self) -> BondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &BondForm {
+        self.attributes
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut BondForm {
+        self.attributes
+    }
+
+    pub fn constraints(&self) -> &BondConstraintsForm {
+        &self.attributes().constraints
+    }
+
+    pub fn atom_ids(&self) -> [AtomId; 2] {
+        self.atoms
+    }
+}
+
+/// Mutable editor access to a bond.
+#[derive(Debug)]
+pub struct BondEditorViewMut<'a> {
+    id: BondId,
+    atoms: [AtomId; 2],
+    attributes: &'a mut BondForm,
+}
+
+impl<'a> BondEditorViewMut<'a> {
+    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], attributes: &'a mut BondForm) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
+    }
+
+    pub fn id(&self) -> BondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &BondForm {
+        self.attributes
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut BondForm {
+        self.attributes
+    }
+
+    pub fn constraints(&self) -> &BondConstraintsForm {
+        &self.attributes().constraints
+    }
+
+    pub fn atom_ids(&self) -> [AtomId; 2] {
+        self.atoms
+    }
+}
+
 // Derivation layer beneath the bond facades: functions of the molecule and
 // bond id, presented by `BondView` (typed) and `BondConstraintsView` (keyed).
 
@@ -281,52 +364,6 @@ pub(crate) fn bond_derived_constraint(
             ))
         }
     }
-}
-
-/// Mutable attribute access to a bond.
-#[derive(Debug)]
-pub struct BondViewMut<'a, const EDITOR: bool = false> {
-    id: BondId,
-    atoms: [AtomId; 2],
-    attributes: &'a mut BondForm,
-}
-
-impl<'a, const EDITOR: bool> BondViewMut<'a, EDITOR> {
-    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], attributes: &'a mut BondForm) -> Self {
-        Self {
-            id,
-            atoms,
-            attributes,
-        }
-    }
-
-    pub fn id(&self) -> BondId {
-        self.id
-    }
-
-    pub fn attributes(&self) -> &BondForm {
-        self.attributes
-    }
-
-    pub fn attributes_mut(&mut self) -> &mut BondForm {
-        self.attributes
-    }
-
-    pub fn constraints(&self) -> &BondConstraintsForm {
-        &self.attributes().constraints
-    }
-
-    pub fn atom_ids(&self) -> [AtomId; 2] {
-        self.atoms
-    }
-}
-
-// Editor-scope view bundles for bonds.
-
-pub struct BondEditorView<'a> {
-    pub id: BondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a BondForm,
 }
 
 #[cfg(test)]
@@ -442,7 +479,7 @@ mod tests {
         assert_exact_size_by(
             molecule.bond(BondId(1)).atoms(),
             vec![AtomId(1), AtomId(2)],
-            |atom| atom.id,
+            |atom| atom.id(),
         );
     }
 

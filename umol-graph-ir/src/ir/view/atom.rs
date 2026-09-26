@@ -54,9 +54,9 @@ impl<'a> AtomViews<'a> {
         let atoms = self.atoms;
         let graph = molecule.raw_graph();
         graph.node_ids().map(move |id| AtomView {
+            molecule,
             id: AtomId::from(id),
             attributes: &atoms[id.index()],
-            molecule,
         })
     }
 
@@ -69,28 +69,33 @@ impl<'a> AtomViews<'a> {
             return None;
         }
         Some(AtomView {
+            molecule: self.molecule,
             id,
             attributes: &self.atoms[id.index()],
-            molecule: self.molecule,
         })
     }
 }
 
-/// Borrowed view of an atom: index, underlying `AtomForm`, and the parent
-/// `Molecule` for cross-relation chemistry methods.
-///
-/// Chemistry methods come in pairs: the topology-derived value (summed from
-/// incident bonds / dative bonds / aromatic system / multicenter bonds) and
-/// the matching local-constraint value carried in `data.constraints`. The
-/// validator cross-checks the two when both are ground.
+/// Borrowed access to an atom's attributes and its relations in a molecule.
 #[derive(Clone, Copy, Debug)]
 pub struct AtomView<'a> {
-    pub id: AtomId,
-    pub attributes: &'a AtomForm,
     molecule: &'a Molecule,
+    id: AtomId,
+    attributes: &'a AtomForm,
 }
 
 impl<'a> AtomView<'a> {
+    #[inline]
+    pub fn id(&self) -> AtomId {
+        self.id
+    }
+
+    /// The stored atom attributes.
+    #[inline]
+    pub fn attributes(&self) -> &'a AtomForm {
+        self.attributes
+    }
+
     #[inline]
     pub fn element(&self) -> &'a ElementForm {
         &self.attributes.element
@@ -333,13 +338,101 @@ impl<'a> AtomView<'a> {
     }
 }
 
+/// Read-only editor access to an atom.
+pub struct AtomEditorView<'a> {
+    id: AtomId,
+    attributes: &'a AtomForm,
+}
+
+impl<'a> AtomEditorView<'a> {
+    pub(crate) fn new(id: AtomId, attributes: &'a AtomForm) -> Self {
+        Self { id, attributes }
+    }
+
+    #[inline]
+    pub fn id(&self) -> AtomId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &'a AtomForm {
+        self.attributes
+    }
+}
+
+/// Mutable attribute access to an atom.
+#[derive(Debug)]
+pub struct AtomViewMut<'a> {
+    id: AtomId,
+    attributes: &'a mut AtomForm,
+}
+
+impl<'a> AtomViewMut<'a> {
+    pub(crate) fn new(id: AtomId, attributes: &'a mut AtomForm) -> Self {
+        Self { id, attributes }
+    }
+
+    #[inline]
+    pub fn id(&self) -> AtomId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &AtomForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn attributes_mut(&mut self) -> &mut AtomForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &AtomConstraintsForm {
+        &self.attributes().constraints
+    }
+}
+
+/// Mutable editor access to an atom.
+#[derive(Debug)]
+pub struct AtomEditorViewMut<'a> {
+    id: AtomId,
+    attributes: &'a mut AtomForm,
+}
+
+impl<'a> AtomEditorViewMut<'a> {
+    pub(crate) fn new(id: AtomId, attributes: &'a mut AtomForm) -> Self {
+        Self { id, attributes }
+    }
+
+    #[inline]
+    pub fn id(&self) -> AtomId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &AtomForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn attributes_mut(&mut self) -> &mut AtomForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &AtomConstraintsForm {
+        &self.attributes().constraints
+    }
+}
+
 // Derivation layer beneath the atom facades: per-quantity functions of the
 // molecule and atom id, presented by `AtomView` (typed quantities) and
 // `AtomConstraintsView` (constraint readings).
 
 /// Stored constraint container of `atom`.
 pub(crate) fn atom_asserted_constraints(molecule: &Molecule, atom: AtomId) -> &AtomConstraintsForm {
-    &molecule.atom(atom).attributes.constraints
+    &molecule.atom(atom).attributes().constraints
 }
 
 /// Localized valence of `atom`: sum of incident bond orders.
@@ -611,42 +704,6 @@ pub(crate) fn atom_derived_constraint(
     }
 }
 
-/// Mutable attribute access to an atom.
-#[derive(Debug)]
-pub struct AtomViewMut<'a, const EDITOR: bool = false> {
-    id: AtomId,
-    attributes: &'a mut AtomForm,
-}
-
-impl<'a, const EDITOR: bool> AtomViewMut<'a, EDITOR> {
-    pub(crate) fn new(id: AtomId, attributes: &'a mut AtomForm) -> Self {
-        Self { id, attributes }
-    }
-
-    pub fn id(&self) -> AtomId {
-        self.id
-    }
-
-    pub fn attributes(&self) -> &AtomForm {
-        self.attributes
-    }
-
-    pub fn attributes_mut(&mut self) -> &mut AtomForm {
-        self.attributes
-    }
-
-    pub fn constraints(&self) -> &AtomConstraintsForm {
-        &self.attributes().constraints
-    }
-}
-
-// Editor-scope view bundles for atoms.
-
-pub struct AtomEditorView<'a> {
-    pub id: AtomId,
-    pub attributes: &'a AtomForm,
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -721,7 +778,7 @@ mod tests {
     #[rstest]
     fn test_atom_views_iter(molecule: Molecule) {
         assert_exact_size_by(Molecule::default().atoms().iter(), vec![], |view| {
-            (view.id, view.attributes.clone())
+            (view.id(), view.attributes().clone())
         });
         assert_exact_size_by(
             molecule.atoms().iter(),
@@ -731,7 +788,7 @@ mod tests {
                 (AtomId(2), AtomForm::from_element(Element::N)),
                 (AtomId(3), AtomForm::from_element(Element::O)),
             ],
-            |view| (view.id, view.attributes.clone()),
+            |view| (view.id(), view.attributes().clone()),
         );
     }
 
@@ -747,8 +804,8 @@ mod tests {
         let res = molecule.atoms().get(AtomId(2));
         assert!(res.is_some());
         let atom = res.unwrap();
-        assert_eq!(atom.id, AtomId(2));
-        assert_eq!(atom.attributes, &AtomForm::from_element(Element::N));
+        assert_eq!(atom.id(), AtomId(2));
+        assert_eq!(atom.attributes(), &AtomForm::from_element(Element::N));
     }
 
     #[rstest]

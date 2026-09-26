@@ -60,7 +60,13 @@ use super::{
     AromaticSystems, DativeBonds, Molecule, MoleculeApplyError, MoleculeEntries,
     MoleculeIntegrityError, MulticenterBonds, NoncovalentBonds, StereoAtoms, StereoBonds,
 };
-use crate::ir::MoleculeRemapping;
+use crate::ir::{
+    AromaticSystemEditorViewMut, AromaticSystemViewMut, AtomEditorViewMut, AtomViewMut,
+    BondEditorViewMut, BondViewMut, DativeBondEditorViewMut, DativeBondViewMut, MoleculeRemapping,
+    MulticenterBondEditorViewMut, MulticenterBondViewMut, NoncovalentBondEditorViewMut,
+    NoncovalentBondViewMut, StereoAtomEditorViewMut, StereoAtomViewMut, StereoBondEditorViewMut,
+    StereoBondViewMut,
+};
 use crate::{mol_dsl, mol_dsl_concrete};
 
 fn ground_atom() -> AtomForm {
@@ -115,11 +121,11 @@ fn test_molecule_from_entries() {
     assert_eq!(m.multicenter_bonds().count(), 0);
     assert_eq!(m.noncovalent_bonds().count(), 0);
     assert_eq!(
-        m.atom(AtomId(0)).attributes.element,
+        m.atom(AtomId(0)).attributes().element,
         ElementForm::Lit(Element::C)
     );
     assert_eq!(
-        m.atom(AtomId(1)).attributes.element,
+        m.atom(AtomId(1)).attributes().element,
         ElementForm::Lit(Element::O)
     );
     assert_eq!(m.bond(BondId(0)).attributes.order, NumForm::Lit(1));
@@ -1870,7 +1876,10 @@ fn test_molecule_reframe_by_compatible_action(#[from(molecule_reframe_source)] s
         .reframe_by(&actions)
         .expect("the action domain and participant degrees are compatible");
 
-    assert_eq!(reframed.atom(AtomId(0)).attributes.charge, NumForm::Lit(2));
+    assert_eq!(
+        reframed.atom(AtomId(0)).attributes().charge,
+        NumForm::Lit(2)
+    );
     assert_eq!(
         reframed.representative_action(),
         reframed.representative_action().identity(),
@@ -3046,8 +3055,8 @@ fn test_molecule_atom(
     #[case] element: Element,
 ) {
     let av = molecule.atom(id);
-    assert_eq!(av.id, id);
-    assert_eq!(av.attributes.element, ElementForm::Lit(element));
+    assert_eq!(av.id(), id);
+    assert_eq!(av.attributes().element, ElementForm::Lit(element));
 }
 
 #[rstest]
@@ -3113,7 +3122,7 @@ fn test_molecule_atoms(#[from(rich_molecule)] molecule: Molecule) {
     let projected: Vec<(AtomId, ElementForm)> = molecule
         .atoms()
         .iter()
-        .map(|v| (v.id, v.attributes.element.clone()))
+        .map(|v| (v.id(), v.attributes().element.clone()))
         .collect();
     assert_eq!(
         projected,
@@ -3405,7 +3414,7 @@ fn test_graph_view_bipartite_maximum_matching(
     #[case] molecule: Molecule,
     #[case] expected: Vec<BondId>,
 ) {
-    let node_order: Vec<AtomId> = molecule.atoms().iter().map(|atom| atom.id).collect();
+    let node_order: Vec<AtomId> = molecule.atoms().iter().map(|atom| atom.id()).collect();
     assert_eq!(
         molecule
             .graph()
@@ -3423,7 +3432,7 @@ fn test_graph_view_bipartite_maximum_matching(
 #[rstest]
 #[case::triangle(mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 :single] [1 2 :single] [0 2 :single]]}"#))]
 fn test_graph_view_bipartite_maximum_matching_error(#[case] molecule: Molecule) {
-    let node_order: Vec<AtomId> = molecule.atoms().iter().map(|atom| atom.id).collect();
+    let node_order: Vec<AtomId> = molecule.atoms().iter().map(|atom| atom.id()).collect();
     assert_eq!(
         molecule
             .graph()
@@ -3450,7 +3459,7 @@ fn test_graph_view_general_maximum_matching(
     #[case] molecule: Molecule,
     #[case] expected: Vec<BondId>,
 ) {
-    let node_order: Vec<AtomId> = molecule.atoms().iter().map(|atom| atom.id).collect();
+    let node_order: Vec<AtomId> = molecule.atoms().iter().map(|atom| atom.id()).collect();
     assert_eq!(
         molecule
             .graph()
@@ -3474,7 +3483,7 @@ fn test_graph_view_bipartite_maximum_matching_or_general(
     #[case] molecule: Molecule,
     #[case] expected: Vec<BondId>,
 ) {
-    let node_order: Vec<AtomId> = molecule.atoms().iter().map(|atom| atom.id).collect();
+    let node_order: Vec<AtomId> = molecule.atoms().iter().map(|atom| atom.id()).collect();
     assert_eq!(
         molecule
             .graph()
@@ -3663,7 +3672,7 @@ fn test_molecule_induced_subgraph(#[from(rich_molecule)] molecule: Molecule) {
     let atom_elements: Vec<_> = extracted
         .atoms()
         .iter()
-        .map(|v| v.attributes.element.clone())
+        .map(|v| v.attributes().element.clone())
         .collect();
     assert_eq!(
         atom_elements,
@@ -3747,7 +3756,7 @@ fn test_molecule_edits(#[from(rich_molecule)] molecule: Molecule) {
 
 #[rstest]
 fn test_molecule_edits_identity(#[from(rich_molecule)] molecule: Molecule) {
-    let atom_ids: Vec<AtomId> = molecule.atoms().iter().map(|v| v.id).collect();
+    let atom_ids: Vec<AtomId> = molecule.atoms().iter().map(|v| v.id()).collect();
     let sub = molecule.induced_subgraph(&atom_ids);
     assert_eq!(molecule.edits(&sub), Edits::new());
 }
@@ -5139,7 +5148,7 @@ fn test_molecule_editor_remove_aromatic_systems(#[from(rich_molecule)] molecule:
         Vec::<AromaticSystemId>::new()
     );
     assert_eq!(
-        result.atoms().iter().map(|v| v.id).collect::<Vec<_>>(),
+        result.atoms().iter().map(|v| v.id()).collect::<Vec<_>>(),
         vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]
     );
     assert_eq!(
@@ -5187,11 +5196,11 @@ fn test_molecule_editor_atom_mut(#[from(rich_molecule)] molecule: Molecule) {
     b.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::Lit(Element::N);
     let result = b.build();
     assert_eq!(
-        result.atom(AtomId(0)).attributes.element,
+        result.atom(AtomId(0)).attributes().element,
         ElementForm::Lit(Element::N)
     );
     assert_eq!(
-        molecule.atom(AtomId(0)).attributes.element,
+        molecule.atom(AtomId(0)).attributes().element,
         ElementForm::Lit(Element::C)
     );
 }
@@ -5214,10 +5223,10 @@ fn test_molecule_editor_atom_constraint_mut(#[from(rich_molecule)] molecule: Mol
         .set(AtomConstraintForm::Degree(NumForm::Lit(2)));
     let result = b.build();
     assert_eq!(
-        result.atom(AtomId(0)).attributes.constraints,
+        result.atom(AtomId(0)).attributes().constraints,
         AtomConstraintsForm::from_iter([AtomConstraintForm::Degree(NumForm::Lit(2))])
     );
-    assert!(molecule.atom(AtomId(0)).attributes.constraints.is_empty());
+    assert!(molecule.atom(AtomId(0)).attributes().constraints.is_empty());
 }
 
 #[rstest]
@@ -5540,7 +5549,7 @@ fn test_molecule_editor_add_and_remove(#[from(rich_molecule)] molecule: Molecule
     let atoms: Vec<Element> = result
         .atoms()
         .iter()
-        .map(|v| match v.attributes.element {
+        .map(|v| match v.attributes().element {
             ElementForm::Lit(e) => e,
             _ => panic!("non-ground element in editor result"),
         })
@@ -5738,7 +5747,7 @@ fn test_molecule_enumerate_maximum_matchings() {
 #[rstest]
 fn test_molecule_index_atom(#[from(rich_molecule)] molecule: Molecule) {
     assert_eq!(
-        molecule.atom(AtomId(2)).attributes.element,
+        molecule.atom(AtomId(2)).attributes().element,
         ElementForm::Lit(Element::N)
     );
 }
@@ -5801,7 +5810,7 @@ fn test_molecule_atom_mut_attributes(
     let expected = Molecule::from_entries(entries);
     if editor {
         let mut draft = molecule.edit();
-        let mut view = draft.atom_mut(AtomId(0));
+        let mut view: AtomEditorViewMut<'_> = draft.atom_mut(AtomId(0));
         *view.attributes_mut() = AtomForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5812,7 +5821,7 @@ fn test_molecule_atom_mut_attributes(
         assert_eq!(view.constraints(), &form.constraints);
         molecule = draft.build();
     } else {
-        let mut view = molecule.atom_mut(AtomId(0));
+        let mut view: AtomViewMut<'_> = molecule.atom_mut(AtomId(0));
         *view.attributes_mut() = AtomForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5837,7 +5846,7 @@ fn test_molecule_bond_mut_attributes(
     let expected = Molecule::from_entries(entries);
     if editor {
         let mut draft = molecule.edit();
-        let mut view = draft.bond_mut(BondId(0));
+        let mut view: BondEditorViewMut<'_> = draft.bond_mut(BondId(0));
         *view.attributes_mut() = BondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5848,7 +5857,7 @@ fn test_molecule_bond_mut_attributes(
         assert_eq!(view.constraints(), &form.constraints);
         molecule = draft.build();
     } else {
-        let mut view = molecule.bond_mut(BondId(0));
+        let mut view: BondViewMut<'_> = molecule.bond_mut(BondId(0));
         *view.attributes_mut() = BondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5873,7 +5882,7 @@ fn test_molecule_dative_bond_mut_attributes(
     let expected = Molecule::from_entries(entries);
     if editor {
         let mut draft = molecule.edit();
-        let mut view = draft.dative_bond_mut(DativeBondId(0));
+        let mut view: DativeBondEditorViewMut<'_> = draft.dative_bond_mut(DativeBondId(0));
         *view.attributes_mut() = DativeBondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5884,7 +5893,7 @@ fn test_molecule_dative_bond_mut_attributes(
         assert_eq!(view.constraints(), &form.constraints);
         molecule = draft.build();
     } else {
-        let mut view = molecule.dative_bond_mut(DativeBondId(0));
+        let mut view: DativeBondViewMut<'_> = molecule.dative_bond_mut(DativeBondId(0));
         *view.attributes_mut() = DativeBondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5910,7 +5919,8 @@ fn test_molecule_aromatic_system_mut_attributes(
     let expected = Molecule::from_entries(entries);
     if editor {
         let mut draft = molecule.edit();
-        let mut view = draft.aromatic_system_mut(AromaticSystemId(0));
+        let mut view: AromaticSystemEditorViewMut<'_> =
+            draft.aromatic_system_mut(AromaticSystemId(0));
         *view.attributes_mut() = AromaticSystemForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5921,7 +5931,7 @@ fn test_molecule_aromatic_system_mut_attributes(
         assert_eq!(view.constraints(), &form.constraints);
         molecule = draft.build();
     } else {
-        let mut view = molecule.aromatic_system_mut(AromaticSystemId(0));
+        let mut view: AromaticSystemViewMut<'_> = molecule.aromatic_system_mut(AromaticSystemId(0));
         *view.attributes_mut() = AromaticSystemForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5947,7 +5957,8 @@ fn test_molecule_multicenter_bond_mut_attributes(
     let expected = Molecule::from_entries(entries);
     if editor {
         let mut draft = molecule.edit();
-        let mut view = draft.multicenter_bond_mut(MulticenterBondId(0));
+        let mut view: MulticenterBondEditorViewMut<'_> =
+            draft.multicenter_bond_mut(MulticenterBondId(0));
         *view.attributes_mut() = MulticenterBondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5958,7 +5969,8 @@ fn test_molecule_multicenter_bond_mut_attributes(
         assert_eq!(view.constraints(), &form.constraints);
         molecule = draft.build();
     } else {
-        let mut view = molecule.multicenter_bond_mut(MulticenterBondId(0));
+        let mut view: MulticenterBondViewMut<'_> =
+            molecule.multicenter_bond_mut(MulticenterBondId(0));
         *view.attributes_mut() = MulticenterBondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5983,7 +5995,8 @@ fn test_molecule_noncovalent_bond_mut_attributes(
     let expected = Molecule::from_entries(entries);
     if editor {
         let mut draft = molecule.edit();
-        let mut view = draft.noncovalent_bond_mut(NoncovalentBondId(0));
+        let mut view: NoncovalentBondEditorViewMut<'_> =
+            draft.noncovalent_bond_mut(NoncovalentBondId(0));
         *view.attributes_mut() = NoncovalentBondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -5994,7 +6007,8 @@ fn test_molecule_noncovalent_bond_mut_attributes(
         assert_eq!(view.constraints(), &form.constraints);
         molecule = draft.build();
     } else {
-        let mut view = molecule.noncovalent_bond_mut(NoncovalentBondId(0));
+        let mut view: NoncovalentBondViewMut<'_> =
+            molecule.noncovalent_bond_mut(NoncovalentBondId(0));
         *view.attributes_mut() = NoncovalentBondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -6019,7 +6033,7 @@ fn test_molecule_stereo_atom_mut_attributes(
     let expected = Molecule::from_entries(entries);
     if editor {
         let mut draft = molecule.edit();
-        let mut view = draft.stereo_atom_mut(StereoAtomId(0));
+        let mut view: StereoAtomEditorViewMut<'_> = draft.stereo_atom_mut(StereoAtomId(0));
         *view.attributes_mut() = StereoAtomForm {
             constraints: Default::default(),
             ..form.clone()
@@ -6030,7 +6044,7 @@ fn test_molecule_stereo_atom_mut_attributes(
         assert_eq!(view.constraints(), &form.constraints);
         molecule = draft.build();
     } else {
-        let mut view = molecule.stereo_atom_mut(StereoAtomId(0));
+        let mut view: StereoAtomViewMut<'_> = molecule.stereo_atom_mut(StereoAtomId(0));
         *view.attributes_mut() = StereoAtomForm {
             constraints: Default::default(),
             ..form.clone()
@@ -6055,7 +6069,7 @@ fn test_molecule_stereo_bond_mut_attributes(
     let expected = Molecule::from_entries(entries);
     if editor {
         let mut draft = molecule.edit();
-        let mut view = draft.stereo_bond_mut(StereoBondId(0));
+        let mut view: StereoBondEditorViewMut<'_> = draft.stereo_bond_mut(StereoBondId(0));
         *view.attributes_mut() = StereoBondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -6066,7 +6080,7 @@ fn test_molecule_stereo_bond_mut_attributes(
         assert_eq!(view.constraints(), &form.constraints);
         molecule = draft.build();
     } else {
-        let mut view = molecule.stereo_bond_mut(StereoBondId(0));
+        let mut view: StereoBondViewMut<'_> = molecule.stereo_bond_mut(StereoBondId(0));
         *view.attributes_mut() = StereoBondForm {
             constraints: Default::default(),
             ..form.clone()
@@ -6102,7 +6116,7 @@ fn test_molecule_modify_atoms(#[from(rich_molecule)] mut molecule: Molecule) {
     let charges: Vec<NumForm> = molecule
         .atoms()
         .iter()
-        .map(|v| v.attributes.charge.clone())
+        .map(|v| v.attributes().charge.clone())
         .collect();
     assert_eq!(
         charges,
@@ -6577,8 +6591,8 @@ fn test_molecule_lift_constraints_drains_inline_stores(
 
     molecule.lift_constraints();
 
-    assert!(molecule.atom(AtomId(0)).attributes.constraints.is_empty());
-    assert!(molecule.atom(AtomId(2)).attributes.constraints.is_empty());
+    assert!(molecule.atom(AtomId(0)).attributes().constraints.is_empty());
+    assert!(molecule.atom(AtomId(2)).attributes().constraints.is_empty());
     assert!(molecule.bond(BondId(0)).attributes.constraints.is_empty());
     assert!(molecule
         .dative_bond(DativeBondId(0))
@@ -6655,7 +6669,7 @@ fn test_molecule_inline_constraints_drains_top_level_leaves(
 
     assert!(molecule.constraints().is_empty());
     assert_eq!(
-        molecule.atom(AtomId(0)).attributes.constraints,
+        molecule.atom(AtomId(0)).attributes().constraints,
         AtomConstraintsForm::from_iter([AtomConstraintForm::Valence(NumForm::Lit(4))])
     );
     assert_eq!(
@@ -6690,10 +6704,10 @@ fn test_molecule_inline_constraints_last_wins_on_collision(
 
     // Only one Valence survives; with two competing inserts of the same kind,
     // exactly one wins (which one is unspecified). Verify count and kind.
-    assert_eq!(molecule.atom(AtomId(0)).attributes.constraints.len(), 1);
+    assert_eq!(molecule.atom(AtomId(0)).attributes().constraints.len(), 1);
     let v = molecule
         .atom(AtomId(0))
-        .attributes
+        .attributes()
         .constraints
         .iter()
         .next()
@@ -6723,7 +6737,7 @@ fn test_molecule_inline_constraints_skips_combinator_nested(
     let mut expected = Constraints::new();
     expected.push(nested);
     assert_same_constraints(molecule.constraints(), &expected);
-    assert!(molecule.atom(AtomId(0)).attributes.constraints.is_empty());
+    assert!(molecule.atom(AtomId(0)).attributes().constraints.is_empty());
     assert!(molecule.bond(BondId(0)).attributes.constraints.is_empty());
 }
 
@@ -6754,7 +6768,7 @@ fn test_molecule_inline_constraints_skips_relational_and_molecule(
     expected.push(mol);
     assert_same_constraints(molecule.constraints(), &expected);
     assert_eq!(
-        molecule.atom(AtomId(0)).attributes.constraints,
+        molecule.atom(AtomId(0)).attributes().constraints,
         AtomConstraintsForm::from_iter([AtomConstraintForm::Valence(NumForm::Lit(4))])
     );
 }
@@ -6790,7 +6804,7 @@ fn test_molecule_lift_then_inline_roundtrips_inline_state(
     let original = molecule.clone();
 
     molecule.lift_constraints();
-    assert!(molecule.atom(AtomId(0)).attributes.constraints.is_empty());
+    assert!(molecule.atom(AtomId(0)).attributes().constraints.is_empty());
     molecule.inline_constraints().unwrap();
 
     assert_eq!(molecule, original);

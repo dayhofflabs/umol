@@ -361,7 +361,7 @@ impl StereoResolver {
                 ));
             edits.update_atom(
                 AtomHandle::Id(atom),
-                molecule.atom(atom).attributes,
+                molecule.atom(atom).attributes(),
                 &update,
             );
         }
@@ -440,7 +440,7 @@ impl StereoResolver {
                 .coset_for(ligands)
                 .ok_or(StereoProjectError::StereoAtomFrame { stereo_atom })?;
             let projected = TetrahedralStereoForm::Stereo(coset);
-            let attributes = molecule.atom(atom).attributes;
+            let attributes = molecule.atom(atom).attributes();
             let assertion = match attributes.constraints.tetrahedral_stereo() {
                 Some(existing) => existing
                     .meet(&projected)

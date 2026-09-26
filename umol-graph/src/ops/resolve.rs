@@ -367,7 +367,7 @@ impl<'a> Resolver<'a> {
         // The single commit of the constitution round.
         let mut edits = Edits::new();
         for (atom, disjuncts) in state.completions.iter() {
-            let current = placed.atom(atom).attributes;
+            let current = placed.atom(atom).attributes();
             // The constraint channel holds assertions only: the commit
             // narrows fields; candidate constraints stay solver state.
             let mut selected = disjuncts[0].clone();
@@ -592,7 +592,7 @@ impl<'a> Resolver<'a> {
         let mut edits = Edits::new();
 
         let needs_rings = molecule.atoms().iter().any(|atom| {
-            atom.attributes.constraints.iter().any(|c| {
+            atom.attributes().constraints.iter().any(|c| {
                 matches!(
                     c,
                     AtomConstraintForm::RingDegree(_)
@@ -619,7 +619,7 @@ impl<'a> Resolver<'a> {
         });
 
         for id in molecule.atoms().ids() {
-            for asserted in molecule.atom(id).attributes.constraints.iter() {
+            for asserted in molecule.atom(id).attributes().constraints.iter() {
                 let mut reading = molecule.atom(id).constraints();
                 if let Some(rings) = rings.as_ref() {
                     reading = reading.with_rings(rings);
@@ -667,7 +667,7 @@ impl<'a> Resolver<'a> {
                         update.constraints.set(asserted.as_undetermined());
                         edits.update_atom(
                             AtomHandle::Id(id),
-                            molecule.atom(id).attributes,
+                            molecule.atom(id).attributes(),
                             &update,
                         );
                     }
@@ -951,7 +951,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
                 let stored = atoms.remove(&(id, inner.key())).or_else(|| {
                     molecule
                         .atom(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                         .cloned()
@@ -1103,7 +1103,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
     for ((id, _), form) in atoms {
         let mut update = AtomUpdate::default();
         update.constraints.set(form);
-        edits.update_atom(AtomHandle::Id(id), molecule.atom(id).attributes, &update);
+        edits.update_atom(AtomHandle::Id(id), molecule.atom(id).attributes(), &update);
     }
     for ((id, _), form) in bonds {
         let mut update = BondUpdate::default();

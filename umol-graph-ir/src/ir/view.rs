@@ -22,29 +22,36 @@ mod ring;
 mod stereo;
 
 pub use aromatic::{
-    AromaticSystemEditorView, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,
+    AromaticSystemEditorView, AromaticSystemEditorViewMut, AromaticSystemView,
+    AromaticSystemViewMut, AromaticSystemViews,
 };
-pub use atom::{AtomEditorView, AtomView, AtomViewMut, AtomViews};
-pub use bond::{BondEditorView, BondView, BondViewMut, BondViews};
+pub use atom::{AtomEditorView, AtomEditorViewMut, AtomView, AtomViewMut, AtomViews};
+pub use bond::{BondEditorView, BondEditorViewMut, BondView, BondViewMut, BondViews};
 pub use constraints::{
     AromaticSystemConstraintsView, AtomConstraintsView, BondConstraintsView,
     DativeBondConstraintsView, MulticenterBondConstraintsView, NoncovalentBondConstraintsView,
     StereoAtomConstraintsView, StereoBondConstraintsView,
 };
-pub use dative::{DativeBondEditorView, DativeBondView, DativeBondViewMut, DativeBondViews};
+pub use dative::{
+    DativeBondEditorView, DativeBondEditorViewMut, DativeBondView, DativeBondViewMut,
+    DativeBondViews,
+};
 pub use graph::{AtomAutomorphism, GraphView};
 pub use ligand::StereoLigandView;
 pub use multicenter::{
-    MulticenterBondEditorView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
+    MulticenterBondEditorView, MulticenterBondEditorViewMut, MulticenterBondView,
+    MulticenterBondViewMut, MulticenterBondViews,
 };
 pub use neighbor::NeighborView;
 pub use noncovalent::{
-    NoncovalentBondEditorView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews,
+    NoncovalentBondEditorView, NoncovalentBondEditorViewMut, NoncovalentBondView,
+    NoncovalentBondViewMut, NoncovalentBondViews,
 };
 pub use ring::{RingAtomView, RingBondView, RingView, RingViews};
 pub use stereo::{
-    StereoAtomEditorView, StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondEditorView,
-    StereoBondView, StereoBondViewMut, StereoBondViews,
+    StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViewMut,
+    StereoAtomViews, StereoBondEditorView, StereoBondEditorViewMut, StereoBondView,
+    StereoBondViewMut, StereoBondViews,
 };
 
 #[cfg(test)]

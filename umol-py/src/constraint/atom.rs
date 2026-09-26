@@ -1181,7 +1181,7 @@ impl AtomConstraintsView {
                     .atoms()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
             AtomConstraintsBacking::Atom(atom) => {
                 let atom = atom.bind(py).borrow();
@@ -1646,7 +1646,7 @@ impl AtomRingSizeCounts {
                     .atoms()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
             AtomRingSizeBacking::Atom(atom) => f(&atom.bind(py).borrow().to_rust().constraints),
             AtomRingSizeBacking::Value(value) => f(value.bind(py).borrow().to_rust()),

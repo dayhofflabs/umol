@@ -41,12 +41,14 @@ use super::stereo::{
 };
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
 use super::view::{
-    AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
-    AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
-    DativeBondViews, GraphView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
-    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingViews,
-    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
-    StereoBondViews,
+    AromaticSystemEditorViewMut, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,
+    AtomEditorViewMut, AtomView, AtomViewMut, AtomViews, BondEditorViewMut, BondView, BondViewMut,
+    BondViews, DativeBondEditorViewMut, DativeBondView, DativeBondViewMut, DativeBondViews,
+    GraphView, MulticenterBondEditorViewMut, MulticenterBondView, MulticenterBondViewMut,
+    MulticenterBondViews, NeighborView, NoncovalentBondEditorViewMut, NoncovalentBondView,
+    NoncovalentBondViewMut, NoncovalentBondViews, RingViews, StereoAtomEditorViewMut,
+    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondEditorViewMut, StereoBondView,
+    StereoBondViewMut, StereoBondViews,
 };
 
 mod build;
@@ -514,13 +516,14 @@ impl Molecule {
     /// # Panics
     ///
     /// Panics if `id` is out of range.
-    pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_, false> {
-        self.atom_view_mut::<false>(id)
-    }
-
-    fn atom_view_mut<const EDITOR: bool>(&mut self, id: AtomId) -> AtomViewMut<'_, EDITOR> {
+    pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_> {
         let attributes = &mut Arc::make_mut(&mut self.atoms)[id.index()];
         AtomViewMut::new(id, attributes)
+    }
+
+    fn atom_view_mut(&mut self, id: AtomId) -> AtomEditorViewMut<'_> {
+        let attributes = &mut Arc::make_mut(&mut self.atoms)[id.index()];
+        AtomEditorViewMut::new(id, attributes)
     }
 
     /// Replace every atom with `f(atom)` in place (owned in, owned out — no
@@ -536,15 +539,18 @@ impl Molecule {
     /// # Panics
     ///
     /// Panics if `id` is out of range.
-    pub fn bond_mut(&mut self, id: BondId) -> BondViewMut<'_, false> {
-        self.bond_view_mut::<false>(id)
-    }
-
-    fn bond_view_mut<const EDITOR: bool>(&mut self, id: BondId) -> BondViewMut<'_, EDITOR> {
+    pub fn bond_mut(&mut self, id: BondId) -> BondViewMut<'_> {
         let [s, t] = self.graph.edge_endpoints(id.into());
         let atoms = [AtomId::from(s), AtomId::from(t)];
         let attributes = &mut Arc::make_mut(&mut self.bonds)[id.index()];
         BondViewMut::new(id, atoms, attributes)
+    }
+
+    fn bond_view_mut(&mut self, id: BondId) -> BondEditorViewMut<'_> {
+        let [s, t] = self.graph.edge_endpoints(id.into());
+        let atoms = [AtomId::from(s), AtomId::from(t)];
+        let attributes = &mut Arc::make_mut(&mut self.bonds)[id.index()];
+        BondEditorViewMut::new(id, atoms, attributes)
     }
 
     /// Replace every bond with `f(bond)` in place.
@@ -559,16 +565,14 @@ impl Molecule {
     /// # Panics
     ///
     /// Panics if `id` is out of range.
-    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_, false> {
-        self.dative_bond_view_mut::<false>(id)
-    }
-
-    fn dative_bond_view_mut<const EDITOR: bool>(
-        &mut self,
-        id: DativeBondId,
-    ) -> DativeBondViewMut<'_, EDITOR> {
+    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_> {
         assert!(self.dative_bonds.contains(id), "invalid dative bond id");
         DativeBondViewMut::new(id, &mut self.dative_bonds)
+    }
+
+    fn dative_bond_view_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
+        assert!(self.dative_bonds.contains(id), "invalid dative bond id");
+        DativeBondEditorViewMut::new(id, &mut self.dative_bonds)
     }
 
     /// Replace every dative bond with `f(bond)` in place.
@@ -583,22 +587,23 @@ impl Molecule {
     /// # Panics
     ///
     /// Panics if `id` is out of range.
-    pub fn aromatic_system_mut(
-        &mut self,
-        id: AromaticSystemId,
-    ) -> AromaticSystemViewMut<'_, false> {
-        self.aromatic_system_view_mut::<false>(id)
-    }
-
-    fn aromatic_system_view_mut<const EDITOR: bool>(
-        &mut self,
-        id: AromaticSystemId,
-    ) -> AromaticSystemViewMut<'_, EDITOR> {
+    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemViewMut<'_> {
         assert!(
             self.aromatic_systems.contains(id),
             "invalid aromatic system id"
         );
         AromaticSystemViewMut::new(id, &mut self.aromatic_systems)
+    }
+
+    fn aromatic_system_view_mut(
+        &mut self,
+        id: AromaticSystemId,
+    ) -> AromaticSystemEditorViewMut<'_> {
+        assert!(
+            self.aromatic_systems.contains(id),
+            "invalid aromatic system id"
+        );
+        AromaticSystemEditorViewMut::new(id, &mut self.aromatic_systems)
     }
 
     /// Replace every aromatic system with `f(system)` in place.
@@ -658,22 +663,23 @@ impl Molecule {
     /// # Panics
     ///
     /// Panics if `id` is out of range.
-    pub fn multicenter_bond_mut(
-        &mut self,
-        id: MulticenterBondId,
-    ) -> MulticenterBondViewMut<'_, false> {
-        self.multicenter_bond_view_mut::<false>(id)
-    }
-
-    fn multicenter_bond_view_mut<const EDITOR: bool>(
-        &mut self,
-        id: MulticenterBondId,
-    ) -> MulticenterBondViewMut<'_, EDITOR> {
+    pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_> {
         assert!(
             self.multicenter_bonds.contains(id),
             "invalid multicenter bond id"
         );
         MulticenterBondViewMut::new(id, &mut self.multicenter_bonds)
+    }
+
+    fn multicenter_bond_view_mut(
+        &mut self,
+        id: MulticenterBondId,
+    ) -> MulticenterBondEditorViewMut<'_> {
+        assert!(
+            self.multicenter_bonds.contains(id),
+            "invalid multicenter bond id"
+        );
+        MulticenterBondEditorViewMut::new(id, &mut self.multicenter_bonds)
     }
 
     /// Replace every multicenter bond with `f(bond)` in place.
@@ -733,22 +739,23 @@ impl Molecule {
     /// # Panics
     ///
     /// Panics if `id` is out of range.
-    pub fn noncovalent_bond_mut(
-        &mut self,
-        id: NoncovalentBondId,
-    ) -> NoncovalentBondViewMut<'_, false> {
-        self.noncovalent_bond_view_mut::<false>(id)
-    }
-
-    fn noncovalent_bond_view_mut<const EDITOR: bool>(
-        &mut self,
-        id: NoncovalentBondId,
-    ) -> NoncovalentBondViewMut<'_, EDITOR> {
+    pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_> {
         assert!(
             self.noncovalent_bonds.contains(id),
             "invalid noncovalent bond id"
         );
         NoncovalentBondViewMut::new(id, &mut self.noncovalent_bonds)
+    }
+
+    fn noncovalent_bond_view_mut(
+        &mut self,
+        id: NoncovalentBondId,
+    ) -> NoncovalentBondEditorViewMut<'_> {
+        assert!(
+            self.noncovalent_bonds.contains(id),
+            "invalid noncovalent bond id"
+        );
+        NoncovalentBondEditorViewMut::new(id, &mut self.noncovalent_bonds)
     }
 
     /// Replace every noncovalent bond with `f(bond)` in place.
@@ -766,16 +773,14 @@ impl Molecule {
     /// # Panics
     ///
     /// Panics if `id` is out of range.
-    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_, false> {
-        self.stereo_atom_view_mut::<false>(id)
-    }
-
-    fn stereo_atom_view_mut<const EDITOR: bool>(
-        &mut self,
-        id: StereoAtomId,
-    ) -> StereoAtomViewMut<'_, EDITOR> {
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_> {
         assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
         StereoAtomViewMut::new(id, &mut self.stereo_atoms)
+    }
+
+    fn stereo_atom_view_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
+        assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
+        StereoAtomEditorViewMut::new(id, &mut self.stereo_atoms)
     }
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
@@ -835,16 +840,14 @@ impl Molecule {
     /// # Panics
     ///
     /// Panics if `id` is out of range.
-    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_, false> {
-        self.stereo_bond_view_mut::<false>(id)
-    }
-
-    fn stereo_bond_view_mut<const EDITOR: bool>(
-        &mut self,
-        id: StereoBondId,
-    ) -> StereoBondViewMut<'_, EDITOR> {
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_> {
         assert!(self.stereo_bonds.contains(id), "invalid stereo bond id");
         StereoBondViewMut::new(id, &mut self.stereo_bonds)
+    }
+
+    fn stereo_bond_view_mut(&mut self, id: StereoBondId) -> StereoBondEditorViewMut<'_> {
+        assert!(self.stereo_bonds.contains(id), "invalid stereo bond id");
+        StereoBondEditorViewMut::new(id, &mut self.stereo_bonds)
     }
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.
@@ -1076,7 +1079,7 @@ impl Molecule {
         for c in self.constraints.iter() {
             let met = match c {
                 Constraint::Atom(id, inner) => {
-                    let met = match self.atom(*id).attributes.constraints.get(inner.key()) {
+                    let met = match self.atom(*id).attributes().constraints.get(inner.key()) {
                         Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
                         None => inner.clone(),
                     };
@@ -1328,9 +1331,12 @@ impl Molecule {
             let molecule_stereo_bond_count = molecule.stereo_bonds().count();
             let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-            entries
-                .atoms
-                .extend(molecule.atoms().iter().map(|atom| atom.attributes.clone()));
+            entries.atoms.extend(
+                molecule
+                    .atoms()
+                    .iter()
+                    .map(|atom| atom.attributes().clone()),
+            );
             entries.bonds.extend(molecule.bonds().iter().map(|bond| {
                 let [first, second] = bond.atom_ids();
                 (
@@ -1343,7 +1349,7 @@ impl Molecule {
                 .dative
                 .extend(molecule.dative_bonds().iter().map(|bond| {
                     (
-                        bond.donors().map(|donor| shift_atom(donor.id)).collect(),
+                        bond.donors().map(|donor| shift_atom(donor.id())).collect(),
                         shift_atom(bond.acceptor_id()),
                         bond.attributes.clone(),
                     )
@@ -1492,7 +1498,7 @@ impl Molecule {
         );
 
         for atom in other.atoms().iter() {
-            editor.add_atom(atom.attributes.clone());
+            editor.add_atom(atom.attributes().clone());
         }
         for bond in other.bonds().iter() {
             let [first, second] = bond.atom_ids();
@@ -1506,7 +1512,7 @@ impl Molecule {
             editor.add_dative_bond(
                 &bond
                     .donors()
-                    .map(|donor| shift_atom(donor.id))
+                    .map(|donor| shift_atom(donor.id()))
                     .collect::<Vec<_>>(),
                 shift_atom(bond.acceptor_id()),
                 bond.attributes.clone(),
@@ -1688,7 +1694,7 @@ impl Molecule {
                 let mut editor = Molecule::new().edit();
                 let mut atom_pairs = Vec::new();
                 for atom in atoms {
-                    let added = editor.add_atom(self.atom(*atom).attributes.clone());
+                    let added = editor.add_atom(self.atom(*atom).attributes().clone());
                     atom_pairs.push((*atom, added));
                 }
                 let atom_correspondence = Correspondence::new(atom_pairs, atom_count, atoms.len())
@@ -1736,7 +1742,7 @@ impl Molecule {
                 let mut dative_pairs = Vec::new();
                 for dative in self.dative_bonds().iter() {
                     if component_of(dative.acceptor_id()) == component {
-                        let donors: Vec<_> = dative.donors().map(|d| map_atom(d.id)).collect();
+                        let donors: Vec<_> = dative.donors().map(|d| map_atom(d.id())).collect();
                         let added = editor.add_dative_bond(
                             &donors,
                             map_atom(dative.acceptor_id()),

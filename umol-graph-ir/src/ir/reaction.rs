@@ -1339,7 +1339,7 @@ impl Reaction {
                     let host_id = host_atom(*id)?;
                     sets.update_atom(
                         AtomHandle::Id(host_id),
-                        host.atom(host_id).attributes,
+                        host.atom(host_id).attributes(),
                         &update,
                     );
                 }
@@ -1351,7 +1351,7 @@ impl Reaction {
                         let host_id = host_atom(*id)?;
                         sets.update_atom(
                             AtomHandle::Id(host_id),
-                            host.atom(host_id).attributes,
+                            host.atom(host_id).attributes(),
                             &AtomUpdate {
                                 constraints: constraint.into(),
                                 ..Default::default()

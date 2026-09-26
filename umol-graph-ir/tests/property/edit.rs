@@ -425,7 +425,7 @@ proptest! {
             .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
 
         if kinds.contains(&EntityKind::Atom) {
-            prop_assert_eq!(&editor.atom(AtomId(4)).attributes.charge, &NumForm::Lit(1));
+            prop_assert_eq!(&editor.atom(AtomId(4)).attributes().charge, &NumForm::Lit(1));
         }
         if kinds.contains(&EntityKind::Bond) {
             prop_assert_eq!(&editor.bond(BondId(1)).attributes.order, &NumForm::Lit(2));
@@ -526,7 +526,7 @@ proptest! {
         let mut a = molecule;
         a.lift_constraints();
         for view in a.atoms().iter() {
-            prop_assert!(view.attributes.constraints.is_empty());
+            prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.bonds().iter() {
             prop_assert!(view.attributes.constraints.is_empty());
@@ -887,7 +887,7 @@ proptest! {
 
         for (id, key) in atom_keys {
             prop_assert!(
-                a.atom(id).attributes.constraints.contains(key),
+                a.atom(id).attributes().constraints.contains(key),
                 "atom {id:?} missing key {key:?} after inline",
             );
         }

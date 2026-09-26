@@ -678,7 +678,7 @@ impl AtomView {
         molecule
             .atoms()
             .get(self.id)
-            .map(|view| view.attributes)
+            .map(|view| view.attributes())
             .ok_or_else(|| PyIndexError::new_err("atom id out of range"))
     }
 }

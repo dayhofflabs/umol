@@ -223,7 +223,7 @@ impl AromaticityResolver {
                     update.constraints.set(AtomConstraintForm::AromaticValence(
                         AromaticValenceForm::Undetermined,
                     ));
-                    edits.update_atom(AtomHandle::Id(id), molecule.atom(id).attributes, &update);
+                    edits.update_atom(AtomHandle::Id(id), molecule.atom(id).attributes(), &update);
                 }
                 for bond in remove_bond_constraints {
                     let mut update = BondUpdate::default();
@@ -340,7 +340,7 @@ impl AromaticityResolver {
                 return Err(AromaticityProjectError::SystemSpin { system: system.id });
             }
             for (atom, &electrons) in system.atom_ids().zip(electrons) {
-                let attributes = molecule.atom(atom).attributes;
+                let attributes = molecule.atom(atom).attributes();
                 let aromatic = AromaticValenceForm::aromatic(NumForm::Lit(electrons));
                 let assertion = match attributes.constraints.aromatic_valence() {
                     Some(existing) => existing
@@ -439,7 +439,7 @@ impl AromaticityResolver {
         let requires_aromaticity = molecule.aromatic_systems().count() != 0
             || molecule.atoms().iter().any(|atom| {
                 matches!(
-                    atom.attributes.constraints.aromatic_valence(),
+                    atom.attributes().constraints.aromatic_valence(),
                     Some(AromaticValenceForm::Aromatic(_))
                 )
             })
@@ -466,9 +466,9 @@ impl AromaticityResolver {
         } = state;
         let carrier_atoms: BTreeSet<AtomId> = completions.iter().map(|(atom, _)| atom).collect();
         let stored_gate = molecule.atoms().iter().any(|atom| {
-            !carrier_atoms.contains(&atom.id)
+            !carrier_atoms.contains(&atom.id())
                 && matches!(
-                    atom.attributes.constraints.aromatic_valence(),
+                    atom.attributes().constraints.aromatic_valence(),
                     Some(AromaticValenceForm::Aromatic(valence)) if valence.as_lit().is_none()
                 )
         });
@@ -958,7 +958,7 @@ impl AromaticityResolver {
         for (atom_id, update) in atom_updates {
             edits.update_atom(
                 AtomHandle::Id(atom_id),
-                molecule.atom(atom_id).attributes,
+                molecule.atom(atom_id).attributes(),
                 &update,
             );
         }
@@ -1001,7 +1001,7 @@ impl AromaticityResolver {
 /// system's literal electron count.
 fn stored_contribution(molecule: &Molecule, atom: AtomId) -> Option<u8> {
     let view = molecule.atom(atom);
-    match view.attributes.constraints.aromatic_valence() {
+    match view.attributes().constraints.aromatic_valence() {
         Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => u8::try_from(*valence).ok(),
         Some(AromaticValenceForm::Aromatic(_) | AromaticValenceForm::NotAromatic) => None,
         Some(AromaticValenceForm::Undetermined) | None => match view.aromatic_valence() {
@@ -1565,7 +1565,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.charge.clone())
+                .map(|atom| atom.attributes().charge.clone())
                 .collect::<Vec<_>>(),
             expected_atom_charges
         );
@@ -1573,7 +1573,7 @@ mod tests {
             molecule
                 .atoms()
                 .iter()
-                .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
+                .map(|atom| atom.attributes().constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
             expected_aromatic_valences
         );

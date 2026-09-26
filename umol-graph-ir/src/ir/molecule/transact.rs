@@ -1430,7 +1430,7 @@ impl MoleculeEditor {
             .iter()
             .map(|&id| RemovedAtom {
                 id,
-                attributes: self.atom(id).attributes.clone(),
+                attributes: self.atom(id).attributes().clone(),
             })
             .collect();
         let removed_bonds = (0..self.bond_count())
@@ -2549,7 +2549,7 @@ mod tests {
         let built = empty.build();
         assert_eq!(built.atoms().count(), 1);
         assert_eq!(
-            built.atom(AtomId(0)).attributes.element,
+            built.atom(AtomId(0)).attributes().element,
             ElementForm::Lit(Element::C)
         );
     }
@@ -2571,11 +2571,11 @@ mod tests {
         let built = empty.build();
         assert_eq!(built.atoms().count(), 2);
         assert_eq!(
-            built.atom(AtomId(0)).attributes.element,
+            built.atom(AtomId(0)).attributes().element,
             ElementForm::Lit(Element::C)
         );
         assert_eq!(
-            built.atom(AtomId(1)).attributes.element,
+            built.atom(AtomId(1)).attributes().element,
             ElementForm::Lit(Element::N)
         );
     }
@@ -2643,7 +2643,7 @@ mod tests {
             }],
         );
         assert_eq!(
-            one_atom.build().atom(AtomId(0)).attributes.charge,
+            one_atom.build().atom(AtomId(0)).attributes().charge,
             NumForm::Lit(1)
         );
     }
@@ -2784,7 +2784,11 @@ mod tests {
 
         assert_eq!(
             (0..editor.atom_count())
-                .map(|index| editor.atom(AtomId(index as u32)).attributes.element.clone())
+                .map(|index| editor
+                    .atom(AtomId(index as u32))
+                    .attributes()
+                    .element
+                    .clone())
                 .collect::<Vec<_>>(),
             vec![ElementForm::Lit(Element::F), ElementForm::Lit(Element::Cl)]
         );
@@ -2812,8 +2816,8 @@ mod tests {
         assert_eq!(editor.atom_count(), 1);
         assert_eq!(
             (
-                editor.atom(AtomId(0)).attributes.element.clone(),
-                editor.atom(AtomId(0)).attributes.charge.clone(),
+                editor.atom(AtomId(0)).attributes().element.clone(),
+                editor.atom(AtomId(0)).attributes().charge.clone(),
             ),
             (ElementForm::Lit(Element::N), NumForm::Lit(1))
         );
@@ -2839,8 +2843,8 @@ mod tests {
         assert_eq!(editor.atom_count(), 1);
         assert_eq!(
             (
-                editor.atom(AtomId(0)).attributes.element.clone(),
-                editor.atom(AtomId(0)).attributes.charge.clone(),
+                editor.atom(AtomId(0)).attributes().element.clone(),
+                editor.atom(AtomId(0)).attributes().charge.clone(),
             ),
             (ElementForm::Lit(Element::N), NumForm::Lit(-1))
         );
@@ -2966,7 +2970,7 @@ mod tests {
 
         let transaction = editor.transact(edits).unwrap();
 
-        assert_eq!(editor.atom(AtomId(0)).attributes.charge, NumForm::Lit(1));
+        assert_eq!(editor.atom(AtomId(0)).attributes().charge, NumForm::Lit(1));
         assert_eq!(editor.bond(BondId(0)).attributes.order, NumForm::Lit(2));
         assert_eq!(
             editor.dative_bond(DativeBondId(0)).attributes.order,
@@ -3092,7 +3096,7 @@ mod tests {
         let next = one_atom.build();
         let cs: Vec<_> = next
             .atom(AtomId(0))
-            .attributes
+            .attributes()
             .constraints
             .iter()
             .cloned()
@@ -5406,7 +5410,7 @@ mod tests {
         let empty = empty.apply(edits).unwrap();
         assert_eq!(empty.atom_count(), 1);
         assert_eq!(
-            empty.atom(AtomId(0)).attributes.element,
+            empty.atom(AtomId(0)).attributes().element,
             ElementForm::Lit(Element::C)
         );
     }

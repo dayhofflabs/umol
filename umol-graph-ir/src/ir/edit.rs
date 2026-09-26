@@ -2952,7 +2952,7 @@ mod tests {
             .transact(applied_edits)
             .expect("atom update edits should apply");
 
-        assert_eq!(editor.atom(AtomId(0)).attributes, &expected);
+        assert_eq!(editor.atom(AtomId(0)).attributes(), &expected);
     }
 
     #[rustfmt::skip]

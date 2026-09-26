@@ -242,10 +242,10 @@ mod tests {
         let atom = builder.atom(spec);
         let mol = builder.build();
 
-        assert_eq!(mol.atom(atom).attributes.charge, expected_charge);
+        assert_eq!(mol.atom(atom).attributes().charge, expected_charge);
         // an unspecified field is grounded regardless of the preset charge
         assert_eq!(
-            mol.atom(atom).attributes.implicit_hydrogens,
+            mol.atom(atom).attributes().implicit_hydrogens,
             NumForm::Lit(0)
         );
     }
@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(
             mol.aromatic_system(system)
                 .atoms()
-                .map(|view| view.id)
+                .map(|view| view.id())
                 .collect::<Vec<_>>(),
             vec![a0, a1]
         );

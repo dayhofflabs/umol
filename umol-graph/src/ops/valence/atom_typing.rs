@@ -105,7 +105,7 @@ impl<'a> AtomTypingValence<'a> {
                 {
                     return false;
                 }
-                atom.attributes.is_compatible(row)
+                atom.attributes().is_compatible(row)
                     && row.constraints.iter().all(|entry| {
                         let key = entry.key();
                         let derived = match key {
@@ -134,7 +134,7 @@ impl<'a> AtomTypingValence<'a> {
                     })
             })
             .map(|row| {
-                atom.attributes
+                atom.attributes()
                     .meet(row)
                     .expect("admission implies the meet exists")
             })
@@ -176,7 +176,7 @@ impl<'a> AtomTypingValence<'a> {
         let charge = atom.charge().as_lit().map(|n| n as i8);
         let constraints = atom.constraints();
         let admitted = self.registry.lookup(element, charge).iter().any(|row| {
-            atom.attributes.is_compatible(row)
+            atom.attributes().is_compatible(row)
                 && row.constraints.iter().all(|entry| {
                     let key = entry.key();
                     let derived = match key {

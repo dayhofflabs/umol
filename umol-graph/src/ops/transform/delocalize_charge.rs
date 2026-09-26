@@ -26,12 +26,12 @@ impl DelocalizationPlan {
         let view = molecule.aromatic_system(system);
         let atom_ids: Vec<AtomId> = view.atom_ids().collect();
         let (&first, rest) = atom_ids.split_first()?;
-        let ElementForm::Lit(element) = molecule.atom(first).attributes.element else {
+        let ElementForm::Lit(element) = molecule.atom(first).attributes().element else {
             return None;
         };
         if rest
             .iter()
-            .any(|&atom| molecule.atom(atom).attributes.element != ElementForm::Lit(element))
+            .any(|&atom| molecule.atom(atom).attributes().element != ElementForm::Lit(element))
         {
             return None;
         }
