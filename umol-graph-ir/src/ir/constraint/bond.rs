@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 use super::super::boolean::BooleanForm;
 use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::NumForm;
 use super::super::stereo::CisTransStereoForm;
 use super::super::traits::{Lattice, Normalize};
@@ -101,7 +101,7 @@ impl Lattice for BondConstraintForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         match (self, other) {
             (Self::Aromatic(a), Self::Aromatic(b)) => Ok(Self::Aromatic(a.join(b)?)),
             (Self::CisTransStereo(a), Self::CisTransStereo(b)) => {
@@ -110,7 +110,7 @@ impl Lattice for BondConstraintForm {
             (Self::RingMembership(a), Self::RingMembership(b)) => {
                 a.join(b).map(Self::RingMembership)
             }
-            _ => Err(NoJoin),
+            _ => Err(NoJoinError),
         }
     }
 
@@ -358,7 +358,7 @@ impl Lattice for BondConstraintsForm {
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
     /// (`BondConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped. The
     /// container always has a top (the empty set), so this is total (`Ok`).
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let mut entries: Vec<BondConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
@@ -539,8 +539,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same_key_widens(BondConstraintForm::ring_membership(RingScope::All, 1), BondConstraintForm::ring_membership(RingScope::All, 2), Ok(BondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([1, 2]))))]
-    #[case::different_key(BondConstraintForm::Aromatic(BooleanForm::Lit(true)), BondConstraintForm::ring_membership(RingScope::All, 1), Err(NoJoin))]
-    fn test_bond_constraint_form_join(#[case] a: BondConstraintForm, #[case] b: BondConstraintForm, #[case] expected: Result<BondConstraintForm, NoJoin>) {
+    #[case::different_key(BondConstraintForm::Aromatic(BooleanForm::Lit(true)), BondConstraintForm::ring_membership(RingScope::All, 1), Err(NoJoinError))]
+    fn test_bond_constraint_form_join(#[case] a: BondConstraintForm, #[case] b: BondConstraintForm, #[case] expected: Result<BondConstraintForm, NoJoinError>) {
         assert_eq!(a.join(&b), expected);
     }
 

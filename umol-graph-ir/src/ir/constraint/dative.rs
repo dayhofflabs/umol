@@ -10,7 +10,7 @@ use umol_perm::DynPermutation;
 use super::super::boolean::BooleanForm;
 use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::NumForm;
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
@@ -108,13 +108,13 @@ impl Lattice for DativeBondConstraintForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         match (self, other) {
             (Self::Aromatic(a), Self::Aromatic(b)) => Ok(Self::Aromatic(a.join(b)?)),
             (Self::RingMembership(a), Self::RingMembership(b)) => {
                 a.join(b).map(Self::RingMembership)
             }
-            _ => Err(NoJoin),
+            _ => Err(NoJoinError),
         }
     }
 
@@ -365,7 +365,7 @@ impl Lattice for DativeBondConstraintsForm {
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
     /// (`DativeBondConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped.
     /// The container always has a top (the empty set), so this is total (`Ok`).
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let mut entries: Vec<DativeBondConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
@@ -565,8 +565,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same_key_widens(DativeBondConstraintForm::ring_membership(RingScope::All, 1), DativeBondConstraintForm::ring_membership(RingScope::All, 2), Ok(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([1, 2]))))]
-    #[case::different_key(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)), DativeBondConstraintForm::ring_membership(RingScope::All, 1), Err(NoJoin))]
-    fn test_dative_bond_constraint_form_join(#[case] a: DativeBondConstraintForm, #[case] b: DativeBondConstraintForm, #[case] expected: Result<DativeBondConstraintForm, NoJoin>) {
+    #[case::different_key(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)), DativeBondConstraintForm::ring_membership(RingScope::All, 1), Err(NoJoinError))]
+    fn test_dative_bond_constraint_form_join(#[case] a: DativeBondConstraintForm, #[case] b: DativeBondConstraintForm, #[case] expected: Result<DativeBondConstraintForm, NoJoinError>) {
         assert_eq!(a.join(&b), expected);
     }
 

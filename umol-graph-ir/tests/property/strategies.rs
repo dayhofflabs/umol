@@ -1163,7 +1163,7 @@ pub(crate) fn topicity_strategy(degree: usize) -> impl Strategy<Value = Topicity
 
 /// Normalized, fiber-spanning `RingMembershipForm`: the `scope` varies (`All` and
 /// `Size(3..=10)`) so a value triple lands in different fibers, exercising the
-/// cross-scope `meet` → `None` / `join` → `Err(NoJoin)` path.
+/// cross-scope `meet` → `None` / `join` → `Err(NoJoinError)` path.
 pub(crate) fn ring_membership_lattice_strategy() -> impl Strategy<Value = RingMembershipForm> {
     prop_oneof![
         constraint_value_strategy(0..=6)

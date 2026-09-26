@@ -29,6 +29,13 @@ create_exception!(
 
 create_exception!(
     umol,
+    NoJoinError,
+    PyException,
+    "Raised when the terms have no least upper bound."
+);
+
+create_exception!(
+    umol,
     ParseError,
     PyException,
     "Raised when textual molecular input fails to parse."

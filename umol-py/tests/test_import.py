@@ -69,6 +69,7 @@ PUBLIC_EXPORTS = frozenset(
     Constraints
     ConstraintsView
     ContradictionError
+    NoJoinError
     ConsumedError
     Correspondence
     CountedHashedFeatureSet
@@ -476,6 +477,7 @@ def test_public_constructor_method_signature(constructor, expected):
     "error_type",
     [
         umol.ContradictionError,
+        umol.NoJoinError,
         umol.ConsumedError,
         umol.InvalidatedViewError,
         umol.InvalidStructureError,

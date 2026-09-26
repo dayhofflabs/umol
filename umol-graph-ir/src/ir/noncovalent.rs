@@ -12,7 +12,7 @@ use umol_perm::DynPermutation;
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::delta::EntitySpan;
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 use super::frame::NoncovalentBondsFrameAction;
 use super::id::{AtomId, NoncovalentBondId};
 use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
@@ -679,7 +679,7 @@ impl Lattice for NoncovalentBondKindForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         Ok(match (self, other) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),

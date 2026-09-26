@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use umol_perm::DynPermutation;
 
 use super::super::compact::MoleculeCompaction;
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::NumForm;
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
@@ -90,7 +90,7 @@ impl Lattice for AromaticSystemConstraintForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         match (self, other) {
             (Self::ElectronCount(a), Self::ElectronCount(b)) => Ok(Self::ElectronCount(a.join(b)?)),
         }
@@ -323,7 +323,7 @@ impl Lattice for AromaticSystemConstraintsForm {
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
     /// (`AromaticSystemConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped.
     /// The container always has a top (the empty set), so this is total (`Ok`).
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let mut entries: Vec<AromaticSystemConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
@@ -518,7 +518,7 @@ mod tests {
     #[rstest]
     #[case::same_value(AromaticSystemConstraintForm::electron_count(6), AromaticSystemConstraintForm::electron_count(6), Ok(AromaticSystemConstraintForm::electron_count(6)))]
     #[case::widens(AromaticSystemConstraintForm::electron_count(1), AromaticSystemConstraintForm::electron_count(2), Ok(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set([1, 2]))))]
-    fn test_aromatic_system_constraint_form_join(#[case] a: AromaticSystemConstraintForm, #[case] b: AromaticSystemConstraintForm, #[case] expected: Result<AromaticSystemConstraintForm, NoJoin>) {
+    fn test_aromatic_system_constraint_form_join(#[case] a: AromaticSystemConstraintForm, #[case] b: AromaticSystemConstraintForm, #[case] expected: Result<AromaticSystemConstraintForm, NoJoinError>) {
         assert_eq!(a.join(&b), expected);
     }
 

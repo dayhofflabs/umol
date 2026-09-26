@@ -7,7 +7,7 @@ use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{AtomConstraintForm, AtomConstraintsForm};
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 use super::num::NumForm;
 use super::operators::MemOp;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
@@ -514,7 +514,7 @@ impl Lattice for ElementForm {
     }
 
     /// Least upper bound (set union), canonicalizing operands and result.
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         use ElementForm::*;
@@ -748,7 +748,7 @@ impl Lattice for IsotopeMassForm {
 
     /// Least upper bound. `Undetermined` absorbs; `Natural` joins only
     /// itself (else `Undetermined`); mass sets join by union.
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         use IsotopeMassForm::*;

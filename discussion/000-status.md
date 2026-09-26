@@ -39,10 +39,10 @@ the statuses recorded here remain authoritative.
   and callback removal. S2a is implemented but its checked top-level constraint
   view is scheduled for removal in S2m; top-level writes belong in the editor.
   The earlier S2b implementation is reverted; the proposed join migration is
-  withdrawn and S2f is cancelled. S2c is next, limited to coset-operation fixes.
-  Uniform unchecked entity-attribute assignment is settled for Rust and Python.
-  S2g's frame-consumer policy remains approved. Implementation of the replacement
-  subitems has not started.
+  withdrawn and S2f is cancelled. Revised S2b is complete: NoJoinError names the
+  Rust unit error and Python join exception. S2c's bounded coset-operation fixes
+  are next. Uniform unchecked entity-attribute assignment is settled for Rust
+  and Python; S2g's frame-consumer policy remains approved.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -260,7 +260,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-25 | Next implementation subitem: S2c coset-operation fixes. S2b withdrawn; S2f cancelled. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Next implementation subitem: S2c coset-operation fixes. S2b complete; S2f cancelled. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

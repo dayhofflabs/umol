@@ -26,7 +26,7 @@ use super::constraint::{
     StereoBondConstraintsForm, StereoLigandPair, TopicityForm,
 };
 use super::delta::EntitySpan;
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 use super::frame::{StereoAtomsFrameAction, StereoBondsFrameAction};
 use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
@@ -1695,7 +1695,7 @@ impl Lattice for StereoConfigurationForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         Ok(match (a.as_ref(), b.as_ref()) {
@@ -1847,7 +1847,7 @@ macro_rules! stereo_site {
                 }
             }
 
-            fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+            fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
                 let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
                 let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
                 Ok(match (a.as_ref(), b.as_ref()) {

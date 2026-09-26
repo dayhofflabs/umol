@@ -2,7 +2,7 @@
 
 pub(crate) use umol_graph_ir::ir::{Lattice, Normalize};
 
-pub(crate) use crate::error::contradiction_error;
+pub(crate) use crate::error::{contradiction_error, NoJoinError};
 
 macro_rules! impl_py_normalize {
     ($py_type:ty, $rust_type:ty, $to_rust:expr, $from_rust:expr) => {
@@ -61,16 +61,15 @@ macro_rules! impl_py_lattice {
                 }
             }
 
-            /// Return the least upper bound, or `None` when no join exists.
-            fn join(&self, py: Python<'_>, other: &$py_type) -> PyResult<Option<Self>> {
+            /// Return the least upper bound, raising `NoJoinError` when no join exists.
+            fn join(&self, py: Python<'_>, other: &$py_type) -> PyResult<Self> {
                 let to_rust = $to_rust;
                 let from_rust = $from_rust;
                 let lhs: $rust_type = to_rust(self, py)?;
                 let rhs: $rust_type = to_rust(other, py)?;
-                match $crate::lattice::Lattice::join(&lhs, &rhs) {
-                    Ok(value) => from_rust(py, value).map(Some),
-                    Err(_) => Ok(None),
-                }
+                let value = $crate::lattice::Lattice::join(&lhs, &rhs)
+                    .map_err(|error| $crate::lattice::NoJoinError::new_err(error.to_string()))?;
+                from_rust(py, value)
             }
 
             /// Whether `target` refines this pattern.

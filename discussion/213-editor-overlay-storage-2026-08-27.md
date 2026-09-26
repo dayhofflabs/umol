@@ -14,10 +14,10 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 
 ## Design status — 2026-09-25
 
-This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c, and S2a are
-implemented. The previous S2b mutable-view attempt was reverted; the replacement
-S2b–S2m plan below is unimplemented. Graph-core mutation and
-restoration are complete in
+This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
+S2a, and the revised S2b are implemented. The previous S2b mutable-view attempt
+was reverted. S2c is next; S2f is cancelled and the remaining S2 work is
+unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -55,9 +55,10 @@ focused correction, recorded under
 
 Replacement verbs and payloads in the Edit/reaction DSLs are approved in S3.
 Python consumption, counter-based accessor invalidation, and storage names are
-approved below. S2b is withdrawn and S2f is cancelled. S2c is the next
-implementation subitem, limited to coset-operation fixes. S2g's frame-consumer
-decisions remain approved and unimplemented.
+approved below. S2b is complete: Rust's unit error is NoJoinError and Python
+join raises NoJoinError. S2c is the next implementation subitem. S2c contains the bounded coset-operation
+fixes; S2f is cancelled. S2g's frame-consumer decisions remain approved and
+unimplemented.
 
 ## Editor and transaction API
 
@@ -569,9 +570,11 @@ CosetSpace already checks indices when retrieving or transforming arrangements.
 StereoKind::count gives the number of cosets; tetrahedral indices are 0 and 1.
 Do not add blanket range validation to normalization, lattice comparisons, raw
 access, assignment, or serialization. Meaningful algebraic results are not
-required for malformed indices. Keep meet, join, widen_with, NoJoin, the derive
-macro, and Python lattice behavior unchanged; the proposed JoinError migration
-is withdrawn.
+required for malformed indices. Keep Rust lattice behavior unchanged; S2b only
+renames the unit error from NoJoin to NoJoinError, including the derive macro's
+return type. The proposed JoinError enum migration is withdrawn.
+Python join raises NoJoinError for Rust's NoJoinError instead of returning None (S2b).
+Python meet retains None for bottom; normalization behavior is unchanged.
 
 The coset-operation changes are limited to action compatibility, failure
 propagation through existing Option returns, and correct domain simplification.
@@ -646,7 +649,8 @@ consumers that require agreement. The four derived electron getters and public
 symmetry methods retain their current signatures. Existing Option/Result
 boundaries cover normalization, canonicalization, and transport. S2c specifies
 the bounded coset-operation fixes; S2g specifies frame-consumer changes.
-Lattice operations and depiction/CoordGen handling remain unchanged.
+Rust lattice operations and depiction/CoordGen handling remain unchanged.
+S2b aligns the Rust unit-error name and Python join's exception behavior.
 The legacy permute signature is a separate unresolved API question; current
 active consumers use the already fallible FrameTransport path.
 No new field setter family, view permission machinery
@@ -2524,9 +2528,9 @@ migrated; add no new callback API or compatibility layer. S2a is complete, but i
 checked molecule-level constraint mutation surface is removed in S2i1.
 The earlier S2b attempt remains reverted. S2a's completed record is retained;
 S2b–S2m below replace the former unimplemented S2b–S2f worklist. Each subitem
-states semantics, interface/nomenclature, and verification. S2b is withdrawn;
-S2f is cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy
-are approved.
+states semantics, interface/nomenclature, and verification. S2b covers the Rust
+unit-error rename and Python join error mapping; the JoinError enum is withdrawn. S2f is
+cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are approved.
 
 - **S2a — completed 2026-09-24; API superseded, removal in S2i1** (`ir::molecule::constraints`, `ir` re-export; additive, green)
   Add the checked molecule-level ConstraintsViewMut and expose it through
@@ -2578,8 +2582,53 @@ are approved.
   denied, nightly formatting, and diff review pass. No workspace or MSRV gate
   was run for this subitem.
 
-- **S2b — withdrawn.** Leave meet, join, widen_with, NoJoin, their implementations,
-  derive macros, and Python lattice behavior unchanged. No JoinError migration.
+- **S2b — completed 2026-09-26: NoJoinError in Rust and Python** (`umol-graph-ir::ir`,
+  `umol-graph-ir-macros`, `umol-py::{lattice,error}`, extension registration and
+  Python package exports; breaking name and Python behavior, red→green). [dep: S0a]
+
+  **Semantics.** Python join returns a form on success and raises NoJoinError
+  when Rust join returns NoJoinError. Absence of a join is an operation failure, not
+  the ordinary bottom result represented by None in meet. Leave Python meet and
+  normalize unchanged. Rename Rust's NoJoin unit error to NoJoinError in its
+  definition, re-export, trait/implementation signatures, derive macro, callers,
+  tests, and documentation. Keep its display message and behavior unchanged;
+  no compatibility alias, JoinError enum, or InvalidTerm variant.
+
+  **Interfaces and nomenclature.** Rust exposes the unit struct NoJoinError;
+  join returns Result<Self, NoJoinError> and widen_with returns
+  Result<bool, NoJoinError>. Export umol.NoJoinError, derived from
+  Exception, alongside the existing binding exceptions. Preserve the Rust
+  NoJoinError display message. In the shared impl_py_lattice macro, change:
+
+  ```diff
+  -fn join(&self, py: Python<'_>, other: &Self) -> PyResult<Option<Self>>;
+  +fn join(&self, py: Python<'_>, other: &Self) -> PyResult<Self>;
+  ```
+
+  The macro uses its existing concrete Python type for other. Map the existing
+  Rust error directly to NoJoinError; retain the existing successful conversion.
+  Register the exception in the extension and Python package exports. Update
+  join documentation and any affected annotations; do not add a second join
+  method or reuse ContradictionError for the distinct NoJoinError failure.
+
+  **Verification.** Python tests cover a successful join, a pair of distinct
+  constraint kinds whose Rust join returns NoJoinError, the exception's public import
+  and message, and an incompatible meet still returning None. Update existing
+  tests that expect None from failed join. Rebuild with the repository Python
+  3.13 environment and run focused binding tests. Run focused Rust join tests
+  and compile the renamed public error through its consumers; no workspace or
+  MSRV gate.
+
+  Implemented the Rust unit-error rename throughout graph-IR, its Lattice derive,
+  tests, and the nomenclature guide. Python join now returns PyResult<Self> and
+  raises the exported NoJoinError with Rust's display message. No lattice
+  algorithms, normalization behavior, or meet behavior changed.
+
+  Verification: 162 focused Rust tests and 175 focused Python tests pass after
+  rebuilding the extension with Python 3.13. Coverage includes successful joins,
+  different-key/scope failures, public exception exports, meet bottom, and
+  writable join results from read-only entity attributes. Nightly formatting,
+  diff checks, and full diff review pass. No workspace or MSRV gate was run.
 
 - **S2c — Coset action handling and domain simplification** (`ir::stereo`;
   behavior changes, green). [dep: S0a]
@@ -4641,8 +4690,9 @@ temporary clone-based default transform implementation is introduced between the
 S4 → S5 → S6 → S7/S8 → S9. S2a is implemented; its API is removed in S2i1.
 Within the revised S2:
 
-- S2b is withdrawn; S2f is cancelled. S2c → S2d establishes coset-operation
-  and count-use behavior. S2e is folded into S2h; it is not an executable prerequisite.
+- S2b is complete. S2c is next; S2f is cancelled.
+  S2c → S2d establishes coset-operation and count-use behavior. S2e is folded
+  into S2h; it is not an executable prerequisite.
 - S2g depends on S2c; its interfaces and failure behavior are approved.
 - S2h removes aggregate attribute checks only after S2c/S2d/S2g
   consumer changes are complete, then tests the newly admissible inputs through

@@ -16,7 +16,7 @@ pub struct Contradiction;
 /// No join: elements have no least upper bound (meet-semilattice).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 #[error("no join: elements have no least upper bound")]
-pub struct NoJoin;
+pub struct NoJoinError;
 
 /// Error from applying an edit batch to an immutable molecule.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]

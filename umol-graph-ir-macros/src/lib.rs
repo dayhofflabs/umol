@@ -92,7 +92,7 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
                     #( #fields: #lattice::meet(&self.#fields, &other.#fields)?, )*
                 })
             }
-            fn join(&self, other: &Self) -> ::core::result::Result<Self, crate::ir::NoJoin> {
+            fn join(&self, other: &Self) -> ::core::result::Result<Self, crate::ir::NoJoinError> {
                 ::core::result::Result::Ok(Self {
                     #( #fields: #lattice::join(&self.#fields, &other.#fields)?, )*
                 })

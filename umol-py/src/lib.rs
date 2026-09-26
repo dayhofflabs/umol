@@ -71,7 +71,8 @@ use crate::{
     element::Element,
     error::{
         ConsumedError, ContradictionError, InvalidStructureError, InvalidatedViewError,
-        MetadataError, ModelConversionError, ParseError, TransactionError, UnderdeterminedError,
+        MetadataError, ModelConversionError, NoJoinError, ParseError, TransactionError,
+        UnderdeterminedError,
     },
     fingerprint::config::{
         EcfpHashScheme, HashedFingerprintConfig, PatternFingerprintConfig,
@@ -231,6 +232,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "ContradictionError",
             module.py().get_type::<ContradictionError>(),
         )?;
+        module.add("NoJoinError", module.py().get_type::<NoJoinError>())?;
         module.add(
             "InvalidStructureError",
             module.py().get_type::<InvalidStructureError>(),

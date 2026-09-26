@@ -9,7 +9,7 @@
 use std::borrow::Cow;
 use std::hash::Hash;
 
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 
 /// Build `Self` from a borrowed IR value of type `A` plus a configuration context.
 /// IR → DSL direction. Infallible.
@@ -89,11 +89,11 @@ pub trait Lattice: Normalize {
     /// incompatible (no value can satisfy both).
     fn meet(&self, other: &Self) -> Option<Self>;
 
-    /// Least upper bound. `Err(NoJoin)` when `self` and `other` have no common
+    /// Least upper bound. `Err(NoJoinError)` when `self` and `other` have no common
     /// generalization — a top-less (meet-semilattice) type whose operands lie in
     /// different fibers (e.g. two `AtomConstraintForm`s of different kind). Bounded
     /// lattices always return `Ok`.
-    fn join(&self, other: &Self) -> Result<Self, NoJoin>;
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError>;
 
     /// Partial-order check: `self` (pattern) is true on `target` iff every
     /// value `target` admits is also admitted by `self` — i.e. the meet refines
@@ -134,8 +134,8 @@ pub trait Lattice: Normalize {
     }
 
     /// In-place `join`. Returns `Ok(true)` iff `self` actually changed;
-    /// `Err(NoJoin)` (leaving `self` unchanged) when the join does not exist.
-    fn widen_with(&mut self, other: &Self) -> Result<bool, NoJoin> {
+    /// `Err(NoJoinError)` (leaving `self` unchanged) when the join does not exist.
+    fn widen_with(&mut self, other: &Self) -> Result<bool, NoJoinError> {
         let new = self.join(other)?;
         Ok(if new != *self {
             *self = new;

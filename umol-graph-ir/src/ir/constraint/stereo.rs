@@ -13,7 +13,7 @@ use umol_perm::{Orientation, Permutation};
 
 use super::super::boolean::BooleanForm;
 use super::super::compact::MoleculeCompaction;
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::id::StereoLigandPosition;
 use super::super::stereo::{Stereogenicity, Topicity};
 use super::super::traits::{AsLit, Lattice, Normalize};
@@ -130,7 +130,7 @@ macro_rules! stereo_constraint {
                 }
             }
 
-            fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+            fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
                 match (self, other) {
                     (Self::LigandSymmetry(a), Self::LigandSymmetry(b)) => {
                         a.join(b).map(Self::LigandSymmetry)
@@ -142,7 +142,7 @@ macro_rules! stereo_constraint {
                     (Self::Stereogenicity(a), Self::Stereogenicity(b)) => {
                         a.join(b).map(Self::Stereogenicity)
                     }
-                    _ => Err(NoJoin),
+                    _ => Err(NoJoinError),
                 }
             }
 
@@ -416,7 +416,7 @@ macro_rules! stereo_constraint {
             /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
             /// (`$constraint::join`); a single-side key widens to the absent ⊤ and is dropped. The
             /// container always has a top (the empty set), so this is total (`Ok`).
-            fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+            fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
                 let mut entries: SmallVec<[$constraint; 2]> = SmallVec::new();
                 let mut a = self.entries.iter();
                 let mut b = other.entries.iter();
@@ -702,7 +702,7 @@ macro_rules! relation_form {
                 .ok()
             }
 
-            fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+            fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
                 Ok(
                     Self::LitSet(self.to_set().union(&other.to_set()).copied().collect())
                         .normalize()
@@ -750,7 +750,7 @@ impl Normalize for LigandSymmetryForm {
 
 /// Meet-semilattice keyed by `permutation`: same permutation delegates to the
 /// `invariant` boolean lattice, different permutations lie in different fibers
-/// (`meet` → `None`, `join` → `Err(NoJoin)`).
+/// (`meet` → `None`, `join` → `Err(NoJoinError)`).
 impl Lattice for LigandSymmetryForm {
     fn is_undetermined(&self) -> bool {
         self.invariant.is_undetermined()
@@ -770,9 +770,9 @@ impl Lattice for LigandSymmetryForm {
         })
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         if self.permutation != other.permutation {
-            return Err(NoJoin);
+            return Err(NoJoinError);
         }
         Ok(Self {
             permutation: self.permutation,
@@ -808,7 +808,7 @@ impl Normalize for FluxionalityForm {
 
 /// Meet-semilattice keyed by `permutation`: same permutation delegates to the
 /// `active` boolean lattice, different permutations lie in different fibers
-/// (`meet` → `None`, `join` → `Err(NoJoin)`).
+/// (`meet` → `None`, `join` → `Err(NoJoinError)`).
 impl Lattice for FluxionalityForm {
     fn is_undetermined(&self) -> bool {
         self.active.is_undetermined()
@@ -828,9 +828,9 @@ impl Lattice for FluxionalityForm {
         })
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         if self.permutation != other.permutation {
-            return Err(NoJoin);
+            return Err(NoJoinError);
         }
         Ok(Self {
             permutation: self.permutation,
@@ -865,7 +865,7 @@ impl Normalize for TopicityForm {
 
 /// Meet-semilattice keyed by `pair`: same pair delegates to the per-pair
 /// `relation` lattice, different pairs lie in different fibers (`meet` → `None`,
-/// `join` → `Err(NoJoin)`) — they are incomparable, there is no global top.
+/// `join` → `Err(NoJoinError)`) — they are incomparable, there is no global top.
 impl Lattice for TopicityForm {
     fn is_undetermined(&self) -> bool {
         self.relation.is_undetermined()
@@ -885,9 +885,9 @@ impl Lattice for TopicityForm {
         })
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         if self.pair != other.pair {
-            return Err(NoJoin);
+            return Err(NoJoinError);
         }
         Ok(Self {
             pair: self.pair,
@@ -1283,11 +1283,11 @@ mod tests {
     #[case::different_permutation(
         LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) },
         LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) },
-        Err(NoJoin))]
+        Err(NoJoinError))]
     fn test_ligand_symmetry_form_join(
         #[case] a: LigandSymmetryForm,
         #[case] b: LigandSymmetryForm,
-        #[case] expected: Result<LigandSymmetryForm, NoJoin>,
+        #[case] expected: Result<LigandSymmetryForm, NoJoinError>,
     ) {
         assert_eq!(a.join(&b), expected);
     }
@@ -1319,11 +1319,11 @@ mod tests {
     #[case::different_permutation(
         FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(true) },
         FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(true) },
-        Err(NoJoin))]
+        Err(NoJoinError))]
     fn test_fluxionality_form_join(
         #[case] a: FluxionalityForm,
         #[case] b: FluxionalityForm,
-        #[case] expected: Result<FluxionalityForm, NoJoin>,
+        #[case] expected: Result<FluxionalityForm, NoJoinError>,
     ) {
         assert_eq!(a.join(&b), expected);
     }
@@ -1359,11 +1359,11 @@ mod tests {
     #[case::different_pair(
         TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) },
         TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) },
-        Err(NoJoin))]
+        Err(NoJoinError))]
     fn test_topicity_form_join(
         #[case] a: TopicityForm,
         #[case] b: TopicityForm,
-        #[case] expected: Result<TopicityForm, NoJoin>,
+        #[case] expected: Result<TopicityForm, NoJoinError>,
     ) {
         assert_eq!(a.join(&b), expected);
     }
@@ -1468,8 +1468,8 @@ mod tests {
     #[case::different_key(
         StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
         StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }),
-        Err(NoJoin))]
-    fn test_stereo_atom_constraint_form_join(#[case] a: StereoAtomConstraintForm, #[case] b: StereoAtomConstraintForm, #[case] expected: Result<StereoAtomConstraintForm, NoJoin>) {
+        Err(NoJoinError))]
+    fn test_stereo_atom_constraint_form_join(#[case] a: StereoAtomConstraintForm, #[case] b: StereoAtomConstraintForm, #[case] expected: Result<StereoAtomConstraintForm, NoJoinError>) {
         assert_eq!(a.join(&b), expected);
     }
 
@@ -1828,7 +1828,7 @@ mod tests {
     fn test_stereo_atom_constraints_form_join(
         #[case] a: StereoAtomConstraintsForm,
         #[case] b: StereoAtomConstraintsForm,
-        #[case] expected: Result<StereoAtomConstraintsForm, NoJoin>,
+        #[case] expected: Result<StereoAtomConstraintsForm, NoJoinError>,
     ) {
         assert_eq!(a.join(&b), expected);
     }

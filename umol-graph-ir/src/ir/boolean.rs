@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 use super::traits::{AsLit, Lattice, Normalize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -73,7 +73,7 @@ impl Lattice for BooleanForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         Ok(match (self, other) {
             (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),
             _ => Self::Undetermined,

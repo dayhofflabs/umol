@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 
 use super::super::compact::MoleculeCompaction;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::NumForm;
 use super::super::stereo::TetrahedralStereoForm;
 use super::super::traits::{AsLit, Lattice, Normalize};
@@ -225,8 +225,8 @@ impl Lattice for AtomConstraintForm {
         }
     }
 
-    /// Join per-key, Err(NoJoin) when operands are in different fibers (different keys).
-    fn join(&self, other: &AtomConstraintForm) -> Result<AtomConstraintForm, NoJoin> {
+    /// Join per-key, Err(NoJoinError) when operands are in different fibers (different keys).
+    fn join(&self, other: &AtomConstraintForm) -> Result<AtomConstraintForm, NoJoinError> {
         match (self, other) {
             (Self::Valence(a), Self::Valence(b)) => Ok(Self::Valence(a.join(b)?)),
             (Self::DonatedPairs(a), Self::DonatedPairs(b)) => Ok(Self::DonatedPairs(a.join(b)?)),
@@ -251,7 +251,7 @@ impl Lattice for AtomConstraintForm {
             (Self::RingMembership(a), Self::RingMembership(b)) => {
                 a.join(b).map(Self::RingMembership)
             }
-            _ => Err(NoJoin),
+            _ => Err(NoJoinError),
         }
     }
 
@@ -604,9 +604,9 @@ impl Lattice for AtomConstraintsForm {
 
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
     /// (`AtomConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped. A
-    /// same-key join never returns `Err(NoJoin)`, but if it did the key would simply drop
+    /// same-key join never returns `Err(NoJoinError)`, but if it did the key would simply drop
     /// (widen to ⊤). The container always has a top (the empty set), so this is total (`Ok`).
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let mut entries: SmallVec<[AtomConstraintForm; 2]> = SmallVec::new();
         let mut a = self.entries.iter();
         let mut b = other.entries.iter();
@@ -872,7 +872,7 @@ impl Lattice for AromaticValenceForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         Ok(match (a.as_ref(), b.as_ref()) {
@@ -1042,7 +1042,7 @@ impl Lattice for MulticenterValenceForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         Ok(match (a.as_ref(), b.as_ref()) {
@@ -1198,11 +1198,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same_key_widens(AtomConstraintForm::valence(4), AtomConstraintForm::valence(3), Ok(AtomConstraintForm::Valence(NumForm::lit_set([3, 4]))))]
-    #[case::different_key(AtomConstraintForm::valence(4), AtomConstraintForm::degree(3), Err(NoJoin))]
+    #[case::different_key(AtomConstraintForm::valence(4), AtomConstraintForm::degree(3), Err(NoJoinError))]
     fn test_atom_constraint_form_join(
         #[case] a: AtomConstraintForm,
         #[case] b: AtomConstraintForm,
-        #[case] expected: Result<AtomConstraintForm, NoJoin>,
+        #[case] expected: Result<AtomConstraintForm, NoJoinError>,
     ) {
         assert_eq!(a.join(&b), expected);
     }

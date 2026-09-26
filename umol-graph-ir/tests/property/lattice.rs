@@ -774,7 +774,7 @@ proptest! {
 
     // Keyed value semilattices: the strategies vary the sub-key (scope /
     // permutation / pair) so a triple spans fibers, exercising the cross-fiber
-    // `meet` → `None` / `join` → `Err(NoJoin)` path the containers never reach.
+    // `meet` → `None` / `join` → `Err(NoJoinError)` path the containers never reach.
     #[test]
     fn test_ring_membership_form_lattice_laws(
         a in ring_membership_lattice_strategy(),

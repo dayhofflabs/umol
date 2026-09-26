@@ -3,7 +3,7 @@
 //! Atom and localized-bond values derived from molecule topology use the Relevant ring projection
 //! through size 22. `RingScope` selects a count; it does not select ring-set semantics.
 
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::num::NumForm;
 use super::super::traits::{Lattice, Normalize};
 
@@ -41,7 +41,7 @@ impl Normalize for RingMembershipForm {
 
 /// Meet-semilattice keyed by `scope`: same scope delegates to the `count`
 /// value-lattice, different scopes lie in different fibers (`meet` → `None`,
-/// `join` → `Err(NoJoin)`).
+/// `join` → `Err(NoJoinError)`).
 impl Lattice for RingMembershipForm {
     fn is_undetermined(&self) -> bool {
         self.count.is_undetermined()
@@ -60,9 +60,9 @@ impl Lattice for RingMembershipForm {
             .map(|count| Self::new(self.scope, count))
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         if self.scope != other.scope {
-            return Err(NoJoin);
+            return Err(NoJoinError);
         }
         Ok(Self::new(self.scope, self.count.join(&other.count)?))
     }
@@ -147,12 +147,12 @@ mod tests {
     #[case::different_scope(
         RingMembershipForm::new(RingScope::All, NumForm::Lit(3)),
         RingMembershipForm::new(RingScope::Size(6), NumForm::Lit(3)),
-        Err(NoJoin)
+        Err(NoJoinError)
     )]
     fn test_ring_membership_form_join(
         #[case] a: RingMembershipForm,
         #[case] b: RingMembershipForm,
-        #[case] expected: Result<RingMembershipForm, NoJoin>,
+        #[case] expected: Result<RingMembershipForm, NoJoinError>,
     ) {
         assert_eq!(a.join(&b), expected);
     }

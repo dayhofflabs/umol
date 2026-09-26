@@ -228,7 +228,7 @@ def test_entity_delta_readonly_contract(
     join = attributes.join(attributes)
     assert normalized.readonly is False
     assert meet is not None and meet.readonly is False
-    assert join is not None and join.readonly is False
+    assert join.readonly is False
 
     assert entity_delta == make_entity_delta(attributes.copy())
     inverse = entity_delta.inverse()

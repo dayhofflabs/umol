@@ -9,7 +9,7 @@ use umol_perm::DynPermutation;
 
 use super::super::boolean::BooleanForm;
 use super::super::compact::MoleculeCompaction;
-use super::super::error::{Contradiction, NoJoin};
+use super::super::error::{Contradiction, NoJoinError};
 use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
@@ -92,7 +92,7 @@ impl Lattice for NoncovalentBondConstraintForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         match (self, other) {
             (Self::Intramolecular(a), Self::Intramolecular(b)) => {
                 Ok(Self::Intramolecular(a.join(b)?))
@@ -327,7 +327,7 @@ impl Lattice for NoncovalentBondConstraintsForm {
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
     /// (`NoncovalentBondConstraintForm::join`); a single-side key widens to the absent ⊤ and is dropped.
     /// The container always has a top (the empty set), so this is total (`Ok`).
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let mut entries: Vec<NoncovalentBondConstraintForm> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
@@ -522,7 +522,7 @@ mod tests {
     #[rstest]
     #[case::same_value(NoncovalentBondConstraintForm::intramolecular(true), NoncovalentBondConstraintForm::intramolecular(true), Ok(NoncovalentBondConstraintForm::intramolecular(true)))]
     #[case::differ_widens(NoncovalentBondConstraintForm::intramolecular(true), NoncovalentBondConstraintForm::intramolecular(false), Ok(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)))]
-    fn test_noncovalent_bond_constraint_form_join(#[case] a: NoncovalentBondConstraintForm, #[case] b: NoncovalentBondConstraintForm, #[case] expected: Result<NoncovalentBondConstraintForm, NoJoin>) {
+    fn test_noncovalent_bond_constraint_form_join(#[case] a: NoncovalentBondConstraintForm, #[case] b: NoncovalentBondConstraintForm, #[case] expected: Result<NoncovalentBondConstraintForm, NoJoinError>) {
         assert_eq!(a.join(&b), expected);
     }
 

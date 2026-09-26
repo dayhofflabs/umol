@@ -1173,7 +1173,7 @@ name with its `AtomForm` parameter already carries it.
 
 **Narrowing** moves a value down the attribute lattice and **widening** moves it up: the in-place
 meet and the in-place join. Narrowing is what resolution does, and it returns whether the value
-actually changed; widening returns `Err(NoJoin)` where no join exists.
+actually changed; widening returns `Err(NoJoinError)` where no join exists.
 
 These are the plain English words for descending and ascending an order of admitted-value sets, and
 they are the right ones. `meet_with` and `join_with` would name the operation rather than its effect;

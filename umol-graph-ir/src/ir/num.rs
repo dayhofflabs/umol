@@ -6,7 +6,7 @@ use std::ops::{Add, Div, Mul, Sub};
 
 use umol_chem::spin::SpinMultiplicity;
 
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 use super::operators::{MemOp, RelOp};
 use super::traits::{AsLit, Lattice, Normalize};
 
@@ -562,7 +562,7 @@ impl Lattice for NumForm {
     }
 
     /// Least upper bound, canonicalizing both operands and the result.
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         let a = self
             .normalized()
             .unwrap_or(Cow::Owned(NumForm::Undetermined));

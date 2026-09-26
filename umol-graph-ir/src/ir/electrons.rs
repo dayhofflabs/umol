@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use umol_graph_core::ParticipantPosition;
 use umol_perm::DynPermutation;
 
-use super::error::{Contradiction, NoJoin};
+use super::error::{Contradiction, NoJoinError};
 use super::traits::{AsLit, FrameTransport, Lattice, Normalize};
 
 /// Per-position electron counts as one atomic lattice value: undetermined, or a
@@ -113,7 +113,7 @@ impl Lattice for ElectronCountsForm {
         }
     }
 
-    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+    fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
         Ok(match (self, other) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(a.clone()),
