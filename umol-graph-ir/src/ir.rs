@@ -92,8 +92,8 @@ pub use frame::{
     StereoBondsFrameAction,
 };
 pub use id::{
-    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId, StereoLigandPosition,
+    AromaticSystemId, AtomId, AtomPosition, BondId, DativeBondId, MulticenterBondId,
+    NoncovalentBondId, StereoAtomId, StereoBondId, StereoLigandPosition,
 };
 pub use incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 pub use ligand::{StereoLigand, StereoLigandKind};

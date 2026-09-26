@@ -45,13 +45,13 @@ definitions found the one stored view. The working tree was read only.
 All five sit in the depiction and layout path and share one shape: the molecule is passed
 alongside a view obtained from it.
 
-| Function | Signature (view parameter) | Callers | Scheduled |
-| --- | --- | --- | --- |
-| `depict/molecule.rs:224` `tetrahedral_candidates` | `stereo: StereoAtomView<'_>` beside `molecule: &Molecule`, `layout: &MoleculeLayout` | `:186` | no (S2f cancelled) |
-| `layout/coordgen.rs:60` `cis_trans_bond` | `stereo: StereoBondView<'_>` beside `molecule: &Molecule` | `:43`, `:234` | no (S2f cancelled) |
-| `depict/molecule.rs:350` `atom_label` | `atom: AtomView<'_>` (sole parameter) | `:91` from a view iteration; test `:1083` | no |
-| `depict/molecule.rs:405` `aromatic_contour` | `system: AromaticSystemView<'_>` beside `molecule`, `layout` | `:102` | no |
-| `depict/molecule.rs:484` `aromatic_annotation` | `system: AromaticSystemView<'_>` beside `molecule`, `layout`, `contour` | `:105` | no |
+| Function | Signature (view parameter) | Callers |
+| --- | --- | --- |
+| `depict/molecule.rs:224` `tetrahedral_candidates` | `stereo: StereoAtomView<'_>` beside `molecule: &Molecule`, `layout: &MoleculeLayout` | `:186` |
+| `layout/coordgen.rs:60` `cis_trans_bond` | `stereo: StereoBondView<'_>` beside `molecule: &Molecule` | `:43`, `:234` |
+| `depict/molecule.rs:350` `atom_label` | `atom: AtomView<'_>` (sole parameter) | `:91` from a view iteration; test `:1083` |
+| `depict/molecule.rs:405` `aromatic_contour` | `system: AromaticSystemView<'_>` beside `molecule`, `layout` | `:102` |
+| `depict/molecule.rs:484` `aromatic_annotation` | `system: AromaticSystemView<'_>` beside `molecule`, `layout`, `contour` | `:105` |
 
 ### umol-graph — constraint validation
 
@@ -122,16 +122,12 @@ S2f's cancellation. The cases fall into three groups:
 
 ## Open questions
 
-1. **Scheduling of the depiction/layout functions.** No changes to these five functions are
-   scheduled under doc 213 after S2f's cancellation. Their scheduling remains open here;
-   cancellation does not approve a replacement implementation item.
-2. **The public home of the ring derivations.** The four `pub(crate)` functions in
+1. **The public home of the ring derivations.** The four `pub(crate)` functions in
    `ir/view/ring.rs` must become reachable from umol-graph with signatures over the molecule,
-   the `RingSet`, and the id. The alternatives are public free functions exported from `ir`;
-   methods on `RingSet`, two of which take the molecule as an argument; or methods on `Molecule`
-   taking the `RingSet`. The ring views and the constraints views keep delegating to whichever
-   form is chosen. `RingViews` remains the constructor of the owned set through `into_ring_set`
-   unless `RingSet::enumerate` also changes, which this document does not propose.
+   the `RingSet`, and the id. The alternatives are methods on `RingSet`, two of which take the
+   molecule as an argument; or methods on `Molecule` taking the `RingSet`. The ring views and
+   the constraints views keep delegating to whichever form is chosen. 
+2. `RingViews` should not be used to generate an owned set through `into_ring_set`. Needs design.
 3. **The `GraphView` isomorphism family.** Remove the four methods, moving their tests to the
    graph-core surface `substructure.rs` already uses, or keep them with the query molecule as
    the argument. Removal shrinks `GraphView` to the operations doc 086 listed for it;

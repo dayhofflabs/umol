@@ -44,9 +44,9 @@ the statuses recorded here remain authoritative.
   and S2d's role-only incidence/count-aware consumers are complete. S2g's
   frame-consumer checks, S2h's aggregate-integrity changes, and S2i1 are complete.
   S2i2–S2i5 are complete, including separate mutable molecule/editor view types.
-  Atom, localized-bond, dative-bond, aromatic-system, multicenter-bond, and
-  noncovalent-bond id/attribute accessors are aligned; the S2j attempt is reverted
-  and the rest of its revised getter inventory awaits review. Uniform unchecked
+  All eight entity-view families have aligned id/attribute accessors. S2j's
+  dative getters and structural mutation are complete; the remaining getter
+  inventory awaits review. Uniform unchecked
   entity-attribute assignment is settled for Rust and Python.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
@@ -265,7 +265,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | S2i5 complete; stereo storage and basic accessors aligned. Next: additional S2j getters and editor structural mutation. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue S2j getters and editor structural mutation for the remaining entity kinds; dative scope is complete. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |
@@ -283,3 +283,4 @@ the statuses recorded here remain authoritative.
 | [229-aggregate-integrity-review-2026-09-22.md](229-aggregate-integrity-review-2026-09-22.md) | Completed | 2026-09-23 | |
 | [230-graph-ir-delta-review-2026-09-23.md](230-graph-ir-delta-review-2026-09-23.md) | Proposed | 2026-09-23 | Awaiting triage of the surviving findings. |
 | [231-view-arguments-2026-09-25.md](231-view-arguments-2026-09-25.md) | Proposed | 2026-09-25 | Awaiting interface and scheduling decisions; doc 213 S2f is cancelled. |
+| [232-view-accessors-2026-09-26.md](232-view-accessors-2026-09-26.md) | Proposed | 2026-09-26 | Review id names, collection interfaces, induced-selection allocations, and noncovalent connectivity delegation to graph-core. Independent of 213 S2j. |

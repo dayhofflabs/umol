@@ -1,4 +1,4 @@
-//! Graph-IR indices into atom, bond, and relation tables.
+//! Graph-IR entity ids and positions within atom and ligand lists.
 
 use std::fmt;
 use std::ops::{Add, Sub};
@@ -70,6 +70,22 @@ define_id!(
     /// Stereo bond index — maps to `RelationId` in the stereo bond relation set.
     StereoBondId,
 );
+
+/// Zero-based position in an entity's ordered atom list, including a dative donor list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct AtomPosition(pub u32);
+
+impl AtomPosition {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<usize> for AtomPosition {
+    fn from(v: usize) -> Self {
+        Self(v as u32)
+    }
+}
 
 /// Position in a stereo element's ordered ligand frame — frame-relative,
 /// `0..kind.degree()`. `u32` (the project-wide index width); the boundary
