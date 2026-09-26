@@ -592,7 +592,7 @@ fn retained_scaling_corpus() -> Vec<CorpusCase> {
                     && molecule
                         .bonds()
                         .iter()
-                        .all(|bond| bond.attributes.constraints.is_empty()),
+                        .all(|bond| bond.attributes().constraints.is_empty()),
                 "benchmark case {name} must remain feature-free"
             );
             CorpusCase { name, molecule }

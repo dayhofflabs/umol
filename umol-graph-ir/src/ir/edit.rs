@@ -3044,7 +3044,7 @@ mod tests {
             .transact(applied_edits)
             .expect("bond update edits should apply");
 
-        assert_eq!(editor.bond(BondId(0)).attributes, &expected);
+        assert_eq!(editor.bond(BondId(0)).attributes(), &expected);
     }
 
     #[rustfmt::skip]

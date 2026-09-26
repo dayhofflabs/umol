@@ -696,10 +696,10 @@ impl ReactionSpan {
         let mut bonds: Vec<(AtomId, AtomId, EntitySpan<BondForm>)> = Vec::new();
         for i in 0..lhs_bond_count {
             let [a, b] = lhs.raw_graph().edge_endpoints(EdgeId(i as u32));
-            let lhs_attributes = lhs.bond(BondId(i as u32)).attributes.clone();
+            let lhs_attributes = lhs.bond(BondId(i as u32)).attributes().clone();
             let rhs_attributes = bonds_corr
                 .right_of(BondId(i as u32))
-                .map(|r| rhs.bond(r).attributes.clone());
+                .map(|r| rhs.bond(r).attributes().clone());
             bonds.push((
                 AtomId::from(a),
                 AtomId::from(b),
@@ -711,7 +711,7 @@ impl ReactionSpan {
             bonds.push((
                 atom_union[&AtomId::from(a)],
                 atom_union[&AtomId::from(b)],
-                EntitySpan::Added(rhs.bond(r).attributes.clone()),
+                EntitySpan::Added(rhs.bond(r).attributes().clone()),
             ));
         }
 
@@ -2234,7 +2234,7 @@ impl Reaction {
             if let Some(attributes) = removed_bonds.get(&id) {
                 bonds.push((first, second, EntitySpan::Removed(attributes.clone())));
             } else if let Some(changes) = bond_changes.get(&id) {
-                let left = lhs.bond(id).attributes.clone();
+                let left = lhs.bond(id).attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_bond_change(&mut right, change)?;
@@ -2251,7 +2251,7 @@ impl Reaction {
                 bonds.push((
                     first,
                     second,
-                    EntitySpan::Unchanged(lhs.bond(id).attributes.clone()),
+                    EntitySpan::Unchanged(lhs.bond(id).attributes().clone()),
                 ));
             }
         }

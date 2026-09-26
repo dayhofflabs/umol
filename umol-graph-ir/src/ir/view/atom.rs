@@ -439,7 +439,7 @@ pub(crate) fn atom_asserted_constraints(molecule: &Molecule, atom: AtomId) -> &A
 pub(crate) fn valence(molecule: &Molecule, atom: AtomId) -> NumForm {
     molecule
         .neighbors(atom)
-        .map(|n| n.bond().attributes.order.clone())
+        .map(|n| n.bond().attributes().order.clone())
         .fold(NumForm::Lit(0), |acc, order| acc + order)
 }
 
@@ -835,7 +835,7 @@ mod tests {
                 (
                     neighbor.bond_id(),
                     neighbor.atom_id(),
-                    neighbor.bond().attributes.clone(),
+                    neighbor.bond().attributes().clone(),
                 )
             },
         );

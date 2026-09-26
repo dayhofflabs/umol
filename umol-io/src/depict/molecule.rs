@@ -66,8 +66,8 @@ pub(crate) fn depict(
             continue;
         };
         let [first, second] = bond.atom_ids();
-        let bond_reference = DepictionReference::Molecule(Entity::Bond(bond.id));
-        if let Some(wedge) = wedges[bond.id.index()] {
+        let bond_reference = DepictionReference::Molecule(Entity::Bond(bond.id()));
+        if let Some(wedge) = wedges[bond.id().index()] {
             items.push(DepictionItem::Wedge(WedgeItem {
                 tip: position(layout, wedge.tip),
                 base: position(layout, wedge.base),
@@ -255,7 +255,7 @@ fn tetrahedral_candidates(
             }
             let kind = wedge_kind(layout, stereo.site_id(), &ligands, *ligand, coset)?;
             Some(WedgeCandidate {
-                bond: bond.id,
+                bond: bond.id(),
                 base: ligand.atom_id,
                 kind,
             })

@@ -88,7 +88,7 @@ pub fn electrons_from_kekule(molecule: &Molecule, atom: AtomId) -> Option<u8> {
     };
     let double_count = view
         .neighbors()
-        .filter(|n| matches!(n.bond().attributes.order, NumForm::Lit(2)))
+        .filter(|n| matches!(n.bond().attributes().order, NumForm::Lit(2)))
         .count();
     match double_count {
         1 => Some(1),
@@ -183,7 +183,7 @@ mod tests {
             .bonds()
             .iter()
             .filter(|view| {
-                view.attributes
+                view.attributes()
                     .constraints
                     .contains(BondConstraintKey::Aromatic)
             })

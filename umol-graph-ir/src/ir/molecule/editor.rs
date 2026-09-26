@@ -239,11 +239,7 @@ impl MoleculeEditor {
     pub fn bond(&self, id: BondId) -> BondEditorView<'_> {
         let endpoints = self.molecule.graph.edge_endpoints(EdgeId::from(id));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
-        BondEditorView {
-            id,
-            attributes: &self.molecule.bonds[id.index()],
-            atoms,
-        }
+        BondEditorView::new(id, atoms, &self.molecule.bonds[id.index()])
     }
 
     pub fn bond_mut(&mut self, id: BondId) -> BondEditorViewMut<'_> {
@@ -1876,13 +1872,13 @@ mod tests {
         let removed_bonds = vec![
             RemovedBond {
                 id: BondId(0),
-                endpoints: triatomic.bond(BondId(0)).atoms,
-                attributes: triatomic.bond(BondId(0)).attributes.clone(),
+                endpoints: triatomic.bond(BondId(0)).atom_ids(),
+                attributes: triatomic.bond(BondId(0)).attributes().clone(),
             },
             RemovedBond {
                 id: BondId(1),
-                endpoints: triatomic.bond(BondId(1)).atoms,
-                attributes: triatomic.bond(BondId(1)).attributes.clone(),
+                endpoints: triatomic.bond(BondId(1)).atom_ids(),
+                attributes: triatomic.bond(BondId(1)).attributes().clone(),
             },
         ];
 

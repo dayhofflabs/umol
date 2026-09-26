@@ -557,7 +557,7 @@ mod tests {
         let ids: Vec<BondId> = molecule
             .aromatic_system(AromaticSystemId(0))
             .bonds()
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         assert_eq!(ids, vec![BondId(0), BondId(1)]);
     }
@@ -636,7 +636,7 @@ mod tests {
         let ids: Vec<BondId> = molecule
             .aromatic_system(AromaticSystemId(0))
             .overlapping_bonds(&subset)
-            .map(|v| v.id)
+            .map(|v| v.id())
             .collect();
         assert_eq!(ids, expected);
     }

@@ -154,7 +154,7 @@ impl Molecule {
         };
 
         for view in self.bonds().iter() {
-            let entity = Entity::Bond(view.id);
+            let entity = Entity::Bond(view.id());
             let atoms = view.atom_ids();
             check_unique_pair(entity, atoms)?;
             let pair = unordered_pair(atoms);

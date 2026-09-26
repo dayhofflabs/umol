@@ -227,8 +227,8 @@ mod tests {
 
         assert_eq!(mol.atoms().count(), 3);
         assert_eq!(mol.bonds().count(), 2);
-        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(1));
-        assert_eq!(mol.bond(BondId(1)).attributes, &BondForm::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).attributes(), &BondForm::from_order(1));
+        assert_eq!(mol.bond(BondId(1)).attributes(), &BondForm::from_order(2));
     }
 
     #[rstest]
@@ -261,7 +261,7 @@ mod tests {
 
         assert_eq!(bond, BondId(0));
         assert_eq!(
-            mol.bond(bond).attributes,
+            mol.bond(bond).attributes(),
             &BondForm::from_order(2).with_charge(-1_i64)
         );
     }
@@ -276,7 +276,7 @@ mod tests {
 
         assert_eq!(bond, BondId(0));
         assert_eq!(
-            mol.bond(bond).attributes,
+            mol.bond(bond).attributes(),
             &BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true))
         );
     }

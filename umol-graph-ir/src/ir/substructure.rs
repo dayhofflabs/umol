@@ -158,7 +158,7 @@ impl Molecule {
             || self
                 .bonds()
                 .iter()
-                .flat_map(|bond| bond.attributes.constraints.iter())
+                .flat_map(|bond| bond.attributes().constraints.iter())
                 .any(|constraint| matches!(constraint, BondConstraintForm::RingMembership(_)));
         needs_rings.then(|| {
             host.rings(
@@ -210,11 +210,11 @@ impl Molecule {
         let bonds = self
             .bonds()
             .iter()
-            .any(|b| !b.attributes.constraints.is_empty())
+            .any(|b| !b.attributes().constraints.is_empty())
             .then(|| {
                 let mut table = vec![true; self.bonds().count() * host_bond_count];
                 for p in self.bonds().iter() {
-                    if p.attributes.constraints.is_empty() {
+                    if p.attributes().constraints.is_empty() {
                         continue;
                     }
                     for h in host.bonds().iter() {
@@ -222,8 +222,8 @@ impl Molecule {
                         if let Some(rings) = rings {
                             reading = reading.with_rings(rings);
                         }
-                        table[p.id.index() * host_bond_count + h.id.index()] =
-                            reading.satisfies(&p.attributes.constraints);
+                        table[p.id().index() * host_bond_count + h.id().index()] =
+                            reading.satisfies(&p.attributes().constraints);
                     }
                 }
                 table
@@ -260,7 +260,7 @@ impl Molecule {
             &mut |query_edge, host_edge| {
                 let pb = BondId::from(query_edge);
                 let hb = BondId::from(host_edge);
-                bond_fields_match(pattern.bond(pb).attributes, host.bond(hb).attributes)
+                bond_fields_match(pattern.bond(pb).attributes(), host.bond(hb).attributes())
                     && bond_table
                         .as_ref()
                         .is_none_or(|table| table[pb.index() * host_bond_count + hb.index()])
@@ -322,7 +322,7 @@ impl Molecule {
                             .is_none_or(|table| table[pa.index() * host_atom_count + ha.index()])
                 }
                 (Entity::Bond(pb), Entity::Bond(hb)) => {
-                    bond_fields_match(pattern.bond(pb).attributes, host.bond(hb).attributes)
+                    bond_fields_match(pattern.bond(pb).attributes(), host.bond(hb).attributes())
                         && bond_table
                             .as_ref()
                             .is_none_or(|table| table[pb.index() * host_bond_count + hb.index()])

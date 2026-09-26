@@ -879,7 +879,7 @@ pub(crate) fn induced_bonds(
         left.bonds().iter().filter_map(|bond| {
             let [first, second] = bond.atom_ids();
             Some((
-                bond.id,
+                bond.id(),
                 ordered_pair(atoms.right_of(first)?, atoms.right_of(second)?),
             ))
         }),
@@ -887,7 +887,7 @@ pub(crate) fn induced_bonds(
         right
             .bonds()
             .iter()
-            .map(|bond| (bond.id, ordered_pair_from(bond.atom_ids()))),
+            .map(|bond| (bond.id(), ordered_pair_from(bond.atom_ids()))),
         right.bonds().count(),
     )
 }

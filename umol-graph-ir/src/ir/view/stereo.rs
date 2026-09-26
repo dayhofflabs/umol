@@ -1566,7 +1566,7 @@ mod tests {
     #[rstest]
     fn test_stereo_bond_view_site(molecule: Molecule) {
         let view = molecule.stereo_bond(StereoBondId(0)).site();
-        assert_eq!(view.id, BondId(1));
+        assert_eq!(view.id(), BondId(1));
         assert_eq!(view.atom_ids(), [AtomId(2), AtomId(3)]);
     }
 

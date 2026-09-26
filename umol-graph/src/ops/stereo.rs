@@ -85,7 +85,7 @@ impl StereoPerception {
                     Some(CisTransStereoForm::Stereo(_))
                 )
             })
-            .map(|bond| bond.id)
+            .map(|bond| bond.id())
             .collect();
         if minimum_ring_size == 0 || asserted.is_empty() {
             return BTreeSet::new();
@@ -195,7 +195,7 @@ impl StereoPerception {
                 .collect();
             let assertion = molecule
                 .bond(bond)
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo()
                 .unwrap_or(&CisTransStereoForm::Undetermined);

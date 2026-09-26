@@ -2465,7 +2465,7 @@ mod tests {
     fn ethanol_deoxygenation() -> GraphIrReaction {
         let ethanol = ingest_smiles("CCO").unwrap();
         let oxygen = ethanol.atom(GraphIrAtomId(2)).attributes().clone();
-        let bond = ethanol.bond(GraphIrBondId(1)).attributes.clone();
+        let bond = ethanol.bond(GraphIrBondId(1)).attributes().clone();
         GraphIrReaction::new(
             ethanol,
             GraphIrDeltas::from_iter([

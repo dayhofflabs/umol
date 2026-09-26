@@ -124,7 +124,7 @@ impl StereoConformanceValidator {
                     let bond = molecule.stereo_bond(stereo_bond).site_id();
                     molecule
                         .bond(bond)
-                        .attributes
+                        .attributes()
                         .constraints
                         .cis_trans_stereo()
                         .is_some_and(|constraint| !constraint.is_undetermined())

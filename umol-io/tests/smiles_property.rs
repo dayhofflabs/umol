@@ -273,7 +273,7 @@ proptest! {
         let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
         let actual: Vec<_> = (0..markers.len() - 1).map(|index| {
             molecule.bond(BondId::from(2 * index + 1))
-                .attributes.constraints.cis_trans_stereo().cloned()
+                .attributes().constraints.cis_trans_stereo().cloned()
         }).collect();
         prop_assert_eq!(actual, expected);
     }
@@ -373,7 +373,7 @@ proptest! {
         let expected = CisTransStereoForm::stereo(StereoCoset::Lit(
             u32::from(!same ^ first_swap ^ second_swap)));
         let raised: Molecule = (&table).try_into_ir(&()).unwrap();
-        prop_assert_eq!(raised.bond(BondId(2)).attributes.constraints.cis_trans_stereo(),
+        prop_assert_eq!(raised.bond(BondId(2)).attributes().constraints.cis_trans_stereo(),
             Some(&expected));
         table.positions = Some(positions.map(|[x,y,z]| Point3D::new(f64::from(x),f64::from(y),f64::from(z))).to_vec());
         let converted = TableMolecule::try_from(ExtendedMolecule::from(table.clone())).unwrap();

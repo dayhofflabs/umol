@@ -1437,14 +1437,14 @@ impl MoleculeEditor {
             .map(BondId::from)
             .filter(|&id| {
                 let view = self.bond(id);
-                bond_set.contains(&id) || view.atoms.iter().any(|atom| atom_set.contains(atom))
+                bond_set.contains(&id) || view.atom_ids().iter().any(|atom| atom_set.contains(atom))
             })
             .map(|id| {
                 let view = self.bond(id);
                 RemovedBond {
                     id,
-                    endpoints: view.atoms,
-                    attributes: view.attributes.clone(),
+                    endpoints: view.atom_ids(),
+                    attributes: view.attributes().clone(),
                 }
             })
             .collect();
@@ -1532,7 +1532,11 @@ impl MoleculeEditor {
                 let view = self.stereo_bond(id);
                 let site = view.site;
                 let site_dropped = bond_set.contains(&site)
-                    || self.bond(site).atoms.iter().any(|a| atom_set.contains(a));
+                    || self
+                        .bond(site)
+                        .atom_ids()
+                        .iter()
+                        .any(|a| atom_set.contains(a));
                 let ligand_dropped = view.ligands.iter().any(|l| atom_set.contains(&l.atom_id));
                 (site_dropped || ligand_dropped).then(|| RemovedStereoBond {
                     id,
@@ -2971,7 +2975,7 @@ mod tests {
         let transaction = editor.transact(edits).unwrap();
 
         assert_eq!(editor.atom(AtomId(0)).attributes().charge, NumForm::Lit(1));
-        assert_eq!(editor.bond(BondId(0)).attributes.order, NumForm::Lit(2));
+        assert_eq!(editor.bond(BondId(0)).attributes().order, NumForm::Lit(2));
         assert_eq!(
             editor.dative_bond(DativeBondId(0)).attributes.order,
             NumForm::Lit(2)
@@ -3568,7 +3572,7 @@ mod tests {
                 },
             }]))
             .unwrap();
-        assert_eq!(diatomic.bond(BondId(0)).attributes.order, NumForm::Lit(2));
+        assert_eq!(diatomic.bond(BondId(0)).attributes().order, NumForm::Lit(2));
     }
 
     #[rstest]
@@ -4780,7 +4784,7 @@ mod tests {
         assert_eq!(
             diatomic
                 .bond(BondId(0))
-                .attributes
+                .attributes()
                 .constraints
                 .iter()
                 .cloned()
@@ -4802,7 +4806,7 @@ mod tests {
             .unwrap();
         assert!(diatomic
             .bond(BondId(0))
-            .attributes
+            .attributes()
             .constraints
             .iter()
             .any(|c| *c == BondConstraintForm::ring_membership(RingScope::Size(5), 1)));

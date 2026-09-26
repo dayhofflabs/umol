@@ -751,7 +751,7 @@ impl ReactionInput {
                     resolved.push(Delta::Bond(BondDelta::Remove {
                         id,
                         atoms: lhs.bond(id).atom_ids(),
-                        attributes: lhs.bond(id).attributes.clone(),
+                        attributes: lhs.bond(id).attributes().clone(),
                     }));
                 }
                 DeltaInput::BondModify(r, update) => {
@@ -763,7 +763,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    for d in BondDelta::for_update(id, lhs.bond(id).attributes, &update) {
+                    for d in BondDelta::for_update(id, lhs.bond(id).attributes(), &update) {
                         resolved.push(Delta::Bond(d));
                     }
                 }

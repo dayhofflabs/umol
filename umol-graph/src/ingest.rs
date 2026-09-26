@@ -1671,7 +1671,7 @@ mod tests {
             molecule
                 .bonds()
                 .iter()
-                .map(|bond| bond.attributes.constraints.aromatic())
+                .map(|bond| bond.attributes().constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );
@@ -2143,7 +2143,7 @@ mod tests {
                 .lhs()
                 .bonds()
                 .iter()
-                .map(|bond| bond.attributes.constraints.aromatic())
+                .map(|bond| bond.attributes().constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );

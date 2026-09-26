@@ -88,10 +88,10 @@ impl Molecule {
             ) {
                 (Some(l), Some(r)) => self
                     .bond(BondId::from(l))
-                    .attributes
-                    .meet(other.bond(BondId::from(r)).attributes)?,
-                (Some(l), None) => self.bond(BondId::from(l)).attributes.clone(),
-                (None, Some(r)) => other.bond(BondId::from(r)).attributes.clone(),
+                    .attributes()
+                    .meet(other.bond(BondId::from(r)).attributes())?,
+                (Some(l), None) => self.bond(BondId::from(l)).attributes().clone(),
+                (None, Some(r)) => other.bond(BondId::from(r)).attributes().clone(),
                 (None, None) => unreachable!("a glued edge originates from a side"),
             };
             bonds.push((AtomId::from(u), AtomId::from(v), bond));

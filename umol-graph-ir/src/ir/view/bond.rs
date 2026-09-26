@@ -45,10 +45,10 @@ impl<'a> BondViews<'a> {
         graph.edge_ids().map(move |id| {
             let [s, t] = graph.edge_endpoints(id);
             BondView {
+                molecule,
                 id: BondId::from(id),
                 atoms: [s, t],
                 attributes: &bonds[id.index()],
-                molecule,
             }
         })
     }
@@ -63,10 +63,10 @@ impl<'a> BondViews<'a> {
         }
         let [s, t] = self.molecule.raw_graph().edge_endpoints(EdgeId::from(id));
         Some(BondView {
+            molecule: self.molecule,
             id,
             atoms: [s, t],
             attributes: &self.bonds[id.index()],
-            molecule: self.molecule,
         })
     }
 
@@ -112,13 +112,24 @@ impl<'a> BondViews<'a> {
 /// Borrowed view of a bond: its index, the two participating atoms, and data.
 #[derive(Clone, Copy, Debug)]
 pub struct BondView<'a> {
-    pub id: BondId,
-    atoms: [NodeId; 2],
-    pub attributes: &'a BondForm,
     molecule: &'a Molecule,
+    id: BondId,
+    atoms: [NodeId; 2],
+    attributes: &'a BondForm,
 }
 
 impl<'a> BondView<'a> {
+    #[inline]
+    pub fn id(&self) -> BondId {
+        self.id
+    }
+
+    /// The stored bond attributes.
+    #[inline]
+    pub fn attributes(&self) -> &'a BondForm {
+        self.attributes
+    }
+
     #[inline]
     pub fn order(&self) -> &'a NumForm {
         &self.attributes.order
@@ -143,6 +154,7 @@ impl<'a> BondView<'a> {
     }
 
     /// The two atom indices incident to this bond.
+    #[inline]
     pub fn atom_ids(&self) -> [AtomId; 2] {
         self.atoms.map(AtomId::from)
     }
@@ -196,9 +208,34 @@ impl<'a> BondView<'a> {
 
 /// Read-only editor access to a bond.
 pub struct BondEditorView<'a> {
-    pub id: BondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a BondForm,
+    id: BondId,
+    atoms: [AtomId; 2],
+    attributes: &'a BondForm,
+}
+
+impl<'a> BondEditorView<'a> {
+    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], attributes: &'a BondForm) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
+    }
+
+    #[inline]
+    pub fn id(&self) -> BondId {
+        self.id
+    }
+
+    #[inline]
+    pub fn attributes(&self) -> &'a BondForm {
+        self.attributes
+    }
+
+    #[inline]
+    pub fn atom_ids(&self) -> [AtomId; 2] {
+        self.atoms
+    }
 }
 
 /// Mutable attribute access to a bond.
@@ -218,22 +255,27 @@ impl<'a> BondViewMut<'a> {
         }
     }
 
+    #[inline]
     pub fn id(&self) -> BondId {
         self.id
     }
 
+    #[inline]
     pub fn attributes(&self) -> &BondForm {
         self.attributes
     }
 
+    #[inline]
     pub fn attributes_mut(&mut self) -> &mut BondForm {
         self.attributes
     }
 
+    #[inline]
     pub fn constraints(&self) -> &BondConstraintsForm {
         &self.attributes().constraints
     }
 
+    #[inline]
     pub fn atom_ids(&self) -> [AtomId; 2] {
         self.atoms
     }
@@ -256,22 +298,27 @@ impl<'a> BondEditorViewMut<'a> {
         }
     }
 
+    #[inline]
     pub fn id(&self) -> BondId {
         self.id
     }
 
+    #[inline]
     pub fn attributes(&self) -> &BondForm {
         self.attributes
     }
 
+    #[inline]
     pub fn attributes_mut(&mut self) -> &mut BondForm {
         self.attributes
     }
 
+    #[inline]
     pub fn constraints(&self) -> &BondConstraintsForm {
         &self.attributes().constraints
     }
 
+    #[inline]
     pub fn atom_ids(&self) -> [AtomId; 2] {
         self.atoms
     }
@@ -282,7 +329,7 @@ impl<'a> BondEditorViewMut<'a> {
 
 /// Stored constraint container of `bond`.
 pub(crate) fn bond_asserted_constraints(molecule: &Molecule, bond: BondId) -> &BondConstraintsForm {
-    &molecule.bond(bond).attributes.constraints
+    &molecule.bond(bond).attributes().constraints
 }
 
 /// Asserted side of one bond constraint key under resolution's closed-world
@@ -433,7 +480,7 @@ mod tests {
     #[rstest]
     fn test_bond_views_iter(molecule: Molecule) {
         assert_exact_size_by(Molecule::default().bonds().iter(), vec![], |view| {
-            (view.id, view.atom_ids(), view.attributes.clone())
+            (view.id(), view.atom_ids(), view.attributes().clone())
         });
         assert_exact_size_by(
             molecule.bonds().iter(),
@@ -442,7 +489,7 @@ mod tests {
                 (BondId(1), [AtomId(1), AtomId(2)], BondForm::from_order(2)),
                 (BondId(2), [AtomId(2), AtomId(3)], BondForm::from_order(1)),
             ],
-            |view| (view.id, view.atom_ids(), view.attributes.clone()),
+            |view| (view.id(), view.atom_ids(), view.attributes().clone()),
         );
     }
 
@@ -458,9 +505,9 @@ mod tests {
         let res = molecule.bonds().get(BondId(1));
         assert!(res.is_some());
         let view = res.unwrap();
-        assert_eq!(view.id, BondId(1));
+        assert_eq!(view.id(), BondId(1));
         assert_eq!(view.atom_ids(), [AtomId(1), AtomId(2)]);
-        assert_eq!(*view.attributes, BondForm::from_order(2));
+        assert_eq!(*view.attributes(), BondForm::from_order(2));
     }
 
     #[rstest]

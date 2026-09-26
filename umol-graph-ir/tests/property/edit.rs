@@ -428,7 +428,7 @@ proptest! {
             prop_assert_eq!(&editor.atom(AtomId(4)).attributes().charge, &NumForm::Lit(1));
         }
         if kinds.contains(&EntityKind::Bond) {
-            prop_assert_eq!(&editor.bond(BondId(1)).attributes.order, &NumForm::Lit(2));
+            prop_assert_eq!(&editor.bond(BondId(1)).attributes().order, &NumForm::Lit(2));
         }
         if kinds.contains(&EntityKind::DativeBond) {
             prop_assert_eq!(
@@ -529,7 +529,7 @@ proptest! {
             prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.bonds().iter() {
-            prop_assert!(view.attributes.constraints.is_empty());
+            prop_assert!(view.attributes().constraints.is_empty());
         }
         for view in a.dative_bonds().iter() {
             prop_assert!(view.attributes.constraints.is_empty());
@@ -893,7 +893,7 @@ proptest! {
         }
         for (id, key) in bond_keys {
             prop_assert!(
-                a.bond(id).attributes.constraints.contains(key),
+                a.bond(id).attributes().constraints.contains(key),
                 "bond {id:?} missing key {key:?} after inline",
             );
         }

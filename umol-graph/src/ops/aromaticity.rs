@@ -417,12 +417,12 @@ impl AromaticityPerceiver {
 
             for bond in molecule.aromatic_system(system).bonds() {
                 if matches!(
-                    bond.attributes.constraints.aromatic(),
+                    bond.attributes().constraints.aromatic(),
                     BooleanForm::Lit(false)
                 ) {
                     inconsistencies.insert(
                         AromaticityInconsistency::AromaticBondConstraintMismatch {
-                            bond: bond.id,
+                            bond: bond.id(),
                             system,
                         },
                     );
@@ -961,7 +961,7 @@ mod tests {
             .bonds()
             .iter()
             .filter(|view| {
-                view.attributes
+                view.attributes()
                     .constraints
                     .contains(BondConstraintKey::Aromatic)
             })
@@ -1101,7 +1101,7 @@ mod tests {
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(molecule.aromatic_systems().count(), 0);
         let any_aromatic = molecule.bonds().iter().any(|view| {
-            view.attributes
+            view.attributes()
                 .constraints
                 .contains(BondConstraintKey::Aromatic)
         });

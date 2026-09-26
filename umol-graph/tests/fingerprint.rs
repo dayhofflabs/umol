@@ -27,7 +27,7 @@ fn benzene() -> Molecule {
 #[fixture]
 fn ethanol_deoxygenation(ethanol: Molecule) -> Reaction {
     let oxygen = ethanol.atom(AtomId(2)).attributes().clone();
-    let bond = ethanol.bond(BondId(1)).attributes.clone();
+    let bond = ethanol.bond(BondId(1)).attributes().clone();
     Reaction::new(
         ethanol,
         Deltas::from_iter([

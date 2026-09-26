@@ -824,7 +824,7 @@ mod tests {
             }
             Entity::Bond(id) => assert!(molecule
                 .bond(id)
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo()
                 .is_some()),
@@ -849,7 +849,7 @@ mod tests {
                 .is_some()),
             Entity::Bond(id) => assert!(molecule
                 .bond(id)
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo()
                 .is_some()),
@@ -999,7 +999,7 @@ mod tests {
         #[with(TableBondOrder::Double)] diatomic: TableMolecule,
     ) {
         let molecule: Molecule = (&diatomic).try_into_ir(&()).unwrap();
-        let bond = molecule.bond(BondId(0)).attributes;
+        let bond = molecule.bond(BondId(0)).attributes();
         assert!(matches!(bond.order, NumForm::Lit(2)));
     }
 
@@ -1008,7 +1008,7 @@ mod tests {
         #[with(TableBondOrder::Aromatic)] diatomic: TableMolecule,
     ) {
         let molecule: Molecule = (&diatomic).try_into_ir(&()).unwrap();
-        let bond = molecule.bond(BondId(0)).attributes;
+        let bond = molecule.bond(BondId(0)).attributes();
         assert!(matches!(bond.order, NumForm::Lit(1)));
         assert!(bond
             .constraints
@@ -1356,7 +1356,7 @@ mod tests {
                     .map(|(index, _)| {
                         molecule
                             .bond(BondId::from(index))
-                            .attributes
+                            .attributes()
                             .constraints
                             .cis_trans_stereo()
                             .cloned()
@@ -1391,7 +1391,7 @@ mod tests {
         assert_eq!(
             molecule
                 .bond(BondId(1))
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo()
                 .cloned(),
@@ -1442,7 +1442,7 @@ mod tests {
             .map(|(index, _)| {
                 molecule
                     .bond(BondId::from(index))
-                    .attributes
+                    .attributes()
                     .constraints
                     .cis_trans_stereo()
                     .cloned()
@@ -1480,7 +1480,7 @@ mod tests {
         assert_eq!(
             molecule
                 .bond(BondId(2))
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo(),
             Some(&CisTransStereoForm::stereo(StereoCoset::Lit(expected)))
@@ -1616,7 +1616,7 @@ mod tests {
         assert_eq!(
             molecule
                 .bond(BondId(1))
-                .attributes
+                .attributes()
                 .constraints
                 .cis_trans_stereo(),
             Some(&CisTransStereoForm::stereo(StereoCoset::Lit(1)))

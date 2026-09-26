@@ -507,9 +507,9 @@ impl<'a> Resolver<'a> {
             .iter()
             .map(|bond| {
                 (
-                    Entity::Bond(bond.id),
-                    &bond.attributes.charge,
-                    &bond.attributes.unpaired_electrons,
+                    Entity::Bond(bond.id()),
+                    &bond.attributes().charge,
+                    &bond.attributes().unpaired_electrons,
                 )
             })
             .chain(molecule.multicenter_bonds().iter().map(|bond| {
@@ -601,7 +601,7 @@ impl<'a> Resolver<'a> {
                 )
             })
         }) || molecule.bonds().iter().any(|bond| {
-            bond.attributes
+            bond.attributes()
                 .constraints
                 .iter()
                 .any(|c| matches!(c, BondConstraintForm::RingMembership(_)))
@@ -676,7 +676,7 @@ impl<'a> Resolver<'a> {
             }
         }
         for id in molecule.bonds().ids() {
-            for asserted in molecule.bond(id).attributes.constraints.iter() {
+            for asserted in molecule.bond(id).attributes().constraints.iter() {
                 let mut reading = molecule.bond(id).constraints();
                 if let Some(rings) = rings.as_ref() {
                     reading = reading.with_rings(rings);
@@ -716,7 +716,7 @@ impl<'a> Resolver<'a> {
                         update.constraints.set(asserted.as_undetermined());
                         edits.update_bond(
                             BondHandle::Id(id),
-                            molecule.bond(id).attributes,
+                            molecule.bond(id).attributes(),
                             &update,
                         );
                     }
@@ -969,7 +969,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
                 let stored = bonds.remove(&(id, inner.key())).or_else(|| {
                     molecule
                         .bond(id)
-                        .attributes
+                        .attributes()
                         .constraints
                         .get(inner.key())
                         .cloned()
@@ -1108,7 +1108,7 @@ fn plan_placement(molecule: &Molecule) -> Result<Edits, PlacementContradiction> 
     for ((id, _), form) in bonds {
         let mut update = BondUpdate::default();
         update.constraints.set(form);
-        edits.update_bond(BondHandle::Id(id), molecule.bond(id).attributes, &update);
+        edits.update_bond(BondHandle::Id(id), molecule.bond(id).attributes(), &update);
     }
     for ((id, _), form) in dative {
         let mut update = DativeBondUpdate::default();

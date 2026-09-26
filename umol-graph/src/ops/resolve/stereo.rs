@@ -120,7 +120,7 @@ impl StereoResolver {
         });
         let skipped = self.perception.skipped_stereo_bonds(molecule);
         let partial_bond_constraint = molecule.bonds().iter().any(|bond| {
-            !skipped.contains(&bond.id)
+            !skipped.contains(&bond.id())
                 && bond
                     .constraints()
                     .cis_trans_stereo()
@@ -372,7 +372,7 @@ impl StereoResolver {
             ));
             edits.update_bond(
                 BondHandle::Id(bond),
-                molecule.bond(bond).attributes,
+                molecule.bond(bond).attributes(),
                 &update,
             );
         }
@@ -467,7 +467,7 @@ impl StereoResolver {
                 .coset_for(ligands)
                 .ok_or(StereoProjectError::StereoBondFrame { stereo_bond })?;
             let projected = CisTransStereoForm::Stereo(coset);
-            let attributes = molecule.bond(bond).attributes;
+            let attributes = molecule.bond(bond).attributes();
             let assertion = match attributes.constraints.cis_trans_stereo() {
                 Some(existing) => existing
                     .meet(&projected)

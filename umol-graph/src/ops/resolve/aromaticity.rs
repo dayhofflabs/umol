@@ -232,7 +232,7 @@ impl AromaticityResolver {
                         .set(BondConstraintForm::Aromatic(BooleanForm::Undetermined));
                     edits.update_bond(
                         BondHandle::Id(bond),
-                        molecule.bond(bond).attributes,
+                        molecule.bond(bond).attributes(),
                         &update,
                     );
                 }
@@ -355,7 +355,7 @@ impl AromaticityResolver {
                 edits.update_atom(AtomHandle::Id(atom), attributes, &update);
             }
             for bond in system.bond_ids() {
-                let attributes = molecule.bond(bond).attributes;
+                let attributes = molecule.bond(bond).attributes();
                 let assertion = attributes
                     .constraints
                     .aromatic()
@@ -445,7 +445,7 @@ impl AromaticityResolver {
             })
             || molecule.bonds().iter().any(|bond| {
                 matches!(
-                    bond.attributes.constraints.aromatic(),
+                    bond.attributes().constraints.aromatic(),
                     BooleanForm::Lit(true)
                 )
             })
@@ -974,7 +974,7 @@ impl AromaticityResolver {
         }
         for bond_id in bond_ids {
             if matches!(
-                molecule.bond(bond_id).attributes.constraints.aromatic(),
+                molecule.bond(bond_id).attributes().constraints.aromatic(),
                 BooleanForm::Lit(_)
             ) {
                 continue;
@@ -985,7 +985,7 @@ impl AromaticityResolver {
                 .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
             edits.update_bond(
                 BondHandle::Id(bond_id),
-                molecule.bond(bond_id).attributes,
+                molecule.bond(bond_id).attributes(),
                 &update,
             );
         }
@@ -1578,7 +1578,9 @@ mod tests {
             expected_aromatic_valences
         );
         assert!(molecule.bonds().iter().all(|bond| matches!(
-            bond.attributes.constraints.get(BondConstraintKey::Aromatic),
+            bond.attributes()
+                .constraints
+                .get(BondConstraintKey::Aromatic),
             Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))
         )));
     }

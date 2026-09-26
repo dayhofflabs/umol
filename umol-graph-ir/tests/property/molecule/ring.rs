@@ -67,7 +67,7 @@ proptest! {
             }
         }
         for bond in molecule.bonds().iter() {
-            let view = rings.bond(bond.id);
+            let view = rings.bond(bond.id());
             let containing: Vec<_> = view.rings().collect();
             prop_assert_eq!(view.is_in_ring(), !containing.is_empty());
             prop_assert_eq!(view.ring_count(), NumForm::Lit(containing.len() as i64));

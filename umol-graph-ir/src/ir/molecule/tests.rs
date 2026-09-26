@@ -128,7 +128,7 @@ fn test_molecule_from_entries() {
         m.atom(AtomId(1)).attributes().element,
         ElementForm::Lit(Element::O)
     );
-    assert_eq!(m.bond(BondId(0)).attributes.order, NumForm::Lit(1));
+    assert_eq!(m.bond(BondId(0)).attributes().order, NumForm::Lit(1));
 }
 
 #[rstest]
@@ -2546,10 +2546,10 @@ fn test_molecule_bond(
     #[case] order: NumForm,
 ) {
     let bv = molecule.bond(id);
-    assert_eq!(bv.id, id);
+    assert_eq!(bv.id(), id);
     assert_eq!(bv.atom_ids()[0], first);
     assert_eq!(bv.atom_ids()[1], second);
-    assert_eq!(bv.attributes.order, order);
+    assert_eq!(bv.attributes().order, order);
 }
 
 #[rstest]
@@ -2559,10 +2559,10 @@ fn test_molecule_bonds(#[from(rich_molecule)] molecule: Molecule) {
         .iter()
         .map(|v| {
             (
-                v.id,
+                v.id(),
                 v.atom_ids()[0],
                 v.atom_ids()[1],
-                v.attributes.order.clone(),
+                v.attributes().order.clone(),
             )
         })
         .collect();
@@ -2823,7 +2823,7 @@ fn test_bond_views_of(
     #[case] b: AtomId,
     #[case] expected: Option<BondId>,
 ) {
-    assert_eq!(molecule.bonds().of(a, b).map(|v| v.id), expected);
+    assert_eq!(molecule.bonds().of(a, b).map(|v| v.id()), expected);
 }
 
 #[rstest]
@@ -2839,7 +2839,7 @@ fn test_bond_views_induced(
         .bonds()
         .induced(&atoms)
         .into_iter()
-        .map(|v| v.id)
+        .map(|v| v.id())
         .collect();
     got.sort_unstable();
     assert_eq!(got, expected);
@@ -3685,7 +3685,13 @@ fn test_molecule_induced_subgraph(#[from(rich_molecule)] molecule: Molecule) {
     let bonds: Vec<(AtomId, AtomId, NumForm)> = extracted
         .bonds()
         .iter()
-        .map(|v| (v.atom_ids()[0], v.atom_ids()[1], v.attributes.order.clone()))
+        .map(|v| {
+            (
+                v.atom_ids()[0],
+                v.atom_ids()[1],
+                v.attributes().order.clone(),
+            )
+        })
         .collect();
     assert_eq!(
         bonds,
@@ -5152,7 +5158,7 @@ fn test_molecule_editor_remove_aromatic_systems(#[from(rich_molecule)] molecule:
         vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]
     );
     assert_eq!(
-        result.bonds().iter().map(|v| v.id).collect::<Vec<_>>(),
+        result.bonds().iter().map(|v| v.id()).collect::<Vec<_>>(),
         vec![BondId(0), BondId(1), BondId(2)]
     );
 }
@@ -5210,8 +5216,8 @@ fn test_molecule_editor_bond_mut(#[from(rich_molecule)] molecule: Molecule) {
     let mut b = molecule.edit();
     b.bond_mut(BondId(0)).attributes_mut().order = NumForm::Lit(3);
     let result = b.build();
-    assert_eq!(result.bond(BondId(0)).attributes.order, NumForm::Lit(3));
-    assert_eq!(molecule.bond(BondId(0)).attributes.order, NumForm::Lit(1));
+    assert_eq!(result.bond(BondId(0)).attributes().order, NumForm::Lit(3));
+    assert_eq!(molecule.bond(BondId(0)).attributes().order, NumForm::Lit(1));
 }
 
 #[rstest]
@@ -5558,7 +5564,13 @@ fn test_molecule_editor_add_and_remove(#[from(rich_molecule)] molecule: Molecule
     let bonds: Vec<(AtomId, AtomId, NumForm)> = result
         .bonds()
         .iter()
-        .map(|v| (v.atom_ids()[0], v.atom_ids()[1], v.attributes.order.clone()))
+        .map(|v| {
+            (
+                v.atom_ids()[0],
+                v.atom_ids()[1],
+                v.attributes().order.clone(),
+            )
+        })
         .collect();
     assert_eq!(
         bonds,
@@ -5754,7 +5766,7 @@ fn test_molecule_index_atom(#[from(rich_molecule)] molecule: Molecule) {
 
 #[rstest]
 fn test_molecule_index_bond(#[from(rich_molecule)] molecule: Molecule) {
-    assert_eq!(molecule.bond(BondId(1)).attributes.order, NumForm::Lit(2));
+    assert_eq!(molecule.bond(BondId(1)).attributes().order, NumForm::Lit(2));
 }
 
 #[rstest]
@@ -6138,7 +6150,7 @@ fn test_molecule_modify_bonds(#[from(rich_molecule)] mut molecule: Molecule) {
     let orders: Vec<NumForm> = molecule
         .bonds()
         .iter()
-        .map(|v| v.attributes.order.clone())
+        .map(|v| v.attributes().order.clone())
         .collect();
     assert_eq!(
         orders,
@@ -6593,7 +6605,7 @@ fn test_molecule_lift_constraints_drains_inline_stores(
 
     assert!(molecule.atom(AtomId(0)).attributes().constraints.is_empty());
     assert!(molecule.atom(AtomId(2)).attributes().constraints.is_empty());
-    assert!(molecule.bond(BondId(0)).attributes.constraints.is_empty());
+    assert!(molecule.bond(BondId(0)).attributes().constraints.is_empty());
     assert!(molecule
         .dative_bond(DativeBondId(0))
         .attributes
@@ -6673,7 +6685,7 @@ fn test_molecule_inline_constraints_drains_top_level_leaves(
         AtomConstraintsForm::from_iter([AtomConstraintForm::Valence(NumForm::Lit(4))])
     );
     assert_eq!(
-        molecule.bond(BondId(0)).attributes.constraints,
+        molecule.bond(BondId(0)).attributes().constraints,
         BondConstraintsForm::from_iter([BondConstraintForm::Aromatic(BooleanForm::Lit(true))])
     );
     assert_eq!(
@@ -6738,7 +6750,7 @@ fn test_molecule_inline_constraints_skips_combinator_nested(
     expected.push(nested);
     assert_same_constraints(molecule.constraints(), &expected);
     assert!(molecule.atom(AtomId(0)).attributes().constraints.is_empty());
-    assert!(molecule.bond(BondId(0)).attributes.constraints.is_empty());
+    assert!(molecule.bond(BondId(0)).attributes().constraints.is_empty());
 }
 
 #[rstest]
@@ -6878,7 +6890,7 @@ fn test_molecule_combine() {
     assert_eq!(union.bonds().count(), 2);
     assert_eq!(union.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     assert_eq!(union.bond(BondId(1)).atom_ids(), [AtomId(2), AtomId(3)]);
-    assert_eq!(union.bond(BondId(1)).attributes, &BondForm::from_order(2));
+    assert_eq!(union.bond(BondId(1)).attributes(), &BondForm::from_order(2));
 }
 
 #[rstest]
@@ -7087,11 +7099,14 @@ fn test_molecule_split() {
     assert_eq!(components.len(), 2);
     let (first, first_corr) = &components[0];
     assert_eq!(first.atoms().count(), 2);
-    assert_eq!(first.bond(BondId(0)).attributes, &BondForm::from_order(1));
+    assert_eq!(first.bond(BondId(0)).attributes(), &BondForm::from_order(1));
     assert_eq!(first_corr.atoms().left_of(AtomId(0)), Some(AtomId(0)));
     assert_eq!(first_corr.atoms().left_of(AtomId(1)), Some(AtomId(1)));
     let (second, second_corr) = &components[1];
-    assert_eq!(second.bond(BondId(0)).attributes, &BondForm::from_order(2));
+    assert_eq!(
+        second.bond(BondId(0)).attributes(),
+        &BondForm::from_order(2)
+    );
     assert_eq!(second_corr.atoms().left_of(AtomId(0)), Some(AtomId(2)));
     assert_eq!(second_corr.atoms().left_of(AtomId(1)), Some(AtomId(3)));
 }

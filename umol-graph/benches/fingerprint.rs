@@ -71,7 +71,7 @@ fn ethanol_deoxygenation(molecule: &Molecule) -> Reaction {
             Delta::Bond(BondDelta::Remove {
                 id: BondId(1),
                 atoms: [AtomId(1), AtomId(2)],
-                attributes: molecule.bond(BondId(1)).attributes.clone(),
+                attributes: molecule.bond(BondId(1)).attributes().clone(),
             }),
         ]),
     )

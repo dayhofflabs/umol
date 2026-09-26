@@ -189,7 +189,7 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
         || molecule
             .bonds()
             .iter()
-            .any(|bond| !bond.attributes.constraints.is_empty())
+            .any(|bond| !bond.attributes().constraints.is_empty())
         || molecule
             .dative_bonds()
             .iter()
@@ -1628,11 +1628,24 @@ fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
             value: sequence(rows),
         });
     }
-    inline_block!(
-        ConstraintBlockPosition::BOND,
-        molecule.bonds(),
-        bond_constraint_form_key
-    );
+    let rows = molecule
+        .bonds()
+        .iter()
+        .flat_map(|bond| {
+            bond.attributes().constraints.iter().map(move |constraint| {
+                product([
+                    index_key(bond.id().index()),
+                    bond_constraint_form_key(constraint),
+                ])
+            })
+        })
+        .collect::<Vec<_>>();
+    if !rows.is_empty() {
+        blocks.push(PositionedKey {
+            position: ConstraintBlockPosition::BOND,
+            value: sequence(rows),
+        });
+    }
     inline_block!(
         ConstraintBlockPosition::DATIVE_BOND,
         molecule.dative_bonds(),
@@ -2626,7 +2639,7 @@ impl CompactTopologyCarrier {
     fn new(molecule: &Molecule, incidence_graph: &IncidenceGraph, entity_colors: &[u32]) -> Self {
         let mut bond_color_counts = vec![0_usize; entity_colors.len()];
         for bond in molecule.bonds().iter() {
-            let node = incidence_graph.node_of(Entity::Bond(bond.id));
+            let node = incidence_graph.node_of(Entity::Bond(bond.id()));
             bond_color_counts[entity_colors[node.index()] as usize] += 1;
         }
         let direct_bond_color = bond_color_counts
@@ -2652,7 +2665,7 @@ impl CompactTopologyCarrier {
         let mut edges = Vec::<[u32; 2]>::with_capacity(molecule.bonds().count() * 2);
 
         for bond in molecule.bonds().iter() {
-            let node = incidence_graph.node_of(Entity::Bond(bond.id));
+            let node = incidence_graph.node_of(Entity::Bond(bond.id()));
             let bond_color = entity_colors[node.index()];
             let [first, second] = bond.atom_ids().map(|atom| atom.index() as u32);
             if direct_bond_color == Some(bond_color) {
@@ -3078,7 +3091,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
             )
         }
         Entity::Bond(id) => {
-            let attributes = molecule.bond(id).attributes;
+            let attributes = molecule.bond(id).attributes();
             (
                 EntityBlockPosition::BOND,
                 CanonicalKeyValue::Product(bond_inherent_fields(attributes)?),
@@ -3347,11 +3360,11 @@ fn topology_bond_key_rows(
                     CanonicalKeyValue::Unsigned(first.max(second)),
                 ]),
             ));
-            fields.extend(bond_inherent_fields(bond.attributes)?);
+            fields.extend(bond_inherent_fields(bond.attributes())?);
             Ok((
                 CanonicalKeyValue::Product(fields),
-                bond.id,
-                incidence_graph.node_of(Entity::Bond(bond.id)),
+                bond.id(),
+                incidence_graph.node_of(Entity::Bond(bond.id())),
             ))
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;

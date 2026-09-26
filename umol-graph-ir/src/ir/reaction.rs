@@ -1389,7 +1389,7 @@ impl Reaction {
                     let host_id = host_bond(*id)?;
                     sets.update_bond(
                         BondHandle::Id(host_id),
-                        host.bond(host_id).attributes,
+                        host.bond(host_id).attributes(),
                         &update,
                     );
                 }
@@ -1401,7 +1401,7 @@ impl Reaction {
                         let host_id = host_bond(*id)?;
                         sets.update_bond(
                             BondHandle::Id(host_id),
-                            host.bond(host_id).attributes,
+                            host.bond(host_id).attributes(),
                             &BondUpdate {
                                 constraints: constraint.into(),
                                 ..Default::default()

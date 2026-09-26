@@ -351,7 +351,7 @@ impl BondView {
         molecule
             .bonds()
             .get(self.id)
-            .map(|view| view.attributes)
+            .map(|view| view.attributes())
             .ok_or_else(|| PyIndexError::new_err("bond id out of range"))
     }
 }

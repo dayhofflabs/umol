@@ -352,7 +352,7 @@ impl Molecule {
                 let [a, b_end] = b.atom_ids();
                 atom_set.contains(&a) && atom_set.contains(&b_end)
             })
-            .map(|b| b.id)
+            .map(|b| b.id())
             .collect();
         let host_dative_bonds: Vec<DativeBondId> = self
             .dative_bonds()
@@ -436,7 +436,7 @@ impl Molecule {
                 let [a, b_end] = b.atom_ids();
                 !kept.contains(&a) || !kept.contains(&b_end)
             })
-            .map(|b| b.id)
+            .map(|b| b.id())
             .collect();
         let mut builder = self.edit();
         let compaction = builder.tracked_remove(&remove_atoms, &remove_bonds);
@@ -1086,7 +1086,7 @@ impl Molecule {
                     Constraint::Atom(*id, met)
                 }
                 Constraint::Bond(id, inner) => {
-                    let met = match self.bond(*id).attributes.constraints.get(inner.key()) {
+                    let met = match self.bond(*id).attributes().constraints.get(inner.key()) {
                         Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
                         None => inner.clone(),
                     };
@@ -1342,7 +1342,7 @@ impl Molecule {
                 (
                     shift_atom(first),
                     shift_atom(second),
-                    bond.attributes.clone(),
+                    bond.attributes().clone(),
                 )
             }));
             entries
@@ -1505,7 +1505,7 @@ impl Molecule {
             editor.add_bond(
                 shift_atom(first),
                 shift_atom(second),
-                bond.attributes.clone(),
+                bond.attributes().clone(),
             );
         }
         for bond in other.dative_bonds().iter() {
@@ -1709,8 +1709,8 @@ impl Molecule {
                     let [a, b] = bond.atom_ids();
                     if component_of(a) == component {
                         let new_bond =
-                            editor.add_bond(map_atom(a), map_atom(b), bond.attributes.clone());
-                        bond_pairs.push((bond.id, new_bond));
+                            editor.add_bond(map_atom(a), map_atom(b), bond.attributes().clone());
+                        bond_pairs.push((bond.id(), new_bond));
                     }
                 }
                 let component_bond_count = bond_pairs.len();

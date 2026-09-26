@@ -18,8 +18,8 @@ This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c
 S2a, the revised S2b, S2c, S2d, S2g, S2h, and S2i1 are implemented. The previous S2b mutable-view
 attempt was reverted. S2i2–S2i4 are complete; the migration compiles and its
 verification passes. S2i5 is complete: mutable molecule/editor views are separate
-types. Atom views expose private ids and attribute borrows through matching
-accessors. The S2j attempt is reverted; the rest of its revised getter inventory
+types. Atom and localized-bond views expose private ids and attribute borrows
+through matching accessors. The S2j attempt is reverted; the rest of its revised getter inventory
 awaits review. S2f is cancelled and the remaining
 S2 work is unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -1274,10 +1274,17 @@ Both mutable atom views retain id(), attributes(), and attributes_mut(). Matchin
 atom-view accessors use #[inline] consistently. Python keeps its read-only id
 property and existing attribute properties; ownership and copying are unchanged.
 
+The four localized-bond views use the same id/attribute accessor pattern.
+BondView stores molecule, id, atoms, and the supplied attribute borrow, in that
+order. BondEditorView stores id, atoms, and the attribute borrow; its crate-private
+new takes those three arguments. All four expose atom_ids() -> [AtomId; 2],
+copying only the two ids, without allocation. All fields are private, and matching
+accessors use #[inline]. Python properties and setters are unchanged.
+
 The readonly storage design retains a separately supplied attribute borrow for
 atoms and localized bonds. Relation views can retrieve their attributes from the
-owning entity set through molecule and id. This step changes only atom views;
-other immutable views retain their current fields and methods.
+owning entity set through molecule and id. These changes cover atom and
+localized-bond views; other immutable views retain their current fields and methods.
 
 For the remaining proposed getter work, make the editor's
 atoms, site, and ligands fields private and migrate their reads to atom_ids(),
@@ -1285,12 +1292,11 @@ site_id(), and ligand_frame(). These match the molecule views. The immutable
 editor views retain their existing local storage, without a Molecule borrow.
 
 Retain the existing crate-private dative/aromatic/multicenter constructors. For
-the four editor views whose public structural fields become private, add
+the three remaining editor views whose public structural fields become private, add
 crate-private new methods on impl<'a>, returning Self with these arguments:
 
 | View | new arguments |
 | --- | --- |
-| BondEditorView | id: BondId, atoms: [AtomId; 2], attributes: &'a BondForm |
 | NoncovalentBondEditorView | id: NoncovalentBondId, atoms: [AtomId; 2], attributes: &'a NoncovalentBondForm |
 | StereoAtomEditorView | id: StereoAtomId, site: AtomId, ligands: &'a [StereoLigand], attributes: &'a StereoAtomForm |
 | StereoBondEditorView | id: StereoBondId, site: BondId, ligands: &'a [StereoLigand], attributes: &'a StereoBondForm |
@@ -3389,6 +3395,16 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   strict Clippy passes for the four affected crates with those targets/features.
   Graph-IR rustdoc with warnings denied, nightly formatting, and git diff --check
   pass. Caller changes preserve existing operations and test assertions.
+
+  **Bond accessor alignment — completed 2026-09-26.** The four bond views expose
+  private ids and attribute borrows through matching accessors with #[inline].
+  BondEditorView also exposes its private endpoints through atom_ids(). Rust
+  callers are migrated; Python properties and setters are unchanged. Graph-IR
+  unit tests pass (7,088 passed, three ignored), as do all 78 Python bond tests
+  after rebuilding. Feature-enabled workspace all-target compilation and
+  graph-IR rustdoc with warnings denied pass. Strict Clippy for the four affected
+  crates, nightly formatting, and git diff --check pass. Reviewed the full diff;
+  callers preserve their operations and assertions.
 
 - **S2j — Local getters and editor structural mutation**
   (`ir::{id,view}`, typed sets, ligand_frame callers and bindings; additive

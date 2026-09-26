@@ -53,7 +53,7 @@ impl RingConstraintInvariantsValidator {
                 validate_bond_constraints(
                     &rings.bond(id),
                     id,
-                    &molecule.bond(id).attributes.constraints,
+                    &molecule.bond(id).attributes().constraints,
                 ),
                 &mut any_underdetermined,
             ) {
@@ -144,7 +144,7 @@ impl RingConstraintInvariantsValidator {
         Ok(validate_bond_constraints(
             &rings.bond(bond_id),
             bond_id,
-            &bond.attributes.constraints,
+            &bond.attributes().constraints,
         ))
     }
 

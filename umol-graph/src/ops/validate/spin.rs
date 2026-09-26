@@ -75,7 +75,7 @@ impl SpinInvariantsValidator {
                 Solution::Underdetermined(()) => any_undetermined = true,
                 Solution::Contradictory(error) => {
                     return Ok(Solution::Contradictory(SpinInvariantsContradiction::Bond {
-                        bond: bond.id,
+                        bond: bond.id(),
                         error,
                     }));
                 }

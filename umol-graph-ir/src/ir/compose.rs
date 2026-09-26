@@ -68,8 +68,8 @@ fn compose_all(
     };
     let mut edge_match = |re: EdgeId, le: EdgeId| {
         r_a.bond(BondId::from(re))
-            .attributes
-            .meet(l_b.bond(BondId::from(le)).attributes)
+            .attributes()
+            .meet(l_b.bond(BondId::from(le)).attributes())
             .is_some()
     };
     let a_inverse = a.reverse().ok()?;

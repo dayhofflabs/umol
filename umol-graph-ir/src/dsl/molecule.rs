@@ -750,9 +750,9 @@ fn render_bonds(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
         .iter()
         .map(|view| {
             render_bond_entry(
-                view.id,
+                view.id(),
                 view.atom_ids(),
-                BondDsl::from_ref(view.attributes).to_edn(),
+                BondDsl::from_ref(view.attributes()).to_edn(),
                 meta,
             )
         })

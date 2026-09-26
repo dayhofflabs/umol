@@ -340,13 +340,13 @@ fn test_kekulization_fixture_output(
     let double_bonds: Vec<BondId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
-        .map(|bond| bond.id)
+        .filter(|bond| bond.attributes().order == NumForm::Lit(2))
+        .map(|bond| bond.id())
         .collect();
     let covered_atoms: HashSet<AtomId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
+        .filter(|bond| bond.attributes().order == NumForm::Lit(2))
         .flat_map(|bond| bond.atom_ids())
         .collect();
     let expected_covered_atoms: HashSet<AtomId> = first
@@ -406,7 +406,7 @@ fn test_kekulization_fixture_output(
         .constraints
         .contains(AtomConstraintKey::AromaticValence)));
     assert!(first.bonds().iter().all(|bond| !bond
-        .attributes
+        .attributes()
         .constraints
         .contains(BondConstraintKey::Aromatic)));
 
@@ -465,13 +465,13 @@ fn test_kekulization_fixture_output_cage(#[case] source: &str) {
     let double_bonds: Vec<BondId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
-        .map(|bond| bond.id)
+        .filter(|bond| bond.attributes().order == NumForm::Lit(2))
+        .map(|bond| bond.id())
         .collect();
     let covered_atoms: HashSet<AtomId> = first
         .bonds()
         .iter()
-        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
+        .filter(|bond| bond.attributes().order == NumForm::Lit(2))
         .flat_map(|bond| bond.atom_ids())
         .collect();
     let expected_covered_atoms: HashSet<AtomId> = system_atoms.into_iter().collect();
@@ -486,9 +486,9 @@ fn test_kekulization_fixture_output_cage(#[case] source: &str) {
     );
     assert_eq!(first.aromatic_systems().count(), 0);
     assert!(first.bonds().iter().all(|bond| {
-        matches!(bond.attributes.order, NumForm::Lit(1 | 2))
+        matches!(bond.attributes().order, NumForm::Lit(1 | 2))
             && !bond
-                .attributes
+                .attributes()
                 .constraints
                 .contains(BondConstraintKey::Aromatic)
     }));

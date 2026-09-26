@@ -5291,7 +5291,7 @@ fn build_reaction(
         deltas.push(Delta::Bond(BondDelta::Remove {
             id,
             atoms: [AtomId::from(x), AtomId::from(y)],
-            attributes: lhs.bond(id).attributes.clone(),
+            attributes: lhs.bond(id).attributes().clone(),
         }));
     }
     // A removed atom also takes its incident overlays (DPO-valid; apply never dangles on overlays).
@@ -5395,7 +5395,7 @@ fn build_reaction(
             continue;
         }
         let Some(order) = new_order else { continue };
-        let old = lhs.bond(id).attributes.order.clone();
+        let old = lhs.bond(id).attributes().order.clone();
         let new = NumForm::Lit(order);
         if old != new {
             deltas.push(Delta::Bond(BondDelta::ModifyField {

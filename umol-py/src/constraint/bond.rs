@@ -558,7 +558,7 @@ impl BondConstraintsView {
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
             BondConstraintsBacking::Bond(bond) => {
                 let bond = bond.bind(py).borrow();
@@ -833,7 +833,7 @@ impl BondRingSizeCounts {
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
-                f(&view.attributes.constraints)
+                f(&view.attributes().constraints)
             }
             BondRingSizeBacking::Bond(bond) => f(&bond.bind(py).borrow().to_rust().constraints),
             BondRingSizeBacking::Value(value) => f(value.bind(py).borrow().to_rust()),

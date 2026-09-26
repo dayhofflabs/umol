@@ -461,18 +461,18 @@ fn convey_molecule(
         table.atoms.push(lowered);
     }
     for bond in molecule.bonds().iter() {
-        let entity = Entity::Bond(bond.id);
+        let entity = Entity::Bond(bond.id());
         let [first, second] = bond.atom_ids();
         let mut lowered = Bond::new(first.0, second.0, lower_order(bond.order(), entity)?);
-        lowered.charge = lower_number(&bond.attributes.charge, entity, "charge")?;
+        lowered.charge = lower_number(&bond.attributes().charge, entity, "charge")?;
         lowered.unpaired_electrons = lower_number(
-            &bond.attributes.unpaired_electrons.count,
+            &bond.attributes().unpaired_electrons.count,
             entity,
             "unpaired electrons",
         )?;
         lowered.multiplicity =
-            lower_multiplicity(&bond.attributes.unpaired_electrons.multiplicity, entity)?;
-        for constraint in bond.attributes.constraints.iter() {
+            lower_multiplicity(&bond.attributes().unpaired_electrons.multiplicity, entity)?;
+        for constraint in bond.attributes().constraints.iter() {
             match constraint {
                 BondConstraintForm::Aromatic(BooleanForm::Lit(true)) => {
                     lowered.order = BondOrder::Aromatic
@@ -481,12 +481,12 @@ fn convey_molecule(
                 BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(coset)) => {
                     table
                         .stereo_bonds
-                        .push(lower_stereo_bond(molecule, bond.id, coset)?);
+                        .push(lower_stereo_bond(molecule, bond.id(), coset)?);
                 }
                 value if value.is_undetermined() => {}
                 value => {
                     return Err(ConveyError::Constraint(Constraint::Bond(
-                        bond.id,
+                        bond.id(),
                         value.clone(),
                     )))
                 }

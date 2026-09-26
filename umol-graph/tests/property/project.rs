@@ -493,7 +493,7 @@ proptest! {
             atoms: base.atoms().iter().map(|atom| atom.attributes().clone()).collect(),
             bonds: base.bonds().iter().map(|bond| {
                 let [first, second] = bond.atom_ids();
-                (first, second, bond.attributes.clone())
+                (first, second, bond.attributes().clone())
             }).collect(),
             stereo_atoms: vec![(AtomId(0), permutation.iter().map(|&i| fixed[i]).collect(),
                 StereoAtomForm::new(StereoKind::Tetrahedral, stored))],
@@ -543,7 +543,7 @@ proptest! {
             atoms: base.atoms().iter().map(|atom| atom.attributes().clone()).collect(),
             bonds: base.bonds().iter().map(|bond| {
                 let [first, second] = bond.atom_ids();
-                (first, second, bond.attributes.clone())
+                (first, second, bond.attributes().clone())
             }).collect(),
             stereo_bonds: vec![(BondId(0), ligands, StereoBondForm::new(StereoKind::CisTrans, stored))],
             ..Default::default()

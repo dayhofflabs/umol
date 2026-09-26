@@ -611,7 +611,7 @@ mod tests {
 
         assert_eq!(mol.atoms().count(), 2);
         assert_eq!(mol.bonds().count(), 1);
-        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).attributes(), &BondForm::from_order(2));
         assert_eq!(mol.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     }
 
@@ -621,7 +621,7 @@ mod tests {
         let spec = atoms([Element::C, Element::O]) + single(0, 1);
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(1));
+        assert_eq!(mol.bond(BondId(0)).attributes(), &BondForm::from_order(1));
         assert_eq!(mol.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
     }
 
@@ -654,7 +654,7 @@ mod tests {
         let spec = atoms([Element::C, Element::C]) + bond_term;
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).attributes, &expected);
+        assert_eq!(mol.bond(BondId(0)).attributes(), &expected);
     }
 
     #[rstest]
@@ -743,7 +743,7 @@ mod tests {
             + named_bond("db", 0_u32, 1_u32, BondForm::from_order(2));
         let mol = spec.build();
 
-        assert_eq!(mol.bond(BondId(0)).attributes, &BondForm::from_order(2));
+        assert_eq!(mol.bond(BondId(0)).attributes(), &BondForm::from_order(2));
     }
 
     #[rstest]

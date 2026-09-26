@@ -30,7 +30,7 @@ impl BondsResolver {
     pub fn plan(&self, molecule: &Molecule) -> Edits {
         let mut edits = Edits::new();
         for bond_id in molecule.bonds().ids() {
-            let bond = molecule.bond(bond_id).attributes;
+            let bond = molecule.bond(bond_id).attributes();
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = BondUpdate::default();
             if matches!(bond.charge, NumForm::Undetermined) {

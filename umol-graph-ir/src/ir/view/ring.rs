@@ -169,7 +169,7 @@ pub(crate) fn atom_ring_membership(rings: &RingSet, atom: AtomId, scope: RingSco
 pub(crate) fn atom_ring_degree(molecule: &Molecule, rings: &RingSet, atom: AtomId) -> NumForm {
     let count = molecule
         .neighbors(atom)
-        .filter(|n| rings.contains_bond(n.bond().id))
+        .filter(|n| rings.contains_bond(n.bond().id()))
         .count();
     NumForm::Lit(count as i64)
 }
@@ -179,7 +179,7 @@ pub(crate) fn atom_ring_degree(molecule: &Molecule, rings: &RingSet, atom: AtomI
 pub(crate) fn atom_ring_valence(molecule: &Molecule, rings: &RingSet, atom: AtomId) -> NumForm {
     molecule
         .neighbors(atom)
-        .filter(|n| rings.contains_bond(n.bond().id))
+        .filter(|n| rings.contains_bond(n.bond().id()))
         .map(|n| n.bond().order().clone())
         .fold(NumForm::Lit(0), |acc, order| acc + order)
 }
