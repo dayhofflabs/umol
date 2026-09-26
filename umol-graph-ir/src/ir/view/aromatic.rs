@@ -23,34 +23,31 @@ use super::constraints::AromaticSystemConstraintsView;
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
     molecule: &'a Molecule,
-    aromatic_systems: &'a AromaticSystems,
 }
 
 impl<'a> AromaticSystemViews<'a> {
-    pub(crate) fn new(molecule: &'a Molecule, aromatic_systems: &'a AromaticSystems) -> Self {
-        Self {
-            molecule,
-            aromatic_systems,
-        }
+    pub(crate) fn new(molecule: &'a Molecule) -> Self {
+        Self { molecule }
     }
 
     pub fn count(&self) -> usize {
-        self.aromatic_systems.count()
+        self.molecule.raw_aromatic_systems().count()
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
-        self.aromatic_systems.ids()
+        self.molecule.raw_aromatic_systems().ids()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = AromaticSystemView<'a>> {
         let molecule = self.molecule;
-        self.aromatic_systems
+        self.molecule
+            .raw_aromatic_systems()
             .ids()
             .map(move |id| AromaticSystemView { molecule, id })
     }
 
     pub fn contains(&self, id: AromaticSystemId) -> bool {
-        self.aromatic_systems.contains(id)
+        self.molecule.raw_aromatic_systems().contains(id)
     }
 
     pub fn get(&self, id: AromaticSystemId) -> Option<AromaticSystemView<'a>> {
@@ -68,12 +65,12 @@ impl<'a> AromaticSystemViews<'a> {
         &self,
         atom: AtomId,
     ) -> impl ExactSizeIterator<Item = AromaticSystemId> + 'a {
-        self.aromatic_systems.incident_ids(atom)
+        self.molecule.raw_aromatic_systems().incident_ids(atom)
     }
 
     /// Whether any aromatic system is incident on `atom`.
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.aromatic_systems.has_incident(atom)
+        self.molecule.raw_aromatic_systems().has_incident(atom)
     }
 
     /// Views of aromatic systems incident on `atom`.
@@ -89,7 +86,7 @@ impl<'a> AromaticSystemViews<'a> {
     /// Id of the aromatic system whose atom set equals `atoms`, if any.
     pub fn of_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<AromaticSystemId> {
         let atoms: Vec<AtomId> = atoms.into_iter().collect();
-        self.aromatic_systems.coincident_id(&atoms)
+        self.molecule.raw_aromatic_systems().coincident_id(&atoms)
     }
 
     /// View of the aromatic system whose atom set equals `atoms`, if any.
@@ -104,10 +101,11 @@ impl<'a> AromaticSystemViews<'a> {
     /// Ids of aromatic systems whose atoms all lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<AromaticSystemId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.aromatic_systems
+        let aromatic_systems = self.molecule.raw_aromatic_systems();
+        aromatic_systems
             .ids()
             .filter(|&id| {
-                self.aromatic_systems
+                aromatic_systems
                     .atom_nodes(id)
                     .iter()
                     .all(|p| set.contains(p))
@@ -145,10 +143,7 @@ impl<'a> AromaticSystemView<'a> {
 
     #[inline]
     pub fn attributes(&self) -> &'a AromaticSystemForm {
-        self.molecule
-            .aromatic_systems()
-            .aromatic_systems
-            .attributes(self.id)
+        self.molecule.raw_aromatic_systems().attributes(self.id)
     }
 
     #[inline]
@@ -176,10 +171,7 @@ impl<'a> AromaticSystemView<'a> {
 
     #[inline]
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.molecule
-            .aromatic_systems()
-            .aromatic_systems
-            .atoms(self.id)
+        self.molecule.raw_aromatic_systems().atoms(self.id)
     }
 
     pub fn atoms(&self) -> impl ExactSizeIterator<Item = AtomView<'a>> + 'a {
@@ -190,12 +182,7 @@ impl<'a> AromaticSystemView<'a> {
     pub fn bond_ids(&self) -> impl Iterator<Item = BondId> + 'a {
         self.molecule
             .raw_graph()
-            .induced_edges(
-                self.molecule
-                    .aromatic_systems()
-                    .aromatic_systems
-                    .atom_nodes(self.id),
-            )
+            .induced_edges(self.molecule.raw_aromatic_systems().atom_nodes(self.id))
             .map(BondId::from)
     }
 
@@ -203,12 +190,7 @@ impl<'a> AromaticSystemView<'a> {
         let molecule = self.molecule;
         self.molecule
             .raw_graph()
-            .induced_edges(
-                self.molecule
-                    .aromatic_systems()
-                    .aromatic_systems
-                    .atom_nodes(self.id),
-            )
+            .induced_edges(self.molecule.raw_aromatic_systems().atom_nodes(self.id))
             .map(move |edge| molecule.bond(BondId::from(edge)))
     }
 
@@ -261,12 +243,7 @@ impl<'a> AromaticSystemView<'a> {
         let molecule = self.molecule;
         self.molecule
             .raw_graph()
-            .induced_edges(
-                self.molecule
-                    .aromatic_systems()
-                    .aromatic_systems
-                    .atom_nodes(self.id),
-            )
+            .induced_edges(self.molecule.raw_aromatic_systems().atom_nodes(self.id))
             .map(BondId::from)
             .filter(move |b| subset.contains(b))
             .map(move |id| molecule.bond(id))

@@ -1293,6 +1293,8 @@ acceptor. Readonly references/iterators retain 'a; mutable-view accessor borrows
 last for the method borrow. Both mutable views expose attributes_mut(). Public
 entity lookup preserves invalid-id panics; the namespace's get remains optional.
 
+AromaticSystemViews stores only molecule; its constructor takes that borrow alone.
+AromaticSystemViews and AromaticSystemView access the set through raw_aromatic_systems().
 AromaticSystemView stores molecule and id. AromaticSystemEditorView stores
 aromatic_systems: &AromaticSystems and id; both mutable views store
 aromatic_systems: &mut AromaticSystems and id. All fields are private, with the

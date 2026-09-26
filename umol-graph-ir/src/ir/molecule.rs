@@ -294,7 +294,7 @@ impl Molecule {
     }
 
     pub fn aromatic_systems(&self) -> AromaticSystemViews<'_> {
-        AromaticSystemViews::new(self, &self.aromatic_systems)
+        AromaticSystemViews::new(self)
     }
 
     /// View of the aromatic system with `id`.
