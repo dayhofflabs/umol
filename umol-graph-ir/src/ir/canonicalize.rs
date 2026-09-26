@@ -332,7 +332,7 @@ pub trait Canonicalize: Reframe {
     /// # Errors
     ///
     /// Returns the aggregate-specific canonicalization error when intrinsic normalization is
-    /// unsatisfiable.
+    /// unsatisfiable or a carried attribute cannot be transported in its stored frame.
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error>;
 
     /// Construct the complete canonical form and its source-to-canonical remapping.
@@ -344,7 +344,7 @@ pub trait Canonicalize: Reframe {
     ///
     /// # Errors
     ///
-    /// Returns the same aggregate-specific intrinsic-normalization error as
+    /// Returns the same aggregate-specific canonicalization error as
     /// [`Self::canonicalize`]. A [`Reaction`] also reports failure to materialize its reaction span.
     ///
     /// # Semantic properties
@@ -2771,18 +2771,25 @@ fn stereo_refinement_descriptor(
             ligands.sort_unstable();
             Ok(descriptor(ligands, StereoConfigurationForm::Undetermined))
         }
-        StereoConfigurationForm::Kinded(kind, _) => stereo_frame_permutations(*kind)
-            .map(|permutation| {
-                configuration
-                    .apply(permutation)
-                    .ok_or(Contradiction)?
-                    .normalize()
-                    .map(|configuration| descriptor(permutation.act(ligand_classes), configuration))
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .min()
-            .ok_or(Contradiction),
+        StereoConfigurationForm::Kinded(kind, _) => {
+            if ligand_classes.len() != kind.degree() {
+                return Err(Contradiction);
+            }
+            stereo_frame_permutations(*kind)
+                .map(|permutation| {
+                    configuration
+                        .apply(permutation)
+                        .ok_or(Contradiction)?
+                        .normalize()
+                        .map(|configuration| {
+                            descriptor(permutation.act(ligand_classes), configuration)
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .min()
+                .ok_or(Contradiction)
+        }
     }
 }
 
@@ -3570,6 +3577,9 @@ fn canonical_kinded_stereo_frame(
     let Some(kind) = configuration.kind() else {
         return Ok(None);
     };
+    if ligands.len() != kind.degree() {
+        return Err(Contradiction);
+    }
     let mut minimum: Option<(Vec<StereoLigand>, StereoConfigurationForm)> = None;
     for permutation in stereo_frame_permutations(kind) {
         let candidate = (
@@ -4799,7 +4809,7 @@ impl Canonicalize for Molecule {
 /// Failure to construct a canonical [`Molecule`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeCanonicalizeError {
-    /// A carried value is contradictory or literal electron counts do not match their atom list.
+    /// A carried value is contradictory or incompatible with its stored atom or ligand frame.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
 }
@@ -4807,7 +4817,7 @@ pub enum MoleculeCanonicalizeError {
 /// Failure to construct a canonical [`ReactionSpan`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionSpanCanonicalizeError {
-    /// A carried value is contradictory or literal electron counts do not match their atom list.
+    /// A carried value is contradictory or incompatible with its stored atom or ligand frame.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
 }

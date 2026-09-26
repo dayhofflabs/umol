@@ -15,8 +15,8 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 ## Design status — 2026-09-26
 
 This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
-S2a, the revised S2b, S2c, and S2d are implemented. The previous S2b mutable-view
-attempt was reverted. S2g is next; S2f is cancelled and the remaining S2 work is
+S2a, the revised S2b, S2c, S2d, and S2g are implemented. The previous S2b mutable-view
+attempt was reverted. S2h is next; S2f is cancelled and the remaining S2 work is
 unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -57,8 +57,8 @@ Replacement verbs and payloads in the Edit/reaction DSLs are approved in S3.
 Python consumption, counter-based accessor invalidation, and storage names are
 approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
-incidence/count-aware consumers are complete. S2f is cancelled. S2g is next; its
-frame-consumer decisions remain approved and unimplemented.
+incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
+checks are implemented; S2h is next.
 
 ## Editor and transaction API
 
@@ -2871,7 +2871,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
 - **S2f — cancelled.** No depiction/CoordGen error-handling, error-enum, or
   private-signature changes are included in this work.
 
-- **S2g — Frame-dependent attribute consumers** (`ir::canonicalize`,
+- **S2g — completed. Frame-dependent attribute consumers** (`ir::canonicalize`,
   `ir::stereo` transport, `umol-graph::ops::validate::stereo`;
   behavior changes and enum extension, red→green). [dep: S2c]
 
@@ -2919,6 +2919,19 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   Tests needing aggregate states currently rejected by construction run in S2h;
   standalone form/action cases and valid aggregate cases run here. Tests for
   malformed coset indices must not demand correct symmetry output.
+
+  **Implemented and verified — 2026-09-26.** Both kind-sized canonicalization
+  permutation paths reject shorter/longer frames with Contradiction.
+  observable_descriptor returns None on kind/ligand-count disagreement.
+  Conformance validation checks both topicity positions and rejects wrong-degree
+  ligand-symmetry assertions, including negative assertions. Existing transport
+  checks and all operation signatures remain unchanged; the only new public
+  symbol is TopicityPositionOutOfRange.
+
+  Passed 297 canonicalization, 19 symmetry, 350 stereo, and 31 stereo-conformance
+  unit tests; 22 canonicalization and 31 frame property tests at 128 cases each;
+  rustdoc for graph-ir/graph with warnings denied, nightly formatting, and
+  git diff --check. Malformed aggregate tests remain in S2h.
 
 - **S2h — Attribute agreement leaves aggregate integrity**
   (`ir::{molecule::integrity,stereo::integrity,reaction::integrity,reaction_span}`,
@@ -2991,6 +3004,10 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   - Canonicalization, transport, and stereo validation handle the newly admitted
     frame/constraint disagreements as specified in S2g, without demanding correct
     symmetry classification for malformed configurations.
+    Cover the construction-dependent expect calls around complete_candidate in
+    canonicalize_full_with_options and reframe_by in reaction_span_canonical_candidate:
+    newly admitted constraint/frame disagreements must reach the existing
+    Contradiction path before those infallible search callbacks.
   - Standalone electron transport still returns None on a degree mismatch;
     the existing chemistry boundaries retain ElectronCountMismatch, no applicable
     plan, and AromaticSystemFailure. Getter cases use [1, 2] and [1, 2, 0, 5]

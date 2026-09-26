@@ -121,9 +121,12 @@ impl Molecule {
     /// The observable coset of a stereo node under the current orbit partition:
     /// the stored coset reduced by ligand-position swaps that preserve the ligands'
     /// current classes. `None` for non-stereo nodes or undetermined and
-    /// nonliteral configurations.
+    /// nonliteral configurations, or a ligand count that differs from the kind's degree.
     fn observable_descriptor(&self, entity: Entity, orbits: &[NodeId]) -> Option<u32> {
         let (kind, coset, ligands) = self.stereo_center(entity)?;
+        if ligands.len() != kind.degree() {
+            return None;
+        }
         let &StereoCoset::Lit(raw) = coset else {
             return None;
         };
