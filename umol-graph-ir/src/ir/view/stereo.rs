@@ -154,6 +154,9 @@ pub struct StereoAtomViewMut<'a> {
 }
 
 /// Mutable editor access to a stereo atom.
+///
+/// Structural mutations update incidence and preserve attributes and constraints.
+/// Ligand mutations preserve the site. Publication checks structural integrity.
 #[derive(Debug)]
 pub struct StereoAtomEditorViewMut<'a> {
     stereo_atoms: &'a mut StereoAtoms,
@@ -324,6 +327,9 @@ pub struct StereoBondViewMut<'a> {
 }
 
 /// Mutable editor access to a stereo bond.
+///
+/// Structural mutations update incidence and preserve attributes and constraints.
+/// Ligand mutations preserve the site. Publication checks structural integrity.
 #[derive(Debug)]
 pub struct StereoBondEditorViewMut<'a> {
     stereo_bonds: &'a mut StereoBonds,
@@ -517,32 +523,10 @@ macro_rules! stereo_view_queries {
                 self.molecule.$raw().attributes(self.id)
             }
 
-            /// The coordination-geometry kind.
-            #[inline]
-            pub fn kind(&self) -> StereoKind {
-                self.attributes()
-                    .configuration
-                    .kind()
-                    .expect("stereo view has a concrete kind")
-            }
-
-            /// The stereo coset.
-            #[inline]
-            pub fn coset(&self) -> &'a StereoCoset {
-                self.attributes()
-                    .configuration
-                    .coset()
-                    .expect("stereo view has a concrete coset")
-            }
-
             /// Id of the stereo site.
             #[inline]
             pub fn site_id(&self) -> $site {
                 self.molecule.$raw().site(self.id)
-            }
-
-            pub fn ligand_count(&self) -> usize {
-                self.molecule.$raw().ligands(self.id).len()
             }
 
             /// The ordered ligands defining the stereo configuration.
@@ -571,14 +555,6 @@ macro_rules! stereo_view_queries {
                     .filter(|ligand| ligand.kind() == StereoLigandKind::Atom)
             }
 
-            pub fn atom_ligand_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-                self.atom_ligands().map(|ligand| ligand.atom_id())
-            }
-
-            pub fn atom_ligand_count(&self) -> usize {
-                self.atom_ligands().count()
-            }
-
             pub fn implicit_hydrogen_ligands(
                 &self,
             ) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
@@ -586,26 +562,9 @@ macro_rules! stereo_view_queries {
                     .filter(|ligand| ligand.kind() == StereoLigandKind::ImplicitHydrogen)
             }
 
-            pub fn implicit_hydrogen_atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-                self.implicit_hydrogen_ligands()
-                    .map(|ligand| ligand.atom_id())
-            }
-
-            pub fn implicit_hydrogen_count(&self) -> usize {
-                self.implicit_hydrogen_ligands().count()
-            }
-
             pub fn lone_pair_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
                 self.ligands()
                     .filter(|ligand| ligand.kind() == StereoLigandKind::LonePair)
-            }
-
-            pub fn lone_pair_atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-                self.lone_pair_ligands().map(|ligand| ligand.atom_id())
-            }
-
-            pub fn lone_pair_count(&self) -> usize {
-                self.lone_pair_ligands().count()
             }
 
             /// The stored configuration read against `ligands`, which must hold the same distinct
@@ -692,13 +651,6 @@ macro_rules! stereo_view_queries {
                 symmetry.topicity(a, b) == Topicity::Diastereotopic
             }
 
-            /// The frame position of an atom ligand, if `atom` is one.
-            pub fn ligand_position(&self, atom: AtomId) -> Option<StereoLigandPosition> {
-                self.ligands()
-                    .position(|l| l.kind() == StereoLigandKind::Atom && l.atom_id() == atom)
-                    .map(|i| StereoLigandPosition(i as u32))
-            }
-
             /// The ordered ligand frame.
             #[inline]
             pub fn ligand_frame(&self) -> &'a [StereoLigand] {
@@ -724,6 +676,140 @@ stereo_view_queries!(
     raw_stereo_bonds,
     "ligand id must refer to a ligand of this stereo bond"
 );
+
+macro_rules! stereo_local_queries {
+    ($view:ident, $borrow:lifetime) => {
+        impl<'a> $view<'a> {
+            /// The coordination-geometry kind.
+            ///
+            /// # Panics
+            ///
+            /// Panics when the configuration is undetermined.
+            #[inline]
+            pub fn kind(&self) -> StereoKind {
+                self.attributes()
+                    .configuration
+                    .kind()
+                    .expect("stereo view has a concrete kind")
+            }
+
+            /// The stereo coset.
+            ///
+            /// # Panics
+            ///
+            /// Panics when the configuration is undetermined.
+            #[inline]
+            pub fn coset(&self) -> &$borrow StereoCoset {
+                self.attributes()
+                    .configuration
+                    .coset()
+                    .expect("stereo view has a concrete coset")
+            }
+
+            pub fn ligand_count(&self) -> usize {
+                self.ligand_frame().len()
+            }
+
+            /// The frame position of an actual-atom ligand with this id, if present.
+            pub fn ligand_position(&self, id: AtomId) -> Option<StereoLigandPosition> {
+                self.ligand_frame()
+                    .iter()
+                    .position(|ligand| {
+                        ligand.kind == StereoLigandKind::Atom && ligand.atom_id == id
+                    })
+                    .map(|index| StereoLigandPosition(index as u32))
+            }
+
+            pub fn atom_ligand_ids(&self) -> impl Iterator<Item = AtomId> + $borrow {
+                self.ligand_frame()
+                    .iter()
+                    .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+                    .map(|ligand| ligand.atom_id)
+            }
+
+            pub fn implicit_hydrogen_atom_ids(&self) -> impl Iterator<Item = AtomId> + $borrow {
+                self.ligand_frame()
+                    .iter()
+                    .filter(|ligand| ligand.kind == StereoLigandKind::ImplicitHydrogen)
+                    .map(|ligand| ligand.atom_id)
+            }
+
+            pub fn lone_pair_atom_ids(&self) -> impl Iterator<Item = AtomId> + $borrow {
+                self.ligand_frame()
+                    .iter()
+                    .filter(|ligand| ligand.kind == StereoLigandKind::LonePair)
+                    .map(|ligand| ligand.atom_id)
+            }
+
+            pub fn atom_ligand_count(&self) -> usize {
+                self.atom_ligand_ids().count()
+            }
+
+            pub fn implicit_hydrogen_count(&self) -> usize {
+                self.implicit_hydrogen_atom_ids().count()
+            }
+
+            pub fn lone_pair_count(&self) -> usize {
+                self.lone_pair_atom_ids().count()
+            }
+        }
+    };
+}
+
+stereo_local_queries!(StereoAtomView, 'a);
+stereo_local_queries!(StereoAtomEditorView, 'a);
+stereo_local_queries!(StereoAtomViewMut, '_);
+stereo_local_queries!(StereoAtomEditorViewMut, '_);
+stereo_local_queries!(StereoBondView, 'a);
+stereo_local_queries!(StereoBondEditorView, 'a);
+stereo_local_queries!(StereoBondViewMut, '_);
+stereo_local_queries!(StereoBondEditorViewMut, '_);
+
+macro_rules! stereo_editor_mutation {
+    ($view:ident, $set:ident, $site:ty) => {
+        impl<'a> $view<'a> {
+            /// Replace the site, preserving ligands, attributes, and constraints.
+            pub fn replace_site(&mut self, site: $site) {
+                self.$set.replace_site(self.id, site);
+            }
+
+            /// Replace the ligand list, preserving the supplied order.
+            pub fn replace_ligands(&mut self, ligands: &[StereoLigand]) {
+                self.$set.replace_ligands(self.id, ligands);
+            }
+
+            /// Replace the ligand at `position` without changing the ligand count.
+            ///
+            /// # Panics
+            ///
+            /// Panics when `position` is outside the ligand list.
+            pub fn replace_ligand(&mut self, position: StereoLigandPosition, ligand: StereoLigand) {
+                self.$set.replace_ligand(self.id, position.index(), ligand);
+            }
+
+            /// Insert a ligand at `position`, preserving the order of the existing ligands.
+            ///
+            /// # Panics
+            ///
+            /// Panics when `position` exceeds the ligand count. Insertion at the end is allowed.
+            pub fn insert_ligand(&mut self, position: StereoLigandPosition, ligand: StereoLigand) {
+                self.$set.insert_ligand(self.id, position.index(), ligand);
+            }
+
+            /// Remove the ligand at `position`, preserving the order of the remaining ligands.
+            ///
+            /// # Panics
+            ///
+            /// Panics when `position` is outside the ligand list.
+            pub fn remove_ligand(&mut self, position: StereoLigandPosition) {
+                self.$set.remove_ligand(self.id, position.index());
+            }
+        }
+    };
+}
+
+stereo_editor_mutation!(StereoAtomEditorViewMut, stereo_atoms, AtomId);
+stereo_editor_mutation!(StereoBondEditorViewMut, stereo_bonds, BondId);
 
 /// Stored constraint container of the stereo atom `id`.
 pub(crate) fn stereo_atom_asserted_constraints(
@@ -772,9 +858,13 @@ mod tests {
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::coloring::ConstitutionColoring;
+    use crate::ir::constraint::{
+        StereoAtomConstraintForm, StereoBondConstraintForm, StereogenicityForm,
+    };
+    use crate::ir::entity::Entity;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::{Molecule, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
     use crate::ir::stereo::{
         StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Stereogenicity, Topicity,
     };
@@ -892,6 +982,54 @@ mod tests {
             )],
             ..Default::default()
         })
+    }
+
+    #[fixture]
+    fn stereo_entries() -> MoleculeEntries {
+        let mut bonds = vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(5), AtomId(6), BondForm::from_order(2)),
+            (AtomId(0), AtomId(5), BondForm::from_order(1)),
+        ];
+        for site in [AtomId(0), AtomId(1), AtomId(5), AtomId(6)] {
+            for ligand in [AtomId(2), AtomId(3), AtomId(4), AtomId(7)] {
+                bonds.push((site, ligand, BondForm::from_order(1)));
+            }
+        }
+        let ligands = vec![
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+        ];
+        MoleculeEntries {
+            atoms: vec![AtomForm::default(); 8],
+            bonds,
+            stereo_atoms: vec![
+                (
+                    AtomId(0),
+                    ligands.clone(),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1))
+                        .with_constraint(StereoAtomConstraintForm::Stereogenicity(
+                            StereogenicityForm::Lit(Stereogenicity::Prochiral),
+                        )),
+                ),
+                (AtomId(6), vec![], StereoAtomForm::default()),
+            ],
+            stereo_bonds: vec![
+                (
+                    BondId(0),
+                    ligands.clone(),
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)).with_constraint(
+                        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                            Stereogenicity::Prochiral,
+                        )),
+                    ),
+                ),
+                (BondId(2), ligands, StereoBondForm::default()),
+            ],
+            ..Default::default()
+        }
     }
 
     #[rstest]
@@ -1346,6 +1484,114 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_atom_editor_view_local_queries(virtual_ligand_molecule: Molecule) {
+        let editor = virtual_ligand_molecule.edit();
+        let (coset, atoms, hydrogens, lone_pairs) = {
+            let view = editor.stereo_atom(StereoAtomId(0));
+            assert_eq!(view.kind(), StereoKind::Tetrahedral);
+            assert_eq!(view.ligand_count(), 4);
+            assert_eq!(view.atom_ligand_count(), 2);
+            assert_eq!(view.implicit_hydrogen_count(), 1);
+            assert_eq!(view.lone_pair_count(), 1);
+            assert_eq!(
+                view.ligand_position(AtomId(1)),
+                Some(StereoLigandPosition(0))
+            );
+            assert_eq!(
+                view.ligand_position(AtomId(4)),
+                Some(StereoLigandPosition(3))
+            );
+            assert_eq!(view.ligand_position(AtomId(0)), None);
+            assert_eq!(view.ligand_position(AtomId(99)), None);
+            (
+                view.coset(),
+                view.atom_ligand_ids(),
+                view.implicit_hydrogen_atom_ids(),
+                view.lone_pair_atom_ids(),
+            )
+        };
+        assert_eq!(coset, &StereoCoset::Lit(1));
+        assert_eq!(atoms.collect::<Vec<_>>(), vec![AtomId(1), AtomId(4)]);
+        assert_eq!(hydrogens.collect::<Vec<_>>(), vec![AtomId(0)]);
+        assert_eq!(lone_pairs.collect::<Vec<_>>(), vec![AtomId(0)]);
+    }
+
+    #[rstest]
+    #[case::kind(false)]
+    #[case::coset(true)]
+    #[should_panic(expected = "stereo view has a concrete")]
+    fn test_stereo_atom_editor_view_configuration_error(
+        mut stereo_entries: MoleculeEntries,
+        #[case] coset: bool,
+    ) {
+        stereo_entries.stereo_atoms[0].2 = StereoAtomForm::default();
+        let virtual_ligand_molecule = Molecule::from_entries(stereo_entries);
+        let editor = virtual_ligand_molecule.edit();
+        let view = editor.stereo_atom(StereoAtomId(0));
+        if coset {
+            let _ = view.coset();
+        } else {
+            let _ = view.kind();
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "invalid stereo atom id")]
+    fn test_stereo_atom_editor_view_id_error(molecule: Molecule) {
+        molecule.edit().stereo_atom(StereoAtomId(1));
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_mut_local_queries(virtual_ligand_molecule: Molecule) {
+        let mut molecule = virtual_ligand_molecule;
+        let view = molecule.stereo_atom_mut(StereoAtomId(0));
+        assert_eq!(view.kind(), StereoKind::Tetrahedral);
+        assert_eq!(view.ligand_count(), 4);
+        assert_eq!(view.atom_ligand_count(), 2);
+        assert_eq!(view.implicit_hydrogen_count(), 1);
+        assert_eq!(view.lone_pair_count(), 1);
+        assert_eq!(
+            view.ligand_position(AtomId(1)),
+            Some(StereoLigandPosition(0))
+        );
+        assert_eq!(
+            view.ligand_position(AtomId(4)),
+            Some(StereoLigandPosition(3))
+        );
+        assert_eq!(view.ligand_position(AtomId(0)), None);
+        assert_eq!(view.ligand_position(AtomId(99)), None);
+        let (coset, atoms, hydrogens, lone_pairs) = (
+            view.coset(),
+            view.atom_ligand_ids(),
+            view.implicit_hydrogen_atom_ids(),
+            view.lone_pair_atom_ids(),
+        );
+        assert_eq!(coset, &StereoCoset::Lit(1));
+        assert_eq!(atoms.collect::<Vec<_>>(), vec![AtomId(1), AtomId(4)]);
+        assert_eq!(hydrogens.collect::<Vec<_>>(), vec![AtomId(0)]);
+        assert_eq!(lone_pairs.collect::<Vec<_>>(), vec![AtomId(0)]);
+    }
+
+    #[rstest]
+    #[case::kind(false)]
+    #[case::coset(true)]
+    #[should_panic(expected = "stereo view has a concrete")]
+    fn test_stereo_atom_view_mut_configuration_error(
+        mut stereo_entries: MoleculeEntries,
+        #[case] coset: bool,
+    ) {
+        stereo_entries.stereo_atoms[0].2 = StereoAtomForm::default();
+        let virtual_ligand_molecule = Molecule::from_entries(stereo_entries);
+        let mut molecule = virtual_ligand_molecule;
+        let view = molecule.stereo_atom_mut(StereoAtomId(0));
+        if coset {
+            let _ = view.coset();
+        } else {
+            let _ = view.kind();
+        }
+    }
+
+    #[rstest]
     fn test_stereo_atom_view_mut_attributes_mut(mut molecule: Molecule) {
         let expected = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0));
         {
@@ -1353,6 +1599,8 @@ mod tests {
             assert_eq!(view.id(), StereoAtomId(0));
             view.attributes_mut().configuration = expected.configuration.clone();
             assert_eq!(view.attributes(), &expected);
+            assert_eq!(view.kind(), StereoKind::Tetrahedral);
+            assert_eq!(view.coset(), &StereoCoset::Lit(0));
             assert_eq!(view.constraints(), &expected.constraints);
             assert_eq!(view.site_id(), AtomId(0));
             assert_eq!(
@@ -1373,6 +1621,56 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_atom_editor_view_mut_local_queries(virtual_ligand_molecule: Molecule) {
+        let mut editor = virtual_ligand_molecule.edit();
+        let view = editor.stereo_atom_mut(StereoAtomId(0));
+        assert_eq!(view.kind(), StereoKind::Tetrahedral);
+        assert_eq!(view.ligand_count(), 4);
+        assert_eq!(view.atom_ligand_count(), 2);
+        assert_eq!(view.implicit_hydrogen_count(), 1);
+        assert_eq!(view.lone_pair_count(), 1);
+        assert_eq!(
+            view.ligand_position(AtomId(1)),
+            Some(StereoLigandPosition(0))
+        );
+        assert_eq!(
+            view.ligand_position(AtomId(4)),
+            Some(StereoLigandPosition(3))
+        );
+        assert_eq!(view.ligand_position(AtomId(0)), None);
+        assert_eq!(view.ligand_position(AtomId(99)), None);
+        let (coset, atoms, hydrogens, lone_pairs) = (
+            view.coset(),
+            view.atom_ligand_ids(),
+            view.implicit_hydrogen_atom_ids(),
+            view.lone_pair_atom_ids(),
+        );
+        assert_eq!(coset, &StereoCoset::Lit(1));
+        assert_eq!(atoms.collect::<Vec<_>>(), vec![AtomId(1), AtomId(4)]);
+        assert_eq!(hydrogens.collect::<Vec<_>>(), vec![AtomId(0)]);
+        assert_eq!(lone_pairs.collect::<Vec<_>>(), vec![AtomId(0)]);
+    }
+
+    #[rstest]
+    #[case::kind(false)]
+    #[case::coset(true)]
+    #[should_panic(expected = "stereo view has a concrete")]
+    fn test_stereo_atom_editor_view_mut_configuration_error(
+        mut stereo_entries: MoleculeEntries,
+        #[case] coset: bool,
+    ) {
+        stereo_entries.stereo_atoms[0].2 = StereoAtomForm::default();
+        let virtual_ligand_molecule = Molecule::from_entries(stereo_entries);
+        let mut editor = virtual_ligand_molecule.edit();
+        let view = editor.stereo_atom_mut(StereoAtomId(0));
+        if coset {
+            let _ = view.coset();
+        } else {
+            let _ = view.kind();
+        }
+    }
+
+    #[rstest]
     fn test_stereo_atom_editor_view_mut_attributes_mut(molecule: Molecule) {
         let mut editor = molecule.edit();
         let expected = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0));
@@ -1381,6 +1679,8 @@ mod tests {
             assert_eq!(view.id(), StereoAtomId(0));
             view.attributes_mut().configuration = expected.configuration.clone();
             assert_eq!(view.attributes(), &expected);
+            assert_eq!(view.kind(), StereoKind::Tetrahedral);
+            assert_eq!(view.coset(), &StereoCoset::Lit(0));
             assert_eq!(view.constraints(), &expected.constraints);
             assert_eq!(view.site_id(), AtomId(0));
             assert_eq!(
@@ -1398,9 +1698,284 @@ mod tests {
     }
 
     #[rstest]
-    #[should_panic(expected = "invalid stereo atom id")]
-    fn test_stereo_atom_editor_view_id_error(molecule: Molecule) {
-        molecule.edit().stereo_atom(StereoAtomId(1));
+    fn test_stereo_atom_editor_view_mut_replace_site(mut stereo_entries: MoleculeEntries) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        {
+            let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+            view.replace_site(AtomId(5));
+            assert_eq!(view.site_id(), AtomId(5));
+            assert_eq!(view.ligand_frame(), stereo_entries.stereo_atoms[0].1);
+            assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
+        }
+        stereo_entries.stereo_atoms[0].0 = AtomId(5);
+        let molecule = editor.try_build().unwrap();
+        assert_eq!(
+            molecule.stereo_atoms().at_id(AtomId(5)),
+            Some(StereoAtomId(0))
+        );
+        assert_eq!(molecule.stereo_atoms().at_id(AtomId(0)), None);
+        assert_eq!(molecule, Molecule::from_entries(stereo_entries));
+    }
+
+    #[rstest]
+    #[case::missing(AtomId(99), MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(99)) })]
+    #[case::duplicate(AtomId(6), MoleculeIntegrityError::DuplicateStereoAtomSites { atom: AtomId(6) })]
+    fn test_stereo_atom_editor_view_mut_replace_site_publication(
+        stereo_entries: MoleculeEntries,
+        #[case] site: AtomId,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        editor.stereo_atom_mut(StereoAtomId(0)).replace_site(site);
+        assert_eq!(editor.try_build(), Err(expected));
+    }
+
+    #[rstest]
+    #[case::reordered(vec![StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)])]
+    #[case::virtual_ligands(vec![StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)])]
+    #[case::empty(vec![])]
+    #[case::single(vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)])]
+    fn test_stereo_atom_editor_view_mut_replace_ligands(
+        mut stereo_entries: MoleculeEntries,
+        #[case] ligands: Vec<StereoLigand>,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        {
+            let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+            view.replace_ligands(&ligands);
+            assert_eq!(view.ligand_frame(), ligands);
+            assert_eq!(view.ligand_count(), ligands.len());
+            assert_eq!(view.site_id(), stereo_entries.stereo_atoms[0].0);
+            assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
+        }
+        stereo_entries.stereo_atoms[0].1 = ligands;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(stereo_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::missing_atom(vec![StereoLigand::new(AtomId(99), StereoLigandKind::Atom)], MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(99)) })]
+    #[case::duplicate(vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom); 2], MoleculeIntegrityError::DuplicateStereoLigand { entity: Entity::StereoAtom(StereoAtomId(0)), ligand: StereoLigand::new(AtomId(2), StereoLigandKind::Atom) })]
+    #[case::wrong_anchor(vec![StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)], MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity: Entity::StereoAtom(StereoAtomId(0)) })]
+    fn test_stereo_atom_editor_view_mut_replace_ligands_publication(
+        stereo_entries: MoleculeEntries,
+        #[case] ligands: Vec<StereoLigand>,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        editor
+            .stereo_atom_mut(StereoAtomId(0))
+            .replace_ligands(&ligands);
+        assert_eq!(editor.try_build(), Err(expected));
+    }
+
+    #[rstest]
+    #[case::attributes_first(true)]
+    #[case::ligands_first(false)]
+    fn test_stereo_atom_editor_view_mut_replace_ligands_attributes(
+        mut stereo_entries: MoleculeEntries,
+        #[case] attributes_first: bool,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        let mut attributes = stereo_entries.stereo_atoms[0].2.clone();
+        attributes.configuration =
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)).configuration;
+        let ligands = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+        ];
+        {
+            let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+            if attributes_first {
+                *view.attributes_mut() = attributes.clone();
+                view.replace_ligands(&ligands);
+            } else {
+                view.replace_ligands(&ligands);
+                *view.attributes_mut() = attributes.clone();
+            }
+            assert_eq!(view.coset(), &StereoCoset::Lit(0));
+        }
+        stereo_entries.stereo_atoms[0].1 = ligands;
+        stereo_entries.stereo_atoms[0].2 = attributes;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(stereo_entries))
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_editor_view_mut_replace_ligands_incidence(
+        mut stereo_entries: MoleculeEntries,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        {
+            let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+            view.replace_ligand(
+                StereoLigandPosition(0),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            );
+            view.insert_ligand(
+                StereoLigandPosition(1),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            );
+            view.remove_ligand(StereoLigandPosition(2));
+        }
+        stereo_entries.stereo_atoms[0].1 = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+        ];
+        let molecule = editor.try_build().unwrap();
+        assert_eq!(
+            molecule
+                .stereo_atoms()
+                .incident_as_ligand_ids(AtomId(3))
+                .collect::<Vec<_>>(),
+            vec![]
+        );
+        assert_eq!(
+            molecule
+                .stereo_atoms()
+                .incident_as_ligand_ids(AtomId(2))
+                .collect::<Vec<_>>(),
+            vec![StereoAtomId(0)]
+        );
+        assert_eq!(molecule, Molecule::from_entries(stereo_entries));
+    }
+
+    #[rstest]
+    #[case::first(StereoLigandPosition(0), vec![StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)])]
+    #[case::last(StereoLigandPosition(3), vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)])]
+    fn test_stereo_atom_editor_view_mut_replace_ligand(
+        stereo_entries: MoleculeEntries,
+        #[case] position: StereoLigandPosition,
+        #[case] expected: Vec<StereoLigand>,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+        view.replace_ligand(
+            position,
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        );
+        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_count(), expected.len());
+        assert_eq!(view.site_id(), stereo_entries.stereo_atoms[0].0);
+        assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
+    }
+
+    #[rstest]
+    #[case::empty(0, StereoLigandPosition(0))]
+    #[case::end(4, StereoLigandPosition(4))]
+    #[should_panic]
+    fn test_stereo_atom_editor_view_mut_replace_ligand_error(
+        stereo_entries: MoleculeEntries,
+        #[case] length: usize,
+        #[case] position: StereoLigandPosition,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+        let ligands = view.ligand_frame()[..length].to_vec();
+        view.replace_ligands(&ligands);
+        view.replace_ligand(
+            position,
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        );
+    }
+
+    #[rstest]
+    #[case::first(StereoLigandPosition(0), vec![StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)])]
+    #[case::middle(StereoLigandPosition(2), vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)])]
+    #[case::end(StereoLigandPosition(4), vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)])]
+    fn test_stereo_atom_editor_view_mut_insert_ligand(
+        stereo_entries: MoleculeEntries,
+        #[case] position: StereoLigandPosition,
+        #[case] expected: Vec<StereoLigand>,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+        view.insert_ligand(
+            position,
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        );
+        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_count(), expected.len());
+        assert_eq!(view.site_id(), stereo_entries.stereo_atoms[0].0);
+        assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_editor_view_mut_insert_ligand_empty(stereo_entries: MoleculeEntries) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+        view.replace_ligands(&[]);
+        view.insert_ligand(
+            StereoLigandPosition(0),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        );
+        assert_eq!(
+            view.ligand_frame(),
+            &[StereoLigand::new(AtomId(2), StereoLigandKind::Atom)]
+        );
+        view.remove_ligand(StereoLigandPosition(0));
+        assert_eq!(view.ligand_frame(), &[]);
+        assert_eq!(view.ligand_count(), 0);
+    }
+
+    #[rstest]
+    #[case::empty(0, StereoLigandPosition(1))]
+    #[case::end(4, StereoLigandPosition(5))]
+    #[should_panic]
+    fn test_stereo_atom_editor_view_mut_insert_ligand_error(
+        stereo_entries: MoleculeEntries,
+        #[case] length: usize,
+        #[case] position: StereoLigandPosition,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+        let ligands = view.ligand_frame()[..length].to_vec();
+        view.replace_ligands(&ligands);
+        view.insert_ligand(
+            position,
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        );
+    }
+
+    #[rstest]
+    #[case::first(StereoLigandPosition(0), vec![StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)])]
+    #[case::last(StereoLigandPosition(3), vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)])]
+    fn test_stereo_atom_editor_view_mut_remove_ligand(
+        stereo_entries: MoleculeEntries,
+        #[case] position: StereoLigandPosition,
+        #[case] expected: Vec<StereoLigand>,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+        view.remove_ligand(position);
+        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_count(), expected.len());
+        assert_eq!(view.site_id(), stereo_entries.stereo_atoms[0].0);
+        assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
+    }
+
+    #[rstest]
+    #[case::empty(0, StereoLigandPosition(0))]
+    #[case::end(4, StereoLigandPosition(4))]
+    #[should_panic]
+    fn test_stereo_atom_editor_view_mut_remove_ligand_error(
+        stereo_entries: MoleculeEntries,
+        #[case] length: usize,
+        #[case] position: StereoLigandPosition,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        let mut view = editor.stereo_atom_mut(StereoAtomId(0));
+        let ligands = view.ligand_frame()[..length].to_vec();
+        view.replace_ligands(&ligands);
+        view.remove_ligand(position);
     }
 
     #[rstest]
@@ -1801,6 +2376,116 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_bond_editor_view_local_queries(virtual_ligand_molecule: Molecule) {
+        let editor = virtual_ligand_molecule.edit();
+        let (coset, atoms, hydrogens, lone_pairs) = {
+            let view = editor.stereo_bond(StereoBondId(0));
+            assert_eq!(view.kind(), StereoKind::CisTrans);
+            assert_eq!(view.ligand_count(), 4);
+            assert_eq!(view.atom_ligand_count(), 2);
+            assert_eq!(view.implicit_hydrogen_count(), 1);
+            assert_eq!(view.lone_pair_count(), 1);
+            assert_eq!(
+                view.ligand_position(AtomId(4)),
+                Some(StereoLigandPosition(0))
+            );
+            assert_eq!(
+                view.ligand_position(AtomId(5)),
+                Some(StereoLigandPosition(2))
+            );
+            assert_eq!(view.ligand_position(AtomId(2)), None);
+            assert_eq!(view.ligand_position(AtomId(3)), None);
+            assert_eq!(view.ligand_position(AtomId(99)), None);
+            (
+                view.coset(),
+                view.atom_ligand_ids(),
+                view.implicit_hydrogen_atom_ids(),
+                view.lone_pair_atom_ids(),
+            )
+        };
+        assert_eq!(coset, &StereoCoset::Lit(1));
+        assert_eq!(atoms.collect::<Vec<_>>(), vec![AtomId(4), AtomId(5)]);
+        assert_eq!(hydrogens.collect::<Vec<_>>(), vec![AtomId(2)]);
+        assert_eq!(lone_pairs.collect::<Vec<_>>(), vec![AtomId(3)]);
+    }
+
+    #[rstest]
+    #[case::kind(false)]
+    #[case::coset(true)]
+    #[should_panic(expected = "stereo view has a concrete")]
+    fn test_stereo_bond_editor_view_configuration_error(
+        mut stereo_entries: MoleculeEntries,
+        #[case] coset: bool,
+    ) {
+        stereo_entries.stereo_bonds[0].2 = StereoBondForm::default();
+        let virtual_ligand_molecule = Molecule::from_entries(stereo_entries);
+        let editor = virtual_ligand_molecule.edit();
+        let view = editor.stereo_bond(StereoBondId(0));
+        if coset {
+            let _ = view.coset();
+        } else {
+            let _ = view.kind();
+        }
+    }
+
+    #[rstest]
+    #[should_panic(expected = "invalid stereo bond id")]
+    fn test_stereo_bond_editor_view_id_error(molecule: Molecule) {
+        molecule.edit().stereo_bond(StereoBondId(1));
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_mut_local_queries(virtual_ligand_molecule: Molecule) {
+        let mut molecule = virtual_ligand_molecule;
+        let view = molecule.stereo_bond_mut(StereoBondId(0));
+        assert_eq!(view.kind(), StereoKind::CisTrans);
+        assert_eq!(view.ligand_count(), 4);
+        assert_eq!(view.atom_ligand_count(), 2);
+        assert_eq!(view.implicit_hydrogen_count(), 1);
+        assert_eq!(view.lone_pair_count(), 1);
+        assert_eq!(
+            view.ligand_position(AtomId(4)),
+            Some(StereoLigandPosition(0))
+        );
+        assert_eq!(
+            view.ligand_position(AtomId(5)),
+            Some(StereoLigandPosition(2))
+        );
+        assert_eq!(view.ligand_position(AtomId(2)), None);
+        assert_eq!(view.ligand_position(AtomId(3)), None);
+        assert_eq!(view.ligand_position(AtomId(99)), None);
+        let (coset, atoms, hydrogens, lone_pairs) = (
+            view.coset(),
+            view.atom_ligand_ids(),
+            view.implicit_hydrogen_atom_ids(),
+            view.lone_pair_atom_ids(),
+        );
+        assert_eq!(coset, &StereoCoset::Lit(1));
+        assert_eq!(atoms.collect::<Vec<_>>(), vec![AtomId(4), AtomId(5)]);
+        assert_eq!(hydrogens.collect::<Vec<_>>(), vec![AtomId(2)]);
+        assert_eq!(lone_pairs.collect::<Vec<_>>(), vec![AtomId(3)]);
+    }
+
+    #[rstest]
+    #[case::kind(false)]
+    #[case::coset(true)]
+    #[should_panic(expected = "stereo view has a concrete")]
+    fn test_stereo_bond_view_mut_configuration_error(
+        mut stereo_entries: MoleculeEntries,
+        #[case] coset: bool,
+    ) {
+        stereo_entries.stereo_bonds[0].2 = StereoBondForm::default();
+        let virtual_ligand_molecule = Molecule::from_entries(stereo_entries);
+        let mut molecule = virtual_ligand_molecule;
+        let view = molecule.stereo_bond_mut(StereoBondId(0));
+        if coset {
+            let _ = view.coset();
+        } else {
+            let _ = view.kind();
+        }
+    }
+
+    #[rstest]
     fn test_stereo_bond_view_mut_attributes_mut(mut molecule: Molecule) {
         let expected = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0));
         {
@@ -1808,6 +2493,8 @@ mod tests {
             assert_eq!(view.id(), StereoBondId(0));
             view.attributes_mut().configuration = expected.configuration.clone();
             assert_eq!(view.attributes(), &expected);
+            assert_eq!(view.kind(), StereoKind::CisTrans);
+            assert_eq!(view.coset(), &StereoCoset::Lit(0));
             assert_eq!(view.constraints(), &expected.constraints);
             assert_eq!(view.site_id(), BondId(1));
             assert_eq!(
@@ -1828,6 +2515,57 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_bond_editor_view_mut_local_queries(virtual_ligand_molecule: Molecule) {
+        let mut editor = virtual_ligand_molecule.edit();
+        let view = editor.stereo_bond_mut(StereoBondId(0));
+        assert_eq!(view.kind(), StereoKind::CisTrans);
+        assert_eq!(view.ligand_count(), 4);
+        assert_eq!(view.atom_ligand_count(), 2);
+        assert_eq!(view.implicit_hydrogen_count(), 1);
+        assert_eq!(view.lone_pair_count(), 1);
+        assert_eq!(
+            view.ligand_position(AtomId(4)),
+            Some(StereoLigandPosition(0))
+        );
+        assert_eq!(
+            view.ligand_position(AtomId(5)),
+            Some(StereoLigandPosition(2))
+        );
+        assert_eq!(view.ligand_position(AtomId(2)), None);
+        assert_eq!(view.ligand_position(AtomId(3)), None);
+        assert_eq!(view.ligand_position(AtomId(99)), None);
+        let (coset, atoms, hydrogens, lone_pairs) = (
+            view.coset(),
+            view.atom_ligand_ids(),
+            view.implicit_hydrogen_atom_ids(),
+            view.lone_pair_atom_ids(),
+        );
+        assert_eq!(coset, &StereoCoset::Lit(1));
+        assert_eq!(atoms.collect::<Vec<_>>(), vec![AtomId(4), AtomId(5)]);
+        assert_eq!(hydrogens.collect::<Vec<_>>(), vec![AtomId(2)]);
+        assert_eq!(lone_pairs.collect::<Vec<_>>(), vec![AtomId(3)]);
+    }
+
+    #[rstest]
+    #[case::kind(false)]
+    #[case::coset(true)]
+    #[should_panic(expected = "stereo view has a concrete")]
+    fn test_stereo_bond_editor_view_mut_configuration_error(
+        mut stereo_entries: MoleculeEntries,
+        #[case] coset: bool,
+    ) {
+        stereo_entries.stereo_bonds[0].2 = StereoBondForm::default();
+        let virtual_ligand_molecule = Molecule::from_entries(stereo_entries);
+        let mut editor = virtual_ligand_molecule.edit();
+        let view = editor.stereo_bond_mut(StereoBondId(0));
+        if coset {
+            let _ = view.coset();
+        } else {
+            let _ = view.kind();
+        }
+    }
+
+    #[rstest]
     fn test_stereo_bond_editor_view_mut_attributes_mut(molecule: Molecule) {
         let mut editor = molecule.edit();
         let expected = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0));
@@ -1836,6 +2574,8 @@ mod tests {
             assert_eq!(view.id(), StereoBondId(0));
             view.attributes_mut().configuration = expected.configuration.clone();
             assert_eq!(view.attributes(), &expected);
+            assert_eq!(view.kind(), StereoKind::CisTrans);
+            assert_eq!(view.coset(), &StereoCoset::Lit(0));
             assert_eq!(view.constraints(), &expected.constraints);
             assert_eq!(view.site_id(), BondId(1));
             assert_eq!(
@@ -1853,9 +2593,282 @@ mod tests {
     }
 
     #[rstest]
-    #[should_panic(expected = "invalid stereo bond id")]
-    fn test_stereo_bond_editor_view_id_error(molecule: Molecule) {
-        molecule.edit().stereo_bond(StereoBondId(1));
+    fn test_stereo_bond_editor_view_mut_replace_site(mut stereo_entries: MoleculeEntries) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        {
+            let mut view = editor.stereo_bond_mut(StereoBondId(0));
+            view.replace_site(BondId(1));
+            assert_eq!(view.site_id(), BondId(1));
+            assert_eq!(view.ligand_frame(), stereo_entries.stereo_bonds[0].1);
+            assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
+        }
+        stereo_entries.stereo_bonds[0].0 = BondId(1);
+        let molecule = editor.try_build().unwrap();
+        assert_eq!(
+            molecule.stereo_bonds().at_id(BondId(1)),
+            Some(StereoBondId(0))
+        );
+        assert_eq!(molecule.stereo_bonds().at_id(BondId(0)), None);
+        assert_eq!(molecule, Molecule::from_entries(stereo_entries));
+    }
+
+    #[rstest]
+    #[case::missing(BondId(99), MoleculeIntegrityError::InvalidReference { entity: Entity::Bond(BondId(99)) })]
+    #[case::duplicate(BondId(2), MoleculeIntegrityError::DuplicateStereoBondSites { bond: BondId(2) })]
+    fn test_stereo_bond_editor_view_mut_replace_site_publication(
+        stereo_entries: MoleculeEntries,
+        #[case] site: BondId,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        editor.stereo_bond_mut(StereoBondId(0)).replace_site(site);
+        assert_eq!(editor.try_build(), Err(expected));
+    }
+
+    #[rstest]
+    #[case::reordered(vec![StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)])]
+    #[case::virtual_ligands(vec![StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::LonePair)])]
+    fn test_stereo_bond_editor_view_mut_replace_ligands(
+        mut stereo_entries: MoleculeEntries,
+        #[case] ligands: Vec<StereoLigand>,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        {
+            let mut view = editor.stereo_bond_mut(StereoBondId(0));
+            view.replace_ligands(&ligands);
+            assert_eq!(view.ligand_frame(), ligands);
+            assert_eq!(view.ligand_count(), ligands.len());
+            assert_eq!(view.site_id(), stereo_entries.stereo_bonds[0].0);
+            assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
+        }
+        stereo_entries.stereo_bonds[0].1 = ligands;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(stereo_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::missing_atom(vec![StereoLigand::new(AtomId(99), StereoLigandKind::Atom)], MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(99)) })]
+    #[case::duplicate(vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom); 2], MoleculeIntegrityError::DuplicateStereoLigand { entity: Entity::StereoBond(StereoBondId(0)), ligand: StereoLigand::new(AtomId(2), StereoLigandKind::Atom) })]
+    #[case::wrong_anchor(vec![StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)], MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity: Entity::StereoBond(StereoBondId(0)) })]
+    fn test_stereo_bond_editor_view_mut_replace_ligands_publication(
+        stereo_entries: MoleculeEntries,
+        #[case] ligands: Vec<StereoLigand>,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        editor
+            .stereo_bond_mut(StereoBondId(0))
+            .replace_ligands(&ligands);
+        assert_eq!(editor.try_build(), Err(expected));
+    }
+
+    #[rstest]
+    #[case::attributes_first(true)]
+    #[case::ligands_first(false)]
+    fn test_stereo_bond_editor_view_mut_replace_ligands_attributes(
+        mut stereo_entries: MoleculeEntries,
+        #[case] attributes_first: bool,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        let mut attributes = stereo_entries.stereo_bonds[0].2.clone();
+        attributes.configuration =
+            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)).configuration;
+        let ligands = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+        ];
+        {
+            let mut view = editor.stereo_bond_mut(StereoBondId(0));
+            if attributes_first {
+                *view.attributes_mut() = attributes.clone();
+                view.replace_ligands(&ligands);
+            } else {
+                view.replace_ligands(&ligands);
+                *view.attributes_mut() = attributes.clone();
+            }
+            assert_eq!(view.coset(), &StereoCoset::Lit(0));
+        }
+        stereo_entries.stereo_bonds[0].1 = ligands;
+        stereo_entries.stereo_bonds[0].2 = attributes;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(stereo_entries))
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_editor_view_mut_replace_ligands_incidence(
+        mut stereo_entries: MoleculeEntries,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        {
+            let mut view = editor.stereo_bond_mut(StereoBondId(0));
+            view.replace_ligand(
+                StereoLigandPosition(0),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            );
+            view.insert_ligand(
+                StereoLigandPosition(1),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            );
+            view.remove_ligand(StereoLigandPosition(2));
+        }
+        stereo_entries.stereo_bonds[0].1 = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+        ];
+        let molecule = editor.try_build().unwrap();
+        assert_eq!(
+            molecule
+                .stereo_bonds()
+                .incident_as_ligand_ids(AtomId(3))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(1)]
+        );
+        assert_eq!(
+            molecule
+                .stereo_bonds()
+                .incident_as_ligand_ids(AtomId(2))
+                .collect::<Vec<_>>(),
+            vec![StereoBondId(0), StereoBondId(1)]
+        );
+        assert_eq!(molecule, Molecule::from_entries(stereo_entries));
+    }
+
+    #[rstest]
+    #[case::first(StereoLigandPosition(0), vec![StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)])]
+    #[case::last(StereoLigandPosition(3), vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)])]
+    fn test_stereo_bond_editor_view_mut_replace_ligand(
+        stereo_entries: MoleculeEntries,
+        #[case] position: StereoLigandPosition,
+        #[case] expected: Vec<StereoLigand>,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        let mut view = editor.stereo_bond_mut(StereoBondId(0));
+        view.replace_ligand(
+            position,
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        );
+        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_count(), expected.len());
+        assert_eq!(view.site_id(), stereo_entries.stereo_bonds[0].0);
+        assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
+    }
+
+    #[rstest]
+    #[case::empty(0, StereoLigandPosition(0))]
+    #[case::end(4, StereoLigandPosition(4))]
+    #[should_panic]
+    fn test_stereo_bond_editor_view_mut_replace_ligand_error(
+        stereo_entries: MoleculeEntries,
+        #[case] length: usize,
+        #[case] position: StereoLigandPosition,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        let mut view = editor.stereo_bond_mut(StereoBondId(0));
+        let ligands = view.ligand_frame()[..length].to_vec();
+        view.replace_ligands(&ligands);
+        view.replace_ligand(
+            position,
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        );
+    }
+
+    #[rstest]
+    #[case::first(StereoLigandPosition(0), vec![StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)])]
+    #[case::middle(StereoLigandPosition(2), vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)])]
+    #[case::end(StereoLigandPosition(4), vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)])]
+    fn test_stereo_bond_editor_view_mut_insert_ligand(
+        stereo_entries: MoleculeEntries,
+        #[case] position: StereoLigandPosition,
+        #[case] expected: Vec<StereoLigand>,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        let mut view = editor.stereo_bond_mut(StereoBondId(0));
+        view.insert_ligand(
+            position,
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        );
+        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_count(), expected.len());
+        assert_eq!(view.site_id(), stereo_entries.stereo_bonds[0].0);
+        assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
+    }
+
+    #[rstest]
+    fn test_stereo_bond_editor_view_mut_insert_ligand_empty(stereo_entries: MoleculeEntries) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        let mut view = editor.stereo_bond_mut(StereoBondId(0));
+        view.replace_ligands(&[]);
+        view.insert_ligand(
+            StereoLigandPosition(0),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        );
+        assert_eq!(
+            view.ligand_frame(),
+            &[StereoLigand::new(AtomId(2), StereoLigandKind::Atom)]
+        );
+        view.remove_ligand(StereoLigandPosition(0));
+        assert_eq!(view.ligand_frame(), &[]);
+        assert_eq!(view.ligand_count(), 0);
+    }
+
+    #[rstest]
+    #[case::empty(0, StereoLigandPosition(1))]
+    #[case::end(4, StereoLigandPosition(5))]
+    #[should_panic]
+    fn test_stereo_bond_editor_view_mut_insert_ligand_error(
+        stereo_entries: MoleculeEntries,
+        #[case] length: usize,
+        #[case] position: StereoLigandPosition,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        let mut view = editor.stereo_bond_mut(StereoBondId(0));
+        let ligands = view.ligand_frame()[..length].to_vec();
+        view.replace_ligands(&ligands);
+        view.insert_ligand(
+            position,
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        );
+    }
+
+    #[rstest]
+    #[case::first(StereoLigandPosition(0), vec![StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(7), StereoLigandKind::Atom)])]
+    #[case::last(StereoLigandPosition(3), vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)])]
+    fn test_stereo_bond_editor_view_mut_remove_ligand(
+        stereo_entries: MoleculeEntries,
+        #[case] position: StereoLigandPosition,
+        #[case] expected: Vec<StereoLigand>,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
+        let mut view = editor.stereo_bond_mut(StereoBondId(0));
+        view.remove_ligand(position);
+        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_count(), expected.len());
+        assert_eq!(view.site_id(), stereo_entries.stereo_bonds[0].0);
+        assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
+    }
+
+    #[rstest]
+    #[case::empty(0, StereoLigandPosition(0))]
+    #[case::end(4, StereoLigandPosition(4))]
+    #[should_panic]
+    fn test_stereo_bond_editor_view_mut_remove_ligand_error(
+        stereo_entries: MoleculeEntries,
+        #[case] length: usize,
+        #[case] position: StereoLigandPosition,
+    ) {
+        let mut editor = Molecule::from_entries(stereo_entries).edit();
+        let mut view = editor.stereo_bond_mut(StereoBondId(0));
+        let ligands = view.ligand_frame()[..length].to_vec();
+        view.replace_ligands(&ligands);
+        view.remove_ligand(position);
     }
 
     #[rstest]
