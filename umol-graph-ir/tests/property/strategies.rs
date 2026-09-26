@@ -2704,12 +2704,12 @@ fn molecule_entity_incidence_is_unique(molecule: &Molecule) -> bool {
         molecule
             .stereo_atoms()
             .iter()
-            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame().to_vec()))),
+            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_ids().to_vec()))),
     ) && all_unique(
         molecule
             .stereo_bonds()
             .iter()
-            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_frame().to_vec()))),
+            .map(|stereo| (stereo.site_id(), sorted(stereo.ligand_ids().to_vec()))),
     )
 }
 

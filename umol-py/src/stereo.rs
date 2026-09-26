@@ -1401,7 +1401,7 @@ macro_rules! stereo_view {
                 let molecule = self.owner.bind(py).borrow();
                 Ok(self
                     .view(molecule.to_rust())?
-                    .ligand_frame()
+                    .ligand_ids()
                     .iter()
                     .copied()
                     .map(StereoLigand::from_rust)

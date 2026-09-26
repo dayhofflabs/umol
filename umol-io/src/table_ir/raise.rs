@@ -764,7 +764,7 @@ mod tests {
         let molecule: Molecule = table.try_into_ir(&()).unwrap();
         let view = molecule.stereo_atom(StereoAtomId(0));
         assert_eq!(
-            view.ligand_frame(),
+            view.ligand_ids(),
             ligands
                 .into_iter()
                 .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))

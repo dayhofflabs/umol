@@ -507,7 +507,7 @@ pub(super) fn normalize_reaction_deltas(
                 let owner = lhs
                     .stereo_atoms()
                     .get(*id)
-                    .map(|view| (view.site_id(), view.ligand_frame()))
+                    .map(|view| (view.site_id(), view.ligand_ids()))
                     .or_else(|| {
                         stereo_atom_adds
                             .get(id)
@@ -531,7 +531,7 @@ pub(super) fn normalize_reaction_deltas(
                 let owner = lhs
                     .stereo_bonds()
                     .get(*id)
-                    .map(|view| (view.site_id(), view.ligand_frame()))
+                    .map(|view| (view.site_id(), view.ligand_ids()))
                     .or_else(|| {
                         stereo_bond_adds
                             .get(id)
@@ -645,7 +645,7 @@ fn reaction_frame_action(
         if domain.is_none_or(|domain| domain.contains_stereo_atom(view.id())) {
             stereo_atoms.insert(
                 view.id(),
-                stereo_atom_representative_action(view.ligand_frame())
+                stereo_atom_representative_action(view.ligand_ids())
                     .expect("integrity-valid stereo-atom frames fit the bounded action"),
             );
         }
@@ -654,7 +654,7 @@ fn reaction_frame_action(
         if domain.is_none_or(|domain| domain.contains_stereo_bond(view.id())) {
             stereo_bonds.insert(
                 view.id(),
-                stereo_bond_representative_action(view.ligand_frame())
+                stereo_bond_representative_action(view.ligand_ids())
                     .expect("integrity-valid stereo-bond frames admit a standard-frame action"),
             );
         }
@@ -840,7 +840,7 @@ fn reframe_reaction_deltas(
                     let owner = lhs
                         .stereo_atoms()
                         .get(id)
-                        .map(|view| (view.site_id(), view.ligand_frame()))
+                        .map(|view| (view.site_id(), view.ligand_ids()))
                         .or_else(|| {
                             stereo_atom_adds
                                 .get(&id)
@@ -862,7 +862,7 @@ fn reframe_reaction_deltas(
                     let owner = lhs
                         .stereo_bonds()
                         .get(id)
-                        .map(|view| (view.site_id(), view.ligand_frame()))
+                        .map(|view| (view.site_id(), view.ligand_ids()))
                         .or_else(|| {
                             stereo_bond_adds
                                 .get(&id)
@@ -2477,8 +2477,8 @@ fn application_frame_actions(
             .stereo_atoms()
             .get(host_id)
             .ok_or(ApplyError::CorrespondenceMismatch { entity })?;
-        let mapped = mapped_ligands(rule_view.ligand_frame(), entity)?;
-        let action = Permutation::between(&mapped, host_view.ligand_frame())
+        let mapped = mapped_ligands(rule_view.ligand_ids(), entity)?;
+        let action = Permutation::between(&mapped, host_view.ligand_ids())
             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
         actions.insert_stereo_atom(id, action);
     }
@@ -2503,8 +2503,8 @@ fn application_frame_actions(
             .stereo_bonds()
             .get(host_id)
             .ok_or(ApplyError::CorrespondenceMismatch { entity })?;
-        let mapped = mapped_ligands(rule_view.ligand_frame(), entity)?;
-        let action = Permutation::between(&mapped, host_view.ligand_frame())
+        let mapped = mapped_ligands(rule_view.ligand_ids(), entity)?;
+        let action = Permutation::between(&mapped, host_view.ligand_ids())
             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
         actions.insert_stereo_bond(id, action);
     }

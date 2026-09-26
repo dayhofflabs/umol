@@ -1230,7 +1230,7 @@ impl MoleculeEditor {
                     removed.push(RemovedStereoAtom {
                         id,
                         site: view.site_id(),
-                        ligands: view.ligand_frame().to_vec(),
+                        ligands: view.ligand_ids().to_vec(),
                         attributes: view.attributes().clone(),
                     });
                     ids.push(id);
@@ -1285,7 +1285,7 @@ impl MoleculeEditor {
                     removed.push(RemovedStereoBond {
                         id,
                         site: view.site_id(),
-                        ligands: view.ligand_frame().to_vec(),
+                        ligands: view.ligand_ids().to_vec(),
                         attributes: view.attributes().clone(),
                     });
                     ids.push(id);
@@ -1518,13 +1518,13 @@ impl MoleculeEditor {
                 let view = self.stereo_atom(id);
                 let dropped = atom_set.contains(&view.site_id())
                     || view
-                        .ligand_frame()
+                        .ligand_ids()
                         .iter()
                         .any(|l| atom_set.contains(&l.atom_id));
                 dropped.then(|| RemovedStereoAtom {
                     id,
                     site: view.site_id(),
-                    ligands: view.ligand_frame().to_vec(),
+                    ligands: view.ligand_ids().to_vec(),
                     attributes: view.attributes().clone(),
                 })
             })
@@ -1541,13 +1541,13 @@ impl MoleculeEditor {
                         .iter()
                         .any(|a| atom_set.contains(a));
                 let ligand_dropped = view
-                    .ligand_frame()
+                    .ligand_ids()
                     .iter()
                     .any(|l| atom_set.contains(&l.atom_id));
                 (site_dropped || ligand_dropped).then(|| RemovedStereoBond {
                     id,
                     site,
-                    ligands: view.ligand_frame().to_vec(),
+                    ligands: view.ligand_ids().to_vec(),
                     attributes: view.attributes().clone(),
                 })
             })

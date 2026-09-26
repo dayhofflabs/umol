@@ -1070,6 +1070,10 @@ without a corresponding node — an implicit hydrogen or a lone pair, each borne
 is how a sulfoxide or a pyramidal amine is expressed without materializing the hydrogen or inventing
 an atom for the lone pair.
 
+Stereo views expose the ordered compound ligand identifiers through `ligand_ids()` as a borrowed
+`&[StereoLigand]`. Each value identifies a ligand by its atom id and kind. `atom_ligand_ids()`
+selects actual-atom ligands and yields their `AtomId` values.
+
 A published stereo frame contains pairwise-distinct complete ligand values and at most
 `MAX_DEGREE` ligands. Two equal virtual ligands with the same anchor and kind are therefore
 prohibited; an implicit hydrogen and a lone pair on the same anchor remain distinct. Explicit

@@ -405,9 +405,9 @@ macro_rules! stereo_editor_view {
                 self.$set.site(self.id)
             }
 
-            /// The ordered ligand frame.
+            /// The ordered ligand identifiers.
             #[inline]
-            pub fn ligand_frame(&self) -> &'a [StereoLigand] {
+            pub fn ligand_ids(&self) -> &'a [StereoLigand] {
                 self.$set.ligands(self.id)
             }
         }
@@ -458,9 +458,9 @@ macro_rules! stereo_view_mut {
                 self.$set.site(self.id)
             }
 
-            /// The ordered ligand frame.
+            /// The ordered ligand identifiers.
             #[inline]
-            pub fn ligand_frame(&self) -> &[StereoLigand] {
+            pub fn ligand_ids(&self) -> &[StereoLigand] {
                 self.$set.ligands(self.id)
             }
 
@@ -651,9 +651,9 @@ macro_rules! stereo_view_queries {
                 symmetry.topicity(a, b) == Topicity::Diastereotopic
             }
 
-            /// The ordered ligand frame.
+            /// The ordered ligand identifiers.
             #[inline]
-            pub fn ligand_frame(&self) -> &'a [StereoLigand] {
+            pub fn ligand_ids(&self) -> &'a [StereoLigand] {
                 self.molecule.$raw().ligands(self.id)
             }
         }
@@ -707,12 +707,12 @@ macro_rules! stereo_local_queries {
             }
 
             pub fn ligand_count(&self) -> usize {
-                self.ligand_frame().len()
+                self.ligand_ids().len()
             }
 
             /// The frame position of an actual-atom ligand with this id, if present.
             pub fn ligand_position(&self, id: AtomId) -> Option<StereoLigandPosition> {
-                self.ligand_frame()
+                self.ligand_ids()
                     .iter()
                     .position(|ligand| {
                         ligand.kind == StereoLigandKind::Atom && ligand.atom_id == id
@@ -721,21 +721,21 @@ macro_rules! stereo_local_queries {
             }
 
             pub fn atom_ligand_ids(&self) -> impl Iterator<Item = AtomId> + $borrow {
-                self.ligand_frame()
+                self.ligand_ids()
                     .iter()
                     .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
                     .map(|ligand| ligand.atom_id)
             }
 
             pub fn implicit_hydrogen_atom_ids(&self) -> impl Iterator<Item = AtomId> + $borrow {
-                self.ligand_frame()
+                self.ligand_ids()
                     .iter()
                     .filter(|ligand| ligand.kind == StereoLigandKind::ImplicitHydrogen)
                     .map(|ligand| ligand.atom_id)
             }
 
             pub fn lone_pair_atom_ids(&self) -> impl Iterator<Item = AtomId> + $borrow {
-                self.ligand_frame()
+                self.ligand_ids()
                     .iter()
                     .filter(|ligand| ligand.kind == StereoLigandKind::LonePair)
                     .map(|ligand| ligand.atom_id)
@@ -1254,7 +1254,7 @@ mod tests {
             Some(StereoLigandPosition(1))
         );
         assert_eq!(view.ligand_position(AtomId(99)), None);
-        assert_eq!(view.ligand_frame().len(), 4);
+        assert_eq!(view.ligand_ids().len(), 4);
     }
 
     #[rstest]
@@ -1443,7 +1443,7 @@ mod tests {
         let (attributes, frame) = {
             let view = molecule.stereo_atom(StereoAtomId(0));
             assert_eq!(view.id(), StereoAtomId(0));
-            (view.attributes(), view.ligand_frame())
+            (view.attributes(), view.ligand_ids())
         };
         assert_eq!(
             attributes,
@@ -1466,7 +1466,7 @@ mod tests {
         let (attributes, frame) = {
             let view = editor.stereo_atom(StereoAtomId(0));
             assert_eq!(view.id(), StereoAtomId(0));
-            (view.attributes(), view.ligand_frame())
+            (view.attributes(), view.ligand_ids())
         };
         assert_eq!(
             attributes,
@@ -1604,7 +1604,7 @@ mod tests {
             assert_eq!(view.constraints(), &expected.constraints);
             assert_eq!(view.site_id(), AtomId(0));
             assert_eq!(
-                view.ligand_frame(),
+                view.ligand_ids(),
                 &[
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
@@ -1684,7 +1684,7 @@ mod tests {
             assert_eq!(view.constraints(), &expected.constraints);
             assert_eq!(view.site_id(), AtomId(0));
             assert_eq!(
-                view.ligand_frame(),
+                view.ligand_ids(),
                 &[
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
@@ -1704,7 +1704,7 @@ mod tests {
             let mut view = editor.stereo_atom_mut(StereoAtomId(0));
             view.replace_site(AtomId(5));
             assert_eq!(view.site_id(), AtomId(5));
-            assert_eq!(view.ligand_frame(), stereo_entries.stereo_atoms[0].1);
+            assert_eq!(view.ligand_ids(), stereo_entries.stereo_atoms[0].1);
             assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
         }
         stereo_entries.stereo_atoms[0].0 = AtomId(5);
@@ -1743,7 +1743,7 @@ mod tests {
         {
             let mut view = editor.stereo_atom_mut(StereoAtomId(0));
             view.replace_ligands(&ligands);
-            assert_eq!(view.ligand_frame(), ligands);
+            assert_eq!(view.ligand_ids(), ligands);
             assert_eq!(view.ligand_count(), ligands.len());
             assert_eq!(view.site_id(), stereo_entries.stereo_atoms[0].0);
             assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
@@ -1862,7 +1862,7 @@ mod tests {
             position,
             StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         );
-        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_ids(), expected);
         assert_eq!(view.ligand_count(), expected.len());
         assert_eq!(view.site_id(), stereo_entries.stereo_atoms[0].0);
         assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
@@ -1879,7 +1879,7 @@ mod tests {
     ) {
         let mut editor = Molecule::from_entries(stereo_entries).edit();
         let mut view = editor.stereo_atom_mut(StereoAtomId(0));
-        let ligands = view.ligand_frame()[..length].to_vec();
+        let ligands = view.ligand_ids()[..length].to_vec();
         view.replace_ligands(&ligands);
         view.replace_ligand(
             position,
@@ -1902,7 +1902,7 @@ mod tests {
             position,
             StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         );
-        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_ids(), expected);
         assert_eq!(view.ligand_count(), expected.len());
         assert_eq!(view.site_id(), stereo_entries.stereo_atoms[0].0);
         assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
@@ -1918,11 +1918,11 @@ mod tests {
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
         );
         assert_eq!(
-            view.ligand_frame(),
+            view.ligand_ids(),
             &[StereoLigand::new(AtomId(2), StereoLigandKind::Atom)]
         );
         view.remove_ligand(StereoLigandPosition(0));
-        assert_eq!(view.ligand_frame(), &[]);
+        assert_eq!(view.ligand_ids(), &[]);
         assert_eq!(view.ligand_count(), 0);
     }
 
@@ -1937,7 +1937,7 @@ mod tests {
     ) {
         let mut editor = Molecule::from_entries(stereo_entries).edit();
         let mut view = editor.stereo_atom_mut(StereoAtomId(0));
-        let ligands = view.ligand_frame()[..length].to_vec();
+        let ligands = view.ligand_ids()[..length].to_vec();
         view.replace_ligands(&ligands);
         view.insert_ligand(
             position,
@@ -1956,7 +1956,7 @@ mod tests {
         let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
         let mut view = editor.stereo_atom_mut(StereoAtomId(0));
         view.remove_ligand(position);
-        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_ids(), expected);
         assert_eq!(view.ligand_count(), expected.len());
         assert_eq!(view.site_id(), stereo_entries.stereo_atoms[0].0);
         assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
@@ -1973,7 +1973,7 @@ mod tests {
     ) {
         let mut editor = Molecule::from_entries(stereo_entries).edit();
         let mut view = editor.stereo_atom_mut(StereoAtomId(0));
-        let ligands = view.ligand_frame()[..length].to_vec();
+        let ligands = view.ligand_ids()[..length].to_vec();
         view.replace_ligands(&ligands);
         view.remove_ligand(position);
     }
@@ -2335,7 +2335,7 @@ mod tests {
         let (attributes, frame) = {
             let view = molecule.stereo_bond(StereoBondId(0));
             assert_eq!(view.id(), StereoBondId(0));
-            (view.attributes(), view.ligand_frame())
+            (view.attributes(), view.ligand_ids())
         };
         assert_eq!(
             attributes,
@@ -2358,7 +2358,7 @@ mod tests {
         let (attributes, frame) = {
             let view = editor.stereo_bond(StereoBondId(0));
             assert_eq!(view.id(), StereoBondId(0));
-            (view.attributes(), view.ligand_frame())
+            (view.attributes(), view.ligand_ids())
         };
         assert_eq!(
             attributes,
@@ -2498,7 +2498,7 @@ mod tests {
             assert_eq!(view.constraints(), &expected.constraints);
             assert_eq!(view.site_id(), BondId(1));
             assert_eq!(
-                view.ligand_frame(),
+                view.ligand_ids(),
                 &[
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
@@ -2579,7 +2579,7 @@ mod tests {
             assert_eq!(view.constraints(), &expected.constraints);
             assert_eq!(view.site_id(), BondId(1));
             assert_eq!(
-                view.ligand_frame(),
+                view.ligand_ids(),
                 &[
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
@@ -2599,7 +2599,7 @@ mod tests {
             let mut view = editor.stereo_bond_mut(StereoBondId(0));
             view.replace_site(BondId(1));
             assert_eq!(view.site_id(), BondId(1));
-            assert_eq!(view.ligand_frame(), stereo_entries.stereo_bonds[0].1);
+            assert_eq!(view.ligand_ids(), stereo_entries.stereo_bonds[0].1);
             assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
         }
         stereo_entries.stereo_bonds[0].0 = BondId(1);
@@ -2636,7 +2636,7 @@ mod tests {
         {
             let mut view = editor.stereo_bond_mut(StereoBondId(0));
             view.replace_ligands(&ligands);
-            assert_eq!(view.ligand_frame(), ligands);
+            assert_eq!(view.ligand_ids(), ligands);
             assert_eq!(view.ligand_count(), ligands.len());
             assert_eq!(view.site_id(), stereo_entries.stereo_bonds[0].0);
             assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
@@ -2755,7 +2755,7 @@ mod tests {
             position,
             StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         );
-        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_ids(), expected);
         assert_eq!(view.ligand_count(), expected.len());
         assert_eq!(view.site_id(), stereo_entries.stereo_bonds[0].0);
         assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
@@ -2772,7 +2772,7 @@ mod tests {
     ) {
         let mut editor = Molecule::from_entries(stereo_entries).edit();
         let mut view = editor.stereo_bond_mut(StereoBondId(0));
-        let ligands = view.ligand_frame()[..length].to_vec();
+        let ligands = view.ligand_ids()[..length].to_vec();
         view.replace_ligands(&ligands);
         view.replace_ligand(
             position,
@@ -2795,7 +2795,7 @@ mod tests {
             position,
             StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         );
-        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_ids(), expected);
         assert_eq!(view.ligand_count(), expected.len());
         assert_eq!(view.site_id(), stereo_entries.stereo_bonds[0].0);
         assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
@@ -2811,11 +2811,11 @@ mod tests {
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
         );
         assert_eq!(
-            view.ligand_frame(),
+            view.ligand_ids(),
             &[StereoLigand::new(AtomId(2), StereoLigandKind::Atom)]
         );
         view.remove_ligand(StereoLigandPosition(0));
-        assert_eq!(view.ligand_frame(), &[]);
+        assert_eq!(view.ligand_ids(), &[]);
         assert_eq!(view.ligand_count(), 0);
     }
 
@@ -2830,7 +2830,7 @@ mod tests {
     ) {
         let mut editor = Molecule::from_entries(stereo_entries).edit();
         let mut view = editor.stereo_bond_mut(StereoBondId(0));
-        let ligands = view.ligand_frame()[..length].to_vec();
+        let ligands = view.ligand_ids()[..length].to_vec();
         view.replace_ligands(&ligands);
         view.insert_ligand(
             position,
@@ -2849,7 +2849,7 @@ mod tests {
         let mut editor = Molecule::from_entries(stereo_entries.clone()).edit();
         let mut view = editor.stereo_bond_mut(StereoBondId(0));
         view.remove_ligand(position);
-        assert_eq!(view.ligand_frame(), expected);
+        assert_eq!(view.ligand_ids(), expected);
         assert_eq!(view.ligand_count(), expected.len());
         assert_eq!(view.site_id(), stereo_entries.stereo_bonds[0].0);
         assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
@@ -2866,7 +2866,7 @@ mod tests {
     ) {
         let mut editor = Molecule::from_entries(stereo_entries).edit();
         let mut view = editor.stereo_bond_mut(StereoBondId(0));
-        let ligands = view.ligand_frame()[..length].to_vec();
+        let ligands = view.ligand_ids()[..length].to_vec();
         view.replace_ligands(&ligands);
         view.remove_ligand(position);
     }

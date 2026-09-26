@@ -2029,7 +2029,7 @@ fn generator_preserves_stereo(
         if entity_image(Entity::Atom(source.site_id())) != Entity::Atom(target.site_id()) {
             return false;
         }
-        let Some(action) = frame_action(source.ligand_frame(), target.ligand_frame()) else {
+        let Some(action) = frame_action(source.ligand_ids(), target.ligand_ids()) else {
             return false;
         };
         if !configuration_preserved(
@@ -2049,7 +2049,7 @@ fn generator_preserves_stereo(
         if entity_image(Entity::Bond(source.site_id())) != Entity::Bond(target.site_id()) {
             return false;
         }
-        let Some(action) = frame_action(source.ligand_frame(), target.ligand_frame()) else {
+        let Some(action) = frame_action(source.ligand_ids(), target.ligand_ids()) else {
             return false;
         };
         if !configuration_preserved(
@@ -3782,7 +3782,7 @@ fn structure_candidate(
         .iter()
         .map(|stereo| {
             let (ligands, configuration) =
-                canonical_frame(stereo.ligand_frame(), &stereo.attributes().configuration)?;
+                canonical_frame(stereo.ligand_ids(), &stereo.attributes().configuration)?;
             let fields = vec![
                 field(
                     0,
@@ -3816,7 +3816,7 @@ fn structure_candidate(
         .iter()
         .map(|stereo| {
             let (ligands, configuration) =
-                canonical_frame(stereo.ligand_frame(), &stereo.attributes().configuration)?;
+                canonical_frame(stereo.ligand_ids(), &stereo.attributes().configuration)?;
             let fields = vec![
                 field(
                     0,

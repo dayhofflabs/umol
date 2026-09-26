@@ -962,7 +962,7 @@ fn render_stereo_atoms(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'sta
             render_stereo_atom_entry(
                 view.id(),
                 view.site_id(),
-                view.ligand_frame()
+                view.ligand_ids()
                     .iter()
                     .copied()
                     .map(|l| render_stereo_ligand(l, meta))
@@ -1003,7 +1003,7 @@ fn render_stereo_bonds(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'sta
             render_stereo_bond_entry(
                 view.id(),
                 view.site_id(),
-                view.ligand_frame()
+                view.ligand_ids()
                     .iter()
                     .copied()
                     .map(|l| render_stereo_ligand(l, meta))

@@ -166,7 +166,7 @@ impl MoleculeCorrespondence {
             lhs.stereo_atoms().iter().filter_map(|stereo| {
                 let (Some(site), Some(ligands)) = (
                     map_atom(&atoms, stereo.site_id()),
-                    map_ligands(&atoms, stereo.ligand_frame()),
+                    map_ligands(&atoms, stereo.ligand_ids()),
                 ) else {
                     return None;
                 };
@@ -178,7 +178,7 @@ impl MoleculeCorrespondence {
                     stereo.id(),
                     (
                         stereo.site_id(),
-                        sorted_ligands(stereo.ligand_frame().iter().copied()),
+                        sorted_ligands(stereo.ligand_ids().iter().copied()),
                     ),
                 )
             }),
@@ -207,7 +207,7 @@ impl MoleculeCorrespondence {
             lhs.stereo_bonds().iter().filter_map(|stereo| {
                 let (Some(site), Some(ligands)) = (
                     bonds.right_of(stereo.site_id()),
-                    map_ligands(&atoms, stereo.ligand_frame()),
+                    map_ligands(&atoms, stereo.ligand_ids()),
                 ) else {
                     return None;
                 };
@@ -219,7 +219,7 @@ impl MoleculeCorrespondence {
                     stereo.id(),
                     (
                         stereo.site_id(),
-                        sorted_ligands(stereo.ligand_frame().iter().copied()),
+                        sorted_ligands(stereo.ligand_ids().iter().copied()),
                     ),
                 )
             }),
@@ -798,7 +798,7 @@ impl MoleculeCorrespondence {
                 let lhs = lhs.stereo_atom(left);
                 let rhs = rhs.stereo_atom(right);
                 atoms.right_of(lhs.site_id()) == Some(rhs.site_id())
-                    && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+                    && same_ligand_set(lhs.ligand_ids(), rhs.ligand_ids())
             })
         {
             return false;
@@ -811,7 +811,7 @@ impl MoleculeCorrespondence {
                 let lhs = lhs.stereo_bond(left);
                 let rhs = rhs.stereo_bond(right);
                 correspondence.bonds().right_of(lhs.site_id()) == Some(rhs.site_id())
-                    && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+                    && same_ligand_set(lhs.ligand_ids(), rhs.ligand_ids())
             })
     }
 

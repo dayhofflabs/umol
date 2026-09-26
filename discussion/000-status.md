@@ -44,10 +44,10 @@ the statuses recorded here remain authoritative.
   and S2d's role-only incidence/count-aware consumers are complete. S2g's
   frame-consumer checks, S2h's aggregate-integrity changes, and S2i1 are complete.
   S2i2–S2i5 are complete, including separate mutable molecule/editor view types.
-  All eight entity-view families have aligned id/attribute accessors. S2j's
-  atom, localized-bond, dative, aromatic, multicenter, and noncovalent additions
-  are complete; remaining stereo getters await review. Uniform unchecked
-  entity-attribute assignment is settled for Rust and Python.
+  All eight entity-view families have aligned id/attribute accessors. S2j's local
+  getters and editor structural mutations are complete. S2k's Rust callback
+  caller migration is next. Uniform unchecked entity-attribute assignment is
+  settled for Rust and Python.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -265,7 +265,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue S2j for stereo entities; the other six entity families are complete. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue with S2k Rust callback caller migration; S2j is complete for all eight entity families. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

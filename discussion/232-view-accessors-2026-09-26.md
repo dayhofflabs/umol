@@ -25,8 +25,9 @@ or delegation, reason, allocation/work differences, and affected callers. Distin
 confirmed behavior from proposed changes. Keep straightforward renames separate from
 return-type or algorithm changes so each group can be reviewed independently.
 
-- Identify methods returning ids or positions without naming them accordingly. Compound
-  StereoLigand values require a separate naming decision; do not mechanically call them ids.
+- Identify methods returning ids or positions without naming them accordingly. Stereo views use
+  ligand_ids() for the ordered compound StereoLigand identifiers (atom id and kind), and
+  atom_ligand_ids() for the actual-atom subset as AtomId values.
 - Compare borrowed slices, fixed arrays, owned vectors, and iterators according to what
   the operation actually produces. Include iterator inputs that are immediately collected.
 - Trace allocation through delegated calls. An iterator return type does not establish
@@ -42,6 +43,9 @@ return-type or algorithm changes so each group can be reviewed independently.
 ## Initial evidence and candidates
 
 ### Id names
+
+The stereo-view rename ligand_frame() → ligand_ids() is settled and implemented separately
+from this review. It retains the borrowed &[StereoLigand] return type and stored order.
 
 [RingView](../umol-graph-ir/src/ir/view/ring.rs) exposes atoms() -> &[AtomId] and
 bonds() -> &[BondId]. Proposed names are atom_ids() and bond_ids(), preserving return

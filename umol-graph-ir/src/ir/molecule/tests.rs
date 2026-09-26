@@ -1135,7 +1135,7 @@ fn test_molecule_try_from_entries_attributes(
         &entries.stereo_atoms[0].2
     );
     assert_eq!(
-        molecule.stereo_atom(StereoAtomId(0)).ligand_frame(),
+        molecule.stereo_atom(StereoAtomId(0)).ligand_ids(),
         entries.stereo_atoms[0].1
     );
     assert_eq!(molecule.clone().edit().try_build().unwrap(), molecule);
@@ -1179,10 +1179,7 @@ fn test_molecule_try_from_entries_stereo_atom(
     entries.stereo_atoms[0].1 = ligands.clone();
     let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
 
-    assert_eq!(
-        molecule.stereo_atom(StereoAtomId(0)).ligand_frame(),
-        ligands
-    );
+    assert_eq!(molecule.stereo_atom(StereoAtomId(0)).ligand_ids(), ligands);
 }
 
 #[rstest]
@@ -1211,10 +1208,7 @@ fn test_molecule_try_from_entries_stereo_bond(
     entries.stereo_bonds[0].1 = ligands.clone();
     let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
 
-    assert_eq!(
-        molecule.stereo_bond(StereoBondId(0)).ligand_frame(),
-        ligands
-    );
+    assert_eq!(molecule.stereo_bond(StereoBondId(0)).ligand_ids(), ligands);
 }
 
 #[rstest]

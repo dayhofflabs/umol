@@ -21,10 +21,8 @@ attempt was reverted. S2i2–S2i4 are complete; the migration compiles and its
 verification passes. S2i5 is complete: mutable molecule/editor views are separate
 types. All eight entity-view families expose private ids and attribute borrows
 through matching accessors. Stereo views use the owning sets for site and ligand
-access; their ligand frames are borrowed. S2j is complete for atoms, localized
-bonds, dative bonds, aromatic systems, multicenter bonds, and noncovalent bonds.
-The remaining stereo getter additions await review; stereo structural mutation
-is unimplemented.
+access; their ligand frames are borrowed. S2j is complete for all eight entity
+families: matching local getters and editor-only structural mutation are implemented.
 S2f is cancelled; the
 remaining S2 work is unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -42,7 +40,7 @@ reopen S2i or block S2j.
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
 | Molecule attribute methods | Uniform unchecked attribute mutation settled; implementation remains | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Remove modify/try_modify callbacks. |
-| Entity-view structures and API | S2i5 complete; S2j complete except for stereo additions | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
+| Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
 | Molecule-level constraint mutation | S2i1 complete; callback migration remains | Molecule::constraints provides reads; the editor exposes &mut Constraints. The public checked constraint view is removed. S2k/S2l migrate callback callers and S2m removes try_modify_constraints. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
 | Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation remains | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Molecule and Edits input-transfer changes remain; the editor already supports consumption. |
@@ -62,9 +60,8 @@ The [bounded study](#fieldframe-agreement-first-use-study--2026-09-24) records
 the consumer changes enabling unchecked attribute assignment. The revised design
 keeps molecule/editor views separate for both immutable and mutable access.
 S2i5 removed the mutable-view const parameter without changing typed editor storage
-or attribute assignment. The atom, localized-bond, dative, aromatic, multicenter,
-and noncovalent additions in S2j are implemented; the remaining stereo getter
-inventory below is proposed for review before implementation.
+or attribute assignment. S2j implements the local-getter inventory and editor-only
+structural mutations below for all eight entity families.
 The lift_constraints defect and its undetermined-stereo policy are a separate
 focused correction, recorded under
 [other operations](#other-moleculereaction-operations).
@@ -74,9 +71,8 @@ Python consumption, counter-based accessor invalidation, and storage names are
 approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
-checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j's atom,
-localized-bond, dative, aromatic, multicenter, and noncovalent work is complete;
-the remaining stereo getter inventory awaits review before implementation.
+checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
+complete; S2k is the next subitem.
 
 ## Editor and transaction API
 
@@ -1272,12 +1268,10 @@ work, not a requirement for another reaction representation or public API.
 
 ### Local getters
 
-The separate families and matching-interface rule are settled. The atom,
-localized-bond, dative, aromatic, multicenter, and noncovalent getters below are
-implemented; the remaining stereo additions are proposed for review before their
-S2j implementation.
+The separate families and matching-interface rule are settled. The getters below
+are implemented for all eight entity families in S2j.
 Existing immutable Molecule view methods retain their signatures and semantics,
-except for the already agreed borrowed ligand_frame return.
+except for the already agreed borrowed ligand_ids return.
 
 AtomView and AtomEditorView have private id and attributes fields, exposed by
 id() -> AtomId and attributes() -> &'a AtomForm. AtomView stores molecule first,
@@ -1345,12 +1339,12 @@ followed by id: StereoAtomId; StereoBondEditorView stores stereo_bonds:
 &'a StereoBonds followed by id: StereoBondId. Both mutable families hold the
 corresponding mutable set borrow followed by id. Fields are private and
 constructors take the owning borrow first. All four views expose id(),
-attributes(), site_id(), and ligand_frame(); both mutable families retain
+attributes(), site_id(), and ligand_ids(); both mutable families retain
 attributes_mut() and constraints(). Readonly attributes/frames retain 'a;
 mutable-view accessor borrows last for the method borrow. Invalid-id lookup
 panics are preserved. Macros share repeated namespace, readonly, and mutable
 implementations; entity-specific navigation and incidence remain explicit.
-Additional stereo getters for editor/mutable views remain in S2j.
+The additional stereo getters for editor/mutable views are implemented in S2j.
 
 The readonly storage design retains a separately supplied attribute borrow for
 atoms and localized bonds. Relation views retrieve their attributes from the
@@ -1364,8 +1358,8 @@ the method borrow. Immutable getters return references tied to the stored borrow
 Iterator lifetimes follow the same rule: +'a for immutable views and +'_ for
 mutable views.
 
-Add these local methods to both mutable families and to immutable editor views
-where absent. Every method takes &self. In the table, &Form denotes &'a Form for
+Both mutable families and immutable editor views expose these local methods.
+Every method takes &self. In the table, &Form denotes &'a Form for
 immutable views and &Form tied to &self for mutable views.
 
 | Entity | Getter signatures |
@@ -1375,7 +1369,7 @@ immutable views and &Form tied to &self for mutable views.
 | Dative bond | donor_ids() -> impl ExactSizeIterator<Item = AtomId>; acceptor_id() -> AtomId; atom_ids() -> impl ExactSizeIterator<Item = AtomId>; donor_count() -> usize; atom_count() -> usize; order() -> &NumForm |
 | Aromatic system and multicenter bond | atom_ids() -> impl ExactSizeIterator<Item = AtomId>; atom_count() -> usize; electrons() -> &ElectronCountsForm; electron_count() -> NumForm; charge() -> &NumForm; unpaired_electrons() -> &UnpairedElectronsForm |
 | Noncovalent bond | atom_ids() -> [AtomId; 2]; kind() -> &NoncovalentBondKindForm |
-| Stereo atom and stereo bond | site_id() -> AtomId / BondId respectively; kind() -> StereoKind; coset() -> &StereoCoset; ligand_count() -> usize; ligand_position(AtomId) -> Option<StereoLigandPosition>; ligand_frame() -> &[StereoLigand]; atom_ligand_ids() -> impl Iterator<Item = AtomId>; implicit_hydrogen_atom_ids() -> impl Iterator<Item = AtomId>; lone_pair_atom_ids() -> impl Iterator<Item = AtomId>; atom_ligand_count() -> usize; implicit_hydrogen_count() -> usize; lone_pair_count() -> usize |
+| Stereo atom and stereo bond | site_id() -> AtomId / BondId respectively; kind() -> StereoKind; coset() -> &StereoCoset; ligand_count() -> usize; ligand_position(id: AtomId) -> Option<StereoLigandPosition>; ligand_ids() -> &[StereoLigand]; atom_ligand_ids() -> impl Iterator<Item = AtomId>; implicit_hydrogen_atom_ids() -> impl Iterator<Item = AtomId>; lone_pair_atom_ids() -> impl Iterator<Item = AtomId>; atom_ligand_count() -> usize; implicit_hydrogen_count() -> usize; lone_pair_count() -> usize |
 
 Dative atom_ids yields donors in stored order followed by the acceptor.
 Aromatic/multicenter electron_count sums the stored literal contributions,
@@ -1383,21 +1377,19 @@ otherwise returns NumForm::Undetermined. It does not check contribution-vector
 length. Stereo kind/coset match the existing immutable molecule views: they panic
 for an undetermined configuration. Optional access remains available through
 attributes.configuration.kind()/coset(); no new configuration() getter is needed.
-ligand_position finds the first actual-atom ligand with the requested id.
+ligand_position takes id: AtomId and finds the first actual-atom ligand with that id.
 Filters preserve stored order; virtual-ligand id accessors yield their bearing ids.
 
-The previous inventory proposed different return types under existing names.
-The matching-interface decisions are below. Basic stereo site/frame access is
-implemented; additional atom, localized-bond, dative, aromatic, multicenter, and
-noncovalent getters are implemented. Other stereo additions remain unimplemented:
+The matching-interface decisions below are implemented, including stereo
+site/frame access and the additional getters for all entity families:
 
-| Proposed editor getter | Existing immutable Molecule getter | Revised editor proposal |
+| Earlier editor proposal | Existing immutable Molecule getter | Implemented decision |
 | --- | --- | --- |
 | kind() -> Option<StereoKind>; coset() -> Option<&StereoCoset> | kind() -> StereoKind; coset() -> &'a StereoCoset | Match the molecule signatures and undetermined-configuration panic. |
 | constraints() -> &EntityConstraintsForm on an immutable editor view | constraints() -> EntityConstraintsView<'a> | Do not add this immutable-editor method. Read stored constraints through attributes.constraints. Both mutable families retain constraints() -> &EntityConstraintsForm. |
-| ligand()/ligands() and ligand-kind filters returning StereoLigand | Corresponding methods return StereoLigandView<'a> | Do not add raw-value methods under these names. Raw ordered ligands remain available through borrowed ligand_frame(); retain the id/count methods listed above. |
+| ligand()/ligands() and ligand-kind filters returning StereoLigand | Corresponding methods return StereoLigandView<'a> | Do not add raw-value methods under these names. Raw ordered ligands remain available through borrowed ligand_ids(); retain the id/count methods listed above. |
 
-This proposal does not remove the existing molecule ligand/constraint view APIs.
+The existing molecule ligand/constraint view APIs are retained.
 Resolved entity views, neighbors, valence, induced bonds, stereo-bond endpoint
 lookup, and frame-transport queries stay outside the editor getter additions.
 No new checked access, error type, or publication requirement is introduced.
@@ -3516,14 +3508,12 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   strict Clippy, graph-IR rustdoc, nightly formatting, and diff checks pass.
   The full scoped diff was reviewed.
 
-- **S2j — Local getters and editor structural mutation**
-  (`ir::{id,view}`, typed sets, ligand_frame callers and bindings; additive
+- **S2j — completed 2026-09-26 — Local getters and editor structural mutation**
+  (`ir::{id,view}`, typed sets, ligand_ids callers and bindings; additive
   structural methods plus breaking getter return change, red→green). [dep: S2i5]
 
-  **Status.** Basic stereo storage/accessor alignment and borrowed ligand frames
-  are implemented. Atom, localized-bond, dative, aromatic, multicenter, and
-  noncovalent additions are complete. Other stereo getters remain proposed for
-  review; stereo structural mutation remains unimplemented with settled contracts.
+  **Status.** Complete for all eight entity families. Matching local getters,
+  borrowed stereo ligand frames, and editor-only structural mutations are implemented.
 
   **Atom and localized-bond scope completed — 2026-09-26.** AtomEditorView and
   both mutable atom views expose element(), isotope_mass(), charge(),
@@ -3586,17 +3576,33 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   Strict graph-IR library/test Clippy, rustdoc, nightly formatting, and diff
   checks pass. The full scoped diff is reviewed.
 
+  **Stereo scope completed — 2026-09-26.** Both stereo families expose the
+  approved local getters on readonly editor views and both mutable views.
+  ligand_position(&self, id: AtomId) uses id consistently, including the readonly
+  molecule views. Shared macros implement the getters and editor-only replace_site,
+  replace_ligands, replace_ligand, insert_ligand, and remove_ligand delegates.
+  Getters borrow stored attributes and ligand slices; structural writes preserve
+  configuration and constraints and update the owning sets' incidence.
+  The stereo-view suite passes 151 cases, including actual/virtual ligand filters,
+  borrow lifetimes, undetermined-configuration panics, position bounds, empty
+  lists, stored order, site/ligand preservation, either attribute-write order,
+  incidence, and structural publication rejection. The S2j closeout passes all
+  693 view tests, 17 stereo property tests, graph-IR all-target Clippy with proptest
+  enabled and warnings denied, strict rustdoc, nightly formatting, and diff checks.
+  The rebuilt Python 3.13 extension passes all 173 stereo/molecule tests.
+  The full scoped diff is reviewed.
+
   **Readonly stereo editor storage — implemented.** StereoAtomEditorView stores
   stereo_atoms: &'a StereoAtoms followed by id: StereoAtomId. StereoBondEditorView
   stores stereo_bonds: &'a StereoBonds followed by id: StereoBondId. All fields are
   private; each crate-private new takes the set borrow and id in that order.
-  attributes(), site_id(), and ligand_frame() read the owning set. Readonly
+  attributes(), site_id(), and ligand_ids() read the owning set. Readonly
   attribute/frame borrows retain 'a. Public site/ligands field callers are migrated.
   Editor lookup checks the id before constructing the view and preserves the
   immediate invalid-id panic. Both mutable families also hold their owning sets.
 
   **Semantics.** Read-only getters borrow existing data; filters are lazy and
-  preserve stored order. ligand_frame borrows the stored ordered slice, with no
+  preserve stored order. ligand_ids borrows the stored ordered slice, with no
   allocation or reconstruction through ligand views. Structural
   replacements preserve attributes/constraints and the other relation factor.
   Single replacement preserves length; insertion/removal preserve unaffected
@@ -3629,9 +3635,8 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   Implemented on both stereo families, including immutable editor views and both
   separate mutable families:
 
-  ```diff
-  -pub fn ligand_frame(&self) -> Vec<StereoLigand>;
-  +pub fn ligand_frame(&self) -> &[StereoLigand];
+  ```rust
+  pub fn ligand_ids(&self) -> &[StereoLigand];
   ```
 
   Immutable views return &'a [StereoLigand] from the owning set; mutable views
@@ -5190,9 +5195,9 @@ Within the revised S2:
   consumer changes are complete, then tests the newly admissible inputs through
   public construction and those consumers before closing the subitem.
 - S2i1–S2i5 are complete, including separate mutable molecule/editor view types
-  with typed storage and unrestricted attributes. S2j adds matching local getters
-  and editor structural operations after review of its revised getter inventory.
-  S2j closes green without waiting for S2k/S2l to restore compilation.
+  with typed storage and unrestricted attributes. S2j is complete: matching local
+  getters and editor structural operations compile and pass their focused gates
+  without depending on S2k/S2l.
 - S2k and S2l migrate Rust and Python callers; both precede removal in S2m.
 - S3a depends on S2i; S3b requires S2j. S3c is independent of view changes.
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
