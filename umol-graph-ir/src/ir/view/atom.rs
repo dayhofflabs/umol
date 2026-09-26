@@ -1,5 +1,4 @@
-//! Atom views: `AtomViews` namespace, `AtomView` / `AtomViewMut` attribute bundles,
-//! `AtomEditorView` / `AtomEditorViewMut` builder bundles.
+//! Atom views.
 
 use umol_chem::element::Element;
 use umol_graph_core::NodeId;
@@ -612,11 +611,33 @@ pub(crate) fn atom_derived_constraint(
     }
 }
 
-/// Mutable borrowed view of an atom.
+/// Mutable attribute access to an atom.
 #[derive(Debug)]
-pub struct AtomViewMut<'a> {
-    pub id: AtomId,
-    pub attributes: &'a mut AtomForm,
+pub struct AtomViewMut<'a, const EDITOR: bool = false> {
+    id: AtomId,
+    attributes: &'a mut AtomForm,
+}
+
+impl<'a, const EDITOR: bool> AtomViewMut<'a, EDITOR> {
+    pub(crate) fn new(id: AtomId, attributes: &'a mut AtomForm) -> Self {
+        Self { id, attributes }
+    }
+
+    pub fn id(&self) -> AtomId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &AtomForm {
+        self.attributes
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut AtomForm {
+        self.attributes
+    }
+
+    pub fn constraints(&self) -> &AtomConstraintsForm {
+        &self.attributes().constraints
+    }
 }
 
 // Editor-scope view bundles for atoms.
@@ -624,11 +645,6 @@ pub struct AtomViewMut<'a> {
 pub struct AtomEditorView<'a> {
     pub id: AtomId,
     pub attributes: &'a AtomForm,
-}
-
-pub struct AtomEditorViewMut<'a> {
-    pub id: AtomId,
-    pub attributes: &'a mut AtomForm,
 }
 
 #[cfg(test)]

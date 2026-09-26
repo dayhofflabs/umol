@@ -251,13 +251,33 @@ pub(crate) fn multicenter_bond_derived_constraint(
     }
 }
 
-/// Mutable borrowed view of a multicenter bond: its id, member atoms (owned)
-/// and mutable data. Molecule-scope peer of `MulticenterBondView`.
+/// Mutable attribute access to a multicenter bond.
 #[derive(Debug)]
-pub struct MulticenterBondViewMut<'a> {
-    pub id: MulticenterBondId,
-    pub atoms: Vec<AtomId>,
-    pub attributes: &'a mut MulticenterBondForm,
+pub struct MulticenterBondViewMut<'a, const EDITOR: bool = false> {
+    id: MulticenterBondId,
+    set: &'a mut MulticenterBonds,
+}
+
+impl<'a, const EDITOR: bool> MulticenterBondViewMut<'a, EDITOR> {
+    pub(crate) fn new(id: MulticenterBondId, set: &'a mut MulticenterBonds) -> Self {
+        Self { id, set }
+    }
+
+    pub fn id(&self) -> MulticenterBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &MulticenterBondForm {
+        self.set.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut MulticenterBondForm {
+        self.set.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &MulticenterBondConstraintsForm {
+        &self.attributes().constraints
+    }
 }
 
 // Builder-scope view bundles for multicenter bonds.
@@ -282,30 +302,6 @@ impl<'a> MulticenterBondEditorView<'a> {
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.atoms.iter().map(|&n| AtomId::from(n))
-    }
-}
-
-pub struct MulticenterBondEditorViewMut<'a> {
-    pub id: MulticenterBondId,
-    atoms: &'a [NodeId],
-    pub attributes: &'a mut MulticenterBondForm,
-}
-
-impl<'a> MulticenterBondEditorViewMut<'a> {
-    pub(crate) fn new(
-        id: MulticenterBondId,
-        atoms: &'a [NodeId],
-        attributes: &'a mut MulticenterBondForm,
-    ) -> Self {
-        Self {
-            id,
-            atoms,
-            attributes,
-        }
-    }
-
-    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }

@@ -142,6 +142,7 @@ pub use view::{
     DativeBondViews, MulticenterBondConstraintsView, MulticenterBondView, MulticenterBondViewMut,
     MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView, NoncovalentBondView,
     NoncovalentBondViewMut, NoncovalentBondViews, RingAtomView, RingBondView, RingView, RingViews,
-    StereoAtomConstraintsView, StereoAtomView, StereoAtomViews, StereoBondConstraintsView,
-    StereoBondView, StereoBondViews, StereoLigandView,
+    StereoAtomConstraintsView, StereoAtomView, StereoAtomViewMut, StereoAtomViews,
+    StereoBondConstraintsView, StereoBondView, StereoBondViewMut, StereoBondViews,
+    StereoLigandView,
 };

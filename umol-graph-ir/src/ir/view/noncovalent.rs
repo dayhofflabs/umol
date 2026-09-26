@@ -236,13 +236,33 @@ fn same_bond_component(molecule: &Molecule, a: AtomId, b: AtomId) -> bool {
     false
 }
 
-/// Mutable borrowed view of a noncovalent bond: its id, the two incident atoms
-/// (owned) and mutable data. Molecule-scope peer of `NoncovalentBondView`.
+/// Mutable attribute access to a noncovalent bond.
 #[derive(Debug)]
-pub struct NoncovalentBondViewMut<'a> {
-    pub id: NoncovalentBondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a mut NoncovalentBondForm,
+pub struct NoncovalentBondViewMut<'a, const EDITOR: bool = false> {
+    id: NoncovalentBondId,
+    set: &'a mut NoncovalentBonds,
+}
+
+impl<'a, const EDITOR: bool> NoncovalentBondViewMut<'a, EDITOR> {
+    pub(crate) fn new(id: NoncovalentBondId, set: &'a mut NoncovalentBonds) -> Self {
+        Self { id, set }
+    }
+
+    pub fn id(&self) -> NoncovalentBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &NoncovalentBondForm {
+        self.set.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut NoncovalentBondForm {
+        self.set.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &NoncovalentBondConstraintsForm {
+        &self.attributes().constraints
+    }
 }
 
 // Builder-scope view bundles for noncovalent bonds.
@@ -251,12 +271,6 @@ pub struct NoncovalentBondEditorView<'a> {
     pub id: NoncovalentBondId,
     pub atoms: [AtomId; 2],
     pub attributes: &'a NoncovalentBondForm,
-}
-
-pub struct NoncovalentBondEditorViewMut<'a> {
-    pub id: NoncovalentBondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a mut NoncovalentBondForm,
 }
 
 #[cfg(test)]

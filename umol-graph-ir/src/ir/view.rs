@@ -1,4 +1,4 @@
-//! Read-only views over `Molecule` topology and relations.
+//! Views over molecule topology, relations, and attributes.
 //!
 //! View records bundle an index with the underlying data so consumers
 //! never assemble (id, data, participants) tuples by hand. Namespace
@@ -22,35 +22,29 @@ mod ring;
 mod stereo;
 
 pub use aromatic::{
-    AromaticSystemEditorView, AromaticSystemEditorViewMut, AromaticSystemView,
-    AromaticSystemViewMut, AromaticSystemViews,
+    AromaticSystemEditorView, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,
 };
-pub use atom::{AtomEditorView, AtomEditorViewMut, AtomView, AtomViewMut, AtomViews};
-pub use bond::{BondEditorView, BondEditorViewMut, BondView, BondViewMut, BondViews};
+pub use atom::{AtomEditorView, AtomView, AtomViewMut, AtomViews};
+pub use bond::{BondEditorView, BondView, BondViewMut, BondViews};
 pub use constraints::{
     AromaticSystemConstraintsView, AtomConstraintsView, BondConstraintsView,
     DativeBondConstraintsView, MulticenterBondConstraintsView, NoncovalentBondConstraintsView,
     StereoAtomConstraintsView, StereoBondConstraintsView,
 };
-pub use dative::{
-    DativeBondEditorView, DativeBondEditorViewMut, DativeBondView, DativeBondViewMut,
-    DativeBondViews,
-};
+pub use dative::{DativeBondEditorView, DativeBondView, DativeBondViewMut, DativeBondViews};
 pub use graph::{AtomAutomorphism, GraphView};
 pub use ligand::StereoLigandView;
 pub use multicenter::{
-    MulticenterBondEditorView, MulticenterBondEditorViewMut, MulticenterBondView,
-    MulticenterBondViewMut, MulticenterBondViews,
+    MulticenterBondEditorView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
 };
 pub use neighbor::NeighborView;
 pub use noncovalent::{
-    NoncovalentBondEditorView, NoncovalentBondEditorViewMut, NoncovalentBondView,
-    NoncovalentBondViewMut, NoncovalentBondViews,
+    NoncovalentBondEditorView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews,
 };
 pub use ring::{RingAtomView, RingBondView, RingView, RingViews};
 pub use stereo::{
-    StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViews,
-    StereoBondEditorView, StereoBondEditorViewMut, StereoBondView, StereoBondViews,
+    StereoAtomEditorView, StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondEditorView,
+    StereoBondView, StereoBondViewMut, StereoBondViews,
 };
 
 #[cfg(test)]

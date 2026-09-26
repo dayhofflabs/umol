@@ -766,9 +766,34 @@ pub(crate) fn stereo_bond_derived_constraint(
     None
 }
 
-// Builder-scope view bundles for stereo elements. `ligands` is a borrow into
-// builder storage so old-state checks compare without cloning; callers clone
-// only what they keep (the `attributes`).
+/// Mutable attribute access to a stereo atom.
+#[derive(Debug)]
+pub struct StereoAtomViewMut<'a, const EDITOR: bool = false> {
+    id: StereoAtomId,
+    set: &'a mut StereoAtoms,
+}
+
+impl<'a, const EDITOR: bool> StereoAtomViewMut<'a, EDITOR> {
+    pub(crate) fn new(id: StereoAtomId, set: &'a mut StereoAtoms) -> Self {
+        Self { id, set }
+    }
+
+    pub fn id(&self) -> StereoAtomId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &StereoAtomForm {
+        self.set.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut StereoAtomForm {
+        self.set.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &StereoAtomConstraintsForm {
+        &self.attributes().constraints
+    }
+}
 
 pub struct StereoAtomEditorView<'a> {
     pub id: StereoAtomId,
@@ -777,11 +802,33 @@ pub struct StereoAtomEditorView<'a> {
     pub attributes: &'a StereoAtomForm,
 }
 
-pub struct StereoAtomEditorViewMut<'a> {
-    pub id: StereoAtomId,
-    pub site: AtomId,
-    pub ligands: &'a [StereoLigand],
-    pub attributes: &'a mut StereoAtomForm,
+/// Mutable attribute access to a stereo bond.
+#[derive(Debug)]
+pub struct StereoBondViewMut<'a, const EDITOR: bool = false> {
+    id: StereoBondId,
+    set: &'a mut StereoBonds,
+}
+
+impl<'a, const EDITOR: bool> StereoBondViewMut<'a, EDITOR> {
+    pub(crate) fn new(id: StereoBondId, set: &'a mut StereoBonds) -> Self {
+        Self { id, set }
+    }
+
+    pub fn id(&self) -> StereoBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &StereoBondForm {
+        self.set.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut StereoBondForm {
+        self.set.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &StereoBondConstraintsForm {
+        &self.attributes().constraints
+    }
 }
 
 pub struct StereoBondEditorView<'a> {
@@ -789,13 +836,6 @@ pub struct StereoBondEditorView<'a> {
     pub site: BondId,
     pub ligands: &'a [StereoLigand],
     pub attributes: &'a StereoBondForm,
-}
-
-pub struct StereoBondEditorViewMut<'a> {
-    pub id: StereoBondId,
-    pub site: BondId,
-    pub ligands: &'a [StereoLigand],
-    pub attributes: &'a mut StereoBondForm,
 }
 
 #[cfg(test)]

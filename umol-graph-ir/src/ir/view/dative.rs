@@ -278,14 +278,33 @@ pub(crate) fn dative_bond_derived_constraint(
     }
 }
 
-/// Mutable borrowed view of a dative bond: its id, participants (donors +
-/// acceptor, owned) and mutable data. Molecule-scope peer of `DativeBondView`.
+/// Mutable attribute access to a dative bond.
 #[derive(Debug)]
-pub struct DativeBondViewMut<'a> {
-    pub id: DativeBondId,
-    pub donors: Vec<AtomId>,
-    pub acceptor: AtomId,
-    pub attributes: &'a mut DativeBondForm,
+pub struct DativeBondViewMut<'a, const EDITOR: bool = false> {
+    id: DativeBondId,
+    set: &'a mut DativeBonds,
+}
+
+impl<'a, const EDITOR: bool> DativeBondViewMut<'a, EDITOR> {
+    pub(crate) fn new(id: DativeBondId, set: &'a mut DativeBonds) -> Self {
+        Self { id, set }
+    }
+
+    pub fn id(&self) -> DativeBondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &DativeBondForm {
+        self.set.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut DativeBondForm {
+        self.set.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &DativeBondConstraintsForm {
+        &self.attributes().constraints
+    }
 }
 
 // Editor-scope view bundles for dative bonds.
@@ -314,42 +333,6 @@ impl<'a> DativeBondEditorView<'a> {
 
     /// All atoms: donors followed by the acceptor.
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        let donors = self.donors;
-        let acceptor = self.acceptor;
-        (0..donors.len() + 1).map(move |index| {
-            if index < donors.len() {
-                AtomId::from(donors[index])
-            } else {
-                acceptor
-            }
-        })
-    }
-}
-
-pub struct DativeBondEditorViewMut<'a> {
-    pub id: DativeBondId,
-    donors: &'a [NodeId],
-    acceptor: AtomId,
-    pub attributes: &'a mut DativeBondForm,
-}
-
-impl<'a> DativeBondEditorViewMut<'a> {
-    pub(crate) fn new(
-        id: DativeBondId,
-        donors: &'a [NodeId],
-        acceptor: AtomId,
-        attributes: &'a mut DativeBondForm,
-    ) -> Self {
-        Self {
-            id,
-            donors,
-            acceptor,
-            attributes,
-        }
-    }
-
-    /// All atoms: donors followed by the acceptor.
-    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         let donors = self.donors;
         let acceptor = self.acceptor;
         (0..donors.len() + 1).map(move |index| {

@@ -5783,6 +5783,292 @@ fn test_molecule_index_noncovalent_bond(#[from(rich_molecule)] molecule: Molecul
 }
 
 #[rstest]
+#[case::attributes(AtomForm { charge: NumForm::Lit(-1), constraints: AtomConstraintForm::valence(3).into(), ..Default::default() })]
+fn test_molecule_atom_mut_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] form: AtomForm,
+    #[values(false, true)] editor: bool,
+) {
+    let mut molecule = Molecule::from_entries(entries.clone());
+    entries.atoms[0] = form.clone();
+    let expected = Molecule::from_entries(entries);
+    if editor {
+        let mut view = molecule.atom_view_mut::<true>(AtomId(0));
+        *view.attributes_mut() = AtomForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), AtomId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    } else {
+        let mut view = molecule.atom_mut(AtomId(0));
+        *view.attributes_mut() = AtomForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), AtomId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    }
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::attributes(BondForm { order: NumForm::Lit(2), constraints: BondConstraintForm::Aromatic(BooleanForm::Lit(true)).into(), ..Default::default() })]
+fn test_molecule_bond_mut_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] form: BondForm,
+    #[values(false, true)] editor: bool,
+) {
+    let mut molecule = Molecule::from_entries(entries.clone());
+    entries.bonds[0].2 = form.clone();
+    let expected = Molecule::from_entries(entries);
+    if editor {
+        let mut view = molecule.bond_view_mut::<true>(BondId(0));
+        *view.attributes_mut() = BondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), BondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    } else {
+        let mut view = molecule.bond_mut(BondId(0));
+        *view.attributes_mut() = BondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), BondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    }
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::attributes(DativeBondForm { order: NumForm::Lit(2), constraints: DativeBondConstraintForm::aromatic(true).into(), ..Default::default() })]
+fn test_molecule_dative_bond_mut_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] form: DativeBondForm,
+    #[values(false, true)] editor: bool,
+) {
+    let mut molecule = Molecule::from_entries(entries.clone());
+    entries.dative[0].2 = form.clone();
+    let expected = Molecule::from_entries(entries);
+    if editor {
+        let mut view = molecule.dative_bond_view_mut::<true>(DativeBondId(0));
+        *view.attributes_mut() = DativeBondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), DativeBondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    } else {
+        let mut view = molecule.dative_bond_mut(DativeBondId(0));
+        *view.attributes_mut() = DativeBondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), DativeBondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    }
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::attributes(AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1, 2]), constraints: AromaticSystemConstraintForm::electron_count(3).into(), ..Default::default() })]
+fn test_molecule_aromatic_system_mut_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] form: AromaticSystemForm,
+    #[values(false, true)] editor: bool,
+) {
+    let mut molecule = Molecule::from_entries(entries.clone());
+    entries.aromatic[0].1 = form.clone();
+    let expected = Molecule::from_entries(entries);
+    if editor {
+        let mut view = molecule.aromatic_system_view_mut::<true>(AromaticSystemId(0));
+        *view.attributes_mut() = AromaticSystemForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), AromaticSystemId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    } else {
+        let mut view = molecule.aromatic_system_mut(AromaticSystemId(0));
+        *view.attributes_mut() = AromaticSystemForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), AromaticSystemId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    }
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::attributes(MulticenterBondForm { electrons: ElectronCountsForm::Lit(vec![1, 2, 0, 5]), constraints: MulticenterBondConstraintForm::electron_count(8).into(), ..Default::default() })]
+fn test_molecule_multicenter_bond_mut_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] form: MulticenterBondForm,
+    #[values(false, true)] editor: bool,
+) {
+    let mut molecule = Molecule::from_entries(entries.clone());
+    entries.multicenter[0].1 = form.clone();
+    let expected = Molecule::from_entries(entries);
+    if editor {
+        let mut view = molecule.multicenter_bond_view_mut::<true>(MulticenterBondId(0));
+        *view.attributes_mut() = MulticenterBondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), MulticenterBondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    } else {
+        let mut view = molecule.multicenter_bond_mut(MulticenterBondId(0));
+        *view.attributes_mut() = MulticenterBondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), MulticenterBondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    }
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::attributes(NoncovalentBondForm { constraints: NoncovalentBondConstraintForm::intramolecular(true).into(), ..Default::default() })]
+fn test_molecule_noncovalent_bond_mut_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] form: NoncovalentBondForm,
+    #[values(false, true)] editor: bool,
+) {
+    let mut molecule = Molecule::from_entries(entries.clone());
+    entries.noncovalent[0].1 = form.clone();
+    let expected = Molecule::from_entries(entries);
+    if editor {
+        let mut view = molecule.noncovalent_bond_view_mut::<true>(NoncovalentBondId(0));
+        *view.attributes_mut() = NoncovalentBondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), NoncovalentBondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    } else {
+        let mut view = molecule.noncovalent_bond_mut(NoncovalentBondId(0));
+        *view.attributes_mut() = NoncovalentBondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), NoncovalentBondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    }
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::attributes(StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 2u32), constraints: StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined).into() })]
+fn test_molecule_stereo_atom_mut_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] form: StereoAtomForm,
+    #[values(false, true)] editor: bool,
+) {
+    let mut molecule = Molecule::from_entries(entries.clone());
+    entries.stereo_atoms[0].2 = form.clone();
+    let expected = Molecule::from_entries(entries);
+    if editor {
+        let mut view = molecule.stereo_atom_view_mut::<true>(StereoAtomId(0));
+        *view.attributes_mut() = StereoAtomForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), StereoAtomId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    } else {
+        let mut view = molecule.stereo_atom_mut(StereoAtomId(0));
+        *view.attributes_mut() = StereoAtomForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), StereoAtomId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    }
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::attributes(StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 2u32), constraints: StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined).into() })]
+fn test_molecule_stereo_bond_mut_attributes(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] form: StereoBondForm,
+    #[values(false, true)] editor: bool,
+) {
+    let mut molecule = Molecule::from_entries(entries.clone());
+    entries.stereo_bonds[0].2 = form.clone();
+    let expected = Molecule::from_entries(entries);
+    if editor {
+        let mut view = molecule.stereo_bond_view_mut::<true>(StereoBondId(0));
+        *view.attributes_mut() = StereoBondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), StereoBondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    } else {
+        let mut view = molecule.stereo_bond_mut(StereoBondId(0));
+        *view.attributes_mut() = StereoBondForm {
+            constraints: Default::default(),
+            ..form.clone()
+        };
+        view.attributes_mut().constraints = form.constraints.clone();
+        assert_eq!(view.id(), StereoBondId(0));
+        assert_eq!(view.attributes(), &form);
+        assert_eq!(view.constraints(), &form.constraints);
+    }
+    assert_eq!(molecule, expected);
+}
+
+#[rstest]
+#[case::atom(|molecule: &mut Molecule| { molecule.atom_mut(AtomId(0)); })]
+#[case::bond(|molecule: &mut Molecule| { molecule.bond_mut(BondId(0)); })]
+#[case::dative_bond(|molecule: &mut Molecule| { molecule.dative_bond_mut(DativeBondId(0)); })]
+#[case::aromatic_system(|molecule: &mut Molecule| { molecule.aromatic_system_mut(AromaticSystemId(0)); })]
+#[case::multicenter_bond(|molecule: &mut Molecule| { molecule.multicenter_bond_mut(MulticenterBondId(0)); })]
+#[case::noncovalent_bond(|molecule: &mut Molecule| { molecule.noncovalent_bond_mut(NoncovalentBondId(0)); })]
+#[case::stereo_atom(|molecule: &mut Molecule| { molecule.stereo_atom_mut(StereoAtomId(0)); })]
+#[case::stereo_bond(|molecule: &mut Molecule| { molecule.stereo_bond_mut(StereoBondId(0)); })]
+#[should_panic]
+fn test_molecule_view_mut_error(#[case] borrow: fn(&mut Molecule)) {
+    borrow(&mut Molecule::new());
+}
+
+#[rstest]
 fn test_molecule_modify_atoms(#[from(rich_molecule)] mut molecule: Molecule) {
     molecule.modify_atoms(|mut a| {
         a.charge = NumForm::Lit(1);

@@ -1,5 +1,4 @@
-//! Bond views: `BondViews` namespace, `BondView` / `BondViewMut` attribute bundles,
-//! `BondEditorView` / `BondEditorViewMut` builder bundles.
+//! Bond views.
 
 use umol_graph_core::{EdgeId, NodeId};
 
@@ -284,12 +283,38 @@ pub(crate) fn bond_derived_constraint(
     }
 }
 
-/// Mutable borrowed view of a bond.
+/// Mutable attribute access to a bond.
 #[derive(Debug)]
-pub struct BondViewMut<'a> {
-    pub id: BondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a mut BondForm,
+pub struct BondViewMut<'a, const EDITOR: bool = false> {
+    id: BondId,
+    atoms: [AtomId; 2],
+    attributes: &'a mut BondForm,
+}
+
+impl<'a, const EDITOR: bool> BondViewMut<'a, EDITOR> {
+    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], attributes: &'a mut BondForm) -> Self {
+        Self {
+            id,
+            atoms,
+            attributes,
+        }
+    }
+
+    pub fn id(&self) -> BondId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &BondForm {
+        self.attributes
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut BondForm {
+        self.attributes
+    }
+
+    pub fn constraints(&self) -> &BondConstraintsForm {
+        &self.attributes().constraints
+    }
 }
 
 // Editor-scope view bundles for bonds.
@@ -298,12 +323,6 @@ pub struct BondEditorView<'a> {
     pub id: BondId,
     pub atoms: [AtomId; 2],
     pub attributes: &'a BondForm,
-}
-
-pub struct BondEditorViewMut<'a> {
-    pub id: BondId,
-    pub atoms: [AtomId; 2],
-    pub attributes: &'a mut BondForm,
 }
 
 #[cfg(test)]

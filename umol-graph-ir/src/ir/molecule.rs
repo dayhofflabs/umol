@@ -45,7 +45,8 @@ use super::view::{
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
     DativeBondViews, GraphView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
     NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingViews,
-    StereoAtomView, StereoAtomViews, StereoBondView, StereoBondViews,
+    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
+    StereoBondViews,
 };
 
 mod build;
@@ -508,9 +509,18 @@ impl Molecule {
         RingViews::new(self, RingSet::enumerate(&self.graph, model, config))
     }
 
-    pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_> {
+    /// Borrow atom attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_, false> {
+        self.atom_view_mut::<false>(id)
+    }
+
+    fn atom_view_mut<const EDITOR: bool>(&mut self, id: AtomId) -> AtomViewMut<'_, EDITOR> {
         let attributes = &mut Arc::make_mut(&mut self.atoms)[id.index()];
-        AtomViewMut { id, attributes }
+        AtomViewMut::new(id, attributes)
     }
 
     /// Replace every atom with `f(atom)` in place (owned in, owned out — no
@@ -521,15 +531,20 @@ impl Molecule {
         }
     }
 
-    pub fn bond_mut(&mut self, id: BondId) -> BondViewMut<'_> {
+    /// Borrow bond attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn bond_mut(&mut self, id: BondId) -> BondViewMut<'_, false> {
+        self.bond_view_mut::<false>(id)
+    }
+
+    fn bond_view_mut<const EDITOR: bool>(&mut self, id: BondId) -> BondViewMut<'_, EDITOR> {
         let [s, t] = self.graph.edge_endpoints(id.into());
         let atoms = [AtomId::from(s), AtomId::from(t)];
         let attributes = &mut Arc::make_mut(&mut self.bonds)[id.index()];
-        BondViewMut {
-            id,
-            atoms,
-            attributes,
-        }
+        BondViewMut::new(id, atoms, attributes)
     }
 
     /// Replace every bond with `f(bond)` in place.
@@ -539,16 +554,21 @@ impl Molecule {
         }
     }
 
-    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_> {
-        let acceptor = self.dative_bonds.acceptor(id);
-        let donors = self.dative_bonds.donors(id).collect();
-        let attributes = self.dative_bonds.attributes_mut(id);
-        DativeBondViewMut {
-            id,
-            donors,
-            acceptor,
-            attributes,
-        }
+    /// Borrow dative bond attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_, false> {
+        self.dative_bond_view_mut::<false>(id)
+    }
+
+    fn dative_bond_view_mut<const EDITOR: bool>(
+        &mut self,
+        id: DativeBondId,
+    ) -> DativeBondViewMut<'_, EDITOR> {
+        assert!(self.dative_bonds.contains(id), "invalid dative bond id");
+        DativeBondViewMut::new(id, &mut self.dative_bonds)
     }
 
     /// Replace every dative bond with `f(bond)` in place.
@@ -558,17 +578,27 @@ impl Molecule {
         }
     }
 
-    pub(crate) fn aromatic_system_mut(
+    /// Borrow aromatic system attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn aromatic_system_mut(
         &mut self,
         id: AromaticSystemId,
-    ) -> AromaticSystemViewMut<'_> {
-        let atoms = self.aromatic_systems.atoms(id).collect();
-        let attributes = self.aromatic_systems.attributes_mut(id);
-        AromaticSystemViewMut {
-            id,
-            atoms,
-            attributes,
-        }
+    ) -> AromaticSystemViewMut<'_, false> {
+        self.aromatic_system_view_mut::<false>(id)
+    }
+
+    fn aromatic_system_view_mut<const EDITOR: bool>(
+        &mut self,
+        id: AromaticSystemId,
+    ) -> AromaticSystemViewMut<'_, EDITOR> {
+        assert!(
+            self.aromatic_systems.contains(id),
+            "invalid aromatic system id"
+        );
+        AromaticSystemViewMut::new(id, &mut self.aromatic_systems)
     }
 
     /// Replace every aromatic system with `f(system)` in place.
@@ -623,17 +653,27 @@ impl Molecule {
         })
     }
 
-    pub(crate) fn multicenter_bond_mut(
+    /// Borrow multicenter bond attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn multicenter_bond_mut(
         &mut self,
         id: MulticenterBondId,
-    ) -> MulticenterBondViewMut<'_> {
-        let atoms = self.multicenter_bonds.atoms(id).collect();
-        let attributes = self.multicenter_bonds.attributes_mut(id);
-        MulticenterBondViewMut {
-            id,
-            atoms,
-            attributes,
-        }
+    ) -> MulticenterBondViewMut<'_, false> {
+        self.multicenter_bond_view_mut::<false>(id)
+    }
+
+    fn multicenter_bond_view_mut<const EDITOR: bool>(
+        &mut self,
+        id: MulticenterBondId,
+    ) -> MulticenterBondViewMut<'_, EDITOR> {
+        assert!(
+            self.multicenter_bonds.contains(id),
+            "invalid multicenter bond id"
+        );
+        MulticenterBondViewMut::new(id, &mut self.multicenter_bonds)
     }
 
     /// Replace every multicenter bond with `f(bond)` in place.
@@ -688,14 +728,27 @@ impl Molecule {
         })
     }
 
-    pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_> {
-        let atoms = self.noncovalent_bonds.atoms(id);
-        let attributes = self.noncovalent_bonds.attributes_mut(id);
-        NoncovalentBondViewMut {
-            id,
-            atoms,
-            attributes,
-        }
+    /// Borrow noncovalent bond attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn noncovalent_bond_mut(
+        &mut self,
+        id: NoncovalentBondId,
+    ) -> NoncovalentBondViewMut<'_, false> {
+        self.noncovalent_bond_view_mut::<false>(id)
+    }
+
+    fn noncovalent_bond_view_mut<const EDITOR: bool>(
+        &mut self,
+        id: NoncovalentBondId,
+    ) -> NoncovalentBondViewMut<'_, EDITOR> {
+        assert!(
+            self.noncovalent_bonds.contains(id),
+            "invalid noncovalent bond id"
+        );
+        NoncovalentBondViewMut::new(id, &mut self.noncovalent_bonds)
     }
 
     /// Replace every noncovalent bond with `f(bond)` in place.
@@ -708,8 +761,21 @@ impl Molecule {
         }
     }
 
-    pub(crate) fn stereo_atom_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
-        self.stereo_atoms.attributes_mut(id)
+    /// Borrow stereo atom attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_, false> {
+        self.stereo_atom_view_mut::<false>(id)
+    }
+
+    fn stereo_atom_view_mut<const EDITOR: bool>(
+        &mut self,
+        id: StereoAtomId,
+    ) -> StereoAtomViewMut<'_, EDITOR> {
+        assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
+        StereoAtomViewMut::new(id, &mut self.stereo_atoms)
     }
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
@@ -764,8 +830,21 @@ impl Molecule {
         })
     }
 
-    pub(crate) fn stereo_bond_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
-        self.stereo_bonds.attributes_mut(id)
+    /// Borrow stereo bond attributes for mutation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is out of range.
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_, false> {
+        self.stereo_bond_view_mut::<false>(id)
+    }
+
+    fn stereo_bond_view_mut<const EDITOR: bool>(
+        &mut self,
+        id: StereoBondId,
+    ) -> StereoBondViewMut<'_, EDITOR> {
+        assert!(self.stereo_bonds.contains(id), "invalid stereo bond id");
+        StereoBondViewMut::new(id, &mut self.stereo_bonds)
     }
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.

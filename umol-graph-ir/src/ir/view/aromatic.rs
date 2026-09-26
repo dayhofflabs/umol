@@ -296,13 +296,33 @@ pub(crate) fn aromatic_system_derived_constraint(
     }
 }
 
-/// Mutable borrowed view of an aromatic system: its id, member atoms (owned)
-/// and mutable data. Molecule-scope peer of `AromaticSystemView`.
+/// Mutable attribute access to an aromatic system.
 #[derive(Debug)]
-pub struct AromaticSystemViewMut<'a> {
-    pub id: AromaticSystemId,
-    pub atoms: Vec<AtomId>,
-    pub attributes: &'a mut AromaticSystemForm,
+pub struct AromaticSystemViewMut<'a, const EDITOR: bool = false> {
+    id: AromaticSystemId,
+    set: &'a mut AromaticSystems,
+}
+
+impl<'a, const EDITOR: bool> AromaticSystemViewMut<'a, EDITOR> {
+    pub(crate) fn new(id: AromaticSystemId, set: &'a mut AromaticSystems) -> Self {
+        Self { id, set }
+    }
+
+    pub fn id(&self) -> AromaticSystemId {
+        self.id
+    }
+
+    pub fn attributes(&self) -> &AromaticSystemForm {
+        self.set.attributes(self.id)
+    }
+
+    pub fn attributes_mut(&mut self) -> &mut AromaticSystemForm {
+        self.set.attributes_mut(self.id)
+    }
+
+    pub fn constraints(&self) -> &AromaticSystemConstraintsForm {
+        &self.attributes().constraints
+    }
 }
 
 // Editor-scope view bundles for aromatic systems.
@@ -327,30 +347,6 @@ impl<'a> AromaticSystemEditorView<'a> {
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
-        self.atoms.iter().map(|&n| AtomId::from(n))
-    }
-}
-
-pub struct AromaticSystemEditorViewMut<'a> {
-    pub id: AromaticSystemId,
-    atoms: &'a [NodeId],
-    pub attributes: &'a mut AromaticSystemForm,
-}
-
-impl<'a> AromaticSystemEditorViewMut<'a> {
-    pub(crate) fn new(
-        id: AromaticSystemId,
-        atoms: &'a [NodeId],
-        attributes: &'a mut AromaticSystemForm,
-    ) -> Self {
-        Self {
-            id,
-            atoms,
-            attributes,
-        }
-    }
-
-    pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
