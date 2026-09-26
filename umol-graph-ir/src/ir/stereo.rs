@@ -1571,6 +1571,7 @@ impl StereoConfigurationForm {
     }
 
     /// Relabel the ligand positions (`^`); `Undetermined` is fixed.
+    /// Returns `None` for an action incompatible with the known kind or an out-of-range literal index.
     pub fn apply(&self, permutation: Permutation) -> Option<Self> {
         self.map_kinded(|kind, coset| coset.apply(kind, permutation))
     }
@@ -1918,8 +1919,8 @@ impl From<CisTransConfiguration> for CisTransStereoForm {
 /// `Lit`/`LitSet` base, or one of these under the permutation-action operators
 /// `~` (swap), `'` (mirror), `^` (apply). Kind-relative — **no
 /// `Lattice`/`Normalize`** (structural `Eq` only); the owning configuration
-/// normalizes it under its concrete kind. Normalization composes the operator
-/// word into one net permutation: over a literal base it folds to a concrete
+/// normalizes it under its concrete kind. For compatible actions, normalization composes the
+/// operator word into one net permutation: over a literal base it folds to a concrete
 /// coset; over a `Var` it leaves at most one operator layer.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoTerm {
@@ -1988,6 +1989,9 @@ impl StereoCoset {
     /// Relabel the ligand positions (the `^` op): move each literal coset index through the kind's
     /// coset algebra, eager on `Lit`/`LitSet`; an open `Term` keeps the operator layer.
     fn apply(&self, kind: StereoKind, permutation: Permutation) -> Option<Self> {
+        if !kind.class_key().space().allows(permutation) {
+            return None;
+        }
         self.map_index(
             |c| kind.act(c, permutation),
             |t| StereoTerm::apply(t, permutation),
@@ -2064,30 +2068,35 @@ fn coset_to_set(coset: &StereoCoset) -> Option<BTreeSet<u32>> {
 
 /// Walk a term's operator word into one net coset permutation (composed inner →
 /// outer), returning the base leaf (`Var`/`Lit`/`LitSet`) and that permutation.
-fn compose_term(term: &StereoTerm, kind: StereoKind) -> (&StereoTerm, Permutation) {
-    match term {
+/// Returns `None` when an explicit action is incompatible with the kind.
+fn compose_term(term: &StereoTerm, kind: StereoKind) -> Option<(&StereoTerm, Permutation)> {
+    let output = match term {
         StereoTerm::Swap(inner) => {
-            let (base, g) = compose_term(inner, kind);
+            let (base, g) = compose_term(inner, kind)?;
             (base, g.compose(kind.involution()))
         }
         StereoTerm::Mirror(inner) => {
-            let (base, g) = compose_term(inner, kind);
+            let (base, g) = compose_term(inner, kind)?;
             (base, g.compose(kind.mirror_permutation()))
         }
         StereoTerm::Apply(inner, p) => {
-            let (base, g) = compose_term(inner, kind);
+            if !kind.class_key().space().allows(*p) {
+                return None;
+            }
+            let (base, g) = compose_term(inner, kind)?;
             (base, g.compose(*p))
         }
         base => (base, Permutation::identity(kind.degree())),
-    }
+    };
+    Some(output)
 }
 
 /// Normalize a coset under `kind`. A `Term` over a `Var` renders by priority
 /// Mirror > Swap > Apply (canonicalizing the domain); every other form reduces to
 /// a literal index set that folds: ∅ → `Err` (the bottom `meet` uses to signal
 /// incompatible cosets), singleton → `Lit`, else `LitSet`. No universe folding
-/// (`full → Undetermined`). Range checking belongs to aggregate integrity,
-/// not this standalone normalizer.
+/// (`full → Undetermined`). Plain literal indices are not range-checked.
+/// An incompatible action leaves the original term unchanged.
 pub(crate) fn canon_coset(
     coset: StereoCoset,
     kind: StereoKind,
@@ -2098,13 +2107,20 @@ pub(crate) fn canon_coset(
         StereoCoset::Lit(i) => BTreeSet::from([*i]),
         StereoCoset::LitSet(values) => values.clone(),
         StereoCoset::Term(t) => {
-            let (base, g) = compose_term(t, kind);
+            let Some((base, g)) = compose_term(t, kind) else {
+                return Ok(coset);
+            };
             match base {
                 StereoTerm::Var(v) => {
                     let n = kind.count() as u32;
                     let domain = match &v.1 {
                         Some(set) if set.is_empty() => return Err(Contradiction),
-                        Some(set) if set.len() as u32 == n => None,
+                        Some(set)
+                            if set.len() == n as usize
+                                && set.last().is_some_and(|&index| index < n) =>
+                        {
+                            None
+                        }
                         Some(set) => Some(set.clone()),
                         None => None,
                     };
@@ -2222,13 +2238,11 @@ pub(crate) fn coset_apply_permutation(
                 .map(|i| s.reindex(*i, permutation))
                 .collect::<Option<_>>()?,
         )),
-        StereoCoset::Term(t) => Some(
-            canon_coset(
-                StereoCoset::term(StereoTerm::apply((**t).clone(), permutation)),
-                kind,
-            )
-            .unwrap_or(StereoCoset::Undetermined),
-        ),
+        StereoCoset::Term(t) => canon_coset(
+            StereoCoset::term(StereoTerm::apply((**t).clone(), permutation)),
+            kind,
+        )
+        .ok(),
     }
 }
 
@@ -3472,6 +3486,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::term_swap_folds_to_lit(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)))]
+    #[case::full_variable_domain(
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var_in("x", [0, 1]))),
+        StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var("x")))
+    )]
     fn test_stereo_configuration_form_normalize(#[case] input: StereoConfigurationForm, #[case] expected: StereoConfigurationForm) {
         assert_eq!(input.normalize(), Ok(expected));
     }
@@ -3489,6 +3507,45 @@ mod tests {
     // Multi-element / full coset sets are preserved (no complement or full→Undetermined fold).
     #[case::multi_element_set(StereoConfigurationForm::Kinded(StereoKind::SquarePlanar, StereoCoset::lit_set([0, 1])))]
     #[case::full_set(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])))]
+    #[case::out_of_range_literal(StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCoset::Lit(2)
+    ))]
+    #[case::out_of_range_set(StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral, StereoCoset::lit_set([0, 2])
+    ))]
+    #[case::same_size_variable_domain(StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var_in("x", [0, 9]))
+    ))]
+    #[case::oversized_variable_domain(StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var_in("x", [0, 1, 2]))
+    ))]
+    #[case::partial_variable_domain(StereoConfigurationForm::Kinded(
+        StereoKind::SquarePlanar, StereoCoset::term(StereoTerm::var_in("x", [0, 1]))
+    ))]
+    #[case::wrong_degree_action(StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::apply(StereoTerm::Lit(0), Permutation::identity(3)))
+    ))]
+    #[case::nested_wrong_degree_action(StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::mirror(StereoTerm::swap(StereoTerm::apply(
+            StereoTerm::var_in("x", [0, 1]), Permutation::identity(3)
+        ))))
+    ))]
+    #[case::disallowed_action(StereoConfigurationForm::Kinded(
+        StereoKind::CisTrans,
+        StereoCoset::term(StereoTerm::apply(
+            StereoTerm::Lit(0), Permutation::from_image(&[1, 2, 0, 3])
+        ))
+    ))]
+    #[case::cancelling_disallowed_actions(StereoConfigurationForm::Kinded(
+        StereoKind::CisTrans,
+        StereoCoset::term(StereoTerm::apply(
+            StereoTerm::apply(StereoTerm::Lit(0), Permutation::from_image(&[1, 2, 0, 3])),
+            Permutation::from_image(&[2, 0, 1, 3])
+        ))
+    ))]
     fn test_stereo_configuration_form_normalize_identity(#[case] input: StereoConfigurationForm) {
         assert_eq!(input.clone().normalize(), Ok(input));
     }
@@ -3497,6 +3554,9 @@ mod tests {
     #[case::empty_set(StereoConfigurationForm::Kinded(
         StereoKind::SquarePlanar,
         StereoCoset::LitSet(BTreeSet::new())
+    ))]
+    #[case::empty_variable_domain(StereoConfigurationForm::Kinded(
+        StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var_in("x", []))
     ))]
     fn test_stereo_configuration_form_normalize_error(#[case] input: StereoConfigurationForm) {
         assert_eq!(input.normalize(), Err(Contradiction));
@@ -3812,8 +3872,22 @@ mod tests {
     #[rstest]
     #[case::lit(StereoCoset::Lit(0), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Lit(1))]
     #[case::undetermined(StereoCoset::Undetermined, Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Undetermined)]
+    #[case::term_literal(StereoCoset::term(StereoTerm::Lit(0)), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Lit(1))]
     fn test_coset_apply_permutation(#[case] coset: StereoCoset, #[case] permutation: Permutation, #[case] kind: StereoKind, #[case] expected: StereoCoset) {
         assert_eq!(coset_apply_permutation(&coset, permutation, kind), Some(expected));
+    }
+
+    #[rstest]
+    #[case::literal(StereoCoset::Lit(2))]
+    #[case::set(StereoCoset::lit_set([0, 2]))]
+    #[case::term_literal(StereoCoset::term(StereoTerm::Lit(2)))]
+    #[case::term_set(StereoCoset::term(StereoTerm::lit_set([0, 2])))]
+    #[case::empty_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [])))]
+    fn test_coset_apply_permutation_error(#[case] coset: StereoCoset) {
+        assert_eq!(
+            coset_apply_permutation(&coset, Permutation::identity(4), StereoKind::Tetrahedral),
+            None,
+        );
     }
 
     #[rstest]
@@ -4352,6 +4426,25 @@ mod tests {
         #[case] expected: StereoConfigurationForm,
     ) {
         assert_eq!(config.apply(permutation), Some(expected));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wrong_degree_literal(StereoKind::Tetrahedral, StereoCoset::Lit(0), Permutation::identity(3))]
+    #[case::wrong_degree_set(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1]), Permutation::identity(3))]
+    #[case::wrong_degree_symbolic(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var("x")), Permutation::identity(3))]
+    #[case::wrong_degree_undetermined(StereoKind::Tetrahedral, StereoCoset::Undetermined, Permutation::identity(3))]
+    #[case::disallowed_literal(StereoKind::CisTrans, StereoCoset::Lit(0), Permutation::from_image(&[1, 2, 0, 3]))]
+    #[case::disallowed_set(StereoKind::CisTrans, StereoCoset::lit_set([0, 1]), Permutation::from_image(&[1, 2, 0, 3]))]
+    #[case::disallowed_symbolic(StereoKind::CisTrans, StereoCoset::term(StereoTerm::var("x")), Permutation::from_image(&[1, 2, 0, 3]))]
+    #[case::disallowed_undetermined(StereoKind::CisTrans, StereoCoset::Undetermined, Permutation::from_image(&[1, 2, 0, 3]))]
+    fn test_stereo_configuration_form_apply_error(
+        #[case] kind: StereoKind,
+        #[case] coset: StereoCoset,
+        #[case] permutation: Permutation,
+    ) {
+        let configuration = StereoConfigurationForm::Kinded(kind, coset);
+        assert_eq!(configuration.apply(permutation), None);
     }
 
     #[rstest]

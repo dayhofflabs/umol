@@ -12,11 +12,11 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
-## Design status — 2026-09-25
+## Design status — 2026-09-26
 
 This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
-S2a, and the revised S2b are implemented. The previous S2b mutable-view attempt
-was reverted. S2c is next; S2f is cancelled and the remaining S2 work is
+S2a, the revised S2b, and S2c are implemented. The previous S2b mutable-view
+attempt was reverted. S2d is next; S2f is cancelled and the remaining S2 work is
 unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -56,9 +56,9 @@ focused correction, recorded under
 Replacement verbs and payloads in the Edit/reaction DSLs are approved in S3.
 Python consumption, counter-based accessor invalidation, and storage names are
 approved below. S2b is complete: Rust's unit error is NoJoinError and Python
-join raises NoJoinError. S2c is the next implementation subitem. S2c contains the bounded coset-operation
-fixes; S2f is cancelled. S2g's frame-consumer decisions remain approved and
-unimplemented.
+join raises NoJoinError. S2c's bounded coset-operation fixes are complete;
+S2d is next and S2f is cancelled. S2g's frame-consumer decisions remain approved
+and unimplemented.
 
 ## Editor and transaction API
 
@@ -2630,7 +2630,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   writable join results from read-only entity attributes. Nightly formatting,
   diff checks, and full diff review pass. No workspace or MSRV gate was run.
 
-- **S2c — Coset action handling and domain simplification** (`ir::stereo`;
+- **S2c — completed 2026-09-26: Coset action handling and domain simplification** (`ir::stereo`;
   behavior changes, green). [dep: S0a]
 
   **Semantics.** Preserve unrestricted coset assignment and existing lattice
@@ -2678,6 +2678,20 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   frame-transport laws. Do not require new lattice rejection or correct symmetry
   classification for malformed indices. Run focused stereo tests and relevant
   properties; no workspace or MSRV gate at this subitem.
+
+  Implemented the four changes in ir::stereo. Incompatible explicit actions
+  return None from compose_term; canon_coset preserves the original term.
+  Complete-domain folding now checks both domain size and its largest index,
+  without allocating or scanning a second set. Symbolic evaluation failures in
+  coset_apply_permutation return None. Public signatures and lattice algorithms
+  remain unchanged; no new normalization error or range-validation pass was added.
+
+  Verification: 1,541 stereo-related unit tests and 62 stereo-related property-suite
+  tests pass (PROPTEST_CASES=128), including valid normalization and
+  frame-transport laws. New exact cases cover incompatible actions, nested
+  preservation, incomplete domains, and existing evaluation failures. Nightly
+  formatting, diff checks, and full scope review pass. No workspace, Python,
+  or MSRV gate was run for this Rust-only subitem.
 
 - **S2d — Role-only incidence and count-aware consumers** (`ir::incidence`,
   `ir::canonicalize`, `ir::substructure`; breaking, red→green).
@@ -4690,7 +4704,7 @@ temporary clone-based default transform implementation is introduced between the
 S4 → S5 → S6 → S7/S8 → S9. S2a is implemented; its API is removed in S2i1.
 Within the revised S2:
 
-- S2b is complete. S2c is next; S2f is cancelled.
+- S2b and S2c are complete. S2d is next; S2f is cancelled.
   S2c → S2d establishes coset-operation and count-use behavior. S2e is folded
   into S2h; it is not an executable prerequisite.
 - S2g depends on S2c; its interfaces and failure behavior are approved.
