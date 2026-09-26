@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use super::super::constraint::{
     NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm,
 };
-use super::super::id::{AtomId, NoncovalentBondId};
+use super::super::id::{AtomId, AtomPosition, NoncovalentBondId};
 use super::super::molecule::Molecule;
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBonds};
 use super::super::traits::Lattice;
@@ -199,6 +199,11 @@ impl<'a> NoncovalentBondEditorView<'a> {
     }
 
     #[inline]
+    pub fn kind(&self) -> &'a NoncovalentBondKindForm {
+        &self.attributes().kind
+    }
+
+    #[inline]
     pub fn atom_ids(&self) -> [AtomId; 2] {
         self.noncovalent_bonds.atoms(self.id)
     }
@@ -235,6 +240,11 @@ impl<'a> NoncovalentBondViewMut<'a> {
     }
 
     #[inline]
+    pub fn kind(&self) -> &NoncovalentBondKindForm {
+        &self.attributes().kind
+    }
+
+    #[inline]
     pub fn constraints(&self) -> &NoncovalentBondConstraintsForm {
         &self.attributes().constraints
     }
@@ -246,6 +256,9 @@ impl<'a> NoncovalentBondViewMut<'a> {
 }
 
 /// Mutable editor access to a noncovalent bond.
+///
+/// Structural mutations update incidence and preserve attributes and constraints.
+/// Atom existence, distinctness, and uniqueness of endpoint pairs are checked at publication.
 #[derive(Debug)]
 pub struct NoncovalentBondEditorViewMut<'a> {
     noncovalent_bonds: &'a mut NoncovalentBonds,
@@ -276,6 +289,11 @@ impl<'a> NoncovalentBondEditorViewMut<'a> {
     }
 
     #[inline]
+    pub fn kind(&self) -> &NoncovalentBondKindForm {
+        &self.attributes().kind
+    }
+
+    #[inline]
     pub fn constraints(&self) -> &NoncovalentBondConstraintsForm {
         &self.attributes().constraints
     }
@@ -283,6 +301,21 @@ impl<'a> NoncovalentBondEditorViewMut<'a> {
     #[inline]
     pub fn atom_ids(&self) -> [AtomId; 2] {
         self.noncovalent_bonds.atoms(self.id)
+    }
+
+    /// Replace both endpoints, preserving the supplied order.
+    pub fn replace_atoms(&mut self, atoms: [AtomId; 2]) {
+        self.noncovalent_bonds.replace_atoms(self.id, atoms);
+    }
+
+    /// Replace the endpoint at `position`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `position` is not 0 or 1.
+    pub fn replace_atom(&mut self, position: AtomPosition, atom: AtomId) {
+        self.noncovalent_bonds
+            .replace_atom(self.id, position.index(), atom);
     }
 }
 
@@ -347,9 +380,11 @@ mod tests {
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
+    use crate::ir::constraint::NoncovalentBondConstraintForm;
     use crate::ir::dative::DativeBondForm;
-    use crate::ir::id::{AtomId, NoncovalentBondId};
-    use crate::ir::molecule::{Molecule, MoleculeEntries};
+    use crate::ir::entity::Entity;
+    use crate::ir::id::{AtomId, AtomPosition, NoncovalentBondId};
+    use crate::ir::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
@@ -402,6 +437,25 @@ mod tests {
             ],
             ..Default::default()
         })
+    }
+
+    #[fixture]
+    fn noncovalent_entries() -> MoleculeEntries {
+        MoleculeEntries {
+            atoms: vec![AtomForm::default(); 5],
+            noncovalent: vec![
+                (
+                    [AtomId(2), AtomId(0)],
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+                        .with_constraint(NoncovalentBondConstraintForm::intramolecular(false)),
+                ),
+                (
+                    [AtomId(3), AtomId(1)],
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+                ),
+            ],
+            ..Default::default()
+        }
     }
 
     #[rstest]
@@ -572,6 +626,22 @@ mod tests {
     }
 
     #[rstest]
+    #[case::literal(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond))]
+    #[case::undetermined(NoncovalentBondKindForm::Undetermined)]
+    fn test_noncovalent_bond_editor_view_kind(
+        mut noncovalent_entries: MoleculeEntries,
+        #[case] expected: NoncovalentBondKindForm,
+    ) {
+        noncovalent_entries.noncovalent[0].1.kind = expected.clone();
+        let editor = Molecule::from_entries(noncovalent_entries).edit();
+        let kind = {
+            let view = editor.noncovalent_bond(NoncovalentBondId(0));
+            view.kind()
+        };
+        assert_eq!(kind, &expected);
+    }
+
+    #[rstest]
     #[case(NoncovalentBondId(0), [AtomId(2), AtomId(0)])]
     #[case(NoncovalentBondId(1), [AtomId(3), AtomId(1)])]
     fn test_noncovalent_bond_editor_view_atom_ids_order(
@@ -603,6 +673,10 @@ mod tests {
             assert_eq!(view.id(), id);
             *view.attributes_mut() = expected.clone();
             assert_eq!(view.attributes(), &expected);
+            assert_eq!(view.kind(), &expected.kind);
+            view.attributes_mut().kind = NoncovalentBondKindForm::Undetermined;
+            assert_eq!(view.kind(), &NoncovalentBondKindForm::Undetermined);
+            view.attributes_mut().kind = expected.kind.clone();
         }
         assert_eq!(molecule.noncovalent_bond(id).attributes(), &expected);
     }
@@ -636,6 +710,10 @@ mod tests {
             assert_eq!(view.id(), id);
             *view.attributes_mut() = expected.clone();
             assert_eq!(view.attributes(), &expected);
+            assert_eq!(view.kind(), &expected.kind);
+            view.attributes_mut().kind = NoncovalentBondKindForm::Undetermined;
+            assert_eq!(view.kind(), &NoncovalentBondKindForm::Undetermined);
+            view.attributes_mut().kind = expected.kind.clone();
         }
         assert_eq!(editor.noncovalent_bond(id).attributes(), &expected);
     }
@@ -651,5 +729,107 @@ mod tests {
         let mut editor = molecule.edit();
         let view = editor.noncovalent_bond_mut(id);
         assert_eq!(view.atom_ids(), expected);
+    }
+
+    #[rstest]
+    #[case::reversed([AtomId(0), AtomId(2)])]
+    #[case::shared_endpoint([AtomId(3), AtomId(0)])]
+    #[case::disjoint([AtomId(4), AtomId(1)])]
+    fn test_noncovalent_bond_editor_view_mut_replace_atoms(
+        mut noncovalent_entries: MoleculeEntries,
+        #[case] atoms: [AtomId; 2],
+    ) {
+        let mut editor = Molecule::from_entries(noncovalent_entries.clone()).edit();
+        {
+            let mut view = editor.noncovalent_bond_mut(NoncovalentBondId(0));
+            view.replace_atoms(atoms);
+            assert_eq!(view.atom_ids(), atoms);
+            assert_eq!(view.attributes(), &noncovalent_entries.noncovalent[0].1);
+        }
+        noncovalent_entries.noncovalent[0].0 = atoms;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(noncovalent_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::missing_atom([AtomId(5), AtomId(0)], MoleculeIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(5)) })]
+    #[case::repeated_atom([AtomId(0), AtomId(0)], MoleculeIntegrityError::DuplicateAtom { entity: Entity::NoncovalentBond(NoncovalentBondId(0)), atom: AtomId(0) })]
+    #[case::parallel([AtomId(1), AtomId(3)], MoleculeIntegrityError::ParallelNoncovalentBonds { atoms: [AtomId(1), AtomId(3)] })]
+    fn test_noncovalent_bond_editor_view_mut_replace_atoms_publication(
+        noncovalent_entries: MoleculeEntries,
+        #[case] atoms: [AtomId; 2],
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        let mut editor = Molecule::from_entries(noncovalent_entries).edit();
+        editor
+            .noncovalent_bond_mut(NoncovalentBondId(0))
+            .replace_atoms(atoms);
+        assert_eq!(editor.try_build(), Err(expected));
+    }
+
+    #[rstest]
+    #[case::first(AtomPosition(0), [AtomId(4), AtomId(0)])]
+    #[case::second(AtomPosition(1), [AtomId(2), AtomId(4)])]
+    fn test_noncovalent_bond_editor_view_mut_replace_atom(
+        mut noncovalent_entries: MoleculeEntries,
+        #[case] position: AtomPosition,
+        #[case] expected: [AtomId; 2],
+    ) {
+        let mut editor = Molecule::from_entries(noncovalent_entries.clone()).edit();
+        {
+            let mut view = editor.noncovalent_bond_mut(NoncovalentBondId(0));
+            view.replace_atom(position, AtomId(4));
+            assert_eq!(view.atom_ids(), expected);
+            assert_eq!(view.attributes(), &noncovalent_entries.noncovalent[0].1);
+        }
+        noncovalent_entries.noncovalent[0].0 = expected;
+        assert_eq!(
+            editor.try_build(),
+            Ok(Molecule::from_entries(noncovalent_entries))
+        );
+    }
+
+    #[rstest]
+    #[case::end(AtomPosition(2))]
+    #[case::beyond_end(AtomPosition(3))]
+    #[should_panic]
+    fn test_noncovalent_bond_editor_view_mut_replace_atom_error(
+        noncovalent_entries: MoleculeEntries,
+        #[case] position: AtomPosition,
+    ) {
+        let mut editor = Molecule::from_entries(noncovalent_entries).edit();
+        editor
+            .noncovalent_bond_mut(NoncovalentBondId(0))
+            .replace_atom(position, AtomId(4));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_editor_view_mut_replace_atoms_incidence(
+        noncovalent_entries: MoleculeEntries,
+    ) {
+        let mut editor = Molecule::from_entries(noncovalent_entries).edit();
+        {
+            let mut view = editor.noncovalent_bond_mut(NoncovalentBondId(0));
+            view.replace_atoms([AtomId(4), AtomId(1)]);
+            view.replace_atom(AtomPosition(1), AtomId(3));
+        }
+        let molecule = editor.try_build().unwrap();
+        let incidence: Vec<Vec<_>> = molecule
+            .atoms()
+            .ids()
+            .map(|atom| molecule.noncovalent_bonds().incident_ids(atom).collect())
+            .collect();
+        assert_eq!(
+            incidence,
+            vec![
+                vec![],
+                vec![NoncovalentBondId(1)],
+                vec![],
+                vec![NoncovalentBondId(0), NoncovalentBondId(1)],
+                vec![NoncovalentBondId(0)],
+            ]
+        );
     }
 }
