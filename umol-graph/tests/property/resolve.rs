@@ -420,11 +420,12 @@ proptest! {
         })).collect();
         let original = Molecule::from_entries(MoleculeEntries {atoms, bonds, ..Default::default()});
         let mut input = original.clone();
-        input.modify_atoms(|atom| AtomForm {
-            lone_pairs: NumForm::Undetermined,
-            unpaired_electrons: UnpairedElectronsForm::default(),
-            ..atom
-        });
+        for index in 0..input.atoms().count() {
+            let mut view = input.atom_mut(AtomId(index as u32));
+            let atom = view.attributes_mut();
+            atom.lone_pairs = NumForm::Undetermined;
+            atom.unpaired_electrons = UnpairedElectronsForm::default();
+        }
         let model = ChemistryModel {valence: ValenceModel {
             tie_break: if most_saturated {ValenceTieBreak::MostSaturated} else {ValenceTieBreak::Strict},
             ..if typing {ValenceModel::default()} else {ValenceModel::smiles()}
@@ -470,11 +471,12 @@ proptest! {
             })).collect();
         let source = Molecule::from_entries(MoleculeEntries {atoms, bonds, ..Default::default()});
         let mut input = source.clone();
-        input.modify_atoms(|atom| AtomForm {
-            lone_pairs: NumForm::Undetermined,
-            unpaired_electrons: UnpairedElectronsForm::default(),
-            ..atom
-        });
+        for index in 0..input.atoms().count() {
+            let mut view = input.atom_mut(AtomId(index as u32));
+            let atom = view.attributes_mut();
+            atom.lone_pairs = NumForm::Undetermined;
+            atom.unpaired_electrons = UnpairedElectronsForm::default();
+        }
         for valence in [ValenceModel::smiles(), ValenceModel::default()] {
             for tie_break in [ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated] {
                 let model = ChemistryModel {

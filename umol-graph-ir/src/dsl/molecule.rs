@@ -578,37 +578,37 @@ impl FromIr<Molecule> for MoleculeDsl {
     type Context = MoleculeDefaults;
 
     fn from_ir(molecule: &Molecule, context: &Self::Context) -> Self {
-        let mut editor = molecule.edit();
-        for index in 0..editor.atom_count() {
+        let mut dsl_molecule = molecule.clone();
+        for index in 0..dsl_molecule.atoms().count() {
             lower_atom(
-                editor.atom_mut(AtomId(index as u32)).attributes_mut(),
+                dsl_molecule.atom_mut(AtomId(index as u32)).attributes_mut(),
                 &context.atom,
             );
         }
-        for index in 0..editor.bond_count() {
+        for index in 0..dsl_molecule.bonds().count() {
             lower_bond(
-                editor.bond_mut(BondId(index as u32)).attributes_mut(),
+                dsl_molecule.bond_mut(BondId(index as u32)).attributes_mut(),
                 &context.bond,
             );
         }
-        for index in 0..editor.aromatic_system_count() {
+        for index in 0..dsl_molecule.aromatic_systems().count() {
             lower_aromatic_system(
-                editor
+                dsl_molecule
                     .aromatic_system_mut(AromaticSystemId(index as u32))
                     .attributes_mut(),
                 &context.aromatic_system,
             );
         }
-        for index in 0..editor.multicenter_bond_count() {
+        for index in 0..dsl_molecule.multicenter_bonds().count() {
             lower_multicenter_bond(
-                editor
+                dsl_molecule
                     .multicenter_bond_mut(MulticenterBondId(index as u32))
                     .attributes_mut(),
                 &context.multicenter_bond,
             );
         }
         MoleculeDsl {
-            molecule: editor.build(),
+            molecule: dsl_molecule,
             metadata: MoleculeMetadata::default(),
         }
     }
@@ -618,37 +618,36 @@ impl IntoIr<Molecule> for MoleculeDsl {
     type Context = MoleculeDefaults;
 
     fn into_ir(self, context: &Self::Context) -> Molecule {
-        let mut editor = self.molecule.edit();
-        drop(self);
-        for index in 0..editor.atom_count() {
+        let mut molecule = self.molecule;
+        for index in 0..molecule.atoms().count() {
             raise_atom(
-                editor.atom_mut(AtomId(index as u32)).attributes_mut(),
+                molecule.atom_mut(AtomId(index as u32)).attributes_mut(),
                 &context.atom,
             );
         }
-        for index in 0..editor.bond_count() {
+        for index in 0..molecule.bonds().count() {
             raise_bond(
-                editor.bond_mut(BondId(index as u32)).attributes_mut(),
+                molecule.bond_mut(BondId(index as u32)).attributes_mut(),
                 &context.bond,
             );
         }
-        for index in 0..editor.aromatic_system_count() {
+        for index in 0..molecule.aromatic_systems().count() {
             raise_aromatic_system(
-                editor
+                molecule
                     .aromatic_system_mut(AromaticSystemId(index as u32))
                     .attributes_mut(),
                 &context.aromatic_system,
             );
         }
-        for index in 0..editor.multicenter_bond_count() {
+        for index in 0..molecule.multicenter_bonds().count() {
             raise_multicenter_bond(
-                editor
+                molecule
                     .multicenter_bond_mut(MulticenterBondId(index as u32))
                     .attributes_mut(),
                 &context.multicenter_bond,
             );
         }
-        editor.build()
+        molecule
     }
 }
 

@@ -3581,8 +3581,13 @@ fn test_constitution_comparison_key_excluded_data() {
         IncidenceLevel::Constitution,
     ));
     let mut excluded = Molecule::from_entries(encoding_entries());
-    excluded
-        .modify_atoms(|atom| atom.with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))));
+    for index in 0..excluded.atoms().count() {
+        excluded
+            .atom_mut(AtomId(index as u32))
+            .attributes_mut()
+            .constraints
+            .set(AtomConstraintForm::Valence(NumForm::Lit(4)));
+    }
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
     let excluded_incidence_graph = excluded.incidence_graph(IncidenceLevel::Constitution);
     let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();

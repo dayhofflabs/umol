@@ -1602,9 +1602,9 @@ mod tests {
         #[case] constraint: Constraint,
     ) {
         let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#);
-        molecule
-            .try_modify_constraints(|constraints| constraints.push(constraint))
-            .expect("the test constraint references the molecule");
+        let mut editor = molecule.edit();
+        editor.constraints_mut().push(constraint);
+        molecule = editor.build();
 
         assert_eq!(
             Resolver::with_config(
@@ -1623,14 +1623,12 @@ mod tests {
     #[rstest]
     fn test_resolver_resolve_placement_collision(chemistry_model: ChemistryModel) {
         let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0"]}"#);
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(Constraint::Atom(
-                    AtomId(0),
-                    AtomConstraintForm::Valence(NumForm::Lit(3)),
-                ));
-            })
-            .expect("the test constraint references the molecule");
+        let mut editor = molecule.edit();
+        editor.constraints_mut().push(Constraint::Atom(
+            AtomId(0),
+            AtomConstraintForm::Valence(NumForm::Lit(3)),
+        ));
+        molecule = editor.build();
         let before = molecule.clone();
 
         assert_eq!(
@@ -1680,11 +1678,11 @@ mod tests {
         #[case] expected: Result<Solution<ResolveReport, ResolveContradiction>, ResolveError>,
     ) {
         let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#);
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(Constraint::Molecule(constraint));
-            })
-            .expect("the test constraint references the molecule");
+        let mut editor = molecule.edit();
+        editor
+            .constraints_mut()
+            .push(Constraint::Molecule(constraint));
+        molecule = editor.build();
 
         assert_eq!(
             Resolver::with_config(
@@ -1704,14 +1702,14 @@ mod tests {
     #[rstest]
     fn test_resolver_resolve_discharge_molecule_scope_error(chemistry_model: ChemistryModel) {
         let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#);
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-                    atoms: None,
-                    sum: NumForm::Lit(5),
-                }));
-            })
-            .expect("the test constraint references the molecule");
+        let mut editor = molecule.edit();
+        editor
+            .constraints_mut()
+            .push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: NumForm::Lit(5),
+            }));
+        molecule = editor.build();
         let before = molecule.clone();
 
         let outcome = Resolver::new(&chemistry_model).resolve(&mut molecule);

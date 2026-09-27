@@ -41,14 +41,15 @@ proptest! {
             ..Default::default()
         });
         let mut expected = source.clone();
-        expected.modify_atoms(|atom| AtomForm {
-            isotope_mass: match atom.isotope_mass {
-                IsotopeMassForm::Undetermined => IsotopeMassForm::Natural,
-                value => value,
-            },
-            lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::closed_shell(),
-            ..atom
-        });
+        for index in 0..expected.atoms().count() {
+            let mut view = expected.atom_mut(AtomId(index as u32));
+            let atom = view.attributes_mut();
+            if atom.isotope_mass == IsotopeMassForm::Undetermined {
+                atom.isotope_mass = IsotopeMassForm::Natural;
+            }
+            atom.lone_pairs = NumForm::Lit(0);
+            atom.unpaired_electrons = UnpairedElectronsForm::closed_shell();
+        }
         for valence in [ValenceModel::smiles(), ValenceModel::default()] {
             for tie_break in [ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated] {
                 let model = ChemistryModel {
@@ -95,13 +96,13 @@ proptest! {
             let mut projected = source.clone();
             let mut expected = source.clone();
             if policy == IsotopePolicy::Natural {
-                expected.modify_atoms(|atom| AtomForm {
-                    isotope_mass: match atom.isotope_mass {
-                        IsotopeMassForm::Natural => IsotopeMassForm::Undetermined,
-                        isotope => isotope,
-                    },
-                    ..atom
-                });
+                for index in 0..expected.atoms().count() {
+                    let mut view = expected.atom_mut(AtomId(index as u32));
+                    let atom = view.attributes_mut();
+                    if atom.isotope_mass == IsotopeMassForm::Natural {
+                        atom.isotope_mass = IsotopeMassForm::Undetermined;
+                    }
+                }
             }
             prop_assert_eq!(resolver.project(&mut projected), Ok(Solution::Determined(())));
             prop_assert_eq!(&projected, &expected);

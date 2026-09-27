@@ -23,7 +23,7 @@ types. All eight entity-view families expose private ids and attribute borrows
 through matching accessors. Stereo views use the owning sets for site and ligand
 access; their ligand frames are borrowed. S2j is complete for all eight entity
 families: matching local getters and editor-only structural mutation are implemented.
-S2k1's in-place DSL conversion is implemented; S2k2 remains unimplemented.
+S2k1's in-place DSL conversion and S2k2's Rust callback caller migration are implemented.
 S2f is cancelled; the
 remaining S2 work is unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -42,7 +42,7 @@ reopen S2i or block S2j.
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
 | Molecule attribute methods | Uniform unchecked attribute mutation settled; implementation remains | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Remove modify/try_modify callbacks. |
 | Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
-| Molecule-level constraint mutation | S2i1 complete; callback migration remains | Molecule::constraints provides reads; the editor exposes &mut Constraints. The public checked constraint view is removed. S2k/S2l migrate callback callers and S2m removes try_modify_constraints. |
+| Molecule-level constraint mutation | S2i1 and Rust caller migration complete; Python migration remains | Molecule::constraints provides reads; the editor exposes &mut Constraints. The public checked constraint view is removed. S2l migrates Python callback callers and S2m removes try_modify_constraints. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
 | Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation remains | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Molecule and Edits input-transfer changes remain; the editor already supports consumption. |
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
@@ -73,7 +73,7 @@ approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
-complete. S2k1 is implemented; S2k2 is the next subitem.
+complete. S2k1 and S2k2 are implemented; S2l is the next subitem.
 
 ## Editor and transaction API
 
@@ -513,9 +513,10 @@ from aggregate integrity checks. Implement those changes with the constructor
 changes across molecule, reaction, and reaction-span paths before exposing the
 uniform mutation surface. No integrity checks have yet been removed in code.
 
-Required caller migrations remain: charge delocalization and MoleculeDsl
-conversion use an editor; Python preserves field assignment and direct
-entity-constraint mutation; molecule-level constraint writes use the editor.
+Charge delocalization and MoleculeDsl conversion mutate entity attributes through
+Molecule's mutable views. Neither requires editor publication or an integrity
+check. Python preserves field assignment and direct entity-constraint mutation;
+molecule-level constraint writes use the editor.
 Remove the molecule-backed top-level constraint mutation paths and their binding
 callback plumbing.
 
@@ -3675,9 +3676,10 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   aromatic,multicenter,stereo}`; internal rewire, green).
   [dep: S2i, S2j]
 
-  **Semantics.** MoleculeDsl conversion uses one editor for the full pass and
-  publishes once. Preserve FromIr's intentional source copy, defaults, metadata,
-  ordering, and faithful conversion; IntoIr does not gain an extra recovery copy.
+  **Semantics.** MoleculeDsl conversion mutates attributes through Molecule's
+  mutable views. FromIr clones the source once; IntoIr moves self.molecule and
+  mutates it directly. Preserve defaults, metadata, ordering, and faithful
+  conversion. Neither path uses an editor or performs an integrity check.
   Replace the eight entity conversion calls in each direction as follows:
 
   | Entity | FromIr | IntoIr |
@@ -3698,9 +3700,8 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   Make lower_aromatic_system, raise_aromatic_system, lower_multicenter_bond, and
   raise_multicenter_bond pub(crate), matching the existing atom/bond functions.
   Their signatures remain (&mut Form, &Defaults) -> (). Add no functions or
-  public API. Use current edit/build; S6 owns consuming edit/finish. Current
-  edit(&self) still copies storage into the editor; this item removes the
-  conversion roundtrips without claiming to remove that lifecycle cost.
+  public API. These conversions do not depend on the editor lifecycle or its
+  S6 migration; IntoIr needs neither an editor storage copy nor drop(self).
 
   **Verification.** DSL defaults and roundtrips, source preservation, metadata
   behavior, exact entity and frame order, unchanged forms for the four no-op
@@ -3709,7 +3710,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   inputs.
 
   **Verification results — 2026-09-26.** The four lower/raise pairs now mutate
-  editor attributes directly; the eight no-op passes are removed.
+  molecule attributes directly; the eight no-op passes are removed.
   StereoAtomDsl::from_ir clones once. DSL unit tests pass (2,418 cases), as do
   all 11 molecule serialization/defaults properties. Added independent expected
   values cover both conversion directions across all entity kinds and source
@@ -3717,24 +3718,23 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   Strict Clippy is blocked only by the now-unused crate-private
   modify_aromatic_systems, modify_multicenter_bonds, modify_stereo_atoms, and
   modify_stereo_bonds methods. Their removal remains in S2m; no lint allowances
-  were added. S2k2 code is unchanged.
+  were added.
 
-- **S2k2 — Charge delocalization and remaining Rust callers**
+- **S2k2 — completed 2026-09-26 — Charge delocalization and remaining Rust callers**
   (`umol-graph::ops::transform::delocalize_charge`, Rust tests/fixtures;
   internal rewire, green). [dep: S2k1]
 
-  **Semantics.**
-  Charge delocalization uses one editor for its complete mutation pass, preserving
-  its planning checks and Infallible result. Direct attribute writes replace
-  whole-form callback roundtrips.
+  **Semantics.** Charge delocalization applies its plans directly to the borrowed
+  molecule through mutable entity views, preserving its planning checks and
+  Infallible result. Attribute writes require no editor, publication, or
+  integrity check.
 
   **Interfaces and nomenclature.** Keep DelocalizeCharge's current transformation
   signature. Its rename to
   ChargeDelocalizer is tracked separately in
   [166](166-molecule-ops-2026-07-27.md#charge-delocalization-transformer-name).
-  Use the approved mutable
-  view names/accessors from S2i and current edit/build lifecycle here; S6 owns
-  consuming edit/finish. No mem::take of a borrowed caller's molecule, temporary
+  DelocalizationPlan::apply takes &mut Molecule and uses the approved mutable
+  view names/accessors from S2i. No mem::take of a borrowed caller's molecule, temporary
   empty receiver, new modify helper, or transitional compatibility callback.
   Migrate ordinary calls and callback method names supplied through macros.
   Move remaining try_modify_constraints callers to editor mutation and
@@ -3746,6 +3746,17 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   callbacks. Preserve
   property laws and invalid-input cases; do not make fixtures valid merely to
   avoid the newly explicit first-use failure behavior.
+
+  **Verification results — 2026-09-26.** Delocalization applies its plans through
+  molecule mutable views. Remaining Rust consumers use mutable entity
+  attributes or editor constraints; the callback methods' own tests remain until
+  S2m removes those methods. Inputs, assertions, and property laws are unchanged.
+  All 808 selected transformation/resolver/validator tests, 14 resolver/isotope
+  properties, seven focused canonicalization/editor-publication tests, and 19
+  integrity integration tests pass. All-target Clippy completes with only the
+  four unused callback warnings recorded in S2k1; warnings-denied Clippy remains
+  blocked by those methods pending S2m. Nightly formatting and diff checks pass;
+  full diff reviewed. Python callers and the transformer rename are unchanged.
 
 - **S2l — Python assignment for every entity kind**
   (`umol-py::{atom,bond,dative,aromatic,multicenter,noncovalent,stereo,molecule,constraint}`;
@@ -5062,8 +5073,7 @@ temporary cloning adapters is not a way to close an earlier subitem.
   their chemistry or boundary outcomes. This includes AromaticityPerceiver's
   add_systems and the three existing transform_into implementations. Construct
   their batches and shared chemistry checks according to the transformation
-  mapping now: borrowed callers cannot simply consume their receiver, and the
-  DelocalizeCharge editor path introduced in S2k cannot wait until S8 to migrate.
+  mapping now: borrowed callers cannot simply consume their receiver.
   Preserve their current public signatures and error contracts. S8 reuses these
   plans for the consuming transformation and lazy iterator; it does not supply a
   missing prerequisite for S6. Test published outputs, late rejection recovery,

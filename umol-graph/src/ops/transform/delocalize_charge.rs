@@ -88,12 +88,10 @@ impl DelocalizationPlan {
                 AromaticValenceForm::Aromatic(NumForm::Lit(contribution)),
             ));
         }
-        molecule
-            .try_modify_aromatic_system(self.system, |system| {
-                system.charge = NumForm::Lit(self.charge);
-                system.electrons = ElectronCountsForm::Lit(self.electrons);
-            })
-            .expect("a derived delocalization plan preserves molecule integrity");
+        let mut view = molecule.aromatic_system_mut(self.system);
+        let system = view.attributes_mut();
+        system.charge = NumForm::Lit(self.charge);
+        system.electrons = ElectronCountsForm::Lit(self.electrons);
     }
 }
 

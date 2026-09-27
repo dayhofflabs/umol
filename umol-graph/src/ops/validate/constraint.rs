@@ -754,9 +754,9 @@ mod tests {
         #[case] constraint: Constraint,
         #[case] expected: Solution<(), ConstraintInvariantsContradiction>,
     ) {
-        molecule
-            .try_modify_constraints(|constraints| constraints.push(constraint))
-            .expect("the test constraint references the molecule");
+        let mut editor = molecule.edit();
+        editor.constraints_mut().push(constraint);
+        molecule = editor.build();
 
         assert_eq!(
             ConstraintInvariantsValidator::new(CONFIG).validate(&molecule),
@@ -777,9 +777,9 @@ mod tests {
         mut molecule: Molecule,
         #[case] constraint: Constraint,
     ) {
-        molecule
-            .try_modify_constraints(|constraints| constraints.push(constraint.clone()))
-            .expect("the test constraint references the molecule");
+        let mut editor = molecule.edit();
+        editor.constraints_mut().push(constraint.clone());
+        molecule = editor.build();
 
         assert_eq!(
             ConstraintInvariantsValidator::new(CONFIG).validate(&molecule),

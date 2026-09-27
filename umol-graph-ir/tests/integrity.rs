@@ -124,16 +124,14 @@ fn test_molecule_electron_attributes(
         let mut valid = molecule.clone();
         if aromatic {
             valid
-                .try_modify_aromatic_system(AromaticSystemId(0), |form| {
-                    form.electrons = ElectronCountsForm::Lit(vec![1, 2, 0])
-                })
-                .unwrap();
+                .aromatic_system_mut(AromaticSystemId(0))
+                .attributes_mut()
+                .electrons = ElectronCountsForm::Lit(vec![1, 2, 0]);
         } else {
             valid
-                .try_modify_multicenter_bond(MulticenterBondId(0), |form| {
-                    form.electrons = ElectronCountsForm::Lit(vec![1, 2, 0])
-                })
-                .unwrap();
+                .multicenter_bond_mut(MulticenterBondId(0))
+                .attributes_mut()
+                .electrons = ElectronCountsForm::Lit(vec![1, 2, 0]);
         }
         assert_eq!(molecule.substructure_matches(&valid, config), Ok(vec![]));
         assert_eq!(valid.substructure_matches(&molecule, config), Ok(vec![]));

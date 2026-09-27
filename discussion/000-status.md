@@ -37,7 +37,7 @@ the statuses recorded here remain authoritative.
   staged implementation plan; S0a–S0b and S1a–S1c are complete. S1d and S0c are
   reverted. S2 now orders consumer checks, entity views, caller migration,
   and callback removal. S2i1 removed the checked molecule constraint view;
-  callback migration and removal remain in S2k–S2m.
+  Python callback migration and callback removal remain in S2l–S2m.
   The earlier S2b implementation is reverted; the proposed join migration is
   withdrawn and S2f is cancelled. Revised S2b is complete: NoJoinError names the
   Rust unit error and Python join exception. S2c's bounded coset-operation fixes
@@ -46,7 +46,7 @@ the statuses recorded here remain authoritative.
   S2i2–S2i5 are complete, including separate mutable molecule/editor view types.
   All eight entity-view families have aligned id/attribute accessors. S2j's local
   getters and editor structural mutations are complete. S2k1's in-place DSL
-  conversion is implemented; S2k2's remaining Rust callers are next. Unused
+  conversion and S2k2's Rust caller migration are implemented; S2l is next. Unused
   callback lint failures await S2m removal. Uniform unchecked entity-attribute
   assignment is settled for Rust and Python.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
@@ -266,7 +266,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue with S2k2 remaining Rust callback callers. S2k1 tests pass; unused callback lint failures await S2m removal. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue with S2l Python assignment. S2k1/S2k2 are implemented; unused callback lint failures await S2m removal. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |
