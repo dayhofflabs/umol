@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use proptest::prelude::*;
-use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
+use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, Neighbor, NodeId};
 
 use super::strategy::graph_with_edge_multiset;
 
@@ -90,6 +90,80 @@ proptest! {
                 .map(|index| EdgeId(index as u32))
                 .collect::<Vec<_>>(),
         );
+    }
+
+    /// Bulk node addition preserves the original topology and appends isolated nodes.
+    #[test]
+    fn test_graph_extend_nodes(
+        (original, edges) in graph_with_edge_multiset(16, 40),
+        count in 0usize..16,
+        shared in any::<bool>(),
+    ) {
+        let mut graph = if shared { original.clone() } else { Graph::new(original.node_count(), &edges) };
+        let ids = graph.extend_nodes(count);
+        prop_assert_eq!(ids.len(), count);
+        prop_assert_eq!(ids.collect::<Vec<_>>(), (original.node_count()..original.node_count() + count).map(NodeId::from).collect::<Vec<_>>());
+        prop_assert_eq!(graph, Graph::new(original.node_count() + count, &edges));
+        prop_assert_eq!(&original, &Graph::new(original.node_count(), &edges));
+    }
+
+    /// Bulk edge addition agrees with constructing the complete ordered edge list.
+    #[test]
+    fn test_graph_extend_edges(
+        (original, mut edges) in graph_with_edge_multiset(16, 40),
+        added in prop::collection::vec((0u32..16, 0u32..16), 0..32),
+        shared in any::<bool>(),
+    ) {
+        let mut graph = if shared { original.clone() } else { Graph::new(original.node_count(), &edges) };
+        let added: Vec<_> = added.into_iter()
+            .filter(|&(a, b)| (a as usize) < original.node_count() && (b as usize) < original.node_count())
+            .map(|(a, b)| [NodeId(a), NodeId(b)]).collect();
+        let ids = graph.extend_edges(&added);
+        prop_assert_eq!(ids.len(), added.len());
+        prop_assert_eq!(ids.collect::<Vec<_>>(), (edges.len()..edges.len() + added.len()).map(EdgeId::from).collect::<Vec<_>>());
+        prop_assert_eq!(&original, &Graph::new(original.node_count(), &edges));
+        edges.extend(added.iter().map(|&[a, b]| [a.0, b.0]));
+        prop_assert_eq!(graph, Graph::new(original.node_count(), &edges));
+    }
+
+    /// Combined extension preserves edge order and both incidences of each edge, including loops.
+    /// Neighbors are derived directly from endpoints, independently of CSR construction.
+    #[test]
+    fn test_graph_extend(
+        (original, mut edges) in graph_with_edge_multiset(16, 40),
+        count in 0usize..16,
+        added in prop::collection::vec((0u32..32, 0u32..32), 0..32),
+        shared in any::<bool>(),
+    ) {
+        let mut graph = if shared { original.clone() } else { Graph::new(original.node_count(), &edges) };
+        let node_count = original.node_count() + count;
+        let added: Vec<_> = added.into_iter()
+            .filter(|&(a, b)| (a as usize) < node_count && (b as usize) < node_count)
+            .map(|(a, b)| [NodeId(a), NodeId(b)]).collect();
+        let (nodes, edge_ids) = graph.extend(count, &added);
+        prop_assert_eq!(nodes.len(), count);
+        prop_assert_eq!(edge_ids.len(), added.len());
+        prop_assert_eq!(nodes.collect::<Vec<_>>(), (original.node_count()..node_count).map(NodeId::from).collect::<Vec<_>>());
+        prop_assert_eq!(edge_ids.collect::<Vec<_>>(), (edges.len()..edges.len() + added.len()).map(EdgeId::from).collect::<Vec<_>>());
+        prop_assert_eq!(&original, &Graph::new(original.node_count(), &edges));
+        edges.extend(added.iter().map(|&[a, b]| [a.0, b.0]));
+        prop_assert_eq!(graph.node_count(), node_count);
+        prop_assert_eq!(graph.edge_count(), edges.len());
+        for (index, &[a, b]) in edges.iter().enumerate() {
+            prop_assert_eq!(graph.edge_endpoints(EdgeId::from(index)), [NodeId(a.min(b)), NodeId(a.max(b))]);
+        }
+        for node in 0..node_count as u32 {
+            let mut expected = Vec::new();
+            for (index, &[a, b]) in edges.iter().enumerate() {
+                if a == node { expected.push(Neighbor { node: NodeId(b), edge: EdgeId::from(index) }); }
+                if b == node { expected.push(Neighbor { node: NodeId(a), edge: EdgeId::from(index) }); }
+            }
+            expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+            let mut actual = graph.neighbors(NodeId(node)).to_vec();
+            prop_assert!(actual.windows(2).all(|pair| pair[0].node <= pair[1].node));
+            actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
+            prop_assert_eq!(actual, expected);
+        }
     }
 
     #[test]

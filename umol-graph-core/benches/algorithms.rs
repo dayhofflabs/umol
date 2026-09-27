@@ -9,10 +9,10 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
     CommonSubgraphEnumerationAlgorithm, Compaction, ConnectedComponentsAlgorithm, Correspondence,
-    EdgeId, EmbeddingKind, GeneralMaximumMatchingAlgorithm, Graph, GraphCorrespondence,
-    MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NeighborhoodAlgorithm, NodeId,
-    RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    EdgeId, EmbeddingKind, GeneralMaximumMatchingAlgorithm, Graph, MaximumIndependentSetAlgorithm,
+    MinimumCycleBasisAlgorithm, NeighborhoodAlgorithm, NodeId, RelevantCycleEnumerationAlgorithm,
+    ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -1437,48 +1437,6 @@ mod matching {
     }
 }
 
-fn mutation(c: &mut Criterion) {
-    let mut group = c.benchmark_group("graph_mutation");
-    for size in [8, 64] {
-        let graph = path(size);
-        let removed = [NodeId((size / 2) as u32)];
-        let overlap = GraphCorrespondence::new(
-            Correspondence::new(vec![(NodeId((size - 1) as u32), NodeId(0))], size, size).unwrap(),
-            Correspondence::new(vec![], size - 1, size - 1).unwrap(),
-        );
-        group.bench_function(BenchmarkId::new("remove_cascading/path", size), |b| {
-            b.iter_batched(
-                || graph.clone(),
-                |mut graph| {
-                    graph.remove_cascading(black_box(&removed), &[]);
-                    black_box(graph)
-                },
-                BatchSize::SmallInput,
-            )
-        });
-        group.bench_function(
-            BenchmarkId::new("tracked_remove_cascading/path", size),
-            |b| {
-                b.iter_batched(
-                    || graph.clone(),
-                    |mut graph| {
-                        let compaction = graph.tracked_remove_cascading(black_box(&removed), &[]);
-                        black_box((graph, compaction))
-                    },
-                    BatchSize::SmallInput,
-                )
-            },
-        );
-        group.bench_function(BenchmarkId::new("pushout/path_pair", size), |b| {
-            b.iter(|| black_box(&graph).pushout(black_box(&graph), black_box(&overlap)))
-        });
-        group.bench_function(BenchmarkId::new("tracked_pushout/path_pair", size), |b| {
-            b.iter(|| black_box(&graph).tracked_pushout(black_box(&graph), black_box(&overlap)))
-        });
-    }
-    group.finish();
-}
-
 fn induced_edges(c: &mut Criterion) {
     let mut group = c.benchmark_group("induced_edges");
     for (name, size, selected, expected) in [
@@ -1522,7 +1480,6 @@ criterion_group!(
     benches,
     induced_edges,
     correspondence_updates,
-    mutation,
     relevant_cycle_enumeration,
     simple_cycle_enumeration,
     minimum_cycle_basis,

@@ -2,7 +2,7 @@
 //!
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
-//! Clones share the CSR through `Arc`; mutations rebuild it. Tracked removals produce a
+//! Clones share the CSR through `Arc`; mutation preserves other clones. Tracked removals produce a
 //! [`GraphCompaction`] for reindexing external data and restoring original node/edge positions.
 
 use std::collections::HashSet;
@@ -253,21 +253,136 @@ impl Graph {
             .all(|&[first, second]| first != second && endpoints.insert([first, second]))
     }
 
+    /// Append one isolated node and return its id.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting node count exceeds `u32::MAX`.
     pub fn add_node(&mut self) -> NodeId {
-        let old = &*self.csr;
-        let new_id = NodeId(old.node_count as u32);
-        let edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[a, b]| [a.0, b.0]).collect();
-        self.csr = Arc::new(Self::build_csr(old.node_count + 1, &edges));
-        new_id
+        self.extend_nodes(1).next().unwrap()
     }
 
+    /// Append one edge and return its id, retaining loops and parallel edges.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside this graph or the resulting adjacency
+    /// exceeds the capacity of its `u32` offsets.
     pub fn add_edge(&mut self, first: NodeId, second: NodeId) -> EdgeId {
-        let old = &*self.csr;
-        let new_id = EdgeId(old.edge_count as u32);
-        let mut edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[s, t]| [s.0, t.0]).collect();
-        edges.push([first.0, second.0]);
-        self.csr = Arc::new(Self::build_csr(old.node_count, &edges));
-        new_id
+        self.extend_edges(&[[first, second]]).next().unwrap()
+    }
+
+    /// Append isolated nodes and return their ids in ascending order.
+    ///
+    /// Mutation completes before return. The exact-size iterator owns its bounds;
+    /// it allocates nothing and borrows neither the graph nor its storage.
+    /// Unique storage grows only its offset vector. Shared storage is copied once.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids and adjacency are unchanged. New ids form the contiguous range
+    /// starting at the original node count. A zero count leaves storage unchanged;
+    /// other clones retain their original graph. Properties in `tests/property/graph.rs`
+    /// compare the result with independently constructed topology.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting node count exceeds `u32::MAX`.
+    pub fn extend_nodes(&mut self, count: usize) -> impl ExactSizeIterator<Item = NodeId> + use<> {
+        let start = self.csr.node_count;
+        let end = start.checked_add(count).expect("node count overflow");
+        assert!(end <= u32::MAX as usize, "node count exceeds u32::MAX");
+        if count != 0 {
+            let offset_count = end.checked_add(1).expect("node offset count overflow");
+            let csr = Arc::make_mut(&mut self.csr);
+            let offset = *csr.offsets.last().unwrap();
+            csr.offsets.resize(offset_count, offset);
+            csr.node_count = end;
+        }
+        (start..end).map(NodeId::from)
+    }
+
+    /// Append edges between existing nodes and return their ids in input order.
+    ///
+    /// Adjacency is rebuilt once for a nonempty batch. Mutation completes before
+    /// return; the allocation-free exact-size iterator borrows neither the graph
+    /// nor the input slice.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids remain unchanged. New edge ids start at the original edge count;
+    /// endpoint order is canonicalized while loops and parallel edges are retained.
+    /// An empty batch leaves storage unchanged; other clones retain their original
+    /// graph. Properties in `tests/property/graph.rs` compare the complete edge list.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside this graph or the resulting adjacency
+    /// exceeds the capacity of its `u32` offsets.
+    pub fn extend_edges(
+        &mut self,
+        edges: &[[NodeId; 2]],
+    ) -> impl ExactSizeIterator<Item = EdgeId> + use<> {
+        self.extend(0, edges).1
+    }
+
+    /// Append nodes and edges, returning their respective contiguous id ranges.
+    ///
+    /// Endpoints refer to the resulting node space, including appended nodes.
+    /// Adjacency is rebuilt once when adding edges; node-only batches use
+    /// [`Self::extend_nodes`]. Mutation completes before return. Both allocation-free
+    /// exact-size iterators own their bounds and borrow neither the graph nor the input.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids and edge order are preserved. New ids start at the original
+    /// count of their kind; new edge order follows the input. Endpoint order is
+    /// canonicalized, retaining loops and parallel edges. Empty input leaves storage
+    /// unchanged and other clones keep their original graph. Public properties in
+    /// `tests/property/graph.rs` derive adjacency directly from the final edge list.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside the resulting node space, the resulting
+    /// node count exceeds `u32::MAX`, or adjacency exceeds the capacity of its
+    /// `u32` offsets.
+    pub fn extend(
+        &mut self,
+        node_count: usize,
+        edges: &[[NodeId; 2]],
+    ) -> (
+        impl ExactSizeIterator<Item = NodeId> + use<>,
+        impl ExactSizeIterator<Item = EdgeId> + use<>,
+    ) {
+        let node_start = self.csr.node_count;
+        let edge_start = self.csr.edge_count;
+        if edges.is_empty() {
+            let _ = self.extend_nodes(node_count);
+        } else {
+            let node_end = node_start
+                .checked_add(node_count)
+                .expect("node count overflow");
+            assert!(node_end <= u32::MAX as usize, "node count exceeds u32::MAX");
+            let edge_end = edge_start
+                .checked_add(edges.len())
+                .expect("edge count overflow");
+            assert!(
+                edge_end <= u32::MAX as usize / 2,
+                "adjacency count exceeds u32::MAX"
+            );
+            let endpoints: Vec<_> = self
+                .csr
+                .endpoints
+                .iter()
+                .chain(edges)
+                .map(|&[a, b]| [a.0, b.0])
+                .collect();
+            self.csr = Arc::new(Self::build_csr(node_end, &endpoints));
+        }
+        (
+            (node_start..self.csr.node_count).map(NodeId::from),
+            (edge_start..self.csr.edge_count).map(EdgeId::from),
+        )
     }
 
     /// SqPO-style removal: delete `nodes` and `edges`, sweeping along every edge incident to a
@@ -1106,7 +1221,7 @@ mod tests {
         assert_eq!(g1, g2);
     }
 
-    #[test]
+    #[rstest]
     fn test_graph_add_node() {
         let mut g = Graph::new(2, &[[0, 1]]);
         let n = g.add_node();
@@ -1117,7 +1232,7 @@ mod tests {
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
     }
 
-    #[test]
+    #[rstest]
     fn test_graph_add_edge() {
         let mut g = Graph::new(3, &[[0, 1]]);
         let e = g.add_edge(NodeId(1), NodeId(2));
@@ -1125,6 +1240,159 @@ mod tests {
         assert_eq!(g.edge_count(), 2);
         assert_eq!(g.degree(NodeId(1)), 2);
         assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
+    }
+
+    #[rstest]
+    #[case::empty(0, &[], 3)]
+    #[case::connected(3, &[[0, 1], [1, 2]], 2)]
+    #[case::loops_and_parallel_edges(2, &[[1, 1], [1, 0], [0, 1]], 1)]
+    fn test_graph_extend_nodes(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] count: usize,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(node_count, edges);
+        let original = shared.then(|| graph.clone());
+        let ids = graph.extend_nodes(count);
+        assert_eq!(graph, Graph::new(node_count + count, edges));
+        graph.add_node();
+        assert_exact_size(
+            ids,
+            (node_count..node_count + count).map(NodeId::from).collect(),
+        );
+        assert_eq!(graph, Graph::new(node_count + count + 1, edges));
+        if let Some(original) = original {
+            assert_eq!(original, Graph::new(node_count, edges));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::default())]
+    #[case::connected(Graph::new(2, &[[0, 1]]))]
+    fn test_graph_extend_nodes_identity(#[case] mut graph: Graph) {
+        let original = graph.clone();
+        assert_exact_size(graph.extend_nodes(0), vec![]);
+        assert_eq!(graph, original);
+        assert!(Arc::ptr_eq(&graph.csr, &original.csr));
+    }
+
+    #[rstest]
+    #[case::isolated(3, &[], &[[2, 0], [1, 2]], &[[0, 2], [1, 2]])]
+    #[case::loops_and_parallel_edges(3, &[[0, 1]], &[[2, 2], [1, 0], [1, 2]], &[[0, 1], [2, 2], [0, 1], [1, 2]])]
+    fn test_graph_extend_edges(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] added: &[[u32; 2]],
+        #[case] expected: &[[u32; 2]],
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(node_count, edges);
+        let original = shared.then(|| graph.clone());
+        let ids = {
+            let added: Vec<_> = added.iter().map(|&[a, b]| [NodeId(a), NodeId(b)]).collect();
+            graph.extend_edges(&added)
+        };
+        assert_eq!(graph, Graph::new(node_count, expected));
+        graph.add_node();
+        assert_exact_size(
+            ids,
+            (edges.len()..expected.len()).map(EdgeId::from).collect(),
+        );
+        assert_eq!(graph, Graph::new(node_count + 1, expected));
+        if let Some(original) = original {
+            assert_eq!(original, Graph::new(node_count, edges));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::default())]
+    #[case::connected(Graph::new(2, &[[0, 1]]))]
+    fn test_graph_extend_edges_identity(#[case] mut graph: Graph) {
+        let original = graph.clone();
+        assert_exact_size(graph.extend_edges(&[]), vec![]);
+        assert_eq!(graph, original);
+        assert!(Arc::ptr_eq(&graph.csr, &original.csr));
+    }
+
+    #[rstest]
+    #[case::empty(0, &[], 3, &[[2, 1], [0, 0]], &[[1, 2], [0, 0]])]
+    #[case::connected(3, &[[0, 1]], 2, &[[4, 2], [3, 4]], &[[0, 1], [2, 4], [3, 4]])]
+    #[case::nodes_only(2, &[[1, 0]], 2, &[], &[[0, 1]])]
+    #[case::edges_only(2, &[[0, 1]], 0, &[[1, 0], [1, 1]], &[[0, 1], [0, 1], [1, 1]])]
+    fn test_graph_extend(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] count: usize,
+        #[case] added: &[[u32; 2]],
+        #[case] expected: &[[u32; 2]],
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(node_count, edges);
+        let original = shared.then(|| graph.clone());
+        let (nodes, edge_ids) = {
+            let added: Vec<_> = added.iter().map(|&[a, b]| [NodeId(a), NodeId(b)]).collect();
+            graph.extend(count, &added)
+        };
+        assert_eq!(graph, Graph::new(node_count + count, expected));
+        graph.add_node();
+        assert_exact_size(
+            nodes,
+            (node_count..node_count + count).map(NodeId::from).collect(),
+        );
+        assert_exact_size(
+            edge_ids,
+            (edges.len()..expected.len()).map(EdgeId::from).collect(),
+        );
+        assert_eq!(graph, Graph::new(node_count + count + 1, expected));
+        if let Some(original) = original {
+            assert_eq!(original, Graph::new(node_count, edges));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(Graph::default())]
+    #[case::connected(Graph::new(2, &[[0, 1]]))]
+    fn test_graph_extend_identity(#[case] mut graph: Graph) {
+        let original = graph.clone();
+        let (nodes, edges) = graph.extend(0, &[]);
+        assert_exact_size(nodes, vec![]);
+        assert_exact_size(edges, vec![]);
+        assert_eq!(graph, original);
+        assert!(Arc::ptr_eq(&graph.csr, &original.csr));
+    }
+
+    #[rstest]
+    #[case::first([NodeId(2), NodeId(0)])]
+    #[case::second([NodeId(0), NodeId(2)])]
+    #[should_panic]
+    fn test_graph_extend_edges_error(#[case] edge: [NodeId; 2]) {
+        let mut graph = Graph::new(2, &[]);
+        let _ = graph.extend_edges(&[edge]);
+    }
+
+    #[rstest]
+    #[case::first([NodeId(3), NodeId(0)])]
+    #[case::second([NodeId(0), NodeId(3)])]
+    #[should_panic]
+    fn test_graph_extend_error(#[case] edge: [NodeId; 2]) {
+        let mut graph = Graph::new(2, &[]);
+        let _ = graph.extend(1, &[edge]);
+    }
+
+    #[rstest]
+    #[case::nodes_only(usize::MAX, false)]
+    #[case::combined(usize::MAX, true)]
+    #[case::node_id_capacity(u32::MAX as usize, false)]
+    #[case::combined_node_id_capacity(u32::MAX as usize, true)]
+    #[should_panic(expected = "node count")]
+    fn test_graph_extend_capacity(#[case] count: usize, #[case] with_edges: bool) {
+        let mut graph = Graph::new(1, &[]);
+        if with_edges {
+            let _ = graph.extend(count, &[[NodeId(0), NodeId(0)]]);
+        } else {
+            let _ = graph.extend_nodes(count);
+        }
     }
 
     #[rstest]

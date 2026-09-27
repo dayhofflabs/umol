@@ -40,6 +40,10 @@ name = "algorithms"
 harness = false
 
 [[bench]]
+name = "graph"
+harness = false
+
+[[bench]]
 name = "relation"
 harness = false
 

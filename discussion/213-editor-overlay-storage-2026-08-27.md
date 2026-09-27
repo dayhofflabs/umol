@@ -29,7 +29,8 @@ S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
 S3a1–S3b are implemented. Replacement Deltas are withdrawn; the nine replacement
 Edits and their Undo variants remain. S3c/S3d record the selective removal and
 retained reaction integration; both are verified. S3e completes the Python Edit
-migration. S3f's graph-core bulk additions are next. Graph-core mutation and
+migration. S3f's graph-core bulk additions are implemented; S3g's relation-set
+bulk additions are next. Graph-core mutation and
 restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -80,8 +81,8 @@ incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-cons
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e is complete;
-S3f is next.
+approved reaction names, semantics, and dative-factor migration. S3e and S3f are
+complete; S3g is next.
 
 ## Editor and transaction API
 
@@ -1402,10 +1403,11 @@ Graph, attribute vectors, typed sets, or copy-on-write storage. Structural
 replacement uses *EditorViewMut, which delegates to the typed sets.
 This boundary adds no second mutation vocabulary or public mutable access.
 
-Graph bulk addition is approved as three mutable operations: add_nodes for
-isolated nodes, add_edges for edges between existing nodes, and add for nodes
-and edges together. The bare verb covers both topology components, consistently
-with the existing graph nomenclature. Combined-add edge endpoints use the
+Graph retains add_node/add_edge for individual additions and uses extend for
+bulk addition, matching relation sets: extend_nodes adds isolated nodes,
+extend_edges adds edges between existing nodes, and extend adds nodes and edges
+together. The bare verb covers both topology components, consistently with the
+existing graph nomenclature. Edge endpoints supplied to extend use the
 resulting graph's node ids, including the appended nodes; there is no separate
 handle namespace. Existing ids stay unchanged and each added kind occupies a
 contiguous block. Return owned, allocation-free, exact-size iterators over those
@@ -1413,13 +1415,13 @@ blocks, following the existing typed node_ids/edge_ids iterator interfaces:
 
 ```rust
 impl Graph {
-    pub fn add_nodes(
+    pub fn extend_nodes(
         &mut self, count: usize,
     ) -> impl ExactSizeIterator<Item = NodeId> + use<>;
-    pub fn add_edges(
+    pub fn extend_edges(
         &mut self, edges: &[[NodeId; 2]],
     ) -> impl ExactSizeIterator<Item = EdgeId> + use<>;
-    pub fn add(
+    pub fn extend(
         &mut self, node_count: usize, edges: &[[NodeId; 2]],
     ) -> (
         impl ExactSizeIterator<Item = NodeId> + use<>,
@@ -1436,11 +1438,11 @@ iterators. Empty additions return empty iterators for the corresponding kind.
 No tracked addition variants are needed: existing ids map identically and new
 ids have no predecessor. Batch execution records added ids for undo and derives
 correspondence when requested. AddAtoms/AddBonds can use the respective bulk
-operations; combine_from can use combined add. Node-only addition can extend
+operations; combine_from can use extend. Node-only addition extends
 adjacency offsets without rebuilding existing edges. Combined addition builds
 the final adjacency once, avoiding an intermediate copy-on-write detachment for
 node addition followed by an edge rebuild. Single additions delegate to their
-bulk counterparts; no timings are claimed by this design decision.
+bulk counterparts. Measurements are recorded under S3f.
 
 Relation sets retain individual add and gain public extend. Each extend takes
 &mut self plus the batch below and returns an owned, allocation-free
@@ -4204,11 +4206,11 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   lint and documentation. Nightly formatting and full diff review pass.
   Full-workspace tests and Rust 1.87 remain at S9b.
 
-- **S3f** (`umol-graph-core::graph`; additive, green) Implement Graph::add_nodes,
-  add_edges, and add with the exact interfaces under Storage delegation. Return
+- **S3f — implemented** (`umol-graph-core::graph`; additive, green) Implement Graph::extend_nodes,
+  extend_edges, and extend with the exact interfaces under Storage delegation. Return
   owned, allocation-free exact-size id iterators; mutation is eager and the
   iterators borrow neither receiver nor inputs. Preserve existing ids and append
-  each kind contiguously. Combined-add endpoints use the resulting node space;
+  each kind contiguously. Endpoints supplied to extend use the resulting node space;
   invalid endpoints retain the graph addition panic contract. Single additions
   delegate to bulk operations. Node-only addition extends adjacency offsets;
   combined addition builds final adjacency once. Verify empty additions,
@@ -4218,6 +4220,60 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   bulk addition before replacing the implementation; use independently built
   expected graphs rather than single additions that delegate to the subject.
   [dep: none]
+
+  **Implemented — 2026-09-26.** All three bulk methods return owned exact-size
+  iterators, and add_node/add_edge delegate to them. Node-only addition grows
+  offsets, copying shared storage once when necessary; batches containing edges
+  rebuild adjacency once. Empty batches preserve shared storage. Invalid endpoints
+  and counts exceeding node-id or adjacency-offset capacity panic.
+
+  **Measurements — 2026-09-26.** The graph benchmark has a setup function and
+  separate extend_nodes, extend_edges, and extend benchmark functions. Removal
+  and pushout benchmarks also reside there, in separate groups, retaining their
+  fixtures and timing boundaries from algorithms.rs. Addition fixtures
+  are paths of 64 or 1,024 nodes, with batches of one or 16 additions and unique
+  or shared storage. Construction and final destruction are excluded; detachment
+  is timed. Combined batches add equally many nodes and edges extending the path.
+  Times below are microseconds per batch of 16. The original column measures
+  repeated single additions before S3f; the other columns use the implementation
+  above on the same fixtures.
+
+  | Nodes / storage | Addition | Original singles | Current singles | Bulk |
+  | --- | --- | ---: | ---: | ---: |
+  | 64 / unique | nodes | 13.784 | 0.189 | 0.101 |
+  | 64 / unique | edges | 13.764 | 12.883 | 0.858 |
+  | 64 / unique | nodes + edges | 33.644 | 14.193 | 0.923 |
+  | 64 / shared | nodes | 13.407 | 0.345 | 0.265 |
+  | 64 / shared | edges | 13.728 | 12.558 | 0.778 |
+  | 64 / shared | nodes + edges | 28.558 | 14.786 | 0.836 |
+  | 1,024 / unique | nodes | 130.300 | 0.344 | 0.335 |
+  | 1,024 / unique | edges | 133.880 | 130.450 | 9.361 |
+  | 1,024 / unique | nodes + edges | 263.460 | 132.070 | 9.141 |
+  | 1,024 / shared | nodes | 129.380 | 2.259 | 2.354 |
+  | 1,024 / shared | edges | 133.390 | 130.010 | 9.175 |
+  | 1,024 / shared | nodes + edges | 262.880 | 132.090 | 9.197 |
+
+  These results support bulk calls for known edge batches: 16-edge additions
+  take about 14–16 times less time than current repeated singles. Node-only gains
+  mainly come from avoiding adjacency reconstruction and also benefit add_node.
+  Shared node-only addition still copies the existing storage; at 1,024 nodes
+  batching does not materially reduce that cost. Single-edge batches remain
+  roughly equal to add_edge. Edge addition still rebuilds the full adjacency;
+  these synthetic paths do not establish application-wide speedups. No allocation
+  counts were measured.
+
+  Reproduce with `cargo bench -p umol-graph-core --bench graph -- graph_extend
+  --warm-up-time 0.1 --measurement-time 0.2 --sample-size 20 --noplot`.
+
+  **Checked — 2026-09-26.** All 2,085 graph-core tests pass with proptest enabled,
+  including independent topology/adjacency expectations, loops and parallel edges,
+  clone independence, invalid endpoints, capacity panics, and iterator lifetimes.
+  All-target Clippy with proptest and rustdoc pass with warnings denied. The graph
+  benchmark's 48 addition cases pass; the eight moved removal/pushout cases pass
+  in Criterion test mode. Both benchmark targets pass Clippy with warnings denied.
+  Nightly formatting and full diff review pass.
+  Full-workspace tests and Rust 1.87 remain at S9b.
+
 - **S3g** (`umol-graph-core::relation::{fixed,var,fixed_fixed,fixed_var,var_var}`;
   additive, green) Add public extend to all five sets, retaining individual add.
   The precise batch argument for each set is in the relation-extend table under
