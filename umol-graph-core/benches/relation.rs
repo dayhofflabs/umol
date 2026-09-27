@@ -14,15 +14,22 @@
 //! include offset adjustment and any movement of later participants as well as index rebuilding.
 //! Whole-relation addition/removal uses fresh sets, excluding setup cloning and final destruction.
 //! It includes column changes, payload removal, incidence rebuilding, and compaction construction.
+//! Bulk addition compares repeated add calls with extend on rows with overlapping four-node
+//! factors; birelations also have one edge participant. Input batches and fresh sets are prepared
+//! outside timing; both paths include batch consumption and incidence rebuilding.
 
-use std::array;
 use std::hint::black_box;
+use std::{array, mem};
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_graph_core::{
     EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, NodeId,
     ParticipantPosition, RelationId, VarRelationSet, VarVarBirelationSet,
 };
+
+fn participants(row: usize) -> [NodeId; 4] {
+    array::from_fn(|position| NodeId::from(row + position))
+}
 
 fn fixed(c: &mut Criterion) {
     let mut group = c.benchmark_group("relation/fixed");
@@ -264,6 +271,60 @@ fn fixed_rows(c: &mut Criterion) {
                     )
                 });
             }
+        }
+    }
+    group.finish();
+}
+
+fn fixed_extend(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relation/fixed_extend");
+    for count in [64usize, 1024] {
+        let entries: Vec<([NodeId; 4], usize)> =
+            (0..count).map(|row| (participants(row), row)).collect();
+        let relations = FixedRelationSet::new(entries);
+        for added_count in [1usize, 16] {
+            let added: Vec<([NodeId; 4], usize)> = (count..count + added_count)
+                .map(|row| (participants(row), row))
+                .collect();
+            let fixture = format!("rows={count}/batch={added_count}");
+            group.bench_function(BenchmarkId::new("add", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(parts, data)| (*parts, *data))
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        for (parts, data) in black_box(mem::take(added)) {
+                            black_box(relations.add(parts, data));
+                        }
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(BenchmarkId::new("extend", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(parts, data)| (*parts, *data))
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
         }
     }
     group.finish();
@@ -583,6 +644,61 @@ fn var_rows(c: &mut Criterion) {
                     });
                 }
             }
+        }
+    }
+    group.finish();
+}
+
+fn var_extend(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relation/var_extend");
+    for count in [64usize, 1024] {
+        let entries: Vec<(Vec<NodeId>, usize)> = (0..count)
+            .map(|row| (participants(row).to_vec(), row))
+            .collect();
+        let relations = VarRelationSet::new(entries);
+        for added_count in [1usize, 16] {
+            let added: Vec<(Vec<NodeId>, usize)> = (count..count + added_count)
+                .map(|row| (participants(row).to_vec(), row))
+                .collect();
+            let fixture = format!("rows={count}/batch={added_count}");
+            group.bench_function(BenchmarkId::new("add", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(parts, data)| (parts.as_slice(), *data))
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        for (parts, data) in black_box(mem::take(added)) {
+                            black_box(relations.add(parts, data));
+                        }
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(BenchmarkId::new("extend", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(parts, data)| (parts.as_slice(), *data))
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
         }
     }
     group.finish();
@@ -965,6 +1081,61 @@ fn fixed_fixed_rows(c: &mut Criterion) {
                     )
                 });
             }
+        }
+    }
+    group.finish();
+}
+
+fn fixed_fixed_extend(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relation/fixed_fixed_extend");
+    for count in [64usize, 1024] {
+        let entries: Vec<([EdgeId; 1], [NodeId; 4], usize)> = (0..count)
+            .map(|row| ([EdgeId::from(row)], participants(row), row))
+            .collect();
+        let relations = FixedFixedBirelationSet::new(entries);
+        for added_count in [1usize, 16] {
+            let added: Vec<([EdgeId; 1], [NodeId; 4], usize)> = (count..count + added_count)
+                .map(|row| ([EdgeId::from(row)], participants(row), row))
+                .collect();
+            let fixture = format!("rows={count}/batch={added_count}");
+            group.bench_function(BenchmarkId::new("add", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(first, second, data)| (*first, *second, *data))
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        for (first, second, data) in black_box(mem::take(added)) {
+                            black_box(relations.add(first, second, data));
+                        }
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(BenchmarkId::new("extend", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(first, second, data)| (*first, *second, *data))
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
         }
     }
     group.finish();
@@ -1604,6 +1775,61 @@ fn fixed_var_rows(c: &mut Criterion) {
                     });
                 }
             }
+        }
+    }
+    group.finish();
+}
+
+fn fixed_var_extend(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relation/fixed_var_extend");
+    for count in [64usize, 1024] {
+        let entries: Vec<([EdgeId; 1], Vec<NodeId>, usize)> = (0..count)
+            .map(|row| ([EdgeId::from(row)], participants(row).to_vec(), row))
+            .collect();
+        let relations = FixedVarBirelationSet::new(entries);
+        for added_count in [1usize, 16] {
+            let added: Vec<([EdgeId; 1], Vec<NodeId>, usize)> = (count..count + added_count)
+                .map(|row| ([EdgeId::from(row)], participants(row).to_vec(), row))
+                .collect();
+            let fixture = format!("rows={count}/batch={added_count}");
+            group.bench_function(BenchmarkId::new("add", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(first, second, data)| (*first, second.as_slice(), *data))
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        for (first, second, data) in black_box(mem::take(added)) {
+                            black_box(relations.add(first, second, data));
+                        }
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(BenchmarkId::new("extend", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(first, second, data)| (*first, second.as_slice(), *data))
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
         }
     }
     group.finish();
@@ -2355,17 +2581,81 @@ fn var_var_rows(c: &mut Criterion) {
     group.finish();
 }
 
+fn var_var_extend(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relation/var_var_extend");
+    for count in [64usize, 1024] {
+        let entries: Vec<(Vec<EdgeId>, Vec<NodeId>, usize)> = (0..count)
+            .map(|row| (vec![EdgeId::from(row)], participants(row).to_vec(), row))
+            .collect();
+        let relations = VarVarBirelationSet::new(entries);
+        for added_count in [1usize, 16] {
+            let added: Vec<(Vec<EdgeId>, Vec<NodeId>, usize)> = (count..count + added_count)
+                .map(|row| (vec![EdgeId::from(row)], participants(row).to_vec(), row))
+                .collect();
+            let fixture = format!("rows={count}/batch={added_count}");
+            group.bench_function(BenchmarkId::new("add", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(first, second, data)| {
+                                    (first.as_slice(), second.as_slice(), *data)
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        for (first, second, data) in black_box(mem::take(added)) {
+                            black_box(relations.add(first, second, data));
+                        }
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_function(BenchmarkId::new("extend", &fixture), |b| {
+                b.iter_batched_ref(
+                    || {
+                        (
+                            relations.clone(),
+                            added
+                                .iter()
+                                .map(|(first, second, data)| {
+                                    (first.as_slice(), second.as_slice(), *data)
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    },
+                    |(relations, added)| {
+                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations);
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+        }
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     fixed,
     fixed_rows,
+    fixed_extend,
     var,
     var_rows,
+    var_extend,
     fixed_fixed,
     fixed_fixed_rows,
+    fixed_fixed_extend,
     fixed_var,
     fixed_var_rows,
+    fixed_var_extend,
     var_var,
-    var_var_rows
+    var_var_rows,
+    var_var_extend,
 );
 criterion_main!(benches);

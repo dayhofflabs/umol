@@ -583,6 +583,85 @@ fn test_fixed_var_birelation_set_add_payload() {
 }
 
 #[rstest]
+#[case::empty_factors(vec![([], vec![], "first"), ([], vec![], "second"), ([], vec![], "third")])]
+#[case::overlapping(vec![([NodeId(2)], vec![NodeId(2), NodeId(0)], "first"), ([NodeId(0)], vec![], "second"), ([NodeId(2)], vec![NodeId(2), NodeId(0)], "third")])]
+#[case::sparse(vec![([], vec![NodeId(u32::MAX)], "first"), ([], vec![], "second"), ([], vec![NodeId(0), NodeId(2)], "third")])]
+fn test_fixed_var_birelation_set_extend<const N1: usize>(
+    #[case] expected: Vec<([NodeId; N1], Vec<NodeId>, &'static str)>,
+    #[values(0, 1, 2)] start: usize,
+) {
+    let mut relations = FixedVarBirelationSet::new(expected[..start].to_vec());
+    let ids = {
+        let added = expected[start..].to_vec();
+        relations.extend(
+            added
+                .iter()
+                .map(|(first, second, data)| (*first, second.as_slice(), *data))
+                .collect(),
+        )
+    };
+    assert_eq!(relations.clone().into_entries(), expected);
+    for node in [NodeId(0), NodeId(1), NodeId(2), NodeId(u32::MAX)] {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (first, second, _))| first.iter().chain(second).any(|&p| p == node))
+            .map(|(index, _)| RelationId::from(index))
+            .collect();
+        assert_eq!(relations.incident_to_node(node), incidence);
+        assert_eq!(relations.incident_to_edge(EdgeId(node.0)), &[]);
+    }
+    let empty = relations.extend(vec![]);
+    assert_exact_size(ids, (start..expected.len()).map(RelationId::from).collect());
+    assert_exact_size(empty, vec![]);
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+#[case::empty(Vec::<([NodeId; 1], Vec<NodeId>, &'static str)>::new())]
+#[case::empty_factors(vec![([], vec![], "first"), ([], vec![], "second"), ([], vec![], "third")])]
+#[case::overlapping(vec![([NodeId(2)], vec![NodeId(2), NodeId(0)], "first"), ([NodeId(0)], vec![], "second"), ([NodeId(2)], vec![NodeId(2), NodeId(0)], "third")])]
+#[case::sparse(vec![([], vec![NodeId(u32::MAX)], "first"), ([], vec![], "second"), ([], vec![NodeId(0), NodeId(2)], "third")])]
+fn test_fixed_var_birelation_set_extend_identity<const N1: usize>(
+    #[case] entries: Vec<([NodeId; N1], Vec<NodeId>, &'static str)>,
+) {
+    let input = FixedVarBirelationSet::new(entries);
+    let mut relations = input.clone();
+    assert_exact_size(relations.extend(vec![]), vec![]);
+    assert_eq!(relations, input);
+}
+
+#[rstest]
+fn test_fixed_var_birelation_set_extend_payload() {
+    let mut relations = FixedVarBirelationSet::default();
+    let ids = relations.extend(vec![
+        (
+            [EdgeId(2)],
+            &[NodeId(2), NodeId(0)],
+            NonCloneData(vec![7, 11]),
+        ),
+        ([EdgeId(2)], &[], NonCloneData(vec![13])),
+    ]);
+    assert_exact_size(ids, vec![RelationId(0), RelationId(1)]);
+    assert_eq!(
+        relations.incident_to_edge(EdgeId(2)),
+        &[RelationId(0), RelationId(1)]
+    );
+    assert_eq!(relations.incident_to_node(NodeId(2)), &[RelationId(0)]);
+    assert_eq!(
+        relations.into_entries(),
+        vec![
+            (
+                [EdgeId(2)],
+                vec![NodeId(2), NodeId(0)],
+                NonCloneData(vec![7, 11])
+            ),
+            ([EdgeId(2)], vec![], NonCloneData(vec![13]))
+        ]
+    );
+}
+
+#[rstest]
 #[case::first(vec![RelationId(0)], vec![1, 2])]
 #[case::empty_second_factor(vec![RelationId(1)], vec![0, 2])]
 #[case::last(vec![RelationId(2)], vec![0, 1])]

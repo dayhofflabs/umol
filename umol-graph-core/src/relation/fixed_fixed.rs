@@ -292,6 +292,44 @@ where
         id
     }
 
+    /// Append relations in input order and return their contiguous ids.
+    ///
+    /// Fixed arities are enforced by the array types; either factor may be empty.
+    /// Payloads are moved without cloning. References are indexed without checking
+    /// external graph membership, as in [`Self::add`]. Incidence is rebuilt once
+    /// after a nonempty batch. Mutation completes before return; the allocation-free
+    /// exact-size iterator owns its bounds and borrows neither the set nor the inputs.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids and rows remain unchanged. New ids start at the previous count;
+    /// row and factor order, multiplicity, and coinciding rows are preserved. Incidence
+    /// lists each relation once per referenced node or edge across all its factors.
+    /// An empty batch leaves storage unchanged. For representable sizes, appending
+    /// batches agrees with concatenating their rows; removing the added ids restores
+    /// the original set. These laws use a row model in `tests/property/relation.rs`.
+    pub fn extend(
+        &mut self,
+        entries: Vec<([L1; N1], [L2; N2], D)>,
+    ) -> impl ExactSizeIterator<Item = RelationId> + use<L1, N1, L2, N2, D> {
+        let start = self.count();
+        if !entries.is_empty() {
+            self.participants_1.reserve(entries.len());
+            self.participants_2.reserve(entries.len());
+            self.data.reserve(entries.len());
+            for (participants_1, participants_2, data) in entries {
+                self.participants_1.push(participants_1);
+                self.participants_2.push(participants_2);
+                self.data.push(data);
+            }
+            self.incidence = Incidence::build(self.count(), |i, out| {
+                out.extend(self.participants_1[i].iter().map(|p| p.refs()));
+                out.extend(self.participants_2[i].iter().map(|p| p.refs()));
+            });
+        }
+        (start..self.count()).map(RelationId::from)
+    }
+
     /// Remove whole relations, preserving survivor order and making their ids dense.
     ///
     /// Delegates to [`Self::tracked_remove`] and discards the compaction. Input ids refer

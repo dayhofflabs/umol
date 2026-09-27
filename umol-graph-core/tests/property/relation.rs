@@ -49,6 +49,9 @@
 //! addition, replacement, and removal with independent rows whose factor lengths vary separately.
 //! Public readers check both sets of compacted row boundaries, payload alignment, and coincidence;
 //! direct union scans check incidence. A separate add/remove roundtrip checks restoration.
+//! Bulk extend methods append sequences of batches to an independent row model.
+//! Every batch preserves input order and multiplicity; direct row scans check both incidence
+//! spaces, and removing the appended ids restores the original rows and index.
 //! Transport exercises the identity/composition laws of [FixedRelationSet::try_map] and its
 //! peers, plus the positional preservation law of [FixedRelationSet::remap] and its peers.
 //! It uses permutations of eight node and edge ids; unit cases cover partial mappings.
@@ -424,6 +427,50 @@ fn test_fixed_relation_set_add_roundtrip() {
             relations.remove(&[id]);
             assert_fixed_relation_rows(&relations, &entries, &participants, &[])?;
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_fixed_relation_set_extend() {
+    let strategy = prop::collection::vec(
+        prop::collection::vec(
+            (prop::array::uniform3(participant_strategy()), any::<u8>()),
+            0..8,
+        ),
+        1..6,
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(module_path!(), "::test_fixed_relation_set_extend")),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |batches| {
+            let mut batches = batches.into_iter();
+            let original = batches.next().unwrap();
+            let mut expected = original.clone();
+            let mut relations = FixedRelationSet::new(original.clone());
+            for batch in batches {
+                let start = expected.len();
+                expected.extend(batch.iter().cloned());
+                let ids = relations.extend(batch);
+                prop_assert_eq!(ids.len(), expected.len() - start);
+                prop_assert_eq!(
+                    ids.collect::<Vec<_>>(),
+                    (start..expected.len())
+                        .map(RelationId::from)
+                        .collect::<Vec<_>>()
+                );
+                assert_fixed_relation_rows(&relations, &expected, &[], &[])?;
+            }
+            let added: Vec<_> = (original.len()..expected.len())
+                .map(RelationId::from)
+                .collect();
+            relations.remove(&added);
+            assert_fixed_relation_rows(&relations, &original, &[], &[])?;
+            prop_assert_eq!(relations.into_entries(), original);
             Ok(())
         })
         .unwrap();
@@ -811,6 +858,58 @@ fn test_var_relation_set_add_roundtrip() {
             relations.remove(&[id]);
             assert_var_relation_rows(&relations, &entries, &participants, &[])?;
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_var_relation_set_extend() {
+    let strategy = prop::collection::vec(
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..7),
+                prop::collection::vec(any::<u8>(), 0..6),
+            ),
+            0..8,
+        ),
+        1..6,
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(module_path!(), "::test_var_relation_set_extend")),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |batches| {
+            let mut batches = batches.into_iter();
+            let original = batches.next().unwrap();
+            let mut expected = original.clone();
+            let mut relations = VarRelationSet::new(original.clone());
+            for batch in batches {
+                let start = expected.len();
+                expected.extend(batch.iter().cloned());
+                let ids = relations.extend(
+                    batch
+                        .iter()
+                        .map(|(parts, data)| (parts.as_slice(), data.clone()))
+                        .collect(),
+                );
+                prop_assert_eq!(ids.len(), expected.len() - start);
+                prop_assert_eq!(
+                    ids.collect::<Vec<_>>(),
+                    (start..expected.len())
+                        .map(RelationId::from)
+                        .collect::<Vec<_>>()
+                );
+                assert_var_relation_rows(&relations, &expected, &[], &[])?;
+            }
+            let added: Vec<_> = (original.len()..expected.len())
+                .map(RelationId::from)
+                .collect();
+            relations.remove(&added);
+            assert_var_relation_rows(&relations, &original, &[], &[])?;
+            prop_assert_eq!(relations.into_entries(), original);
             Ok(())
         })
         .unwrap();
@@ -1305,6 +1404,70 @@ fn test_fixed_fixed_birelation_set_add_roundtrip() {
             relations.remove(&[id]);
             assert_fixed_fixed_birelation_rows(&relations, &entries, &(first, second), &query)?;
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_fixed_fixed_birelation_set_extend() {
+    let strategy = (
+        prop::collection::vec(
+            prop::collection::vec(
+                (
+                    prop::array::uniform2(participant_strategy()),
+                    prop::array::uniform3(participant_strategy()),
+                    prop::collection::vec(any::<u8>(), 0..6),
+                ),
+                0..8,
+            ),
+            1..6,
+        ),
+        participant_strategy(),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_fixed_fixed_birelation_set_extend"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(batches, probe)| {
+            let mut batches = batches.into_iter();
+            let original = batches.next().unwrap();
+            let mut expected = original.clone();
+            let mut relations = FixedFixedBirelationSet::new(original.clone());
+            for batch in batches {
+                let start = expected.len();
+                expected.extend(batch.iter().cloned());
+                let ids = relations.extend(batch);
+                prop_assert_eq!(ids.len(), expected.len() - start);
+                prop_assert_eq!(
+                    ids.collect::<Vec<_>>(),
+                    (start..expected.len())
+                        .map(RelationId::from)
+                        .collect::<Vec<_>>()
+                );
+                assert_fixed_fixed_birelation_rows(
+                    &relations,
+                    &expected,
+                    &([probe; 2], [probe; 3]),
+                    &(vec![], vec![]),
+                )?;
+            }
+            let added: Vec<_> = (original.len()..expected.len())
+                .map(RelationId::from)
+                .collect();
+            relations.remove(&added);
+            assert_fixed_fixed_birelation_rows(
+                &relations,
+                &original,
+                &([probe; 2], [probe; 3]),
+                &(vec![], vec![]),
+            )?;
+            prop_assert_eq!(relations.into_entries(), original);
             Ok(())
         })
         .unwrap();
@@ -1811,6 +1974,75 @@ fn test_fixed_var_birelation_set_add_roundtrip() {
                 &query,
             )?;
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_fixed_var_birelation_set_extend() {
+    let strategy = (
+        prop::collection::vec(
+            prop::collection::vec(
+                (
+                    prop::array::uniform2(participant_strategy()),
+                    prop::collection::vec(participant_strategy(), 0..7),
+                    prop::collection::vec(any::<u8>(), 0..6),
+                ),
+                0..8,
+            ),
+            1..6,
+        ),
+        participant_strategy(),
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_fixed_var_birelation_set_extend"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |(batches, probe)| {
+            let mut batches = batches.into_iter();
+            let original = batches.next().unwrap();
+            let mut expected = original.clone();
+            let mut relations = FixedVarBirelationSet::new(original.clone());
+            for batch in batches {
+                let start = expected.len();
+                expected.extend(batch.iter().cloned());
+                let ids = relations.extend(
+                    batch
+                        .iter()
+                        .map(|(first, second, data)| (*first, second.as_slice(), data.clone()))
+                        .collect(),
+                );
+                prop_assert_eq!(ids.len(), expected.len() - start);
+                prop_assert_eq!(
+                    ids.collect::<Vec<_>>(),
+                    (start..expected.len())
+                        .map(RelationId::from)
+                        .collect::<Vec<_>>()
+                );
+                assert_fixed_var_birelation_rows(
+                    &relations,
+                    &expected,
+                    &([probe; 2], vec![]),
+                    &(vec![], vec![]),
+                )?;
+            }
+            let added: Vec<_> = (original.len()..expected.len())
+                .map(RelationId::from)
+                .collect();
+            relations.remove(&added);
+            assert_fixed_var_birelation_rows(
+                &relations,
+                &original,
+                &([probe; 2], vec![]),
+                &(vec![], vec![]),
+            )?;
+            prop_assert_eq!(relations.into_entries(), original);
             Ok(())
         })
         .unwrap();
@@ -2354,6 +2586,74 @@ fn test_var_var_birelation_set_add_roundtrip() {
                 &query,
             )?;
             prop_assert_eq!(relations.into_entries(), entries);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[rstest]
+fn test_var_var_birelation_set_extend() {
+    let strategy = prop::collection::vec(
+        prop::collection::vec(
+            (
+                prop::collection::vec(participant_strategy(), 0..7),
+                prop::collection::vec(participant_strategy(), 0..7),
+                prop::collection::vec(any::<u8>(), 0..6),
+            ),
+            0..8,
+        ),
+        1..6,
+    );
+    let config = Config {
+        source_file: Some(file!()),
+        test_name: Some(concat!(
+            module_path!(),
+            "::test_var_var_birelation_set_extend"
+        )),
+        ..Config::default()
+    };
+    TestRunner::new(config)
+        .run(&strategy, |batches| {
+            let mut batches = batches.into_iter();
+            let original = batches.next().unwrap();
+            let mut expected = original.clone();
+            let mut relations = VarVarBirelationSet::new(original.clone());
+            for batch in batches {
+                let start = expected.len();
+                expected.extend(batch.iter().cloned());
+                let ids = relations.extend(
+                    batch
+                        .iter()
+                        .map(|(first, second, data)| {
+                            (first.as_slice(), second.as_slice(), data.clone())
+                        })
+                        .collect(),
+                );
+                prop_assert_eq!(ids.len(), expected.len() - start);
+                prop_assert_eq!(
+                    ids.collect::<Vec<_>>(),
+                    (start..expected.len())
+                        .map(RelationId::from)
+                        .collect::<Vec<_>>()
+                );
+                assert_var_var_birelation_rows(
+                    &relations,
+                    &expected,
+                    &(vec![], vec![]),
+                    &(vec![], vec![]),
+                )?;
+            }
+            let added: Vec<_> = (original.len()..expected.len())
+                .map(RelationId::from)
+                .collect();
+            relations.remove(&added);
+            assert_var_var_birelation_rows(
+                &relations,
+                &original,
+                &(vec![], vec![]),
+                &(vec![], vec![]),
+            )?;
+            prop_assert_eq!(relations.into_entries(), original);
             Ok(())
         })
         .unwrap();

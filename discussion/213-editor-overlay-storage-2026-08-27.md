@@ -29,8 +29,8 @@ S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
 S3a1–S3b are implemented. Replacement Deltas are withdrawn; the nine replacement
 Edits and their Undo variants remain. S3c/S3d record the selective removal and
 retained reaction integration; both are verified. S3e completes the Python Edit
-migration. S3f's graph-core bulk additions are implemented; S3g's relation-set
-bulk additions are next. Graph-core mutation and
+migration. S3f's graph-core bulk additions and S3g's relation-set bulk additions
+are implemented. S3h's typed-overlay extend methods are next. Graph-core mutation and
 restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -81,8 +81,8 @@ incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-cons
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e and S3f are
-complete; S3g is next.
+approved reaction names, semantics, and dative-factor migration. S3e–S3g are
+complete; S3h is next.
 
 ## Editor and transaction API
 
@@ -1452,7 +1452,7 @@ those lifetimes while accounting for the enclosing type/const parameters.
 
 | Relation set | extend batch argument |
 | --- | --- |
-| FixedRelationSet<P, N, D> | Vec<([P; N], D)> |
+| FixedRelationSet<P, D, N> | Vec<([P; N], D)> |
 | VarRelationSet<P, D> | Vec<(&[P], D)> |
 | FixedFixedBirelationSet<L1, N1, L2, N2, D> | Vec<([L1; N1], [L2; N2], D)> |
 | FixedVarBirelationSet<L1, N1, L2, D> | Vec<([L1; N1], &[L2], D)> |
@@ -4274,7 +4274,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Nightly formatting and full diff review pass.
   Full-workspace tests and Rust 1.87 remain at S9b.
 
-- **S3g** (`umol-graph-core::relation::{fixed,var,fixed_fixed,fixed_var,var_var}`;
+- **S3g — implemented** (`umol-graph-core::relation::{fixed,var,fixed_fixed,fixed_var,var_var}`;
   additive, green) Add public extend to all five sets, retaining individual add.
   The precise batch argument for each set is in the relation-extend table under
   Storage delegation: an owned Vec of its factor/payload tuples, with variable
@@ -4290,6 +4290,57 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   empty variable factors, payload moves, and mutation while the returned iterator
   remains live. Do not use a delegating individual add as the sole oracle.
   [dep: none]
+
+  **Implemented — 2026-09-26.** All five sets expose extend with the batch shapes
+  above. Fixed factors use arrays; variable factors take slices copied into packed
+  storage; payloads move without a Clone bound. Each nonempty call reserves room
+  for the batch in each column/buffer, appends its rows, and rebuilds union incidence
+  once. Empty batches leave storage unchanged. Precise captures exclude receiver
+  and input-slice lifetimes; the exact-size id iterator owns its bounds. Individual
+  add implementations, constructors, and their external-reference/size contracts
+  are unchanged. The five methods are the only added public symbols.
+
+  **Measurements — 2026-09-26.** Separate per-set benchmarks in benches/relation.rs
+  compare repeated add with extend. Each row contains four overlapping node ids;
+  birelations additionally contain one edge id. Inputs contain 64 or 1,024 rows;
+  batches contain one or 16 rows. Setup clones and batch construction, and final
+  set destruction, are excluded. Batch consumption, storage growth, and incidence
+  rebuilding are timed. Microseconds per batch of 16:
+
+  | Set | Existing rows | add before S3g | add after S3g | extend |
+  | --- | ---: | ---: | ---: | ---: |
+  | FixedRelationSet | 64 | 53.989 | 57.252 | 3.834 |
+  | FixedRelationSet | 1,024 | 880.080 | 858.140 | 56.338 |
+  | VarRelationSet | 64 | 55.083 | 56.088 | 4.160 |
+  | VarRelationSet | 1,024 | 921.940 | 843.200 | 58.169 |
+  | FixedFixedBirelationSet | 64 | 60.606 | 64.545 | 4.380 |
+  | FixedFixedBirelationSet | 1,024 | 856.090 | 935.070 | 58.431 |
+  | FixedVarBirelationSet | 64 | 63.421 | 62.934 | 4.607 |
+  | FixedVarBirelationSet | 1,024 | 874.850 | 884.590 | 62.012 |
+  | VarVarBirelationSet | 64 | 73.547 | 73.669 | 5.500 |
+  | VarVarBirelationSet | 1,024 | 999.470 | 1,056.900 | 71.754 |
+
+  Known batches should use extend: the measured 16-row calls take about 13–16
+  times less time than repeated add. One-row calls show no consistent gain;
+  extend ranged from about 4% faster to 12% slower in this short comparison.
+  Individual add remains appropriate for isolated additions. Both operations
+  rebuild the full incidence index; batching reduces repeated work without
+  changing storage or adding persistent indexes. No allocation counts were
+  measured, and these synthetic fixtures do not establish application-wide gains.
+
+  Reproduce with `cargo bench -p umol-graph-core --bench relation -- _extend/
+  --warm-up-time 0.1 --measurement-time 0.2 --sample-size 20 --noplot`.
+
+  **Checked — 2026-09-26.** All 2,164 graph-core tests pass with proptest enabled,
+  including 74 new unit cases and five new properties. Unit cases cover zero/empty
+  factors, coinciding rows, sparse references, non-Clone payloads, exact-size
+  iteration, and receiver/input-borrow independence. Sequential-batch properties
+  use independent rows and direct incidence scans, including references shared
+  across factors and participants reporting both node and edge ids. Removing all
+  appended ids restores the original rows and index. The 40 benchmark cases pass;
+  all-target Clippy with proptest, rustdoc with warnings denied, nightly formatting,
+  and full diff review pass. Workspace and Rust 1.87 gates remain at S9b.
+
 - **S3h** (`ir::{aromatic,multicenter,dative,noncovalent,stereo}`;
   additive, green) Add crate-private extend to AromaticSystems, MulticenterBonds,
   DativeBonds, NoncovalentBonds, StereoAtoms, and StereoBonds. Each takes &mut self

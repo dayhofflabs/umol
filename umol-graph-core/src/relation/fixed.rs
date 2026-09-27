@@ -224,6 +224,45 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
         id
     }
 
+    /// Append relations in input order and return their contiguous ids.
+    ///
+    /// Fixed arity is enforced by the array type; zero arity is permitted.
+    /// Payloads are moved without cloning. References are indexed without checking
+    /// external graph membership, as in [`Self::add`]. Incidence is rebuilt once
+    /// after a nonempty batch. Mutation completes before return; the allocation-free
+    /// exact-size iterator owns its bounds and borrows neither the set nor the inputs.
+    ///
+    /// # Semantic properties
+    ///
+    /// Existing ids and rows remain unchanged. New ids start at the previous count;
+    /// row and factor order, multiplicity, and coinciding rows are preserved. Incidence
+    /// lists each relation once per referenced node or edge across all its factors.
+    /// An empty batch leaves storage unchanged. For representable sizes, appending
+    /// batches agrees with concatenating their rows; removing the added ids restores
+    /// the original set. These laws use a row model in `tests/property/relation.rs`.
+    pub fn extend(
+        &mut self,
+        entries: Vec<([P; N], D)>,
+    ) -> impl ExactSizeIterator<Item = RelationId> + use<P, D, N> {
+        let start = self.count();
+        if !entries.is_empty() {
+            self.participants.reserve(entries.len());
+            self.data.reserve(entries.len());
+            for (participants, data) in entries {
+                self.participants.push(participants);
+                self.data.push(data);
+            }
+            self.incidence = Incidence::build(self.count(), |i, out| {
+                out.extend(
+                    self.participants[i]
+                        .iter()
+                        .map(|participant| participant.refs()),
+                );
+            });
+        }
+        (start..self.count()).map(RelationId::from)
+    }
+
     /// Remove whole relations, preserving survivor order and making their ids dense.
     ///
     /// Delegates to [`Self::tracked_remove`] and discards the compaction. Input ids refer

@@ -501,6 +501,75 @@ fn test_var_relation_set_add_payload() {
 }
 
 #[rstest]
+#[case::empty_rows(vec![(vec![], "first"), (vec![], "second"), (vec![], "third")])]
+#[case::variable_rows(vec![(vec![NodeId(2), NodeId(0)], "first"), (vec![], "second"), (vec![NodeId(2), NodeId(2), NodeId(0)], "third")])]
+#[case::coinciding(vec![(vec![NodeId(u32::MAX)], "first"), (vec![NodeId(0)], "second"), (vec![NodeId(u32::MAX)], "third")])]
+fn test_var_relation_set_extend(
+    #[case] expected: Vec<(Vec<NodeId>, &'static str)>,
+    #[values(0, 1, 2)] start: usize,
+) {
+    let mut relations = VarRelationSet::new(expected[..start].to_vec());
+    let ids = {
+        let added = expected[start..].to_vec();
+        relations.extend(
+            added
+                .iter()
+                .map(|(parts, data)| (parts.as_slice(), *data))
+                .collect(),
+        )
+    };
+    assert_eq!(relations.clone().into_entries(), expected);
+    for node in [NodeId(0), NodeId(1), NodeId(2), NodeId(u32::MAX)] {
+        let incidence: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .filter(|(_, (row, _))| row.contains(&node))
+            .map(|(index, _)| RelationId::from(index))
+            .collect();
+        assert_eq!(relations.incident_to_node(node), incidence);
+        assert_eq!(relations.incident_to_edge(EdgeId(node.0)), &[]);
+    }
+    let empty = relations.extend(vec![]);
+    assert_exact_size(ids, (start..expected.len()).map(RelationId::from).collect());
+    assert_exact_size(empty, vec![]);
+    assert_eq!(relations.into_entries(), expected);
+}
+
+#[rstest]
+#[case::empty(Vec::<(Vec<NodeId>, &'static str)>::new())]
+#[case::empty_rows(vec![(vec![], "first"), (vec![], "second"), (vec![], "third")])]
+#[case::variable_rows(vec![(vec![NodeId(2), NodeId(0)], "first"), (vec![], "second"), (vec![NodeId(2), NodeId(2), NodeId(0)], "third")])]
+#[case::coinciding(vec![(vec![NodeId(u32::MAX)], "first"), (vec![NodeId(0)], "second"), (vec![NodeId(u32::MAX)], "third")])]
+fn test_var_relation_set_extend_identity(#[case] entries: Vec<(Vec<NodeId>, &'static str)>) {
+    let input = VarRelationSet::new(entries);
+    let mut relations = input.clone();
+    assert_exact_size(relations.extend(vec![]), vec![]);
+    assert_eq!(relations, input);
+}
+
+#[rstest]
+fn test_var_relation_set_extend_payload() {
+    let mut relations = VarRelationSet::default();
+    let ids = relations.extend(vec![
+        (&[EdgeId(2), EdgeId(0)], NonCloneData(vec![7, 11])),
+        (&[EdgeId(2), EdgeId(2)], NonCloneData(vec![13])),
+    ]);
+    assert_exact_size(ids, vec![RelationId(0), RelationId(1)]);
+    assert_eq!(
+        relations.incident_to_edge(EdgeId(2)),
+        &[RelationId(0), RelationId(1)]
+    );
+    assert_eq!(relations.incident_to_node(NodeId(2)), &[]);
+    assert_eq!(
+        relations.into_entries(),
+        vec![
+            (vec![EdgeId(2), EdgeId(0)], NonCloneData(vec![7, 11])),
+            (vec![EdgeId(2), EdgeId(2)], NonCloneData(vec![13]))
+        ]
+    );
+}
+
+#[rstest]
 #[case::first_empty(vec![RelationId(0)], vec![1, 2, 3, 4, 5])]
 #[case::first_nonempty(vec![RelationId(1)], vec![0, 2, 3, 4, 5])]
 #[case::middle_empty(vec![RelationId(2)], vec![0, 1, 3, 4, 5])]
