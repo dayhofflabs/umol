@@ -1240,7 +1240,7 @@ pub enum StereoConfigurationUpdate {
 }
 
 impl StereoConfigurationUpdate {
-    fn apply_to(&self, current: &StereoConfigurationForm) -> StereoConfigurationForm {
+    pub(crate) fn apply_to(&self, current: &StereoConfigurationForm) -> StereoConfigurationForm {
         match self {
             Self::Unchanged => current.clone(),
             Self::Undetermined => StereoConfigurationForm::Undetermined,

@@ -1177,18 +1177,17 @@ impl Edits {
         current: &StereoAtomForm,
         update: &StereoAtomUpdate,
     ) {
-        let updated = current.update(update);
+        let configuration = update.configuration.apply_to(&current.configuration);
         let kind = update
             .configuration
             .kind()
-            .or_else(|| current.configuration.kind())
-            .or_else(|| updated.configuration.kind());
-        if !current.configuration.normalized_eq(&updated.configuration) {
+            .or_else(|| current.configuration.kind());
+        if !current.configuration.normalized_eq(&configuration) {
             self.push(Edit::ModifyStereoAtomField {
                 id: id.clone(),
                 change: StereoAtomFieldChange::Configuration {
                     old: current.configuration.clone(),
-                    new: updated.configuration,
+                    new: configuration,
                 },
             });
         }
@@ -1218,18 +1217,17 @@ impl Edits {
         current: &StereoBondForm,
         update: &StereoBondUpdate,
     ) {
-        let updated = current.update(update);
+        let configuration = update.configuration.apply_to(&current.configuration);
         let kind = update
             .configuration
             .kind()
-            .or_else(|| current.configuration.kind())
-            .or_else(|| updated.configuration.kind());
-        if !current.configuration.normalized_eq(&updated.configuration) {
+            .or_else(|| current.configuration.kind());
+        if !current.configuration.normalized_eq(&configuration) {
             self.push(Edit::ModifyStereoBondField {
                 id: id.clone(),
                 change: StereoBondFieldChange::Configuration {
                     old: current.configuration.clone(),
-                    new: updated.configuration,
+                    new: configuration,
                 },
             });
         }
@@ -3619,6 +3617,49 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::configuration_only(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() },
+        vec![Edit::ModifyStereoAtomField { id: StereoAtomHandle::Id(StereoAtomId(7)), change: StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32) } }],
+    )]
+    #[case::constraint_only(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomUpdate { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+        vec![Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(7)), kind: Some(StereoKind::Tetrahedral), old: None, new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) }],
+    )]
+    #[case::clearing(
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
+        vec![
+            Edit::ModifyStereoAtomField { id: StereoAtomHandle::Id(StereoAtomId(7)), change: StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), new: StereoConfigurationForm::Undetermined } },
+            Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(7)), kind: Some(StereoKind::Tetrahedral), old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), new: None },
+        ],
+    )]
+    #[case::matching_kind_with_constraint(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        vec![Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(7)), kind: Some(StereoKind::Tetrahedral), old: None, new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) }],
+    )]
+    #[case::different_kind_with_constraint(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::SquarePlanar, coset: None }, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        vec![
+            Edit::ModifyStereoAtomField { id: StereoAtomHandle::Id(StereoAtomId(7)), change: StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), new: StereoConfigurationForm::kinded(StereoKind::SquarePlanar, StereoCoset::Undetermined) } },
+            Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(7)), kind: Some(StereoKind::SquarePlanar), old: None, new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        ],
+    )]
+    fn test_edits_update_stereo_atom_construction(
+        #[case] current: StereoAtomForm,
+        #[case] update: StereoAtomUpdate,
+        #[case] expected: Vec<Edit>,
+    ) {
+        let mut edits = Edits::new();
+        edits.update_stereo_atom(StereoAtomHandle::Id(StereoAtomId(7)), &current, &update);
+        assert_eq!(edits.as_slice(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::configuration_and_constraint(
         StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
         StereoBondUpdate {
@@ -3705,6 +3746,49 @@ mod tests {
         );
 
         assert_eq!(edits, Edits::new());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::configuration_only(
+        StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() },
+        vec![Edit::ModifyStereoBondField { id: StereoBondHandle::Id(StereoBondId(7)), change: StereoBondFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32) } }],
+    )]
+    #[case::constraint_only(
+        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+        StereoBondUpdate { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+        vec![Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(7)), kind: Some(StereoKind::CisTrans), old: None, new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) }],
+    )]
+    #[case::clearing(
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)) },
+        vec![
+            Edit::ModifyStereoBondField { id: StereoBondHandle::Id(StereoBondId(7)), change: StereoBondFieldChange::Configuration { old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), new: StereoConfigurationForm::Undetermined } },
+            Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(7)), kind: Some(StereoKind::CisTrans), old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), new: None },
+        ],
+    )]
+    #[case::matching_kind_with_constraint(
+        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        vec![Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(7)), kind: Some(StereoKind::CisTrans), old: None, new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) }],
+    )]
+    #[case::missing_current_kind_with_constraint(
+        StereoBondForm::default(),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        vec![
+            Edit::ModifyStereoBondField { id: StereoBondHandle::Id(StereoBondId(7)), change: StereoBondFieldChange::Configuration { old: StereoConfigurationForm::Undetermined, new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Undetermined) } },
+            Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(7)), kind: Some(StereoKind::CisTrans), old: None, new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+        ],
+    )]
+    fn test_edits_update_stereo_bond_construction(
+        #[case] current: StereoBondForm,
+        #[case] update: StereoBondUpdate,
+        #[case] expected: Vec<Edit>,
+    ) {
+        let mut edits = Edits::new();
+        edits.update_stereo_bond(StereoBondHandle::Id(StereoBondId(7)), &current, &update);
+        assert_eq!(edits.as_slice(), expected);
     }
 
     #[rstest]

@@ -26,7 +26,7 @@ families: matching local getters and editor-only structural mutation are impleme
 S2k1's in-place DSL conversion, S2k2's Rust callback caller migration, and S2l's
 Python assignment and read-only molecule constraint access are implemented.
 S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
-S3a1 is implemented; S3a2 is next. Graph-core mutation and restoration are complete in
+S3a1–S3a2 are implemented; S3a3 is next. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -74,8 +74,8 @@ approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
-complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1 is
-implemented and S3a2 is next.
+complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a2
+are implemented and S3a3 is next.
 
 ## Editor and transaction API
 
@@ -4017,8 +4017,9 @@ design and gains no DSL operation here.
   **Implemented — 2026-09-26.** Edit and Undo carry the nine named component
   replacements; dative construction, removal, and saved entries carry donors and
   acceptor separately. Edits keeps its append-only handle accounting. Local
-  construction tests and rustdoc reflect the new payloads and batch namespace.
-  Formatting and diff checks pass. Compilation is red at the planned S3 boundary:
+  construction tests and rustdoc reflect the new payloads and batch namespace;
+  the tests cannot run until the S3 consumer migrations compile. Formatting and
+  diff checks pass. Compilation is red at the planned S3 boundary:
   existing DSL, editor/transaction, and reaction consumers still use the former
   dative payload or lack the new Undo arms. S3a3, S3b, S3d, and S3e migrate those
   consumers before the S3 green gate.
@@ -4041,6 +4042,12 @@ design and gains no DSL operation here.
   and unchanged updates. Cover kind-only updates with matching and differing
   current kinds. Review the construction path for discarded whole-constraint
   updates; no benchmark campaign or timing threshold is required.
+
+  **Implemented — 2026-09-26.** Both Edits constructors compute only the updated
+  configuration; `StereoConfigurationUpdate::apply_to` is crate-visible. Exact
+  edit cases cover the listed update shapes and kind selection. Form updates
+  retain their complete-form behavior. Formatting and diff checks pass. The
+  S3a1 consumer errors still prevent compilation until the S3 migrations.
 
 - **S3a3 — Edit DSL replacement syntax** (`dsl::edit`; breaking, green at S3e). [dep: S3a1, S3a2]
 
