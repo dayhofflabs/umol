@@ -46,7 +46,7 @@ aggregate:
 
 | Aggregate | Open input | Crate-private authoritative check | Checked publication | Asserted publication |
 | --- | --- | --- | --- | --- |
-| `Molecule` | `MoleculeEntries`; transient `MoleculeEditor` state | `Molecule::check_integrity` | `Molecule::try_from_entries`, `MoleculeEditor::snapshot`, `MoleculeEditor::try_build`, and checked integrity-sensitive mutations | `Molecule::from_entries`, `MoleculeEditor::build`, and trusted internal publishers |
+| `Molecule` | `MoleculeEntries`; transient `MoleculeEditor` state | `Molecule::check_integrity` | `Molecule::try_from_entries`, `MoleculeEditor::snapshot`, `MoleculeEditor::try_build` | `Molecule::from_entries`, `MoleculeEditor::build`, and trusted internal publishers |
 | `Reaction` | a closed lhs `Molecule` plus independently assembled `Deltas` | `Reaction::check_integrity` | `Reaction::try_new` | `Reaction::new` and trusted internal publishers |
 | `ReactionSpan` | `ReactionSpanEntries` | `ReactionSpan::check_integrity` | `ReactionSpan::try_from_entries` | `ReactionSpan::from_entries` and trusted internal publishers |
 

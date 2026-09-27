@@ -25,8 +25,8 @@ access; their ligand frames are borrowed. S2j is complete for all eight entity
 families: matching local getters and editor-only structural mutation are implemented.
 S2k1's in-place DSL conversion, S2k2's Rust callback caller migration, and S2l's
 Python assignment and read-only molecule constraint access are implemented.
-S2f is cancelled; the
-remaining S2 work is unimplemented. Graph-core mutation and restoration are complete in
+S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
+S3a is next. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -41,9 +41,9 @@ reopen S2i or block S2j.
 | Storage delegation, participant methods, Edit/Delta/Undo variants, local getters | Settled design; S1a–S1c complete | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
-| Molecule attribute methods | Direct assignment implemented; callback removal remains in S2m | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Remove modify/try_modify callbacks. |
+| Molecule attribute methods | Implemented; S2 complete | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Mutation callbacks are removed. |
 | Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
-| Molecule-level constraint mutation | S2i1, Rust caller migration, and S2l complete | Molecule::constraints provides reads; the editor exposes &mut Constraints. Python molecule constraint entries and iteration are lazy and read-only. S2m removes try_modify_constraints. |
+| Molecule-level constraint mutation | Implemented; S2 complete | Molecule::constraints provides reads; the editor exposes &mut Constraints. Python molecule constraint entries and iteration are lazy and read-only. try_modify_constraints is removed. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
 | Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation remains | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Molecule and Edits input-transfer changes remain; the editor already supports consumption. |
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
@@ -74,7 +74,7 @@ approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
-complete. S2k1, S2k2, and S2l are implemented; S2m is the next subitem.
+complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete and S3a is next.
 
 ## Editor and transaction API
 
@@ -3864,6 +3864,24 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   where the change can affect cost. Full-workspace and Rust 1.87 gates remain
   at S9b, not after every subitem. This stage closes only after all listed
   migrations are green.
+
+  **Implemented and verified — 2026-09-26.** Removed all 18 listed callback
+  methods, including private implementations, and their obsolete tests. No
+  production callers remained. Existing mutable-view tests cover every entity
+  kind, electron-count mismatches, coset values, entity constraints, and invalid
+  ids; stereo kind-assignment cases are retained through those views. Editor
+  publication tests retain invalid molecule-constraint rejection. Molecule
+  rustdoc and the integrity guide describe the direct entity-mutation and
+  editor-publication boundaries.
+
+  Graph-IR and graph tests pass with both proptest features and graph conformance
+  enabled: 10,712 passed, eight ignored, including doctests. All 1,639 Python
+  binding tests pass (two ignored); the rebuilt Python 3.13 extension passes
+  1,589 Python tests (two skipped). All-target Clippy and rustdoc pass with
+  warnings denied for graph-IR, graph, and Python bindings. Nightly formatting,
+  removal searches, diff checks, and full diff review pass. No remaining
+  production execution path changes in S2m, so the S0 and S2d measurements were
+  not rerun. Full-workspace and Rust 1.87 gates remain S9b.
 
 ### S3 — Batch mutation and reaction vocabulary
 

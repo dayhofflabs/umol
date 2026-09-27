@@ -6032,6 +6032,7 @@ fn test_molecule_noncovalent_bond_mut_attributes(
 
 #[rstest]
 #[case::attributes(StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 2u32), constraints: StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined).into() })]
+#[case::other_site_kind(StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32), constraints: Default::default() })]
 fn test_molecule_stereo_atom_mut_attributes(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] form: StereoAtomForm,
@@ -6068,6 +6069,7 @@ fn test_molecule_stereo_atom_mut_attributes(
 
 #[rstest]
 #[case::attributes(StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 2u32), constraints: StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined).into() })]
+#[case::other_site_kind(StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32), constraints: Default::default() })]
 fn test_molecule_stereo_bond_mut_attributes(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] form: StereoBondForm,
@@ -6117,45 +6119,6 @@ fn test_molecule_view_mut_error(#[case] borrow: fn(&mut Molecule)) {
 }
 
 #[rstest]
-fn test_molecule_modify_atoms(#[from(rich_molecule)] mut molecule: Molecule) {
-    molecule.modify_atoms(|mut a| {
-        a.charge = NumForm::Lit(1);
-        a
-    });
-    let charges: Vec<NumForm> = molecule
-        .atoms()
-        .iter()
-        .map(|v| v.attributes().charge.clone())
-        .collect();
-    assert_eq!(
-        charges,
-        vec![
-            NumForm::Lit(1),
-            NumForm::Lit(1),
-            NumForm::Lit(1),
-            NumForm::Lit(1),
-        ]
-    );
-}
-
-#[rstest]
-fn test_molecule_modify_bonds(#[from(rich_molecule)] mut molecule: Molecule) {
-    molecule.modify_bonds(|mut b| {
-        b.order = NumForm::Lit(1);
-        b
-    });
-    let orders: Vec<NumForm> = molecule
-        .bonds()
-        .iter()
-        .map(|v| v.attributes().order.clone())
-        .collect();
-    assert_eq!(
-        orders,
-        vec![NumForm::Lit(1), NumForm::Lit(1), NumForm::Lit(1)]
-    );
-}
-
-#[rstest]
 fn test_molecule_dative_bond_mut(#[from(rich_molecule)] mut molecule: Molecule) {
     molecule
         .dative_bond_mut(DativeBondId(0))
@@ -6193,95 +6156,6 @@ fn test_molecule_aromatic_system_mut(#[from(rich_molecule)] mut molecule: Molecu
 }
 
 #[rstest]
-fn test_molecule_modify_aromatic_systems(#[from(rich_molecule)] mut molecule: Molecule) {
-    molecule.modify_aromatic_systems(|mut a| {
-        a.electrons = ElectronCountsForm::Lit(vec![1; 3]);
-        a
-    });
-    let electrons: Vec<ElectronCountsForm> = molecule
-        .aromatic_systems()
-        .iter()
-        .map(|v| v.attributes().electrons.clone())
-        .collect();
-    assert_eq!(electrons, vec![ElectronCountsForm::Lit(vec![1; 3])]);
-}
-
-#[rstest]
-fn test_molecule_try_modify_aromatic_system(#[from(rich_molecule)] mut molecule: Molecule) {
-    assert_eq!(
-        molecule.try_modify_aromatic_system(AromaticSystemId(0), |form| {
-            form.electrons = ElectronCountsForm::Lit(vec![2, 1, 0]);
-        }),
-        Ok(()),
-    );
-    assert_eq!(
-        molecule
-            .aromatic_system(AromaticSystemId(0))
-            .attributes()
-            .electrons,
-        ElectronCountsForm::Lit(vec![2, 1, 0]),
-    );
-}
-
-#[rstest]
-#[case::invalid_reference(
-    AromaticSystemId(1),
-    ElectronCountsForm::Lit(vec![2, 1, 0]),
-    MoleculeIntegrityError::InvalidReference {
-        entity: Entity::AromaticSystem(AromaticSystemId(1)),
-    },
-)]
-fn test_molecule_try_modify_aromatic_system_error(
-    #[from(rich_molecule)] mut molecule: Molecule,
-    #[case] id: AromaticSystemId,
-    #[case] electrons: ElectronCountsForm,
-    #[case] expected: MoleculeIntegrityError,
-) {
-    let before = molecule.clone();
-    assert_eq!(
-        molecule.try_modify_aromatic_system(id, |form| form.electrons = electrons),
-        Err(expected),
-    );
-    assert_eq!(molecule, before);
-}
-
-#[rstest]
-fn test_molecule_try_modify_aromatic_systems(#[from(rich_molecule)] mut molecule: Molecule) {
-    assert_eq!(
-        molecule.try_modify_aromatic_systems(|form| {
-            form.electrons = ElectronCountsForm::Lit(vec![2, 1, 0]);
-        }),
-        Ok(()),
-    );
-    assert_eq!(
-        molecule
-            .aromatic_systems()
-            .iter()
-            .map(|view| view.attributes().electrons.clone())
-            .collect::<Vec<_>>(),
-        vec![ElectronCountsForm::Lit(vec![2, 1, 0])],
-    );
-}
-
-#[rstest]
-fn test_molecule_try_modify_aromatic_systems_attributes(
-    #[from(rich_molecule)] mut molecule: Molecule,
-) {
-    let electrons = ElectronCountsForm::Lit(vec![2, 1]);
-    assert_eq!(
-        molecule.try_modify_aromatic_systems(|form| form.electrons = electrons.clone()),
-        Ok(())
-    );
-    assert_eq!(
-        molecule
-            .aromatic_system(AromaticSystemId(0))
-            .attributes()
-            .electrons,
-        electrons
-    );
-}
-
-#[rstest]
 fn test_molecule_multicenter_bond_mut(#[from(rich_molecule)] mut molecule: Molecule) {
     molecule
         .multicenter_bond_mut(MulticenterBondId(0))
@@ -6293,95 +6167,6 @@ fn test_molecule_multicenter_bond_mut(#[from(rich_molecule)] mut molecule: Molec
             .attributes()
             .electrons,
         ElectronCountsForm::Lit(vec![1, 1, 0]),
-    );
-}
-
-#[rstest]
-fn test_molecule_modify_multicenter_bonds(#[from(rich_molecule)] mut molecule: Molecule) {
-    molecule.modify_multicenter_bonds(|mut m| {
-        m.electrons = ElectronCountsForm::Lit(vec![1, 1, 0]);
-        m
-    });
-    let electrons: Vec<ElectronCountsForm> = molecule
-        .multicenter_bonds()
-        .iter()
-        .map(|v| v.attributes().electrons.clone())
-        .collect();
-    assert_eq!(electrons, vec![ElectronCountsForm::Lit(vec![1, 1, 0])],);
-}
-
-#[rstest]
-fn test_molecule_try_modify_multicenter_bond(#[from(rich_molecule)] mut molecule: Molecule) {
-    assert_eq!(
-        molecule.try_modify_multicenter_bond(MulticenterBondId(0), |form| {
-            form.electrons = ElectronCountsForm::Lit(vec![2, 0, 0]);
-        }),
-        Ok(()),
-    );
-    assert_eq!(
-        molecule
-            .multicenter_bond(MulticenterBondId(0))
-            .attributes()
-            .electrons,
-        ElectronCountsForm::Lit(vec![2, 0, 0]),
-    );
-}
-
-#[rstest]
-#[case::invalid_reference(
-    MulticenterBondId(1),
-    ElectronCountsForm::Lit(vec![2, 0, 0]),
-    MoleculeIntegrityError::InvalidReference {
-        entity: Entity::MulticenterBond(MulticenterBondId(1)),
-    },
-)]
-fn test_molecule_try_modify_multicenter_bond_error(
-    #[from(rich_molecule)] mut molecule: Molecule,
-    #[case] id: MulticenterBondId,
-    #[case] electrons: ElectronCountsForm,
-    #[case] expected: MoleculeIntegrityError,
-) {
-    let before = molecule.clone();
-    assert_eq!(
-        molecule.try_modify_multicenter_bond(id, |form| form.electrons = electrons),
-        Err(expected),
-    );
-    assert_eq!(molecule, before);
-}
-
-#[rstest]
-fn test_molecule_try_modify_multicenter_bonds(#[from(rich_molecule)] mut molecule: Molecule) {
-    assert_eq!(
-        molecule.try_modify_multicenter_bonds(|form| {
-            form.electrons = ElectronCountsForm::Lit(vec![2, 0, 0]);
-        }),
-        Ok(()),
-    );
-    assert_eq!(
-        molecule
-            .multicenter_bonds()
-            .iter()
-            .map(|view| view.attributes().electrons.clone())
-            .collect::<Vec<_>>(),
-        vec![ElectronCountsForm::Lit(vec![2, 0, 0])],
-    );
-}
-
-#[rstest]
-fn test_molecule_try_modify_multicenter_bonds_attributes(
-    #[from(rich_molecule)] mut molecule: Molecule,
-) {
-    let electrons = ElectronCountsForm::Lit(vec![2, 1]);
-    assert_eq!(
-        molecule.try_modify_multicenter_bonds(|form| form.electrons = electrons.clone()),
-        Ok(())
-    );
-    assert_eq!(
-        molecule
-            .multicenter_bond(MulticenterBondId(0))
-            .attributes()
-            .electrons,
-        electrons
     );
 }
 
@@ -6398,160 +6183,6 @@ fn test_molecule_noncovalent_bond_mut(#[from(rich_molecule)] mut molecule: Molec
             .kind,
         NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)
     );
-}
-
-#[rstest]
-fn test_molecule_try_modify_stereo_atom(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
-    let mut molecule = Molecule::from_entries(entries);
-    molecule
-        .try_modify_stereo_atom(StereoAtomId(0), |form| {
-            form.configuration =
-                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
-        })
-        .expect("tetrahedral configuration satisfies atom-site integrity");
-    assert_eq!(
-        molecule
-            .stereo_atom(StereoAtomId(0))
-            .attributes()
-            .configuration,
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-    );
-
-    assert_eq!(
-        molecule.try_modify_stereo_atom(StereoAtomId(0), |form| {
-            form.configuration =
-                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
-        }),
-        Ok(()),
-    );
-    assert_eq!(
-        molecule
-            .stereo_atom(StereoAtomId(0))
-            .attributes()
-            .configuration,
-        StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
-    );
-    assert_eq!(
-        molecule.try_modify_stereo_atom(StereoAtomId(1), |_| {}),
-        Err(MoleculeIntegrityError::InvalidReference {
-            entity: Entity::StereoAtom(StereoAtomId(1)),
-        }),
-    );
-}
-
-#[rstest]
-fn test_molecule_try_modify_stereo_atoms(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
-    let mut molecule = Molecule::from_entries(entries);
-    molecule
-        .try_modify_stereo_atoms(|form| {
-            form.configuration =
-                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
-        })
-        .expect("tetrahedral configurations satisfy atom-site integrity");
-
-    assert_eq!(
-        molecule.try_modify_stereo_atoms(|form| {
-            form.configuration =
-                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
-        }),
-        Ok(()),
-    );
-    assert_eq!(
-        molecule
-            .stereo_atom(StereoAtomId(0))
-            .attributes()
-            .configuration,
-        StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0))
-    );
-}
-
-#[rstest]
-fn test_molecule_try_modify_stereo_bond(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
-    let mut molecule = Molecule::from_entries(entries);
-    molecule
-        .try_modify_stereo_bond(StereoBondId(0), |form| {
-            form.configuration =
-                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
-        })
-        .expect("cis/trans configuration satisfies bond-site integrity");
-    assert_eq!(
-        molecule
-            .stereo_bond(StereoBondId(0))
-            .attributes()
-            .configuration,
-        StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-    );
-
-    assert_eq!(
-        molecule.try_modify_stereo_bond(StereoBondId(0), |form| {
-            form.configuration =
-                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
-        }),
-        Ok(()),
-    );
-    assert_eq!(
-        molecule
-            .stereo_bond(StereoBondId(0))
-            .attributes()
-            .configuration,
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
-    );
-    assert_eq!(
-        molecule.try_modify_stereo_bond(StereoBondId(1), |_| {}),
-        Err(MoleculeIntegrityError::InvalidReference {
-            entity: Entity::StereoBond(StereoBondId(1)),
-        }),
-    );
-}
-
-#[rstest]
-fn test_molecule_try_modify_stereo_bonds(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
-    let mut molecule = Molecule::from_entries(entries);
-    molecule
-        .try_modify_stereo_bonds(|form| {
-            form.configuration =
-                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
-        })
-        .expect("cis/trans configurations satisfy bond-site integrity");
-
-    assert_eq!(
-        molecule.try_modify_stereo_bonds(|form| {
-            form.configuration =
-                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
-        }),
-        Ok(()),
-    );
-    assert_eq!(
-        molecule
-            .stereo_bond(StereoBondId(0))
-            .attributes()
-            .configuration,
-        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0))
-    );
-}
-
-#[rstest]
-fn test_molecule_try_modify_constraints(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
-    let mut molecule = Molecule::from_entries(entries);
-    let valid = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(NumForm::Lit(4)));
-    molecule
-        .try_modify_constraints(|constraints| constraints.push(valid.clone()))
-        .expect("constraint references an available atom");
-    assert!(molecule.constraints().iter().any(|entry| entry == &valid));
-
-    let before = molecule.clone();
-    assert_eq!(
-        molecule.try_modify_constraints(|constraints| {
-            constraints.push(Constraint::Atom(
-                AtomId(4),
-                AtomConstraintForm::degree(NumForm::Lit(4)),
-            ));
-        }),
-        Err(MoleculeIntegrityError::InvalidReference {
-            entity: Entity::Atom(AtomId(4)),
-        }),
-    );
-    assert_eq!(molecule, before);
 }
 
 // -- lift_constraints / inline_constraints ---------------------

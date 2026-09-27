@@ -35,9 +35,9 @@ the statuses recorded here remain authoritative.
 - [213 - Molecule and reaction mutation](213-editor-overlay-storage-2026-08-27.md)
   has a settled execution API, consumer mappings, ownership experiments, and a
   staged implementation plan; S0a–S0b and S1a–S1c are complete. S1d and S0c are
-  reverted. S2 now orders consumer checks, entity views, caller migration,
+  reverted. S2 is complete: consumer checks, entity views, caller migration,
   and callback removal. S2i1 removed the checked molecule constraint view;
-  S2l completes Python callback migration; S2m removes the Rust callbacks.
+  S2l migrated Python callers and S2m removed the Rust callbacks.
   The earlier S2b implementation is reverted; the proposed join migration is
   withdrawn and S2f is cancelled. Revised S2b is complete: NoJoinError names the
   Rust unit error and Python join exception. S2c's bounded coset-operation fixes
@@ -47,9 +47,9 @@ the statuses recorded here remain authoritative.
   All eight entity-view families have aligned id/attribute accessors. S2j's local
   getters and editor structural mutations are complete. S2k1's in-place DSL
   conversion, S2k2's Rust caller migration, and S2l's Python assignment/read-only
-  molecule constraint access are implemented; S2m is next. Unused
-  callback lint failures await S2m removal. Uniform unchecked entity-attribute
-  assignment is settled for Rust and Python.
+  molecule constraint access are implemented. S2m closes the stage with strict
+  lint and rustdoc, property/conformance suites, and Python tests passing.
+  S3a is next.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -267,7 +267,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue with S2m callback removal and stage verification. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-26 | Continue with S3a batch mutation and reaction vocabulary. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

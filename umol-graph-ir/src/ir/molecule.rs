@@ -23,7 +23,7 @@ use super::constraint::{
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
 use super::edit::{AtomHandle, BondHandle, Edits};
-use super::entity::{Entity, EntityKind};
+use super::entity::EntityKind;
 use super::error::{Contradiction, MoleculeApplyError};
 use super::frame::OverlaysFrameAction;
 use super::id::{
@@ -62,8 +62,8 @@ pub(crate) mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
-/// Per-entity data are `Arc`-shared (copy-on-write). The molecule allows attribute mutation
-/// and checked constraint mutation; structural edits go through `MoleculeEditor` via
+/// Entity attributes and entity-level constraints are mutable through entity views.
+/// Structural edits and molecule-level constraint changes go through `MoleculeEditor` via
 /// [`Molecule::edit`].
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Molecule {
@@ -556,14 +556,6 @@ impl Molecule {
         AtomEditorViewMut::new(id, attributes)
     }
 
-    /// Replace every atom with `f(atom)` in place (owned in, owned out — no
-    /// `&mut AtomForm` escapes, so the container controls any re-interning).
-    pub fn modify_atoms(&mut self, mut f: impl FnMut(AtomForm) -> AtomForm) {
-        for atom in Arc::make_mut(&mut self.atoms).iter_mut() {
-            *atom = f(mem::take(atom));
-        }
-    }
-
     /// Borrow bond attributes for mutation.
     ///
     /// # Panics
@@ -583,13 +575,6 @@ impl Molecule {
         BondEditorViewMut::new(id, atoms, attributes)
     }
 
-    /// Replace every bond with `f(bond)` in place.
-    pub fn modify_bonds(&mut self, mut f: impl FnMut(BondForm) -> BondForm) {
-        for bond in Arc::make_mut(&mut self.bonds).iter_mut() {
-            *bond = f(mem::take(bond));
-        }
-    }
-
     /// Borrow dative bond attributes for mutation.
     ///
     /// # Panics
@@ -603,13 +588,6 @@ impl Molecule {
     fn dative_bond_view_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
         assert!(self.dative_bonds.contains(id), "invalid dative bond id");
         DativeBondEditorViewMut::new(&mut self.dative_bonds, id)
-    }
-
-    /// Replace every dative bond with `f(bond)` in place.
-    pub fn modify_dative_bonds(&mut self, mut f: impl FnMut(DativeBondForm) -> DativeBondForm) {
-        for dative_bond in self.dative_bonds.attributes_iter_mut() {
-            *dative_bond = f(mem::take(dative_bond));
-        }
     }
 
     /// Borrow aromatic system attributes for mutation.
@@ -636,58 +614,6 @@ impl Molecule {
         AromaticSystemEditorViewMut::new(&mut self.aromatic_systems, id)
     }
 
-    /// Replace every aromatic system with `f(system)` in place.
-    pub(crate) fn modify_aromatic_systems(
-        &mut self,
-        mut f: impl FnMut(AromaticSystemForm) -> AromaticSystemForm,
-    ) {
-        for aromatic_system in self.aromatic_systems.attributes_iter_mut() {
-            *aromatic_system = f(mem::take(aromatic_system));
-        }
-    }
-
-    /// Transactionally modify one aromatic-system form.
-    ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// it still satisfies molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
-    /// integrity error introduced by the callback. On error, this molecule is unchanged.
-    pub fn try_modify_aromatic_system(
-        &mut self,
-        id: AromaticSystemId,
-        f: impl FnOnce(&mut AromaticSystemForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        if !self.aromatic_systems.contains(id) {
-            return Err(MoleculeIntegrityError::InvalidReference {
-                entity: Entity::AromaticSystem(id),
-            });
-        }
-        self.try_modify_checked(|candidate| f(candidate.aromatic_systems.attributes_mut(id)))
-    }
-
-    /// Transactionally modify every aromatic-system form.
-    ///
-    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
-    /// only if all modified forms still satisfy molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_aromatic_systems(
-        &mut self,
-        mut f: impl FnMut(&mut AromaticSystemForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| {
-            for aromatic_system in candidate.aromatic_systems.attributes_iter_mut() {
-                f(aromatic_system);
-            }
-        })
-    }
-
     /// Borrow multicenter bond attributes for mutation.
     ///
     /// # Panics
@@ -710,58 +636,6 @@ impl Molecule {
             "invalid multicenter bond id"
         );
         MulticenterBondEditorViewMut::new(&mut self.multicenter_bonds, id)
-    }
-
-    /// Replace every multicenter bond with `f(bond)` in place.
-    pub(crate) fn modify_multicenter_bonds(
-        &mut self,
-        mut f: impl FnMut(MulticenterBondForm) -> MulticenterBondForm,
-    ) {
-        for multicenter_bond in self.multicenter_bonds.attributes_iter_mut() {
-            *multicenter_bond = f(mem::take(multicenter_bond));
-        }
-    }
-
-    /// Transactionally modify one multicenter-bond form.
-    ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// it still satisfies molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
-    /// integrity error introduced by the callback. On error, this molecule is unchanged.
-    pub fn try_modify_multicenter_bond(
-        &mut self,
-        id: MulticenterBondId,
-        f: impl FnOnce(&mut MulticenterBondForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        if !self.multicenter_bonds.contains(id) {
-            return Err(MoleculeIntegrityError::InvalidReference {
-                entity: Entity::MulticenterBond(id),
-            });
-        }
-        self.try_modify_checked(|candidate| f(candidate.multicenter_bonds.attributes_mut(id)))
-    }
-
-    /// Transactionally modify every multicenter-bond form.
-    ///
-    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
-    /// only if all modified forms still satisfy molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_multicenter_bonds(
-        &mut self,
-        mut f: impl FnMut(&mut MulticenterBondForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| {
-            for multicenter_bond in candidate.multicenter_bonds.attributes_iter_mut() {
-                f(multicenter_bond);
-            }
-        })
     }
 
     /// Borrow noncovalent bond attributes for mutation.
@@ -788,16 +662,6 @@ impl Molecule {
         NoncovalentBondEditorViewMut::new(&mut self.noncovalent_bonds, id)
     }
 
-    /// Replace every noncovalent bond with `f(bond)` in place.
-    pub fn modify_noncovalent_bonds(
-        &mut self,
-        mut f: impl FnMut(NoncovalentBondForm) -> NoncovalentBondForm,
-    ) {
-        for noncovalent_bond in self.noncovalent_bonds.attributes_iter_mut() {
-            *noncovalent_bond = f(mem::take(noncovalent_bond));
-        }
-    }
-
     /// Borrow stereo atom attributes for mutation.
     ///
     /// # Panics
@@ -811,58 +675,6 @@ impl Molecule {
     fn stereo_atom_view_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
         assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
         StereoAtomEditorViewMut::new(&mut self.stereo_atoms, id)
-    }
-
-    /// Replace every stereo atom with `f(stereo_atom)` in place.
-    pub(crate) fn modify_stereo_atoms(
-        &mut self,
-        mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm,
-    ) {
-        for stereo_atom in self.stereo_atoms.attributes_iter_mut() {
-            *stereo_atom = f(mem::take(stereo_atom));
-        }
-    }
-
-    /// Transactionally modify one stereo-atom form.
-    ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// it still satisfies molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
-    /// integrity error introduced by the callback. On error, this molecule is unchanged.
-    pub fn try_modify_stereo_atom(
-        &mut self,
-        id: StereoAtomId,
-        f: impl FnOnce(&mut StereoAtomForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        if !self.stereo_atoms.contains(id) {
-            return Err(MoleculeIntegrityError::InvalidReference {
-                entity: Entity::StereoAtom(id),
-            });
-        }
-        self.try_modify_checked(|candidate| f(candidate.stereo_atoms.attributes_mut(id)))
-    }
-
-    /// Transactionally modify every stereo-atom form.
-    ///
-    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
-    /// only if all modified forms still satisfy molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_stereo_atoms(
-        &mut self,
-        mut f: impl FnMut(&mut StereoAtomForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| {
-            for stereo_atom in candidate.stereo_atoms.attributes_iter_mut() {
-                f(stereo_atom);
-            }
-        })
     }
 
     /// Borrow stereo bond attributes for mutation.
@@ -880,91 +692,12 @@ impl Molecule {
         StereoBondEditorViewMut::new(&mut self.stereo_bonds, id)
     }
 
-    /// Replace every stereo bond with `f(stereo_bond)` in place.
-    pub(crate) fn modify_stereo_bonds(
-        &mut self,
-        mut f: impl FnMut(StereoBondForm) -> StereoBondForm,
-    ) {
-        for stereo_bond in self.stereo_bonds.attributes_iter_mut() {
-            *stereo_bond = f(mem::take(stereo_bond));
-        }
-    }
-
-    /// Transactionally modify one stereo-bond form.
-    ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// it still satisfies molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
-    /// integrity error introduced by the callback. On error, this molecule is unchanged.
-    pub fn try_modify_stereo_bond(
-        &mut self,
-        id: StereoBondId,
-        f: impl FnOnce(&mut StereoBondForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        if !self.stereo_bonds.contains(id) {
-            return Err(MoleculeIntegrityError::InvalidReference {
-                entity: Entity::StereoBond(id),
-            });
-        }
-        self.try_modify_checked(|candidate| f(candidate.stereo_bonds.attributes_mut(id)))
-    }
-
-    /// Transactionally modify every stereo-bond form.
-    ///
-    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
-    /// only if all modified forms still satisfy molecule representation integrity.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_stereo_bonds(
-        &mut self,
-        mut f: impl FnMut(&mut StereoBondForm),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| {
-            for stereo_bond in candidate.stereo_bonds.attributes_iter_mut() {
-                f(stereo_bond);
-            }
-        })
-    }
-
     pub fn constraints(&self) -> &Constraints {
         &self.constraints
     }
 
     fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
-    }
-
-    /// Transactionally modify the molecule-level constraint tree.
-    ///
-    /// The callback operates on a private candidate. The candidate replaces this molecule only if
-    /// all constraint references and stereo wrapper domains remain valid.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first molecule integrity error introduced by the callback. On error, this
-    /// molecule is unchanged.
-    pub fn try_modify_constraints(
-        &mut self,
-        f: impl FnOnce(&mut Constraints),
-    ) -> Result<(), MoleculeIntegrityError> {
-        self.try_modify_checked(|candidate| f(candidate.constraints_mut()))
-    }
-
-    fn try_modify_checked(
-        &mut self,
-        f: impl FnOnce(&mut Self),
-    ) -> Result<(), MoleculeIntegrityError> {
-        let mut candidate = self.clone();
-        f(&mut candidate);
-        candidate.check_integrity()?;
-        *self = candidate;
-        Ok(())
     }
 
     pub fn is_empty(&self) -> bool {
