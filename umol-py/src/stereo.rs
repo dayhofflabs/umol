@@ -1690,7 +1690,6 @@ mod tests {
 
     use super::*;
     use crate::boolean::{BooleanForm, BooleanLike};
-    use crate::error::InvalidStructureError;
 
     #[rstest]
     #[case(vec![0, 1, 2, 3])]
@@ -3429,45 +3428,31 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_set_configuration() {
+    #[case::tetrahedral(
+        StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
+        GraphIrStereoConfigurationForm::Kinded(
+            GraphIrStereoKind::Tetrahedral,
+            GraphIrStereoCoset::Lit(1),
+        )
+    )]
+    #[case::incompatible_site_kind(
+        StereoConfigurationLike::CisTrans(CisTransConfiguration::Z),
+        GraphIrStereoConfigurationForm::Kinded(
+            GraphIrStereoKind::CisTrans,
+            GraphIrStereoCoset::Lit(0),
+        )
+    )]
+    fn test_stereo_atom_view_set_configuration(
+        #[case] configuration: StereoConfigurationLike,
+        #[case] expected: GraphIrStereoConfigurationForm,
+    ) {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
                 id: GraphIrStereoAtomId(0),
             };
-            view.set_configuration(
-                py,
-                StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
-            )
-            .unwrap();
-            assert_eq!(
-                view.configuration(py).unwrap().to_rust(py),
-                GraphIrStereoConfigurationForm::Kinded(
-                    GraphIrStereoKind::Tetrahedral,
-                    GraphIrStereoCoset::Lit(1)
-                )
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_stereo_atom_view_set_configuration_integrity_error() {
-        Python::attach(|py| {
-            let view = StereoAtomView {
-                owner: stereo_atom_molecule(py),
-                id: GraphIrStereoAtomId(0),
-            };
-            let before = view.configuration(py).unwrap().to_rust(py);
-
-            let error = view
-                .set_configuration(
-                    py,
-                    StereoConfigurationLike::CisTrans(CisTransConfiguration::Z),
-                )
-                .unwrap_err();
-
-            assert!(error.is_instance_of::<InvalidStructureError>(py));
-            assert_eq!(view.configuration(py).unwrap().to_rust(py), before);
+            view.set_configuration(py, configuration).unwrap();
+            assert_eq!(view.configuration(py).unwrap().to_rust(py), expected);
         });
     }
 

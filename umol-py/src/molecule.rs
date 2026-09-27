@@ -990,10 +990,10 @@ mod tests {
 
     #[rstest]
     #[case::syntax(" C", "ParseError", "Leading whitespace")]
-    #[case::model_conversion(
+    #[case::incomplete_stereo(
         "C[S@]C",
-        "ModelConversionError",
-        "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral"
+        "ContradictionError",
+        "stereo inconsistency: stereo atom StereoAtomId(0) cannot be realized"
     )]
     #[case::underdetermined("*", "UnderdeterminedError", "resolution underdetermined")]
     fn test_molecule_from_smiles_error(

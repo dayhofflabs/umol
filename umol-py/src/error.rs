@@ -346,9 +346,16 @@ mod tests {
         "Leading whitespace"
     )]
     #[case::model_conversion(
-        ingest_smiles("C[S@]C").unwrap_err(),
+        GraphSmilesInputError::ModelConversion(
+            RaiseError::TetrahedralLigandCount { atom: 1, count: 2 },
+        ),
         "ModelConversionError",
-        "stereo atom 0: stereo frame has 2 ligands, expected 4 for Tetrahedral"
+        "tetrahedral stereo at atom 1 with 2 ligands, expected 3 or 4 ligands"
+    )]
+    #[case::incomplete_stereo(
+        ingest_smiles("C[S@]C").unwrap_err(),
+        "ContradictionError",
+        "stereo inconsistency: stereo atom StereoAtomId(0) cannot be realized"
     )]
     #[case::contradiction(
         GraphSmilesInputError::Contradiction(GraphResolveContradiction::Aromaticity(
