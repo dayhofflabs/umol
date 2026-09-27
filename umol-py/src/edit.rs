@@ -316,7 +316,12 @@ impl ConstraintEdit {
 }
 
 type ReadonlyBondAddition = ((HandleLike, HandleLike), Readonly<BondForm>);
-type ReadonlyDativeBondRemoval = (HandleLike, Vec<HandleLike>, Readonly<DativeBondForm>);
+type ReadonlyDativeBondRemoval = (
+    HandleLike,
+    Vec<HandleLike>,
+    HandleLike,
+    Readonly<DativeBondForm>,
+);
 type ReadonlyAromaticSystemRemoval = (HandleLike, Vec<HandleLike>, Readonly<AromaticSystemForm>);
 type ReadonlyMulticenterBondRemoval = (HandleLike, Vec<HandleLike>, Readonly<MulticenterBondForm>);
 type ReadonlyNoncovalentBondRemoval = (
@@ -339,13 +344,13 @@ type ReadonlyStereoBondRemoval = (
 );
 
 type BondAddition = ((HandleLike, HandleLike), Py<BondForm>);
-type DativeBondAddition = (Vec<HandleLike>, Py<DativeBondForm>);
+type DativeBondAddition = (Vec<HandleLike>, HandleLike, Py<DativeBondForm>);
 type AromaticSystemAddition = (Vec<HandleLike>, Py<AromaticSystemForm>);
 type MulticenterBondAddition = (Vec<HandleLike>, Py<MulticenterBondForm>);
 type NoncovalentBondAddition = ((HandleLike, HandleLike), Py<NoncovalentBondForm>);
 type StereoAtomAddition = (HandleLike, Vec<StereoLigandInput>, Py<StereoAtomForm>);
 type StereoBondAddition = (HandleLike, Vec<StereoLigandInput>, Py<StereoBondForm>);
-type DativeBondRemoval = (HandleLike, Vec<HandleLike>, Py<DativeBondForm>);
+type DativeBondRemoval = (HandleLike, Vec<HandleLike>, HandleLike, Py<DativeBondForm>);
 type AromaticSystemRemoval = (HandleLike, Vec<HandleLike>, Py<AromaticSystemForm>);
 type MulticenterBondRemoval = (HandleLike, Vec<HandleLike>, Py<MulticenterBondForm>);
 type NoncovalentBondRemoval = (
@@ -456,11 +461,22 @@ pub enum Edit {
         change: Py<BondFieldChange>,
     },
     AddDativeBond {
-        atoms: Vec<HandleLike>,
+        donors: Vec<HandleLike>,
+        acceptor: HandleLike,
         attributes: Readonly<DativeBondForm>,
     },
     RemoveDativeBonds {
         removes: Vec<ReadonlyDativeBondRemoval>,
+    },
+    ReplaceDativeBondDonors {
+        id: HandleLike,
+        old: Vec<HandleLike>,
+        new: Vec<HandleLike>,
+    },
+    ReplaceDativeBondAcceptor {
+        id: HandleLike,
+        old: HandleLike,
+        new: HandleLike,
     },
     ModifyDativeBondField {
         id: HandleLike,
@@ -473,6 +489,11 @@ pub enum Edit {
     RemoveAromaticSystems {
         removes: Vec<ReadonlyAromaticSystemRemoval>,
     },
+    ReplaceAromaticSystemAtoms {
+        id: HandleLike,
+        old: Vec<HandleLike>,
+        new: Vec<HandleLike>,
+    },
     ModifyAromaticSystemField {
         id: HandleLike,
         change: Py<AromaticSystemFieldChange>,
@@ -484,6 +505,11 @@ pub enum Edit {
     RemoveMulticenterBonds {
         removes: Vec<ReadonlyMulticenterBondRemoval>,
     },
+    ReplaceMulticenterBondAtoms {
+        id: HandleLike,
+        old: Vec<HandleLike>,
+        new: Vec<HandleLike>,
+    },
     ModifyMulticenterBondField {
         id: HandleLike,
         change: Py<MulticenterBondFieldChange>,
@@ -494,6 +520,11 @@ pub enum Edit {
     },
     RemoveNoncovalentBonds {
         removes: Vec<ReadonlyNoncovalentBondRemoval>,
+    },
+    ReplaceNoncovalentBondAtoms {
+        id: HandleLike,
+        old: (HandleLike, HandleLike),
+        new: (HandleLike, HandleLike),
     },
     ModifyNoncovalentBondField {
         id: HandleLike,
@@ -507,6 +538,16 @@ pub enum Edit {
     RemoveStereoAtoms {
         removes: ReadonlyStereoAtomRemovals,
     },
+    ReplaceStereoAtomSite {
+        id: HandleLike,
+        old: HandleLike,
+        new: HandleLike,
+    },
+    ReplaceStereoAtomLigands {
+        id: HandleLike,
+        old: Vec<StereoLigandInput>,
+        new: Vec<StereoLigandInput>,
+    },
     ModifyStereoAtomField {
         id: HandleLike,
         change: Py<StereoAtomFieldChange>,
@@ -518,6 +559,16 @@ pub enum Edit {
     },
     RemoveStereoBonds {
         removes: ReadonlyStereoBondRemovals,
+    },
+    ReplaceStereoBondSite {
+        id: HandleLike,
+        old: HandleLike,
+        new: HandleLike,
+    },
+    ReplaceStereoBondLigands {
+        id: HandleLike,
+        old: Vec<StereoLigandInput>,
+        new: Vec<StereoLigandInput>,
     },
     ModifyStereoBondField {
         id: HandleLike,
@@ -599,29 +650,52 @@ impl Edit {
             Self::RemoveTopology { .. } => ("RemoveTopology", &["atoms", "bonds"]),
             Self::ModifyAtomField { .. } => ("ModifyAtomField", &["id", "change"]),
             Self::ModifyBondField { .. } => ("ModifyBondField", &["id", "change"]),
-            Self::AddDativeBond { .. } => ("AddDativeBond", &["atoms", "attributes"]),
+            Self::AddDativeBond { .. } => ("AddDativeBond", &["donors", "acceptor", "attributes"]),
             Self::RemoveDativeBonds { .. } => ("RemoveDativeBonds", &["removes"]),
+            Self::ReplaceDativeBondDonors { .. } => {
+                ("ReplaceDativeBondDonors", &["id", "old", "new"])
+            }
+            Self::ReplaceDativeBondAcceptor { .. } => {
+                ("ReplaceDativeBondAcceptor", &["id", "old", "new"])
+            }
             Self::ModifyDativeBondField { .. } => ("ModifyDativeBondField", &["id", "change"]),
             Self::AddAromaticSystem { .. } => ("AddAromaticSystem", &["atoms", "attributes"]),
             Self::RemoveAromaticSystems { .. } => ("RemoveAromaticSystems", &["removes"]),
+            Self::ReplaceAromaticSystemAtoms { .. } => {
+                ("ReplaceAromaticSystemAtoms", &["id", "old", "new"])
+            }
             Self::ModifyAromaticSystemField { .. } => {
                 ("ModifyAromaticSystemField", &["id", "change"])
             }
             Self::AddMulticenterBond { .. } => ("AddMulticenterBond", &["atoms", "attributes"]),
             Self::RemoveMulticenterBonds { .. } => ("RemoveMulticenterBonds", &["removes"]),
+            Self::ReplaceMulticenterBondAtoms { .. } => {
+                ("ReplaceMulticenterBondAtoms", &["id", "old", "new"])
+            }
             Self::ModifyMulticenterBondField { .. } => {
                 ("ModifyMulticenterBondField", &["id", "change"])
             }
             Self::AddNoncovalentBond { .. } => ("AddNoncovalentBond", &["atoms", "attributes"]),
             Self::RemoveNoncovalentBonds { .. } => ("RemoveNoncovalentBonds", &["removes"]),
+            Self::ReplaceNoncovalentBondAtoms { .. } => {
+                ("ReplaceNoncovalentBondAtoms", &["id", "old", "new"])
+            }
             Self::ModifyNoncovalentBondField { .. } => {
                 ("ModifyNoncovalentBondField", &["id", "change"])
             }
             Self::AddStereoAtom { .. } => ("AddStereoAtom", &["site", "ligands", "attributes"]),
             Self::RemoveStereoAtoms { .. } => ("RemoveStereoAtoms", &["removes"]),
+            Self::ReplaceStereoAtomSite { .. } => ("ReplaceStereoAtomSite", &["id", "old", "new"]),
+            Self::ReplaceStereoAtomLigands { .. } => {
+                ("ReplaceStereoAtomLigands", &["id", "old", "new"])
+            }
             Self::ModifyStereoAtomField { .. } => ("ModifyStereoAtomField", &["id", "change"]),
             Self::AddStereoBond { .. } => ("AddStereoBond", &["site", "ligands", "attributes"]),
             Self::RemoveStereoBonds { .. } => ("RemoveStereoBonds", &["removes"]),
+            Self::ReplaceStereoBondSite { .. } => ("ReplaceStereoBondSite", &["id", "old", "new"]),
+            Self::ReplaceStereoBondLigands { .. } => {
+                ("ReplaceStereoBondLigands", &["id", "old", "new"])
+            }
             Self::ModifyStereoBondField { .. } => ("ModifyStereoBondField", &["id", "change"]),
             Self::ModifyAtomConstraint { .. } => ("ModifyAtomConstraint", &["id", "old", "new"]),
             Self::ModifyBondConstraint { .. } => ("ModifyBondConstraint", &["id", "old", "new"]),
@@ -689,22 +763,42 @@ impl Edit {
                 id: HandleLike::from_bond_handle(id),
                 change: into_py_variant(py, BondFieldChange::from_rust(py, change)?)?,
             },
-            GraphIrEdit::AddDativeBond { atoms, attributes } => Self::AddDativeBond {
-                atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
+            GraphIrEdit::AddDativeBond {
+                donors,
+                acceptor,
+                attributes,
+            } => Self::AddDativeBond {
+                donors: donors.iter().map(HandleLike::from_atom_handle).collect(),
+                acceptor: HandleLike::from_atom_handle(acceptor),
                 attributes: Readonly::<DativeBondForm>::from_rust(py, attributes)?,
             },
             GraphIrEdit::RemoveDativeBonds { removes } => Self::RemoveDativeBonds {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, attributes)| {
+                    .map(|(id, donors, acceptor, attributes)| {
                         Ok((
                             HandleLike::from_dative_bond_handle(id),
-                            atoms.iter().map(HandleLike::from_atom_handle).collect(),
+                            donors.iter().map(HandleLike::from_atom_handle).collect(),
+                            HandleLike::from_atom_handle(acceptor),
                             Readonly::<DativeBondForm>::from_rust(py, attributes)?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
             },
+            GraphIrEdit::ReplaceDativeBondDonors { id, old, new } => {
+                Self::ReplaceDativeBondDonors {
+                    id: HandleLike::from_dative_bond_handle(id),
+                    old: old.iter().map(HandleLike::from_atom_handle).collect(),
+                    new: new.iter().map(HandleLike::from_atom_handle).collect(),
+                }
+            }
+            GraphIrEdit::ReplaceDativeBondAcceptor { id, old, new } => {
+                Self::ReplaceDativeBondAcceptor {
+                    id: HandleLike::from_dative_bond_handle(id),
+                    old: HandleLike::from_atom_handle(old),
+                    new: HandleLike::from_atom_handle(new),
+                }
+            }
             GraphIrEdit::ModifyDativeBondField { id, change } => Self::ModifyDativeBondField {
                 id: HandleLike::from_dative_bond_handle(id),
                 change: into_py_variant(py, DativeBondFieldChange::from_rust(py, change)?)?,
@@ -725,6 +819,13 @@ impl Edit {
                     })
                     .collect::<PyResult<_>>()?,
             },
+            GraphIrEdit::ReplaceAromaticSystemAtoms { id, old, new } => {
+                Self::ReplaceAromaticSystemAtoms {
+                    id: HandleLike::from_aromatic_system_handle(id),
+                    old: old.iter().map(HandleLike::from_atom_handle).collect(),
+                    new: new.iter().map(HandleLike::from_atom_handle).collect(),
+                }
+            }
             GraphIrEdit::ModifyAromaticSystemField { id, change } => {
                 Self::ModifyAromaticSystemField {
                     id: HandleLike::from_aromatic_system_handle(id),
@@ -747,6 +848,13 @@ impl Edit {
                     })
                     .collect::<PyResult<_>>()?,
             },
+            GraphIrEdit::ReplaceMulticenterBondAtoms { id, old, new } => {
+                Self::ReplaceMulticenterBondAtoms {
+                    id: HandleLike::from_multicenter_bond_handle(id),
+                    old: old.iter().map(HandleLike::from_atom_handle).collect(),
+                    new: new.iter().map(HandleLike::from_atom_handle).collect(),
+                }
+            }
             GraphIrEdit::ModifyMulticenterBondField { id, change } => {
                 Self::ModifyMulticenterBondField {
                     id: HandleLike::from_multicenter_bond_handle(id),
@@ -778,6 +886,19 @@ impl Edit {
                     })
                     .collect::<PyResult<_>>()?,
             },
+            GraphIrEdit::ReplaceNoncovalentBondAtoms { id, old, new } => {
+                Self::ReplaceNoncovalentBondAtoms {
+                    id: HandleLike::from_noncovalent_bond_handle(id),
+                    old: (
+                        HandleLike::from_atom_handle(&old[0]),
+                        HandleLike::from_atom_handle(&old[1]),
+                    ),
+                    new: (
+                        HandleLike::from_atom_handle(&new[0]),
+                        HandleLike::from_atom_handle(&new[1]),
+                    ),
+                }
+            }
             GraphIrEdit::ModifyNoncovalentBondField { id, change } => {
                 Self::ModifyNoncovalentBondField {
                     id: HandleLike::from_noncovalent_bond_handle(id),
@@ -827,6 +948,34 @@ impl Edit {
                         .collect::<PyResult<_>>()?,
                 ),
             },
+            GraphIrEdit::ReplaceStereoAtomSite { id, old, new } => Self::ReplaceStereoAtomSite {
+                id: HandleLike::from_stereo_atom_handle(id),
+                old: HandleLike::from_atom_handle(old),
+                new: HandleLike::from_atom_handle(new),
+            },
+            GraphIrEdit::ReplaceStereoAtomLigands { id, old, new } => {
+                Self::ReplaceStereoAtomLigands {
+                    id: HandleLike::from_stereo_atom_handle(id),
+                    old: old
+                        .iter()
+                        .map(|(atom, kind)| {
+                            (
+                                HandleLike::from_atom_handle(atom),
+                                StereoLigandKind::from_rust(*kind),
+                            )
+                        })
+                        .collect(),
+                    new: new
+                        .iter()
+                        .map(|(atom, kind)| {
+                            (
+                                HandleLike::from_atom_handle(atom),
+                                StereoLigandKind::from_rust(*kind),
+                            )
+                        })
+                        .collect(),
+                }
+            }
             GraphIrEdit::ModifyStereoAtomField { id, change } => Self::ModifyStereoAtomField {
                 id: HandleLike::from_stereo_atom_handle(id),
                 change: into_py_variant(py, StereoAtomFieldChange::from_rust(py, change)?)?,
@@ -871,6 +1020,34 @@ impl Edit {
                         .collect::<PyResult<_>>()?,
                 ),
             },
+            GraphIrEdit::ReplaceStereoBondSite { id, old, new } => Self::ReplaceStereoBondSite {
+                id: HandleLike::from_stereo_bond_handle(id),
+                old: HandleLike::from_bond_handle(old),
+                new: HandleLike::from_bond_handle(new),
+            },
+            GraphIrEdit::ReplaceStereoBondLigands { id, old, new } => {
+                Self::ReplaceStereoBondLigands {
+                    id: HandleLike::from_stereo_bond_handle(id),
+                    old: old
+                        .iter()
+                        .map(|(atom, kind)| {
+                            (
+                                HandleLike::from_atom_handle(atom),
+                                StereoLigandKind::from_rust(*kind),
+                            )
+                        })
+                        .collect(),
+                    new: new
+                        .iter()
+                        .map(|(atom, kind)| {
+                            (
+                                HandleLike::from_atom_handle(atom),
+                                StereoLigandKind::from_rust(*kind),
+                            )
+                        })
+                        .collect(),
+                }
+            }
             GraphIrEdit::ModifyStereoBondField { id, change } => Self::ModifyStereoBondField {
                 id: HandleLike::from_stereo_bond_handle(id),
                 change: into_py_variant(py, StereoBondFieldChange::from_rust(py, change)?)?,
@@ -1050,22 +1227,42 @@ impl Edit {
                 id: id.to_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::AddDativeBond { atoms, attributes } => GraphIrEdit::AddDativeBond {
-                atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
+            Self::AddDativeBond {
+                donors,
+                acceptor,
+                attributes,
+            } => GraphIrEdit::AddDativeBond {
+                donors: donors.iter().map(HandleLike::to_atom_handle).collect(),
+                acceptor: acceptor.to_atom_handle(),
                 attributes: attributes.to_rust(py),
             },
             Self::RemoveDativeBonds { removes } => GraphIrEdit::RemoveDativeBonds {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, attributes)| {
+                    .map(|(id, donors, acceptor, attributes)| {
                         (
                             id.to_dative_bond_handle(),
-                            atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                            donors.iter().map(HandleLike::to_atom_handle).collect(),
+                            acceptor.to_atom_handle(),
                             attributes.to_rust(py),
                         )
                     })
                     .collect(),
             },
+            Self::ReplaceDativeBondDonors { id, old, new } => {
+                GraphIrEdit::ReplaceDativeBondDonors {
+                    id: id.to_dative_bond_handle(),
+                    old: old.iter().map(HandleLike::to_atom_handle).collect(),
+                    new: new.iter().map(HandleLike::to_atom_handle).collect(),
+                }
+            }
+            Self::ReplaceDativeBondAcceptor { id, old, new } => {
+                GraphIrEdit::ReplaceDativeBondAcceptor {
+                    id: id.to_dative_bond_handle(),
+                    old: old.to_atom_handle(),
+                    new: new.to_atom_handle(),
+                }
+            }
             Self::ModifyDativeBondField { id, change } => GraphIrEdit::ModifyDativeBondField {
                 id: id.to_dative_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
@@ -1086,6 +1283,13 @@ impl Edit {
                     })
                     .collect(),
             },
+            Self::ReplaceAromaticSystemAtoms { id, old, new } => {
+                GraphIrEdit::ReplaceAromaticSystemAtoms {
+                    id: id.to_aromatic_system_handle(),
+                    old: old.iter().map(HandleLike::to_atom_handle).collect(),
+                    new: new.iter().map(HandleLike::to_atom_handle).collect(),
+                }
+            }
             Self::ModifyAromaticSystemField { id, change } => {
                 GraphIrEdit::ModifyAromaticSystemField {
                     id: id.to_aromatic_system_handle(),
@@ -1108,6 +1312,13 @@ impl Edit {
                     })
                     .collect(),
             },
+            Self::ReplaceMulticenterBondAtoms { id, old, new } => {
+                GraphIrEdit::ReplaceMulticenterBondAtoms {
+                    id: id.to_multicenter_bond_handle(),
+                    old: old.iter().map(HandleLike::to_atom_handle).collect(),
+                    new: new.iter().map(HandleLike::to_atom_handle).collect(),
+                }
+            }
             Self::ModifyMulticenterBondField { id, change } => {
                 GraphIrEdit::ModifyMulticenterBondField {
                     id: id.to_multicenter_bond_handle(),
@@ -1130,6 +1341,13 @@ impl Edit {
                     })
                     .collect(),
             },
+            Self::ReplaceNoncovalentBondAtoms { id, old, new } => {
+                GraphIrEdit::ReplaceNoncovalentBondAtoms {
+                    id: id.to_noncovalent_bond_handle(),
+                    old: [old.0.to_atom_handle(), old.1.to_atom_handle()],
+                    new: [new.0.to_atom_handle(), new.1.to_atom_handle()],
+                }
+            }
             Self::ModifyNoncovalentBondField { id, change } => {
                 GraphIrEdit::ModifyNoncovalentBondField {
                     id: id.to_noncovalent_bond_handle(),
@@ -1165,6 +1383,24 @@ impl Edit {
                     })
                     .collect(),
             },
+            Self::ReplaceStereoAtomSite { id, old, new } => GraphIrEdit::ReplaceStereoAtomSite {
+                id: id.to_stereo_atom_handle(),
+                old: old.to_atom_handle(),
+                new: new.to_atom_handle(),
+            },
+            Self::ReplaceStereoAtomLigands { id, old, new } => {
+                GraphIrEdit::ReplaceStereoAtomLigands {
+                    id: id.to_stereo_atom_handle(),
+                    old: old
+                        .iter()
+                        .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                        .collect(),
+                    new: new
+                        .iter()
+                        .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                        .collect(),
+                }
+            }
             Self::ModifyStereoAtomField { id, change } => GraphIrEdit::ModifyStereoAtomField {
                 id: id.to_stereo_atom_handle(),
                 change: change.bind(py).borrow().to_rust(py),
@@ -1198,6 +1434,24 @@ impl Edit {
                     })
                     .collect(),
             },
+            Self::ReplaceStereoBondSite { id, old, new } => GraphIrEdit::ReplaceStereoBondSite {
+                id: id.to_stereo_bond_handle(),
+                old: old.to_bond_handle(),
+                new: new.to_bond_handle(),
+            },
+            Self::ReplaceStereoBondLigands { id, old, new } => {
+                GraphIrEdit::ReplaceStereoBondLigands {
+                    id: id.to_stereo_bond_handle(),
+                    old: old
+                        .iter()
+                        .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                        .collect(),
+                    new: new
+                        .iter()
+                        .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
+                        .collect(),
+                }
+            }
             Self::ModifyStereoBondField { id, change } => GraphIrEdit::ModifyStereoBondField {
                 id: id.to_stereo_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
@@ -1449,20 +1703,23 @@ impl Edits {
     fn add_dative_bond(
         &mut self,
         py: Python<'_>,
-        atoms: Vec<HandleLike>,
+        donors: Vec<HandleLike>,
+        acceptor: HandleLike,
         attributes: Py<DativeBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::DativeBond(self.0.add_dative_bond(
-            atoms.iter().map(HandleLike::to_atom_handle).collect(),
+            donors.iter().map(HandleLike::to_atom_handle).collect(),
+            acceptor.to_atom_handle(),
             attributes.bind(py).borrow().to_rust().clone(),
         )))
     }
 
     fn add_dative_bonds(&mut self, py: Python<'_>, bonds: Vec<DativeBondAddition>) -> Vec<New> {
         self.0
-            .add_dative_bonds(bonds.into_iter().map(|(atoms, attributes)| {
+            .add_dative_bonds(bonds.into_iter().map(|(donors, acceptor, attributes)| {
                 (
-                    atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                    donors.iter().map(HandleLike::to_atom_handle).collect(),
+                    acceptor.to_atom_handle(),
                     attributes.bind(py).borrow().to_rust().clone(),
                 )
             }))
@@ -1647,10 +1904,11 @@ impl Edits {
         self.0.remove_dative_bonds(
             removes
                 .into_iter()
-                .map(|(id, atoms, attributes)| {
+                .map(|(id, donors, acceptor, attributes)| {
                     (
                         id.to_dative_bond_handle(),
-                        atoms.iter().map(HandleLike::to_atom_handle).collect(),
+                        donors.iter().map(HandleLike::to_atom_handle).collect(),
+                        acceptor.to_atom_handle(),
                         attributes.bind(py).borrow().to_rust().clone(),
                     )
                 })
@@ -2036,14 +2294,26 @@ mod tests {
             },
         },
         GraphIrEdit::AddDativeBond {
-            atoms: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
+            donors: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
+            acceptor: GraphIrAtomHandle::New(0),
             attributes: GraphIrDativeBondForm::default(),
         },
         GraphIrEdit::RemoveDativeBonds { removes: vec![(
             GraphIrDativeBondHandle::New(0),
-            vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
+            vec![],
+            GraphIrAtomHandle::Id(GraphIrAtomId(0)),
             GraphIrDativeBondForm::default(),
         )] },
+        GraphIrEdit::ReplaceDativeBondDonors {
+            id: GraphIrDativeBondHandle::New(0),
+            old: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
+            new: vec![GraphIrAtomHandle::New(1), GraphIrAtomHandle::Id(GraphIrAtomId(2))],
+        },
+        GraphIrEdit::ReplaceDativeBondAcceptor {
+            id: GraphIrDativeBondHandle::New(0),
+            old: GraphIrAtomHandle::Id(GraphIrAtomId(0)),
+            new: GraphIrAtomHandle::New(1),
+        },
         GraphIrEdit::ModifyDativeBondField {
             id: GraphIrDativeBondHandle::Id(GraphIrDativeBondId(0)),
             change: GraphIrDativeBondFieldChange::Order {
@@ -2060,6 +2330,11 @@ mod tests {
             vec![GraphIrAtomHandle::New(0)],
             GraphIrAromaticSystemForm::default(),
         )] },
+        GraphIrEdit::ReplaceAromaticSystemAtoms {
+            id: GraphIrAromaticSystemHandle::New(0),
+            old: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
+            new: vec![GraphIrAtomHandle::New(1), GraphIrAtomHandle::Id(GraphIrAtomId(2))],
+        },
         GraphIrEdit::ModifyAromaticSystemField {
             id: GraphIrAromaticSystemHandle::New(0),
             change: GraphIrAromaticSystemFieldChange::Charge {
@@ -2076,6 +2351,11 @@ mod tests {
             vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
             GraphIrMulticenterBondForm::default(),
         )] },
+        GraphIrEdit::ReplaceMulticenterBondAtoms {
+            id: GraphIrMulticenterBondHandle::New(0),
+            old: vec![GraphIrAtomHandle::Id(GraphIrAtomId(0))],
+            new: vec![GraphIrAtomHandle::New(1), GraphIrAtomHandle::Id(GraphIrAtomId(2))],
+        },
         GraphIrEdit::ModifyMulticenterBondField {
             id: GraphIrMulticenterBondHandle::Id(GraphIrMulticenterBondId(0)),
             change: GraphIrMulticenterBondFieldChange::Charge {
@@ -2092,6 +2372,11 @@ mod tests {
             [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
             GraphIrNoncovalentBondForm::default(),
         )] },
+        GraphIrEdit::ReplaceNoncovalentBondAtoms {
+            id: GraphIrNoncovalentBondHandle::New(0),
+            old: [GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrAtomHandle::New(0)],
+            new: [GraphIrAtomHandle::New(1), GraphIrAtomHandle::Id(GraphIrAtomId(2))],
+        },
         GraphIrEdit::ModifyNoncovalentBondField {
             id: GraphIrNoncovalentBondHandle::Id(GraphIrNoncovalentBondId(0)),
             change: GraphIrNoncovalentBondFieldChange::Kind {
@@ -2110,6 +2395,16 @@ mod tests {
             vec![(GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrStereoLigandKind::ImplicitHydrogen)],
             GraphIrStereoAtomForm::new(GraphIrStereoKind::Tetrahedral, 1_u32),
         )] },
+        GraphIrEdit::ReplaceStereoAtomSite {
+            id: GraphIrStereoAtomHandle::New(0),
+            old: GraphIrAtomHandle::Id(GraphIrAtomId(0)),
+            new: GraphIrAtomHandle::New(1),
+        },
+        GraphIrEdit::ReplaceStereoAtomLigands {
+            id: GraphIrStereoAtomHandle::New(0),
+            old: vec![(GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrStereoLigandKind::Atom)],
+            new: vec![(GraphIrAtomHandle::New(1), GraphIrStereoLigandKind::ImplicitHydrogen), (GraphIrAtomHandle::New(0), GraphIrStereoLigandKind::LonePair)],
+        },
         GraphIrEdit::ModifyStereoAtomField {
             id: GraphIrStereoAtomHandle::New(0),
             change: GraphIrStereoAtomFieldChange::Configuration {
@@ -2128,6 +2423,16 @@ mod tests {
             vec![(GraphIrAtomHandle::New(0), GraphIrStereoLigandKind::Atom)],
             GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, 1_u32),
         )] },
+        GraphIrEdit::ReplaceStereoBondSite {
+            id: GraphIrStereoBondHandle::New(0),
+            old: GraphIrBondHandle::Id(GraphIrBondId(0)),
+            new: GraphIrBondHandle::New(1),
+        },
+        GraphIrEdit::ReplaceStereoBondLigands {
+            id: GraphIrStereoBondHandle::New(0),
+            old: vec![(GraphIrAtomHandle::Id(GraphIrAtomId(0)), GraphIrStereoLigandKind::Atom)],
+            new: vec![(GraphIrAtomHandle::New(1), GraphIrStereoLigandKind::ImplicitHydrogen), (GraphIrAtomHandle::New(0), GraphIrStereoLigandKind::LonePair)],
+        },
         GraphIrEdit::ModifyStereoBondField {
             id: GraphIrStereoBondHandle::Id(GraphIrStereoBondId(0)),
             change: GraphIrStereoBondFieldChange::Configuration {

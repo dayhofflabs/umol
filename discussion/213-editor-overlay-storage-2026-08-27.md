@@ -28,8 +28,9 @@ Python assignment and read-only molecule constraint access are implemented.
 S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
 S3a1–S3b are implemented. Replacement Deltas are withdrawn; the nine replacement
 Edits and their Undo variants remain. S3c/S3d record the selective removal and
-retained reaction integration; both are verified. S3e's Python Edit
-migration remains. Graph-core mutation and restoration are complete in
+retained reaction integration; both are verified. S3e completes the Python Edit
+migration. S3f's graph-core bulk additions are next. Graph-core mutation and
+restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -79,7 +80,8 @@ incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-cons
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e remains.
+approved reaction names, semantics, and dative-factor migration. S3e is complete;
+S3f is next.
 
 ## Editor and transaction API
 
@@ -4175,15 +4177,33 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Graph-ir all-target Clippy with proptest and rustdoc pass with warnings denied.
   Nightly formatting, removal searches, and full diff review pass. Replacement
   Edit/Undo and Edit DSL source files are unchanged by this removal. Workspace
-  and Python checks remain for S3e.
+  and Python verification is recorded under S3e.
 
-- **S3e** (`umol-py::edit`; breaking, red→green)
+- **S3e — implemented** (`umol-py::edit`; breaking, red→green)
   Expose the nine replacement Edit variants with the Rust payloads and failure
   behavior; migrate exhaustive matches and add parity cases.
   Migrate existing dative Edit variants and Edits addition/removal methods to
   separate donor/acceptor inputs, including plural entry tuples. Delta bindings
   retain their existing vocabulary. Do not add unrelated API coverage.
   This closes the enum migration. [dep: S3a, S3b, S3d]
+
+  **Implemented — 2026-09-26.** Python Edit exposes all nine Replace variants,
+  ordered with their entity kinds and carrying id/old/new as in Rust. Dative
+  additions take donors, acceptor, attributes; removals take
+  (id, donors, acceptor, attributes). The singular/plural Edits methods use those
+  same factors. Binding conversion preserves Id/New handles, list order,
+  noncovalent pairs, and ligand kinds. Rust execution supplies the existing
+  precondition errors.
+
+  **Checked — 2026-09-26.** The rebuilt Python 3.13 extension passes 1,638 tests
+  (two skipped); the Rust binding suite passes 1,637 tests (two ignored).
+  All nine variants have conversion, Python construction/rendering, application,
+  old-value mismatch, and rollback coverage; a same-batch New-handle case checks
+  dative additions and both replacements together. Workspace all-target checking,
+  binding all-target Clippy, and binding rustdoc pass with warnings denied for
+  lint and documentation. Nightly formatting and full diff review pass.
+  Full-workspace tests and Rust 1.87 remain at S9b.
+
 - **S3f** (`umol-graph-core::graph`; additive, green) Implement Graph::add_nodes,
   add_edges, and add with the exact interfaces under Storage delegation. Return
   owned, allocation-free exact-size id iterators; mutation is eager and the

@@ -119,6 +119,51 @@ def test_edit(edit):
         edit.extra = None
 
 
+@pytest.mark.parametrize(
+    ("variant", "old", "new"),
+    [
+        (Edit.ReplaceDativeBondDonors, [0], [New(0), 2]),
+        (Edit.ReplaceDativeBondAcceptor, 0, New(0)),
+        (Edit.ReplaceAromaticSystemAtoms, [0, 1], [New(0), 1, 2]),
+        (Edit.ReplaceMulticenterBondAtoms, [0, 1], [New(0), 1, 2]),
+        (Edit.ReplaceNoncovalentBondAtoms, (0, 1), (New(0), 2)),
+        (Edit.ReplaceStereoAtomSite, 0, New(0)),
+        (
+            Edit.ReplaceStereoAtomLigands,
+            [(0, StereoLigandKind.Atom)],
+            [(New(0), StereoLigandKind.ImplicitHydrogen),
+             (1, StereoLigandKind.LonePair)],
+        ),
+        (Edit.ReplaceStereoBondSite, 0, New(0)),
+        (
+            Edit.ReplaceStereoBondLigands,
+            [(0, StereoLigandKind.Atom)],
+            [(New(0), StereoLigandKind.ImplicitHydrogen),
+             (1, StereoLigandKind.LonePair)],
+        ),
+    ],
+)
+def test_edit_replace(variant, old, new):
+    edit = variant(id=New(0), old=old, new=new)
+    edits = Edits([edit])
+
+    assert (edit.id, edit.old, edit.new) == (New(0), old, new)
+    assert repr(edit) == (
+        f"Edit.{variant.__name__}(id=New(0), old={old!r}, new={new!r})"
+    )
+    assert list(edits) == [edit]
+    assert Edits.parse(edits.render()) == edits
+    for field in ("id", "old", "new"):
+        with pytest.raises(AttributeError):
+            setattr(edit, field, None)
+
+
+@pytest.mark.parametrize("atoms", [(), (0,), (0, 1, 2)])
+def test_edit_replace_noncovalent_bond_atoms_error(atoms):
+    with pytest.raises(ValueError):
+        Edit.ReplaceNoncovalentBondAtoms(id=0, old=(0, 1), new=atoms)
+
+
 def test_edit_form_fields():
     atom = AtomForm.parse("C")
     bond = BondForm.parse("1")
@@ -132,7 +177,7 @@ def test_edit_form_fields():
     edits = [
         Edit.AddAtoms(atoms=[atom]),
         Edit.AddBonds(bonds=[((0, New(0)), bond)]),
-        Edit.AddDativeBond(atoms=[0, New(0)], attributes=dative),
+        Edit.AddDativeBond(donors=[0], acceptor=New(0), attributes=dative),
         Edit.AddAromaticSystem(atoms=[0, New(0)], attributes=aromatic),
         Edit.AddMulticenterBond(atoms=[0, New(0)], attributes=multicenter),
         Edit.AddNoncovalentBond(
@@ -198,7 +243,7 @@ def test_edit_removal_form_fields():
     stereo_bond = StereoBondForm.parse("Ct0")
 
     edits = [
-        Edit.RemoveDativeBonds(removes=[(0, [0, 1], dative)]),
+        Edit.RemoveDativeBonds(removes=[(0, [0], 1, dative)]),
         Edit.RemoveAromaticSystems(removes=[(0, [0, 1], aromatic)]),
         Edit.RemoveMulticenterBonds(removes=[(0, [0, 1], multicenter)]),
         Edit.RemoveNoncovalentBonds(removes=[(0, (0, 1), noncovalent)]),
@@ -333,7 +378,7 @@ def test_edits_add():
     handles = (
         edits.add_atom(attributes=atom),
         edits.add_bond(0, New(0), attributes=bond),
-        edits.add_dative_bond([0, New(0)], attributes=dative),
+        edits.add_dative_bond([0], New(0), attributes=dative),
         edits.add_aromatic_system([0, New(0)], attributes=aromatic),
         edits.add_multicenter_bond([0, New(0)], attributes=multicenter),
         edits.add_noncovalent_bond((0, New(0)), attributes=noncovalent),
@@ -345,7 +390,7 @@ def test_edits_add():
     assert list(edits) == [
         Edit.AddAtoms(atoms=[atom]),
         Edit.AddBonds(bonds=[((0, New(0)), bond)]),
-        Edit.AddDativeBond(atoms=[0, New(0)], attributes=dative),
+        Edit.AddDativeBond(donors=[0], acceptor=New(0), attributes=dative),
         Edit.AddAromaticSystem(atoms=[0, New(0)], attributes=aromatic),
         Edit.AddMulticenterBond(atoms=[0, New(0)], attributes=multicenter),
         Edit.AddNoncovalentBond(atoms=(0, New(0)), attributes=noncovalent),
@@ -370,7 +415,7 @@ def test_edits_add_many():
         [((0, New(0)), bond), ((New(0), New(1)), bond)]
     )
     dative_handles = edits.add_dative_bonds(
-        [([0, New(0)], dative), ([New(0), New(1)], dative)]
+        [([0], New(0), dative), ([New(0)], New(1), dative)]
     )
     aromatic_handles = edits.add_aromatic_systems(
         [([0, New(0)], aromatic), ([New(0), New(1)], aromatic)]
@@ -407,8 +452,8 @@ def test_edits_add_many():
         Edit.AddBonds(
             bonds=[((0, New(0)), bond), ((New(0), New(1)), bond)]
         ),
-        Edit.AddDativeBond(atoms=[0, New(0)], attributes=dative),
-        Edit.AddDativeBond(atoms=[New(0), New(1)], attributes=dative),
+        Edit.AddDativeBond(donors=[0], acceptor=New(0), attributes=dative),
+        Edit.AddDativeBond(donors=[New(0)], acceptor=New(1), attributes=dative),
         Edit.AddAromaticSystem(atoms=[0, New(0)], attributes=aromatic),
         Edit.AddAromaticSystem(atoms=[New(0), New(1)], attributes=aromatic),
         Edit.AddMulticenterBond(atoms=[0, New(0)], attributes=multicenter),
@@ -440,7 +485,7 @@ def test_edits_constructor_counters():
             Edit.AddBonds(
                 bonds=[((0, 1), bond), ((1, 0), bond)]
             ),
-            Edit.AddDativeBond(atoms=[0, 1], attributes=dative),
+            Edit.AddDativeBond(donors=[0], acceptor=1, attributes=dative),
             Edit.AddAromaticSystem(atoms=[0, 1], attributes=aromatic),
             Edit.AddMulticenterBond(atoms=[0, 1], attributes=multicenter),
             Edit.AddNoncovalentBond(atoms=(0, 1), attributes=noncovalent),
@@ -451,7 +496,7 @@ def test_edits_constructor_counters():
 
     assert edits.add_atom(atom) == New(2)
     assert edits.add_bond(0, 1, bond) == New(2)
-    assert edits.add_dative_bond([0, 1], dative) == New(1)
+    assert edits.add_dative_bond([0], 1, dative) == New(1)
     assert edits.add_aromatic_system([0, 1], aromatic) == New(1)
     assert edits.add_multicenter_bond([0, 1], multicenter) == New(1)
     assert edits.add_noncovalent_bond((0, 1), noncovalent) == New(1)
@@ -470,7 +515,7 @@ def test_edits_remove():
     ligands = [(New(0), StereoLigandKind.Atom)]
 
     edits.remove_topology([0, New(0)], [1, New(0)])
-    edits.remove_dative_bonds([(New(0), [0, New(0)], dative)])
+    edits.remove_dative_bonds([(New(0), [0], New(0), dative)])
     edits.remove_aromatic_systems([(0, [0, New(0)], aromatic)])
     edits.remove_multicenter_bonds([(New(0), [0, New(0)], multicenter)])
     edits.remove_noncovalent_bonds([(0, (0, New(0)), noncovalent)])
@@ -482,7 +527,7 @@ def test_edits_remove():
     assert list(edits) == [
         Edit.RemoveTopology(atoms=[0, New(0)], bonds=[1, New(0)]),
         Edit.RemoveDativeBonds(
-            removes=[(New(0), [0, New(0)], dative)]
+            removes=[(New(0), [0], New(0), dative)]
         ),
         Edit.RemoveAromaticSystems(
             removes=[(0, [0, New(0)], aromatic)]
@@ -701,7 +746,7 @@ def test_edits_parse_render():
     edits = Edits()
     atom = edits.add_atom(AtomForm.parse("C#h3"))
     bond = edits.add_bond(0, atom, BondForm(1))
-    edits.add_dative_bond([0, atom], DativeBondForm(1))
+    edits.add_dative_bond([0], atom, DativeBondForm(1))
     edits.add_aromatic_system([0, atom], AromaticSystemForm([1, 1]))
     edits.add_multicenter_bond([0, atom], MulticenterBondForm([1, 1]))
     edits.add_noncovalent_bond(

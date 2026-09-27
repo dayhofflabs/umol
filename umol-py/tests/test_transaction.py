@@ -7,6 +7,7 @@ from umol import (
     ConsumedError,
     Correspondence,
     DativeBondForm,
+    Edit,
     Edits,
     Element,
     Molecule,
@@ -16,9 +17,11 @@ from umol import (
     NoncovalentBondKind,
     StereoAtomForm,
     StereoBondForm,
+    StereoConfigurationForm,
     StereoLigand,
     StereoLigandKind,
     TetrahedralConfiguration,
+    TransactionError,
 )
 
 
@@ -62,6 +65,102 @@ def rich_molecule():
 
 def add_carbon_edits():
     return Edits.parse('[{:atom {:add "C"}}]')
+
+
+@pytest.fixture(params=[
+    pytest.param((
+        Edit.ReplaceDativeBondDonors(id=0, old=[0], new=[2, 3]),
+        {"dative_bonds": [([0], 1, DativeBondForm(1))]},
+        {"dative_bonds": [([2, 3], 1, DativeBondForm(1))]},
+    ), id="dative_bond_donors"),
+    pytest.param((
+        Edit.ReplaceDativeBondAcceptor(id=0, old=1, new=2),
+        {"dative_bonds": [([0], 1, DativeBondForm(1))]},
+        {"dative_bonds": [([0], 2, DativeBondForm(1))]},
+    ), id="dative_bond_acceptor"),
+    pytest.param((
+        Edit.ReplaceAromaticSystemAtoms(id=0, old=[0, 1], new=[2, 3]),
+        {"aromatic_systems": [([0, 1], AromaticSystemForm([1, 2]))]},
+        {"aromatic_systems": [([2, 3], AromaticSystemForm([1, 2]))]},
+    ), id="aromatic_system_atoms"),
+    pytest.param((
+        Edit.ReplaceMulticenterBondAtoms(id=0, old=[0, 1], new=[2, 3]),
+        {"multicenter_bonds": [([0, 1], MulticenterBondForm([1, 2]))]},
+        {"multicenter_bonds": [([2, 3], MulticenterBondForm([1, 2]))]},
+    ), id="multicenter_bond_atoms"),
+    pytest.param((
+        Edit.ReplaceNoncovalentBondAtoms(id=0, old=(0, 1), new=(2, 3)),
+        {"noncovalent_bonds": [
+            ((0, 1), NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))
+        ]},
+        {"noncovalent_bonds": [
+            ((2, 3), NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))
+        ]},
+    ), id="noncovalent_bond_atoms"),
+    pytest.param((
+        Edit.ReplaceStereoAtomSite(id=0, old=0, new=2),
+        {"stereo_atoms": [(
+            0, [StereoLigand(1, StereoLigandKind.Atom)],
+            StereoAtomForm(StereoConfigurationForm.Undetermined()),
+        )]},
+        {"stereo_atoms": [(
+            2, [StereoLigand(1, StereoLigandKind.Atom)],
+            StereoAtomForm(StereoConfigurationForm.Undetermined()),
+        )]},
+    ), id="stereo_atom_site"),
+    pytest.param((
+        Edit.ReplaceStereoAtomLigands(
+            id=0, old=[(3, StereoLigandKind.Atom)], new=[(4, StereoLigandKind.Atom)],
+        ),
+        {"stereo_atoms": [(
+            0, [StereoLigand(3, StereoLigandKind.Atom)],
+            StereoAtomForm(StereoConfigurationForm.Undetermined()),
+        )]},
+        {"stereo_atoms": [(
+            0, [StereoLigand(4, StereoLigandKind.Atom)],
+            StereoAtomForm(StereoConfigurationForm.Undetermined()),
+        )]},
+    ), id="stereo_atom_ligands"),
+    pytest.param((
+        Edit.ReplaceStereoBondSite(id=0, old=0, new=1),
+        {"stereo_bonds": [(
+            0, [StereoLigand(i, StereoLigandKind.Atom) for i in [3, 4, 5, 6]],
+            StereoBondForm.parse("Ct0"),
+        )]},
+        {"stereo_bonds": [(
+            1, [StereoLigand(i, StereoLigandKind.Atom) for i in [3, 4, 5, 6]],
+            StereoBondForm.parse("Ct0"),
+        )]},
+    ), id="stereo_bond_site"),
+    pytest.param((
+        Edit.ReplaceStereoBondLigands(
+            id=0,
+            old=[(i, StereoLigandKind.Atom) for i in [3, 4, 5, 6]],
+            new=[(0, StereoLigandKind.ImplicitHydrogen)]
+                + [(i, StereoLigandKind.Atom) for i in [4, 5, 6]],
+        ),
+        {"stereo_bonds": [(
+            0, [StereoLigand(i, StereoLigandKind.Atom) for i in [3, 4, 5, 6]],
+            StereoBondForm.parse("Ct0"),
+        )]},
+        {"stereo_bonds": [(
+            0, [StereoLigand(0, StereoLigandKind.ImplicitHydrogen)]
+                + [StereoLigand(i, StereoLigandKind.Atom) for i in [4, 5, 6]],
+            StereoBondForm.parse("Ct0"),
+        )]},
+    ), id="stereo_bond_ligands"),
+])
+def replacement_case(request):
+    edit, original, changed = request.param
+    atoms = [AtomForm.parse("C") for _ in range(7)]
+    bonds = [(a, b, BondForm(1)) for a, b in [
+        (0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (1, 6), (2, 5), (2, 6), (1, 2),
+    ]]
+    return (
+        Molecule.from_entries(atoms, bonds=bonds, **original),
+        Molecule.from_entries(atoms, bonds=bonds, **changed),
+        edit,
+    )
 
 
 def test_molecule_editor_tracked_snapshot_and_build():
@@ -142,6 +241,59 @@ def test_transaction_consumed(method):
     with pytest.raises(ConsumedError, match="^Transaction has been consumed$") as error:
         getattr(alias, method)(editor)
     assert type(error.value) is ConsumedError
+
+
+def test_molecule_apply_replace(replacement_case):
+    original, expected, edit = replacement_case
+
+    assert original.apply(Edits([edit])) == expected
+
+
+def test_molecule_editor_transact_replace(replacement_case):
+    original, expected, edit = replacement_case
+    editor = original.edit()
+
+    transaction = editor.transact(Edits([edit]))
+
+    assert editor.snapshot() == expected
+    transaction.rollback(editor)
+    assert editor.build() == original
+
+
+def test_molecule_editor_transact_replace_new_handles():
+    original = Molecule.parse('{:atoms ["C" "N"]}')
+    editor = original.edit()
+    edits = Edits()
+    atom = edits.add_atom(AtomForm.parse("O"))
+    dative = edits.add_dative_bond([0], 1, DativeBondForm(1))
+    edits.append(Edit.ReplaceDativeBondDonors(id=dative, old=[0], new=[atom]))
+    edits.append(Edit.ReplaceDativeBondAcceptor(id=dative, old=1, new=0))
+    expected = Molecule.from_entries(
+        [AtomForm.parse("C"), AtomForm.parse("N"), AtomForm.parse("O")],
+        dative_bonds=[([2], 0, DativeBondForm(1))],
+    )
+
+    transaction = editor.transact(edits)
+
+    assert editor.snapshot() == expected
+    transaction.rollback(editor)
+    assert editor.build() == original
+
+
+@pytest.mark.parametrize("method", ["apply", "transact"])
+def test_molecule_editor_replace_error(replacement_case, method):
+    original, _, edit = replacement_case
+    editor = original.edit()
+    mismatch = type(edit)(id=edit.id, old=edit.new, new=edit.old)
+    edits = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("N")]), mismatch])
+
+    with pytest.raises(
+        TransactionError,
+        match="^precondition failed: old state does not match current$",
+    ):
+        getattr(editor, method)(edits)
+    if method == "transact":
+        assert editor.build() == original
 
 
 def test_molecule_editor_tracked_remove():
