@@ -23,6 +23,7 @@ types. All eight entity-view families expose private ids and attribute borrows
 through matching accessors. Stereo views use the owning sets for site and ligand
 access; their ligand frames are borrowed. S2j is complete for all eight entity
 families: matching local getters and editor-only structural mutation are implemented.
+S2k1's in-place DSL conversion is implemented; S2k2 remains unimplemented.
 S2f is cancelled; the
 remaining S2 work is unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -72,7 +73,7 @@ approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
-complete; S2k is the next subitem.
+complete. S2k1 is implemented; S2k2 is the next subitem.
 
 ## Editor and transaction API
 
@@ -3667,18 +3668,68 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   breaking rewire, red→green). [dep: S2i, S2j]
 
   Signature and field-access migrations required to compile are already complete
-  in S2i/S2j. This subitem changes the remaining callback-based mutation flows
-  and finishes green.
+  in S2i/S2j. S2k1 covers DSL conversion; S2k2 covers charge delocalization and
+  remaining Rust callers. Each finishes green.
+
+- **S2k1 — completed 2026-09-26 — In-place DSL defaults conversion** (`dsl::{molecule,atom,bond,
+  aromatic,multicenter,stereo}`; internal rewire, green).
+  [dep: S2i, S2j]
 
   **Semantics.** MoleculeDsl conversion uses one editor for the full pass and
   publishes once. Preserve FromIr's intentional source copy, defaults, metadata,
   ordering, and faithful conversion; IntoIr does not gain an extra recovery copy.
+  Replace the eight entity conversion calls in each direction as follows:
+
+  | Entity | FromIr | IntoIr |
+  | --- | --- | --- |
+  | Atom | atom::lower_atom | atom::raise_atom |
+  | Localized bond | bond::lower_bond | bond::raise_bond |
+  | Aromatic system | aromatic::lower_aromatic_system | aromatic::raise_aromatic_system |
+  | Multicenter bond | multicenter::lower_multicenter_bond | multicenter::raise_multicenter_bond |
+  | Dative bond, noncovalent bond, stereo atom, stereo bond | No mutation | No mutation |
+
+  The first four kinds use the existing in-place functions through
+  attributes_mut(). The other four conversions leave their forms unchanged, so
+  remove those molecule-level passes entirely. No temporary entity DSL wrapper,
+  per-form clone, or mem::take is needed. Keep the standalone entity DSL
+  conversions; reduce StereoAtomDsl::from_ir's two consecutive clones to one.
+
+  **Interfaces and nomenclature.** Keep MoleculeDsl's FromIr/IntoIr signatures.
+  Make lower_aromatic_system, raise_aromatic_system, lower_multicenter_bond, and
+  raise_multicenter_bond pub(crate), matching the existing atom/bond functions.
+  Their signatures remain (&mut Form, &Defaults) -> (). Add no functions or
+  public API. Use current edit/build; S6 owns consuming edit/finish. Current
+  edit(&self) still copies storage into the editor; this item removes the
+  conversion roundtrips without claiming to remove that lifecycle cost.
+
+  **Verification.** DSL defaults and roundtrips, source preservation, metadata
+  behavior, exact entity and frame order, unchanged forms for the four no-op
+  kinds, and standalone stereo conversion. Preserve property laws and malformed
+  attribute cases; do not introduce correctness requirements for manipulated
+  inputs.
+
+  **Verification results — 2026-09-26.** The four lower/raise pairs now mutate
+  editor attributes directly; the eight no-op passes are removed.
+  StereoAtomDsl::from_ir clones once. DSL unit tests pass (2,418 cases), as do
+  all 11 molecule serialization/defaults properties. Added independent expected
+  values cover both conversion directions across all entity kinds and source
+  preservation. Nightly formatting and diff checks pass; full diff reviewed.
+  Strict Clippy is blocked only by the now-unused crate-private
+  modify_aromatic_systems, modify_multicenter_bonds, modify_stereo_atoms, and
+  modify_stereo_bonds methods. Their removal remains in S2m; no lint allowances
+  were added. S2k2 code is unchanged.
+
+- **S2k2 — Charge delocalization and remaining Rust callers**
+  (`umol-graph::ops::transform::delocalize_charge`, Rust tests/fixtures;
+  internal rewire, green). [dep: S2k1]
+
+  **Semantics.**
   Charge delocalization uses one editor for its complete mutation pass, preserving
   its planning checks and Infallible result. Direct attribute writes replace
   whole-form callback roundtrips.
 
-  **Interfaces and nomenclature.** Keep existing FromIr/IntoIr signatures and
-  DelocalizeCharge's current transformation signature. Its rename to
+  **Interfaces and nomenclature.** Keep DelocalizeCharge's current transformation
+  signature. Its rename to
   ChargeDelocalizer is tracked separately in
   [166](166-molecule-ops-2026-07-27.md#charge-delocalization-transformer-name).
   Use the approved mutable
@@ -3691,8 +3742,8 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   reference/frame integrity cases at constructor/editor publication
   boundaries, including deliberately invalid inputs and order preservation.
 
-  **Verification.** DSL roundtrips, preserved source semantics, charge
-  delocalization outcomes, and tests/fixtures that used callbacks. Preserve
+  **Verification.** Charge delocalization outcomes and tests/fixtures that used
+  callbacks. Preserve
   property laws and invalid-input cases; do not make fixtures valid merely to
   avoid the newly explicit first-use failure behavior.
 

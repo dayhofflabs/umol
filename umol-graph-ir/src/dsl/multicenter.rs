@@ -437,7 +437,10 @@ fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm)
     }
 }
 
-fn raise_multicenter_bond(bond: &mut MulticenterBondForm, cfg: &MulticenterBondDefaults) {
+pub(crate) fn raise_multicenter_bond(
+    bond: &mut MulticenterBondForm,
+    cfg: &MulticenterBondDefaults,
+) {
     let MulticenterBondForm {
         charge,
         unpaired_electrons,
@@ -454,7 +457,10 @@ fn raise_multicenter_bond(bond: &mut MulticenterBondForm, cfg: &MulticenterBondD
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-fn lower_multicenter_bond(bond: &mut MulticenterBondForm, cfg: &MulticenterBondDefaults) {
+pub(crate) fn lower_multicenter_bond(
+    bond: &mut MulticenterBondForm,
+    cfg: &MulticenterBondDefaults,
+) {
     let MulticenterBondForm {
         charge,
         unpaired_electrons,

@@ -18,9 +18,9 @@ use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
-use super::aromatic::AromaticSystemDsl;
-use super::atom::AtomDsl;
-use super::bond::{expand_bond_keyword, BondDsl};
+use super::aromatic::{lower_aromatic_system, raise_aromatic_system, AromaticSystemDsl};
+use super::atom::{lower_atom, raise_atom, AtomDsl};
+use super::bond::{expand_bond_keyword, lower_bond, raise_bond, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl};
 use super::dative::{expand_dative_keyword, DativeBondDsl};
@@ -30,7 +30,7 @@ use super::edn_utils::{
 };
 use super::error::ParseError;
 use super::metadata::{Metadata, MetadataError, MoleculeMetadata};
-use super::multicenter::MulticenterBondDsl;
+use super::multicenter::{lower_multicenter_bond, raise_multicenter_bond, MulticenterBondDsl};
 use super::namespace::{MoleculeContext, Namespace};
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{
@@ -578,28 +578,37 @@ impl FromIr<Molecule> for MoleculeDsl {
     type Context = MoleculeDefaults;
 
     fn from_ir(molecule: &Molecule, context: &Self::Context) -> Self {
-        let mut dsl_molecule = molecule.clone();
-        dsl_molecule.modify_atoms(|atom| AtomDsl::from_ir(&atom, &context.atom).0);
-        dsl_molecule.modify_bonds(|bond| BondDsl::from_ir(&bond, &context.bond).0);
-        dsl_molecule.modify_aromatic_systems(|system| {
-            AromaticSystemDsl::from_ir(&system, &context.aromatic_system).0
-        });
-        dsl_molecule.modify_multicenter_bonds(|bond| {
-            MulticenterBondDsl::from_ir(&bond, &context.multicenter_bond).0
-        });
-        dsl_molecule
-            .modify_dative_bonds(|bond| DativeBondDsl::from_ir(&bond, &context.dative_bond).0);
-        dsl_molecule.modify_noncovalent_bonds(|bond| {
-            NoncovalentBondDsl::from_ir(&bond, &context.noncovalent_bond).0
-        });
-        dsl_molecule.modify_stereo_atoms(|stereo_atom| {
-            StereoAtomDsl::from_ir(&stereo_atom, &context.stereo_atom).0
-        });
-        dsl_molecule.modify_stereo_bonds(|stereo_bond| {
-            StereoBondDsl::from_ir(&stereo_bond, &context.stereo_bond).0
-        });
+        let mut editor = molecule.edit();
+        for index in 0..editor.atom_count() {
+            lower_atom(
+                editor.atom_mut(AtomId(index as u32)).attributes_mut(),
+                &context.atom,
+            );
+        }
+        for index in 0..editor.bond_count() {
+            lower_bond(
+                editor.bond_mut(BondId(index as u32)).attributes_mut(),
+                &context.bond,
+            );
+        }
+        for index in 0..editor.aromatic_system_count() {
+            lower_aromatic_system(
+                editor
+                    .aromatic_system_mut(AromaticSystemId(index as u32))
+                    .attributes_mut(),
+                &context.aromatic_system,
+            );
+        }
+        for index in 0..editor.multicenter_bond_count() {
+            lower_multicenter_bond(
+                editor
+                    .multicenter_bond_mut(MulticenterBondId(index as u32))
+                    .attributes_mut(),
+                &context.multicenter_bond,
+            );
+        }
         MoleculeDsl {
-            molecule: dsl_molecule,
+            molecule: editor.build(),
             metadata: MoleculeMetadata::default(),
         }
     }
@@ -609,26 +618,37 @@ impl IntoIr<Molecule> for MoleculeDsl {
     type Context = MoleculeDefaults;
 
     fn into_ir(self, context: &Self::Context) -> Molecule {
-        let mut molecule = self.molecule;
-        molecule.modify_atoms(|atom| AtomDsl(atom).into_ir(&context.atom));
-        molecule.modify_bonds(|bond| BondDsl(bond).into_ir(&context.bond));
-        molecule.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ir(&context.dative_bond));
-        molecule.modify_aromatic_systems(|system| {
-            AromaticSystemDsl(system).into_ir(&context.aromatic_system)
-        });
-        molecule.modify_multicenter_bonds(|bond| {
-            MulticenterBondDsl(bond).into_ir(&context.multicenter_bond)
-        });
-        molecule.modify_noncovalent_bonds(|bond| {
-            NoncovalentBondDsl(bond).into_ir(&context.noncovalent_bond)
-        });
-        molecule.modify_stereo_atoms(|stereo_atom| {
-            StereoAtomDsl(stereo_atom).into_ir(&context.stereo_atom)
-        });
-        molecule.modify_stereo_bonds(|stereo_bond| {
-            StereoBondDsl(stereo_bond).into_ir(&context.stereo_bond)
-        });
-        molecule
+        let mut editor = self.molecule.edit();
+        drop(self);
+        for index in 0..editor.atom_count() {
+            raise_atom(
+                editor.atom_mut(AtomId(index as u32)).attributes_mut(),
+                &context.atom,
+            );
+        }
+        for index in 0..editor.bond_count() {
+            raise_bond(
+                editor.bond_mut(BondId(index as u32)).attributes_mut(),
+                &context.bond,
+            );
+        }
+        for index in 0..editor.aromatic_system_count() {
+            raise_aromatic_system(
+                editor
+                    .aromatic_system_mut(AromaticSystemId(index as u32))
+                    .attributes_mut(),
+                &context.aromatic_system,
+            );
+        }
+        for index in 0..editor.multicenter_bond_count() {
+            raise_multicenter_bond(
+                editor
+                    .multicenter_bond_mut(MulticenterBondId(index as u32))
+                    .attributes_mut(),
+                &context.multicenter_bond,
+            );
+        }
+        editor.build()
     }
 }
 

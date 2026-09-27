@@ -6,6 +6,7 @@ use umol_chem::element::Element;
 use umol_edn::read_string;
 
 use super::*;
+use crate::dsl::config::NumDefault;
 use crate::ir::atom::AtomForm;
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{BondConstraintForm, Constraint, MoleculeConstraint};
@@ -361,11 +362,7 @@ fn test_molecule_dsl_from_str_error() {
     assert!(matches!(err, ParseError::EdnParse(_)));
 }
 
-// Round-trip direction: DSL → IR (raise) → DSL (lower) is the
-// identity. IR → DSL → IR isn't, since raising `Undetermined`
-// fields to `Lit(0)` is one-way under grounding defaults. One case per
-// overlay kind so the `into_ir` / `from_ir` per-relation loops are
-// exercised.
+// Raising then lowering these omitted-default forms preserves the DSL molecule.
 #[rustfmt::skip]
 #[rstest]
 #[case::atoms_bonds(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##)]
@@ -382,6 +379,75 @@ fn test_molecule_dsl_dsl_to_ir_to_dsl_roundtrip(#[case] source: &str) {
     let raised = dsl.clone().into_ir(&cfg);
     let lowered = MoleculeDsl::from_ir(&raised, &cfg);
     assert_eq!(lowered.molecule(), dsl.molecule());
+}
+
+#[rstest]
+fn test_molecule_dsl_from_ir(populated_molecule_dsl: MoleculeDsl) {
+    let expected = populated_molecule_dsl.into_parts().0;
+    let mut source = expected.clone();
+    for index in 0..source.atoms().count() {
+        source
+            .atom_mut(AtomId(index as u32))
+            .attributes_mut()
+            .charge = NumForm::Lit(0);
+    }
+    for index in 0..source.bonds().count() {
+        source
+            .bond_mut(BondId(index as u32))
+            .attributes_mut()
+            .charge = NumForm::Lit(0);
+    }
+    source
+        .aromatic_system_mut(AromaticSystemId(0))
+        .attributes_mut()
+        .charge = NumForm::Lit(0);
+    source
+        .multicenter_bond_mut(MulticenterBondId(0))
+        .attributes_mut()
+        .charge = NumForm::Lit(0);
+    let before = source.clone();
+    let mut defaults = MoleculeDefaults::new();
+    defaults.atom.charge = NumDefault::Zero;
+    defaults.bond.charge = NumDefault::Zero;
+    defaults.aromatic_system.charge = NumDefault::Zero;
+    defaults.multicenter_bond.charge = NumDefault::Zero;
+
+    let actual = MoleculeDsl::from_ir(&source, &defaults);
+
+    assert_eq!(actual.into_parts(), (expected, MoleculeMetadata::default()));
+    assert_eq!(source, before);
+}
+
+#[rstest]
+fn test_molecule_dsl_into_ir(populated_molecule_dsl: MoleculeDsl) {
+    let mut expected = populated_molecule_dsl.molecule().clone();
+    for index in 0..expected.atoms().count() {
+        expected
+            .atom_mut(AtomId(index as u32))
+            .attributes_mut()
+            .charge = NumForm::Lit(0);
+    }
+    for index in 0..expected.bonds().count() {
+        expected
+            .bond_mut(BondId(index as u32))
+            .attributes_mut()
+            .charge = NumForm::Lit(0);
+    }
+    expected
+        .aromatic_system_mut(AromaticSystemId(0))
+        .attributes_mut()
+        .charge = NumForm::Lit(0);
+    expected
+        .multicenter_bond_mut(MulticenterBondId(0))
+        .attributes_mut()
+        .charge = NumForm::Lit(0);
+    let mut defaults = MoleculeDefaults::new();
+    defaults.atom.charge = NumDefault::Zero;
+    defaults.bond.charge = NumDefault::Zero;
+    defaults.aromatic_system.charge = NumDefault::Zero;
+    defaults.multicenter_bond.charge = NumDefault::Zero;
+
+    assert_eq!(populated_molecule_dsl.into_ir(&defaults), expected);
 }
 
 #[rstest]

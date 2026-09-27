@@ -149,7 +149,6 @@ impl FromIr<StereoAtomForm> for StereoAtomDsl {
     type Context = StereoAtomDefaults;
 
     fn from_ir(form: &StereoAtomForm, _context: &Self::Context) -> Self {
-        let form = form.clone();
         StereoAtomDsl(form.clone())
     }
 }

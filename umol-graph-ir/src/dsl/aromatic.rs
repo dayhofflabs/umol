@@ -433,7 +433,7 @@ fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm)
     }
 }
 
-fn raise_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
+pub(crate) fn raise_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
     let AromaticSystemForm {
         charge,
         unpaired_electrons,
@@ -450,7 +450,7 @@ fn raise_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDe
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-fn lower_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
+pub(crate) fn lower_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDefaults) {
     let AromaticSystemForm {
         charge,
         unpaired_electrons,
