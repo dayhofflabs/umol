@@ -161,9 +161,12 @@ type StereoBondRemovalInput = (
 
 /// Ordered standalone surface form for a batch of host-specific molecule edits.
 ///
-/// Parsing validates each checked update and recorded removal shape before the batch can be
-/// converted to [`Edits`]. Full entity definitions and recorded removal state are interpreted under
+/// Parsing requires each edit's fields and decodes their types. For `:modify`, `:expect` and
+/// `:update` must address matching fields and constraints. The parser does not compare old values
+/// with a molecule. Full entity definitions and recorded removal state are interpreted under
 /// [`MoleculeDefaults`]; partial `:expect` and `:update` values are not defaulted.
+/// `:replace-*` edits carry old and new atom, donor, acceptor, site, or ligand values in
+/// `[handle {:expect old :update new}]`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EditsDsl {
     inputs: Vec<EditInput>,
@@ -266,7 +269,17 @@ enum EditInput {
         acceptor: AtomHandle,
         attributes: DativeBondDsl,
     },
-    DativeBondsRemove(Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondDsl)>),
+    DativeBondsRemove(Vec<(DativeBondHandle, Vec<AtomHandle>, AtomHandle, DativeBondDsl)>),
+    DativeBondReplaceDonors {
+        id: DativeBondHandle,
+        old: Vec<AtomHandle>,
+        new: Vec<AtomHandle>,
+    },
+    DativeBondReplaceAcceptor {
+        id: DativeBondHandle,
+        old: AtomHandle,
+        new: AtomHandle,
+    },
     DativeBondModify {
         id: DativeBondHandle,
         expect: DativeBondUpdate,
@@ -277,6 +290,11 @@ enum EditInput {
         attributes: AromaticSystemDsl,
     },
     AromaticSystemsRemove(Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemDsl)>),
+    AromaticSystemReplaceAtoms {
+        id: AromaticSystemHandle,
+        old: Vec<AtomHandle>,
+        new: Vec<AtomHandle>,
+    },
     AromaticSystemModify {
         id: AromaticSystemHandle,
         expect: AromaticSystemUpdate,
@@ -287,6 +305,11 @@ enum EditInput {
         attributes: MulticenterBondDsl,
     },
     MulticenterBondsRemove(Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondDsl)>),
+    MulticenterBondReplaceAtoms {
+        id: MulticenterBondHandle,
+        old: Vec<AtomHandle>,
+        new: Vec<AtomHandle>,
+    },
     MulticenterBondModify {
         id: MulticenterBondHandle,
         expect: MulticenterBondUpdate,
@@ -297,6 +320,11 @@ enum EditInput {
         attributes: NoncovalentBondDsl,
     },
     NoncovalentBondsRemove(Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondDsl)>),
+    NoncovalentBondReplaceAtoms {
+        id: NoncovalentBondHandle,
+        old: [AtomHandle; 2],
+        new: [AtomHandle; 2],
+    },
     NoncovalentBondModify {
         id: NoncovalentBondHandle,
         expect: NoncovalentBondUpdate,
@@ -308,6 +336,16 @@ enum EditInput {
         attributes: StereoAtomDsl,
     },
     StereoAtomsRemove(Vec<StereoAtomRemovalInput>),
+    StereoAtomReplaceSite {
+        id: StereoAtomHandle,
+        old: AtomHandle,
+        new: AtomHandle,
+    },
+    StereoAtomReplaceLigands {
+        id: StereoAtomHandle,
+        old: Vec<StereoLigandInput>,
+        new: Vec<StereoLigandInput>,
+    },
     StereoAtomModify {
         id: StereoAtomHandle,
         expect: StereoAtomUpdate,
@@ -319,6 +357,16 @@ enum EditInput {
         attributes: StereoBondDsl,
     },
     StereoBondsRemove(Vec<StereoBondRemovalInput>),
+    StereoBondReplaceSite {
+        id: StereoBondHandle,
+        old: BondHandle,
+        new: BondHandle,
+    },
+    StereoBondReplaceLigands {
+        id: StereoBondHandle,
+        old: Vec<StereoLigandInput>,
+        new: Vec<StereoLigandInput>,
+    },
     StereoBondModify {
         id: StereoBondHandle,
         expect: StereoBondUpdate,
@@ -365,7 +413,7 @@ impl ToEdn for EditInput {
             Self::AtomModify { id, expect, update } => edit_map(
                 "atom",
                 "modify",
-                checked_update_edn(
+                render_expect_update(
                     id.to_edn(),
                     AtomUpdateDsl(expect.clone()).to_edn(),
                     AtomUpdateDsl(update.clone()).to_edn(),
@@ -383,7 +431,7 @@ impl ToEdn for EditInput {
             Self::BondModify { id, expect, update } => edit_map(
                 "bond",
                 "modify",
-                checked_update_edn(
+                render_expect_update(
                     id.to_edn(),
                     BondUpdateDsl(expect.clone()).to_edn(),
                     BondUpdateDsl(update.clone()).to_edn(),
@@ -404,10 +452,7 @@ impl ToEdn for EditInput {
                 Edn::Vector(
                     removes
                         .iter()
-                        .map(|(id, atoms, attributes)| {
-                            let (acceptor, donors) = atoms
-                                .split_last()
-                                .expect("dative edit always has an acceptor");
+                        .map(|(id, donors, acceptor, attributes)| {
                             dative_entry_edn(
                                 Some(id.to_edn()),
                                 donors,
@@ -419,10 +464,20 @@ impl ToEdn for EditInput {
                         .into(),
                 ),
             ),
+            Self::DativeBondReplaceDonors { id, old, new } => edit_map(
+                "dative-bond",
+                "replace-donors",
+                render_expect_update(id.to_edn(), old.to_edn(), new.to_edn()),
+            ),
+            Self::DativeBondReplaceAcceptor { id, old, new } => edit_map(
+                "dative-bond",
+                "replace-acceptor",
+                render_expect_update(id.to_edn(), old.to_edn(), new.to_edn()),
+            ),
             Self::DativeBondModify { id, expect, update } => edit_map(
                 "dative-bond",
                 "modify",
-                checked_update_edn(
+                render_expect_update(
                     id.to_edn(),
                     DativeBondUpdateDsl(expect.clone()).to_edn(),
                     DativeBondUpdateDsl(update.clone()).to_edn(),
@@ -446,10 +501,15 @@ impl ToEdn for EditInput {
                         .into(),
                 ),
             ),
+            Self::AromaticSystemReplaceAtoms { id, old, new } => edit_map(
+                "aromatic-system",
+                "replace-atoms",
+                render_expect_update(id.to_edn(), old.to_edn(), new.to_edn()),
+            ),
             Self::AromaticSystemModify { id, expect, update } => edit_map(
                 "aromatic-system",
                 "modify",
-                checked_update_edn(
+                render_expect_update(
                     id.to_edn(),
                     AromaticSystemUpdateDsl(expect.clone()).to_edn(),
                     AromaticSystemUpdateDsl(update.clone()).to_edn(),
@@ -473,10 +533,15 @@ impl ToEdn for EditInput {
                         .into(),
                 ),
             ),
+            Self::MulticenterBondReplaceAtoms { id, old, new } => edit_map(
+                "multicenter-bond",
+                "replace-atoms",
+                render_expect_update(id.to_edn(), old.to_edn(), new.to_edn()),
+            ),
             Self::MulticenterBondModify { id, expect, update } => edit_map(
                 "multicenter-bond",
                 "modify",
-                checked_update_edn(
+                render_expect_update(
                     id.to_edn(),
                     MulticenterBondUpdateDsl(expect.clone()).to_edn(),
                     MulticenterBondUpdateDsl(update.clone()).to_edn(),
@@ -500,10 +565,15 @@ impl ToEdn for EditInput {
                         .into(),
                 ),
             ),
+            Self::NoncovalentBondReplaceAtoms { id, old, new } => edit_map(
+                "noncovalent-bond",
+                "replace-atoms",
+                render_expect_update(id.to_edn(), old.to_edn(), new.to_edn()),
+            ),
             Self::NoncovalentBondModify { id, expect, update } => edit_map(
                 "noncovalent-bond",
                 "modify",
-                checked_update_edn(
+                render_expect_update(
                     id.to_edn(),
                     NoncovalentBondUpdateDsl(expect.clone()).to_edn(),
                     NoncovalentBondUpdateDsl(update.clone()).to_edn(),
@@ -536,10 +606,24 @@ impl ToEdn for EditInput {
                         .into(),
                 ),
             ),
+            Self::StereoAtomReplaceSite { id, old, new } => edit_map(
+                "stereo-atom",
+                "replace-site",
+                render_expect_update(id.to_edn(), old.to_edn(), new.to_edn()),
+            ),
+            Self::StereoAtomReplaceLigands { id, old, new } => edit_map(
+                "stereo-atom",
+                "replace-ligands",
+                render_expect_update(
+                    id.to_edn(),
+                    render_stereo_ligands(old),
+                    render_stereo_ligands(new),
+                ),
+            ),
             Self::StereoAtomModify { id, expect, update } => edit_map(
                 "stereo-atom",
                 "modify",
-                checked_update_edn(
+                render_expect_update(
                     id.to_edn(),
                     StereoAtomUpdateDsl(expect.clone()).to_edn(),
                     StereoAtomUpdateDsl(update.clone()).to_edn(),
@@ -572,10 +656,24 @@ impl ToEdn for EditInput {
                         .into(),
                 ),
             ),
+            Self::StereoBondReplaceSite { id, old, new } => edit_map(
+                "stereo-bond",
+                "replace-site",
+                render_expect_update(id.to_edn(), old.to_edn(), new.to_edn()),
+            ),
+            Self::StereoBondReplaceLigands { id, old, new } => edit_map(
+                "stereo-bond",
+                "replace-ligands",
+                render_expect_update(
+                    id.to_edn(),
+                    render_stereo_ligands(old),
+                    render_stereo_ligands(new),
+                ),
+            ),
             Self::StereoBondModify { id, expect, update } => edit_map(
                 "stereo-bond",
                 "modify",
-                checked_update_edn(
+                render_expect_update(
                     id.to_edn(),
                     StereoBondUpdateDsl(expect.clone()).to_edn(),
                     StereoBondUpdateDsl(update.clone()).to_edn(),
@@ -628,21 +726,31 @@ impl EditInput {
                 append_bond_modify(edits, id, expect, update)?;
             }
             Self::DativeBondAdd {
-                mut donors,
+                donors,
                 acceptor,
                 attributes,
             } => {
-                donors.push(acceptor);
-                edits.add_dative_bond(donors, attributes.into_ir(&defaults.dative_bond));
+                edits.add_dative_bond(donors, acceptor, attributes.into_ir(&defaults.dative_bond));
             }
             Self::DativeBondsRemove(removes) => edits.remove_dative_bonds(
                 removes
                     .into_iter()
-                    .map(|(id, atoms, attributes)| {
-                        (id, atoms, attributes.into_ir(&defaults.dative_bond))
+                    .map(|(id, donors, acceptor, attributes)| {
+                        (
+                            id,
+                            donors,
+                            acceptor,
+                            attributes.into_ir(&defaults.dative_bond),
+                        )
                     })
                     .collect(),
             ),
+            Self::DativeBondReplaceDonors { id, old, new } => {
+                edits.push(Edit::ReplaceDativeBondDonors { id, old, new });
+            }
+            Self::DativeBondReplaceAcceptor { id, old, new } => {
+                edits.push(Edit::ReplaceDativeBondAcceptor { id, old, new });
+            }
             Self::DativeBondModify { id, expect, update } => {
                 append_dative_bond_modify(edits, id, expect, update)?;
             }
@@ -657,6 +765,9 @@ impl EditInput {
                     })
                     .collect(),
             ),
+            Self::AromaticSystemReplaceAtoms { id, old, new } => {
+                edits.push(Edit::ReplaceAromaticSystemAtoms { id, old, new });
+            }
             Self::AromaticSystemModify { id, expect, update } => {
                 append_aromatic_system_modify(edits, id, expect, update)?;
             }
@@ -671,6 +782,9 @@ impl EditInput {
                     })
                     .collect(),
             ),
+            Self::MulticenterBondReplaceAtoms { id, old, new } => {
+                edits.push(Edit::ReplaceMulticenterBondAtoms { id, old, new });
+            }
             Self::MulticenterBondModify { id, expect, update } => {
                 append_multicenter_bond_modify(edits, id, expect, update)?;
             }
@@ -685,6 +799,9 @@ impl EditInput {
                     })
                     .collect(),
             ),
+            Self::NoncovalentBondReplaceAtoms { id, old, new } => {
+                edits.push(Edit::ReplaceNoncovalentBondAtoms { id, old, new });
+            }
             Self::NoncovalentBondModify { id, expect, update } => {
                 append_noncovalent_bond_modify(edits, id, expect, update)?;
             }
@@ -703,6 +820,12 @@ impl EditInput {
                     })
                     .collect(),
             ),
+            Self::StereoAtomReplaceSite { id, old, new } => {
+                edits.push(Edit::ReplaceStereoAtomSite { id, old, new });
+            }
+            Self::StereoAtomReplaceLigands { id, old, new } => {
+                edits.push(Edit::ReplaceStereoAtomLigands { id, old, new });
+            }
             Self::StereoAtomModify { id, expect, update } => {
                 append_stereo_atom_modify(edits, id, expect, update)?;
             }
@@ -721,6 +844,12 @@ impl EditInput {
                     })
                     .collect(),
             ),
+            Self::StereoBondReplaceSite { id, old, new } => {
+                edits.push(Edit::ReplaceStereoBondSite { id, old, new });
+            }
+            Self::StereoBondReplaceLigands { id, old, new } => {
+                edits.push(Edit::ReplaceStereoBondLigands { id, old, new });
+            }
             Self::StereoBondModify { id, expect, update } => {
                 append_stereo_bond_modify(edits, id, expect, update)?;
             }
@@ -786,33 +915,42 @@ impl EditInput {
                     update,
                 }]
             }
-            Edit::AddDativeBond { atoms, attributes } => {
-                let (acceptor, donors) = atoms.split_last().ok_or_else(|| {
-                    DeError::Custom("dative-bond addition has no acceptor".to_string())
-                })?;
-                vec![Self::DativeBondAdd {
-                    donors: donors.to_vec(),
-                    acceptor: acceptor.clone(),
-                    attributes: DativeBondDsl::from_ir(attributes, &defaults.dative_bond),
-                }]
-            }
+            Edit::AddDativeBond {
+                donors,
+                acceptor,
+                attributes,
+            } => vec![Self::DativeBondAdd {
+                donors: donors.clone(),
+                acceptor: acceptor.clone(),
+                attributes: DativeBondDsl::from_ir(attributes, &defaults.dative_bond),
+            }],
             Edit::RemoveDativeBonds { removes } => vec![Self::DativeBondsRemove(
                 removes
                     .iter()
-                    .map(|(id, atoms, attributes)| {
-                        if atoms.is_empty() {
-                            return Err(DeError::Custom(
-                                "dative-bond removal has no acceptor".to_string(),
-                            ));
-                        }
-                        Ok((
+                    .map(|(id, donors, acceptor, attributes)| {
+                        (
                             id.clone(),
-                            atoms.clone(),
+                            donors.clone(),
+                            acceptor.clone(),
                             DativeBondDsl::from_ir(attributes, &defaults.dative_bond),
-                        ))
+                        )
                     })
-                    .collect::<Result<_, _>>()?,
+                    .collect(),
             )],
+            Edit::ReplaceDativeBondDonors { id, old, new } => {
+                vec![Self::DativeBondReplaceDonors {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
+            Edit::ReplaceDativeBondAcceptor { id, old, new } => {
+                vec![Self::DativeBondReplaceAcceptor {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
             Edit::ModifyDativeBondField { id, change } => {
                 let (expect, update) = dative_bond_field_updates(change);
                 vec![Self::DativeBondModify {
@@ -845,6 +983,13 @@ impl EditInput {
                     })
                     .collect(),
             )],
+            Edit::ReplaceAromaticSystemAtoms { id, old, new } => {
+                vec![Self::AromaticSystemReplaceAtoms {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
             Edit::ModifyAromaticSystemField { id, change } => {
                 let (expect, update) = aromatic_system_field_updates(change);
                 vec![Self::AromaticSystemModify {
@@ -877,6 +1022,13 @@ impl EditInput {
                     })
                     .collect(),
             )],
+            Edit::ReplaceMulticenterBondAtoms { id, old, new } => {
+                vec![Self::MulticenterBondReplaceAtoms {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
             Edit::ModifyMulticenterBondField { id, change } => {
                 let (expect, update) = multicenter_bond_field_updates(change);
                 vec![Self::MulticenterBondModify {
@@ -909,6 +1061,13 @@ impl EditInput {
                     })
                     .collect(),
             )],
+            Edit::ReplaceNoncovalentBondAtoms { id, old, new } => {
+                vec![Self::NoncovalentBondReplaceAtoms {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
             Edit::ModifyNoncovalentBondField { id, change } => {
                 let (expect, update) = noncovalent_bond_field_updates(change);
                 vec![Self::NoncovalentBondModify {
@@ -947,6 +1106,20 @@ impl EditInput {
                     })
                     .collect(),
             )],
+            Edit::ReplaceStereoAtomSite { id, old, new } => {
+                vec![Self::StereoAtomReplaceSite {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
+            Edit::ReplaceStereoAtomLigands { id, old, new } => {
+                vec![Self::StereoAtomReplaceLigands {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
             Edit::ModifyStereoAtomField { id, change } => {
                 let (expect, update) = stereo_atom_field_updates(change);
                 vec![Self::StereoAtomModify {
@@ -985,6 +1158,20 @@ impl EditInput {
                     })
                     .collect(),
             )],
+            Edit::ReplaceStereoBondSite { id, old, new } => {
+                vec![Self::StereoBondReplaceSite {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
+            Edit::ReplaceStereoBondLigands { id, old, new } => {
+                vec![Self::StereoBondReplaceLigands {
+                    id: id.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }]
+            }
             Edit::ModifyStereoBondField { id, change } => {
                 let (expect, update) = stereo_bond_field_updates(change);
                 vec![Self::StereoBondModify {
@@ -1018,7 +1205,7 @@ fn parse_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
         "add" => Ok(EditInput::AtomAdd(AtomDsl::from_edn(payload)?)),
         "remove" => Ok(EditInput::AtomRemove(AtomHandle::from_edn(payload)?)),
         "modify" => {
-            let (id, expect, update) = parse_atom_checked_update(payload)?;
+            let (id, expect, update) = parse_atom_modification(payload)?;
             validate_atom_update_pair(&expect, &update)?;
             Ok(EditInput::AtomModify { id, expect, update })
         }
@@ -1053,7 +1240,7 @@ fn parse_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
         }
         "remove" => Ok(EditInput::BondRemove(BondHandle::from_edn(payload)?)),
         "modify" => {
-            let (id, expect, update) = parse_bond_checked_update(payload)?;
+            let (id, expect, update) = parse_bond_modification(payload)?;
             validate_bond_update_pair(&expect, &update)?;
             Ok(EditInput::BondModify { id, expect, update })
         }
@@ -1072,8 +1259,9 @@ fn parse_dative_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
                 attributes,
             })
         }
+        "replace-donors" | "replace-acceptor" => parse_dative_bond_replacement(op, payload),
         "modify" => {
-            let (id, expect, update) = parse_dative_bond_checked_update(payload)?;
+            let (id, expect, update) = parse_dative_bond_modification(payload)?;
             validate_dative_bond_update_pair(&expect, &update)?;
             Ok(EditInput::DativeBondModify { id, expect, update })
         }
@@ -1111,8 +1299,12 @@ fn parse_aromatic_system_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let (atoms, attributes) = parse_aromatic_system_addition(payload)?;
             Ok(EditInput::AromaticSystemAdd { atoms, attributes })
         }
+        "replace-atoms" => {
+            let (id, old, new) = parse_aromatic_system_replacement(payload)?;
+            Ok(EditInput::AromaticSystemReplaceAtoms { id, old, new })
+        }
         "modify" => {
-            let (id, expect, update) = parse_aromatic_system_checked_update(payload)?;
+            let (id, expect, update) = parse_aromatic_system_modification(payload)?;
             validate_aromatic_system_update_pair(&expect, &update)?;
             Ok(EditInput::AromaticSystemModify { id, expect, update })
         }
@@ -1150,8 +1342,12 @@ fn parse_multicenter_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let (atoms, attributes) = parse_multicenter_bond_addition(payload)?;
             Ok(EditInput::MulticenterBondAdd { atoms, attributes })
         }
+        "replace-atoms" => {
+            let (id, old, new) = parse_multicenter_bond_replacement(payload)?;
+            Ok(EditInput::MulticenterBondReplaceAtoms { id, old, new })
+        }
         "modify" => {
-            let (id, expect, update) = parse_multicenter_bond_checked_update(payload)?;
+            let (id, expect, update) = parse_multicenter_bond_modification(payload)?;
             validate_multicenter_bond_update_pair(&expect, &update)?;
             Ok(EditInput::MulticenterBondModify { id, expect, update })
         }
@@ -1189,8 +1385,12 @@ fn parse_noncovalent_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
             let (atoms, attributes) = parse_noncovalent_bond_addition(payload)?;
             Ok(EditInput::NoncovalentBondAdd { atoms, attributes })
         }
+        "replace-atoms" => {
+            let (id, old, new) = parse_noncovalent_bond_replacement(payload)?;
+            Ok(EditInput::NoncovalentBondReplaceAtoms { id, old, new })
+        }
         "modify" => {
-            let (id, expect, update) = parse_noncovalent_bond_checked_update(payload)?;
+            let (id, expect, update) = parse_noncovalent_bond_modification(payload)?;
             validate_noncovalent_bond_update_pair(&expect, &update)?;
             Ok(EditInput::NoncovalentBondModify { id, expect, update })
         }
@@ -1241,7 +1441,7 @@ fn parse_dative_bond_addition(
 
 fn parse_dative_bond_removal(
     edn: &Edn<'_>,
-) -> Result<(DativeBondHandle, Vec<AtomHandle>, DativeBondDsl), DeError> {
+) -> Result<(DativeBondHandle, Vec<AtomHandle>, AtomHandle, DativeBondDsl), DeError> {
     let Edn::Map(map) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "dative-bond removal map",
@@ -1251,12 +1451,63 @@ fn parse_dative_bond_removal(
     };
     let mut helper = EdnMapHelper::new(map);
     let id = helper.required("id")?;
-    let mut donors: Vec<AtomHandle> = helper.required("donors")?;
+    let donors = helper.required("donors")?;
     let acceptor = helper.required("acceptor")?;
     let attributes = helper.required("attrs")?;
     helper.finalize()?;
-    donors.push(acceptor);
-    Ok((id, donors, attributes))
+    Ok((id, donors, acceptor, attributes))
+}
+
+fn parse_dative_bond_replacement(op: &str, edn: &Edn<'_>) -> Result<EditInput, DeError> {
+    let Edn::Vector(parts) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "dative-bond replacement [handle {:expect old :update new}]",
+            got: edn.kind(),
+            path: vec!["dative-bond edit".to_string()],
+        });
+    };
+    if parts.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "dative-bond :{op} expects [handle changes], got {} elements",
+            parts.len()
+        )));
+    }
+    let Edn::Map(changes) = &parts[1] else {
+        return Err(DeError::TypeMismatch {
+            expected: "dative-bond replacement changes map",
+            got: parts[1].kind(),
+            path: vec!["dative-bond edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(changes);
+    let input = match op {
+        "replace-donors" => {
+            let old = helper.required("expect")?;
+            let new = helper.required("update")?;
+            helper.finalize()?;
+            EditInput::DativeBondReplaceDonors {
+                id: DativeBondHandle::from_edn(&parts[0])?,
+                old,
+                new,
+            }
+        }
+        "replace-acceptor" => {
+            let old = helper.required("expect")?;
+            let new = helper.required("update")?;
+            helper.finalize()?;
+            EditInput::DativeBondReplaceAcceptor {
+                id: DativeBondHandle::from_edn(&parts[0])?,
+                old,
+                new,
+            }
+        }
+        _ => {
+            return Err(DeError::Custom(format!(
+                "unknown dative-bond edit op :{op}"
+            )))
+        }
+    };
+    Ok(input)
 }
 
 fn parse_aromatic_system_addition(
@@ -1294,6 +1545,36 @@ fn parse_aromatic_system_removal(
     Ok((id, atoms, attributes))
 }
 
+fn parse_aromatic_system_replacement(
+    edn: &Edn<'_>,
+) -> Result<(AromaticSystemHandle, Vec<AtomHandle>, Vec<AtomHandle>), DeError> {
+    let Edn::Vector(parts) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "aromatic-system :replace-atoms [handle {:expect atoms :update atoms}]",
+            got: edn.kind(),
+            path: vec!["aromatic-system edit".to_string()],
+        });
+    };
+    if parts.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "aromatic-system :replace-atoms expects [handle changes], got {} elements",
+            parts.len()
+        )));
+    }
+    let Edn::Map(changes) = &parts[1] else {
+        return Err(DeError::TypeMismatch {
+            expected: "aromatic-system :replace-atoms changes map",
+            got: parts[1].kind(),
+            path: vec!["aromatic-system edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(changes);
+    let old = helper.required("expect")?;
+    let new = helper.required("update")?;
+    helper.finalize()?;
+    Ok((AromaticSystemHandle::from_edn(&parts[0])?, old, new))
+}
+
 fn parse_multicenter_bond_addition(
     edn: &Edn<'_>,
 ) -> Result<(Vec<AtomHandle>, MulticenterBondDsl), DeError> {
@@ -1327,6 +1608,36 @@ fn parse_multicenter_bond_removal(
     let attributes = helper.required("attrs")?;
     helper.finalize()?;
     Ok((id, atoms, attributes))
+}
+
+fn parse_multicenter_bond_replacement(
+    edn: &Edn<'_>,
+) -> Result<(MulticenterBondHandle, Vec<AtomHandle>, Vec<AtomHandle>), DeError> {
+    let Edn::Vector(parts) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "multicenter-bond :replace-atoms [handle {:expect atoms :update atoms}]",
+            got: edn.kind(),
+            path: vec!["multicenter-bond edit".to_string()],
+        });
+    };
+    if parts.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "multicenter-bond :replace-atoms expects [handle changes], got {} elements",
+            parts.len()
+        )));
+    }
+    let Edn::Map(changes) = &parts[1] else {
+        return Err(DeError::TypeMismatch {
+            expected: "multicenter-bond :replace-atoms changes map",
+            got: parts[1].kind(),
+            path: vec!["multicenter-bond edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(changes);
+    let old = helper.required("expect")?;
+    let new = helper.required("update")?;
+    helper.finalize()?;
+    Ok((MulticenterBondHandle::from_edn(&parts[0])?, old, new))
 }
 
 fn parse_noncovalent_bond_addition(
@@ -1364,6 +1675,36 @@ fn parse_noncovalent_bond_removal(
     Ok((id, atoms, attributes))
 }
 
+fn parse_noncovalent_bond_replacement(
+    edn: &Edn<'_>,
+) -> Result<(NoncovalentBondHandle, [AtomHandle; 2], [AtomHandle; 2]), DeError> {
+    let Edn::Vector(parts) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "noncovalent-bond :replace-atoms [handle {:expect atoms :update atoms}]",
+            got: edn.kind(),
+            path: vec!["noncovalent-bond edit".to_string()],
+        });
+    };
+    if parts.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "noncovalent-bond :replace-atoms expects [handle changes], got {} elements",
+            parts.len()
+        )));
+    }
+    let Edn::Map(changes) = &parts[1] else {
+        return Err(DeError::TypeMismatch {
+            expected: "noncovalent-bond :replace-atoms changes map",
+            got: parts[1].kind(),
+            path: vec!["noncovalent-bond edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(changes);
+    let old = helper.required("expect")?;
+    let new = helper.required("update")?;
+    helper.finalize()?;
+    Ok((NoncovalentBondHandle::from_edn(&parts[0])?, old, new))
+}
+
 fn parse_stereo_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "stereo-atom edit")?;
     match op {
@@ -1375,8 +1716,9 @@ fn parse_stereo_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
                 attributes,
             })
         }
+        "replace-site" | "replace-ligands" => parse_stereo_atom_replacement(op, payload),
         "modify" => {
-            let (id, expect, update) = parse_stereo_atom_checked_update(payload)?;
+            let (id, expect, update) = parse_stereo_atom_modification(payload)?;
             validate_stereo_atom_update_pair(&expect, &update)?;
             Ok(EditInput::StereoAtomModify { id, expect, update })
         }
@@ -1418,8 +1760,9 @@ fn parse_stereo_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
                 attributes,
             })
         }
+        "replace-site" | "replace-ligands" => parse_stereo_bond_replacement(op, payload),
         "modify" => {
-            let (id, expect, update) = parse_stereo_bond_checked_update(payload)?;
+            let (id, expect, update) = parse_stereo_bond_modification(payload)?;
             validate_stereo_bond_update_pair(&expect, &update)?;
             Ok(EditInput::StereoBondModify { id, expect, update })
         }
@@ -1483,6 +1826,58 @@ fn parse_stereo_atom_removal(edn: &Edn<'_>) -> Result<StereoAtomRemovalInput, De
     Ok((id, site, parse_stereo_ligands(&ligands)?, attributes))
 }
 
+fn parse_stereo_atom_replacement(op: &str, edn: &Edn<'_>) -> Result<EditInput, DeError> {
+    let Edn::Vector(parts) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-atom replacement [handle {:expect old :update new}]",
+            got: edn.kind(),
+            path: vec!["stereo-atom edit".to_string()],
+        });
+    };
+    if parts.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "stereo-atom :{op} expects [handle changes], got {} elements",
+            parts.len()
+        )));
+    }
+    let Edn::Map(changes) = &parts[1] else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-atom replacement changes map",
+            got: parts[1].kind(),
+            path: vec!["stereo-atom edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(changes);
+    let input = match op {
+        "replace-site" => {
+            let old = helper.required("expect")?;
+            let new = helper.required("update")?;
+            helper.finalize()?;
+            EditInput::StereoAtomReplaceSite {
+                id: StereoAtomHandle::from_edn(&parts[0])?,
+                old,
+                new,
+            }
+        }
+        "replace-ligands" => {
+            let old: Vec<Edn<'_>> = helper.required("expect")?;
+            let new: Vec<Edn<'_>> = helper.required("update")?;
+            helper.finalize()?;
+            EditInput::StereoAtomReplaceLigands {
+                id: StereoAtomHandle::from_edn(&parts[0])?,
+                old: parse_stereo_ligands(&old)?,
+                new: parse_stereo_ligands(&new)?,
+            }
+        }
+        _ => {
+            return Err(DeError::Custom(format!(
+                "unknown stereo-atom edit op :{op}"
+            )))
+        }
+    };
+    Ok(input)
+}
+
 fn parse_stereo_bond_addition(edn: &Edn<'_>) -> Result<StereoBondAdditionInput, DeError> {
     let Edn::Map(map) = edn else {
         return Err(DeError::TypeMismatch {
@@ -1514,6 +1909,58 @@ fn parse_stereo_bond_removal(edn: &Edn<'_>) -> Result<StereoBondRemovalInput, De
     let attributes = helper.required("attrs")?;
     helper.finalize()?;
     Ok((id, site, parse_stereo_ligands(&ligands)?, attributes))
+}
+
+fn parse_stereo_bond_replacement(op: &str, edn: &Edn<'_>) -> Result<EditInput, DeError> {
+    let Edn::Vector(parts) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-bond replacement [handle {:expect old :update new}]",
+            got: edn.kind(),
+            path: vec!["stereo-bond edit".to_string()],
+        });
+    };
+    if parts.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "stereo-bond :{op} expects [handle changes], got {} elements",
+            parts.len()
+        )));
+    }
+    let Edn::Map(changes) = &parts[1] else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-bond replacement changes map",
+            got: parts[1].kind(),
+            path: vec!["stereo-bond edit".to_string()],
+        });
+    };
+    let mut helper = EdnMapHelper::new(changes);
+    let input = match op {
+        "replace-site" => {
+            let old = helper.required("expect")?;
+            let new = helper.required("update")?;
+            helper.finalize()?;
+            EditInput::StereoBondReplaceSite {
+                id: StereoBondHandle::from_edn(&parts[0])?,
+                old,
+                new,
+            }
+        }
+        "replace-ligands" => {
+            let old: Vec<Edn<'_>> = helper.required("expect")?;
+            let new: Vec<Edn<'_>> = helper.required("update")?;
+            helper.finalize()?;
+            EditInput::StereoBondReplaceLigands {
+                id: StereoBondHandle::from_edn(&parts[0])?,
+                old: parse_stereo_ligands(&old)?,
+                new: parse_stereo_ligands(&new)?,
+            }
+        }
+        _ => {
+            return Err(DeError::Custom(format!(
+                "unknown stereo-bond edit op :{op}"
+            )))
+        }
+    };
+    Ok(input)
 }
 
 fn parse_stereo_ligands(ligands: &[Edn<'_>]) -> Result<Vec<StereoLigandInput>, DeError> {
@@ -1579,9 +2026,7 @@ fn parse_constraint_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
     }
 }
 
-fn parse_atom_checked_update(
-    edn: &Edn<'_>,
-) -> Result<(AtomHandle, AtomUpdate, AtomUpdate), DeError> {
+fn parse_atom_modification(edn: &Edn<'_>) -> Result<(AtomHandle, AtomUpdate, AtomUpdate), DeError> {
     let Edn::Vector(parts) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "atom :modify [handle {:expect dsl :update dsl}]",
@@ -1613,9 +2058,7 @@ fn parse_atom_checked_update(
     ))
 }
 
-fn parse_bond_checked_update(
-    edn: &Edn<'_>,
-) -> Result<(BondHandle, BondUpdate, BondUpdate), DeError> {
+fn parse_bond_modification(edn: &Edn<'_>) -> Result<(BondHandle, BondUpdate, BondUpdate), DeError> {
     let Edn::Vector(parts) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "bond :modify [handle {:expect dsl :update dsl}]",
@@ -1647,7 +2090,7 @@ fn parse_bond_checked_update(
     ))
 }
 
-fn parse_dative_bond_checked_update(
+fn parse_dative_bond_modification(
     edn: &Edn<'_>,
 ) -> Result<(DativeBondHandle, DativeBondUpdate, DativeBondUpdate), DeError> {
     let Edn::Vector(parts) = edn else {
@@ -1681,7 +2124,7 @@ fn parse_dative_bond_checked_update(
     ))
 }
 
-fn parse_aromatic_system_checked_update(
+fn parse_aromatic_system_modification(
     edn: &Edn<'_>,
 ) -> Result<
     (
@@ -1722,7 +2165,7 @@ fn parse_aromatic_system_checked_update(
     ))
 }
 
-fn parse_multicenter_bond_checked_update(
+fn parse_multicenter_bond_modification(
     edn: &Edn<'_>,
 ) -> Result<
     (
@@ -1763,7 +2206,7 @@ fn parse_multicenter_bond_checked_update(
     ))
 }
 
-fn parse_noncovalent_bond_checked_update(
+fn parse_noncovalent_bond_modification(
     edn: &Edn<'_>,
 ) -> Result<
     (
@@ -1804,7 +2247,7 @@ fn parse_noncovalent_bond_checked_update(
     ))
 }
 
-fn parse_stereo_atom_checked_update(
+fn parse_stereo_atom_modification(
     edn: &Edn<'_>,
 ) -> Result<(StereoAtomHandle, StereoAtomUpdate, StereoAtomUpdate), DeError> {
     let Edn::Vector(parts) = edn else {
@@ -1838,7 +2281,7 @@ fn parse_stereo_atom_checked_update(
     ))
 }
 
-fn parse_stereo_bond_checked_update(
+fn parse_stereo_bond_modification(
     edn: &Edn<'_>,
 ) -> Result<(StereoBondHandle, StereoBondUpdate, StereoBondUpdate), DeError> {
     let Edn::Vector(parts) = edn else {
@@ -3024,7 +3467,7 @@ fn stereo_bond_constraint_updates(
     Ok((expect, update))
 }
 
-fn checked_update_edn(
+fn render_expect_update(
     handle: Edn<'static>,
     expect: Edn<'static>,
     update: Edn<'static>,
@@ -3082,29 +3525,27 @@ fn stereo_entry_edn(
         entry.insert(Edn::keyword("id"), id);
     }
     entry.insert(Edn::keyword("site"), site);
-    entry.insert(
-        Edn::keyword("ligands"),
-        Edn::Vector(
-            ligands
-                .iter()
-                .map(stereo_ligand_edn)
-                .collect::<Vec<_>>()
-                .into(),
-        ),
-    );
+    entry.insert(Edn::keyword("ligands"), render_stereo_ligands(ligands));
     entry.insert(Edn::keyword("attrs"), attributes_edn);
     Edn::Map(entry)
 }
 
-fn stereo_ligand_edn(ligand: &(AtomHandle, StereoLigandKind)) -> Edn<'static> {
-    let (atom, kind) = ligand;
-    match kind {
-        StereoLigandKind::Atom => atom.to_edn(),
-        StereoLigandKind::ImplicitHydrogen => {
-            Edn::Vector(vec![Edn::keyword("h"), atom.to_edn()].into())
-        }
-        StereoLigandKind::LonePair => Edn::Vector(vec![Edn::keyword("lp"), atom.to_edn()].into()),
-    }
+fn render_stereo_ligands(ligands: &[StereoLigandInput]) -> Edn<'static> {
+    Edn::Vector(
+        ligands
+            .iter()
+            .map(|(atom, kind)| match kind {
+                StereoLigandKind::Atom => atom.to_edn(),
+                StereoLigandKind::ImplicitHydrogen => {
+                    Edn::Vector(vec![Edn::keyword("h"), atom.to_edn()].into())
+                }
+                StereoLigandKind::LonePair => {
+                    Edn::Vector(vec![Edn::keyword("lp"), atom.to_edn()].into())
+                }
+            })
+            .collect::<Vec<_>>()
+            .into(),
+    )
 }
 
 fn edit_map(entity: &str, operation: &str, payload: Edn<'static>) -> Edn<'static> {
@@ -4223,6 +4664,107 @@ mod tests {
             }],
         }]),
     )]
+    #[case::dative_replace_donors(
+        r#"[{:dative-bond {:replace-donors [0 {:expect [2 1] :update [1 {:new 0}]}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceDativeBondDonors {
+            id: DativeBondHandle::Id(DativeBondId(0)),
+            old: vec![AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(1))],
+            new: vec![AtomHandle::Id(AtomId(1)), AtomHandle::New(0)],
+        }]),
+    )]
+    #[case::dative_replace_acceptor(
+        r#"[{:dative-bond {:replace-acceptor [{:new 0} {:expect 3 :update {:new 1}}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceDativeBondAcceptor {
+            id: DativeBondHandle::New(0),
+            old: AtomHandle::Id(AtomId(3)),
+            new: AtomHandle::New(1),
+        }]),
+    )]
+    #[case::aromatic_replace_atoms(
+        r#"[{:aromatic-system {:replace-atoms [0 {:expect [3 1 2] :update [2 3 {:new 0}]}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceAromaticSystemAtoms {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            old: vec![AtomHandle::Id(AtomId(3)), AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+            new: vec![AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(3)), AtomHandle::New(0)],
+        }]),
+    )]
+    #[case::multicenter_replace_atoms(
+        r#"[{:multicenter-bond {:replace-atoms [{:new 0} {:expect [4 2 1] :update [1 4 2]}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceMulticenterBondAtoms {
+            id: MulticenterBondHandle::New(0),
+            old: vec![AtomHandle::Id(AtomId(4)), AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(1))],
+            new: vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(4)), AtomHandle::Id(AtomId(2))],
+        }]),
+    )]
+    #[case::noncovalent_replace_atoms(
+        r#"[{:noncovalent-bond {:replace-atoms [0 {:expect [3 4] :update [{:new 0} 4]}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceNoncovalentBondAtoms {
+            id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            old: [AtomHandle::Id(AtomId(3)), AtomHandle::Id(AtomId(4))],
+            new: [AtomHandle::New(0), AtomHandle::Id(AtomId(4))],
+        }]),
+    )]
+    #[case::stereo_atom_replace_site(
+        r#"[{:stereo-atom {:replace-site [{:new 0} {:expect 1 :update {:new 0}}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceStereoAtomSite {
+            id: StereoAtomHandle::New(0),
+            old: AtomHandle::Id(AtomId(1)),
+            new: AtomHandle::New(0),
+        }]),
+    )]
+    #[case::stereo_atom_replace_ligands(
+        r#"[{:stereo-atom {:replace-ligands [0 {:expect [2 [:h 0] [:lp 0] {:new 1}] :update [{:new 1} [:h 0] [:lp 0] 2]}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceStereoAtomLigands {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            old: vec![
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
+                (AtomHandle::New(1), StereoLigandKind::Atom),
+            ],
+            new: vec![
+                (AtomHandle::New(1), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+            ],
+        }]),
+    )]
+    #[case::stereo_bond_replace_site(
+        r#"[{:stereo-bond {:replace-site [0 {:expect 1 :update {:new 0}}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceStereoBondSite {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            old: BondHandle::Id(BondId(1)),
+            new: BondHandle::New(0),
+        }]),
+    )]
+    #[case::stereo_bond_replace_ligands(
+        r#"[{:stereo-bond {:replace-ligands [{:new 0} {:expect [2 3 [:h 1] [:lp 1]] :update [3 2 [:h 1] [:lp 1]]}]}}]"#,
+        MoleculeDefaults::new(),
+        Edits::from_iter([Edit::ReplaceStereoBondLigands {
+            id: StereoBondHandle::New(0),
+            old: vec![
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
+            ],
+            new: vec![
+                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
+            ],
+        }]),
+    )]
     fn test_edits_dsl_roundtrip(
         #[case] input: &str,
         #[case] defaults: MoleculeDefaults,
@@ -4683,16 +5225,33 @@ mod tests {
     #[case::dative_add(
         r#"{:dative-bond {:add {:donors [0 {:new 0}] :acceptor 2 :attrs :single}}}"#,
         Edit::AddDativeBond {
-            atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0), AtomHandle::Id(AtomId(2))],
+            donors: vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+            acceptor: AtomHandle::Id(AtomId(2)),
             attributes: DativeBondForm::from_order(1),
         },
     )]
     #[case::dative_remove(
         r#"{:dative-bonds {:remove [{:id 0 :donors [1] :acceptor {:new 2} :attrs :single} {:id {:new 0} :donors [{:new 1}] :acceptor 3 :attrs :double}]}}"#,
         Edit::RemoveDativeBonds { removes: vec![
-            (DativeBondHandle::Id(DativeBondId(0)), vec![AtomHandle::Id(AtomId(1)), AtomHandle::New(2)], DativeBondForm::from_order(1)),
-            (DativeBondHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(3))], DativeBondForm::from_order(2)),
+            (DativeBondHandle::Id(DativeBondId(0)), vec![AtomHandle::Id(AtomId(1))], AtomHandle::New(2), DativeBondForm::from_order(1)),
+            (DativeBondHandle::New(0), vec![AtomHandle::New(1)], AtomHandle::Id(AtomId(3)), DativeBondForm::from_order(2)),
         ] },
+    )]
+    #[case::dative_replace_donors(
+        r#"{:dative-bond {:replace-donors [0 {:expect [2 1] :update [1 {:new 0}]}]}}"#,
+        Edit::ReplaceDativeBondDonors {
+            id: DativeBondHandle::Id(DativeBondId(0)),
+            old: vec![AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(1))],
+            new: vec![AtomHandle::Id(AtomId(1)), AtomHandle::New(0)],
+        },
+    )]
+    #[case::dative_replace_acceptor(
+        r#"{:dative-bond {:replace-acceptor [{:new 0} {:expect 3 :update {:new 1}}]}}"#,
+        Edit::ReplaceDativeBondAcceptor {
+            id: DativeBondHandle::New(0),
+            old: AtomHandle::Id(AtomId(3)),
+            new: AtomHandle::New(1),
+        },
     )]
     #[case::dative_field(
         r#"{:dative-bond {:modify [{:new 0} {:expect "1" :update "2"}]}}"#,
@@ -4730,6 +5289,14 @@ mod tests {
             (AromaticSystemHandle::Id(AromaticSystemId(0)), vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)], AromaticSystemForm::from_electrons(vec![1, 1])),
             (AromaticSystemHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(2))], AromaticSystemForm::from_electrons(vec![2, 2])),
         ] },
+    )]
+    #[case::aromatic_replace_atoms(
+        r#"{:aromatic-system {:replace-atoms [0 {:expect [3 1 2] :update [2 3 {:new 0}]}]}}"#,
+        Edit::ReplaceAromaticSystemAtoms {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            old: vec![AtomHandle::Id(AtomId(3)), AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+            new: vec![AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(3)), AtomHandle::New(0)],
+        },
     )]
     #[case::aromatic_field(
         r##"{:aromatic-system {:modify [{:new 0} {:expect "#c0" :update "#c-"}]}}"##,
@@ -4785,6 +5352,14 @@ mod tests {
             (MulticenterBondHandle::New(0), vec![AtomHandle::New(1), AtomHandle::Id(AtomId(2))], MulticenterBondForm::from_electrons(vec![2, 0])),
         ] },
     )]
+    #[case::multicenter_replace_atoms(
+        r#"{:multicenter-bond {:replace-atoms [{:new 0} {:expect [4 2 1] :update [1 4 2]}]}}"#,
+        Edit::ReplaceMulticenterBondAtoms {
+            id: MulticenterBondHandle::New(0),
+            old: vec![AtomHandle::Id(AtomId(4)), AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(1))],
+            new: vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(4)), AtomHandle::Id(AtomId(2))],
+        },
+    )]
     #[case::multicenter_field(
         r#"{:multicenter-bond {:modify [{:new 0} {:expect "[1,1]" :update "[2,0]"}]}}"#,
         Edit::ModifyMulticenterBondField {
@@ -4838,6 +5413,14 @@ mod tests {
             (NoncovalentBondHandle::Id(NoncovalentBondId(0)), [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)),
             (NoncovalentBondHandle::New(0), [AtomHandle::New(1), AtomHandle::Id(AtomId(2))], NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic)),
         ] },
+    )]
+    #[case::noncovalent_replace_atoms(
+        r#"{:noncovalent-bond {:replace-atoms [0 {:expect [3 4] :update [{:new 0} 4]}]}}"#,
+        Edit::ReplaceNoncovalentBondAtoms {
+            id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            old: [AtomHandle::Id(AtomId(3)), AtomHandle::Id(AtomId(4))],
+            new: [AtomHandle::New(0), AtomHandle::Id(AtomId(4))],
+        },
     )]
     #[case::noncovalent_field(
         r#"{:noncovalent-bond {:modify [{:new 0} {:expect "Hbd" :update "Ion"}]}}"#,
@@ -4904,6 +5487,32 @@ mod tests {
                 StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
             ),
         ] },
+    )]
+    #[case::stereo_atom_replace_site(
+        r#"{:stereo-atom {:replace-site [{:new 0} {:expect 1 :update {:new 0}}]}}"#,
+        Edit::ReplaceStereoAtomSite {
+            id: StereoAtomHandle::New(0),
+            old: AtomHandle::Id(AtomId(1)),
+            new: AtomHandle::New(0),
+        },
+    )]
+    #[case::stereo_atom_replace_ligands(
+        r#"{:stereo-atom {:replace-ligands [0 {:expect [2 [:h 0] [:lp 0] {:new 1}] :update [{:new 1} [:h 0] [:lp 0] 2]}]}}"#,
+        Edit::ReplaceStereoAtomLigands {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            old: vec![
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
+                (AtomHandle::New(1), StereoLigandKind::Atom),
+            ],
+            new: vec![
+                (AtomHandle::New(1), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+            ],
+        },
     )]
     #[case::stereo_atom_field(
         r#"{:stereo-atom {:modify [{:new 0} {:expect "Th0" :update "Th1"}]}}"#,
@@ -4972,6 +5581,32 @@ mod tests {
                 StereoBondForm::new(StereoKind::CisTrans, 0_u32),
             ),
         ] },
+    )]
+    #[case::stereo_bond_replace_site(
+        r#"{:stereo-bond {:replace-site [0 {:expect 1 :update {:new 0}}]}}"#,
+        Edit::ReplaceStereoBondSite {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            old: BondHandle::Id(BondId(1)),
+            new: BondHandle::New(0),
+        },
+    )]
+    #[case::stereo_bond_replace_ligands(
+        r#"{:stereo-bond {:replace-ligands [{:new 0} {:expect [2 3 [:h 1] [:lp 1]] :update [3 2 [:h 1] [:lp 1]]}]}}"#,
+        Edit::ReplaceStereoBondLigands {
+            id: StereoBondHandle::New(0),
+            old: vec![
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
+            ],
+            new: vec![
+                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
+            ],
+        },
     )]
     #[case::stereo_bond_field_clear(
         r#"{:stereo-bond {:modify [0 {:expect "Ct1" :update "*"}]}}"#,
@@ -5112,6 +5747,13 @@ mod tests {
                 .to_string(),
         )),
     )]
+    #[case::dative_replace_donors_missing_update(
+        "{:dative-bond {:replace-donors [0 {:expect [1 2]}]}}",
+        EdnError::De(DeError::MissingField {
+            key: "update".to_string(),
+            path: Vec::new(),
+        }),
+    )]
     #[case::aromatic_field(
         r##"{:aromatic-system {:modify [0 {:expect "#c0" :update "[1,1]"}]}}"##,
         EdnError::De(DeError::Custom(
@@ -5145,6 +5787,14 @@ mod tests {
                 .to_string(),
         )),
     )]
+    #[case::noncovalent_replace_atoms_arity(
+        "{:noncovalent-bond {:replace-atoms [0 {:expect [1] :update [2 3]}]}}",
+        EdnError::De(DeError::OutOfRange {
+            value: "1".to_string(),
+            target: "fixed-length array",
+            path: Vec::new(),
+        }),
+    )]
     #[case::stereo_atom_field(
         r#"{:stereo-atom {:modify [0 {:expect "Th0" :update "Th"}]}}"#,
         EdnError::De(DeError::Custom(
@@ -5157,6 +5807,12 @@ mod tests {
         EdnError::De(DeError::Custom(
             "stereo-atom constraint changes require the same stereo kind in :expect and :update"
                 .to_string(),
+        )),
+    )]
+    #[case::stereo_atom_replace_ligands_kind(
+        "{:stereo-atom {:replace-ligands [0 {:expect [[:x 1]] :update [2]}]}}",
+        EdnError::De(DeError::Custom(
+            "unknown stereo ligand kind :x".to_string(),
         )),
     )]
     #[case::stereo_bond_ligand_kind(

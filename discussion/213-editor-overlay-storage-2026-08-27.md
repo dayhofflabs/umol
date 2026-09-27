@@ -26,7 +26,7 @@ families: matching local getters and editor-only structural mutation are impleme
 S2k1's in-place DSL conversion, S2k2's Rust callback caller migration, and S2l's
 Python assignment and read-only molecule constraint access are implemented.
 S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
-S3a1–S3a2 are implemented; S3a3 is next. Graph-core mutation and restoration are complete in
+S3a1–S3a3 are implemented; S3b is next. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -74,8 +74,8 @@ approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
-complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a2
-are implemented and S3a3 is next.
+complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
+are implemented and S3b is next.
 
 ## Editor and transaction API
 
@@ -4014,15 +4014,15 @@ design and gains no DSL operation here.
   Verify all nine payload shapes, exact list order, Id/New handle namespaces,
   fixed arity, and dative donor/acceptor construction. Execution cases belong to S3b.
 
-  **Implemented — 2026-09-26.** Edit and Undo carry the nine named component
-  replacements; dative construction, removal, and saved entries carry donors and
+  **Implemented — 2026-09-26.** Edit and Undo carry the nine named `Replace*`
+  variants; dative construction, removal, and saved entries carry donors and
   acceptor separately. Edits keeps its append-only handle accounting. Local
   construction tests and rustdoc reflect the new payloads and batch namespace;
   the tests cannot run until the S3 consumer migrations compile. Formatting and
   diff checks pass. Compilation is red at the planned S3 boundary:
-  existing DSL, editor/transaction, and reaction consumers still use the former
-  dative payload or lack the new Undo arms. S3a3, S3b, S3d, and S3e migrate those
-  consumers before the S3 green gate.
+  editor/transaction and reaction consumers still use the former dative payload
+  or lack the new Undo arms. S3b, S3d, and S3e migrate those consumers before
+  the S3 green gate.
 
 - **S3a2 — Stereo update construction** (`ir::{edit,stereo}`; additive cleanup, within the S3 migration). [dep: S3a1]
 
@@ -4049,7 +4049,7 @@ design and gains no DSL operation here.
   retain their complete-form behavior. Formatting and diff checks pass. The
   S3a1 consumer errors still prevent compilation until the S3 migrations.
 
-- **S3a3 — Edit DSL replacement syntax** (`dsl::edit`; breaking, green at S3e). [dep: S3a1, S3a2]
+- **S3a3 — Edit DSL `replace-*` operations** (`dsl::edit`; breaking, green at S3e). [dep: S3a1, S3a2]
 
   Extend the existing EditInput grammar and EditsDsl parse/render/conversion
   paths with :replace-atoms, :replace-donors, :replace-acceptor, :replace-site,
@@ -4070,6 +4070,14 @@ design and gains no DSL operation here.
   Verify tree/streaming paths where present, ordered old/new vectors, existing
   handle and ligand encodings, dative syntax preservation, and roundtrips for
   every variant. Update Edit/Edits construction and namespace rustdoc.
+
+  **Implemented — 2026-09-26.** EditInput parsing, rendering, and IR conversion
+  handle all nine operations beside the existing edits for each entity. Separate
+  EditInput and EditsDsl roundtrip cases cover stored vector order, handles, and
+  ligand encoding. Negative cases cover missing update, noncovalent arity, and
+  unknown ligand kind. Dative add/remove syntax is unchanged. Formatting and diff
+  checks pass. Tests cannot run yet because the
+  planned S3 consumer migration still leaves the crate uncompilable.
 
 - **S3b** (`ir::molecule::transact`; breaking, green at S3e) Realize those edits
   through the structural methods on *EditorViewMut, obtained
