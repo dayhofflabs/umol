@@ -4,6 +4,8 @@
 //! own frame, independent of a host molecule or match. Entity deltas use entity
 //! ids; constraint deltas carry the constraint itself. Removals and
 //! modifications retain their previous values, so every delta can be inverted.
+//! Whole-component replacements retain the ordered old and new incidence values;
+//! they leave other components and attributes unchanged.
 //!
 //! `Deltas` retains input order until normalization folds each entity's changes
 //! and the molecule-level constraint changes, then sorts the result.
@@ -302,6 +304,16 @@ pub enum DativeBondDelta {
         acceptor: AtomId,
         attributes: DativeBondForm,
     },
+    ReplaceDonors {
+        id: DativeBondId,
+        old: Vec<AtomId>,
+        new: Vec<AtomId>,
+    },
+    ReplaceAcceptor {
+        id: DativeBondId,
+        old: AtomId,
+        new: AtomId,
+    },
     ModifyField {
         id: DativeBondId,
         change: DativeBondFieldChange,
@@ -316,7 +328,8 @@ pub enum DativeBondDelta {
 impl DativeBondDelta {
     pub(crate) fn uses_participant_frame(&self) -> bool {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::Add { .. } | Self::Remove { .. } | Self::ReplaceDonors { .. } => true,
+            Self::ReplaceAcceptor { .. } => false,
             Self::ModifyField { change, .. } => match change {
                 DativeBondFieldChange::Order { .. } => false,
             },
@@ -350,6 +363,16 @@ impl DativeBondDelta {
                 donors,
                 acceptor,
                 attributes,
+            },
+            Self::ReplaceDonors { id, old, new } => Self::ReplaceDonors {
+                id,
+                old: new,
+                new: old,
+            },
+            Self::ReplaceAcceptor { id, old, new } => Self::ReplaceAcceptor {
+                id,
+                old: new,
+                new: old,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
@@ -406,6 +429,11 @@ pub enum AromaticSystemDelta {
         atoms: Vec<AtomId>,
         attributes: AromaticSystemForm,
     },
+    ReplaceAtoms {
+        id: AromaticSystemId,
+        old: Vec<AtomId>,
+        new: Vec<AtomId>,
+    },
     ModifyField {
         id: AromaticSystemId,
         change: AromaticSystemFieldChange,
@@ -420,7 +448,7 @@ pub enum AromaticSystemDelta {
 impl AromaticSystemDelta {
     pub(crate) fn uses_participant_frame(&self) -> bool {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::Add { .. } | Self::Remove { .. } | Self::ReplaceAtoms { .. } => true,
             Self::ModifyField { change, .. } => match change {
                 AromaticSystemFieldChange::Electrons { .. } => true,
                 AromaticSystemFieldChange::Charge { .. }
@@ -452,6 +480,11 @@ impl AromaticSystemDelta {
                 id,
                 atoms,
                 attributes,
+            },
+            Self::ReplaceAtoms { id, old, new } => Self::ReplaceAtoms {
+                id,
+                old: new,
+                new: old,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
@@ -534,6 +567,11 @@ pub enum MulticenterBondDelta {
         atoms: Vec<AtomId>,
         attributes: MulticenterBondForm,
     },
+    ReplaceAtoms {
+        id: MulticenterBondId,
+        old: Vec<AtomId>,
+        new: Vec<AtomId>,
+    },
     ModifyField {
         id: MulticenterBondId,
         change: MulticenterBondFieldChange,
@@ -548,7 +586,7 @@ pub enum MulticenterBondDelta {
 impl MulticenterBondDelta {
     pub(crate) fn uses_participant_frame(&self) -> bool {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::Add { .. } | Self::Remove { .. } | Self::ReplaceAtoms { .. } => true,
             Self::ModifyField { change, .. } => match change {
                 MulticenterBondFieldChange::Electrons { .. } => true,
                 MulticenterBondFieldChange::Charge { .. }
@@ -580,6 +618,11 @@ impl MulticenterBondDelta {
                 id,
                 atoms,
                 attributes,
+            },
+            Self::ReplaceAtoms { id, old, new } => Self::ReplaceAtoms {
+                id,
+                old: new,
+                new: old,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
@@ -662,6 +705,11 @@ pub enum NoncovalentBondDelta {
         atoms: [AtomId; 2],
         attributes: NoncovalentBondForm,
     },
+    ReplaceAtoms {
+        id: NoncovalentBondId,
+        old: [AtomId; 2],
+        new: [AtomId; 2],
+    },
     ModifyField {
         id: NoncovalentBondId,
         change: NoncovalentBondFieldChange,
@@ -676,7 +724,7 @@ pub enum NoncovalentBondDelta {
 impl NoncovalentBondDelta {
     pub(crate) fn uses_participant_frame(&self) -> bool {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::Add { .. } | Self::Remove { .. } | Self::ReplaceAtoms { .. } => true,
             Self::ModifyField { change, .. } => match change {
                 NoncovalentBondFieldChange::Kind { .. } => false,
             },
@@ -706,6 +754,11 @@ impl NoncovalentBondDelta {
                 id,
                 atoms,
                 attributes,
+            },
+            Self::ReplaceAtoms { id, old, new } => Self::ReplaceAtoms {
+                id,
+                old: new,
+                new: old,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
@@ -767,6 +820,16 @@ pub enum StereoAtomDelta {
         ligands: Vec<StereoLigand>,
         attributes: StereoAtomForm,
     },
+    ReplaceSite {
+        id: StereoAtomId,
+        old: AtomId,
+        new: AtomId,
+    },
+    ReplaceLigands {
+        id: StereoAtomId,
+        old: Vec<StereoLigand>,
+        new: Vec<StereoLigand>,
+    },
     ModifyField {
         id: StereoAtomId,
         change: StereoAtomFieldChange,
@@ -787,6 +850,8 @@ impl StereoAtomDelta {
         match self {
             Self::Add { id, .. }
             | Self::Remove { id, .. }
+            | Self::ReplaceSite { id, .. }
+            | Self::ReplaceLigands { id, .. }
             | Self::ModifyField { id, .. }
             | Self::ModifyConstraint { id, .. } => *id,
         }
@@ -794,7 +859,8 @@ impl StereoAtomDelta {
 
     pub(crate) fn uses_participant_frame(&self) -> bool {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::Add { .. } | Self::Remove { .. } | Self::ReplaceLigands { .. } => true,
+            Self::ReplaceSite { .. } => false,
             Self::ModifyField { change, .. } => match change {
                 StereoAtomFieldChange::Configuration { .. } => true,
             },
@@ -828,6 +894,16 @@ impl StereoAtomDelta {
                 site,
                 ligands,
                 attributes,
+            },
+            Self::ReplaceSite { id, old, new } => Self::ReplaceSite {
+                id,
+                old: new,
+                new: old,
+            },
+            Self::ReplaceLigands { id, old, new } => Self::ReplaceLigands {
+                id,
+                old: new,
+                new: old,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
@@ -893,6 +969,16 @@ pub enum StereoBondDelta {
         ligands: Vec<StereoLigand>,
         attributes: StereoBondForm,
     },
+    ReplaceSite {
+        id: StereoBondId,
+        old: BondId,
+        new: BondId,
+    },
+    ReplaceLigands {
+        id: StereoBondId,
+        old: Vec<StereoLigand>,
+        new: Vec<StereoLigand>,
+    },
     ModifyField {
         id: StereoBondId,
         change: StereoBondFieldChange,
@@ -911,6 +997,8 @@ impl StereoBondDelta {
         match self {
             Self::Add { id, .. }
             | Self::Remove { id, .. }
+            | Self::ReplaceSite { id, .. }
+            | Self::ReplaceLigands { id, .. }
             | Self::ModifyField { id, .. }
             | Self::ModifyConstraint { id, .. } => *id,
         }
@@ -918,7 +1006,8 @@ impl StereoBondDelta {
 
     pub(crate) fn uses_participant_frame(&self) -> bool {
         match self {
-            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::Add { .. } | Self::Remove { .. } | Self::ReplaceLigands { .. } => true,
+            Self::ReplaceSite { .. } => false,
             Self::ModifyField { change, .. } => match change {
                 StereoBondFieldChange::Configuration { .. } => true,
             },
@@ -952,6 +1041,16 @@ impl StereoBondDelta {
                 site,
                 ligands,
                 attributes,
+            },
+            Self::ReplaceSite { id, old, new } => Self::ReplaceSite {
+                id,
+                old: new,
+                new: old,
+            },
+            Self::ReplaceLigands { id, old, new } => Self::ReplaceLigands {
+                id,
+                old: new,
+                new: old,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
@@ -1036,6 +1135,12 @@ impl FrameTransport for DativeBondDelta {
                 acceptor,
                 attributes: attributes.reframe_by(action)?,
             },
+            Self::ReplaceDonors { id, old, new } => Self::ReplaceDonors {
+                id,
+                old: action.act(&old)?,
+                new: action.act(&new)?,
+            },
+            Self::ReplaceAcceptor { id, old, new } => Self::ReplaceAcceptor { id, old, new },
             Self::ModifyField { id, change } => Self::ModifyField { id, change },
             Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
                 id,
@@ -1068,6 +1173,11 @@ impl FrameTransport for AromaticSystemDelta {
                 id,
                 atoms: action.act(&atoms)?,
                 attributes: attributes.reframe_by(action)?,
+            },
+            Self::ReplaceAtoms { id, old, new } => Self::ReplaceAtoms {
+                id,
+                old: action.act(&old)?,
+                new: action.act(&new)?,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
@@ -1117,6 +1227,11 @@ impl FrameTransport for MulticenterBondDelta {
                 id,
                 atoms: action.act(&atoms)?,
                 attributes: attributes.reframe_by(action)?,
+            },
+            Self::ReplaceAtoms { id, old, new } => Self::ReplaceAtoms {
+                id,
+                old: action.act(&old)?,
+                new: action.act(&new)?,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
@@ -1170,6 +1285,11 @@ impl FrameTransport for NoncovalentBondDelta {
                 atoms: action.act(&atoms)?.try_into().ok()?,
                 attributes: attributes.reframe_by(action)?,
             },
+            Self::ReplaceAtoms { id, old, new } => Self::ReplaceAtoms {
+                id,
+                old: action.act(&old)?.try_into().ok()?,
+                new: action.act(&new)?.try_into().ok()?,
+            },
             Self::ModifyField { id, change } => Self::ModifyField { id, change },
             Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
                 id,
@@ -1215,6 +1335,17 @@ impl FrameTransport for StereoAtomDelta {
                     site,
                     ligands: action.act(&ligands),
                     attributes: attributes.reframe_by(action)?,
+                }
+            }
+            Self::ReplaceSite { id, old, new } => Self::ReplaceSite { id, old, new },
+            Self::ReplaceLigands { id, old, new } => {
+                if action.degree() != old.len() || action.degree() != new.len() {
+                    return None;
+                }
+                Self::ReplaceLigands {
+                    id,
+                    old: action.act(&old),
+                    new: action.act(&new),
                 }
             }
             Self::ModifyField { id, change } => Self::ModifyField {
@@ -1279,6 +1410,17 @@ impl FrameTransport for StereoBondDelta {
                     site,
                     ligands: action.act(&ligands),
                     attributes: attributes.reframe_by(action)?,
+                }
+            }
+            Self::ReplaceSite { id, old, new } => Self::ReplaceSite { id, old, new },
+            Self::ReplaceLigands { id, old, new } => {
+                if action.degree() != old.len() || action.degree() != new.len() {
+                    return None;
+                }
+                Self::ReplaceLigands {
+                    id,
+                    old: action.act(&old),
+                    new: action.act(&new),
                 }
             }
             Self::ModifyField { id, change } => Self::ModifyField {
@@ -1402,6 +1544,8 @@ impl Delta {
                     let id = match delta {
                         DativeBondDelta::Add { id, .. }
                         | DativeBondDelta::Remove { id, .. }
+                        | DativeBondDelta::ReplaceDonors { id, .. }
+                        | DativeBondDelta::ReplaceAcceptor { id, .. }
                         | DativeBondDelta::ModifyField { id, .. }
                         | DativeBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -1413,6 +1557,7 @@ impl Delta {
                     let id = match delta {
                         AromaticSystemDelta::Add { id, .. }
                         | AromaticSystemDelta::Remove { id, .. }
+                        | AromaticSystemDelta::ReplaceAtoms { id, .. }
                         | AromaticSystemDelta::ModifyField { id, .. }
                         | AromaticSystemDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -1424,6 +1569,7 @@ impl Delta {
                     let id = match delta {
                         MulticenterBondDelta::Add { id, .. }
                         | MulticenterBondDelta::Remove { id, .. }
+                        | MulticenterBondDelta::ReplaceAtoms { id, .. }
                         | MulticenterBondDelta::ModifyField { id, .. }
                         | MulticenterBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -1435,6 +1581,7 @@ impl Delta {
                     let id = match delta {
                         NoncovalentBondDelta::Add { id, .. }
                         | NoncovalentBondDelta::Remove { id, .. }
+                        | NoncovalentBondDelta::ReplaceAtoms { id, .. }
                         | NoncovalentBondDelta::ModifyField { id, .. }
                         | NoncovalentBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -1467,6 +1614,8 @@ impl Delta {
                     let id = match &delta {
                         DativeBondDelta::Add { id, .. }
                         | DativeBondDelta::Remove { id, .. }
+                        | DativeBondDelta::ReplaceDonors { id, .. }
+                        | DativeBondDelta::ReplaceAcceptor { id, .. }
                         | DativeBondDelta::ModifyField { id, .. }
                         | DativeBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -1482,6 +1631,7 @@ impl Delta {
                     let id = match &delta {
                         AromaticSystemDelta::Add { id, .. }
                         | AromaticSystemDelta::Remove { id, .. }
+                        | AromaticSystemDelta::ReplaceAtoms { id, .. }
                         | AromaticSystemDelta::ModifyField { id, .. }
                         | AromaticSystemDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -1497,6 +1647,7 @@ impl Delta {
                     let id = match &delta {
                         MulticenterBondDelta::Add { id, .. }
                         | MulticenterBondDelta::Remove { id, .. }
+                        | MulticenterBondDelta::ReplaceAtoms { id, .. }
                         | MulticenterBondDelta::ModifyField { id, .. }
                         | MulticenterBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -1512,6 +1663,7 @@ impl Delta {
                     let id = match &delta {
                         NoncovalentBondDelta::Add { id, .. }
                         | NoncovalentBondDelta::Remove { id, .. }
+                        | NoncovalentBondDelta::ReplaceAtoms { id, .. }
                         | NoncovalentBondDelta::ModifyField { id, .. }
                         | NoncovalentBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -1809,8 +1961,8 @@ impl FrameTransport for ConstraintSpan {
     }
 }
 
-/// The per-entity op the fold operates on, abstracting `AtomDelta`/`BondDelta`. `atoms` carries
-/// the entity's participant atoms in `Add`/`Remove` (`()` for an atom, its two ids for a bond).
+/// The per-entity op the fold operates on. `atoms` carries the entity's incidence in
+/// `Add`/`Remove` (`()` for an atom, two ids for a bond).
 pub(crate) enum EntityOp<F: EntityFold> {
     Add {
         atoms: F::Atoms,
@@ -1820,6 +1972,7 @@ pub(crate) enum EntityOp<F: EntityFold> {
         atoms: F::Atoms,
         attributes: F::Attributes,
     },
+    Replace(F),
     ModifyField(F::FieldChange),
     ModifyConstraint {
         old: Option<F::Constraint>,
@@ -1849,6 +2002,26 @@ pub(crate) trait EntityFold: EntityPatch {
         remove_atoms: &Self::Atoms,
         old: Self::Attributes,
     ) -> bool;
+
+    fn replace_component(_: &mut Self::Atoms, _: &Self) -> Result<(), Contradiction> {
+        Err(Contradiction)
+    }
+
+    fn same_component(_: &Self, _: &Self) -> bool {
+        false
+    }
+
+    fn fuse_replacement(_: &mut Self, _: Self) -> Result<(), Contradiction> {
+        Err(Contradiction)
+    }
+
+    fn replacement_is_identity(_: &Self) -> bool {
+        false
+    }
+
+    fn inverse_replacement(_: Self) -> Option<Self> {
+        None
+    }
 
     /// Recover this kind's deltas from its lhs/rhs state column: `Added`/`Removed` become
     /// structural `Add`/`Remove` (their `atoms` from `atoms(index)`), `Modified` becomes the
@@ -1906,8 +2079,8 @@ fn fold_group<F: EntityFold>(id: F::Id, group: Vec<F>) -> Result<Vec<F>, Contrad
     Ok(folded.into_iter().map(|op| F::rebuild(id, op)).collect())
 }
 
-/// Created entity: seed `attributes` from `Add`, absorb subsequent field/constraint changes; a
-/// matching `Add`+`Remove` cancels. Yields one `Add` with the final attributes, or nothing.
+/// Created entity: absorb component, field, and constraint changes into `Add`. A matching
+/// `Remove` cancels the addition.
 fn fold_created<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>, Contradiction> {
     let mut state: Option<(F::Atoms, F::Attributes)> = None;
     let mut removed = false;
@@ -1930,6 +2103,10 @@ fn fold_created<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>
                 let (_, attributes) = state.as_mut().ok_or(Contradiction)?;
                 F::apply_constraint(attributes, old, new)?;
             }
+            EntityOp::Replace(delta) => {
+                let (atoms, _) = state.as_mut().ok_or(Contradiction)?;
+                F::replace_component(atoms, &delta)?;
+            }
             EntityOp::Remove { atoms, attributes } => {
                 let (add_atoms, current) = state.as_ref().ok_or(Contradiction)?;
                 if !F::remove_matches(add_atoms, current, &atoms, attributes) {
@@ -1946,14 +2123,14 @@ fn fold_created<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>
     })
 }
 
-/// Preserved entity: fuse `ModifyField` chains per field and `ModifyConstraint` chains per key. A
-/// `Remove` subsumes the prior changes and carries the *original* value (the changes are
-/// reverted on the removed attributes).
+/// Preserved entity: fuse changes per component, field, or constraint key. A `Remove` subsumes
+/// prior changes and carries the original incidence and attributes.
 #[allow(clippy::type_complexity)]
 fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>, Contradiction> {
     let mut fields: HashMap<Discriminant<F::FieldChange>, F::FieldChange> = HashMap::new();
     let mut constraints: HashMap<F::ConstraintKey, (Option<F::Constraint>, Option<F::Constraint>)> =
         HashMap::new();
+    let mut replacements: Vec<F> = Vec::new();
     let mut removed: Option<(F::Atoms, F::Attributes)> = None;
     for op in ops {
         if removed.is_some() {
@@ -1961,6 +2138,16 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         }
         match op {
             EntityOp::Add { .. } => return Err(Contradiction),
+            EntityOp::Replace(delta) => {
+                if let Some(previous) = replacements
+                    .iter_mut()
+                    .find(|previous| F::same_component(previous, &delta))
+                {
+                    F::fuse_replacement(previous, delta)?;
+                } else {
+                    replacements.push(delta);
+                }
+            }
             EntityOp::ModifyField(change) => {
                 let field_key = discriminant(&change);
                 let fused = match fields.remove(&field_key) {
@@ -1991,7 +2178,11 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
             }
         }
     }
-    if let Some((atoms, mut attributes)) = removed {
+    if let Some((mut atoms, mut attributes)) = removed {
+        for delta in replacements.into_iter().rev() {
+            let inverse = F::inverse_replacement(delta).ok_or(Contradiction)?;
+            F::replace_component(&mut atoms, &inverse)?;
+        }
         for (_idx, change) in fields {
             F::apply_field(&mut attributes, F::field_inverse(change))?;
         }
@@ -2001,6 +2192,12 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         return Ok(vec![EntityOp::Remove { atoms, attributes }]);
     }
     let mut out = Vec::new();
+    out.extend(
+        replacements
+            .into_iter()
+            .filter(|delta| !F::replacement_is_identity(delta))
+            .map(EntityOp::Replace),
+    );
     for (_idx, change) in fields {
         if !F::field_is_identity(&change) {
             out.push(EntityOp::ModifyField(change));
@@ -2012,6 +2209,47 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         }
     }
     Ok(out)
+}
+
+macro_rules! fold_atoms_replacement {
+    ($delta:ident) => {
+        fn replace_component(atoms: &mut Self::Atoms, delta: &Self) -> Result<(), Contradiction> {
+            let $delta::ReplaceAtoms { old, new, .. } = delta else {
+                return Err(Contradiction);
+            };
+            if atoms != old {
+                return Err(Contradiction);
+            }
+            *atoms = new.clone();
+            Ok(())
+        }
+
+        fn same_component(_: &Self, _: &Self) -> bool {
+            true
+        }
+
+        fn fuse_replacement(previous: &mut Self, next: Self) -> Result<(), Contradiction> {
+            let $delta::ReplaceAtoms { new: current, .. } = previous else {
+                return Err(Contradiction);
+            };
+            let $delta::ReplaceAtoms { old, new, .. } = next else {
+                return Err(Contradiction);
+            };
+            if *current != old {
+                return Err(Contradiction);
+            }
+            *current = new;
+            Ok(())
+        }
+
+        fn replacement_is_identity(delta: &Self) -> bool {
+            matches!(delta, $delta::ReplaceAtoms { old, new, .. } if old == new)
+        }
+
+        fn inverse_replacement(delta: Self) -> Option<Self> {
+            matches!(delta, $delta::ReplaceAtoms { .. }).then(|| delta.inverse())
+        }
+    };
 }
 
 impl EntityPatch for AtomDelta {
@@ -2086,6 +2324,7 @@ impl EntityFold for AtomDelta {
         match op {
             EntityOp::Add { attributes, .. } => AtomDelta::Add { id, attributes },
             EntityOp::Remove { attributes, .. } => AtomDelta::Remove { id, attributes },
+            EntityOp::Replace(delta) => delta,
             EntityOp::ModifyField(change) => Self::modify_field(id, change),
             EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
         }
@@ -2192,6 +2431,7 @@ impl EntityFold for BondDelta {
                 atoms,
                 attributes,
             },
+            EntityOp::Replace(delta) => delta,
             EntityOp::ModifyField(change) => Self::modify_field(id, change),
             EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
         }
@@ -2269,6 +2509,8 @@ impl EntityFold for DativeBondDelta {
         match self {
             DativeBondDelta::Add { id, .. }
             | DativeBondDelta::Remove { id, .. }
+            | DativeBondDelta::ReplaceDonors { id, .. }
+            | DativeBondDelta::ReplaceAcceptor { id, .. }
             | DativeBondDelta::ModifyField { id, .. }
             | DativeBondDelta::ModifyConstraint { id, .. } => *id,
         }
@@ -2294,6 +2536,8 @@ impl EntityFold for DativeBondDelta {
                 atoms: (donors, acceptor),
                 attributes,
             },
+            delta @ (DativeBondDelta::ReplaceDonors { .. }
+            | DativeBondDelta::ReplaceAcceptor { .. }) => EntityOp::Replace(delta),
             DativeBondDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
             DativeBondDelta::ModifyConstraint { old, new, .. } => {
                 EntityOp::ModifyConstraint { old, new }
@@ -2321,6 +2565,7 @@ impl EntityFold for DativeBondDelta {
                 acceptor,
                 attributes,
             },
+            EntityOp::Replace(delta) => delta,
             EntityOp::ModifyField(change) => Self::modify_field(id, change),
             EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
         }
@@ -2348,6 +2593,58 @@ impl EntityFold for DativeBondDelta {
             && DynPermutation::between(&remove_atoms.0, &add_atoms.0)
                 .and_then(|action| old.reframe_by(&action))
                 .is_some_and(|restated| restated.normalized_eq(current))
+    }
+
+    fn replace_component(atoms: &mut Self::Atoms, delta: &Self) -> Result<(), Contradiction> {
+        match delta {
+            Self::ReplaceDonors { old, new, .. } if atoms.0 == *old => atoms.0 = new.clone(),
+            Self::ReplaceAcceptor { old, new, .. } if atoms.1 == *old => atoms.1 = *new,
+            _ => return Err(Contradiction),
+        }
+        Ok(())
+    }
+
+    fn same_component(previous: &Self, next: &Self) -> bool {
+        matches!(
+            (previous, next),
+            (Self::ReplaceDonors { .. }, Self::ReplaceDonors { .. })
+                | (Self::ReplaceAcceptor { .. }, Self::ReplaceAcceptor { .. })
+        )
+    }
+
+    fn fuse_replacement(previous: &mut Self, next: Self) -> Result<(), Contradiction> {
+        match (previous, next) {
+            (Self::ReplaceDonors { new: current, .. }, Self::ReplaceDonors { old, new, .. })
+                if *current == old =>
+            {
+                *current = new;
+                Ok(())
+            }
+            (
+                Self::ReplaceAcceptor { new: current, .. },
+                Self::ReplaceAcceptor { old, new, .. },
+            ) if *current == old => {
+                *current = new;
+                Ok(())
+            }
+            _ => Err(Contradiction),
+        }
+    }
+
+    fn replacement_is_identity(delta: &Self) -> bool {
+        match delta {
+            Self::ReplaceDonors { old, new, .. } => old == new,
+            Self::ReplaceAcceptor { old, new, .. } => old == new,
+            _ => false,
+        }
+    }
+
+    fn inverse_replacement(delta: Self) -> Option<Self> {
+        matches!(
+            delta,
+            Self::ReplaceDonors { .. } | Self::ReplaceAcceptor { .. }
+        )
+        .then(|| delta.inverse())
     }
 
     fold_field_ops!(DativeBondFieldChange, { Order });
@@ -2403,6 +2700,7 @@ impl EntityFold for AromaticSystemDelta {
         match self {
             AromaticSystemDelta::Add { id, .. }
             | AromaticSystemDelta::Remove { id, .. }
+            | AromaticSystemDelta::ReplaceAtoms { id, .. }
             | AromaticSystemDelta::ModifyField { id, .. }
             | AromaticSystemDelta::ModifyConstraint { id, .. } => *id,
         }
@@ -2416,6 +2714,7 @@ impl EntityFold for AromaticSystemDelta {
             AromaticSystemDelta::Remove {
                 atoms, attributes, ..
             } => EntityOp::Remove { atoms, attributes },
+            delta @ AromaticSystemDelta::ReplaceAtoms { .. } => EntityOp::Replace(delta),
             AromaticSystemDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
             AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
                 EntityOp::ModifyConstraint { old, new }
@@ -2435,6 +2734,7 @@ impl EntityFold for AromaticSystemDelta {
                 atoms,
                 attributes,
             },
+            EntityOp::Replace(delta) => delta,
             EntityOp::ModifyField(change) => Self::modify_field(id, change),
             EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
         }
@@ -2462,6 +2762,8 @@ impl EntityFold for AromaticSystemDelta {
             .and_then(|action| old.reframe_by(&action))
             .is_some_and(|restated| restated.normalized_eq(current))
     }
+
+    fold_atoms_replacement!(AromaticSystemDelta);
 
     fold_field_ops!(AromaticSystemFieldChange, {
         Electrons,
@@ -2524,6 +2826,7 @@ impl EntityFold for MulticenterBondDelta {
         match self {
             MulticenterBondDelta::Add { id, .. }
             | MulticenterBondDelta::Remove { id, .. }
+            | MulticenterBondDelta::ReplaceAtoms { id, .. }
             | MulticenterBondDelta::ModifyField { id, .. }
             | MulticenterBondDelta::ModifyConstraint { id, .. } => *id,
         }
@@ -2537,6 +2840,7 @@ impl EntityFold for MulticenterBondDelta {
             MulticenterBondDelta::Remove {
                 atoms, attributes, ..
             } => EntityOp::Remove { atoms, attributes },
+            delta @ MulticenterBondDelta::ReplaceAtoms { .. } => EntityOp::Replace(delta),
             MulticenterBondDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
             MulticenterBondDelta::ModifyConstraint { old, new, .. } => {
                 EntityOp::ModifyConstraint { old, new }
@@ -2556,6 +2860,7 @@ impl EntityFold for MulticenterBondDelta {
                 atoms,
                 attributes,
             },
+            EntityOp::Replace(delta) => delta,
             EntityOp::ModifyField(change) => Self::modify_field(id, change),
             EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
         }
@@ -2583,6 +2888,8 @@ impl EntityFold for MulticenterBondDelta {
             .and_then(|action| old.reframe_by(&action))
             .is_some_and(|restated| restated.normalized_eq(current))
     }
+
+    fold_atoms_replacement!(MulticenterBondDelta);
 
     fold_field_ops!(MulticenterBondFieldChange, {
         Electrons,
@@ -2643,6 +2950,7 @@ impl EntityFold for NoncovalentBondDelta {
         match self {
             NoncovalentBondDelta::Add { id, .. }
             | NoncovalentBondDelta::Remove { id, .. }
+            | NoncovalentBondDelta::ReplaceAtoms { id, .. }
             | NoncovalentBondDelta::ModifyField { id, .. }
             | NoncovalentBondDelta::ModifyConstraint { id, .. } => *id,
         }
@@ -2656,6 +2964,7 @@ impl EntityFold for NoncovalentBondDelta {
             NoncovalentBondDelta::Remove {
                 atoms, attributes, ..
             } => EntityOp::Remove { atoms, attributes },
+            delta @ NoncovalentBondDelta::ReplaceAtoms { .. } => EntityOp::Replace(delta),
             NoncovalentBondDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
             NoncovalentBondDelta::ModifyConstraint { old, new, .. } => {
                 EntityOp::ModifyConstraint { old, new }
@@ -2675,6 +2984,7 @@ impl EntityFold for NoncovalentBondDelta {
                 atoms,
                 attributes,
             },
+            EntityOp::Replace(delta) => delta,
             EntityOp::ModifyField(change) => Self::modify_field(id, change),
             EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
         }
@@ -2702,6 +3012,8 @@ impl EntityFold for NoncovalentBondDelta {
             .and_then(|action| old.reframe_by(&action))
             .is_some_and(|restated| restated.normalized_eq(current))
     }
+
+    fold_atoms_replacement!(NoncovalentBondDelta);
 
     fold_field_ops!(NoncovalentBondFieldChange, { Kind });
 }
@@ -2830,7 +3142,10 @@ pub(crate) fn apply_dative_change(
         DativeBondDelta::ModifyConstraint { old, new, .. } => {
             DativeBondDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        DativeBondDelta::Add { .. } | DativeBondDelta::Remove { .. } => Ok(()),
+        DativeBondDelta::Add { .. }
+        | DativeBondDelta::Remove { .. }
+        | DativeBondDelta::ReplaceDonors { .. }
+        | DativeBondDelta::ReplaceAcceptor { .. } => Ok(()),
     }
 }
 
@@ -2845,7 +3160,9 @@ pub(crate) fn apply_aromatic_change(
         AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
             AromaticSystemDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        AromaticSystemDelta::Add { .. } | AromaticSystemDelta::Remove { .. } => Ok(()),
+        AromaticSystemDelta::Add { .. }
+        | AromaticSystemDelta::Remove { .. }
+        | AromaticSystemDelta::ReplaceAtoms { .. } => Ok(()),
     }
 }
 
@@ -2860,7 +3177,9 @@ pub(crate) fn apply_multicenter_change(
         MulticenterBondDelta::ModifyConstraint { old, new, .. } => {
             MulticenterBondDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        MulticenterBondDelta::Add { .. } | MulticenterBondDelta::Remove { .. } => Ok(()),
+        MulticenterBondDelta::Add { .. }
+        | MulticenterBondDelta::Remove { .. }
+        | MulticenterBondDelta::ReplaceAtoms { .. } => Ok(()),
     }
 }
 
@@ -2875,7 +3194,9 @@ pub(crate) fn apply_noncovalent_change(
         NoncovalentBondDelta::ModifyConstraint { old, new, .. } => {
             NoncovalentBondDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. } => Ok(()),
+        NoncovalentBondDelta::Add { .. }
+        | NoncovalentBondDelta::Remove { .. }
+        | NoncovalentBondDelta::ReplaceAtoms { .. } => Ok(()),
     }
 }
 
@@ -2890,7 +3211,10 @@ pub(crate) fn apply_stereo_atom_change(
         StereoAtomDelta::ModifyConstraint { old, new, .. } => {
             StereoAtomDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        StereoAtomDelta::Add { .. } | StereoAtomDelta::Remove { .. } => Ok(()),
+        StereoAtomDelta::Add { .. }
+        | StereoAtomDelta::Remove { .. }
+        | StereoAtomDelta::ReplaceSite { .. }
+        | StereoAtomDelta::ReplaceLigands { .. } => Ok(()),
     }
 }
 
@@ -2905,7 +3229,10 @@ pub(crate) fn apply_stereo_bond_change(
         StereoBondDelta::ModifyConstraint { old, new, .. } => {
             StereoBondDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        StereoBondDelta::Add { .. } | StereoBondDelta::Remove { .. } => Ok(()),
+        StereoBondDelta::Add { .. }
+        | StereoBondDelta::Remove { .. }
+        | StereoBondDelta::ReplaceSite { .. }
+        | StereoBondDelta::ReplaceLigands { .. } => Ok(()),
     }
 }
 
@@ -2983,6 +3310,20 @@ fn fold_stereo_atom_group(
                     state = None;
                     removed = true;
                 }
+                StereoAtomDelta::ReplaceSite { old, new, .. } => {
+                    let (site, _, _) = state.as_mut().ok_or(Contradiction)?;
+                    if *site != old {
+                        return Err(Contradiction);
+                    }
+                    *site = new;
+                }
+                StereoAtomDelta::ReplaceLigands { old, new, .. } => {
+                    let (_, ligands, _) = state.as_mut().ok_or(Contradiction)?;
+                    if *ligands != old {
+                        return Err(Contradiction);
+                    }
+                    *ligands = new;
+                }
                 other => {
                     let (_, _, attributes) = state.as_mut().ok_or(Contradiction)?;
                     apply_stereo_atom_change(attributes, &other)?;
@@ -3009,12 +3350,24 @@ fn fold_stereo_atom_group(
         ),
     > = HashMap::new();
     let mut removed: Option<(AtomId, Vec<StereoLigand>, StereoAtomForm)> = None;
+    let mut site_change: Option<(AtomId, AtomId)> = None;
+    let mut ligand_change: Option<(Vec<StereoLigand>, Vec<StereoLigand>)> = None;
     for delta in group {
         if removed.is_some() {
             return Err(Contradiction);
         }
         match delta {
             StereoAtomDelta::Add { .. } => return Err(Contradiction),
+            StereoAtomDelta::ReplaceSite { old, new, .. } => match &mut site_change {
+                Some((_, current)) if *current == old => *current = new,
+                Some(_) => return Err(Contradiction),
+                None => site_change = Some((old, new)),
+            },
+            StereoAtomDelta::ReplaceLigands { old, new, .. } => match &mut ligand_change {
+                Some((_, current)) if *current == old => *current = new,
+                Some(_) => return Err(Contradiction),
+                None => ligand_change = Some((old, new)),
+            },
             StereoAtomDelta::ModifyField {
                 change: StereoAtomFieldChange::Configuration { old, new },
                 ..
@@ -3056,7 +3409,19 @@ fn fold_stereo_atom_group(
         }
     }
     let config = fold_stereo_config(config_changes)?;
-    if let Some((site, ligands, mut attributes)) = removed {
+    if let Some((mut site, mut ligands, mut attributes)) = removed {
+        if let Some((old, new)) = site_change {
+            if site != new {
+                return Err(Contradiction);
+            }
+            site = old;
+        }
+        if let Some((old, new)) = ligand_change {
+            if ligands != new {
+                return Err(Contradiction);
+            }
+            ligands = old;
+        }
         match config {
             StereoConfigFold::Identity => {}
             StereoConfigFold::Set { old, new } => {
@@ -3077,6 +3442,16 @@ fn fold_stereo_atom_group(
         }]);
     }
     let mut out = Vec::new();
+    if let Some((old, new)) = site_change {
+        if old != new {
+            out.push(StereoAtomDelta::ReplaceSite { id, old, new });
+        }
+    }
+    if let Some((old, new)) = ligand_change {
+        if old != new {
+            out.push(StereoAtomDelta::ReplaceLigands { id, old, new });
+        }
+    }
     match config {
         StereoConfigFold::Identity => {}
         StereoConfigFold::Set { old, new } => out.push(StereoAtomDelta::ModifyField {
@@ -3138,6 +3513,20 @@ fn fold_stereo_bond_group(
                     state = None;
                     removed = true;
                 }
+                StereoBondDelta::ReplaceSite { old, new, .. } => {
+                    let (site, _, _) = state.as_mut().ok_or(Contradiction)?;
+                    if *site != old {
+                        return Err(Contradiction);
+                    }
+                    *site = new;
+                }
+                StereoBondDelta::ReplaceLigands { old, new, .. } => {
+                    let (_, ligands, _) = state.as_mut().ok_or(Contradiction)?;
+                    if *ligands != old {
+                        return Err(Contradiction);
+                    }
+                    *ligands = new;
+                }
                 other => {
                     let (_, _, attributes) = state.as_mut().ok_or(Contradiction)?;
                     apply_stereo_bond_change(attributes, &other)?;
@@ -3164,12 +3553,24 @@ fn fold_stereo_bond_group(
         ),
     > = HashMap::new();
     let mut removed: Option<(BondId, Vec<StereoLigand>, StereoBondForm)> = None;
+    let mut site_change: Option<(BondId, BondId)> = None;
+    let mut ligand_change: Option<(Vec<StereoLigand>, Vec<StereoLigand>)> = None;
     for delta in group {
         if removed.is_some() {
             return Err(Contradiction);
         }
         match delta {
             StereoBondDelta::Add { .. } => return Err(Contradiction),
+            StereoBondDelta::ReplaceSite { old, new, .. } => match &mut site_change {
+                Some((_, current)) if *current == old => *current = new,
+                Some(_) => return Err(Contradiction),
+                None => site_change = Some((old, new)),
+            },
+            StereoBondDelta::ReplaceLigands { old, new, .. } => match &mut ligand_change {
+                Some((_, current)) if *current == old => *current = new,
+                Some(_) => return Err(Contradiction),
+                None => ligand_change = Some((old, new)),
+            },
             StereoBondDelta::ModifyField {
                 change: StereoBondFieldChange::Configuration { old, new },
                 ..
@@ -3211,7 +3612,19 @@ fn fold_stereo_bond_group(
         }
     }
     let config = fold_stereo_config(config_changes)?;
-    if let Some((site, ligands, mut attributes)) = removed {
+    if let Some((mut site, mut ligands, mut attributes)) = removed {
+        if let Some((old, new)) = site_change {
+            if site != new {
+                return Err(Contradiction);
+            }
+            site = old;
+        }
+        if let Some((old, new)) = ligand_change {
+            if ligands != new {
+                return Err(Contradiction);
+            }
+            ligands = old;
+        }
         match config {
             StereoConfigFold::Identity => {}
             StereoConfigFold::Set { old, new } => {
@@ -3232,6 +3645,16 @@ fn fold_stereo_bond_group(
         }]);
     }
     let mut out = Vec::new();
+    if let Some((old, new)) = site_change {
+        if old != new {
+            out.push(StereoBondDelta::ReplaceSite { id, old, new });
+        }
+    }
+    if let Some((old, new)) = ligand_change {
+        if old != new {
+            out.push(StereoBondDelta::ReplaceLigands { id, old, new });
+        }
+    }
     match config {
         StereoConfigFold::Identity => {}
         StereoConfigFold::Set { old, new } => out.push(StereoBondDelta::ModifyField {
@@ -4283,6 +4706,42 @@ mod tests {
             attributes: BondForm::default(),
         })
     )]
+    #[case::dative_donors(
+        Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(1), AtomId(2)], new: vec![AtomId(2), AtomId(1)] }),
+        Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(2), AtomId(1)], new: vec![AtomId(1), AtomId(2)] })
+    )]
+    #[case::dative_acceptor(
+        Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(1), new: AtomId(2) }),
+        Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(2), new: AtomId(1) })
+    )]
+    #[case::aromatic_atoms(
+        Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(1), AtomId(2)], new: vec![AtomId(2), AtomId(1)] }),
+        Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(2), AtomId(1)], new: vec![AtomId(1), AtomId(2)] })
+    )]
+    #[case::multicenter_atoms(
+        Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(1), AtomId(2)], new: vec![AtomId(2), AtomId(1)] }),
+        Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(2), AtomId(1)], new: vec![AtomId(1), AtomId(2)] })
+    )]
+    #[case::noncovalent_atoms(
+        Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(1), AtomId(2)], new: [AtomId(2), AtomId(1)] }),
+        Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(2), AtomId(1)], new: [AtomId(1), AtomId(2)] })
+    )]
+    #[case::stereo_atom_site(
+        Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(1), new: AtomId(2) }),
+        Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(2), new: AtomId(1) })
+    )]
+    #[case::stereo_atom_ligands(
+        Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::LonePair)] }),
+        Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(1), StereoLigandKind::LonePair)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)] })
+    )]
+    #[case::stereo_bond_site(
+        Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(1), new: BondId(2) }),
+        Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(2), new: BondId(1) })
+    )]
+    #[case::stereo_bond_ligands(
+        Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::LonePair)] }),
+        Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: vec![StereoLigand::new(AtomId(1), StereoLigandKind::LonePair)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)] })
+    )]
     fn test_delta_inverse(#[case] input: Delta, #[case] expected: Delta) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
@@ -4309,6 +4768,23 @@ mod tests {
     }
 
     #[rstest]
+    fn test_dative_bond_delta_reframe_by_replacement() {
+        let action = DynPermutation::try_from([1, 0].as_slice()).unwrap();
+        let input = DativeBondDelta::ReplaceDonors {
+            id: DativeBondId(4),
+            old: vec![AtomId(1), AtomId(2)],
+            new: vec![AtomId(3), AtomId(4)],
+        };
+        let expected = DativeBondDelta::ReplaceDonors {
+            id: DativeBondId(4),
+            old: vec![AtomId(2), AtomId(1)],
+            new: vec![AtomId(4), AtomId(3)],
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
     fn test_aromatic_system_delta_reframe_by() {
         let action =
             DynPermutation::try_from([2, 0, 1].as_slice()).expect("test image is a permutation");
@@ -4328,6 +4804,18 @@ mod tests {
         };
 
         assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_delta_reframe_by_replacement_error() {
+        let action = DynPermutation::identity(2);
+        let input = AromaticSystemDelta::ReplaceAtoms {
+            id: AromaticSystemId(3),
+            old: vec![AtomId(1), AtomId(2)],
+            new: vec![AtomId(1), AtomId(2), AtomId(3)],
+        };
+
+        assert_eq!(input.reframe_by(&action), None);
     }
 
     #[rstest]
@@ -4361,6 +4849,23 @@ mod tests {
             id: NoncovalentBondId(5),
             atoms: [AtomId(2), AtomId(1)],
             attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_delta_reframe_by_replacement() {
+        let action = DynPermutation::try_from([1, 0].as_slice()).unwrap();
+        let input = NoncovalentBondDelta::ReplaceAtoms {
+            id: NoncovalentBondId(5),
+            old: [AtomId(1), AtomId(2)],
+            new: [AtomId(3), AtomId(4)],
+        };
+        let expected = NoncovalentBondDelta::ReplaceAtoms {
+            id: NoncovalentBondId(5),
+            old: [AtomId(2), AtomId(1)],
+            new: [AtomId(4), AtomId(3)],
         };
 
         assert_eq!(input.reframe_by(&action), Some(expected));
@@ -4406,6 +4911,47 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_atom_delta_reframe_by_replacement() {
+        let action = Permutation::from_image(&[1, 0, 2, 3]);
+        let input = StereoAtomDelta::ReplaceLigands {
+            id: StereoAtomId(6),
+            old: [1, 2, 3, 4]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+            new: [1, 2, 3, 5]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+        };
+        let expected = StereoAtomDelta::ReplaceLigands {
+            id: StereoAtomId(6),
+            old: [2, 1, 3, 4]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+            new: [2, 1, 3, 5]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_stereo_atom_delta_reframe_by_replacement_error() {
+        let action = Permutation::from_image(&[1, 0, 2, 3]);
+        let input = StereoAtomDelta::ReplaceLigands {
+            id: StereoAtomId(6),
+            old: [1, 2, 3, 4]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+            new: [1, 2, 3]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+        };
+
+        assert_eq!(input.reframe_by(&action), None);
+    }
+
+    #[rstest]
     fn test_stereo_bond_delta_reframe_by() {
         let action = Permutation::from_image(&[1, 0, 2, 3]);
         let input = StereoBondDelta::ModifyField {
@@ -4421,6 +4967,31 @@ mod tests {
                 old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32),
                 new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32),
             },
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_stereo_bond_delta_reframe_by_replacement() {
+        let action = Permutation::from_image(&[1, 0, 2, 3]);
+        let input = StereoBondDelta::ReplaceLigands {
+            id: StereoBondId(7),
+            old: [1, 2, 3, 4]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+            new: [1, 2, 3, 5]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+        };
+        let expected = StereoBondDelta::ReplaceLigands {
+            id: StereoBondId(7),
+            old: [2, 1, 3, 4]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
+            new: [2, 1, 3, 5]
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .to_vec(),
         };
 
         assert_eq!(input.reframe_by(&action), Some(expected));
@@ -4651,6 +5222,241 @@ mod tests {
         let deltas = Deltas::from_iter(entries.clone());
 
         assert_eq!(deltas.into_iter().collect::<Vec<_>>(), entries);
+    }
+
+    #[rstest]
+    #[case::dative_donors(
+        vec![Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }), Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(1), AtomId(0)], new: vec![AtomId(2), AtomId(1)] })],
+        Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(2), AtomId(1)] })
+    )]
+    #[case::dative_acceptor(
+        vec![Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(0), new: AtomId(1) }), Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(1), new: AtomId(2) })],
+        Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(0), new: AtomId(2) })
+    )]
+    #[case::aromatic_atoms(
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }), Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(1), AtomId(0)], new: vec![AtomId(2), AtomId(1)] })],
+        Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(2), AtomId(1)] })
+    )]
+    #[case::multicenter_atoms(
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }), Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(1), AtomId(0)], new: vec![AtomId(2), AtomId(1)] })],
+        Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(2), AtomId(1)] })
+    )]
+    #[case::noncovalent_atoms(
+        vec![Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(0), AtomId(1)], new: [AtomId(1), AtomId(0)] }), Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(1), AtomId(0)], new: [AtomId(2), AtomId(1)] })],
+        Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(0), AtomId(1)], new: [AtomId(2), AtomId(1)] })
+    )]
+    #[case::stereo_atom_site(
+        vec![Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(0), new: AtomId(1) }), Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(1), new: AtomId(2) })],
+        Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(0), new: AtomId(2) })
+    )]
+    #[case::stereo_atom_ligands(
+        vec![Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)] }), Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)] })],
+        Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)] })
+    )]
+    #[case::stereo_bond_site(
+        vec![Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(0), new: BondId(1) }), Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(1), new: BondId(2) })],
+        Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(0), new: BondId(2) })
+    )]
+    #[case::stereo_bond_ligands(
+        vec![Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)] }), Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)] })],
+        Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)] })
+    )]
+    fn test_deltas_normalize_replacement_chain(#[case] input: Vec<Delta>, #[case] expected: Delta) {
+        assert_eq!(
+            Deltas::from_iter(input).normalize(),
+            Ok(Deltas::from_iter([expected]))
+        );
+    }
+
+    #[rstest]
+    fn test_deltas_normalize_replacement_independent_components() {
+        let input = Deltas::from_iter([
+            Delta::DativeBond(DativeBondDelta::ReplaceDonors {
+                id: DativeBondId(4),
+                old: vec![AtomId(0), AtomId(1)],
+                new: vec![AtomId(1), AtomId(0)],
+            }),
+            Delta::DativeBond(DativeBondDelta::ReplaceAcceptor {
+                id: DativeBondId(4),
+                old: AtomId(2),
+                new: AtomId(3),
+            }),
+            Delta::DativeBond(DativeBondDelta::ReplaceDonors {
+                id: DativeBondId(4),
+                old: vec![AtomId(1), AtomId(0)],
+                new: vec![AtomId(4), AtomId(0)],
+            }),
+        ]);
+        let expected = Deltas::from_iter([
+            Delta::DativeBond(DativeBondDelta::ReplaceDonors {
+                id: DativeBondId(4),
+                old: vec![AtomId(0), AtomId(1)],
+                new: vec![AtomId(4), AtomId(0)],
+            }),
+            Delta::DativeBond(DativeBondDelta::ReplaceAcceptor {
+                id: DativeBondId(4),
+                old: AtomId(2),
+                new: AtomId(3),
+            }),
+        ]);
+
+        assert_eq!(input.normalize(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::dative_donors(vec![Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }), Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(3), AtomId(1)], new: vec![AtomId(2), AtomId(1)] })])]
+    #[case::dative_acceptor(vec![Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(0), new: AtomId(1) }), Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(3), new: AtomId(2) })])]
+    #[case::aromatic_atoms(vec![Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }), Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(3), AtomId(1)], new: vec![AtomId(2), AtomId(1)] })])]
+    #[case::multicenter_atoms(vec![Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }), Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(3), AtomId(1)], new: vec![AtomId(2), AtomId(1)] })])]
+    #[case::noncovalent_atoms(vec![Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(0), AtomId(1)], new: [AtomId(1), AtomId(0)] }), Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(3), AtomId(1)], new: [AtomId(2), AtomId(1)] })])]
+    #[case::stereo_atom_site(vec![Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(0), new: AtomId(1) }), Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(3), new: AtomId(2) })])]
+    #[case::stereo_atom_ligands(vec![Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)] }), Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)] })])]
+    #[case::stereo_bond_site(vec![Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(0), new: BondId(1) }), Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(3), new: BondId(2) })])]
+    #[case::stereo_bond_ligands(vec![Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)] }), Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)] })])]
+    fn test_deltas_normalize_replacement_error(#[case] input: Vec<Delta>) {
+        assert_eq!(Deltas::from_iter(input).normalize(), Err(Contradiction));
+    }
+
+    #[rstest]
+    #[case::dative_donors(Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(0), AtomId(1)] }))]
+    #[case::dative_acceptor(Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(0), new: AtomId(0) }))]
+    #[case::aromatic_atoms(Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(0), AtomId(1)] }))]
+    #[case::multicenter_atoms(Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(0), AtomId(1)] }))]
+    #[case::noncovalent_atoms(Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(0), AtomId(1)], new: [AtomId(0), AtomId(1)] }))]
+    #[case::stereo_atom_site(Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(0), new: AtomId(0) }))]
+    #[case::stereo_atom_ligands(Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)] }))]
+    #[case::stereo_bond_site(Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(0), new: BondId(0) }))]
+    #[case::stereo_bond_ligands(Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom)] }))]
+    fn test_deltas_normalize_replacement_identity(#[case] input: Delta) {
+        assert_eq!(Deltas::from_iter([input]).normalize(), Ok(Deltas::new()));
+    }
+
+    #[rstest]
+    #[case::dative_donors(
+        Delta::DativeBond(DativeBondDelta::Add { id: DativeBondId(4), donors: vec![AtomId(0), AtomId(1)], acceptor: AtomId(8), attributes: DativeBondForm::from_order(1) }),
+        Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }),
+        Delta::DativeBond(DativeBondDelta::Add { id: DativeBondId(4), donors: vec![AtomId(1), AtomId(0)], acceptor: AtomId(8), attributes: DativeBondForm::from_order(1) }),
+        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(4), donors: vec![AtomId(1), AtomId(0)], acceptor: AtomId(8), attributes: DativeBondForm::from_order(1) })
+    )]
+    #[case::dative_acceptor(
+        Delta::DativeBond(DativeBondDelta::Add { id: DativeBondId(4), donors: vec![AtomId(0), AtomId(1)], acceptor: AtomId(8), attributes: DativeBondForm::from_order(1) }),
+        Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(8), new: AtomId(9) }),
+        Delta::DativeBond(DativeBondDelta::Add { id: DativeBondId(4), donors: vec![AtomId(0), AtomId(1)], acceptor: AtomId(9), attributes: DativeBondForm::from_order(1) }),
+        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(4), donors: vec![AtomId(0), AtomId(1)], acceptor: AtomId(9), attributes: DativeBondForm::from_order(1) })
+    )]
+    #[case::aromatic_atoms(
+        Delta::AromaticSystem(AromaticSystemDelta::Add { id: AromaticSystemId(4), atoms: vec![AtomId(0), AtomId(1)], attributes: AromaticSystemForm::from_electrons(vec![1, 2]) }),
+        Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }),
+        Delta::AromaticSystem(AromaticSystemDelta::Add { id: AromaticSystemId(4), atoms: vec![AtomId(1), AtomId(0)], attributes: AromaticSystemForm::from_electrons(vec![1, 2]) }),
+        Delta::AromaticSystem(AromaticSystemDelta::Remove { id: AromaticSystemId(4), atoms: vec![AtomId(1), AtomId(0)], attributes: AromaticSystemForm::from_electrons(vec![1, 2]) })
+    )]
+    #[case::multicenter_atoms(
+        Delta::MulticenterBond(MulticenterBondDelta::Add { id: MulticenterBondId(4), atoms: vec![AtomId(0), AtomId(1)], attributes: MulticenterBondForm::from_electrons(vec![1, 2]) }),
+        Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }),
+        Delta::MulticenterBond(MulticenterBondDelta::Add { id: MulticenterBondId(4), atoms: vec![AtomId(1), AtomId(0)], attributes: MulticenterBondForm::from_electrons(vec![1, 2]) }),
+        Delta::MulticenterBond(MulticenterBondDelta::Remove { id: MulticenterBondId(4), atoms: vec![AtomId(1), AtomId(0)], attributes: MulticenterBondForm::from_electrons(vec![1, 2]) })
+    )]
+    #[case::noncovalent_atoms(
+        Delta::NoncovalentBond(NoncovalentBondDelta::Add { id: NoncovalentBondId(4), atoms: [AtomId(0), AtomId(1)], attributes: NoncovalentBondForm::default() }),
+        Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(0), AtomId(1)], new: [AtomId(1), AtomId(0)] }),
+        Delta::NoncovalentBond(NoncovalentBondDelta::Add { id: NoncovalentBondId(4), atoms: [AtomId(1), AtomId(0)], attributes: NoncovalentBondForm::default() }),
+        Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id: NoncovalentBondId(4), atoms: [AtomId(1), AtomId(0)], attributes: NoncovalentBondForm::default() })
+    )]
+    #[case::stereo_atom_site(
+        Delta::StereoAtom(StereoAtomDelta::Add { id: StereoAtomId(4), site: AtomId(0), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], attributes: StereoAtomForm::default() }),
+        Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(0), new: AtomId(1) }),
+        Delta::StereoAtom(StereoAtomDelta::Add { id: StereoAtomId(4), site: AtomId(1), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], attributes: StereoAtomForm::default() }),
+        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(4), site: AtomId(1), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], attributes: StereoAtomForm::default() })
+    )]
+    #[case::stereo_atom_ligands(
+        Delta::StereoAtom(StereoAtomDelta::Add { id: StereoAtomId(4), site: AtomId(0), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], attributes: StereoAtomForm::default() }),
+        Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)] }),
+        Delta::StereoAtom(StereoAtomDelta::Add { id: StereoAtomId(4), site: AtomId(0), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)], attributes: StereoAtomForm::default() }),
+        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(4), site: AtomId(0), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)], attributes: StereoAtomForm::default() })
+    )]
+    #[case::stereo_bond_site(
+        Delta::StereoBond(StereoBondDelta::Add { id: StereoBondId(4), site: BondId(0), ligands: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) }),
+        Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(0), new: BondId(1) }),
+        Delta::StereoBond(StereoBondDelta::Add { id: StereoBondId(4), site: BondId(1), ligands: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) }),
+        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(4), site: BondId(1), ligands: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) })
+    )]
+    #[case::stereo_bond_ligands(
+        Delta::StereoBond(StereoBondDelta::Add { id: StereoBondId(4), site: BondId(0), ligands: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) }),
+        Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), new: [2, 3, 4, 6].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec() }),
+        Delta::StereoBond(StereoBondDelta::Add { id: StereoBondId(4), site: BondId(0), ligands: [2, 3, 4, 6].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) }),
+        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(4), site: BondId(0), ligands: [2, 3, 4, 6].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) })
+    )]
+    fn test_deltas_normalize_replacement_created(
+        #[case] add: Delta,
+        #[case] replacement: Delta,
+        #[case] expected_add: Delta,
+        #[case] remove: Delta,
+    ) {
+        assert_eq!(
+            Deltas::from_iter([add.clone(), replacement.clone()]).normalize(),
+            Ok(Deltas::from_iter([expected_add])),
+        );
+        assert_eq!(
+            Deltas::from_iter([add, replacement, remove]).normalize(),
+            Ok(Deltas::new()),
+        );
+    }
+
+    #[rstest]
+    #[case::dative_donors(
+        Delta::DativeBond(DativeBondDelta::ReplaceDonors { id: DativeBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }),
+        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(4), donors: vec![AtomId(1), AtomId(0)], acceptor: AtomId(8), attributes: DativeBondForm::from_order(1) }),
+        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(4), donors: vec![AtomId(0), AtomId(1)], acceptor: AtomId(8), attributes: DativeBondForm::from_order(1) })
+    )]
+    #[case::dative_acceptor(
+        Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id: DativeBondId(4), old: AtomId(8), new: AtomId(9) }),
+        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(4), donors: vec![AtomId(0), AtomId(1)], acceptor: AtomId(9), attributes: DativeBondForm::from_order(1) }),
+        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(4), donors: vec![AtomId(0), AtomId(1)], acceptor: AtomId(8), attributes: DativeBondForm::from_order(1) })
+    )]
+    #[case::aromatic_atoms(
+        Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id: AromaticSystemId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }),
+        Delta::AromaticSystem(AromaticSystemDelta::Remove { id: AromaticSystemId(4), atoms: vec![AtomId(1), AtomId(0)], attributes: AromaticSystemForm::from_electrons(vec![1, 2]) }),
+        Delta::AromaticSystem(AromaticSystemDelta::Remove { id: AromaticSystemId(4), atoms: vec![AtomId(0), AtomId(1)], attributes: AromaticSystemForm::from_electrons(vec![1, 2]) })
+    )]
+    #[case::multicenter_atoms(
+        Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id: MulticenterBondId(4), old: vec![AtomId(0), AtomId(1)], new: vec![AtomId(1), AtomId(0)] }),
+        Delta::MulticenterBond(MulticenterBondDelta::Remove { id: MulticenterBondId(4), atoms: vec![AtomId(1), AtomId(0)], attributes: MulticenterBondForm::from_electrons(vec![1, 2]) }),
+        Delta::MulticenterBond(MulticenterBondDelta::Remove { id: MulticenterBondId(4), atoms: vec![AtomId(0), AtomId(1)], attributes: MulticenterBondForm::from_electrons(vec![1, 2]) })
+    )]
+    #[case::noncovalent_atoms(
+        Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id: NoncovalentBondId(4), old: [AtomId(0), AtomId(1)], new: [AtomId(1), AtomId(0)] }),
+        Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id: NoncovalentBondId(4), atoms: [AtomId(1), AtomId(0)], attributes: NoncovalentBondForm::default() }),
+        Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id: NoncovalentBondId(4), atoms: [AtomId(0), AtomId(1)], attributes: NoncovalentBondForm::default() })
+    )]
+    #[case::stereo_atom_site(
+        Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id: StereoAtomId(4), old: AtomId(0), new: AtomId(1) }),
+        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(4), site: AtomId(1), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], attributes: StereoAtomForm::default() }),
+        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(4), site: AtomId(0), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], attributes: StereoAtomForm::default() })
+    )]
+    #[case::stereo_atom_ligands(
+        Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id: StereoAtomId(4), old: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], new: vec![StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)] }),
+        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(4), site: AtomId(0), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::LonePair)], attributes: StereoAtomForm::default() }),
+        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(4), site: AtomId(0), ligands: vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)], attributes: StereoAtomForm::default() })
+    )]
+    #[case::stereo_bond_site(
+        Delta::StereoBond(StereoBondDelta::ReplaceSite { id: StereoBondId(4), old: BondId(0), new: BondId(1) }),
+        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(4), site: BondId(1), ligands: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) }),
+        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(4), site: BondId(0), ligands: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) })
+    )]
+    #[case::stereo_bond_ligands(
+        Delta::StereoBond(StereoBondDelta::ReplaceLigands { id: StereoBondId(4), old: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), new: [2, 3, 4, 6].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec() }),
+        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(4), site: BondId(0), ligands: [2, 3, 4, 6].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) }),
+        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(4), site: BondId(0), ligands: [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).to_vec(), attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32) })
+    )]
+    fn test_deltas_normalize_replacement_remove(
+        #[case] replacement: Delta,
+        #[case] remove: Delta,
+        #[case] expected: Delta,
+    ) {
+        assert_eq!(
+            Deltas::from_iter([replacement, remove]).normalize(),
+            Ok(Deltas::from_iter([expected])),
+        );
     }
 
     #[rstest]
