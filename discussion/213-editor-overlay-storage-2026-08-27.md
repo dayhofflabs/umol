@@ -26,7 +26,7 @@ families: matching local getters and editor-only structural mutation are impleme
 S2k1's in-place DSL conversion, S2k2's Rust callback caller migration, and S2l's
 Python assignment and read-only molecule constraint access are implemented.
 S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
-S3a is next. Graph-core mutation and restoration are complete in
+S3a1 is implemented; S3a2 is next. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -74,7 +74,8 @@ approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
-complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete and S3a is next.
+complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1 is
+implemented and S3a2 is next.
 
 ## Editor and transaction API
 
@@ -4013,6 +4014,15 @@ design and gains no DSL operation here.
   Verify all nine payload shapes, exact list order, Id/New handle namespaces,
   fixed arity, and dative donor/acceptor construction. Execution cases belong to S3b.
 
+  **Implemented — 2026-09-26.** Edit and Undo carry the nine named component
+  replacements; dative construction, removal, and saved entries carry donors and
+  acceptor separately. Edits keeps its append-only handle accounting. Local
+  construction tests and rustdoc reflect the new payloads and batch namespace.
+  Formatting and diff checks pass. Compilation is red at the planned S3 boundary:
+  existing DSL, editor/transaction, and reaction consumers still use the former
+  dative payload or lack the new Undo arms. S3a3, S3b, S3d, and S3e migrate those
+  consumers before the S3 green gate.
+
 - **S3a2 — Stereo update construction** (`ir::{edit,stereo}`; additive cleanup, within the S3 migration). [dep: S3a1]
 
   **Stereo update construction cleanup** (`ir::{edit,stereo}`). In both
@@ -4336,9 +4346,9 @@ design and gains no DSL operation here.
   removed and rewritten entries, duplicate entries, and preserved list order.
 
 - **S4b — Molecule delegation and Edit/Undo execution** (group; breaking,
-  green at S4b8). [dep: S4a, S3i]
+  green at S4b8; cleanup at S4b9). [dep: S4a, S3i]
 
-  Execute S4b1–S4b8 in order. The complete editor inventory is in S4b2;
+  Execute S4b1–S4b9 in order. The complete editor inventory is in S4b2;
   the execution signatures are in S4b3 and every Edit/Undo call is mapped below.
   Changes to journal return types and Undo variants may temporarily break callers
   within this group; migrate all of them by S4b8 without fallback match arms.
@@ -4819,6 +4829,18 @@ design and gains no DSL operation here.
   Check source matches against this inventory without wildcard fallbacks. Audit
   every mutation and capture path for accessor-only Molecule access; passing
   behavior tests alone does not establish this boundary.
+
+- **S4b9 — Remove temporary entity-set dead-code expectations**
+  (`ir::{aromatic,dative,multicenter,noncovalent,stereo}`; cleanup, green).
+  [dep: S4b8]
+
+  S4b1–S4b8 must put each typed entity set's `remove` and `compact` methods to
+  use through Molecule mutation. Remove the six impl-level
+  `#[cfg_attr(not(test), expect(dead_code, ...))]` attributes once the non-test
+  build confirms that all methods in those impls have callers. Do not replace
+  them with narrower dead-code allowances or retain unused mutation methods.
+  Verify the non-test build, strict all-target Clippy, and the affected removal
+  and compaction tests. This subitem changes no mutation interface or behavior.
 
 - **S4c — moved to S5a1.** Introduce the scope guard with Transaction::run,
   which owns it. No unused recovery machinery or temporary public API is added
@@ -5319,7 +5341,8 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S4b uses
   those additions and the component removal/restoration interfaces.
-- S4a closes at S4a2; S4b closes at S4b8. S4c is incorporated in S5a1.
+- S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is
+  incorporated in S5a1.
 - S5a1–S5a2 introduce the guard and public lifecycle together; S5d1–S5d3
   complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

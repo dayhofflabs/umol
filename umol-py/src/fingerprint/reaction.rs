@@ -25,20 +25,6 @@ impl ReactionSide {
             GraphReactionSide::Product => Self::Product,
         }
     }
-
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Python-to-Rust conversion is used by reaction fingerprint operations"
-        )
-    )]
-    pub(crate) fn to_rust(self) -> GraphReactionSide {
-        match self {
-            Self::Reactant => GraphReactionSide::Reactant,
-            Self::Product => GraphReactionSide::Product,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -364,13 +350,6 @@ mod tests {
         #[case] expected: ReactionSide,
     ) {
         assert_eq!(ReactionSide::from_rust(side), expected);
-    }
-
-    #[rstest]
-    #[case::reactant(ReactionSide::Reactant, GraphReactionSide::Reactant)]
-    #[case::product(ReactionSide::Product, GraphReactionSide::Product)]
-    fn test_reaction_side_to_rust(#[case] side: ReactionSide, #[case] expected: GraphReactionSide) {
-        assert_eq!(side.to_rust(), expected);
     }
 
     #[rstest]

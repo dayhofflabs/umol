@@ -1,10 +1,10 @@
-//! Edit vocabulary for transactional molecule mutation.
+//! Edit vocabulary for molecule mutation.
 //!
-//! The `Edit` enum is the caller-facing data-form mutation vocabulary; realized
-//! rollback data belongs to the `Undo` journal.
+//! `Edit` carries requested changes; `Undo` carries the state captured when a
+//! transaction executes them.
 //!
 //! Handles (`AtomHandle`, `BondHandle`, ...) are symbolic. `Id(n)` names entity
-//! `n` in the transaction's initial host; `New(n)` names the `n`th same-kind
+//! `n` in the host at application entry; `New(n)` names the `n`th same-kind
 //! entity created in the same [`Edits`] sequence.
 
 use std::collections::{BTreeSet, HashMap};
@@ -265,18 +265,18 @@ pub struct AddBond {
     pub attributes: BondForm,
 }
 
-/// One modification of a molecule the caller holds.
+/// One requested molecule mutation.
 ///
-/// An edit is an imperative instruction, not an algebraic value. It refers to entities by their
-/// index in the transaction's initial host, and to entities created earlier in the same sequence
-/// as `New(n)`, since the host's concrete numbering is not known when the sequence is written.
+/// An edit is an imperative instruction, not an algebraic value. It refers to entities in the
+/// host at application entry by `Id(n)`, and to entities created earlier in the same sequence
+/// by `New(n)`.
 ///
 /// Removal uses cascade deletion: taking an atom out of a ring also removes its incident bonds and
 /// any aromatic system it belonged to. This is an execution behavior, not a complete definition of
 /// SqPO rewriting. Because the edit need not name what it discards, and because concrete ids and
-/// compaction are only known during application, an edit cannot be inverted on its own. Checked
-/// application records an [`Undo`] as these effects are realized. `RemoveTopology` removes atoms
-/// and bonds together.
+/// compaction are only known during application, an edit cannot be inverted on its own.
+/// Transactional application records an [`Undo`] as these effects are realized.
+/// `RemoveTopology` removes atoms and bonds together.
 ///
 /// Edits have no normal form. Sorting or deduplicating a sequence would invalidate the `New(n)`
 /// references that depend on its order.
@@ -304,11 +304,27 @@ pub enum Edit {
 
     // Dative bonds
     AddDativeBond {
-        atoms: Vec<AtomHandle>,
+        donors: Vec<AtomHandle>,
+        acceptor: AtomHandle,
         attributes: DativeBondForm,
     },
     RemoveDativeBonds {
-        removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondForm)>,
+        removes: Vec<(
+            DativeBondHandle,
+            Vec<AtomHandle>,
+            AtomHandle,
+            DativeBondForm,
+        )>,
+    },
+    ReplaceDativeBondDonors {
+        id: DativeBondHandle,
+        old: Vec<AtomHandle>,
+        new: Vec<AtomHandle>,
+    },
+    ReplaceDativeBondAcceptor {
+        id: DativeBondHandle,
+        old: AtomHandle,
+        new: AtomHandle,
     },
     ModifyDativeBondField {
         id: DativeBondHandle,
@@ -323,6 +339,11 @@ pub enum Edit {
     RemoveAromaticSystems {
         removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemForm)>,
     },
+    ReplaceAromaticSystemAtoms {
+        id: AromaticSystemHandle,
+        old: Vec<AtomHandle>,
+        new: Vec<AtomHandle>,
+    },
     ModifyAromaticSystemField {
         id: AromaticSystemHandle,
         change: AromaticSystemFieldChange,
@@ -336,6 +357,11 @@ pub enum Edit {
     RemoveMulticenterBonds {
         removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondForm)>,
     },
+    ReplaceMulticenterBondAtoms {
+        id: MulticenterBondHandle,
+        old: Vec<AtomHandle>,
+        new: Vec<AtomHandle>,
+    },
     ModifyMulticenterBondField {
         id: MulticenterBondHandle,
         change: MulticenterBondFieldChange,
@@ -348,6 +374,11 @@ pub enum Edit {
     },
     RemoveNoncovalentBonds {
         removes: Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondForm)>,
+    },
+    ReplaceNoncovalentBondAtoms {
+        id: NoncovalentBondHandle,
+        old: [AtomHandle; 2],
+        new: [AtomHandle; 2],
     },
     ModifyNoncovalentBondField {
         id: NoncovalentBondHandle,
@@ -365,6 +396,16 @@ pub enum Edit {
     RemoveStereoAtoms {
         removes: Vec<StereoAtomRemoval>,
     },
+    ReplaceStereoAtomSite {
+        id: StereoAtomHandle,
+        old: AtomHandle,
+        new: AtomHandle,
+    },
+    ReplaceStereoAtomLigands {
+        id: StereoAtomHandle,
+        old: Vec<(AtomHandle, StereoLigandKind)>,
+        new: Vec<(AtomHandle, StereoLigandKind)>,
+    },
     ModifyStereoAtomField {
         id: StereoAtomHandle,
         change: StereoAtomFieldChange,
@@ -376,6 +417,16 @@ pub enum Edit {
     },
     RemoveStereoBonds {
         removes: Vec<StereoBondRemoval>,
+    },
+    ReplaceStereoBondSite {
+        id: StereoBondHandle,
+        old: BondHandle,
+        new: BondHandle,
+    },
+    ReplaceStereoBondLigands {
+        id: StereoBondHandle,
+        old: Vec<(AtomHandle, StereoLigandKind)>,
+        new: Vec<(AtomHandle, StereoLigandKind)>,
     },
     ModifyStereoBondField {
         id: StereoBondHandle,
@@ -439,18 +490,20 @@ pub enum Edit {
     },
 }
 
-/// An ordered batch of host-specific molecule edits.
+/// An ordered batch of molecule edits.
 ///
 /// Order is semantic: later entries may refer to entities created by earlier entries. For every
-/// entity kind, `Id(n)` names entity `n` in the transaction's initial host and `New(n)` names the
-/// `n`th same-kind creation in this sequence. Creation ordinals are independent between kinds,
-/// never reused, and are not changed by removals. `Edits` issues these symbolic handles only;
-/// transaction application owns their concrete ids, liveness, and compaction in a particular host.
+/// entity kind, `Id(n)` names entity `n` in the host at this batch's application entry and
+/// `New(n)` names the `n`th same-kind creation in this sequence. Creation ordinals are independent
+/// between kinds, never reused, and are not changed by removals. Construction does not execute
+/// edits or check their references against a molecule. Application resolves the handles against
+/// one host and owns concrete ids, liveness, and compaction.
 ///
 /// The public mutation surface is append-only. Mutable iteration, insertion, removal, reordering,
 /// and concatenation are deliberately absent because they could invalidate issued `New(n)` handles.
-/// Checked application resolves the handles against one host and returns the realized undo journal
-/// as a [`Transaction`](crate::ir::Transaction).
+/// The `update_*` methods derive entries from the supplied current form without simulating prior
+/// edits. Raw `push` and `FromIterator` preserve supplied handles; they do not rebase separately
+/// constructed batches.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Edits {
     edits: Vec<Edit>,
@@ -545,21 +598,28 @@ impl Edits {
 
     pub fn add_dative_bond(
         &mut self,
-        atoms: Vec<AtomHandle>,
+        donors: Vec<AtomHandle>,
+        acceptor: AtomHandle,
         attributes: DativeBondForm,
     ) -> DativeBondHandle {
         let handle = DativeBondHandle::New(self.created_dative_bonds);
-        self.push(Edit::AddDativeBond { atoms, attributes });
+        self.push(Edit::AddDativeBond {
+            donors,
+            acceptor,
+            attributes,
+        });
         handle
     }
 
     pub fn add_dative_bonds(
         &mut self,
-        bonds: impl IntoIterator<Item = (Vec<AtomHandle>, DativeBondForm)>,
+        bonds: impl IntoIterator<Item = (Vec<AtomHandle>, AtomHandle, DativeBondForm)>,
     ) -> Vec<DativeBondHandle> {
         bonds
             .into_iter()
-            .map(|(atoms, attributes)| self.add_dative_bond(atoms, attributes))
+            .map(|(donors, acceptor, attributes)| {
+                self.add_dative_bond(donors, acceptor, attributes)
+            })
             .collect()
     }
 
@@ -699,7 +759,12 @@ impl Edits {
 
     pub fn remove_dative_bonds(
         &mut self,
-        removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondForm)>,
+        removes: Vec<(
+            DativeBondHandle,
+            Vec<AtomHandle>,
+            AtomHandle,
+            DativeBondForm,
+        )>,
     ) {
         self.push(Edit::RemoveDativeBonds { removes });
     }
@@ -1952,14 +2017,16 @@ pub struct RemovedBond {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddedDativeBond {
     pub id: DativeBondId,
-    pub atoms: Vec<AtomId>,
+    pub donors: Vec<AtomId>,
+    pub acceptor: AtomId,
     pub attributes: DativeBondForm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemovedDativeBond {
     pub id: DativeBondId,
-    pub atoms: Vec<AtomId>,
+    pub donors: Vec<AtomId>,
+    pub acceptor: AtomId,
     pub attributes: DativeBondForm,
 }
 
@@ -2102,11 +2169,23 @@ pub enum Undo {
         undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
     },
+    RestoreDativeBondDonors {
+        id: DativeBondId,
+        donors: Vec<AtomId>,
+    },
+    RestoreDativeBondAcceptor {
+        id: DativeBondId,
+        acceptor: AtomId,
+    },
     RemoveAddedAromaticSystem(AddedAromaticSystem),
     RestoreRemovedAromaticSystems {
         removed: Vec<RemovedAromaticSystem>,
         undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
+    },
+    RestoreAromaticSystemAtoms {
+        id: AromaticSystemId,
+        atoms: Vec<AtomId>,
     },
     RemoveAddedMulticenterBond(AddedMulticenterBond),
     RestoreRemovedMulticenterBonds {
@@ -2114,11 +2193,19 @@ pub enum Undo {
         undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
     },
+    RestoreMulticenterBondAtoms {
+        id: MulticenterBondId,
+        atoms: Vec<AtomId>,
+    },
     RemoveAddedNoncovalentBond(AddedNoncovalentBond),
     RestoreRemovedNoncovalentBonds {
         removed: Vec<RemovedNoncovalentBond>,
         undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
+    },
+    RestoreNoncovalentBondAtoms {
+        id: NoncovalentBondId,
+        atoms: [AtomId; 2],
     },
     RemoveAddedStereoAtom(AddedStereoAtom),
     RestoreRemovedStereoAtoms {
@@ -2126,11 +2213,27 @@ pub enum Undo {
         undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
     },
+    RestoreStereoAtomSite {
+        id: StereoAtomId,
+        site: AtomId,
+    },
+    RestoreStereoAtomLigands {
+        id: StereoAtomId,
+        ligands: Vec<StereoLigand>,
+    },
     RemoveAddedStereoBond(AddedStereoBond),
     RestoreRemovedStereoBonds {
         removed: Vec<RemovedStereoBond>,
         undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
+    },
+    RestoreStereoBondSite {
+        id: StereoBondId,
+        site: BondId,
+    },
+    RestoreStereoBondLigands {
+        id: StereoBondId,
+        ligands: Vec<StereoLigand>,
     },
     ModifyAtomField {
         id: AtomId,
@@ -2300,7 +2403,11 @@ mod tests {
 
         assert_eq!(edits.add_atom(atom.clone()), AtomHandle::New(0));
         assert_eq!(
-            edits.add_dative_bond(vec![AtomHandle::Id(AtomId(0))], dative.clone()),
+            edits.add_dative_bond(
+                vec![AtomHandle::Id(AtomId(0))],
+                AtomHandle::Id(AtomId(1)),
+                dative.clone(),
+            ),
             DativeBondHandle::New(0),
         );
         assert_eq!(
@@ -2343,7 +2450,8 @@ mod tests {
             [
                 Edit::AddAtoms { atoms: vec![atom] },
                 Edit::AddDativeBond {
-                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    donors: vec![AtomHandle::Id(AtomId(0))],
+                    acceptor: AtomHandle::Id(AtomId(1)),
                     attributes: dative,
                 },
                 Edit::AddBonds {
@@ -2452,8 +2560,16 @@ mod tests {
 
         assert_eq!(
             edits.add_dative_bonds([
-                (vec![AtomHandle::Id(AtomId(0))], DativeBondForm::default()),
-                (vec![AtomHandle::Id(AtomId(1))], DativeBondForm::default()),
+                (
+                    vec![AtomHandle::Id(AtomId(0))],
+                    AtomHandle::Id(AtomId(1)),
+                    DativeBondForm::default(),
+                ),
+                (
+                    vec![AtomHandle::Id(AtomId(1))],
+                    AtomHandle::Id(AtomId(2)),
+                    DativeBondForm::default(),
+                ),
             ]),
             vec![DativeBondHandle::New(0), DativeBondHandle::New(1)],
         );
@@ -2531,11 +2647,13 @@ mod tests {
             edits.iter().cloned().collect::<Vec<_>>(),
             vec![
                 Edit::AddDativeBond {
-                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    donors: vec![AtomHandle::Id(AtomId(0))],
+                    acceptor: AtomHandle::Id(AtomId(1)),
                     attributes: DativeBondForm::default(),
                 },
                 Edit::AddDativeBond {
-                    atoms: vec![AtomHandle::Id(AtomId(1))],
+                    donors: vec![AtomHandle::Id(AtomId(1))],
+                    acceptor: AtomHandle::Id(AtomId(2)),
                     attributes: DativeBondForm::default(),
                 },
                 Edit::AddAromaticSystem {
@@ -2618,6 +2736,7 @@ mod tests {
         edits.remove_dative_bonds(vec![(
             DativeBondHandle::Id(DativeBondId(0)),
             vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+            AtomHandle::Id(AtomId(2)),
             DativeBondForm::default(),
         )]);
         edits.remove_aromatic_systems(vec![(
@@ -2655,6 +2774,7 @@ mod tests {
                     removes: vec![(
                         DativeBondHandle::Id(DativeBondId(0)),
                         vec![AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
+                        AtomHandle::Id(AtomId(2)),
                         DativeBondForm::default(),
                     )],
                 },
@@ -2729,12 +2849,19 @@ mod tests {
         };
         let mut edits = Edits::new();
         edits.push(entry.clone());
+        let replacement = Edit::ReplaceAromaticSystemAtoms {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            old: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+            new: vec![AtomHandle::Id(AtomId(1)), AtomHandle::New(0)],
+        };
+        edits.push(replacement.clone());
 
         assert_eq!(
             edits.add_atom(AtomForm::from_element(Element::O)),
             AtomHandle::New(2)
         );
         assert_eq!(edits.as_slice()[0], entry);
+        assert_eq!(edits.as_slice()[1], replacement);
     }
 
     #[rstest]
@@ -2759,7 +2886,8 @@ mod tests {
                 ],
             },
             Edit::AddDativeBond {
-                atoms: Vec::new(),
+                donors: Vec::new(),
+                acceptor: AtomHandle::Id(AtomId(0)),
                 attributes: DativeBondForm::default(),
             },
             Edit::AddAromaticSystem {
@@ -2798,7 +2926,11 @@ mod tests {
             BondHandle::New(2),
         );
         assert_eq!(
-            edits.add_dative_bond(Vec::new(), DativeBondForm::default()),
+            edits.add_dative_bond(
+                Vec::new(),
+                AtomHandle::Id(AtomId(0)),
+                DativeBondForm::default(),
+            ),
             DativeBondHandle::New(1),
         );
         assert_eq!(
