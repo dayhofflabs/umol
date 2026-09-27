@@ -26,7 +26,7 @@ families: matching local getters and editor-only structural mutation are impleme
 S2k1's in-place DSL conversion, S2k2's Rust callback caller migration, and S2l's
 Python assignment and read-only molecule constraint access are implemented.
 S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
-S3a1–S3a3 are implemented; S3b is next. Graph-core mutation and restoration are complete in
+S3a1–S3b are implemented; S3c is next. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -75,7 +75,7 @@ join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
-are implemented and S3b is next.
+and S3b are implemented; S3c is next.
 
 ## Editor and transaction API
 
@@ -4090,6 +4090,14 @@ design and gains no DSL operation here.
   and acceptor; remove combined-vector joining/splitting and pass donor slices
   to the editor. Preserve existing failure and rollback semantics.
   [dep: S2j, S3a]
+
+  **Implemented — 2026-09-26.** All nine edits check resolved old values before
+  mutating through editor views and record their exact previous components for
+  undo. Dative add/remove and restoration use separate donor and acceptor
+  fields. Focused forward/undo, mismatch, invalid-target undo, and dative tests
+  pass with the two pending reaction call-site signature updates applied for
+  compilation; those updates remain in S3d. The final tree remains red until
+  the S3 consumer migration is complete.
 
   **Structural Edit execution and undo.** Each row below uses the existing
   *EditorViewMut for the resolved entity id, obtained through private

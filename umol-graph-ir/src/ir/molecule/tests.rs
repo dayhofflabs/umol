@@ -4359,12 +4359,8 @@ fn test_molecule_editor_tracked_build_dative_bonds_restoration(
     let (donors, acceptor, data) = &entries.dative[0];
     edits.remove_dative_bonds(vec![(
         DativeBondHandle::Id(DativeBondId(0)),
-        donors
-            .iter()
-            .copied()
-            .chain([*acceptor])
-            .map(AtomHandle::Id)
-            .collect(),
+        donors.iter().copied().map(AtomHandle::Id).collect(),
+        AtomHandle::Id(*acceptor),
         data.clone(),
     )]);
     let transaction = editor.transact(edits).unwrap();

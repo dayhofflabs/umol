@@ -870,11 +870,12 @@ impl MoleculeEditor {
             removed
                 .into_iter()
                 .map(|removed| {
-                    let (acceptor, donors) = removed
-                        .atoms
-                        .split_last()
-                        .expect("dative bond has an acceptor");
-                    (removed.id, donors.to_vec(), *acceptor, removed.attributes)
+                    (
+                        removed.id,
+                        removed.donors,
+                        removed.acceptor,
+                        removed.attributes,
+                    )
                 })
                 .collect(),
         );
@@ -1136,7 +1137,8 @@ mod tests {
         triatomic.restore_dative_bonds(
             vec![RemovedDativeBond {
                 id: first,
-                atoms: vec![AtomId(0), AtomId(1)],
+                donors: vec![AtomId(0)],
+                acceptor: AtomId(1),
                 attributes,
             }],
             &compaction.undo_compaction(),
@@ -1917,7 +1919,8 @@ mod tests {
         let view = b.dative_bond(DativeBondId(0));
         let removed = RemovedDativeBond {
             id: DativeBondId(0),
-            atoms: view.atom_ids().collect(),
+            donors: view.donor_ids().collect(),
+            acceptor: view.acceptor_id(),
             attributes: view.attributes().clone(),
         };
 
