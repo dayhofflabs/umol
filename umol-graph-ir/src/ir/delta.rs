@@ -3131,108 +3131,201 @@ pub(crate) fn apply_bond_change(
     }
 }
 
-pub(crate) fn apply_dative_change(
+/// Apply a change to a dative bond entry in its supplied frame.
+/// Add/Remove are no-ops.
+///
+/// # Errors
+/// Returns `Contradiction` if the old donors or acceptor do not match exactly,
+/// an old attribute does not match under `normalized_eq`, or constraint keys differ.
+pub(crate) fn apply_dative_bond_change(
+    donors: &mut Vec<AtomId>,
+    acceptor: &mut AtomId,
     attributes: &mut DativeBondForm,
     delta: &DativeBondDelta,
 ) -> Result<(), Contradiction> {
     match delta {
+        DativeBondDelta::ReplaceDonors { old, new, .. } => {
+            if donors != old {
+                return Err(Contradiction);
+            }
+            donors.clone_from(new);
+            Ok(())
+        }
+        DativeBondDelta::ReplaceAcceptor { old, new, .. } => {
+            if acceptor != old {
+                return Err(Contradiction);
+            }
+            *acceptor = *new;
+            Ok(())
+        }
         DativeBondDelta::ModifyField { change, .. } => {
             DativeBondDelta::apply_field(attributes, change.clone())
         }
         DativeBondDelta::ModifyConstraint { old, new, .. } => {
             DativeBondDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        DativeBondDelta::Add { .. }
-        | DativeBondDelta::Remove { .. }
-        | DativeBondDelta::ReplaceDonors { .. }
-        | DativeBondDelta::ReplaceAcceptor { .. } => Ok(()),
+        DativeBondDelta::Add { .. } | DativeBondDelta::Remove { .. } => Ok(()),
     }
 }
 
-pub(crate) fn apply_aromatic_change(
+/// Apply a change to an aromatic system entry in its supplied frame.
+/// Add/Remove are no-ops.
+///
+/// # Errors
+/// Returns `Contradiction` if the old atom sequence does not match exactly,
+/// or an old attribute does not match under `normalized_eq`.
+pub(crate) fn apply_aromatic_system_change(
+    atoms: &mut Vec<AtomId>,
     attributes: &mut AromaticSystemForm,
     delta: &AromaticSystemDelta,
 ) -> Result<(), Contradiction> {
     match delta {
+        AromaticSystemDelta::ReplaceAtoms { old, new, .. } => {
+            if atoms != old {
+                return Err(Contradiction);
+            }
+            atoms.clone_from(new);
+            Ok(())
+        }
         AromaticSystemDelta::ModifyField { change, .. } => {
             AromaticSystemDelta::apply_field(attributes, change.clone())
         }
         AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
             AromaticSystemDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        AromaticSystemDelta::Add { .. }
-        | AromaticSystemDelta::Remove { .. }
-        | AromaticSystemDelta::ReplaceAtoms { .. } => Ok(()),
+        AromaticSystemDelta::Add { .. } | AromaticSystemDelta::Remove { .. } => Ok(()),
     }
 }
 
-pub(crate) fn apply_multicenter_change(
+/// Apply a change to a multicenter bond entry in its supplied frame.
+/// Add/Remove are no-ops.
+///
+/// # Errors
+/// Returns `Contradiction` if the old atom sequence does not match exactly,
+/// or an old attribute does not match under `normalized_eq`.
+pub(crate) fn apply_multicenter_bond_change(
+    atoms: &mut Vec<AtomId>,
     attributes: &mut MulticenterBondForm,
     delta: &MulticenterBondDelta,
 ) -> Result<(), Contradiction> {
     match delta {
+        MulticenterBondDelta::ReplaceAtoms { old, new, .. } => {
+            if atoms != old {
+                return Err(Contradiction);
+            }
+            atoms.clone_from(new);
+            Ok(())
+        }
         MulticenterBondDelta::ModifyField { change, .. } => {
             MulticenterBondDelta::apply_field(attributes, change.clone())
         }
         MulticenterBondDelta::ModifyConstraint { old, new, .. } => {
             MulticenterBondDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        MulticenterBondDelta::Add { .. }
-        | MulticenterBondDelta::Remove { .. }
-        | MulticenterBondDelta::ReplaceAtoms { .. } => Ok(()),
+        MulticenterBondDelta::Add { .. } | MulticenterBondDelta::Remove { .. } => Ok(()),
     }
 }
 
-pub(crate) fn apply_noncovalent_change(
+/// Apply a change to a noncovalent bond entry in its supplied frame.
+/// Add/Remove are no-ops.
+///
+/// # Errors
+/// Returns `Contradiction` if the old atom pair does not match exactly,
+/// or an old attribute does not match under `normalized_eq`.
+pub(crate) fn apply_noncovalent_bond_change(
+    atoms: &mut [AtomId; 2],
     attributes: &mut NoncovalentBondForm,
     delta: &NoncovalentBondDelta,
 ) -> Result<(), Contradiction> {
     match delta {
+        NoncovalentBondDelta::ReplaceAtoms { old, new, .. } => {
+            if atoms != old {
+                return Err(Contradiction);
+            }
+            *atoms = *new;
+            Ok(())
+        }
         NoncovalentBondDelta::ModifyField { change, .. } => {
             NoncovalentBondDelta::apply_field(attributes, change.clone())
         }
         NoncovalentBondDelta::ModifyConstraint { old, new, .. } => {
             NoncovalentBondDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        NoncovalentBondDelta::Add { .. }
-        | NoncovalentBondDelta::Remove { .. }
-        | NoncovalentBondDelta::ReplaceAtoms { .. } => Ok(()),
+        NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. } => Ok(()),
     }
 }
 
+/// Apply a change to a stereo atom entry in its supplied frame.
+/// Add/Remove are no-ops.
+///
+/// # Errors
+/// Returns `Contradiction` if the old site or ligand sequence does not match exactly,
+/// an old attribute does not match under `normalized_eq`, or constraint keys differ.
 pub(crate) fn apply_stereo_atom_change(
+    site: &mut AtomId,
+    ligands: &mut Vec<StereoLigand>,
     attributes: &mut StereoAtomForm,
     delta: &StereoAtomDelta,
 ) -> Result<(), Contradiction> {
     match delta {
+        StereoAtomDelta::ReplaceSite { old, new, .. } => {
+            if site != old {
+                return Err(Contradiction);
+            }
+            *site = *new;
+            Ok(())
+        }
+        StereoAtomDelta::ReplaceLigands { old, new, .. } => {
+            if ligands != old {
+                return Err(Contradiction);
+            }
+            ligands.clone_from(new);
+            Ok(())
+        }
         StereoAtomDelta::ModifyField { change, .. } => {
             StereoAtomDelta::apply_field(attributes, change.clone())
         }
         StereoAtomDelta::ModifyConstraint { old, new, .. } => {
             StereoAtomDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        StereoAtomDelta::Add { .. }
-        | StereoAtomDelta::Remove { .. }
-        | StereoAtomDelta::ReplaceSite { .. }
-        | StereoAtomDelta::ReplaceLigands { .. } => Ok(()),
+        StereoAtomDelta::Add { .. } | StereoAtomDelta::Remove { .. } => Ok(()),
     }
 }
 
+/// Apply a change to a stereo bond entry in its supplied frame.
+/// Add/Remove are no-ops.
+///
+/// # Errors
+/// Returns `Contradiction` if the old site or ligand sequence does not match exactly,
+/// an old attribute does not match under `normalized_eq`, or constraint keys differ.
 pub(crate) fn apply_stereo_bond_change(
+    site: &mut BondId,
+    ligands: &mut Vec<StereoLigand>,
     attributes: &mut StereoBondForm,
     delta: &StereoBondDelta,
 ) -> Result<(), Contradiction> {
     match delta {
+        StereoBondDelta::ReplaceSite { old, new, .. } => {
+            if site != old {
+                return Err(Contradiction);
+            }
+            *site = *new;
+            Ok(())
+        }
+        StereoBondDelta::ReplaceLigands { old, new, .. } => {
+            if ligands != old {
+                return Err(Contradiction);
+            }
+            ligands.clone_from(new);
+            Ok(())
+        }
         StereoBondDelta::ModifyField { change, .. } => {
             StereoBondDelta::apply_field(attributes, change.clone())
         }
         StereoBondDelta::ModifyConstraint { old, new, .. } => {
             StereoBondDelta::apply_constraint(attributes, old.clone(), new.clone())
         }
-        StereoBondDelta::Add { .. }
-        | StereoBondDelta::Remove { .. }
-        | StereoBondDelta::ReplaceSite { .. }
-        | StereoBondDelta::ReplaceLigands { .. } => Ok(()),
+        StereoBondDelta::Add { .. } | StereoBondDelta::Remove { .. } => Ok(()),
     }
 }
 
@@ -3325,8 +3418,8 @@ fn fold_stereo_atom_group(
                     *ligands = new;
                 }
                 other => {
-                    let (_, _, attributes) = state.as_mut().ok_or(Contradiction)?;
-                    apply_stereo_atom_change(attributes, &other)?;
+                    let (site, ligands, attributes) = state.as_mut().ok_or(Contradiction)?;
+                    apply_stereo_atom_change(site, ligands, attributes, &other)?;
                 }
             }
         }
@@ -3528,8 +3621,8 @@ fn fold_stereo_bond_group(
                     *ligands = new;
                 }
                 other => {
-                    let (_, _, attributes) = state.as_mut().ok_or(Contradiction)?;
-                    apply_stereo_bond_change(attributes, &other)?;
+                    let (site, ligands, attributes) = state.as_mut().ok_or(Contradiction)?;
+                    apply_stereo_bond_change(site, ligands, attributes, &other)?;
                 }
             }
         }
@@ -3922,6 +4015,84 @@ mod tests {
                 .expect("action is admissible"),
             StereoBondsFrameAction::from_vec(vec![Permutation::from_image(&[1, 0, 2, 3])])
                 .expect("action is admissible"),
+        )
+    }
+
+    #[fixture]
+    fn dative_bond_entry() -> (Vec<AtomId>, AtomId, DativeBondForm) {
+        (
+            vec![AtomId(2), AtomId(0)],
+            AtomId(1),
+            DativeBondForm::from_order(1)
+                .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+        )
+    }
+
+    #[fixture]
+    fn aromatic_system_entry() -> (Vec<AtomId>, AromaticSystemForm) {
+        (
+            vec![AtomId(2), AtomId(0), AtomId(1)],
+            AromaticSystemForm::from_electrons(vec![1, 2, 0])
+                .with_charge(-1_i64)
+                .with_unpaired_electrons((1_u8, 2_u8))
+                .with_constraint(AromaticSystemConstraintForm::electron_count(3_i64)),
+        )
+    }
+
+    #[fixture]
+    fn multicenter_bond_entry() -> (Vec<AtomId>, MulticenterBondForm) {
+        (
+            vec![AtomId(2), AtomId(0), AtomId(1)],
+            MulticenterBondForm::from_electrons(vec![1, 0, 2])
+                .with_charge(1_i64)
+                .with_unpaired_electrons((1_u8, 2_u8))
+                .with_constraint(MulticenterBondConstraintForm::electron_count(3_i64)),
+        )
+    }
+
+    #[fixture]
+    fn noncovalent_bond_entry() -> ([AtomId; 2], NoncovalentBondForm) {
+        (
+            [AtomId(2), AtomId(0)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(
+                NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true)),
+            ),
+        )
+    }
+
+    #[fixture]
+    fn stereo_atom_entry() -> (AtomId, Vec<StereoLigand>, StereoAtomForm) {
+        (
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        )
+    }
+
+    #[fixture]
+    fn stereo_bond_entry() -> (BondId, Vec<StereoLigand>, StereoBondForm) {
+        (
+            BondId(0),
+            vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
         )
     }
 
@@ -5222,6 +5393,829 @@ mod tests {
         let deltas = Deltas::from_iter(entries.clone());
 
         assert_eq!(deltas.into_iter().collect::<Vec<_>>(), entries);
+    }
+
+    #[rstest]
+    #[case::donors(
+        vec![DativeBondDelta::ReplaceDonors {
+            id: DativeBondId(0),
+            old: vec![AtomId(2), AtomId(0)],
+            new: vec![AtomId(3), AtomId(2), AtomId(0)],
+        }],
+        (
+            vec![AtomId(3), AtomId(2), AtomId(0)],
+            AtomId(1),
+            DativeBondForm::from_order(1)
+                .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+        ),
+    )]
+    #[case::acceptor(
+        vec![DativeBondDelta::ReplaceAcceptor {
+            id: DativeBondId(0),
+            old: AtomId(1),
+            new: AtomId(3),
+        }],
+        (
+            vec![AtomId(2), AtomId(0)],
+            AtomId(3),
+            DativeBondForm::from_order(1)
+                .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+        ),
+    )]
+    #[case::fields_and_constraints(
+        vec![
+            DativeBondDelta::ReplaceDonors {
+                id: DativeBondId(0),
+                old: vec![AtomId(2), AtomId(0)],
+                new: vec![AtomId(2)],
+            },
+            DativeBondDelta::ReplaceAcceptor {
+                id: DativeBondId(0),
+                old: AtomId(1),
+                new: AtomId(3),
+            },
+            DativeBondDelta::ModifyField {
+                id: DativeBondId(0),
+                change: DativeBondFieldChange::Order {
+                    old: NumForm::lit_set([1]),
+                    new: NumForm::Lit(2),
+                },
+            },
+            DativeBondDelta::ModifyConstraint {
+                id: DativeBondId(0),
+                old: None,
+                new: Some(DativeBondConstraintForm::ring_membership(
+                    RingScope::Size(5),
+                    1_i64,
+                )),
+            },
+        ],
+        (
+            vec![AtomId(2)],
+            AtomId(3),
+            DativeBondForm::from_order(2)
+                .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)))
+                .with_constraint(DativeBondConstraintForm::ring_membership(
+                    RingScope::Size(5),
+                    1_i64,
+                )),
+        ),
+    )]
+    fn test_apply_dative_bond_change(
+        mut dative_bond_entry: (Vec<AtomId>, AtomId, DativeBondForm),
+        #[case] changes: Vec<DativeBondDelta>,
+        #[case] expected: (Vec<AtomId>, AtomId, DativeBondForm),
+    ) {
+        for change in changes {
+            assert_eq!(
+                apply_dative_bond_change(
+                    &mut dative_bond_entry.0,
+                    &mut dative_bond_entry.1,
+                    &mut dative_bond_entry.2,
+                    &change
+                ),
+                Ok(())
+            );
+        }
+        assert_eq!(dative_bond_entry, expected);
+    }
+
+    #[rstest]
+    #[case::donor_order(DativeBondDelta::ReplaceDonors {
+        id: DativeBondId(0),
+        old: vec![AtomId(0), AtomId(2)],
+        new: vec![AtomId(3)],
+    })]
+    #[case::donor_length(DativeBondDelta::ReplaceDonors {
+        id: DativeBondId(0),
+        old: vec![AtomId(2)],
+        new: vec![AtomId(3)],
+    })]
+    #[case::acceptor(DativeBondDelta::ReplaceAcceptor {
+        id: DativeBondId(0),
+        old: AtomId(0),
+        new: AtomId(3),
+    })]
+    fn test_apply_dative_bond_change_error(
+        mut dative_bond_entry: (Vec<AtomId>, AtomId, DativeBondForm),
+        #[case] change: DativeBondDelta,
+    ) {
+        let original = dative_bond_entry.clone();
+        assert_eq!(
+            apply_dative_bond_change(
+                &mut dative_bond_entry.0,
+                &mut dative_bond_entry.1,
+                &mut dative_bond_entry.2,
+                &change
+            ),
+            Err(Contradiction)
+        );
+        assert_eq!(dative_bond_entry, original);
+    }
+
+    #[rstest]
+    #[case::order(
+        vec![AromaticSystemDelta::ReplaceAtoms {
+            id: AromaticSystemId(0),
+            old: vec![AtomId(2), AtomId(0), AtomId(1)],
+            new: vec![AtomId(1), AtomId(2), AtomId(0)],
+        }],
+        (
+            vec![AtomId(1), AtomId(2), AtomId(0)],
+            AromaticSystemForm::from_electrons(vec![1, 2, 0])
+                .with_charge(-1_i64)
+                .with_unpaired_electrons((1_u8, 2_u8))
+                .with_constraint(AromaticSystemConstraintForm::electron_count(3_i64)),
+        ),
+    )]
+    #[case::length(
+        vec![AromaticSystemDelta::ReplaceAtoms {
+            id: AromaticSystemId(0),
+            old: vec![AtomId(2), AtomId(0), AtomId(1)],
+            new: vec![AtomId(2), AtomId(0)],
+        }],
+        (
+            vec![AtomId(2), AtomId(0)],
+            AromaticSystemForm::from_electrons(vec![1, 2, 0])
+                .with_charge(-1_i64)
+                .with_unpaired_electrons((1_u8, 2_u8))
+                .with_constraint(AromaticSystemConstraintForm::electron_count(3_i64)),
+        ),
+    )]
+    #[case::fields_and_constraints(
+        vec![
+            AromaticSystemDelta::ReplaceAtoms {
+                id: AromaticSystemId(0),
+                old: vec![AtomId(2), AtomId(0), AtomId(1)],
+                new: vec![AtomId(2), AtomId(0)],
+            },
+            AromaticSystemDelta::ModifyField {
+                id: AromaticSystemId(0),
+                change: AromaticSystemFieldChange::Electrons {
+                    old: ElectronCountsForm::Lit(vec![1, 2, 0]),
+                    new: ElectronCountsForm::Lit(vec![2, 2]),
+                },
+            },
+            AromaticSystemDelta::ModifyConstraint {
+                id: AromaticSystemId(0),
+                old: Some(AromaticSystemConstraintForm::electron_count(3_i64)),
+                new: Some(AromaticSystemConstraintForm::electron_count(4_i64)),
+            },
+        ],
+        (
+            vec![AtomId(2), AtomId(0)],
+            AromaticSystemForm::from_electrons(vec![2, 2])
+                .with_charge(-1_i64)
+                .with_unpaired_electrons((1_u8, 2_u8))
+                .with_constraint(AromaticSystemConstraintForm::electron_count(4_i64)),
+        ),
+    )]
+    fn test_apply_aromatic_system_change(
+        mut aromatic_system_entry: (Vec<AtomId>, AromaticSystemForm),
+        #[case] changes: Vec<AromaticSystemDelta>,
+        #[case] expected: (Vec<AtomId>, AromaticSystemForm),
+    ) {
+        for change in changes {
+            assert_eq!(
+                apply_aromatic_system_change(
+                    &mut aromatic_system_entry.0,
+                    &mut aromatic_system_entry.1,
+                    &change
+                ),
+                Ok(())
+            );
+        }
+        assert_eq!(aromatic_system_entry, expected);
+    }
+
+    #[rstest]
+    #[case::atom_order(AromaticSystemDelta::ReplaceAtoms {
+        id: AromaticSystemId(0),
+        old: vec![AtomId(0), AtomId(2), AtomId(1)],
+        new: vec![AtomId(3), AtomId(0)],
+    })]
+    #[case::atom_length(AromaticSystemDelta::ReplaceAtoms {
+        id: AromaticSystemId(0),
+        old: vec![AtomId(2), AtomId(0)],
+        new: vec![AtomId(3), AtomId(0)],
+    })]
+    fn test_apply_aromatic_system_change_error(
+        mut aromatic_system_entry: (Vec<AtomId>, AromaticSystemForm),
+        #[case] change: AromaticSystemDelta,
+    ) {
+        let original = aromatic_system_entry.clone();
+        assert_eq!(
+            apply_aromatic_system_change(
+                &mut aromatic_system_entry.0,
+                &mut aromatic_system_entry.1,
+                &change
+            ),
+            Err(Contradiction)
+        );
+        assert_eq!(aromatic_system_entry, original);
+    }
+
+    #[rstest]
+    #[case::order(
+        vec![MulticenterBondDelta::ReplaceAtoms {
+            id: MulticenterBondId(0),
+            old: vec![AtomId(2), AtomId(0), AtomId(1)],
+            new: vec![AtomId(1), AtomId(2), AtomId(0)],
+        }],
+        (
+            vec![AtomId(1), AtomId(2), AtomId(0)],
+            MulticenterBondForm::from_electrons(vec![1, 0, 2])
+                .with_charge(1_i64)
+                .with_unpaired_electrons((1_u8, 2_u8))
+                .with_constraint(MulticenterBondConstraintForm::electron_count(3_i64)),
+        ),
+    )]
+    #[case::length(
+        vec![MulticenterBondDelta::ReplaceAtoms {
+            id: MulticenterBondId(0),
+            old: vec![AtomId(2), AtomId(0), AtomId(1)],
+            new: vec![AtomId(2), AtomId(0)],
+        }],
+        (
+            vec![AtomId(2), AtomId(0)],
+            MulticenterBondForm::from_electrons(vec![1, 0, 2])
+                .with_charge(1_i64)
+                .with_unpaired_electrons((1_u8, 2_u8))
+                .with_constraint(MulticenterBondConstraintForm::electron_count(3_i64)),
+        ),
+    )]
+    #[case::fields_and_constraints(
+        vec![
+            MulticenterBondDelta::ReplaceAtoms {
+                id: MulticenterBondId(0),
+                old: vec![AtomId(2), AtomId(0), AtomId(1)],
+                new: vec![AtomId(2), AtomId(0)],
+            },
+            MulticenterBondDelta::ModifyField {
+                id: MulticenterBondId(0),
+                change: MulticenterBondFieldChange::Electrons {
+                    old: ElectronCountsForm::Lit(vec![1, 0, 2]),
+                    new: ElectronCountsForm::Lit(vec![2, 2]),
+                },
+            },
+            MulticenterBondDelta::ModifyConstraint {
+                id: MulticenterBondId(0),
+                old: Some(MulticenterBondConstraintForm::electron_count(3_i64)),
+                new: Some(MulticenterBondConstraintForm::electron_count(4_i64)),
+            },
+        ],
+        (
+            vec![AtomId(2), AtomId(0)],
+            MulticenterBondForm::from_electrons(vec![2, 2])
+                .with_charge(1_i64)
+                .with_unpaired_electrons((1_u8, 2_u8))
+                .with_constraint(MulticenterBondConstraintForm::electron_count(4_i64)),
+        ),
+    )]
+    fn test_apply_multicenter_bond_change(
+        mut multicenter_bond_entry: (Vec<AtomId>, MulticenterBondForm),
+        #[case] changes: Vec<MulticenterBondDelta>,
+        #[case] expected: (Vec<AtomId>, MulticenterBondForm),
+    ) {
+        for change in changes {
+            assert_eq!(
+                apply_multicenter_bond_change(
+                    &mut multicenter_bond_entry.0,
+                    &mut multicenter_bond_entry.1,
+                    &change
+                ),
+                Ok(())
+            );
+        }
+        assert_eq!(multicenter_bond_entry, expected);
+    }
+
+    #[rstest]
+    #[case::atom_order(MulticenterBondDelta::ReplaceAtoms {
+        id: MulticenterBondId(0),
+        old: vec![AtomId(0), AtomId(2), AtomId(1)],
+        new: vec![AtomId(3), AtomId(0)],
+    })]
+    #[case::atom_length(MulticenterBondDelta::ReplaceAtoms {
+        id: MulticenterBondId(0),
+        old: vec![AtomId(2), AtomId(0)],
+        new: vec![AtomId(3), AtomId(0)],
+    })]
+    fn test_apply_multicenter_bond_change_error(
+        mut multicenter_bond_entry: (Vec<AtomId>, MulticenterBondForm),
+        #[case] change: MulticenterBondDelta,
+    ) {
+        let original = multicenter_bond_entry.clone();
+        assert_eq!(
+            apply_multicenter_bond_change(
+                &mut multicenter_bond_entry.0,
+                &mut multicenter_bond_entry.1,
+                &change
+            ),
+            Err(Contradiction)
+        );
+        assert_eq!(multicenter_bond_entry, original);
+    }
+
+    #[rstest]
+    #[case::order(
+        vec![NoncovalentBondDelta::ReplaceAtoms {
+            id: NoncovalentBondId(0),
+            old: [AtomId(2), AtomId(0)],
+            new: [AtomId(0), AtomId(2)],
+        }],
+        (
+            [AtomId(0), AtomId(2)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(
+                NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true)),
+            ),
+        ),
+    )]
+    #[case::atoms(
+        vec![NoncovalentBondDelta::ReplaceAtoms {
+            id: NoncovalentBondId(0),
+            old: [AtomId(2), AtomId(0)],
+            new: [AtomId(2), AtomId(1)],
+        }],
+        (
+            [AtomId(2), AtomId(1)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(
+                NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true)),
+            ),
+        ),
+    )]
+    #[case::fields_and_constraints(
+        vec![
+            NoncovalentBondDelta::ReplaceAtoms {
+                id: NoncovalentBondId(0),
+                old: [AtomId(2), AtomId(0)],
+                new: [AtomId(2), AtomId(1)],
+            },
+            NoncovalentBondDelta::ModifyField {
+                id: NoncovalentBondId(0),
+                change: NoncovalentBondFieldChange::Kind {
+                    old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                    new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
+                },
+            },
+            NoncovalentBondDelta::ModifyConstraint {
+                id: NoncovalentBondId(0),
+                old: Some(NoncovalentBondConstraintForm::Intramolecular(
+                    BooleanForm::Lit(true),
+                )),
+                new: Some(NoncovalentBondConstraintForm::Intramolecular(
+                    BooleanForm::Lit(false),
+                )),
+            },
+        ],
+        (
+            [AtomId(2), AtomId(1)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic).with_constraint(
+                NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false)),
+            ),
+        ),
+    )]
+    fn test_apply_noncovalent_bond_change(
+        mut noncovalent_bond_entry: ([AtomId; 2], NoncovalentBondForm),
+        #[case] changes: Vec<NoncovalentBondDelta>,
+        #[case] expected: ([AtomId; 2], NoncovalentBondForm),
+    ) {
+        for change in changes {
+            assert_eq!(
+                apply_noncovalent_bond_change(
+                    &mut noncovalent_bond_entry.0,
+                    &mut noncovalent_bond_entry.1,
+                    &change
+                ),
+                Ok(())
+            );
+        }
+        assert_eq!(noncovalent_bond_entry, expected);
+    }
+
+    #[rstest]
+    #[case::atom_order(NoncovalentBondDelta::ReplaceAtoms {
+        id: NoncovalentBondId(0),
+        old: [AtomId(0), AtomId(2)],
+        new: [AtomId(1), AtomId(2)],
+    })]
+    #[case::atom(NoncovalentBondDelta::ReplaceAtoms {
+        id: NoncovalentBondId(0),
+        old: [AtomId(2), AtomId(1)],
+        new: [AtomId(0), AtomId(2)],
+    })]
+    fn test_apply_noncovalent_bond_change_error(
+        mut noncovalent_bond_entry: ([AtomId; 2], NoncovalentBondForm),
+        #[case] change: NoncovalentBondDelta,
+    ) {
+        let original = noncovalent_bond_entry.clone();
+        assert_eq!(
+            apply_noncovalent_bond_change(
+                &mut noncovalent_bond_entry.0,
+                &mut noncovalent_bond_entry.1,
+                &change
+            ),
+            Err(Contradiction)
+        );
+        assert_eq!(noncovalent_bond_entry, original);
+    }
+
+    #[rstest]
+    #[case::site(
+        vec![StereoAtomDelta::ReplaceSite {
+            id: StereoAtomId(0),
+            old: AtomId(0),
+            new: AtomId(4),
+        }],
+        (
+            AtomId(4),
+            vec![
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        ),
+    )]
+    #[case::ligand_order(
+        vec![StereoAtomDelta::ReplaceLigands {
+            id: StereoAtomId(0),
+            old: vec![
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            ],
+            new: vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            ],
+        }],
+        (
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        ),
+    )]
+    #[case::ligand_length(
+        vec![StereoAtomDelta::ReplaceLigands {
+            id: StereoAtomId(0),
+            old: vec![
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            ],
+            new: vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+        }],
+        (
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        ),
+    )]
+    #[case::fields_and_constraints(
+        vec![
+            StereoAtomDelta::ReplaceSite {
+                id: StereoAtomId(0),
+                old: AtomId(0),
+                new: AtomId(4),
+            },
+            StereoAtomDelta::ReplaceLigands {
+                id: StereoAtomId(0),
+                old: vec![
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+                new: vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+            },
+            StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32),
+                    new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32),
+                },
+            },
+            StereoAtomDelta::ModifyConstraint {
+                id: StereoAtomId(0),
+                kind: Some(StereoKind::Tetrahedral),
+                old: Some(StereoAtomConstraintForm::Stereogenicity(
+                    StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+                )),
+                new: None,
+            },
+        ],
+        (
+            AtomId(4),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        ),
+    )]
+    fn test_apply_stereo_atom_change(
+        mut stereo_atom_entry: (AtomId, Vec<StereoLigand>, StereoAtomForm),
+        #[case] changes: Vec<StereoAtomDelta>,
+        #[case] expected: (AtomId, Vec<StereoLigand>, StereoAtomForm),
+    ) {
+        for change in changes {
+            assert_eq!(
+                apply_stereo_atom_change(
+                    &mut stereo_atom_entry.0,
+                    &mut stereo_atom_entry.1,
+                    &mut stereo_atom_entry.2,
+                    &change
+                ),
+                Ok(())
+            );
+        }
+        assert_eq!(stereo_atom_entry, expected);
+    }
+
+    #[rstest]
+    #[case::site(StereoAtomDelta::ReplaceSite {
+        id: StereoAtomId(0),
+        old: AtomId(1),
+        new: AtomId(4),
+    })]
+    #[case::ligand_order(StereoAtomDelta::ReplaceLigands {
+        id: StereoAtomId(0),
+        old: vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        ],
+        new: vec![],
+    })]
+    #[case::ligand_kind(StereoAtomDelta::ReplaceLigands {
+        id: StereoAtomId(0),
+        old: vec![
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+        ],
+        new: vec![],
+    })]
+    #[case::ligand_length(StereoAtomDelta::ReplaceLigands {
+        id: StereoAtomId(0),
+        old: vec![
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ],
+        new: vec![],
+    })]
+    fn test_apply_stereo_atom_change_error(
+        mut stereo_atom_entry: (AtomId, Vec<StereoLigand>, StereoAtomForm),
+        #[case] change: StereoAtomDelta,
+    ) {
+        let original = stereo_atom_entry.clone();
+        assert_eq!(
+            apply_stereo_atom_change(
+                &mut stereo_atom_entry.0,
+                &mut stereo_atom_entry.1,
+                &mut stereo_atom_entry.2,
+                &change
+            ),
+            Err(Contradiction)
+        );
+        assert_eq!(stereo_atom_entry, original);
+    }
+
+    #[rstest]
+    #[case::site(
+        vec![StereoBondDelta::ReplaceSite {
+            id: StereoBondId(0),
+            old: BondId(0),
+            new: BondId(4),
+        }],
+        (
+            BondId(4),
+            vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        ),
+    )]
+    #[case::ligand_order(
+        vec![StereoBondDelta::ReplaceLigands {
+            id: StereoBondId(0),
+            old: vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+            new: vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+        }],
+        (
+            BondId(0),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        ),
+    )]
+    #[case::ligand_length(
+        vec![StereoBondDelta::ReplaceLigands {
+            id: StereoBondId(0),
+            old: vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+            new: vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+        }],
+        (
+            BondId(0),
+            vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        ),
+    )]
+    #[case::fields_and_constraints(
+        vec![
+            StereoBondDelta::ReplaceSite {
+                id: StereoBondId(0),
+                old: BondId(0),
+                new: BondId(4),
+            },
+            StereoBondDelta::ReplaceLigands {
+                id: StereoBondId(0),
+                old: vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                new: vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+            },
+            StereoBondDelta::ModifyField {
+                id: StereoBondId(0),
+                change: StereoBondFieldChange::Configuration {
+                    old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32),
+                    new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32),
+                },
+            },
+            StereoBondDelta::ModifyConstraint {
+                id: StereoBondId(0),
+                kind: Some(StereoKind::CisTrans),
+                old: Some(StereoBondConstraintForm::Stereogenicity(
+                    StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+                )),
+                new: None,
+            },
+        ],
+        (
+            BondId(4),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+        ),
+    )]
+    fn test_apply_stereo_bond_change(
+        mut stereo_bond_entry: (BondId, Vec<StereoLigand>, StereoBondForm),
+        #[case] changes: Vec<StereoBondDelta>,
+        #[case] expected: (BondId, Vec<StereoLigand>, StereoBondForm),
+    ) {
+        for change in changes {
+            assert_eq!(
+                apply_stereo_bond_change(
+                    &mut stereo_bond_entry.0,
+                    &mut stereo_bond_entry.1,
+                    &mut stereo_bond_entry.2,
+                    &change
+                ),
+                Ok(())
+            );
+        }
+        assert_eq!(stereo_bond_entry, expected);
+    }
+
+    #[rstest]
+    #[case::site(StereoBondDelta::ReplaceSite {
+        id: StereoBondId(0),
+        old: BondId(1),
+        new: BondId(4),
+    })]
+    #[case::ligand_order(StereoBondDelta::ReplaceLigands {
+        id: StereoBondId(0),
+        old: vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+        ],
+        new: vec![],
+    })]
+    #[case::ligand_kind(StereoBondDelta::ReplaceLigands {
+        id: StereoBondId(0),
+        old: vec![
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+        ],
+        new: vec![],
+    })]
+    #[case::ligand_length(StereoBondDelta::ReplaceLigands {
+        id: StereoBondId(0),
+        old: vec![
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ],
+        new: vec![],
+    })]
+    fn test_apply_stereo_bond_change_error(
+        mut stereo_bond_entry: (BondId, Vec<StereoLigand>, StereoBondForm),
+        #[case] change: StereoBondDelta,
+    ) {
+        let original = stereo_bond_entry.clone();
+        assert_eq!(
+            apply_stereo_bond_change(
+                &mut stereo_bond_entry.0,
+                &mut stereo_bond_entry.1,
+                &mut stereo_bond_entry.2,
+                &change
+            ),
+            Err(Contradiction)
+        );
+        assert_eq!(stereo_bond_entry, original);
     }
 
     #[rstest]

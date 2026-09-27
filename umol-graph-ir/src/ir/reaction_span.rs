@@ -26,8 +26,8 @@ use super::constraint::{Constraint, ConstraintFrameActionDomain, ConstraintFrame
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bond_spans_with, DativeBondForm, DativeBondSpans};
 use super::delta::{
-    apply_aromatic_change, apply_atom_change, apply_bond_change, apply_dative_change,
-    apply_multicenter_change, apply_noncovalent_change, apply_stereo_atom_change,
+    apply_aromatic_system_change, apply_atom_change, apply_bond_change, apply_dative_bond_change,
+    apply_multicenter_bond_change, apply_noncovalent_bond_change, apply_stereo_atom_change,
     apply_stereo_bond_change, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
     ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan, MulticenterBondDelta,
     NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
@@ -2277,7 +2277,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_aromatic_change(&mut right, change)?;
+                    apply_aromatic_system_change(&mut right, change)?;
                 }
                 aromatic.push((
                     participants,
@@ -2310,7 +2310,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_multicenter_change(&mut right, change)?;
+                    apply_multicenter_bond_change(&mut right, change)?;
                 }
                 multicenter.push((
                     participants,
@@ -2342,7 +2342,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_noncovalent_change(&mut right, change)?;
+                    apply_noncovalent_bond_change(&mut right, change)?;
                 }
                 noncovalent.push((
                     [first, second],
@@ -2378,7 +2378,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_dative_change(&mut right, change)?;
+                    apply_dative_bond_change(&mut right, change)?;
                 }
                 dative.push((
                     donors,

@@ -19,7 +19,7 @@ use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::{read_constraint_dsl, ConstraintDsl};
 use super::dative::{DativeBondDsl, DativeBondUpdateDsl};
 use super::edn_utils::{
-    consume_single_key_map_close, missing, parse_single_key_map, parse_vec,
+    consume_single_key_map_close, missing, pair, parse_single_key_map, parse_vec, two_atom_refs,
     read_single_key_map_header, read_vec, single_key_map,
 };
 use super::error::ParseError;
@@ -41,10 +41,10 @@ use super::multicenter::{MulticenterBondDsl, MulticenterBondUpdateDsl};
 use super::namespace::{MoleculeContext, Namespace};
 use super::noncovalent::{NoncovalentBondDsl, NoncovalentBondUpdateDsl};
 use super::refs::{
-    read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
+    parse_stereo_ligand, read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
     read_multicenter_bond_ref, read_noncovalent_bond_ref, read_stereo_atom_ref,
-    read_stereo_bond_ref, AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef,
-    NoncovalentBondRef, StereoAtomRef, StereoBondRef,
+    read_stereo_bond_ref, read_stereo_ligand, AromaticSystemRef, AtomRef, BondRef, DativeBondRef,
+    MulticenterBondRef, NoncovalentBondRef, StereoAtomRef, StereoBondRef, StereoLigandRef,
 };
 use super::stereo::{StereoAtomDsl, StereoAtomUpdateDsl, StereoBondDsl, StereoBondUpdateDsl};
 use crate::ir::atom::{AtomForm, AtomUpdate};
@@ -644,21 +644,30 @@ pub(crate) enum DeltaInput {
     BondModify(BondRef, BondUpdate),
     DativeBondAdd(DativeBondEntryInput),
     DativeBondRemove(DativeBondRef),
+    DativeBondReplaceDonors(DativeBondRef, Vec<AtomRef>),
+    DativeBondReplaceAcceptor(DativeBondRef, AtomRef),
     DativeBondModify(DativeBondRef, DativeBondUpdate),
     AromaticSystemAdd(AromaticSystemEntryInput),
     AromaticSystemRemove(AromaticSystemRef),
+    AromaticSystemReplaceAtoms(AromaticSystemRef, Vec<AtomRef>),
     AromaticSystemModify(AromaticSystemRef, AromaticSystemUpdate),
     MulticenterBondAdd(MulticenterBondEntryInput),
     MulticenterBondRemove(MulticenterBondRef),
+    MulticenterBondReplaceAtoms(MulticenterBondRef, Vec<AtomRef>),
     MulticenterBondModify(MulticenterBondRef, MulticenterBondUpdate),
     NoncovalentBondAdd(NoncovalentBondEntryInput),
     NoncovalentBondRemove(NoncovalentBondRef),
+    NoncovalentBondReplaceAtoms(NoncovalentBondRef, [AtomRef; 2]),
     NoncovalentBondModify(NoncovalentBondRef, NoncovalentBondUpdate),
     StereoAtomAdd(StereoAtomEntryInput),
     StereoAtomRemove(StereoAtomRef),
+    StereoAtomReplaceSite(StereoAtomRef, AtomRef),
+    StereoAtomReplaceLigands(StereoAtomRef, Vec<StereoLigandRef>),
     StereoAtomModify(StereoAtomRef, StereoAtomUpdate),
     StereoBondAdd(StereoBondEntryInput),
     StereoBondRemove(StereoBondRef),
+    StereoBondReplaceSite(StereoBondRef, BondRef),
+    StereoBondReplaceLigands(StereoBondRef, Vec<StereoLigandRef>),
     StereoBondModify(StereoBondRef, StereoBondUpdate),
     ConstraintAdd(ConstraintDsl),
     ConstraintRemove(ConstraintDsl),
@@ -799,6 +808,37 @@ impl ReactionInput {
                         attributes: lhs.dative_bond(id).attributes().clone(),
                     }));
                 }
+                DeltaInput::DativeBondReplaceDonors(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.dative_bond_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-donors",
+                            kind: "dative bond",
+                            index: id.index(),
+                        });
+                    }
+                    let new = new.into_iter().map(|atom| atom.resolve(&context)).collect::<Result<_, _>>()?;
+                    resolved.push(Delta::DativeBond(DativeBondDelta::ReplaceDonors {
+                        id,
+                        old: lhs.dative_bond(id).donor_ids().collect(),
+                        new,
+                    }));
+                }
+                DeltaInput::DativeBondReplaceAcceptor(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.dative_bond_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-acceptor",
+                            kind: "dative bond",
+                            index: id.index(),
+                        });
+                    }
+                    resolved.push(Delta::DativeBond(DativeBondDelta::ReplaceAcceptor {
+                        id,
+                        old: lhs.dative_bond(id).acceptor_id(),
+                        new: new.resolve(&context)?,
+                    }));
+                }
                 DeltaInput::DativeBondModify(r, update) => {
                     let id = r.resolve(&context)?;
                     if context.dative_bond_scope(id) == EntityScope::Deltas {
@@ -841,6 +881,22 @@ impl ReactionInput {
                         id,
                         atoms: view.atom_ids().collect(),
                         attributes: lhs.aromatic_system(id).attributes().clone(),
+                    }));
+                }
+                DeltaInput::AromaticSystemReplaceAtoms(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.aromatic_system_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-atoms",
+                            kind: "aromatic system",
+                            index: id.index(),
+                        });
+                    }
+                    let new = new.into_iter().map(|atom| atom.resolve(&context)).collect::<Result<_, _>>()?;
+                    resolved.push(Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms {
+                        id,
+                        old: lhs.aromatic_system(id).atom_ids().collect(),
+                        new,
                     }));
                 }
                 DeltaInput::AromaticSystemModify(r, rhs) => {
@@ -889,6 +945,22 @@ impl ReactionInput {
                         attributes: lhs.multicenter_bond(id).attributes().clone(),
                     }));
                 }
+                DeltaInput::MulticenterBondReplaceAtoms(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.multicenter_bond_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-atoms",
+                            kind: "multicenter bond",
+                            index: id.index(),
+                        });
+                    }
+                    let new = new.into_iter().map(|atom| atom.resolve(&context)).collect::<Result<_, _>>()?;
+                    resolved.push(Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms {
+                        id,
+                        old: lhs.multicenter_bond(id).atom_ids().collect(),
+                        new,
+                    }));
+                }
                 DeltaInput::MulticenterBondModify(r, rhs) => {
                     let id = r.resolve(&context)?;
                     if context.multicenter_bond_scope(id) == EntityScope::Deltas {
@@ -929,6 +1001,22 @@ impl ReactionInput {
                         id,
                         atoms: lhs.noncovalent_bond(id).atom_ids(),
                         attributes: lhs.noncovalent_bond(id).attributes().clone(),
+                    }));
+                }
+                DeltaInput::NoncovalentBondReplaceAtoms(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.noncovalent_bond_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-atoms",
+                            kind: "noncovalent bond",
+                            index: id.index(),
+                        });
+                    }
+                    let [first, second] = new;
+                    resolved.push(Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms {
+                        id,
+                        old: lhs.noncovalent_bond(id).atom_ids(),
+                        new: [first.resolve(&context)?, second.resolve(&context)?],
                     }));
                 }
                 DeltaInput::NoncovalentBondModify(r, rhs) => {
@@ -983,6 +1071,37 @@ impl ReactionInput {
                         attributes: lhs.stereo_atom(id).attributes().clone(),
                     }));
                 }
+                DeltaInput::StereoAtomReplaceSite(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-site",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
+                    }
+                    resolved.push(Delta::StereoAtom(StereoAtomDelta::ReplaceSite {
+                        id,
+                        old: lhs.stereo_atom(id).site_id(),
+                        new: new.resolve(&context)?,
+                    }));
+                }
+                DeltaInput::StereoAtomReplaceLigands(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-ligands",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
+                    }
+                    let new = new.into_iter().map(|ligand| Ok(StereoLigand::new(ligand.atom.resolve(&context)?, ligand.kind))).collect::<Result<_, ParseError>>()?;
+                    resolved.push(Delta::StereoAtom(StereoAtomDelta::ReplaceLigands {
+                        id,
+                        old: lhs.stereo_atom(id).ligand_ids().to_vec(),
+                        new,
+                    }));
+                }
                 DeltaInput::StereoAtomModify(r, rhs) => {
                     let id = r.resolve(&context)?;
                     if context.stereo_atom_scope(id) == EntityScope::Deltas {
@@ -1030,6 +1149,37 @@ impl ReactionInput {
                             .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
                             .collect(),
                         attributes: lhs.stereo_bond(id).attributes().clone(),
+                    }));
+                }
+                DeltaInput::StereoBondReplaceSite(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-site",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
+                    }
+                    resolved.push(Delta::StereoBond(StereoBondDelta::ReplaceSite {
+                        id,
+                        old: lhs.stereo_bond(id).site_id(),
+                        new: new.resolve(&context)?,
+                    }));
+                }
+                DeltaInput::StereoBondReplaceLigands(r, new) => {
+                    let id = r.resolve(&context)?;
+                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "replace-ligands",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
+                    }
+                    let new = new.into_iter().map(|ligand| Ok(StereoLigand::new(ligand.atom.resolve(&context)?, ligand.kind))).collect::<Result<_, ParseError>>()?;
+                    resolved.push(Delta::StereoBond(StereoBondDelta::ReplaceLigands {
+                        id,
+                        old: lhs.stereo_bond(id).ligand_ids().to_vec(),
+                        new,
                     }));
                 }
                 DeltaInput::StereoBondModify(r, rhs) => {
@@ -1278,6 +1428,20 @@ fn read_delta_dative_bond_input(
     let input = match op.as_str() {
         "add" => DeltaInput::DativeBondAdd(read_dative_bond_entry(de)?),
         "remove" => DeltaInput::DativeBondRemove(read_dative_bond_ref(de)?),
+        "replace-donors" => {
+            de.consume_byte(b'[')?;
+            let target = read_dative_bond_ref(de)?;
+            let donors = read_vec(de, read_atom_ref)?;
+            de.consume_byte(b']')?;
+            DeltaInput::DativeBondReplaceDonors(target, donors)
+        }
+        "replace-acceptor" => {
+            de.consume_byte(b'[')?;
+            let target = read_dative_bond_ref(de)?;
+            let acceptor = read_atom_ref(de)?;
+            de.consume_byte(b']')?;
+            DeltaInput::DativeBondReplaceAcceptor(target, acceptor)
+        }
         "modify" => {
             de.consume_byte(b'[')?;
             let r = read_dative_bond_ref(de)?;
@@ -1304,6 +1468,13 @@ fn read_delta_aromatic_system_input(
     let input = match op.as_str() {
         "add" => DeltaInput::AromaticSystemAdd(read_aromatic_system_entry(de)?),
         "remove" => DeltaInput::AromaticSystemRemove(read_aromatic_system_ref(de)?),
+        "replace-atoms" => {
+            de.consume_byte(b'[')?;
+            let target = read_aromatic_system_ref(de)?;
+            let atoms = read_vec(de, read_atom_ref)?;
+            de.consume_byte(b']')?;
+            DeltaInput::AromaticSystemReplaceAtoms(target, atoms)
+        }
         "modify" => {
             de.consume_byte(b'[')?;
             let r = read_aromatic_system_ref(de)?;
@@ -1332,6 +1503,13 @@ fn read_delta_multicenter_bond_input(
     let input = match op.as_str() {
         "add" => DeltaInput::MulticenterBondAdd(read_multicenter_bond_entry(de)?),
         "remove" => DeltaInput::MulticenterBondRemove(read_multicenter_bond_ref(de)?),
+        "replace-atoms" => {
+            de.consume_byte(b'[')?;
+            let target = read_multicenter_bond_ref(de)?;
+            let atoms = read_vec(de, read_atom_ref)?;
+            de.consume_byte(b']')?;
+            DeltaInput::MulticenterBondReplaceAtoms(target, atoms)
+        }
         "modify" => {
             de.consume_byte(b'[')?;
             let r = read_multicenter_bond_ref(de)?;
@@ -1360,6 +1538,13 @@ fn read_delta_noncovalent_bond_input(
     let input = match op.as_str() {
         "add" => DeltaInput::NoncovalentBondAdd(read_noncovalent_bond_entry(de)?),
         "remove" => DeltaInput::NoncovalentBondRemove(read_noncovalent_bond_ref(de)?),
+        "replace-atoms" => {
+            de.consume_byte(b'[')?;
+            let target = read_noncovalent_bond_ref(de)?;
+            let atoms = two_atom_refs(read_vec(de, read_atom_ref)?, "noncovalent-bond :replace-atoms")?;
+            de.consume_byte(b']')?;
+            DeltaInput::NoncovalentBondReplaceAtoms(target, atoms)
+        }
         "modify" => {
             de.consume_byte(b'[')?;
             let r = read_noncovalent_bond_ref(de)?;
@@ -1388,6 +1573,20 @@ fn read_delta_stereo_atom_input(
     let input = match op.as_str() {
         "add" => DeltaInput::StereoAtomAdd(read_stereo_atom_entry(de)?),
         "remove" => DeltaInput::StereoAtomRemove(read_stereo_atom_ref(de)?),
+        "replace-site" => {
+            de.consume_byte(b'[')?;
+            let target = read_stereo_atom_ref(de)?;
+            let site = read_atom_ref(de)?;
+            de.consume_byte(b']')?;
+            DeltaInput::StereoAtomReplaceSite(target, site)
+        }
+        "replace-ligands" => {
+            de.consume_byte(b'[')?;
+            let target = read_stereo_atom_ref(de)?;
+            let ligands = read_vec(de, read_stereo_ligand)?;
+            de.consume_byte(b']')?;
+            DeltaInput::StereoAtomReplaceLigands(target, ligands)
+        }
         "modify" => {
             de.consume_byte(b'[')?;
             let r = read_stereo_atom_ref(de)?;
@@ -1414,6 +1613,20 @@ fn read_delta_stereo_bond_input(
     let input = match op.as_str() {
         "add" => DeltaInput::StereoBondAdd(read_stereo_bond_entry(de)?),
         "remove" => DeltaInput::StereoBondRemove(read_stereo_bond_ref(de)?),
+        "replace-site" => {
+            de.consume_byte(b'[')?;
+            let target = read_stereo_bond_ref(de)?;
+            let site = read_bond_ref(de)?;
+            de.consume_byte(b']')?;
+            DeltaInput::StereoBondReplaceSite(target, site)
+        }
+        "replace-ligands" => {
+            de.consume_byte(b'[')?;
+            let target = read_stereo_bond_ref(de)?;
+            let ligands = read_vec(de, read_stereo_ligand)?;
+            de.consume_byte(b']')?;
+            DeltaInput::StereoBondReplaceLigands(target, ligands)
+        }
         "modify" => {
             de.consume_byte(b'[')?;
             let r = read_stereo_bond_ref(de)?;
@@ -1523,6 +1736,20 @@ fn parse_delta_dative_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
         "remove" => Ok(DeltaInput::DativeBondRemove(DativeBondRef::from_edn(
             payload,
         )?)),
+        "replace-donors" => {
+            let (target, donors) = pair(payload, "dative-bond :replace-donors")?;
+            Ok(DeltaInput::DativeBondReplaceDonors(
+                DativeBondRef::from_edn(target)?,
+                parse_vec(donors, "donors", |e| AtomRef::from_edn(e))?,
+            ))
+        }
+        "replace-acceptor" => {
+            let (target, acceptor) = pair(payload, "dative-bond :replace-acceptor")?;
+            Ok(DeltaInput::DativeBondReplaceAcceptor(
+                DativeBondRef::from_edn(target)?,
+                AtomRef::from_edn(acceptor)?,
+            ))
+        }
         "modify" => {
             let Edn::Vector(v) = payload else {
                 return Err(DeError::TypeMismatch {
@@ -1557,6 +1784,13 @@ fn parse_delta_aromatic_system_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErro
         "remove" => Ok(DeltaInput::AromaticSystemRemove(
             AromaticSystemRef::from_edn(payload)?,
         )),
+        "replace-atoms" => {
+            let (target, atoms) = pair(payload, "aromatic-system :replace-atoms")?;
+            Ok(DeltaInput::AromaticSystemReplaceAtoms(
+                AromaticSystemRef::from_edn(target)?,
+                parse_vec(atoms, "atoms", |e| AtomRef::from_edn(e))?,
+            ))
+        }
         "modify" => {
             let Edn::Vector(v) = payload else {
                 return Err(DeError::TypeMismatch {
@@ -1591,6 +1825,13 @@ fn parse_delta_multicenter_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErr
         "remove" => Ok(DeltaInput::MulticenterBondRemove(
             MulticenterBondRef::from_edn(payload)?,
         )),
+        "replace-atoms" => {
+            let (target, atoms) = pair(payload, "multicenter-bond :replace-atoms")?;
+            Ok(DeltaInput::MulticenterBondReplaceAtoms(
+                MulticenterBondRef::from_edn(target)?,
+                parse_vec(atoms, "atoms", |e| AtomRef::from_edn(e))?,
+            ))
+        }
         "modify" => {
             let Edn::Vector(v) = payload else {
                 return Err(DeError::TypeMismatch {
@@ -1625,6 +1866,13 @@ fn parse_delta_noncovalent_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErr
         "remove" => Ok(DeltaInput::NoncovalentBondRemove(
             NoncovalentBondRef::from_edn(payload)?,
         )),
+        "replace-atoms" => {
+            let (target, atoms) = pair(payload, "noncovalent-bond :replace-atoms")?;
+            Ok(DeltaInput::NoncovalentBondReplaceAtoms(
+                NoncovalentBondRef::from_edn(target)?,
+                two_atom_refs(parse_vec(atoms, "atoms", |e| AtomRef::from_edn(e))?, "noncovalent-bond :replace-atoms")?,
+            ))
+        }
         "modify" => {
             let Edn::Vector(v) = payload else {
                 return Err(DeError::TypeMismatch {
@@ -1657,6 +1905,20 @@ fn parse_delta_stereo_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
         "remove" => Ok(DeltaInput::StereoAtomRemove(StereoAtomRef::from_edn(
             payload,
         )?)),
+        "replace-site" => {
+            let (target, site) = pair(payload, "stereo-atom :replace-site")?;
+            Ok(DeltaInput::StereoAtomReplaceSite(
+                StereoAtomRef::from_edn(target)?,
+                AtomRef::from_edn(site)?,
+            ))
+        }
+        "replace-ligands" => {
+            let (target, ligands) = pair(payload, "stereo-atom :replace-ligands")?;
+            Ok(DeltaInput::StereoAtomReplaceLigands(
+                StereoAtomRef::from_edn(target)?,
+                parse_vec(ligands, "ligands", parse_stereo_ligand)?,
+            ))
+        }
         "modify" => {
             let Edn::Vector(v) = payload else {
                 return Err(DeError::TypeMismatch {
@@ -1689,6 +1951,20 @@ fn parse_delta_stereo_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
         "remove" => Ok(DeltaInput::StereoBondRemove(StereoBondRef::from_edn(
             payload,
         )?)),
+        "replace-site" => {
+            let (target, site) = pair(payload, "stereo-bond :replace-site")?;
+            Ok(DeltaInput::StereoBondReplaceSite(
+                StereoBondRef::from_edn(target)?,
+                BondRef::from_edn(site)?,
+            ))
+        }
+        "replace-ligands" => {
+            let (target, ligands) = pair(payload, "stereo-bond :replace-ligands")?;
+            Ok(DeltaInput::StereoBondReplaceLigands(
+                StereoBondRef::from_edn(target)?,
+                parse_vec(ligands, "ligands", parse_stereo_ligand)?,
+            ))
+        }
         "modify" => {
             let Edn::Vector(v) = payload else {
                 return Err(DeError::TypeMismatch {
@@ -1916,6 +2192,26 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 ));
                 i += 1;
             }
+            Delta::DativeBond(DativeBondDelta::ReplaceDonors { id, new, .. }) => {
+                out.push(single_key_map("dative-bond", single_key_map(
+                    "replace-donors",
+                    Edn::Vector(vec![
+                        DativeBondRef::denote(*id, meta.lhs()).to_edn(),
+                        Edn::Vector(new.iter().map(|atom| render_atom_endpoint(*atom, meta)).collect::<Vec<_>>().into()),
+                    ].into()),
+                )));
+                i += 1;
+            }
+            Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id, new, .. }) => {
+                out.push(single_key_map("dative-bond", single_key_map(
+                    "replace-acceptor",
+                    Edn::Vector(vec![
+                        DativeBondRef::denote(*id, meta.lhs()).to_edn(),
+                        render_atom_endpoint(*new, meta),
+                    ].into()),
+                )));
+                i += 1;
+            }
             Delta::DativeBond(
                 DativeBondDelta::ModifyField { id, .. }
                 | DativeBondDelta::ModifyConstraint { id, .. },
@@ -1986,6 +2282,16 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                         AromaticSystemRef::denote(*id, meta.lhs()).to_edn(),
                     ),
                 ));
+                i += 1;
+            }
+            Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id, new, .. }) => {
+                out.push(single_key_map("aromatic-system", single_key_map(
+                    "replace-atoms",
+                    Edn::Vector(vec![
+                        AromaticSystemRef::denote(*id, meta.lhs()).to_edn(),
+                        Edn::Vector(new.iter().map(|atom| render_atom_endpoint(*atom, meta)).collect::<Vec<_>>().into()),
+                    ].into()),
+                )));
                 i += 1;
             }
             Delta::AromaticSystem(
@@ -2068,6 +2374,16 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 ));
                 i += 1;
             }
+            Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id, new, .. }) => {
+                out.push(single_key_map("multicenter-bond", single_key_map(
+                    "replace-atoms",
+                    Edn::Vector(vec![
+                        MulticenterBondRef::denote(*id, meta.lhs()).to_edn(),
+                        Edn::Vector(new.iter().map(|atom| render_atom_endpoint(*atom, meta)).collect::<Vec<_>>().into()),
+                    ].into()),
+                )));
+                i += 1;
+            }
             Delta::MulticenterBond(
                 MulticenterBondDelta::ModifyField { id, .. }
                 | MulticenterBondDelta::ModifyConstraint { id, .. },
@@ -2148,6 +2464,16 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 ));
                 i += 1;
             }
+            Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id, new, .. }) => {
+                out.push(single_key_map("noncovalent-bond", single_key_map(
+                    "replace-atoms",
+                    Edn::Vector(vec![
+                        NoncovalentBondRef::denote(*id, meta.lhs()).to_edn(),
+                        Edn::Vector(new.iter().map(|atom| render_atom_endpoint(*atom, meta)).collect::<Vec<_>>().into()),
+                    ].into()),
+                )));
+                i += 1;
+            }
             Delta::NoncovalentBond(
                 NoncovalentBondDelta::ModifyField { id, .. }
                 | NoncovalentBondDelta::ModifyConstraint { id, .. },
@@ -2220,6 +2546,26 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     "stereo-atom",
                     single_key_map("remove", StereoAtomRef::denote(*id, meta.lhs()).to_edn()),
                 ));
+                i += 1;
+            }
+            Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id, new, .. }) => {
+                out.push(single_key_map("stereo-atom", single_key_map(
+                    "replace-site",
+                    Edn::Vector(vec![
+                        StereoAtomRef::denote(*id, meta.lhs()).to_edn(),
+                        render_atom_endpoint(*new, meta),
+                    ].into()),
+                )));
+                i += 1;
+            }
+            Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id, new, .. }) => {
+                out.push(single_key_map("stereo-atom", single_key_map(
+                    "replace-ligands",
+                    Edn::Vector(vec![
+                        StereoAtomRef::denote(*id, meta.lhs()).to_edn(),
+                        Edn::Vector(new.iter().map(|ligand| render_stereo_ligand(*ligand, meta)).collect::<Vec<_>>().into()),
+                    ].into()),
+                )));
                 i += 1;
             }
             Delta::StereoAtom(
@@ -2323,6 +2669,29 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     "stereo-bond",
                     single_key_map("remove", StereoBondRef::denote(*id, meta.lhs()).to_edn()),
                 ));
+                i += 1;
+            }
+            Delta::StereoBond(StereoBondDelta::ReplaceSite { id, new, .. }) => {
+                out.push(single_key_map("stereo-bond", single_key_map(
+                    "replace-site",
+                    Edn::Vector(vec![
+                        StereoBondRef::denote(*id, meta.lhs()).to_edn(),
+                        match meta.keyword(Entity::Bond(*new)) {
+                            Some(name) => Edn::Keyword(EdnKeyword::owned(name.to_string())),
+                            None => Edn::Int(new.index() as i64),
+                        },
+                    ].into()),
+                )));
+                i += 1;
+            }
+            Delta::StereoBond(StereoBondDelta::ReplaceLigands { id, new, .. }) => {
+                out.push(single_key_map("stereo-bond", single_key_map(
+                    "replace-ligands",
+                    Edn::Vector(vec![
+                        StereoBondRef::denote(*id, meta.lhs()).to_edn(),
+                        Edn::Vector(new.iter().map(|ligand| render_stereo_ligand(*ligand, meta)).collect::<Vec<_>>().into()),
+                    ].into()),
+                )));
                 i += 1;
             }
             Delta::StereoBond(

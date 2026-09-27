@@ -26,7 +26,9 @@ families: matching local getters and editor-only structural mutation are impleme
 S2k1's in-place DSL conversion, S2k2's Rust callback caller migration, and S2l's
 Python assignment and read-only molecule constraint access are implemented.
 S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
-S3a1–S3c are implemented; S3d is next. Graph-core mutation and restoration are complete in
+S3a1–S3c are implemented. S3d1's entry functions and tests are implemented;
+verification awaits S3d2's span migration. S3d2–S3d5 remain. Graph-core mutation and
+restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -75,7 +77,8 @@ join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
-S3b and S3c are implemented; S3d is next.
+S3b and S3c are implemented. S3d1's entry functions and tests await verification
+with S3d2; S3d2–S3d5 sequence the remaining S3d work.
 
 ## Editor and transaction API
 
@@ -620,7 +623,7 @@ The concrete gaps and required changes are:
 | stereo_refinement_descriptor and canonical_kinded_stereo_frame in [canonicalize.rs](../umol-graph-ir/src/ir/canonicalize.rs) | Permutation::act asserts that ligand length equals the declared kind's degree. | Check that agreement before applying kind-derived permutations. These functions already return Result. |
 | Molecule::graph_symmetry, observable_descriptor, has_oriented_center, and project_stereo in [symmetry.rs](../umol-graph-ir/src/ir/symmetry.rs) | An invalid coset can affect the resulting chirality classification. Separately, a kind/frame mismatch can panic while generating ligand swaps, and local projection assumes a determined kind. | Invalid coset indices do not justify making graph_symmetry or stereo_atom_symmetry/stereo_bond_symmetry fallible. No correct chirality classification is required for an invalid index. Keep the separate panic hazards visible without treating them as approval for a fallible symmetry API. |
 | StereoConformanceValidator::validate_symmetry and StereoSymmetry::topicity | An out-of-range first topicity position panics; an out-of-range second position can give a false classification. A wrong-degree ligand-symmetry permutation is treated as non-membership, which can satisfy a negative assertion. | Check pair positions and permutation degree before interpreting the entity constraint. Constraint FrameTransport already checks them and returns None. Fluxionality is transported, but this validator does not currently evaluate it. |
-| StereoResolver::project; StereoPerception::derive; export::lower_stereo_atom / lower_stereo_bond; Reaction::application_deltas | Projection reports failed transport; perception records failed entity candidates; export rejects unsupported literal indices. Reaction application explicitly checks stereo domains. | Retain existing consumer behavior; do not introduce a shared normalization range check or additional validation pass. |
+| StereoResolver::project; StereoPerception::derive; export::lower_stereo_atom / lower_stereo_bond; Reaction::prepare_deltas | Projection reports failed transport; perception records failed entity candidates; export rejects unsupported literal indices. Reaction application explicitly checks stereo domains. | Retain existing consumer behavior; do not introduce a shared normalization range check or additional validation pass. |
 
 **Failure interfaces:** all public signatures remain unchanged. compose_term is
 the only private signature change: it returns Option<(&StereoTerm, Permutation)>.
@@ -1262,17 +1265,19 @@ kind; it does not automatically rewrite that modification into removal/addition.
 The existing precedent establishes the representation and its consumers, not a
 general automatic conversion of arbitrary replacements.
 
-Settled conversion approach: materialize the before/after states for replacement
-deltas and reuse the existing correspondence induction, superimposition, and
-reference-mapping operations. Shared-incidence and stereo-kind compatibility use
-the existing rules; incompatible entities become removal/addition entries. Span
-conversion back to a reaction may therefore express the replacement as removal
-and addition rather than recover the original Delta spelling.
+Construct the before/after entries of entities affected by replacement deltas
+directly from their source entries and deltas. Span conversion uses the reaction
+lhs; application uses the matched host's attributes, preserving every attribute
+the deltas leave unchanged. Use the existing incidence, frame, and stereo-kind
+compatibility rules. Compatible entries remain preserved; incompatible entries
+become removal/addition entries, with references mapped to the appropriate side.
 
-Incidence-changing replacements are expected to be rare. Favor this straightforward
-path over specialized change-history tracing or optimization without demonstrated
-need. Connecting replacement deltas to these existing operations is implementation
-work, not a requirement for another reaction representation or public API.
+Reaction application lowers those entries directly into one Edit batch. Span
+conversion extends the existing per-entity entry construction. Neither operation
+executes the reaction to discover its changes, and application does not convert
+through ReactionSpan. Span conversion back to a reaction may express replacement
+as removal/addition. S3d records the draft internal signatures and the resulting
+roundtrip-contract distinction for review.
 
 ### Local getters
 
@@ -4179,11 +4184,13 @@ design and gains no DSL operation here.
 
   Context-free Deltas normalization retains replacement variants when they do
   not fold away; it cannot invent the remaining entity attributes required for
-  complete Remove/Add entries. S3d owns that lowering using the reaction lhs.
+  complete Remove/Add entries. S3d obtains them from lhs for span conversion
+  and from the matched host for application.
   Retain the existing FrameTransport failure boundary: one frame action cannot
   act on differently sized old/new lists. Incompatible replacements use S3d's
-  before/after lowering before host alignment, rather than forcing a shared
-  permutation or introducing separate left/right frames into ReactionSpan.
+  entry-level before/after lowering before applying a shared frame action.
+  Each removal/addition entry carries its own frame; ReactionSpan retains one
+  shared frame for each preserved entity.
 
   The reaction DSL uses the replacement verbs listed at the start of S3, with
   [target new] payloads and old values derived from lhs, as for :modify. Its
@@ -4197,48 +4204,273 @@ design and gains no DSL operation here.
   changing either list. Reaction application and span-conversion tests belong
   to S3d. The complete enum migration reaches its green boundary at S3e.
 
-- **S3d** (`ir::reaction`, `ir::reaction::integrity`, `ir::reaction_span`,
-  `dsl::reaction`; breaking, green at S3e) Lower
-  replacement deltas through before/after materialization and existing
-  correspondence induction and superimposition. Test compatible preserved
-  entities, incompatible removal/addition, application, and roundtrips without
-  asserting that Delta spelling survives span conversion. [dep: S3b, S3c]
+- **S3d — incomplete; revised approach, draft internal signatures** (`ir::delta`,
+  `ir::reaction`, `ir::reaction::integrity`, `ir::reaction_span`, `dsl::reaction`;
+  breaking, green at S3e) [dep: S3b, S3c]
 
-  Pass dative donors and acceptor separately when lowering existing Add/Remove
-  deltas to Edits; stop joining them into one atom vector.
+  **Semantics.** Group normalized replacement, field, and constraint deltas by
+  entity. Construct that entity's before/after entries directly. Replacement
+  changes only the named atoms, donors, acceptor, site, or ligands; other values
+  survive unless explicitly changed. Component continuity retains exact sequence
+  equality. Attribute continuity retains the existing normalized equality rule.
+  Constructing an entry does not mutate a molecule or run an Edit batch.
 
-  S2h has already removed count/frame and per-entity stereo-attribute agreement
-  from aggregate integrity. S3d does not reintroduce those checks for replacement
-  deltas, either at reaction construction or final product publication.
+  **Execution order.** S3d1 and S3d2 form the first shared build checkpoint:
+  the restored span conversion has six non-exhaustive matches, so S3d1's tests
+  cannot execute independently. Complete the real span handling in S3d2, then
+  run both subitems' tests before application work. Do not add catch-all arms,
+  temporary rejection paths, ignored tests, or test-only visibility to force a
+  green build. Later subitems have separate focused checks. The graph-ir gate is
+  S3d5; workspace/Python enum migration closes at S3e.
 
-  Extend reference visitation, remapping, and application-domain collection to
-  every new old/new component. Extend the retained reaction reference checks to
-  their entity ids, atom ids, bond sites, and ligand atoms. Preserve the existing
-  removal/source incidence contract. Published molecules and reaction-span sides
-  still satisfy the structural contract retained by S2h: valid references,
-  relation uniqueness, ligand incidence, duplicate-ligand rejection, and the
-  storage frame bound. Keep the retained reaction-span agreement of determined
-  kinds for a preserved stereo entity; incompatible changes use Remove/Add.
+  **Uncommitted-code disposition.** The original to_reaction_span body is
+  restored. The has_replacements function, conversion branches in iterator
+  construction, tracked_apply_at and check_preconditions, and apply_aligned_deltas
+  extraction are removed. DSL replacement parsing/rendering, reference checks,
+  and dative factor migration remain. Reuse the compatible replacement-to-Edit
+  arms and exhaustive matches after fixing their placement. Created-id collection
+  still needs reworking to avoid the extra BTreeSet pass; the new application
+  fixture still needs a genuinely nonidentity local frame. S3d remains incomplete.
 
-  Before/after materialization remains necessary to obtain complete entities for
-  span conversion and incompatible-change lowering. A single frame action cannot
-  transport differently sized old/new lists. Use the agreed Remove/Add lowering
-  before host alignment where required; first-use frame transport retains its
-  own Option/Result failure behavior. Do not impose attribute agreement on
-  intermediate edits or on construction merely because transport may need it.
+- **S3d1 — implemented; verification pending S3d2** (`ir::delta`; entry changes,
+  breaking internal signatures). [dep: S3b, S3c]
 
-  Test size-changing atoms/electron counts and ligands/configuration together,
-  including nonidentity host alignment. Distinguish retained structural errors
-  from count/coset disagreement: the latter alone must not fail construction or
-  publication, but an operation requiring normalization or frame transport still
-  reports its existing failure when the supplied attributes cannot be interpreted.
+  **Entry interfaces.** The six delta::apply_*_change functions take their entity's
+  structural arguments and retain pub(crate) visibility. Each name uses the full
+  entity name. Atom and localized-bond functions keep their signatures. These
+  functions act on one entry in one supplied frame; their callers own grouping, source selection,
+  frame transport, and Add/Remove handling.
 
-  Extend ReactionDsl's tree and streaming readers, rendering, and IR conversion
-  with the approved replacement syntax, deriving old component values from lhs
-  as for :modify. Test both parsing paths, aliases, ordering,
-  roundtrips, and rejection of unavailable entities. Do not encode an
-  identity-preserving replacement as remove/add merely to avoid designing its
-  DSL representation; span conversion's separate contract remains unchanged.
+  ```rust
+  pub(crate) fn apply_dative_bond_change(
+      donors: &mut Vec<AtomId>, acceptor: &mut AtomId,
+      attributes: &mut DativeBondForm, delta: &DativeBondDelta,
+  ) -> Result<(), Contradiction>;
+
+  pub(crate) fn apply_aromatic_system_change(
+      atoms: &mut Vec<AtomId>, attributes: &mut AromaticSystemForm,
+      delta: &AromaticSystemDelta,
+  ) -> Result<(), Contradiction>;
+
+  pub(crate) fn apply_multicenter_bond_change(
+      atoms: &mut Vec<AtomId>, attributes: &mut MulticenterBondForm,
+      delta: &MulticenterBondDelta,
+  ) -> Result<(), Contradiction>;
+
+  pub(crate) fn apply_noncovalent_bond_change(
+      atoms: &mut [AtomId; 2], attributes: &mut NoncovalentBondForm,
+      delta: &NoncovalentBondDelta,
+  ) -> Result<(), Contradiction>;
+
+  pub(crate) fn apply_stereo_atom_change(
+      site: &mut AtomId, ligands: &mut Vec<StereoLigand>,
+      attributes: &mut StereoAtomForm, delta: &StereoAtomDelta,
+  ) -> Result<(), Contradiction>;
+
+  pub(crate) fn apply_stereo_bond_change(
+      site: &mut BondId, ligands: &mut Vec<StereoLigand>,
+      attributes: &mut StereoBondForm, delta: &StereoBondDelta,
+  ) -> Result<(), Contradiction>;
+  ```
+
+  Callers copy the source entry into a local tuple and apply its changes there.
+  A failed local calculation is discarded. Migrate the existing stereo-fold
+  callers to pass the fields of their existing entry tuples. No new entry types,
+  generic materialization trait, or public methods are proposed.
+
+  **Verification.** Add exact tuple-based cases for all nine replacements,
+  mixed field/constraint changes, exact old-component mismatch, and untouched
+  values. Assert the complete resulting entry. Preserve existing normalization
+  and folding properties. Run these cases and existing delta unit tests at the
+  S3d2 checkpoint; do not count this subitem as verified before that run.
+
+  **Implementation and checks.** All nine replacements check exact old values
+  and change only their named field. Attribute/constraint changes retain the
+  existing normalized equality and constraint-key checks. The two normalization
+  callers pass the site and ligands of their saved Add entry. Added 37 cases for
+  full-entry results, order/length changes, ligand kinds, mixed attribute and
+  constraint changes, and unchanged entries on replacement mismatch. Existing
+  normalization/folding tests and properties are unchanged.
+
+  cargo check -p umol-graph-ir --tests stops at the six span callers whose
+  arguments are migrated in S3d2; no tests executed. The missing replacement
+  match arms also remain in S3d2. Nightly rustfmt parsed the changed Rust, and
+  git diff --check passed. Test execution remains pending the shared checkpoint.
+
+- **S3d2 — Direct span construction** (`ir::reaction_span`; completes
+  graph-ir library compilation for the new enum variants). [dep: S3d1]
+
+  Keep the existing public signature:
+
+  ```rust
+  pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction>;
+  ```
+
+  **Span conversion.** Extend the original per-entity construction in
+  Reaction::to_reaction_span. Compute changed entries from lhs using the entry
+  functions above. Use the existing incidence and stereo-kind matching rules
+  over before/after entries, including crossing entity matches; equality of the
+  original numeric ids is not the compatibility test. Transport compatible
+  payloads into the shared span frame. Unmatched entries become Removed/Added.
+  Map constraints into the left/right union ids using existing reference-mapping
+  operations, then finish with ReactionSpan::try_from_entries. Conversion does
+  not run edits or construct a product Molecule to call superimpose.
+
+  **Roundtrip contract for review.** The span records before/after values.
+  A replacement that inherits an unspecified host attribute can become an
+  explicit Remove/Add whose Add contains the lhs-derived attribute. For example,
+  an unspecified rule charge remains the host's concrete charge during direct
+  replacement, while a recovered explicit Add carries the unspecified charge.
+  The current to_reaction_span rustdoc's blanket claim of identical application
+  to every host therefore cannot simply be extended to these replacements.
+  The draft contract preserves the represented sides and span correspondence;
+  it does not promise recovery of replacement spelling or host-value inheritance
+  from an incompatible Remove/Add span. Record this boundary explicitly in the
+  method's semantic properties when implementing; do not alter existing
+  Add/Remove execution to infer a replacement from a pair of unrelated deltas.
+
+  **Verification.** Cover compatible preservation, incompatible Remove/Add,
+  size changes with positional attributes, crossing incidence, and constraints
+  mapped separately to each side. Assert lhs, rhs, and correspondence using
+  independently constructed expected values. Retain the existing cases rejecting
+  unrelated incompatible stereo-kind modification. The roundtrip-contract note
+  above remains a review point; changing that law is not authorized merely by
+  adding tests for a weaker one.
+
+  First run cargo check -p umol-graph-ir --lib, then the delta and reaction_span
+  unit-test modules and the reaction::span property module. This executes S3d1's
+  deferred checks as well. The retained replacement-application fixture belongs
+  to S3d3 and is not claimed green at this checkpoint. Before changing application
+  lowering, record the existing reaction/apply_at and reaction/tracked_apply_at
+  benchmark results on this compiling tree for the ordinary-path comparison.
+
+- **S3d3 — Matched application** (`ir::reaction`, `ir::reaction::dpo`;
+  completes replacement application in graph-ir). [dep: S3d1, S3d2]
+
+  **Application.** Keep the existing private/public boundaries. The private
+  method is named apply_deltas_at; its supplied deltas are already normalized.
+
+  ```rust
+  impl Reaction {
+      fn prepare_deltas(&self) -> Result<Deltas, ApplyPreconditionError>;
+
+      fn apply_deltas_at(
+          &self, host: &Molecule,
+          correspondence: &MoleculeCorrespondence, deltas: Deltas,
+      ) -> Result<Option<(Molecule, MoleculeCorrespondence)>, ApplyError>;
+  }
+
+  fn reframe_deltas(
+      deltas: Deltas, lhs: &Molecule, host: &Molecule,
+      correspondence: &MoleculeCorrespondence,
+  ) -> Result<Deltas, ApplyError>;
+  ```
+
+  Unit tests call prepare_deltas directly; external property tests and fuzzing
+  exercise preparation through Reaction::apply. The standalone public
+  check_preconditions wrapper is removed.
+
+  Within Reaction::apply_deltas_at:
+
+  1. Identify the complete delta groups needing incompatible-entry lowering
+     before calling reaction::reframe_deltas on the remaining
+     deltas. Grouped fields and constraints follow their entity; none are
+     accidentally transported by its old-degree action after being separated
+     from a size-changing replacement.
+  2. For each such group, match the old rule values against the host. Express
+     the host attributes in the source rule frame, retaining host values for
+     untouched fields and constraints. Use rule ids for the local atom/site/
+     ligand entries; the supplied correspondence establishes their host meaning.
+     Record realized old values after matching, as existing application does,
+     before using the entry functions above.
+  3. Construct the resulting entry. Emit removal using the host's actual old
+     frame and addition using the new entry's own frame. Resolve its atom and
+     bond ids through the existing Id/New handle maps. Compatible groups use
+     the corresponding replacement/modification Edits through ordinary frame
+     alignment. Dative additions/removals pass donors and acceptor separately.
+  4. Map surviving molecule constraints from removed entity handles to their
+     issued addition handles, including host constraints absent from the rule.
+     Apply explicit constraint removals/additions before deciding what survives.
+     Existing constraints use the required old-to-new frame restatement;
+     explicitly added constraints use their specified output frame. Build the
+     corresponding constraint Edits directly with ConstraintEdit::new. Removal
+     compaction must not silently discard a surviving constraint merely because
+     an internal Remove/Add pair implements replacement.
+  5. Run one Edit batch and the existing product integrity check. Keep the final
+     host-to-product correspondence induction. Construct no preliminary product,
+     and call neither span conversion nor application recursively.
+
+  Entry construction copies affected entries and transports their positional
+  attributes. Incompatible Remove/Add execution also incurs the existing
+  relation-set compaction and incidence rebuild, and locating surviving
+  constraints can require scanning the molecule's constraints. Its cost is not
+  limited to the changed entry. Batch removals by entity kind as the current
+  application does. This lowering adds no whole-molecule copy or second edit
+  execution; the existing application's product-copy/journal costs remain.
+
+  Reaction::prepare_deltas uses source-entry
+  calculations for reaction-local continuity, stereo, and deletion-incidence
+  checks. It retains replacement deltas for subsequent host realization and
+  does not replace the host's future attributes with a complete lhs-derived Add.
+  Account for a replacement that disconnects an entity from an atom being
+  removed. Retain rejection of unrelated, standalone incompatible stereo-kind
+  ModifyField operations; a replacement group lowered to Remove/Add has separate
+  entries and is checked as such.
+
+  **Verification.** Add the expected-result fixtures before changing lowering.
+  Cover all nine replacements; separate nonidentity atom mappings from
+  nonidentity local permutations and use unequal positional values. Verify
+  inherited host attributes, host-only surviving constraints, explicit constraint
+  changes, newly added atom/bond handles, and replacement that disconnects an
+  atom before deletion. Compare the complete product and correspondence, not
+  only counts or successful return. Repair and run the retained application
+  fixture here. Run the reaction and DPO unit tests, then reaction::application
+  and reaction::malformed properties. Constraint handling is part of this item;
+  do not publish an intermediate implementation that silently drops constraints.
+
+- **S3d4 — Reference and DSL integration** (`ir::reaction::integrity`,
+  `dsl::reaction`; completes Rust reaction input/output). [dep: S3d2, S3d3]
+
+  **Integrity and DSL.** Extend reference visitation, remapping, and
+  application-domain collection to all old/new atoms, sites, and ligands.
+  Preserve removal/source incidence and the S2h structural contract: valid
+  references, relation uniqueness, ligand incidence, duplicate-ligand rejection,
+  and the storage frame bound. Preserved stereo entries retain determined-kind
+  agreement. Count/coset disagreement alone remains outside aggregate integrity;
+  consumers needing frame transport retain their existing failure boundary.
+  Keep ReactionDsl's approved per-entity replacement verbs and [target new]
+  payloads, deriving old from lhs. Cover tree/stream readers, rendering, aliases,
+  ordering, and unavailable targets; DSL does not substitute Remove/Add syntax.
+
+  **Verification.** Finish the retained code rather than recreating it. Test
+  each target/old/new reference position, both parser paths, aliases, supplied
+  order, added-entity availability, and exact replacement rendering. Run the
+  reaction-construction and reaction-DSL unit cases, then reaction::serialization
+  properties. Keep the existing malformed-input assertions and generators.
+
+- **S3d5 — Integration and cost check** (`umol-graph-ir`; graph-ir green
+  checkpoint, workspace green remains S3e). [dep: S3d1, S3d2, S3d3, S3d4]
+
+  Run the complete graph-ir unit/integration tests once, plus the feature-gated
+  delta, reaction, and frame property modules. Run graph-ir Clippy and rustdoc
+  with warnings denied; format with cargo +nightly fmt --all and check the diff.
+  If formatting touches unrelated files, retain only formatting for this work.
+  Full workspace/Python checks belong to S3e, not each S3d subitem; the Rust 1.87
+  check remains a final gate.
+
+  Re-run the two ordinary-application benchmark cases from S3d2 and investigate
+  any material regression. Add a focused replacement-application case to the
+  existing reaction benchmark. Review its allocations and call path: one Edit
+  execution, no preliminary product, no application/span roundtrip, no extra
+  whole-molecule copy introduced by lowering, and batched removals per entity
+  kind. Explain observed cost in terms of entry copying, frame transport,
+  constraint mapping, and storage compaction. Do not benchmark the rejected
+  roundtrip as an implementation alternative or start a broad comparison study.
+
+  Review the full source diff against the agreed signatures, nomenclature,
+  stored-order semantics, and attribute/constraint preservation. Record the
+  checks and unresolved failures under the owning subitem; do not weaken a law
+  or add a fallback to close the gate. S3e depends on this checkpoint.
 
 - **S3e** (`umol-py::edit`, delta/reaction bindings; breaking, red→green)
   Extend the existing Python variant families for the new changes, with
@@ -4246,7 +4478,7 @@ design and gains no DSL operation here.
   and add parity cases. Do not add unrelated Rust API coverage merely for parity.
   Migrate existing dative Edit variants and Edits addition/removal methods to
   the separate donor/acceptor inputs from S3a, including plural entry tuples.
-  This closes the enum migration. [dep: S3a, S3c, S3d]
+  This closes the enum migration. [dep: S3a, S3c, S3d5]
 - **S3f** (`umol-graph-core::graph`; additive, green) Implement Graph::add_nodes,
   add_edges, and add with the exact interfaces under Storage delegation. Return
   owned, allocation-free exact-size id iterators; mutation is eager and the

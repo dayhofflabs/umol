@@ -8,7 +8,7 @@
 mod dpo;
 mod integrity;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::vec::IntoIter;
 
 use dpo::check_reaction_dpo;
@@ -100,7 +100,7 @@ impl<T> ReactionApplicationIter<T> {
         match_config: SubstructureMatchConfig,
         output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
     ) -> Result<Self, ApplyPreconditionError> {
-        let deltas = reaction.application_deltas()?;
+        let deltas = reaction.prepare_deltas()?;
         let correspondences = reaction
             .lhs
             .substructure_matches(&host, match_config)?
@@ -124,7 +124,7 @@ impl<T> Iterator for ReactionApplicationIter<T> {
             let correspondence = self.correspondences.next()?;
             match self
                 .reaction
-                .apply_at_canonical(&self.host, &correspondence, self.deltas.clone())
+                .apply_deltas_at(&self.host, &correspondence, self.deltas.clone())
             {
                 Ok(Some((product, correspondence))) => {
                     return Some(Ok((self.output)(&self.host, product, correspondence)));
@@ -1162,7 +1162,7 @@ impl Reaction {
         }
 
         let deltas = normalize_reaction_deltas(&self.lhs, &self.deltas)?;
-        self.apply_at_canonical(host, correspondence, deltas)
+        self.apply_deltas_at(host, correspondence, deltas)
     }
 
     /// Apply at a supplied match and return the realized host-to-product reaction.
@@ -1220,13 +1220,13 @@ impl Reaction {
         ))
     }
 
-    fn apply_at_canonical(
+    fn apply_deltas_at(
         &self,
         host: &Molecule,
         correspondence: &MoleculeCorrespondence,
         mut deltas: Deltas,
     ) -> Result<Option<(Molecule, MoleculeCorrespondence)>, ApplyError> {
-        deltas = reframe_application_deltas(deltas, &self.lhs, host, correspondence)?;
+        deltas = reframe_deltas(deltas, &self.lhs, host, correspondence)?;
         let host_atom = |id: AtomId| {
             correspondence
                 .atoms()
@@ -1300,6 +1300,36 @@ impl Reaction {
                 })
         };
 
+        let new_atom_index: HashMap<AtomId, usize> = deltas
+            .iter()
+            .filter_map(|delta| match delta {
+                Delta::Atom(AtomDelta::Add { id, .. }) => Some(*id),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| (id, index))
+            .collect();
+        let new_bond_index: HashMap<BondId, usize> = deltas
+            .iter()
+            .filter_map(|delta| match delta {
+                Delta::Bond(BondDelta::Add { id, .. }) => Some(*id),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| (id, index))
+            .collect();
+        let atom_handle = |id: AtomId| match new_atom_index.get(&id) {
+            Some(&index) => Ok(AtomHandle::New(index)),
+            None => host_atom(id).map(AtomHandle::Id),
+        };
+        let bond_handle = |id: BondId| match new_bond_index.get(&id) {
+            Some(&index) => Ok(BondHandle::New(index)),
+            None => host_bond(id).map(BondHandle::Id),
+        };
         let mut created_atoms: BTreeMap<AtomId, AtomForm> = BTreeMap::new();
         let mut created_bonds: BTreeMap<BondId, ([AtomId; 2], BondForm)> = BTreeMap::new();
         let mut sets = Edits::new();
@@ -1426,6 +1456,20 @@ impl Reaction {
                     }
                 }
                 Delta::DativeBond(d) => match d {
+                    DativeBondDelta::ReplaceDonors { id, old, new } => {
+                        sets.push(Edit::ReplaceDativeBondDonors {
+                            id: DativeBondHandle::Id(host_dative(*id)?),
+                            old: old.iter().map(|atom| atom_handle(*atom)).collect::<Result<_, _>>()?,
+                            new: new.iter().map(|atom| atom_handle(*atom)).collect::<Result<_, _>>()?,
+                        });
+                    }
+                    DativeBondDelta::ReplaceAcceptor { id, old, new } => {
+                        sets.push(Edit::ReplaceDativeBondAcceptor {
+                            id: DativeBondHandle::Id(host_dative(*id)?),
+                            old: atom_handle(*old)?,
+                            new: atom_handle(*new)?,
+                        });
+                    }
                     DativeBondDelta::ModifyField { id, change } => {
                         let update = match change {
                             DativeBondFieldChange::Order { new, .. } => DativeBondUpdate {
@@ -1462,6 +1506,13 @@ impl Reaction {
                     }
                 },
                 Delta::AromaticSystem(a) => match a {
+                    AromaticSystemDelta::ReplaceAtoms { id, old, new } => {
+                        sets.push(Edit::ReplaceAromaticSystemAtoms {
+                            id: AromaticSystemHandle::Id(host_aromatic(*id)?),
+                            old: old.iter().map(|atom| atom_handle(*atom)).collect::<Result<_, _>>()?,
+                            new: new.iter().map(|atom| atom_handle(*atom)).collect::<Result<_, _>>()?,
+                        });
+                    }
                     AromaticSystemDelta::ModifyField { id, change } => {
                         let update = match change {
                             AromaticSystemFieldChange::Electrons { new, .. } => {
@@ -1510,6 +1561,13 @@ impl Reaction {
                     }
                 },
                 Delta::MulticenterBond(mc) => match mc {
+                    MulticenterBondDelta::ReplaceAtoms { id, old, new } => {
+                        sets.push(Edit::ReplaceMulticenterBondAtoms {
+                            id: MulticenterBondHandle::Id(host_multicenter(*id)?),
+                            old: old.iter().map(|atom| atom_handle(*atom)).collect::<Result<_, _>>()?,
+                            new: new.iter().map(|atom| atom_handle(*atom)).collect::<Result<_, _>>()?,
+                        });
+                    }
                     MulticenterBondDelta::ModifyField { id, change } => {
                         let update = match change {
                             MulticenterBondFieldChange::Electrons { new, .. } => {
@@ -1560,6 +1618,13 @@ impl Reaction {
                     }
                 },
                 Delta::NoncovalentBond(nc) => match nc {
+                    NoncovalentBondDelta::ReplaceAtoms { id, old, new } => {
+                        sets.push(Edit::ReplaceNoncovalentBondAtoms {
+                            id: NoncovalentBondHandle::Id(host_noncovalent(*id)?),
+                            old: [atom_handle(old[0])?, atom_handle(old[1])?],
+                            new: [atom_handle(new[0])?, atom_handle(new[1])?],
+                        });
+                    }
                     NoncovalentBondDelta::ModifyField { id, change } => {
                         let update = match change {
                             NoncovalentBondFieldChange::Kind { new, .. } => NoncovalentBondUpdate {
@@ -1599,6 +1664,20 @@ impl Reaction {
                 // `Add` is lowered in the second pass; `Remove` tracks the host id for the DPO
                 // dangling check.
                 Delta::StereoAtom(s) => match s {
+                    StereoAtomDelta::ReplaceSite { id, old, new } => {
+                        sets.push(Edit::ReplaceStereoAtomSite {
+                            id: StereoAtomHandle::Id(host_stereo_atom(*id)?),
+                            old: atom_handle(*old)?,
+                            new: atom_handle(*new)?,
+                        });
+                    }
+                    StereoAtomDelta::ReplaceLigands { id, old, new } => {
+                        sets.push(Edit::ReplaceStereoAtomLigands {
+                            id: StereoAtomHandle::Id(host_stereo_atom(*id)?),
+                            old: old.iter().map(|ligand| Ok((atom_handle(ligand.atom_id)?, ligand.kind))).collect::<Result<_, ApplyError>>()?,
+                            new: new.iter().map(|ligand| Ok((atom_handle(ligand.atom_id)?, ligand.kind))).collect::<Result<_, ApplyError>>()?,
+                        });
+                    }
                     StereoAtomDelta::ModifyField { id, change } => {
                         let host_id = host_stereo_atom(*id)?;
                         let StereoAtomFieldChange::Configuration { new, .. } = change;
@@ -1632,6 +1711,20 @@ impl Reaction {
                     }
                 },
                 Delta::StereoBond(s) => match s {
+                    StereoBondDelta::ReplaceSite { id, old, new } => {
+                        sets.push(Edit::ReplaceStereoBondSite {
+                            id: StereoBondHandle::Id(host_stereo_bond(*id)?),
+                            old: bond_handle(*old)?,
+                            new: bond_handle(*new)?,
+                        });
+                    }
+                    StereoBondDelta::ReplaceLigands { id, old, new } => {
+                        sets.push(Edit::ReplaceStereoBondLigands {
+                            id: StereoBondHandle::Id(host_stereo_bond(*id)?),
+                            old: old.iter().map(|ligand| Ok((atom_handle(ligand.atom_id)?, ligand.kind))).collect::<Result<_, ApplyError>>()?,
+                            new: new.iter().map(|ligand| Ok((atom_handle(ligand.atom_id)?, ligand.kind))).collect::<Result<_, ApplyError>>()?,
+                        });
+                    }
                     StereoBondDelta::ModifyField { id, change } => {
                         let host_id = host_stereo_bond(*id)?;
                         let StereoBondFieldChange::Configuration { new, .. } = change;
@@ -1711,26 +1804,6 @@ impl Reaction {
         }
 
         // `AddAtoms` is the first edit, so created atoms take `New(0..k)` in ascending id order.
-        let new_atom_index: HashMap<AtomId, usize> = created_atoms
-            .keys()
-            .enumerate()
-            .map(|(index, &id)| (id, index))
-            .collect();
-        let atom_handle = |id: AtomId| match new_atom_index.get(&id) {
-            Some(&index) => Ok(AtomHandle::New(index)),
-            None => host_atom(id).map(AtomHandle::Id),
-        };
-        // Created bonds use their own `New(0..k)` namespace in ascending id order.
-        let new_bond_index: HashMap<BondId, usize> = created_bonds
-            .keys()
-            .enumerate()
-            .map(|(index, &id)| (id, index))
-            .collect();
-        let bond_handle = |id: BondId| match new_bond_index.get(&id) {
-            Some(&index) => Ok(BondHandle::New(index)),
-            None => host_bond(id).map(BondHandle::Id),
-        };
-
         // Overlay create/remove need `atom_handle` (created participants resolve to `New`), so they
         // are lowered in a second pass: adds after the topology adds, removes before
         // `RemoveTopology`. Removes are collected per kind and emitted as one batched edit each,
@@ -1744,8 +1817,12 @@ impl Reaction {
         let mut new_noncovalent_handles = HashMap::new();
         let mut new_stereo_atom_handles = HashMap::new();
         let mut new_stereo_bond_handles = HashMap::new();
-        let mut remove_dative: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondForm)> =
-            Vec::new();
+        let mut remove_dative: Vec<(
+            DativeBondHandle,
+            Vec<AtomHandle>,
+            AtomHandle,
+            DativeBondForm,
+        )> = Vec::new();
         let mut remove_aromatic: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemForm)> =
             Vec::new();
         let mut remove_multicenter: Vec<(
@@ -1768,12 +1845,15 @@ impl Reaction {
                     acceptor,
                     attributes,
                 }) => {
-                    let mut atoms: Vec<AtomHandle> = donors
+                    let donors: Vec<AtomHandle> = donors
                         .iter()
                         .map(|a| atom_handle(*a))
                         .collect::<Result<_, _>>()?;
-                    atoms.push(atom_handle(*acceptor)?);
-                    let handle = overlay_adds.add_dative_bond(atoms, attributes.clone());
+                    let handle = overlay_adds.add_dative_bond(
+                        donors,
+                        atom_handle(*acceptor)?,
+                        attributes.clone(),
+                    );
                     new_dative_handles.insert(*id, handle);
                 }
                 Delta::DativeBond(DativeBondDelta::Remove {
@@ -1782,14 +1862,14 @@ impl Reaction {
                     acceptor,
                     attributes,
                 }) => {
-                    let mut atoms: Vec<AtomHandle> = donors
+                    let donors: Vec<AtomHandle> = donors
                         .iter()
                         .map(|a| atom_handle(*a))
                         .collect::<Result<_, _>>()?;
-                    atoms.push(atom_handle(*acceptor)?);
                     remove_dative.push((
                         DativeBondHandle::Id(host_dative(*id)?),
-                        atoms,
+                        donors,
+                        atom_handle(*acceptor)?,
                         attributes.clone(),
                     ));
                 }
@@ -2161,12 +2241,7 @@ impl Reaction {
         Ok(Some((product, comap)))
     }
 
-    /// Check the reaction-local structural preconditions shared by every application.
-    pub fn check_preconditions(&self) -> Result<(), ApplyPreconditionError> {
-        self.application_deltas().map(drop)
-    }
-
-    fn application_deltas(&self) -> Result<Deltas, ApplyPreconditionError> {
+    fn prepare_deltas(&self) -> Result<Deltas, ApplyPreconditionError> {
         if !stereo_delta_domains_are_valid(&self.lhs, &self.deltas) {
             return Err(ApplyPreconditionError::InconsistentReaction);
         }
@@ -2525,7 +2600,7 @@ fn optional_pattern_matches<T: Lattice>(pattern: &Option<T>, target: &Option<T>)
     }
 }
 
-fn reframe_application_deltas(
+fn reframe_deltas(
     deltas: Deltas,
     lhs: &Molecule,
     host: &Molecule,
@@ -2540,6 +2615,8 @@ fn reframe_application_deltas(
                     let id = match &delta {
                         DativeBondDelta::Add { id, .. }
                         | DativeBondDelta::Remove { id, .. }
+                        | DativeBondDelta::ReplaceDonors { id, .. }
+                        | DativeBondDelta::ReplaceAcceptor { id, .. }
                         | DativeBondDelta::ModifyField { id, .. }
                         | DativeBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -2576,6 +2653,7 @@ fn reframe_application_deltas(
                     let id = match &delta {
                         AromaticSystemDelta::Add { id, .. }
                         | AromaticSystemDelta::Remove { id, .. }
+                        | AromaticSystemDelta::ReplaceAtoms { id, .. }
                         | AromaticSystemDelta::ModifyField { id, .. }
                         | AromaticSystemDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -2624,6 +2702,7 @@ fn reframe_application_deltas(
                     let id = match &delta {
                         MulticenterBondDelta::Add { id, .. }
                         | MulticenterBondDelta::Remove { id, .. }
+                        | MulticenterBondDelta::ReplaceAtoms { id, .. }
                         | MulticenterBondDelta::ModifyField { id, .. }
                         | MulticenterBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -2672,6 +2751,7 @@ fn reframe_application_deltas(
                     let id = match &delta {
                         NoncovalentBondDelta::Add { id, .. }
                         | NoncovalentBondDelta::Remove { id, .. }
+                        | NoncovalentBondDelta::ReplaceAtoms { id, .. }
                         | NoncovalentBondDelta::ModifyField { id, .. }
                         | NoncovalentBondDelta::ModifyConstraint { id, .. } => *id,
                     };
@@ -2752,6 +2832,8 @@ fn reframe_application_deltas(
                             }
                             *old = host_old;
                         }
+                        StereoAtomDelta::ReplaceSite { .. }
+                        | StereoAtomDelta::ReplaceLigands { .. } => {}
                         StereoAtomDelta::Add { .. } => unreachable!(),
                     }
                     Delta::StereoAtom(delta)
@@ -2804,6 +2886,8 @@ fn reframe_application_deltas(
                             }
                             *old = host_old;
                         }
+                        StereoBondDelta::ReplaceSite { .. }
+                        | StereoBondDelta::ReplaceLigands { .. } => {}
                         StereoBondDelta::Add { .. } => unreachable!(),
                     }
                     Delta::StereoBond(delta)
@@ -5068,7 +5152,7 @@ mod tests {
             },
         );
         assert_eq!(
-            reaction.check_preconditions(),
+            reaction.prepare_deltas().map(drop),
             Err(ApplyPreconditionError::InconsistentReaction),
         );
         assert_eq!(reaction.to_reaction_span(), Err(Contradiction));
@@ -5776,6 +5860,74 @@ mod tests {
     }
 
     #[rstest]
+    fn test_reaction_apply_at_replacement() {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                AromaticSystemForm::from_electrons(vec![1, 1]),
+            )],
+            ..Default::default()
+        });
+        let reaction = Reaction::new(
+            lhs.clone(),
+            Deltas::from_iter([
+                Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms {
+                    id: AromaticSystemId(0),
+                    old: vec![AtomId(0), AtomId(1)],
+                    new: vec![AtomId(0), AtomId(1), AtomId(2)],
+                }),
+                Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                    id: AromaticSystemId(0),
+                    change: AromaticSystemFieldChange::Electrons {
+                        old: ElectronCountsForm::Lit(vec![1, 1]),
+                        new: ElectronCountsForm::Lit(vec![1, 1, 1]),
+                    },
+                }),
+            ]),
+        );
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(0), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+            )],
+            ..Default::default()
+        });
+        let host = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(0)],
+                AromaticSystemForm::from_electrons(vec![1, 1]),
+            )],
+            ..Default::default()
+        });
+        let correspondence = MoleculeCorrespondence::induce(
+            &lhs,
+            &host,
+            Correspondence::from_images(&[AtomId(1), AtomId(0), AtomId(2)], 3),
+        )
+        .unwrap();
+
+        assert_eq!(reaction.apply_at(&host, &correspondence), Ok(Some(expected)));
+        assert_eq!(
+            reaction.to_reaction_span().unwrap().to_reaction().deltas().as_slice(),
+            &[
+                Delta::AromaticSystem(AromaticSystemDelta::Remove {
+                    id: AromaticSystemId(0),
+                    atoms: vec![AtomId(0), AtomId(1)],
+                    attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
+                }),
+                Delta::AromaticSystem(AromaticSystemDelta::Add {
+                    id: AromaticSystemId(1),
+                    atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+                    attributes: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+                }),
+            ],
+        );
+    }
+
+    #[rstest]
     fn test_reaction_apply_at_frame_error() {
         let atoms = [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
             .into_iter()
@@ -6337,8 +6489,8 @@ mod tests {
             })]),
         ),
     )]
-    fn test_reaction_check_preconditions(#[case] reaction: Reaction) {
-        assert_eq!(reaction.check_preconditions(), Ok(()));
+    fn test_reaction_prepare_deltas(#[case] reaction: Reaction) {
+        assert_eq!(reaction.prepare_deltas().map(drop), Ok(()));
     }
 
     #[rstest]
@@ -6378,11 +6530,11 @@ mod tests {
         ),
         ApplyPreconditionError::ReactionDpo(DpoContradiction::DanglingBond { atom: AtomId(0), bond: BondId(0) }),
     )]
-    fn test_reaction_check_preconditions_error(
+    fn test_reaction_prepare_deltas_error(
         #[case] reaction: Reaction,
         #[case] expected: ApplyPreconditionError,
     ) {
-        assert_eq!(reaction.check_preconditions().unwrap_err(), expected);
+        assert_eq!(reaction.prepare_deltas().unwrap_err(), expected);
     }
 
     #[rustfmt::skip]

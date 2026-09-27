@@ -497,11 +497,11 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_check_preconditions_update_error(
+    fn test_reaction_apply_update_error(
         reaction in malformed_update_strategy(),
     ) {
         prop_assert_eq!(
-            reaction.check_preconditions(),
+            reaction.apply(reaction.lhs(), MATCH_CONFIG).map(drop),
             Err(ApplyPreconditionError::InconsistentReaction),
         );
     }
