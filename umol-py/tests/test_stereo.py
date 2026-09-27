@@ -476,3 +476,47 @@ def test_molecule_repr_stereo():
     assert repr(stereo_atom_molecule()) == (
         "Molecule(atoms=5, bonds=4, stereo_atoms=1)"
     )
+
+
+@pytest.mark.parametrize(
+    ("namespace", "form", "kind", "ligands"),
+    [
+        (
+            "stereo_atoms",
+            StereoAtomForm,
+            StereoKind.Tetrahedral,
+            [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)],
+        ),
+        (
+            "stereo_bonds",
+            StereoBondForm,
+            StereoKind.CisTrans,
+            [
+                StereoLigand(2, StereoLigandKind.Atom),
+                StereoLigand(0, StereoLigandKind.ImplicitHydrogen),
+                StereoLigand(3, StereoLigandKind.Atom),
+                StereoLigand(1, StereoLigandKind.ImplicitHydrogen),
+            ],
+        ),
+    ],
+)
+@pytest.mark.parametrize("replace_form", [False, True])
+def test_stereo_view_assignment_out_of_range_coset(namespace, form, kind, ligands, replace_form):
+    initial = StereoConfigurationForm.Kinded(kind, StereoCoset.Lit(0))
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C")) for _ in range(5)],
+        bonds=[(0, i, BondForm(1)) for i in range(1, 5)] + [(1, 3, BondForm(1))],
+        **{namespace: [(0, ligands, form(initial))]},
+    )
+    collection = getattr(molecule, namespace)
+    view = collection[0]
+    configuration = StereoConfigurationForm.Kinded(kind, StereoCoset.Lit(2))
+
+    if replace_form:
+        collection[0] = form(configuration)
+    else:
+        view.configuration = configuration
+
+    assert view.configuration == configuration
+    assert collection[0].configuration == configuration
+    assert view.site_id == 0

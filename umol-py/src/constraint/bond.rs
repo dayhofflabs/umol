@@ -567,32 +567,30 @@ impl BondConstraintsView {
         }
     }
 
-    /// Mutate the backing bond's constraints in place through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrBondConstraintsForm) -> R,
-    ) -> PyResult<R> {
-        match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .bond_mut(*id)
-                .attributes_mut()
-                .constraints)),
-            BondConstraintsBacking::Bond(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
-            }
-        }
-    }
-
     /// Set one constraint on the backing bond in place (last-wins per key).
     pub(crate) fn set_form(
         &self,
         py: Python<'_>,
         constraint: GraphIrBondConstraintForm,
     ) -> PyResult<()> {
-        self.with_mut(py, |cs| cs.set(constraint))
+        match &self.backing {
+            BondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+            BondConstraintsBacking::Bond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+        }
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -601,7 +599,22 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: GraphIrBondConstraintKey,
     ) -> PyResult<Option<GraphIrBondConstraintForm>> {
-        self.with_mut(py, |cs| cs.remove(key))
+        match &self.backing {
+            BondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                Ok(cs.remove(key))
+            }
+            BondConstraintsBacking::Bond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                Ok(cs.remove(key))
+            }
+        }
     }
 }
 
@@ -650,7 +663,24 @@ impl BondConstraintsView {
     /// view aliasing the same bond is not a double-borrow panic.
     pub(crate) fn update(&self, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs))
+        match &self.backing {
+            BondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+            BondConstraintsBacking::Bond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {

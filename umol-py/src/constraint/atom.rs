@@ -1190,32 +1190,30 @@ impl AtomConstraintsView {
         }
     }
 
-    /// Mutate the backing atom's constraints in place through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrAtomConstraintsForm) -> R,
-    ) -> PyResult<R> {
-        match &self.backing {
-            AtomConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .atom_mut(*id)
-                .attributes_mut()
-                .constraints)),
-            AtomConstraintsBacking::Atom(atom) => {
-                Ok(f(&mut atom.borrow_mut(py).to_rust_mut()?.constraints))
-            }
-        }
-    }
-
     /// Set one constraint on the backing atom in place (last-wins per key).
     pub(crate) fn set_form(
         &self,
         py: Python<'_>,
         constraint: GraphIrAtomConstraintForm,
     ) -> PyResult<()> {
-        self.with_mut(py, |cs| cs.set(constraint))
+        match &self.backing {
+            AtomConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().atoms().contains(*id) {
+                    return Err(PyIndexError::new_err("atom id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().atom_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+            AtomConstraintsBacking::Atom(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+        }
     }
 
     /// Remove one key from the backing atom in place, returning the removed entry.
@@ -1224,7 +1222,22 @@ impl AtomConstraintsView {
         py: Python<'_>,
         key: GraphIrAtomConstraintKey,
     ) -> PyResult<Option<GraphIrAtomConstraintForm>> {
-        self.with_mut(py, |cs| cs.remove(key))
+        match &self.backing {
+            AtomConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().atoms().contains(*id) {
+                    return Err(PyIndexError::new_err("atom id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().atom_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                Ok(cs.remove(key))
+            }
+            AtomConstraintsBacking::Atom(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                Ok(cs.remove(key))
+            }
+        }
     }
 }
 
@@ -1273,7 +1286,24 @@ impl AtomConstraintsView {
     /// view aliasing the same atom is not a double-borrow panic.
     pub(crate) fn update(&self, py: Python<'_>, other: AtomConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs))
+        match &self.backing {
+            AtomConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().atoms().contains(*id) {
+                    return Err(PyIndexError::new_err("atom id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().atom_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+            AtomConstraintsBacking::Atom(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {

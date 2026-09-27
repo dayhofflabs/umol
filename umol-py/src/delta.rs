@@ -1559,8 +1559,8 @@ pub enum ConstraintDelta {
 
 #[pymethods]
 impl ConstraintDelta {
-    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py) == other.to_rust(py)
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> PyResult<bool> {
+        Ok(self.to_rust(py)? == other.to_rust(py)?)
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -1578,7 +1578,7 @@ impl ConstraintDelta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py)?.inverse())?)
     }
 }
 
@@ -1586,23 +1586,23 @@ impl ConstraintDelta {
     pub(crate) fn from_rust(py: Python<'_>, delta: &GraphIrConstraintDelta) -> PyResult<Self> {
         Ok(match delta {
             GraphIrConstraintDelta::Add(constraint) => Self::Add {
-                constraint: into_py_variant(py, Constraint::from_rust(py, constraint)?)?,
+                constraint: Constraint::from_rust(py, constraint)?,
             },
             GraphIrConstraintDelta::Remove(constraint) => Self::Remove {
-                constraint: into_py_variant(py, Constraint::from_rust(py, constraint)?)?,
+                constraint: Constraint::from_rust(py, constraint)?,
             },
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrConstraintDelta {
-        match self {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrConstraintDelta> {
+        Ok(match self {
             Self::Add { constraint } => {
-                GraphIrConstraintDelta::Add(constraint.bind(py).borrow().to_rust(py))
+                GraphIrConstraintDelta::Add(constraint.bind(py).borrow().to_rust(py)?)
             }
             Self::Remove { constraint } => {
-                GraphIrConstraintDelta::Remove(constraint.bind(py).borrow().to_rust(py))
+                GraphIrConstraintDelta::Remove(constraint.bind(py).borrow().to_rust(py)?)
             }
-        }
+        })
     }
 }
 
@@ -1622,8 +1622,8 @@ pub enum Delta {
 
 #[pymethods]
 impl Delta {
-    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py) == other.to_rust(py)
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> PyResult<bool> {
+        Ok(self.to_rust(py)? == other.to_rust(py)?)
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -1643,7 +1643,7 @@ impl Delta {
 
     /// Return the inverse resolved edit.
     fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py)?.inverse())?)
     }
 }
 
@@ -1683,8 +1683,8 @@ impl Delta {
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrDelta {
-        match self {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrDelta> {
+        Ok(match self {
             Self::Atom(delta) => GraphIrDelta::Atom(delta.bind(py).borrow().to_rust(py)),
             Self::Bond(delta) => GraphIrDelta::Bond(delta.bind(py).borrow().to_rust(py)),
             Self::DativeBond(delta) => {
@@ -1706,9 +1706,9 @@ impl Delta {
                 GraphIrDelta::StereoBond(delta.bind(py).borrow().to_rust(py))
             }
             Self::Constraint(delta) => {
-                GraphIrDelta::Constraint(delta.bind(py).borrow().to_rust(py))
+                GraphIrDelta::Constraint(delta.bind(py).borrow().to_rust(py)?)
             }
-        }
+        })
     }
 }
 
@@ -1766,13 +1766,13 @@ impl Deltas {
     /// Build an owned container from delta entries, preserving order and duplicates.
     #[new]
     #[pyo3(signature = (entries=Vec::new()))]
-    fn new(py: Python<'_>, entries: Vec<Py<Delta>>) -> Self {
-        Self::from_rust(
+    fn new(py: Python<'_>, entries: Vec<Py<Delta>>) -> PyResult<Self> {
+        Ok(Self::from_rust(
             entries
                 .into_iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py))
-                .collect(),
-        )
+                .collect::<PyResult<GraphIrDeltas>>()?,
+        ))
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -1785,8 +1785,9 @@ impl Deltas {
     }
 
     /// Append one detached delta snapshot.
-    fn append(&mut self, py: Python<'_>, delta: Py<Delta>) {
-        self.0.push(delta.bind(py).borrow().to_rust(py));
+    fn append(&mut self, py: Python<'_>, delta: Py<Delta>) -> PyResult<()> {
+        self.0.push(delta.bind(py).borrow().to_rust(py)?);
+        Ok(())
     }
 
     fn __len__(&self) -> usize {
@@ -4380,7 +4381,7 @@ mod tests {
     fn test_constraint_delta_roundtrip(#[case] delta: GraphIrConstraintDelta) {
         Python::attach(|py| {
             let binding = ConstraintDelta::from_rust(py, &delta).unwrap();
-            assert_eq!(binding.to_rust(py), delta);
+            assert_eq!(binding.to_rust(py).unwrap(), delta);
         });
     }
 
@@ -4426,7 +4427,7 @@ mod tests {
         Python::attach(|py| {
             let left = ConstraintDelta::from_rust(py, &left).unwrap();
             let right = ConstraintDelta::from_rust(py, &right).unwrap();
-            assert_eq!(left.__eq__(&right, py), expected);
+            assert_eq!(left.__eq__(&right, py).unwrap(), expected);
         });
     }
 
@@ -4476,11 +4477,11 @@ mod tests {
             let binding = ConstraintDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_rust(py),
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
                 delta.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py).unwrap(), delta);
         });
     }
 
@@ -4539,7 +4540,7 @@ mod tests {
     fn test_delta_roundtrip(#[case] delta: GraphIrDelta) {
         Python::attach(|py| {
             let binding = Delta::from_rust(py, &delta).unwrap();
-            assert_eq!(binding.to_rust(py), delta);
+            assert_eq!(binding.to_rust(py).unwrap(), delta);
         });
     }
 
@@ -4585,7 +4586,7 @@ mod tests {
         Python::attach(|py| {
             let left = Delta::from_rust(py, &left).unwrap();
             let right = Delta::from_rust(py, &right).unwrap();
-            assert_eq!(left.__eq__(&right, py), expected);
+            assert_eq!(left.__eq__(&right, py).unwrap(), expected);
         });
     }
 
@@ -4692,11 +4693,11 @@ mod tests {
             let binding = Delta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_rust(py),
+                inverse.bind(py).borrow().to_rust(py).unwrap(),
                 delta.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py).unwrap(), delta);
         });
     }
 
@@ -4744,7 +4745,7 @@ mod tests {
             drop(borrow);
 
             let entry = iter.__next__(py).unwrap().unwrap();
-            assert_eq!(entry.borrow(py).to_rust(py), expected);
+            assert_eq!(entry.borrow(py).to_rust(py).unwrap(), expected);
             assert!(owner.try_borrow_mut(py).is_ok());
             assert!(iter.__next__(py).unwrap().is_none());
         });
@@ -4769,7 +4770,10 @@ mod tests {
                 .map(|entry| into_py_variant(py, Delta::from_rust(py, entry).unwrap()).unwrap())
                 .collect();
             let expected: GraphIrDeltas = entries.into_iter().collect();
-            assert_eq!(Deltas::new(py, python_entries).to_rust(), &expected);
+            assert_eq!(
+                Deltas::new(py, python_entries).unwrap().to_rust(),
+                &expected
+            );
         });
     }
 
@@ -4846,7 +4850,7 @@ mod tests {
             );
             let value = into_py_variant(py, Delta::from_rust(py, &appended).unwrap()).unwrap();
 
-            deltas.append(py, value);
+            deltas.append(py, value).unwrap();
 
             assert_eq!(
                 deltas.to_rust().as_slice(),
@@ -5024,7 +5028,10 @@ mod tests {
                 .into_iter()
                 .collect(),
             );
-            assert_eq!(deltas.__getitem__(py, index).unwrap().to_rust(py), expected);
+            assert_eq!(
+                deltas.__getitem__(py, index).unwrap().to_rust(py).unwrap(),
+                expected
+            );
         });
     }
 
@@ -5073,7 +5080,8 @@ mod tests {
                     .unwrap()
                     .bind(py)
                     .borrow()
-                    .to_rust(py),
+                    .to_rust(py)
+                    .unwrap(),
                 expected[0]
             );
             assert_eq!(
@@ -5082,7 +5090,8 @@ mod tests {
                     .unwrap()
                     .bind(py)
                     .borrow()
-                    .to_rust(py),
+                    .to_rust(py)
+                    .unwrap(),
                 expected[1]
             );
             assert!(iter.__next__(py).unwrap().is_none());

@@ -36,7 +36,7 @@ use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::entity::EntityForm;
-use crate::error::{molecule_integrity_error, parse_error};
+use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 
@@ -1445,10 +1445,10 @@ macro_rules! stereo_view {
                 }
                 molecule
                     .to_rust_mut()
-                    .$entity_mut(self.id, |attributes| {
-                        attributes.configuration = configuration;
-                    })
-                    .map_err(molecule_integrity_error)
+                    .$entity_mut(self.id)
+                    .attributes_mut()
+                    .configuration = configuration;
+                Ok(())
             }
 
             /// The entity's constraints as a live handle onto the molecule: reads borrow the
@@ -1474,8 +1474,10 @@ macro_rules! stereo_view {
                 }
                 molecule
                     .to_rust_mut()
-                    .$entity_mut(self.id, |attributes| attributes.constraints = constraints)
-                    .map_err(molecule_integrity_error)
+                    .$entity_mut(self.id)
+                    .attributes_mut()
+                    .constraints = constraints;
+                Ok(())
             }
 
             /// The value fields as a dict: `configuration` plus a `constraints` list of the
@@ -1501,13 +1503,13 @@ macro_rules! stereo_view {
 }
 
 stereo_view! {
-    StereoAtomView, GraphIrStereoAtomView, GraphIrStereoAtomId, stereo_atoms, try_modify_stereo_atom,
+    StereoAtomView, GraphIrStereoAtomView, GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut,
     "stereo atom id out of range", StereoAtomConstraintForm, StereoAtomConstraintsView,
     StereoAtomConstraintsBacking, StereoAtomConstraintsLike,
 }
 
 stereo_view! {
-    StereoBondView, GraphIrStereoBondView, GraphIrStereoBondId, stereo_bonds, try_modify_stereo_bond,
+    StereoBondView, GraphIrStereoBondView, GraphIrStereoBondId, stereo_bonds, stereo_bond_mut,
     "stereo bond id out of range", StereoBondConstraintForm, StereoBondConstraintsView,
     StereoBondConstraintsBacking, StereoBondConstraintsLike,
 }
@@ -1579,10 +1581,8 @@ macro_rules! stereo_views {
                 let mut molecule = self.owner.borrow_mut(py);
                 let id = $resolve_index(molecule.to_rust(), index)?;
                 let attributes = value.to_rust().clone();
-                molecule
-                    .to_rust_mut()
-                    .$entity_mut(id, |current| *current = attributes)
-                    .map_err(molecule_integrity_error)
+                *molecule.to_rust_mut().$entity_mut(id).attributes_mut() = attributes;
+                Ok(())
             }
 
             /// The stereo entity sitting on the atom/bond with id `site`, or `None`. Keyed by
@@ -1661,12 +1661,12 @@ macro_rules! stereo_views {
 
 stereo_views! {
     StereoAtomViews, StereoAtomView, StereoAtomViewIter, GraphIrStereoAtomId, GraphIrAtomId, stereo_atoms,
-    try_modify_stereo_atom, StereoAtomForm, resolve_stereo_atom_index, "stereo atom id out of range",
+    stereo_atom_mut, StereoAtomForm, resolve_stereo_atom_index, "stereo atom id out of range",
 }
 
 stereo_views! {
     StereoBondViews, StereoBondView, StereoBondViewIter, GraphIrStereoBondId, GraphIrBondId, stereo_bonds,
-    try_modify_stereo_bond, StereoBondForm, resolve_stereo_bond_index, "stereo bond id out of range",
+    stereo_bond_mut, StereoBondForm, resolve_stereo_bond_index, "stereo bond id out of range",
 }
 
 #[cfg(test)]

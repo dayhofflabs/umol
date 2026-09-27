@@ -153,8 +153,9 @@ a new value. The `*Editor` suffix communicates that lifecycle and is preferable 
 editor as a generally mutable form of the original type.
 
 For molecules, the editor is the structural mutation boundary: adding or removing topology and
-overlays goes through `MoleculeEditor`. Ordinary attribute and constraint mutation does not require
-an editor; it writes through the molecule's entity and constraint views.
+overlays goes through `MoleculeEditor`. Ordinary attributes and entity-level constraints are
+assigned through the molecule's entity views. Molecule-level constraints are read-only on the
+molecule; changing them requires editing and publication.
 
 ### Operation-issued iterator
 
@@ -241,11 +242,18 @@ A property contract is determined by the returned object's role:
 These rules apply recursively. Marking the outer PyO3 class as frozen is insufficient when a nested
 constraints container or other umol object remains mutable.
 
-The existing constraint-container distinction is retained. A value-backed `*ConstraintsForm` is an
-owned mutable container; a molecule-backed `*ConstraintsView` is a live container whose writes
-update the molecule. Entity views use the latter and do not require an editor. If a frozen parent
-needs to expose constraints, resolve that parent's access contract without replacing this general
-container design or returning a misleading mutable disconnected copy.
+A value-backed entity `*ConstraintsForm` is an owned mutable container; an entity
+`*ConstraintsView` writes through to the stored entity constraints. These writes do not require
+an editor. Molecule-level `ConstraintsView` is a read-only sequence. Its iterator yields one
+stored constraint per step, including an entire `And` or `Or` as one entry. Accessing a
+composition's children produces another read-only sequence; iteration never descends implicitly.
+
+Molecule-backed `Constraint` entries retain their owner and location. Variant fields read the
+stored constraint; leaf payloads are converted to the existing immutable value forms when
+requested. `copy()` produces an independent constraint value. Structural mutation invalidates
+the collection, entries, child sequences, and iterators through the molecule's accessor counter.
+Ordinary entity assignment leaves these constraint accessors valid. Standalone `Constraints`
+remains mutable and returns independent entry values.
 
 ## Construction and conversion
 

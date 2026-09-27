@@ -3,7 +3,7 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
@@ -363,11 +363,16 @@ impl AromaticSystemView {
     #[setter]
     fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
         let value = value.to_rust(py);
-        self.owner
-            .borrow_mut(py)
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        if !molecule.to_rust().aromatic_systems().contains(self.id) {
+            return Err(PyIndexError::new_err("aromatic system id out of range"));
+        }
+        molecule
             .to_rust_mut()
-            .try_modify_aromatic_system(self.id, |system| system.electrons = value)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .aromatic_system_mut(self.id)
+            .attributes_mut()
+            .electrons = value;
+        Ok(())
     }
 
     #[getter]
@@ -385,11 +390,16 @@ impl AromaticSystemView {
     #[setter]
     fn set_charge(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         let value = value.to_rust(py);
-        self.owner
-            .borrow_mut(py)
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        if !molecule.to_rust().aromatic_systems().contains(self.id) {
+            return Err(PyIndexError::new_err("aromatic system id out of range"));
+        }
+        molecule
             .to_rust_mut()
-            .try_modify_aromatic_system(self.id, |system| system.charge = value)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .aromatic_system_mut(self.id)
+            .attributes_mut()
+            .charge = value;
+        Ok(())
     }
 
     #[getter]
@@ -411,11 +421,16 @@ impl AromaticSystemView {
         value: PyRef<'_, UnpairedElectronsForm>,
     ) -> PyResult<()> {
         let value = value.to_rust(py);
-        self.owner
-            .borrow_mut(py)
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        if !molecule.to_rust().aromatic_systems().contains(self.id) {
+            return Err(PyIndexError::new_err("aromatic system id out of range"));
+        }
+        molecule
             .to_rust_mut()
-            .try_modify_aromatic_system(self.id, |system| system.unpaired_electrons = value)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .aromatic_system_mut(self.id)
+            .attributes_mut()
+            .unpaired_electrons = value;
+        Ok(())
     }
 
     /// The system's constraints as a live handle onto the molecule: reads borrow the
@@ -439,11 +454,16 @@ impl AromaticSystemView {
         value: AromaticSystemConstraintsLike,
     ) -> PyResult<()> {
         let value = value.to_rust(py)?;
-        self.owner
-            .borrow_mut(py)
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        if !molecule.to_rust().aromatic_systems().contains(self.id) {
+            return Err(PyIndexError::new_err("aromatic system id out of range"));
+        }
+        molecule
             .to_rust_mut()
-            .try_modify_aromatic_system(self.id, |system| system.constraints = value)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .aromatic_system_mut(self.id)
+            .attributes_mut()
+            .constraints = value;
+        Ok(())
     }
 
     /// The value fields as a dict keyed by field name; values are Python objects —
@@ -541,10 +561,11 @@ impl AromaticSystemViews {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_aromatic_system_index(molecule.to_rust(), index)?;
         let system = system.to_rust().clone();
-        molecule
+        *molecule
             .to_rust_mut()
-            .try_modify_aromatic_system(id, |candidate| *candidate = system)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .aromatic_system_mut(id)
+            .attributes_mut() = system;
+        Ok(())
     }
 
     /// The aromatic system whose member atom set equals `atoms`, or `None`.

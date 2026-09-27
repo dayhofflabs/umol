@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
@@ -533,37 +533,30 @@ impl MulticenterBondConstraintsView {
         }
     }
 
-    /// Mutate the backing bond's constraints in place through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrMulticenterBondConstraintsForm) -> R,
-    ) -> PyResult<R> {
-        match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
-                let mut output = None;
-                owner
-                    .borrow_mut(py)
-                    .to_rust_mut()
-                    .try_modify_multicenter_bond(*id, |bond| {
-                        output = Some(f(&mut bond.constraints));
-                    })
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
-                Ok(output.expect("a successful checked mutation invokes its callback"))
-            }
-            MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
-            }
-        }
-    }
-
     /// Set one constraint on the backing bond in place (last-wins per key).
     pub(crate) fn set_form(
         &self,
         py: Python<'_>,
         constraint: GraphIrMulticenterBondConstraintForm,
     ) -> PyResult<()> {
-        self.with_mut(py, |cs| cs.set(constraint))
+        match &self.backing {
+            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("multicenter bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+            MulticenterBondConstraintsBacking::MulticenterBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+        }
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -572,7 +565,22 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         key: GraphIrMulticenterBondConstraintKey,
     ) -> PyResult<Option<GraphIrMulticenterBondConstraintForm>> {
-        self.with_mut(py, |cs| cs.remove(key))
+        match &self.backing {
+            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("multicenter bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                Ok(cs.remove(key))
+            }
+            MulticenterBondConstraintsBacking::MulticenterBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                Ok(cs.remove(key))
+            }
+        }
     }
 }
 
@@ -629,7 +637,24 @@ impl MulticenterBondConstraintsView {
         other: MulticenterBondConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs))
+        match &self.backing {
+            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("multicenter bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+            MulticenterBondConstraintsBacking::MulticenterBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {

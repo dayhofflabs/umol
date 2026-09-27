@@ -341,9 +341,14 @@ mod tests {
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
-        AtomHandle as GraphIrAtomHandle, AtomId as GraphIrAtomId, BondForm as GraphIrBondForm,
-        Edit as GraphIrEdit, Edits as GraphIrEdits, NumForm as GraphIrNumForm,
+        AtomConstraintForm as GraphIrAtomConstraintForm, AtomFieldChange as GraphIrAtomFieldChange,
+        AtomForm as GraphIrAtomForm, AtomHandle as GraphIrAtomHandle, AtomId as GraphIrAtomId,
+        BondForm as GraphIrBondForm, Constraint as GraphIrConstraint, Edit as GraphIrEdit,
+        Edits as GraphIrEdits, Entity as GraphIrEntity,
+        MoleculeIntegrityError as GraphIrMoleculeIntegrityError, NumForm as GraphIrNumForm,
+        StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
+        StereoAtomId as GraphIrStereoAtomId, StereoKind as GraphIrStereoKind,
+        StereogenicityForm as GraphIrStereogenicityForm,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -469,6 +474,49 @@ mod tests {
                     .extract::<String>()
                     .unwrap(),
                 "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::reference(
+        GraphIrConstraint::Atom(GraphIrAtomId(5), GraphIrAtomConstraintForm::degree(1)),
+        GraphIrMoleculeIntegrityError::InvalidReference { entity: GraphIrEntity::Atom(GraphIrAtomId(5)) }
+    )]
+    #[case::stereo_frame(
+        GraphIrConstraint::StereoAtom(
+            GraphIrStereoAtomId(0), GraphIrStereoKind::Octahedral,
+            GraphIrStereoAtomConstraintForm::Stereogenicity(GraphIrStereogenicityForm::Undetermined)
+        ),
+        GraphIrMoleculeIntegrityError::StereoLigandArity {
+            entity: GraphIrEntity::StereoAtom(GraphIrStereoAtomId(0)),
+            kind: GraphIrStereoKind::Octahedral, expected: 6, actual: 4
+        }
+    )]
+    fn test_molecule_editor_build_constraint_error(
+        #[case] constraint: GraphIrConstraint,
+        #[case] expected: GraphIrMoleculeIntegrityError,
+    ) {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+        );
+        let mut editor = MoleculeEditor {
+            inner: Some(molecule.edit()),
+        };
+        editor
+            .inner
+            .as_mut()
+            .unwrap()
+            .constraints_mut()
+            .push(constraint);
+        let error = editor.build().unwrap_err();
+        Python::attach(|py| {
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected.to_string()
             );
         });
     }

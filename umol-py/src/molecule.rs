@@ -3,7 +3,7 @@
 
 use std::str::FromStr;
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyOverflowError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph::fingerprint::PatternFingerprinter as GraphPatternFingerprinter;
 use umol_graph::ingest::ingest_smiles_with;
@@ -26,14 +26,14 @@ use crate::aromatic::{AromaticSystemForm, AromaticSystemViews};
 use crate::atom::{AtomForm, AtomViews};
 use crate::bond::{BondForm, BondViews};
 use crate::compact::MoleculeCompaction;
-use crate::constraint::molecule::{Constraint, ConstraintsLike, ConstraintsView};
+use crate::constraint::molecule::{Constraint, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondForm, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
-    fingerprint_error, metadata_error, molecule_apply_error, molecule_integrity_error, parse_error,
-    smiles_input_error, InvalidStructureError,
+    fingerprint_error, metadata_error, molecule_apply_error, parse_error, smiles_input_error,
+    InvalidStructureError, InvalidatedViewError,
 };
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
@@ -56,15 +56,24 @@ use crate::transaction::MoleculeEditor;
 
 /// A molecule: the owned graph-IR root.
 #[pyclass(eq, from_py_object)]
-#[derive(Clone, Debug, PartialEq)]
-pub struct Molecule(GraphIrMolecule);
+#[derive(Clone, Debug)]
+pub struct Molecule {
+    value: GraphIrMolecule,
+    counter: u64,
+}
+
+impl PartialEq for Molecule {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
 
 #[pymethods]
 impl Molecule {
     /// An empty molecule: zero atoms, zero bonds.
     #[new]
     fn new() -> Self {
-        Self(GraphIrMolecule::new())
+        Self::from_rust(GraphIrMolecule::new())
     }
 
     /// Parse a molecule from its EDN representation under explicit construction defaults.
@@ -97,7 +106,7 @@ impl Molecule {
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
-        GraphIrMoleculeDsl::from_ir(&self.0, defaults.to_rust()).to_string()
+        GraphIrMoleculeDsl::from_ir(&self.value, defaults.to_rust()).to_string()
     }
 
     /// Render a canonical DSL representation with persistent metadata.
@@ -111,7 +120,7 @@ impl Molecule {
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<String> {
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
-        let lowered = GraphIrMoleculeDsl::from_ir(&self.0, defaults.to_rust())
+        let lowered = GraphIrMoleculeDsl::from_ir(&self.value, defaults.to_rust())
             .into_parts()
             .0;
         GraphIrMoleculeDsl::new(lowered, metadata.to_rust().clone())
@@ -222,7 +231,7 @@ impl Molecule {
         let ir_constraints = constraints
             .iter()
             .map(|constraint| constraint.bind(py).borrow().to_rust(py))
-            .collect::<Vec<_>>();
+            .collect::<PyResult<Vec<_>>>()?;
         GraphIrMolecule::try_from_entries(GraphIrMoleculeEntries {
             atoms: ir_atoms,
             bonds: ir_bonds,
@@ -234,7 +243,7 @@ impl Molecule {
             stereo_bonds: ir_stereo_bonds,
             constraints: ir_constraints.into(),
         })
-        .map(Molecule)
+        .map(Self::from_rust)
         .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
@@ -274,7 +283,7 @@ impl Molecule {
 
     /// Create a mutable editor initialized from this molecule.
     fn edit(&self) -> MoleculeEditor {
-        MoleculeEditor::from_rust(self.0.edit())
+        MoleculeEditor::from_rust(self.value.edit())
     }
 
     /// Apply a checked edit batch without modifying this molecule.
@@ -282,7 +291,7 @@ impl Molecule {
     /// Raises `TransactionError` when the edits cannot be applied and `InvalidStructureError` when
     /// the modified draft cannot be published as a molecule.
     fn apply(&self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
-        self.0
+        self.value
             .apply(edits.bind(py).borrow().to_rust().clone())
             .map(Self::from_rust)
             .map_err(molecule_apply_error)
@@ -294,7 +303,7 @@ impl Molecule {
         py: Python<'_>,
         edits: Py<Edits>,
     ) -> PyResult<(Self, MoleculeCorrespondence)> {
-        self.0
+        self.value
             .tracked_apply(edits.bind(py).borrow().to_rust().clone())
             .map(|(molecule, correspondence)| {
                 (
@@ -308,13 +317,16 @@ impl Molecule {
     /// Combine by disjoint concatenation. For each entity kind, this molecule's ids remain
     /// the prefix and other follows in its original order.
     fn combine(&self, other: &Self) -> Self {
-        Self::from_rust(self.0.combine(&other.0))
+        Self::from_rust(self.value.combine(&other.value))
     }
 
     /// Append other in place, preserving existing ids and each entity kind's order.
-    fn combine_from(slf: Py<Self>, py: Python<'_>, other: Py<Self>) {
+    fn combine_from(slf: Py<Self>, py: Python<'_>, other: Py<Self>) -> PyResult<()> {
         let other = other.bind(py).borrow().to_rust().clone();
-        slf.borrow_mut(py).to_rust_mut().combine_from(&other);
+        let mut molecule = slf.try_borrow_mut(py)?;
+        molecule.advance_counter()?;
+        molecule.to_rust_mut().combine_from(&other);
+        Ok(())
     }
 
     /// Combine an iterable by disjoint concatenation, in input order for each entity kind.
@@ -352,13 +364,13 @@ impl Molecule {
             chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
-        let mut molecule = self.0.clone();
+        let mut molecule = self.value.clone();
         let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
             .resolve(&mut molecule)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         Ok(match solution {
             GraphSolution::Determined(report) => Solution::Determined {
-                molecule: Self(molecule),
+                molecule: Self::from_rust(molecule),
                 report: ResolveReport::from_rust(&report),
             },
             GraphSolution::Underdetermined(report) => Solution::Underdetermined {
@@ -433,12 +445,16 @@ impl Molecule {
 
     /// Decompose into conservatively connected components, ordered by lowest source atom id.
     fn split(&self) -> Vec<Self> {
-        self.0.split().into_iter().map(Self::from_rust).collect()
+        self.value
+            .split()
+            .into_iter()
+            .map(Self::from_rust)
+            .collect()
     }
 
     /// Return the same components as split, paired with source-to-component correspondences.
     fn tracked_split(&self) -> Vec<(Self, MoleculeCorrespondence)> {
-        self.0
+        self.value
             .tracked_split()
             .into_iter()
             .map(|(component, correspondence)| {
@@ -452,12 +468,12 @@ impl Molecule {
 
     /// Extract the atoms selected by a sub-to-host correspondence, preserving host order.
     fn extract(&self, selection: &MoleculeCorrespondence) -> Self {
-        Self::from_rust(self.0.extract(selection.to_rust()))
+        Self::from_rust(self.value.extract(selection.to_rust()))
     }
 
     /// Return the same extraction and its host-to-result compaction.
     fn tracked_extract(&self, selection: &MoleculeCorrespondence) -> (Self, MoleculeCompaction) {
-        let (molecule, compaction) = self.0.tracked_extract(selection.to_rust());
+        let (molecule, compaction) = self.value.tracked_extract(selection.to_rust());
         (
             Self::from_rust(molecule),
             MoleculeCompaction::from_rust(compaction),
@@ -473,8 +489,8 @@ impl Molecule {
     ) -> PyResult<Vec<MoleculeCorrespondence>> {
         let config = config.unwrap_or_default().to_rust();
         Ok(self
-            .0
-            .substructure_matches(&host.0, config)
+            .value
+            .substructure_matches(&host.value, config)
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .into_iter()
             .map(MoleculeCorrespondence::from_rust)
@@ -486,7 +502,7 @@ impl Molecule {
     fn hashed_fingerprint(&self, config: HashedFingerprintConfig) -> PyResult<HashedFeatureSet> {
         config
             .to_rust()
-            .featurize(&self.0)
+            .featurize(&self.value)
             .map(HashedFeatureSet::from_rust)
             .map_err(fingerprint_error)
     }
@@ -499,7 +515,7 @@ impl Molecule {
     ) -> PyResult<CountedHashedFeatureSet> {
         config
             .to_rust()
-            .featurize_counted(&self.0)
+            .featurize_counted(&self.value)
             .map(CountedHashedFeatureSet::from_rust)
             .map_err(fingerprint_error)
     }
@@ -512,7 +528,7 @@ impl Molecule {
                 GraphPatternFingerprinter::new,
                 PatternFingerprintConfig::to_rust,
             )
-            .fingerprint(&self.0)
+            .fingerprint(&self.value)
             .map(BitFp::from_rust)
             .map_err(fingerprint_error)
     }
@@ -525,7 +541,7 @@ impl Molecule {
     ) -> PyResult<StructuralFeatureSet> {
         config
             .to_rust()
-            .featurize(&self.0)
+            .featurize(&self.value)
             .map(StructuralFeatureSet::from_rust)
             .map_err(fingerprint_error)
     }
@@ -580,18 +596,8 @@ impl Molecule {
 
     /// The molecule-level constraints in insertion order.
     #[getter]
-    fn constraints(slf: Py<Self>) -> ConstraintsView {
-        ConstraintsView::new(slf)
-    }
-
-    /// Replace the molecule-level constraints from an owned container or live view.
-    #[setter]
-    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsLike) -> PyResult<()> {
-        let constraints = value.to_rust(py)?;
-        slf.borrow_mut(py)
-            .to_rust_mut()
-            .try_modify_constraints(|current| *current = constraints)
-            .map_err(molecule_integrity_error)
+    fn constraints(slf: Py<Self>, py: Python<'_>) -> PyResult<ConstraintsView> {
+        ConstraintsView::new(slf, py)
     }
 
     pub(crate) fn __repr__(&self) -> String {
@@ -599,16 +605,16 @@ impl Molecule {
         // multicenter bonds, noncovalent bonds, stereo atoms, stereo bonds) only when present,
         // so a plain covalent molecule stays uncluttered. Names match the `from_entries` kwargs.
         let mut parts = vec![
-            format!("atoms={}", self.0.atoms().count()),
-            format!("bonds={}", self.0.bonds().count()),
+            format!("atoms={}", self.value.atoms().count()),
+            format!("bonds={}", self.value.bonds().count()),
         ];
         for (name, count) in [
-            ("dative_bonds", self.0.dative_bonds().count()),
-            ("aromatic_systems", self.0.aromatic_systems().count()),
-            ("multicenter_bonds", self.0.multicenter_bonds().count()),
-            ("noncovalent_bonds", self.0.noncovalent_bonds().count()),
-            ("stereo_atoms", self.0.stereo_atoms().count()),
-            ("stereo_bonds", self.0.stereo_bonds().count()),
+            ("dative_bonds", self.value.dative_bonds().count()),
+            ("aromatic_systems", self.value.aromatic_systems().count()),
+            ("multicenter_bonds", self.value.multicenter_bonds().count()),
+            ("noncovalent_bonds", self.value.noncovalent_bonds().count()),
+            ("stereo_atoms", self.value.stereo_atoms().count()),
+            ("stereo_bonds", self.value.stereo_bonds().count()),
         ] {
             if count > 0 {
                 parts.push(format!("{name}={count}"));
@@ -619,20 +625,43 @@ impl Molecule {
 }
 
 impl Molecule {
-    /// The wrapped IR molecule — read access for atom views.
-    pub(crate) fn to_rust(&self) -> &GraphIrMolecule {
-        &self.0
+    pub(crate) fn view_counter(&self) -> PyResult<u64> {
+        Ok(self.counter)
     }
 
-    /// Mutable access to the wrapped IR molecule — write access for the live
-    /// atom and constraint views (copy-on-write through `atom_mut`).
+    pub(crate) fn check_access(&self, expected: u64, accessor: &'static str) -> PyResult<()> {
+        if self.counter != expected {
+            return Err(InvalidatedViewError::new_err(format!(
+                "{accessor} was invalidated by Molecule mutation"
+            )));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn advance_counter(&mut self) -> PyResult<()> {
+        self.counter = self
+            .counter
+            .checked_add(1)
+            .ok_or_else(|| PyOverflowError::new_err("Molecule accessor counter exhausted"))?;
+        Ok(())
+    }
+
+    /// Read access to the wrapped IR molecule.
+    pub(crate) fn to_rust(&self) -> &GraphIrMolecule {
+        &self.value
+    }
+
+    /// Mutable access to the wrapped IR molecule.
     pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrMolecule {
-        &mut self.0
+        &mut self.value
     }
 
     /// Wrap a Rust molecule as a Python molecule value.
     pub(crate) fn from_rust(molecule: GraphIrMolecule) -> Self {
-        Molecule(molecule)
+        Self {
+            value: molecule,
+            counter: 0,
+        }
     }
 }
 
@@ -659,14 +688,12 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AromaticSystemForm as GraphIrAromaticSystemForm,
-        AromaticSystemId as GraphIrAromaticSystemId,
-        AtomConstraintForm as GraphIrAtomConstraintForm, AtomFieldChange as GraphIrAtomFieldChange,
+        AromaticSystemId as GraphIrAromaticSystemId, AtomFieldChange as GraphIrAtomFieldChange,
         AtomForm as GraphIrAtomForm, AtomHandle as GraphIrAtomHandle,
         AtomUpdate as GraphIrAtomUpdate, BondForm as GraphIrBondForm,
-        Constraint as GraphIrConstraint, Constraints as GraphIrConstraints,
-        DativeBondForm as GraphIrDativeBondForm, DativeBondId as GraphIrDativeBondId,
-        Edit as GraphIrEdit, Edits as GraphIrEdits, Entity as GraphIrEntity,
-        MoleculeConstraint as GraphIrMoleculeConstraint,
+        Constraint as GraphIrConstraint, DativeBondForm as GraphIrDativeBondForm,
+        DativeBondId as GraphIrDativeBondId, Edit as GraphIrEdit, Edits as GraphIrEdits,
+        Entity as GraphIrEntity, MoleculeConstraint as GraphIrMoleculeConstraint,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
         MulticenterBondForm as GraphIrMulticenterBondForm,
         MulticenterBondId as GraphIrMulticenterBondId,
@@ -680,8 +707,6 @@ mod tests {
 
     use super::*;
     use crate::atom::AtomForm as PyAtomForm;
-    use crate::constraint::molecule::Constraints;
-    use crate::convert::into_py_variant;
     use crate::error::{
         InvalidStructureError, MetadataError, ParseError, TransactionError, UnderdeterminedError,
     };
@@ -917,8 +942,7 @@ mod tests {
             let constraint = GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected {
                 atoms: Some(vec![GraphIrAtomId(0), GraphIrAtomId(2)]),
             });
-            let constraints =
-                vec![into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap()];
+            let constraints = vec![Constraint::from_rust(py, &constraint).unwrap()];
             let molecule = Molecule::from_entries(
                 py,
                 atoms,
@@ -1595,7 +1619,7 @@ mod tests {
             .into_iter()
             .map(GraphIrAtomForm::from_element)
             .collect();
-        let molecule = Molecule(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+        let molecule = Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms,
             ..Default::default()
         }));
@@ -1606,111 +1630,11 @@ mod tests {
     fn test_molecule_constraints() {
         Python::attach(|py| {
             let molecule = Py::new(py, Molecule::new()).unwrap();
-            let view = Molecule::constraints(molecule.clone_ref(py));
-            let constraint =
-                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-            view.with_mut(py, |constraints| constraints.push(constraint.clone()))
-                .unwrap();
-
+            let view = Molecule::constraints(molecule, py).unwrap();
             assert_eq!(
-                molecule
-                    .bind(py)
-                    .borrow()
-                    .to_rust()
-                    .constraints()
-                    .as_slice(),
-                &[constraint]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_molecule_set_constraints() {
-        Python::attach(|py| {
-            let molecule = Py::new(py, Molecule::new()).unwrap();
-            let constraint = GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected {
-                atoms: Some(vec![]),
-            });
-            let constraints = Py::new(
-                py,
-                Constraints::from_rust(GraphIrConstraints::from(vec![constraint.clone()])),
-            )
-            .unwrap();
-
-            Molecule::set_constraints(
-                molecule.clone_ref(py),
-                py,
-                ConstraintsLike::Container(constraints),
-            )
-            .unwrap();
-
-            assert_eq!(
-                molecule
-                    .bind(py)
-                    .borrow()
-                    .to_rust()
-                    .constraints()
-                    .as_slice(),
-                &[constraint]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_molecule_set_constraints_integrity_error() {
-        Python::attach(|py| {
-            let molecule = Py::new(py, Molecule::new()).unwrap();
-            let invalid =
-                GraphIrConstraint::Atom(GraphIrAtomId(0), GraphIrAtomConstraintForm::degree(1));
-            let constraints = Py::new(
-                py,
-                Constraints::from_rust(GraphIrConstraints::from(vec![invalid])),
-            )
-            .unwrap();
-
-            let error = Molecule::set_constraints(
-                molecule.clone_ref(py),
-                py,
-                ConstraintsLike::Container(constraints),
-            )
-            .unwrap_err();
-
-            assert!(error.is_instance_of::<InvalidStructureError>(py));
-            assert!(molecule
-                .bind(py)
-                .borrow()
-                .to_rust()
-                .constraints()
-                .is_empty());
-        });
-    }
-
-    #[rstest]
-    fn test_molecule_set_constraints_self() {
-        Python::attach(|py| {
-            let constraint =
-                GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-            let molecule = Py::new(
-                py,
-                Molecule(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                    constraints: GraphIrConstraints::from(vec![constraint.clone()]),
-                    ..Default::default()
-                })),
-            )
-            .unwrap();
-            let own_view = Py::new(py, Molecule::constraints(molecule.clone_ref(py))).unwrap();
-
-            Molecule::set_constraints(molecule.clone_ref(py), py, ConstraintsLike::View(own_view))
-                .unwrap();
-
-            assert_eq!(
-                molecule
-                    .bind(py)
-                    .borrow()
-                    .to_rust()
-                    .constraints()
-                    .as_slice(),
-                &[constraint]
+                view.read(py, |constraints| Ok(constraints.to_vec()))
+                    .unwrap(),
+                Vec::new()
             );
         });
     }
@@ -1718,7 +1642,7 @@ mod tests {
     #[rstest]
     fn test_molecule_eq() {
         assert_eq!(Molecule::new(), Molecule::new());
-        let carbon = Molecule(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+        let carbon = Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         }));
@@ -1728,7 +1652,7 @@ mod tests {
     #[rstest]
     #[case::empty(Molecule::new(), "Molecule(atoms=0, bonds=0)")]
     #[case::noncovalent(
-        Molecule(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+        Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::O),
                 GraphIrAtomForm::from_element(ChemElement::O),

@@ -23,7 +23,8 @@ types. All eight entity-view families expose private ids and attribute borrows
 through matching accessors. Stereo views use the owning sets for site and ligand
 access; their ligand frames are borrowed. S2j is complete for all eight entity
 families: matching local getters and editor-only structural mutation are implemented.
-S2k1's in-place DSL conversion and S2k2's Rust callback caller migration are implemented.
+S2k1's in-place DSL conversion, S2k2's Rust callback caller migration, and S2l's
+Python assignment and read-only molecule constraint access are implemented.
 S2f is cancelled; the
 remaining S2 work is unimplemented. Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -40,9 +41,9 @@ reopen S2i or block S2j.
 | Storage delegation, participant methods, Edit/Delta/Undo variants, local getters | Settled design; S1a–S1c complete | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
-| Molecule attribute methods | Uniform unchecked attribute mutation settled; implementation remains | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Remove modify/try_modify callbacks. |
+| Molecule attribute methods | Direct assignment implemented; callback removal remains in S2m | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Remove modify/try_modify callbacks. |
 | Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
-| Molecule-level constraint mutation | S2i1 and Rust caller migration complete; Python migration remains | Molecule::constraints provides reads; the editor exposes &mut Constraints. The public checked constraint view is removed. S2l migrates Python callback callers and S2m removes try_modify_constraints. |
+| Molecule-level constraint mutation | S2i1, Rust caller migration, and S2l complete | Molecule::constraints provides reads; the editor exposes &mut Constraints. Python molecule constraint entries and iteration are lazy and read-only. S2m removes try_modify_constraints. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
 | Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation remains | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Molecule and Edits input-transfer changes remain; the editor already supports consumption. |
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
@@ -73,7 +74,7 @@ approved below. S2b is complete: Rust's unit error is NoJoinError and Python
 join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
 incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
-complete. S2k1 and S2k2 are implemented; S2l is the next subitem.
+complete. S2k1, S2k2, and S2l are implemented; S2m is the next subitem.
 
 ## Editor and transaction API
 
@@ -775,7 +776,9 @@ Transaction::run(&mut molecule, callback) for interactive execution.
 
 ### Python accessor invalidation
 
-**Approved; implementation remains in S5d/S6d.** The Option
+**Approved.** S2l implements the counter and invalidation for molecule constraint
+accessors at combine_from. The remaining accessor migration belongs to S5d;
+consumption belongs to S6d. The Option
 wrapper for consuming inputs is retained. Use counter for the invalidation
 field and methods. Invalidate at the public operation boundary, without
 classifying edits or maintaining per-entity counters.
@@ -802,7 +805,8 @@ to revive a stale parent. Check validity before reads, writes, indexing,
 iteration, conversion, id access, or creating descendants. Invalid access raises
 the existing InvalidatedViewError, rather than IndexError or access to a shifted
 entity. The check precedes Rust indexing. Explicit independent copies remain
-usable. Existing owned return values are not converted to live views by this work.
+usable. S2l makes molecule constraint entries live read-only accessors; other
+existing owned return values retain their copying policy.
 
 Use one private u64 counter in the Python Molecule wrapper and a captured
 counter in each owner-backed accessor. Advancing it uses checked addition;
@@ -813,7 +817,7 @@ counter after preparing Python inputs, then retain that borrow throughout
 Rust execution. No Python callback runs between invalidation and completion.
 An unwind after execution starts also leaves old accessors invalid.
 
-Concrete wrapper layout (final shape after S6d; S5d adds counter while the
+Concrete wrapper layout (final shape after S6d; S2l adds counter while the
 value is still non-optional):
 
 ```rust
@@ -858,9 +862,10 @@ to the existing types; their source migration belongs to S5d.
 Apply the same extra field to the other seven entity views, the eight entity
 collections and their molecule-backed iterators, molecule ConstraintsView,
 and the Molecule variants of entity-constraint and ring-size storage enums.
-Standalone storage variants are unchanged. Current constraint/key/item iterators
-own copied entries or keys; they need no counter because they do not consult
-the molecule. Their separate copying policy is unchanged.
+Standalone storage variants are unchanged. Molecule ConstraintIter retains its
+collection and checks its counter on access. Entity-constraint key/item iterators
+currently own copied entries or keys; they need no counter because they do not
+consult the molecule. Their separate copying policy is unchanged.
 
 The complete additional crate-visible methods on the Python Molecule wrapper
 are below; fields remain private. Existing to_rust/to_rust_mut become fallible
@@ -3783,9 +3788,29 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   standalone Constraints and entity-level constraint setters mutable. Invalid
   entity/collection indices remain IndexError.
   Remove each molecule-backed with_mut callback as its callers migrate.
-  Prepared transactions, consumption/counters, and their scheduled S5 work are
-  not redesigned here; no interactive Python transaction or new editor-view
-  binding family is introduced.
+  Prepared transactions and consumption remain in S5/S6. No interactive Python
+  transaction or new editor-view binding family is introduced.
+
+  **Read-only constraint entries.** Preserve Constraint.Atom, Constraint.And,
+  and the other existing variants, constructors, tuple fields, equality, and
+  pattern matching. Constraint privately stores either an owned Rust value or
+  a molecule owner, captured counter, collection position, and child-index path.
+  ConstraintsView stores either the molecule/counter or a parent Constraint for
+  an And/Or child sequence. ConstraintIter retains that sequence, a cursor, and
+  its end position. Each step yields one constraint; compositions remain whole
+  entries. Child access is explicit and read-only. No constraint tree is copied
+  to create a molecule accessor or iterator. Leaf payloads use the existing
+  immutable Python value forms, converted when requested. Constraint.copy()
+  copies the selected subtree into an independent value; standalone Constraints
+  remains mutable and returns independent values.
+
+  Add the already specified Molecule counter and check_access/advance_counter/
+  view_counter methods for these accessors. combine_from advances the counter
+  immediately before Rust execution; ordinary entity assignment does not.
+  Collections, entries, child sequences, and exhausted iterators reject stale
+  access with InvalidatedViewError. Conversion into edits/deltas propagates this
+  error. S5d2 extends this mechanism to the remaining views and operation
+  boundaries; S6d adds owner consumption.
 
   **Verification.** Python 3.13 assignment tests for all eight kinds, whole-form
   replacement, nested constraints, short/long electron vectors, out-of-range
@@ -3795,6 +3820,17 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   invalid top-level reference/frame rejection at editor publication.
   Build the extension before tests and exercise public Python access rather
   than test-only Rust mutation paths.
+
+  **Implemented and verified — 2026-09-26.** All entity property and nested
+  constraint writes use direct Rust mutable views; Python with_mut/try_modify
+  callers are removed. Molecule constraints use the read-only entry/sequence
+  design above. The rebuilt Python 3.13 extension passes 748 focused Python
+  tests; all 1,639 binding unit tests pass (two ignored), including editor
+  publication rejection of invalid constraint references and stereo frames.
+  Variant matching, nested sequences, explicit copying, invalidation, and
+  ordinary setter usability are covered. All-target Clippy adds no warnings;
+  the four unused Rust callback methods still block warnings-denied lint until
+  S2m removes them. Nightly formatting and diff checks pass; full diff reviewed.
 
 - **S2m — Remove callback mutation and close the stage**
   (`ir::molecule`, remaining Rust/Python callers, public documentation;
@@ -4973,7 +5009,8 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   accessors at execution entry, including on no-op and rollback; ordinary view
   setters retain access.
 
-  Apply the complete field and method table under Python accessor invalidation.
+  Reuse the Molecule counter methods and molecule constraint accessors from S2l.
+  Apply the remaining field and method table under Python accessor invalidation.
   Test all eight entity kinds, nested constraints and ring sizes, exhausted
   iterators, and ordinary setter usability. Molecule storage is not Option yet;
   S6d adds consumption without changing these counter rules.

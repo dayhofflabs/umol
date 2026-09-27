@@ -237,8 +237,10 @@ impl ReactionSpan {
         let mut constraint_entries = Vec::new();
         for (lhs, rhs) in constraints {
             constraint_entries.extend(constraint_spans(
-                lhs.map(|value| value.bind(py).borrow().to_rust(py)),
-                rhs.map(|value| value.bind(py).borrow().to_rust(py)),
+                lhs.map(|value| value.bind(py).borrow().to_rust(py))
+                    .transpose()?,
+                rhs.map(|value| value.bind(py).borrow().to_rust(py))
+                    .transpose()?,
             )?);
         }
 
@@ -314,7 +316,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::convert::into_py_variant;
     use crate::error::{MetadataError, ParseError};
 
     #[rstest]
@@ -703,56 +704,20 @@ mod tests {
                 )],
                 vec![
                     (
-                        Some(
-                            into_py_variant(
-                                py,
-                                Constraint::from_rust(py, &unchanged_constraint).unwrap(),
-                            )
-                            .unwrap(),
-                        ),
-                        Some(
-                            into_py_variant(
-                                py,
-                                Constraint::from_rust(py, &unchanged_constraint).unwrap(),
-                            )
-                            .unwrap(),
-                        ),
+                        Some(Constraint::from_rust(py, &unchanged_constraint).unwrap()),
+                        Some(Constraint::from_rust(py, &unchanged_constraint).unwrap()),
                     ),
                     (
-                        Some(
-                            into_py_variant(
-                                py,
-                                Constraint::from_rust(py, &modified_constraint_lhs).unwrap(),
-                            )
-                            .unwrap(),
-                        ),
-                        Some(
-                            into_py_variant(
-                                py,
-                                Constraint::from_rust(py, &modified_constraint_rhs).unwrap(),
-                            )
-                            .unwrap(),
-                        ),
+                        Some(Constraint::from_rust(py, &modified_constraint_lhs).unwrap()),
+                        Some(Constraint::from_rust(py, &modified_constraint_rhs).unwrap()),
                     ),
                     (
-                        Some(
-                            into_py_variant(
-                                py,
-                                Constraint::from_rust(py, &removed_constraint).unwrap(),
-                            )
-                            .unwrap(),
-                        ),
+                        Some(Constraint::from_rust(py, &removed_constraint).unwrap()),
                         None,
                     ),
                     (
                         None,
-                        Some(
-                            into_py_variant(
-                                py,
-                                Constraint::from_rust(py, &added_constraint).unwrap(),
-                            )
-                            .unwrap(),
-                        ),
+                        Some(Constraint::from_rust(py, &added_constraint).unwrap()),
                     ),
                 ],
             )

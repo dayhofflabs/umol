@@ -252,10 +252,11 @@ def test_aromaticsystemview_set_electrons():
     assert mol.aromatic_systems[0].electrons == ElectronCountsForm.Lit([2, 2, 2, 2, 2, 2])
 
 
-def test_aromaticsystemview_set_electrons_attributes():
+@pytest.mark.parametrize("electrons", [[], [2], [2, 2, 2, 2, 2, 2, 2]])
+def test_aromaticsystemview_set_electrons_mismatched_length(electrons):
     mol = benzene()
-    mol.aromatic_systems[0].electrons = [2]
-    assert mol.aromatic_systems[0].electrons == ElectronCountsForm.Lit([2])
+    mol.aromatic_systems[0].electrons = electrons
+    assert mol.aromatic_systems[0].electrons == ElectronCountsForm.Lit(electrons)
 
 
 def test_aromaticsystemview_set_charge():

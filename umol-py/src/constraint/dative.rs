@@ -562,32 +562,30 @@ impl DativeBondConstraintsView {
         }
     }
 
-    /// Mutate the backing bond's constraints in place through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrDativeBondConstraintsForm) -> R,
-    ) -> PyResult<R> {
-        match &self.backing {
-            DativeBondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .dative_bond_mut(*id)
-                .attributes_mut()
-                .constraints)),
-            DativeBondConstraintsBacking::DativeBond(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
-            }
-        }
-    }
-
     /// Set one constraint on the backing bond in place (last-wins per key).
     pub(crate) fn set_form(
         &self,
         py: Python<'_>,
         constraint: GraphIrDativeBondConstraintForm,
     ) -> PyResult<()> {
-        self.with_mut(py, |cs| cs.set(constraint))
+        match &self.backing {
+            DativeBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().dative_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("dative bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().dative_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+            DativeBondConstraintsBacking::DativeBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+        }
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -596,7 +594,22 @@ impl DativeBondConstraintsView {
         py: Python<'_>,
         key: GraphIrDativeBondConstraintKey,
     ) -> PyResult<Option<GraphIrDativeBondConstraintForm>> {
-        self.with_mut(py, |cs| cs.remove(key))
+        match &self.backing {
+            DativeBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().dative_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("dative bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().dative_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                Ok(cs.remove(key))
+            }
+            DativeBondConstraintsBacking::DativeBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                Ok(cs.remove(key))
+            }
+        }
     }
 }
 
@@ -653,7 +666,24 @@ impl DativeBondConstraintsView {
         other: DativeBondConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs))
+        match &self.backing {
+            DativeBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().dative_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("dative bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().dative_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+            DativeBondConstraintsBacking::DativeBond(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {

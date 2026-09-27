@@ -3,7 +3,7 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
@@ -372,11 +372,16 @@ impl MulticenterBondView {
     #[setter]
     fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
         let value = value.to_rust(py);
-        self.owner
-            .borrow_mut(py)
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        if !molecule.to_rust().multicenter_bonds().contains(self.id) {
+            return Err(PyIndexError::new_err("multicenter bond id out of range"));
+        }
+        molecule
             .to_rust_mut()
-            .try_modify_multicenter_bond(self.id, |bond| bond.electrons = value)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .multicenter_bond_mut(self.id)
+            .attributes_mut()
+            .electrons = value;
+        Ok(())
     }
 
     #[getter]
@@ -394,11 +399,16 @@ impl MulticenterBondView {
     #[setter]
     fn set_charge(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         let value = value.to_rust(py);
-        self.owner
-            .borrow_mut(py)
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        if !molecule.to_rust().multicenter_bonds().contains(self.id) {
+            return Err(PyIndexError::new_err("multicenter bond id out of range"));
+        }
+        molecule
             .to_rust_mut()
-            .try_modify_multicenter_bond(self.id, |bond| bond.charge = value)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .multicenter_bond_mut(self.id)
+            .attributes_mut()
+            .charge = value;
+        Ok(())
     }
 
     #[getter]
@@ -420,11 +430,16 @@ impl MulticenterBondView {
         value: PyRef<'_, UnpairedElectronsForm>,
     ) -> PyResult<()> {
         let value = value.to_rust(py);
-        self.owner
-            .borrow_mut(py)
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        if !molecule.to_rust().multicenter_bonds().contains(self.id) {
+            return Err(PyIndexError::new_err("multicenter bond id out of range"));
+        }
+        molecule
             .to_rust_mut()
-            .try_modify_multicenter_bond(self.id, |bond| bond.unpaired_electrons = value)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .multicenter_bond_mut(self.id)
+            .attributes_mut()
+            .unpaired_electrons = value;
+        Ok(())
     }
 
     /// The bond's constraints as a live handle onto the molecule: reads borrow the
@@ -448,11 +463,16 @@ impl MulticenterBondView {
         value: MulticenterBondConstraintsLike,
     ) -> PyResult<()> {
         let value = value.to_rust(py)?;
-        self.owner
-            .borrow_mut(py)
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        if !molecule.to_rust().multicenter_bonds().contains(self.id) {
+            return Err(PyIndexError::new_err("multicenter bond id out of range"));
+        }
+        molecule
             .to_rust_mut()
-            .try_modify_multicenter_bond(self.id, |bond| bond.constraints = value)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .multicenter_bond_mut(self.id)
+            .attributes_mut()
+            .constraints = value;
+        Ok(())
     }
 
     /// The value fields as a dict keyed by field name; values are Python objects —
@@ -547,10 +567,11 @@ impl MulticenterBondViews {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_multicenter_bond_index(molecule.to_rust(), index)?;
         let bond = bond.to_rust().clone();
-        molecule
+        *molecule
             .to_rust_mut()
-            .try_modify_multicenter_bond(id, |candidate| *candidate = bond)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .multicenter_bond_mut(id)
+            .attributes_mut() = bond;
+        Ok(())
     }
 
     /// The multicenter bond whose member atom set equals `atoms`, or `None`.

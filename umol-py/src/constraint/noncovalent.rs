@@ -591,32 +591,30 @@ impl NoncovalentBondConstraintsView {
         }
     }
 
-    /// Mutate the backing bond's constraints in place through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrNoncovalentBondConstraintsForm) -> R,
-    ) -> PyResult<R> {
-        match &self.backing {
-            NoncovalentBondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .noncovalent_bond_mut(*id)
-                .attributes_mut()
-                .constraints)),
-            NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
-            }
-        }
-    }
-
     /// Set one constraint on the backing bond in place (last-wins per key).
     pub(crate) fn set_form(
         &self,
         py: Python<'_>,
         constraint: GraphIrNoncovalentBondConstraintForm,
     ) -> PyResult<()> {
-        self.with_mut(py, |cs| cs.set(constraint))
+        match &self.backing {
+            NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().noncovalent_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("noncovalent bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().noncovalent_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+            NoncovalentBondConstraintsBacking::Noncovalent(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                cs.set(constraint);
+                Ok(())
+            }
+        }
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -625,7 +623,22 @@ impl NoncovalentBondConstraintsView {
         py: Python<'_>,
         key: GraphIrNoncovalentBondConstraintKey,
     ) -> PyResult<Option<GraphIrNoncovalentBondConstraintForm>> {
-        self.with_mut(py, |cs| cs.remove(key))
+        match &self.backing {
+            NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().noncovalent_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("noncovalent bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().noncovalent_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                Ok(cs.remove(key))
+            }
+            NoncovalentBondConstraintsBacking::Noncovalent(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                Ok(cs.remove(key))
+            }
+        }
     }
 }
 
@@ -684,7 +697,24 @@ impl NoncovalentBondConstraintsView {
         // the same bond (`bond.constraints.update(bond.constraints)`) reads while the
         // bond is unborrowed instead of self-aliasing into a double-borrow panic.
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs))
+        match &self.backing {
+            NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                if !molecule.to_rust().noncovalent_bonds().contains(*id) {
+                    return Err(PyIndexError::new_err("noncovalent bond id out of range"));
+                }
+                let mut view = molecule.to_rust_mut().noncovalent_bond_mut(*id);
+                let cs = &mut view.attributes_mut().constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+            NoncovalentBondConstraintsBacking::Noncovalent(value) => {
+                let mut value = value.try_borrow_mut(py)?;
+                let cs = &mut value.to_rust_mut()?.constraints;
+                resolved.apply(cs);
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {

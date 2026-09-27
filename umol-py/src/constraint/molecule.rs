@@ -1,16 +1,16 @@
 //! Molecule-level constraint payloads matching `umol_graph_ir::ir::constraint`.
 
-use std::vec::IntoIter;
-
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
+use pyo3::types::{PyList, PySequence};
+use pyo3::PyClassInitializer;
 use umol_graph_ir::ir::{
     AromaticSystemId as GraphIrAromaticSystemId, AtomId as GraphIrAtomId, BondId as GraphIrBondId,
     Constraint as GraphIrConstraint, Constraints as GraphIrConstraints,
     DativeBondId as GraphIrDativeBondId, MoleculeConstraint as GraphIrMoleculeConstraint,
     MulticenterBondId as GraphIrMulticenterBondId, NoncovalentBondId as GraphIrNoncovalentBondId,
-    RelationalConstraint as GraphIrRelationalConstraint, StereoAtomId as GraphIrStereoAtomId,
-    StereoBondId as GraphIrStereoBondId,
+    Normalize, RelationalConstraint as GraphIrRelationalConstraint,
+    StereoAtomId as GraphIrStereoAtomId, StereoBondId as GraphIrStereoBondId,
 };
 
 use super::aromatic::AromaticSystemConstraintForm;
@@ -21,7 +21,7 @@ use super::multicenter::MulticenterBondConstraintForm;
 use super::noncovalent::NoncovalentBondConstraintForm;
 use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 use crate::convert::{into_py_variant, variant_repr};
-use crate::error::molecule_integrity_error;
+use crate::error::{contradiction_error, InvalidatedViewError};
 use crate::lattice::impl_py_normalize;
 use crate::molecule::Molecule;
 use crate::num::NumForm;
@@ -78,180 +78,799 @@ pub enum MoleculeConstraint {
     Connected(Option<Vec<u32>>),
 }
 
-/// A recursive molecule-constraint tree containing entity leaves, aggregate
-/// leaves, and Boolean combinators.
-#[pyclass(frozen)]
-pub enum Constraint {
-    Atom(u32, Py<AtomConstraintForm>),
-    Bond(u32, Py<BondConstraintForm>),
-    DativeBond(u32, Py<DativeBondConstraintForm>),
-    AromaticSystem(u32, Py<AromaticSystemConstraintForm>),
-    MulticenterBond(u32, Py<MulticenterBondConstraintForm>),
-    NoncovalentBond(u32, Py<NoncovalentBondConstraintForm>),
-    StereoAtom(u32, StereoKind, Py<StereoAtomConstraintForm>),
-    StereoBond(u32, StereoKind, Py<StereoBondConstraintForm>),
-    Relational(Py<RelationalConstraint>),
-    Molecule(Py<MoleculeConstraint>),
-    And(Vec<Py<Constraint>>),
-    Or(Vec<Py<Constraint>>),
-    Not(Py<Constraint>),
+/// A constraint value or read-only access to a stored constraint.
+#[pyclass(frozen, subclass)]
+pub struct Constraint {
+    storage: ConstraintStorage,
+}
+
+enum ConstraintStorage {
+    Owned(GraphIrConstraint),
+    Molecule {
+        owner: Py<Molecule>,
+        counter: u64,
+        position: usize,
+        path: Box<[usize]>,
+    },
 }
 
 #[pymethods]
 impl Constraint {
-    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py) == other.to_rust(py)
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> PyResult<bool> {
+        self.read(py, |lhs| other.read(py, |rhs| Ok(lhs == rhs)))
     }
 
-    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
-        let (variant, arity) = match &*slf.bind(py).borrow() {
-            Self::Atom(_, _) => ("Atom", 2),
-            Self::Bond(_, _) => ("Bond", 2),
-            Self::DativeBond(_, _) => ("DativeBond", 2),
-            Self::AromaticSystem(_, _) => ("AromaticSystem", 2),
-            Self::MulticenterBond(_, _) => ("MulticenterBond", 2),
-            Self::NoncovalentBond(_, _) => ("NoncovalentBond", 2),
-            Self::StereoAtom(_, _, _) => ("StereoAtom", 3),
-            Self::StereoBond(_, _, _) => ("StereoBond", 3),
-            Self::Relational(_) => ("Relational", 1),
-            Self::Molecule(_) => ("Molecule", 1),
-            Self::And(_) => ("And", 1),
-            Self::Or(_) => ("Or", 1),
-            Self::Not(_) => ("Not", 1),
-        };
-        variant_repr(slf.bind(py).as_any(), "Constraint", variant, arity)
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |value| {
+            Ok(match value {
+                GraphIrConstraint::Atom(..)
+                | GraphIrConstraint::Bond(..)
+                | GraphIrConstraint::DativeBond(..)
+                | GraphIrConstraint::AromaticSystem(..)
+                | GraphIrConstraint::MulticenterBond(..)
+                | GraphIrConstraint::NoncovalentBond(..) => 2,
+                GraphIrConstraint::StereoAtom(..) | GraphIrConstraint::StereoBond(..) => 3,
+                GraphIrConstraint::Relational(..)
+                | GraphIrConstraint::Molecule(..)
+                | GraphIrConstraint::And(..)
+                | GraphIrConstraint::Or(..)
+                | GraphIrConstraint::Not(..) => 1,
+            })
+        })
+    }
+
+    fn __getitem__(slf: Py<Self>, py: Python<'_>, index: usize) -> PyResult<Py<PyAny>> {
+        if index >= slf.try_borrow(py)?.__len__(py)? {
+            return Err(PyIndexError::new_err("tuple index out of range"));
+        }
+        Ok(slf.bind(py).getattr(format!("_{index}"))?.unbind())
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        self.read(py, |value| {
+            let (name, fields) = constraint_fields(py, value)?;
+            Ok(format!("Constraint.{name}({})", fields.join(", ")))
+        })
+    }
+
+    /// Copy the selected constraint into an independent value.
+    fn copy(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        self.read(py, |value| Self::from_rust(py, value))
+    }
+
+    fn normalize(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        let value = self.to_rust(py)?.normalize().map_err(contradiction_error)?;
+        Self::from_storage(py, ConstraintStorage::Owned(value))
+    }
+
+    fn normalized_eq(&self, py: Python<'_>, other: &Self) -> PyResult<bool> {
+        self.read(py, |lhs| other.read(py, |rhs| Ok(lhs.normalized_eq(rhs))))
     }
 }
 
-impl_py_normalize!(
-    Constraint,
-    GraphIrConstraint,
-    |value: &Constraint, py: Python<'_>| -> PyResult<GraphIrConstraint> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: GraphIrConstraint| -> PyResult<Constraint> {
-        Constraint::from_rust(py, &value)
-    }
-);
-
 impl Constraint {
-    pub(crate) fn from_rust(py: Python<'_>, constraint: &GraphIrConstraint) -> PyResult<Self> {
-        Ok(match constraint {
-            GraphIrConstraint::Atom(id, child) => Self::Atom(
-                id.0,
-                into_py_variant(py, AtomConstraintForm::from_rust(py, child)?)?,
-            ),
-            GraphIrConstraint::Bond(id, child) => Self::Bond(
-                id.0,
-                into_py_variant(py, BondConstraintForm::from_rust(py, child)?)?,
-            ),
-            GraphIrConstraint::DativeBond(id, child) => Self::DativeBond(
-                id.0,
-                into_py_variant(py, DativeBondConstraintForm::from_rust(py, child)?)?,
-            ),
-            GraphIrConstraint::AromaticSystem(id, child) => Self::AromaticSystem(
-                id.0,
-                into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, child)?)?,
-            ),
-            GraphIrConstraint::MulticenterBond(id, child) => Self::MulticenterBond(
-                id.0,
-                into_py_variant(py, MulticenterBondConstraintForm::from_rust(py, child)?)?,
-            ),
-            GraphIrConstraint::NoncovalentBond(id, child) => Self::NoncovalentBond(
-                id.0,
-                into_py_variant(py, NoncovalentBondConstraintForm::from_rust(py, child)?)?,
-            ),
-            GraphIrConstraint::StereoAtom(id, kind, child) => Self::StereoAtom(
-                id.0,
-                StereoKind::from_rust(*kind),
-                into_py_variant(py, StereoAtomConstraintForm::from_rust(py, child)?)?,
-            ),
-            GraphIrConstraint::StereoBond(id, kind, child) => Self::StereoBond(
-                id.0,
-                StereoKind::from_rust(*kind),
-                into_py_variant(py, StereoBondConstraintForm::from_rust(py, child)?)?,
-            ),
-            GraphIrConstraint::Relational(child) => Self::Relational(into_py_variant(
-                py,
-                RelationalConstraint::from_rust(py, child)?,
-            )?),
-            GraphIrConstraint::Molecule(child) => Self::Molecule(into_py_variant(
-                py,
-                MoleculeConstraint::from_rust(py, child)?,
-            )?),
-            GraphIrConstraint::And(children) => Self::And(
-                children
-                    .iter()
-                    .map(|child| into_py_variant(py, Self::from_rust(py, child)?))
-                    .collect::<PyResult<_>>()?,
-            ),
-            GraphIrConstraint::Or(children) => Self::Or(
-                children
-                    .iter()
-                    .map(|child| into_py_variant(py, Self::from_rust(py, child)?))
-                    .collect::<PyResult<_>>()?,
-            ),
-            GraphIrConstraint::Not(child) => {
-                Self::Not(into_py_variant(py, Self::from_rust(py, child)?)?)
+    fn read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&GraphIrConstraint) -> PyResult<R>,
+    ) -> PyResult<R> {
+        match &self.storage {
+            ConstraintStorage::Owned(value) => f(value),
+            ConstraintStorage::Molecule {
+                owner,
+                counter,
+                position,
+                path,
+            } => {
+                let owner = owner.try_borrow(py)?;
+                owner.check_access(*counter, "Constraint")?;
+                let mut value = owner
+                    .to_rust()
+                    .constraints()
+                    .as_slice()
+                    .get(*position)
+                    .ok_or_else(|| {
+                        InvalidatedViewError::new_err("Constraint is no longer available")
+                    })?;
+                for index in path {
+                    value = match value {
+                        GraphIrConstraint::And(children) | GraphIrConstraint::Or(children) => {
+                            children.get(*index)
+                        }
+                        GraphIrConstraint::Not(child) if *index == 0 => Some(child.as_ref()),
+                        _ => None,
+                    }
+                    .ok_or_else(|| {
+                        InvalidatedViewError::new_err("Constraint is no longer available")
+                    })?;
+                }
+                f(value)
+            }
+        }
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrConstraint> {
+        self.read(py, |value| Ok(value.clone()))
+    }
+
+    pub(crate) fn from_rust(py: Python<'_>, value: &GraphIrConstraint) -> PyResult<Py<Self>> {
+        Self::from_storage(py, ConstraintStorage::Owned(value.clone()))
+    }
+
+    fn child(&self, py: Python<'_>, index: usize) -> PyResult<Py<Self>> {
+        self.read(py, |value| {
+            let child = match value {
+                GraphIrConstraint::And(children) | GraphIrConstraint::Or(children) => {
+                    children.get(index)
+                }
+                GraphIrConstraint::Not(child) if index == 0 => Some(child.as_ref()),
+                _ => None,
+            }
+            .ok_or_else(|| PyIndexError::new_err("constraint index out of range"))?;
+            match &self.storage {
+                ConstraintStorage::Owned(_) => Self::from_rust(py, child),
+                ConstraintStorage::Molecule {
+                    owner,
+                    counter,
+                    position,
+                    path,
+                } => {
+                    let mut path = path.to_vec();
+                    path.push(index);
+                    Self::from_storage(
+                        py,
+                        ConstraintStorage::Molecule {
+                            owner: owner.clone_ref(py),
+                            counter: *counter,
+                            position: *position,
+                            path: path.into_boxed_slice(),
+                        },
+                    )
+                }
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrConstraint {
-        match self {
-            Self::Atom(id, child) => {
-                GraphIrConstraint::Atom(GraphIrAtomId(*id), child.bind(py).borrow().to_rust(py))
+    fn from_storage(py: Python<'_>, storage: ConstraintStorage) -> PyResult<Py<Self>> {
+        let base = Self { storage };
+        let initialize = base.read(py, |value| {
+            let initialize: fn(Python<'_>, Self) -> PyResult<Py<Self>> = match value {
+                GraphIrConstraint::Atom(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::Atom),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::Bond(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::Bond),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::DativeBond(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::DativeBond),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::AromaticSystem(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::AromaticSystem),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::MulticenterBond(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::MulticenterBond),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::NoncovalentBond(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::NoncovalentBond),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::StereoAtom(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::StereoAtom),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::StereoBond(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::StereoBond),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::Relational(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::Relational),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::Molecule(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::Molecule),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::And(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::And),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::Or(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::Or),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+                GraphIrConstraint::Not(..) => |py, base| {
+                    Ok(Py::new(
+                        py,
+                        PyClassInitializer::from(base).add_subclass(variants::Not),
+                    )?
+                    .into_bound(py)
+                    .into_super()
+                    .unbind())
+                },
+            };
+            Ok(initialize)
+        })?;
+        initialize(py, base)
+    }
+}
+
+#[allow(
+    clippy::just_underscores_and_digits,
+    reason = "Python tuple-variant constructor keywords are _0, _1, and _2."
+)]
+mod variants {
+    use super::*;
+
+    macro_rules! entity_variant {
+        ($name:ident, $form:ident, $id:ident) => {
+            #[pyclass(extends = Constraint, frozen, module = "umol")]
+            pub struct $name;
+            #[pymethods]
+            impl $name {
+                #[classattr]
+                fn __qualname__() -> &'static str {
+                    concat!("Constraint.", stringify!($name))
+                }
+
+                #[new]
+                fn new(py: Python<'_>, _0: u32, _1: Py<$form>) -> PyClassInitializer<Self> {
+                    PyClassInitializer::from(Constraint {
+                        storage: ConstraintStorage::Owned(GraphIrConstraint::$name(
+                            $id(_0),
+                            _1.borrow(py).to_rust(py),
+                        )),
+                    })
+                    .add_subclass(Self)
+                }
+                #[classattr]
+                fn __match_args__() -> (&'static str, &'static str) {
+                    ("_0", "_1")
+                }
+                #[getter]
+                fn _0(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<u32> {
+                    slf.as_super().read(py, |value| match value {
+                        GraphIrConstraint::$name(id, _) => Ok(id.0),
+                        _ => unreachable!(),
+                    })
+                }
+                #[getter]
+                fn _1(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<$form>> {
+                    slf.as_super().read(py, |value| match value {
+                        GraphIrConstraint::$name(_, form) => {
+                            into_py_variant(py, $form::from_rust(py, form)?)
+                        }
+                        _ => unreachable!(),
+                    })
+                }
             }
-            Self::Bond(id, child) => {
-                GraphIrConstraint::Bond(GraphIrBondId(*id), child.bind(py).borrow().to_rust(py))
-            }
-            Self::DativeBond(id, child) => GraphIrConstraint::DativeBond(
-                GraphIrDativeBondId(*id),
-                child.bind(py).borrow().to_rust(py),
-            ),
-            Self::AromaticSystem(id, child) => GraphIrConstraint::AromaticSystem(
-                GraphIrAromaticSystemId(*id),
-                child.bind(py).borrow().to_rust(py),
-            ),
-            Self::MulticenterBond(id, child) => GraphIrConstraint::MulticenterBond(
-                GraphIrMulticenterBondId(*id),
-                child.bind(py).borrow().to_rust(py),
-            ),
-            Self::NoncovalentBond(id, child) => GraphIrConstraint::NoncovalentBond(
-                GraphIrNoncovalentBondId(*id),
-                child.bind(py).borrow().to_rust(py),
-            ),
-            Self::StereoAtom(id, kind, child) => GraphIrConstraint::StereoAtom(
-                GraphIrStereoAtomId(*id),
-                kind.to_rust(),
-                child.bind(py).borrow().to_rust(py),
-            ),
-            Self::StereoBond(id, kind, child) => GraphIrConstraint::StereoBond(
-                GraphIrStereoBondId(*id),
-                kind.to_rust(),
-                child.bind(py).borrow().to_rust(py),
-            ),
-            Self::Relational(child) => {
-                GraphIrConstraint::Relational(child.bind(py).borrow().to_rust(py))
-            }
-            Self::Molecule(child) => {
-                GraphIrConstraint::Molecule(child.bind(py).borrow().to_rust(py))
-            }
-            Self::And(children) => GraphIrConstraint::And(
-                children
-                    .iter()
-                    .map(|child| child.bind(py).borrow().to_rust(py))
-                    .collect(),
-            ),
-            Self::Or(children) => GraphIrConstraint::Or(
-                children
-                    .iter()
-                    .map(|child| child.bind(py).borrow().to_rust(py))
-                    .collect(),
-            ),
-            Self::Not(child) => {
-                GraphIrConstraint::Not(Box::new(child.bind(py).borrow().to_rust(py)))
-            }
+        };
+    }
+    entity_variant!(Atom, AtomConstraintForm, GraphIrAtomId);
+    entity_variant!(Bond, BondConstraintForm, GraphIrBondId);
+    entity_variant!(DativeBond, DativeBondConstraintForm, GraphIrDativeBondId);
+    entity_variant!(
+        AromaticSystem,
+        AromaticSystemConstraintForm,
+        GraphIrAromaticSystemId
+    );
+    entity_variant!(
+        MulticenterBond,
+        MulticenterBondConstraintForm,
+        GraphIrMulticenterBondId
+    );
+    entity_variant!(
+        NoncovalentBond,
+        NoncovalentBondConstraintForm,
+        GraphIrNoncovalentBondId
+    );
+
+    #[pyclass(extends = Constraint, frozen, module = "umol")]
+    pub struct StereoAtom;
+    #[pymethods]
+    impl StereoAtom {
+        #[classattr]
+        fn __qualname__() -> &'static str {
+            "Constraint.StereoAtom"
+        }
+
+        #[new]
+        fn new(
+            py: Python<'_>,
+            _0: u32,
+            _1: StereoKind,
+            _2: Py<StereoAtomConstraintForm>,
+        ) -> PyClassInitializer<Self> {
+            PyClassInitializer::from(Constraint {
+                storage: ConstraintStorage::Owned(GraphIrConstraint::StereoAtom(
+                    GraphIrStereoAtomId(_0),
+                    _1.to_rust(),
+                    _2.borrow(py).to_rust(py),
+                )),
+            })
+            .add_subclass(Self)
+        }
+        #[classattr]
+        fn __match_args__() -> (&'static str, &'static str, &'static str) {
+            ("_0", "_1", "_2")
+        }
+        #[getter]
+        fn _0(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<u32> {
+            slf.as_super().read(py, |value| match value {
+                GraphIrConstraint::StereoAtom(id, _, _) => Ok(id.0),
+                _ => unreachable!(),
+            })
+        }
+        #[getter]
+        fn _1(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<StereoKind> {
+            slf.as_super().read(py, |value| match value {
+                GraphIrConstraint::StereoAtom(_, kind, _) => Ok(StereoKind::from_rust(*kind)),
+                _ => unreachable!(),
+            })
+        }
+        #[getter]
+        fn _2(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<StereoAtomConstraintForm>> {
+            slf.as_super().read(py, |value| match value {
+                GraphIrConstraint::StereoAtom(_, _, form) => {
+                    into_py_variant(py, StereoAtomConstraintForm::from_rust(py, form)?)
+                }
+                _ => unreachable!(),
+            })
         }
     }
+
+    #[pyclass(extends = Constraint, frozen, module = "umol")]
+    pub struct StereoBond;
+    #[pymethods]
+    impl StereoBond {
+        #[classattr]
+        fn __qualname__() -> &'static str {
+            "Constraint.StereoBond"
+        }
+
+        #[new]
+        fn new(
+            py: Python<'_>,
+            _0: u32,
+            _1: StereoKind,
+            _2: Py<StereoBondConstraintForm>,
+        ) -> PyClassInitializer<Self> {
+            PyClassInitializer::from(Constraint {
+                storage: ConstraintStorage::Owned(GraphIrConstraint::StereoBond(
+                    GraphIrStereoBondId(_0),
+                    _1.to_rust(),
+                    _2.borrow(py).to_rust(py),
+                )),
+            })
+            .add_subclass(Self)
+        }
+        #[classattr]
+        fn __match_args__() -> (&'static str, &'static str, &'static str) {
+            ("_0", "_1", "_2")
+        }
+        #[getter]
+        fn _0(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<u32> {
+            slf.as_super().read(py, |value| match value {
+                GraphIrConstraint::StereoBond(id, _, _) => Ok(id.0),
+                _ => unreachable!(),
+            })
+        }
+        #[getter]
+        fn _1(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<StereoKind> {
+            slf.as_super().read(py, |value| match value {
+                GraphIrConstraint::StereoBond(_, kind, _) => Ok(StereoKind::from_rust(*kind)),
+                _ => unreachable!(),
+            })
+        }
+        #[getter]
+        fn _2(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<StereoBondConstraintForm>> {
+            slf.as_super().read(py, |value| match value {
+                GraphIrConstraint::StereoBond(_, _, form) => {
+                    into_py_variant(py, StereoBondConstraintForm::from_rust(py, form)?)
+                }
+                _ => unreachable!(),
+            })
+        }
+    }
+
+    #[pyclass(extends = Constraint, frozen, module = "umol")]
+    pub struct Relational;
+    #[pymethods]
+    impl Relational {
+        #[classattr]
+        fn __qualname__() -> &'static str {
+            "Constraint.Relational"
+        }
+
+        #[new]
+        fn new(py: Python<'_>, _0: Py<RelationalConstraint>) -> PyClassInitializer<Self> {
+            PyClassInitializer::from(Constraint {
+                storage: ConstraintStorage::Owned(GraphIrConstraint::Relational(
+                    _0.borrow(py).to_rust(py),
+                )),
+            })
+            .add_subclass(Self)
+        }
+        #[classattr]
+        fn __match_args__() -> (&'static str,) {
+            ("_0",)
+        }
+        #[getter]
+        fn _0(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<RelationalConstraint>> {
+            slf.as_super().read(py, |value| match value {
+                GraphIrConstraint::Relational(form) => {
+                    into_py_variant(py, RelationalConstraint::from_rust(py, form)?)
+                }
+                _ => unreachable!(),
+            })
+        }
+    }
+
+    #[pyclass(extends = Constraint, frozen, module = "umol")]
+    pub struct Molecule;
+    #[pymethods]
+    impl Molecule {
+        #[classattr]
+        fn __qualname__() -> &'static str {
+            "Constraint.Molecule"
+        }
+
+        #[new]
+        fn new(py: Python<'_>, _0: Py<MoleculeConstraint>) -> PyClassInitializer<Self> {
+            PyClassInitializer::from(Constraint {
+                storage: ConstraintStorage::Owned(GraphIrConstraint::Molecule(
+                    _0.borrow(py).to_rust(py),
+                )),
+            })
+            .add_subclass(Self)
+        }
+        #[classattr]
+        fn __match_args__() -> (&'static str,) {
+            ("_0",)
+        }
+        #[getter]
+        fn _0(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<MoleculeConstraint>> {
+            slf.as_super().read(py, |value| match value {
+                GraphIrConstraint::Molecule(form) => {
+                    into_py_variant(py, MoleculeConstraint::from_rust(py, form)?)
+                }
+                _ => unreachable!(),
+            })
+        }
+    }
+
+    #[pyclass(extends = Constraint, frozen, module = "umol")]
+    pub struct And;
+    #[pymethods]
+    impl And {
+        #[classattr]
+        fn __qualname__() -> &'static str {
+            "Constraint.And"
+        }
+
+        #[new]
+        fn new(py: Python<'_>, _0: Vec<Py<Constraint>>) -> PyResult<PyClassInitializer<Self>> {
+            let children = _0
+                .iter()
+                .map(|child| child.borrow(py).to_rust(py))
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(PyClassInitializer::from(Constraint {
+                storage: ConstraintStorage::Owned(GraphIrConstraint::And(children)),
+            })
+            .add_subclass(Self))
+        }
+        #[classattr]
+        fn __match_args__() -> (&'static str,) {
+            ("_0",)
+        }
+        #[getter]
+        fn _0(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<ConstraintsView> {
+            slf.as_super().read(py, |_| Ok(()))?;
+            Ok(ConstraintsView {
+                storage: ConstraintsStorage::Children(slf.into_super().into()),
+            })
+        }
+    }
+
+    #[pyclass(extends = Constraint, frozen, module = "umol")]
+    pub struct Or;
+    #[pymethods]
+    impl Or {
+        #[classattr]
+        fn __qualname__() -> &'static str {
+            "Constraint.Or"
+        }
+
+        #[new]
+        fn new(py: Python<'_>, _0: Vec<Py<Constraint>>) -> PyResult<PyClassInitializer<Self>> {
+            let children = _0
+                .iter()
+                .map(|child| child.borrow(py).to_rust(py))
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(PyClassInitializer::from(Constraint {
+                storage: ConstraintStorage::Owned(GraphIrConstraint::Or(children)),
+            })
+            .add_subclass(Self))
+        }
+        #[classattr]
+        fn __match_args__() -> (&'static str,) {
+            ("_0",)
+        }
+        #[getter]
+        fn _0(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<ConstraintsView> {
+            slf.as_super().read(py, |_| Ok(()))?;
+            Ok(ConstraintsView {
+                storage: ConstraintsStorage::Children(slf.into_super().into()),
+            })
+        }
+    }
+
+    #[pyclass(extends = Constraint, frozen, module = "umol")]
+    pub struct Not;
+    #[pymethods]
+    impl Not {
+        #[classattr]
+        fn __qualname__() -> &'static str {
+            "Constraint.Not"
+        }
+
+        #[new]
+        fn new(py: Python<'_>, _0: Py<Constraint>) -> PyResult<PyClassInitializer<Self>> {
+            Ok(PyClassInitializer::from(Constraint {
+                storage: ConstraintStorage::Owned(GraphIrConstraint::Not(Box::new(
+                    _0.borrow(py).to_rust(py)?,
+                ))),
+            })
+            .add_subclass(Self))
+        }
+        #[classattr]
+        fn __match_args__() -> (&'static str,) {
+            ("_0",)
+        }
+        #[getter]
+        fn _0(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Constraint>> {
+            slf.as_super().child(py, 0)
+        }
+    }
+}
+
+pub(crate) fn register_constraint(py: Python<'_>) -> PyResult<()> {
+    PySequence::register::<ConstraintsView>(py)?;
+    let base = py.get_type::<Constraint>();
+    base.setattr("Atom", py.get_type::<variants::Atom>())?;
+    base.setattr("Bond", py.get_type::<variants::Bond>())?;
+    base.setattr("DativeBond", py.get_type::<variants::DativeBond>())?;
+    base.setattr("AromaticSystem", py.get_type::<variants::AromaticSystem>())?;
+    base.setattr(
+        "MulticenterBond",
+        py.get_type::<variants::MulticenterBond>(),
+    )?;
+    base.setattr(
+        "NoncovalentBond",
+        py.get_type::<variants::NoncovalentBond>(),
+    )?;
+    base.setattr("StereoAtom", py.get_type::<variants::StereoAtom>())?;
+    base.setattr("StereoBond", py.get_type::<variants::StereoBond>())?;
+    base.setattr("Relational", py.get_type::<variants::Relational>())?;
+    base.setattr("Molecule", py.get_type::<variants::Molecule>())?;
+    base.setattr("And", py.get_type::<variants::And>())?;
+    base.setattr("Or", py.get_type::<variants::Or>())?;
+    base.setattr("Not", py.get_type::<variants::Not>())?;
+    Ok(())
+}
+
+fn constraint_fields(
+    py: Python<'_>,
+    value: &GraphIrConstraint,
+) -> PyResult<(&'static str, Vec<String>)> {
+    Ok(match value {
+        GraphIrConstraint::Atom(id, form) => (
+            "Atom",
+            vec![
+                id.0.to_string(),
+                into_py_variant(py, AtomConstraintForm::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::Bond(id, form) => (
+            "Bond",
+            vec![
+                id.0.to_string(),
+                into_py_variant(py, BondConstraintForm::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::DativeBond(id, form) => (
+            "DativeBond",
+            vec![
+                id.0.to_string(),
+                into_py_variant(py, DativeBondConstraintForm::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::AromaticSystem(id, form) => (
+            "AromaticSystem",
+            vec![
+                id.0.to_string(),
+                into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::MulticenterBond(id, form) => (
+            "MulticenterBond",
+            vec![
+                id.0.to_string(),
+                into_py_variant(py, MulticenterBondConstraintForm::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::NoncovalentBond(id, form) => (
+            "NoncovalentBond",
+            vec![
+                id.0.to_string(),
+                into_py_variant(py, NoncovalentBondConstraintForm::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::StereoAtom(id, kind, form) => (
+            "StereoAtom",
+            vec![
+                id.0.to_string(),
+                StereoKind::from_rust(*kind)
+                    .into_pyobject(py)?
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+                into_py_variant(py, StereoAtomConstraintForm::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::StereoBond(id, kind, form) => (
+            "StereoBond",
+            vec![
+                id.0.to_string(),
+                StereoKind::from_rust(*kind)
+                    .into_pyobject(py)?
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+                into_py_variant(py, StereoBondConstraintForm::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::Relational(form) => (
+            "Relational",
+            vec![
+                into_py_variant(py, RelationalConstraint::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::Molecule(form) => (
+            "Molecule",
+            vec![
+                into_py_variant(py, MoleculeConstraint::from_rust(py, form)?)?
+                    .bind(py)
+                    .as_any()
+                    .repr()?
+                    .extract()?,
+            ],
+        ),
+        GraphIrConstraint::And(children) | GraphIrConstraint::Or(children) => {
+            let children = children
+                .iter()
+                .map(|child| {
+                    let (name, fields) = constraint_fields(py, child)?;
+                    Ok(format!("Constraint.{name}({})", fields.join(", ")))
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            (
+                if matches!(value, GraphIrConstraint::And(_)) {
+                    "And"
+                } else {
+                    "Or"
+                },
+                vec![format!("[{}]", children.join(", "))],
+            )
+        }
+        GraphIrConstraint::Not(child) => {
+            let (name, fields) = constraint_fields(py, child)?;
+            (
+                "Not",
+                vec![format!("Constraint.{name}({})", fields.join(", "))],
+            )
+        }
+    })
 }
 
 /// Resolve a possibly-negative Python index into an existing constraint position.
@@ -268,31 +887,37 @@ fn resolve_constraint_index(len: usize, index: isize) -> PyResult<usize> {
     }
 }
 
-/// Build a detached iterator of concrete Python constraint variants.
-fn constraint_iter(py: Python<'_>, constraints: &GraphIrConstraints) -> PyResult<ConstraintIter> {
+fn constraint_iter(py: Python<'_>, constraints: &GraphIrConstraints) -> PyResult<Py<PyAny>> {
     let entries = constraints
         .iter()
-        .map(|constraint| into_py_variant(py, Constraint::from_rust(py, constraint)?))
+        .map(|value| Constraint::from_rust(py, value))
         .collect::<PyResult<Vec<_>>>()?;
-    Ok(ConstraintIter {
-        entries: entries.into_iter(),
-    })
+    Ok(PyList::new(py, entries)?.try_iter()?.into_any().unbind())
 }
 
-/// A snapshot iterator over molecule-level constraints.
 #[pyclass]
 pub(crate) struct ConstraintIter {
-    entries: IntoIter<Py<Constraint>>,
+    collection: Py<ConstraintsView>,
+    position: usize,
+    end: usize,
 }
 
 #[pymethods]
 impl ConstraintIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
+    fn __iter__<'py>(slf: PyRef<'py, Self>, py: Python<'py>) -> PyResult<PyRef<'py, Self>> {
+        slf.collection.try_borrow(py)?.read(py, |_| Ok(()))?;
+        Ok(slf)
     }
 
-    fn __next__(&mut self) -> Option<Py<Constraint>> {
-        self.entries.next()
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<Py<Constraint>>> {
+        let collection = self.collection.try_borrow(py)?;
+        collection.read(py, |_| Ok(()))?;
+        if self.position == self.end {
+            return Ok(None);
+        }
+        let value = collection.__getitem__(py, self.position as isize)?;
+        self.position += 1;
+        Ok(Some(value))
     }
 }
 
@@ -312,15 +937,15 @@ impl ConstraintsUpdate {
                 ResolvedConstraintsUpdate::Overlay(container.bind(py).borrow().to_rust().clone())
             }
             Self::View(view) => ResolvedConstraintsUpdate::Overlay(
-                view.bind(py)
-                    .borrow()
-                    .read(py, |constraints| Ok(constraints.clone()))?,
+                view.bind(py).borrow().read(py, |constraints| {
+                    Ok(GraphIrConstraints::from(constraints.to_vec()))
+                })?,
             ),
             Self::Entries(entries) => ResolvedConstraintsUpdate::Entries(
                 entries
                     .iter()
                     .map(|entry| entry.bind(py).borrow().to_rust(py))
-                    .collect(),
+                    .collect::<PyResult<Vec<_>>>()?,
             ),
         })
     }
@@ -350,25 +975,6 @@ impl ResolvedConstraintsUpdate {
     }
 }
 
-/// A whole-container input that snapshots either a value container or a live view.
-#[derive(FromPyObject)]
-pub(crate) enum ConstraintsLike {
-    Container(Py<Constraints>),
-    View(Py<ConstraintsView>),
-}
-
-impl ConstraintsLike {
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrConstraints> {
-        match self {
-            Self::Container(container) => Ok(container.bind(py).borrow().to_rust().clone()),
-            Self::View(view) => view
-                .bind(py)
-                .borrow()
-                .read(py, |constraints| Ok(constraints.clone())),
-        }
-    }
-}
-
 /// The molecule-level constraints in insertion order. Mutable, value-equal,
 /// and unhashable.
 #[pyclass(eq)]
@@ -379,27 +985,28 @@ pub struct Constraints(GraphIrConstraints);
 impl Constraints {
     /// Build an owned container from constraint entries, preserving order and duplicates.
     #[new]
-    fn new(py: Python<'_>, entries: Vec<Py<Constraint>>) -> Self {
-        Self(GraphIrConstraints::from(
+    fn new(py: Python<'_>, entries: Vec<Py<Constraint>>) -> PyResult<Self> {
+        Ok(Self(GraphIrConstraints::from(
             entries
                 .into_iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py))
-                .collect::<Vec<_>>(),
-        ))
+                .collect::<PyResult<Vec<_>>>()?,
+        )))
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let value = into_py_variant(py, Constraint::from_rust(py, entry)?)?;
+            let value = Constraint::from_rust(py, entry)?;
             parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!("Constraints([{}])", parts.join(", ")))
     }
 
     /// Append one constraint, preserving existing entries and duplicates.
-    fn append(&mut self, py: Python<'_>, constraint: Py<Constraint>) {
-        self.0.push(constraint.bind(py).borrow().to_rust(py));
+    fn append(&mut self, py: Python<'_>, constraint: Py<Constraint>) -> PyResult<()> {
+        self.0.push(constraint.bind(py).borrow().to_rust(py)?);
+        Ok(())
     }
 
     fn clear(&mut self) {
@@ -417,12 +1024,12 @@ impl Constraints {
         self.0.len()
     }
 
-    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Constraint> {
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Py<Constraint>> {
         let index = resolve_constraint_index(self.0.len(), index)?;
         Constraint::from_rust(py, &self.0.as_slice()[index])
     }
 
-    fn __iter__(&self, py: Python<'_>) -> PyResult<ConstraintIter> {
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         constraint_iter(py, &self.0)
     }
 }
@@ -452,79 +1059,83 @@ impl_py_normalize!(
     }
 );
 
-/// A live handle onto the molecule-level constraints of one `Molecule`.
-#[pyclass]
+/// Read-only access to a molecule's constraints or a composition's children.
+#[pyclass(sequence)]
 pub struct ConstraintsView {
-    pub(crate) owner: Py<Molecule>,
+    storage: ConstraintsStorage,
+}
+
+enum ConstraintsStorage {
+    Molecule { owner: Py<Molecule>, counter: u64 },
+    Children(Py<Constraint>),
 }
 
 impl ConstraintsView {
-    pub(crate) fn new(owner: Py<Molecule>) -> Self {
-        Self { owner }
+    pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<Self> {
+        let counter = owner.try_borrow(py)?.view_counter()?;
+        Ok(Self {
+            storage: ConstraintsStorage::Molecule { owner, counter },
+        })
     }
 
-    /// Borrow the current constraints and read through `f` without cloning the store.
     pub(crate) fn read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&GraphIrConstraints) -> PyResult<R>,
+        f: impl FnOnce(&[GraphIrConstraint]) -> PyResult<R>,
     ) -> PyResult<R> {
-        let molecule = self.owner.bind(py).borrow();
-        f(molecule.to_rust().constraints())
-    }
-
-    /// Mutate the molecule's constraint store transactionally through `f`.
-    pub(crate) fn with_mut<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut GraphIrConstraints) -> R,
-    ) -> PyResult<R> {
-        let mut result = None;
-        self.owner
-            .borrow_mut(py)
-            .to_rust_mut()
-            .try_modify_constraints(|constraints| result = Some(f(constraints)))
-            .map_err(molecule_integrity_error)?;
-        Ok(result.expect("the checked mutation callback always runs"))
+        match &self.storage {
+            ConstraintsStorage::Molecule { owner, counter } => {
+                let owner = owner.try_borrow(py)?;
+                owner.check_access(*counter, "ConstraintsView")?;
+                f(owner.to_rust().constraints().as_slice())
+            }
+            ConstraintsStorage::Children(parent) => {
+                parent.try_borrow(py)?.read(py, |value| match value {
+                    GraphIrConstraint::And(children) | GraphIrConstraint::Or(children) => {
+                        f(children)
+                    }
+                    _ => unreachable!(),
+                })
+            }
+        }
     }
 }
 
 #[pymethods]
 impl ConstraintsView {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let count = self.read(py, |constraints| Ok(constraints.len()))?;
-        Ok(format!("ConstraintsView({count} entries)"))
-    }
-
-    /// Append one constraint to the molecule, preserving existing entries and duplicates.
-    fn append(&self, py: Python<'_>, constraint: Py<Constraint>) -> PyResult<()> {
-        let constraint = constraint.bind(py).borrow().to_rust(py);
-        self.with_mut(py, |constraints| constraints.push(constraint))
-    }
-
-    fn clear(&self, py: Python<'_>) -> PyResult<()> {
-        self.with_mut(py, GraphIrConstraints::clear)
-    }
-
-    /// Append another container, live view, or iterable after snapshotting the RHS.
-    fn update(&self, py: Python<'_>, other: ConstraintsUpdate) -> PyResult<()> {
-        let resolved = other.resolve(py)?;
-        self.with_mut(py, |constraints| resolved.apply(constraints))
-    }
-
-    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
-        self.read(py, |constraints| Ok(constraints.len()))
-    }
-
-    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Constraint> {
-        self.read(py, |constraints| {
-            let index = resolve_constraint_index(constraints.len(), index)?;
-            Constraint::from_rust(py, &constraints.as_slice()[index])
+        self.read(py, |values| {
+            Ok(format!("ConstraintsView({} entries)", values.len()))
         })
     }
 
-    fn __iter__(&self, py: Python<'_>) -> PyResult<ConstraintIter> {
-        self.read(py, |constraints| constraint_iter(py, constraints))
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |values| Ok(values.len()))
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Py<Constraint>> {
+        let index = self.read(py, |values| resolve_constraint_index(values.len(), index))?;
+        match &self.storage {
+            ConstraintsStorage::Molecule { owner, counter } => Constraint::from_storage(
+                py,
+                ConstraintStorage::Molecule {
+                    owner: owner.clone_ref(py),
+                    counter: *counter,
+                    position: index,
+                    path: Box::default(),
+                },
+            ),
+            ConstraintsStorage::Children(parent) => parent.try_borrow(py)?.child(py, index),
+        }
+    }
+
+    fn __iter__(slf: Py<Self>, py: Python<'_>) -> PyResult<ConstraintIter> {
+        let end = slf.try_borrow(py)?.__len__(py)?;
+        Ok(ConstraintIter {
+            collection: slf,
+            position: 0,
+            end,
+        })
     }
 }
 
@@ -1059,7 +1670,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::error::InvalidStructureError;
 
     #[rstest]
     #[case::donors(GraphIrRelationalConstraint::DativeBondDonors {
@@ -1279,7 +1889,7 @@ mod tests {
     fn test_constraint_roundtrip(#[case] constraint: GraphIrConstraint) {
         Python::attach(|py| {
             let value = Constraint::from_rust(py, &constraint).unwrap();
-            assert_eq!(value.to_rust(py), constraint);
+            assert_eq!(value.borrow(py).to_rust(py).unwrap(), constraint);
         });
     }
 
@@ -1301,12 +1911,11 @@ mod tests {
         ]);
 
         Python::attach(|py| {
-            let value =
-                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
-            let equal =
-                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
+            register_constraint(py).unwrap();
+            let value = Constraint::from_rust(py, &constraint).unwrap();
+            let equal = Constraint::from_rust(py, &constraint).unwrap();
 
-            assert_eq!(value.bind(py).borrow().to_rust(py), constraint);
+            assert_eq!(value.bind(py).borrow().to_rust(py).unwrap(), constraint);
             assert!(value.bind(py).as_any().eq(equal.bind(py).as_any()).unwrap());
             assert_eq!(
                 value
@@ -1397,10 +2006,16 @@ match node:
         let mut constraints = GraphIrConstraints::from(vec![first.clone(), second.clone()]);
 
         Python::attach(|py| {
-            let mut iter = constraint_iter(py, &constraints).unwrap();
+            let iterator = constraint_iter(py, &constraints).unwrap();
+            let mut iter = iterator.bind(py).try_iter().unwrap();
             constraints.push(GraphIrConstraint::Or(Vec::new()));
 
-            let first_mirror = iter.__next__().unwrap();
+            let first_mirror = iter
+                .next()
+                .unwrap()
+                .unwrap()
+                .extract::<Py<Constraint>>()
+                .unwrap();
             assert_eq!(
                 first_mirror
                     .bind(py)
@@ -1411,47 +2026,19 @@ match node:
                     .unwrap(),
                 1
             );
-            assert_eq!(first_mirror.bind(py).borrow().to_rust(py), first);
+            assert_eq!(first_mirror.bind(py).borrow().to_rust(py).unwrap(), first);
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                iter.next()
+                    .unwrap()
+                    .unwrap()
+                    .extract::<Py<Constraint>>()
+                    .unwrap()
+                    .borrow(py)
+                    .to_rust(py)
+                    .unwrap(),
                 second
             );
-            assert!(iter.__next__().is_none());
-        });
-    }
-
-    #[rstest]
-    fn test_constraints_like_to_rust_container() {
-        let expected = GraphIrConstraints::from(vec![
-            GraphIrConstraint::And(Vec::new()),
-            GraphIrConstraint::And(Vec::new()),
-        ]);
-
-        Python::attach(|py| {
-            let container = Py::new(py, Constraints::from_rust(expected.clone())).unwrap();
-            let arg = ConstraintsLike::Container(container);
-
-            assert_eq!(arg.to_rust(py).unwrap(), expected);
-        });
-    }
-
-    #[rstest]
-    fn test_constraints_like_to_rust_view() {
-        let expected = GraphIrConstraints::from(vec![
-            GraphIrConstraint::Or(Vec::new()),
-            GraphIrConstraint::Or(Vec::new()),
-        ]);
-        let mut molecule = GraphIrMolecule::new();
-        molecule
-            .try_modify_constraints(|constraints| *constraints = expected.clone())
-            .unwrap();
-
-        Python::attach(|py| {
-            let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let view = Py::new(py, ConstraintsView::new(owner)).unwrap();
-            let arg = ConstraintsLike::View(view);
-
-            assert_eq!(arg.to_rust(py).unwrap(), expected);
+            assert!(iter.next().is_none());
         });
     }
 
@@ -1465,11 +2052,9 @@ match node:
         Python::attach(|py| {
             let values = entries
                 .iter()
-                .map(|entry| {
-                    into_py_variant(py, Constraint::from_rust(py, entry).unwrap()).unwrap()
-                })
+                .map(|entry| Constraint::from_rust(py, entry).unwrap())
                 .collect();
-            let constraints = Constraints::new(py, values);
+            let constraints = Constraints::new(py, values).unwrap();
 
             assert_eq!(constraints.to_rust().as_slice(), entries.as_slice());
         });
@@ -1519,10 +2104,9 @@ match node:
         Python::attach(|py| {
             let mut constraints =
                 Constraints::from_rust(GraphIrConstraints::from(vec![constraint.clone()]));
-            let value =
-                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
+            let value = Constraint::from_rust(py, &constraint).unwrap();
 
-            constraints.append(py, value);
+            constraints.append(py, value).unwrap();
 
             assert_eq!(
                 constraints.to_rust().as_slice(),
@@ -1563,16 +2147,16 @@ match node:
             )
             .unwrap();
             let mut molecule = GraphIrMolecule::new();
-            molecule
-                .try_modify_constraints(|constraints| constraints.push(from_view.clone()))
-                .unwrap();
+            let mut editor = molecule.edit();
+            editor.constraints_mut().push(from_view.clone());
+            molecule = editor.build();
             let view = Py::new(
                 py,
-                ConstraintsView::new(Py::new(py, Molecule::from_rust(molecule)).unwrap()),
+                ConstraintsView::new(Py::new(py, Molecule::from_rust(molecule)).unwrap(), py)
+                    .unwrap(),
             )
             .unwrap();
-            let entry =
-                into_py_variant(py, Constraint::from_rust(py, &from_entries).unwrap()).unwrap();
+            let entry = Constraint::from_rust(py, &from_entries).unwrap();
 
             Constraints::update(
                 target.clone_ref(py),
@@ -1646,7 +2230,7 @@ match node:
             ]));
             let actual = constraints.__getitem__(py, index).unwrap();
 
-            assert_eq!(actual.to_rust(py), expected);
+            assert_eq!(actual.borrow(py).to_rust(py).unwrap(), expected);
         });
     }
 
@@ -1681,7 +2265,8 @@ match node:
         ]));
 
         Python::attach(|py| {
-            let mut iter = constraints.__iter__(py).unwrap();
+            let iterator = constraints.__iter__(py).unwrap();
+            let mut iter = iterator.bind(py).try_iter().unwrap();
             constraints
                 .to_rust_mut()
                 .push(GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(
@@ -1689,14 +2274,28 @@ match node:
                 ))));
 
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                iter.next()
+                    .unwrap()
+                    .unwrap()
+                    .extract::<Py<Constraint>>()
+                    .unwrap()
+                    .borrow(py)
+                    .to_rust(py)
+                    .unwrap(),
                 first
             );
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                iter.next()
+                    .unwrap()
+                    .unwrap()
+                    .extract::<Py<Constraint>>()
+                    .unwrap()
+                    .borrow(py)
+                    .to_rust(py)
+                    .unwrap(),
                 second
             );
-            assert!(iter.__next__().is_none());
+            assert!(iter.next().is_none());
         });
     }
 
@@ -1715,179 +2314,34 @@ match node:
     #[rstest]
     fn test_constraints_view_repr() {
         let mut molecule = GraphIrMolecule::new();
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(GraphIrConstraint::And(Vec::new()));
-                constraints.push(GraphIrConstraint::Or(Vec::new()));
-            })
-            .unwrap();
+        let mut editor = molecule.edit();
+        editor
+            .constraints_mut()
+            .push(GraphIrConstraint::And(Vec::new()));
+        editor
+            .constraints_mut()
+            .push(GraphIrConstraint::Or(Vec::new()));
+
+        molecule = editor.build();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let view = ConstraintsView::new(owner);
+            let view = ConstraintsView::new(owner, py).unwrap();
 
             assert_eq!(view.__repr__(py).unwrap(), "ConstraintsView(2 entries)");
         });
     }
 
     #[rstest]
-    fn test_constraints_view_append() {
-        let constraint =
-            GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-        let mut molecule = GraphIrMolecule::new();
-        molecule
-            .try_modify_constraints(|constraints| constraints.push(constraint.clone()))
-            .unwrap();
-
+    #[case::empty(Vec::new(), 0)]
+    #[case::nonempty(vec![GraphIrConstraint::And(Vec::new())], 1)]
+    fn test_constraints_view_len(#[case] entries: Vec<GraphIrConstraint>, #[case] expected: usize) {
+        let mut editor = GraphIrMolecule::new().edit();
+        *editor.constraints_mut() = entries.into();
         Python::attach(|py| {
-            let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let view = ConstraintsView::new(owner.clone_ref(py));
-            let value =
-                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
-
-            view.append(py, value).unwrap();
-
-            assert_eq!(
-                owner.bind(py).borrow().to_rust().constraints().as_slice(),
-                &[constraint.clone(), constraint]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_constraints_view_append_integrity_error() {
-        let constraint =
-            GraphIrConstraint::Atom(GraphIrAtomId(0), GraphIrAtomConstraintForm::degree(1));
-
-        Python::attach(|py| {
-            let owner = Py::new(py, Molecule::from_rust(GraphIrMolecule::new())).unwrap();
-            let view = ConstraintsView::new(owner.clone_ref(py));
-            let value =
-                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
-
-            let error = view.append(py, value).unwrap_err();
-
-            assert!(error.is_instance_of::<InvalidStructureError>(py));
-            assert!(owner.bind(py).borrow().to_rust().constraints().is_empty());
-        });
-    }
-
-    #[rstest]
-    fn test_constraints_view_clear() {
-        let mut molecule = GraphIrMolecule::new();
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(GraphIrConstraint::And(Vec::new()));
-            })
-            .unwrap();
-
-        Python::attach(|py| {
-            let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let view = ConstraintsView::new(owner.clone_ref(py));
-
-            view.clear(py).unwrap();
-
-            assert_eq!(
-                owner.bind(py).borrow().to_rust().constraints(),
-                &GraphIrConstraints::new()
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_constraints_view_update() {
-        let initial = GraphIrConstraint::And(Vec::new());
-        let from_container = GraphIrConstraint::Or(Vec::new());
-        let from_view = GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(Vec::new())));
-        let from_entries =
-            GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-        let mut target_molecule = GraphIrMolecule::new();
-        target_molecule
-            .try_modify_constraints(|constraints| constraints.push(initial.clone()))
-            .unwrap();
-
-        Python::attach(|py| {
-            let target_owner = Py::new(py, Molecule::from_rust(target_molecule)).unwrap();
-            let target = ConstraintsView::new(target_owner.clone_ref(py));
-            let container = Py::new(
-                py,
-                Constraints::from_rust(GraphIrConstraints::from(vec![from_container.clone()])),
-            )
-            .unwrap();
-            let mut source_molecule = GraphIrMolecule::new();
-            source_molecule
-                .try_modify_constraints(|constraints| constraints.push(from_view.clone()))
-                .unwrap();
-            let source_view = Py::new(
-                py,
-                ConstraintsView::new(Py::new(py, Molecule::from_rust(source_molecule)).unwrap()),
-            )
-            .unwrap();
-            let entry =
-                into_py_variant(py, Constraint::from_rust(py, &from_entries).unwrap()).unwrap();
-
-            target
-                .update(py, ConstraintsUpdate::Container(container))
-                .unwrap();
-            target
-                .update(py, ConstraintsUpdate::View(source_view))
-                .unwrap();
-            target
-                .update(py, ConstraintsUpdate::Entries(vec![entry]))
-                .unwrap();
-
-            assert_eq!(
-                target_owner
-                    .bind(py)
-                    .borrow()
-                    .to_rust()
-                    .constraints()
-                    .as_slice(),
-                &[initial, from_container, from_view, from_entries]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_constraints_view_update_self() {
-        let entry = GraphIrConstraint::Or(Vec::new());
-        let mut molecule = GraphIrMolecule::new();
-        molecule
-            .try_modify_constraints(|constraints| constraints.push(entry.clone()))
-            .unwrap();
-
-        Python::attach(|py| {
-            let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let view = Py::new(py, ConstraintsView::new(owner.clone_ref(py))).unwrap();
-
-            view.bind(py)
-                .borrow()
-                .update(py, ConstraintsUpdate::View(view.clone_ref(py)))
-                .unwrap();
-
-            assert_eq!(
-                owner.bind(py).borrow().to_rust().constraints().as_slice(),
-                &[entry.clone(), entry]
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_constraints_view_len() {
-        Python::attach(|py| {
-            let owner = Py::new(py, Molecule::from_rust(GraphIrMolecule::new())).unwrap();
-            let view = ConstraintsView::new(owner.clone_ref(py));
-            assert_eq!(view.__len__(py).unwrap(), 0);
-
-            owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .try_modify_constraints(|constraints| {
-                    constraints.push(GraphIrConstraint::And(Vec::new()));
-                })
-                .unwrap();
-
-            assert_eq!(view.__len__(py).unwrap(), 1);
+            let owner = Py::new(py, Molecule::from_rust(editor.build())).unwrap();
+            let view = ConstraintsView::new(owner, py).unwrap();
+            assert_eq!(view.__len__(py).unwrap(), expected);
         });
     }
 
@@ -1904,23 +2358,28 @@ match node:
             atoms: vec![GraphIrAtomForm::default(), GraphIrAtomForm::default()],
             ..Default::default()
         });
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(GraphIrConstraint::Atom(
-                    GraphIrAtomId(1),
-                    GraphIrAtomConstraintForm::degree(2),
-                ));
-                constraints.push(GraphIrConstraint::Molecule(
-                    GraphIrMoleculeConstraint::Connected { atoms: None },
-                ));
-            })
-            .unwrap();
+        let mut editor = molecule.edit();
+        editor.constraints_mut().push(GraphIrConstraint::Atom(
+            GraphIrAtomId(1),
+            GraphIrAtomConstraintForm::degree(2),
+        ));
+        editor.constraints_mut().push(GraphIrConstraint::Molecule(
+            GraphIrMoleculeConstraint::Connected { atoms: None },
+        ));
+        molecule = editor.build();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let view = ConstraintsView::new(owner);
+            let view = ConstraintsView::new(owner, py).unwrap();
 
-            assert_eq!(view.__getitem__(py, index).unwrap().to_rust(py), expected);
+            assert_eq!(
+                view.__getitem__(py, index)
+                    .unwrap()
+                    .borrow(py)
+                    .to_rust(py)
+                    .unwrap(),
+                expected
+            );
         });
     }
 
@@ -1929,15 +2388,16 @@ match node:
     #[case::negative(-2)]
     fn test_constraints_view_getitem_error(#[case] index: isize) {
         let mut molecule = GraphIrMolecule::new();
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(GraphIrConstraint::And(Vec::new()));
-            })
-            .unwrap();
+        let mut editor = molecule.edit();
+        editor
+            .constraints_mut()
+            .push(GraphIrConstraint::And(Vec::new()));
+
+        molecule = editor.build();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let view = ConstraintsView::new(owner);
+            let view = ConstraintsView::new(owner, py).unwrap();
 
             assert_eq!(
                 view.__getitem__(py, index).err().unwrap().to_string(),
@@ -1948,39 +2408,35 @@ match node:
 
     #[rstest]
     fn test_constraints_view_iter() {
-        let first = GraphIrConstraint::And(Vec::new());
-        let second = GraphIrConstraint::Or(Vec::new());
-        let mut molecule = GraphIrMolecule::new();
-        molecule
-            .try_modify_constraints(|constraints| {
-                constraints.push(first.clone());
-                constraints.push(second.clone());
-            })
-            .unwrap();
-
+        let first = GraphIrConstraint::And(vec![GraphIrConstraint::Or(Vec::new())]);
+        let second = GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(Vec::new())));
+        let mut editor = GraphIrMolecule::new().edit();
+        editor.constraints_mut().push(first.clone());
+        editor.constraints_mut().push(second.clone());
+        let molecule = editor.build();
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let view = ConstraintsView::new(owner.clone_ref(py));
-            let mut iter = view.__iter__(py).unwrap();
-            owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .try_modify_constraints(|constraints| {
-                    constraints.push(GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(
-                        Vec::new(),
-                    ))));
-                })
-                .unwrap();
-
+            let view = Py::new(py, ConstraintsView::new(owner, py).unwrap()).unwrap();
+            let mut iter = ConstraintsView::__iter__(view, py).unwrap();
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                iter.__next__(py)
+                    .unwrap()
+                    .unwrap()
+                    .borrow(py)
+                    .to_rust(py)
+                    .unwrap(),
                 first
             );
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                iter.__next__(py)
+                    .unwrap()
+                    .unwrap()
+                    .borrow(py)
+                    .to_rust(py)
+                    .unwrap(),
                 second
             );
-            assert!(iter.__next__().is_none());
+            assert!(iter.__next__(py).unwrap().is_none());
         });
     }
 }

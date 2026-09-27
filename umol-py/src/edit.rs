@@ -283,7 +283,7 @@ impl ConstraintEdit {
         constraint: Py<Constraint>,
         handles: Option<HashMap<Entity, HandleLike>>,
     ) -> PyResult<Self> {
-        let constraint = constraint.bind(py).borrow().to_rust(py);
+        let constraint = constraint.bind(py).borrow().to_rust(py)?;
         let Some(handles) = handles else {
             return Ok(Self(GraphIrConstraintEdit::from(constraint)));
         };

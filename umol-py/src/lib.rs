@@ -38,7 +38,8 @@ use crate::{
             DativeBondConstraintsView, DativeBondRingSizeCounts,
         },
         molecule::{
-            Constraint, Constraints, ConstraintsView, MoleculeConstraint, RelationalConstraint,
+            register_constraint, Constraint, Constraints, ConstraintsView, MoleculeConstraint,
+            RelationalConstraint,
         },
         multicenter::{
             MulticenterBondConstraintForm, MulticenterBondConstraintKey,
@@ -348,6 +349,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;
         module.add_class::<Constraint>()?;
+        register_constraint(module.py())?;
         module.add_class::<Constraints>()?;
         module.add_class::<ConstraintsView>()?;
         module.add_class::<RelOp>()?;

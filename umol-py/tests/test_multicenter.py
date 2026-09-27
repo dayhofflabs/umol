@@ -252,10 +252,11 @@ def test_multicenterbondview_set_electrons():
     assert mol.multicenter_bonds[0].electrons == ElectronCountsForm.Lit([2, 2, 2])
 
 
-def test_multicenterbondview_set_electrons_attributes():
+@pytest.mark.parametrize("electrons", [[], [2], [2, 2, 2, 2]])
+def test_multicenterbondview_set_electrons_mismatched_length(electrons):
     mol = three_center_bond()
-    mol.multicenter_bonds[0].electrons = [2]
-    assert mol.multicenter_bonds[0].electrons == ElectronCountsForm.Lit([2])
+    mol.multicenter_bonds[0].electrons = electrons
+    assert mol.multicenter_bonds[0].electrons == ElectronCountsForm.Lit(electrons)
 
 
 def test_multicenterbondview_set_charge():
