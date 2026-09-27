@@ -26,9 +26,10 @@ use super::constraint::{Constraint, ConstraintFrameActionDomain, ConstraintFrame
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bond_spans_with, DativeBondForm, DativeBondSpans};
 use super::delta::{
-    apply_aromatic_system_change, apply_atom_change, apply_bond_change, apply_dative_bond_change,
-    apply_multicenter_bond_change, apply_noncovalent_bond_change, apply_stereo_atom_change,
-    apply_stereo_bond_change, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
+    apply_aromatic_system_modification, apply_atom_modification, apply_bond_modification,
+    apply_dative_bond_modification, apply_multicenter_bond_modification,
+    apply_noncovalent_bond_modification, apply_stereo_atom_modification,
+    apply_stereo_bond_modification, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
     ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan, MulticenterBondDelta,
     NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
@@ -2210,7 +2211,7 @@ impl Reaction {
                 let left = lhs.atom(id).attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_atom_change(&mut right, change)?;
+                    apply_atom_modification(&mut right, change)?;
                 }
                 atoms.push(EntitySpan::Modified {
                     lhs: left,
@@ -2237,7 +2238,7 @@ impl Reaction {
                 let left = lhs.bond(id).attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_bond_change(&mut right, change)?;
+                    apply_bond_modification(&mut right, change)?;
                 }
                 bonds.push((
                     first,
@@ -2277,7 +2278,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_aromatic_system_change(&mut right, change)?;
+                    apply_aromatic_system_modification(&mut right, change)?;
                 }
                 aromatic.push((
                     participants,
@@ -2310,7 +2311,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_multicenter_bond_change(&mut right, change)?;
+                    apply_multicenter_bond_modification(&mut right, change)?;
                 }
                 multicenter.push((
                     participants,
@@ -2342,7 +2343,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_noncovalent_bond_change(&mut right, change)?;
+                    apply_noncovalent_bond_modification(&mut right, change)?;
                 }
                 noncovalent.push((
                     [first, second],
@@ -2378,7 +2379,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_dative_bond_change(&mut right, change)?;
+                    apply_dative_bond_modification(&mut right, change)?;
                 }
                 dative.push((
                     donors,
@@ -2418,7 +2419,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_stereo_atom_change(&mut right, change)?;
+                    apply_stereo_atom_modification(&mut right, change)?;
                 }
                 stereo_atoms.push((
                     site,
@@ -2456,7 +2457,7 @@ impl Reaction {
                 let left = view.attributes().clone();
                 let mut right = left.clone();
                 for change in changes {
-                    apply_stereo_bond_change(&mut right, change)?;
+                    apply_stereo_bond_modification(&mut right, change)?;
                 }
                 stereo_bonds.push((
                     site,

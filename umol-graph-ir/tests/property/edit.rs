@@ -69,9 +69,10 @@ proptest! {
                 }
                 EntityKind::DativeBond => {
                     counts[2] += 1;
-                    direct.add_dative_bond(Vec::new(), DativeBondForm::default());
+                    direct.add_dative_bond(Vec::new(), AtomHandle::Id(AtomId(0)), DativeBondForm::default());
                     entries.push(Edit::AddDativeBond {
-                        atoms: Vec::new(),
+                        donors: Vec::new(),
+                        acceptor: AtomHandle::Id(AtomId(0)),
                         attributes: DativeBondForm::default(),
                     });
                 }
@@ -160,7 +161,7 @@ proptest! {
                 AtomHandle::Id(AtomId(1)),
                 BondForm::default(),
             ),
-            direct.add_dative_bond(Vec::new(), DativeBondForm::default()),
+            direct.add_dative_bond(Vec::new(), AtomHandle::Id(AtomId(0)), DativeBondForm::default()),
             direct.add_aromatic_system(Vec::new(), AromaticSystemForm::default()),
             direct.add_multicenter_bond(Vec::new(), MulticenterBondForm::default()),
             direct.add_noncovalent_bond(
@@ -185,7 +186,7 @@ proptest! {
                 AtomHandle::Id(AtomId(1)),
                 BondForm::default(),
             ),
-            pushed.add_dative_bond(Vec::new(), DativeBondForm::default()),
+            pushed.add_dative_bond(Vec::new(), AtomHandle::Id(AtomId(0)), DativeBondForm::default()),
             pushed.add_aromatic_system(Vec::new(), AromaticSystemForm::default()),
             pushed.add_multicenter_bond(Vec::new(), MulticenterBondForm::default()),
             pushed.add_noncovalent_bond(
@@ -210,7 +211,7 @@ proptest! {
                 AtomHandle::Id(AtomId(1)),
                 BondForm::default(),
             ),
-            collected.add_dative_bond(Vec::new(), DativeBondForm::default()),
+            collected.add_dative_bond(Vec::new(), AtomHandle::Id(AtomId(0)), DativeBondForm::default()),
             collected.add_aromatic_system(Vec::new(), AromaticSystemForm::default()),
             collected.add_multicenter_bond(Vec::new(), MulticenterBondForm::default()),
             collected.add_noncovalent_bond(
@@ -297,7 +298,8 @@ proptest! {
                 }
                 EntityKind::DativeBond => {
                     edits.add_dative_bond(
-                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                        vec![AtomHandle::Id(AtomId(0))],
+                        AtomHandle::Id(AtomId(1)),
                         DativeBondForm::from_order(1),
                     );
                 }

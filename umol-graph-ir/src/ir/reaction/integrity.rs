@@ -195,14 +195,6 @@ impl ReactionIntegrityCheck {
                 self.require_available(lhs, added, Entity::DativeBond(*id))?;
                 self.require_atoms(lhs, added, donors.iter().copied().chain([*acceptor]))
             }
-            Delta::DativeBond(DativeBondDelta::ReplaceDonors { id, old, new }) => {
-                self.require_available(lhs, added, Entity::DativeBond(*id))?;
-                self.require_atoms(lhs, added, old.iter().chain(new).copied())
-            }
-            Delta::DativeBond(DativeBondDelta::ReplaceAcceptor { id, old, new }) => {
-                self.require_available(lhs, added, Entity::DativeBond(*id))?;
-                self.require_atoms(lhs, added, [*old, *new])
-            }
             Delta::DativeBond(
                 DativeBondDelta::ModifyField { id, .. }
                 | DativeBondDelta::ModifyConstraint { id, .. },
@@ -213,10 +205,6 @@ impl ReactionIntegrityCheck {
             Delta::AromaticSystem(AromaticSystemDelta::Remove { id, atoms, .. }) => {
                 self.require_available(lhs, added, Entity::AromaticSystem(*id))?;
                 self.require_atoms(lhs, added, atoms.iter().copied())
-            }
-            Delta::AromaticSystem(AromaticSystemDelta::ReplaceAtoms { id, old, new }) => {
-                self.require_available(lhs, added, Entity::AromaticSystem(*id))?;
-                self.require_atoms(lhs, added, old.iter().chain(new).copied())
             }
             Delta::AromaticSystem(
                 AromaticSystemDelta::ModifyField { id, .. }
@@ -229,10 +217,6 @@ impl ReactionIntegrityCheck {
                 self.require_available(lhs, added, Entity::MulticenterBond(*id))?;
                 self.require_atoms(lhs, added, atoms.iter().copied())
             }
-            Delta::MulticenterBond(MulticenterBondDelta::ReplaceAtoms { id, old, new }) => {
-                self.require_available(lhs, added, Entity::MulticenterBond(*id))?;
-                self.require_atoms(lhs, added, old.iter().chain(new).copied())
-            }
             Delta::MulticenterBond(
                 MulticenterBondDelta::ModifyField { id, .. }
                 | MulticenterBondDelta::ModifyConstraint { id, .. },
@@ -243,10 +227,6 @@ impl ReactionIntegrityCheck {
             Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, atoms, .. }) => {
                 self.require_available(lhs, added, Entity::NoncovalentBond(*id))?;
                 self.require_atoms(lhs, added, *atoms)
-            }
-            Delta::NoncovalentBond(NoncovalentBondDelta::ReplaceAtoms { id, old, new }) => {
-                self.require_available(lhs, added, Entity::NoncovalentBond(*id))?;
-                self.require_atoms(lhs, added, old.iter().chain(new).copied())
             }
             Delta::NoncovalentBond(
                 NoncovalentBondDelta::ModifyField { id, .. }
@@ -267,18 +247,6 @@ impl ReactionIntegrityCheck {
                     iter::once(*site).chain(ligands.iter().map(|ligand| ligand.atom_id)),
                 )
             }
-            Delta::StereoAtom(StereoAtomDelta::ReplaceSite { id, old, new }) => {
-                self.require_available(lhs, added, Entity::StereoAtom(*id))?;
-                self.require_atoms(lhs, added, [*old, *new])
-            }
-            Delta::StereoAtom(StereoAtomDelta::ReplaceLigands { id, old, new }) => {
-                self.require_available(lhs, added, Entity::StereoAtom(*id))?;
-                self.require_atoms(
-                    lhs,
-                    added,
-                    old.iter().chain(new).map(|ligand| ligand.atom_id),
-                )
-            }
             Delta::StereoAtom(
                 StereoAtomDelta::ModifyField { id, .. }
                 | StereoAtomDelta::ModifyConstraint { id, .. },
@@ -293,19 +261,6 @@ impl ReactionIntegrityCheck {
                 self.require_available(lhs, added, Entity::StereoBond(*id))?;
                 self.require_available(lhs, added, Entity::Bond(*site))?;
                 self.require_atoms(lhs, added, ligands.iter().map(|ligand| ligand.atom_id))
-            }
-            Delta::StereoBond(StereoBondDelta::ReplaceSite { id, old, new }) => {
-                self.require_available(lhs, added, Entity::StereoBond(*id))?;
-                self.require_available(lhs, added, Entity::Bond(*old))?;
-                self.require_available(lhs, added, Entity::Bond(*new))
-            }
-            Delta::StereoBond(StereoBondDelta::ReplaceLigands { id, old, new }) => {
-                self.require_available(lhs, added, Entity::StereoBond(*id))?;
-                self.require_atoms(
-                    lhs,
-                    added,
-                    old.iter().chain(new).map(|ligand| ligand.atom_id),
-                )
             }
             Delta::StereoBond(
                 StereoBondDelta::ModifyField { id, .. }

@@ -3386,10 +3386,8 @@ impl InvalidTransactionBatch {
                                     position as u32
                                 },
                             )),
-                            vec![
-                                AtomHandle::Id(AtomId((position * 2) as u32)),
-                                AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
-                            ],
+                            vec![AtomHandle::Id(AtomId((position * 2) as u32))],
+                            AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
                             DativeBondForm::from_order(1),
                         )
                     })
@@ -3652,10 +3650,8 @@ impl TransactionCase {
                 }
                 let mut edits = Edits::new();
                 edits.add_dative_bond(
-                    vec![
-                        AtomHandle::Id(AtomId(donor as u32)),
-                        AtomHandle::Id(AtomId(acceptor as u32)),
-                    ],
+                    vec![AtomHandle::Id(AtomId(donor as u32))],
+                    AtomHandle::Id(AtomId(acceptor as u32)),
                     DativeBondForm::from_order(1),
                 );
                 edits
@@ -3953,7 +3949,8 @@ fn transaction_removal_cases() -> Vec<(Molecule, Edits)> {
         Edit::RemoveDativeBonds {
             removes: vec![(
                 DativeBondHandle::Id(DativeBondId(0)),
-                atom_handles(&[0, 1]),
+                atom_handles(&[0]),
+                AtomHandle::Id(AtomId(1)),
                 DativeBondForm::from_order(1),
             )],
         },
@@ -4026,7 +4023,8 @@ fn transaction_creation_case(include_created_constraint: bool) -> (Molecule, Edi
         BondForm::from_order(2),
     );
     let dative = edits.add_dative_bond(
-        vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+        vec![AtomHandle::Id(AtomId(1))],
+        AtomHandle::Id(AtomId(2)),
         DativeBondForm::from_order(1),
     );
     let aromatic = edits.add_aromatic_system(
@@ -4314,7 +4312,8 @@ impl ConstraintCompactionCase {
             EntityKind::DativeBond => Edit::RemoveDativeBonds {
                 removes: vec![(
                     DativeBondHandle::Id(DativeBondId(0)),
-                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    vec![AtomHandle::Id(AtomId(0))],
+                    AtomHandle::Id(AtomId(1)),
                     DativeBondForm::from_order(1),
                 )],
             },
@@ -4575,14 +4574,14 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (Molecule,
                 let dative: Vec<_> = (0..2)
                     .filter(|&i| rm_dv[i])
                     .map(|i| {
-                        let mut atoms: Vec<AtomHandle> = DATIVE_DONORS[i]
+                        let donors: Vec<AtomHandle> = DATIVE_DONORS[i]
                             .iter()
                             .map(|&a| AtomHandle::Id(AtomId(a)))
                             .collect();
-                        atoms.push(AtomHandle::Id(AtomId(DATIVE_ACCEPTORS[i])));
                         (
                             DativeBondHandle::Id(DativeBondId(i as u32)),
-                            atoms,
+                            donors,
+                            AtomHandle::Id(AtomId(DATIVE_ACCEPTORS[i])),
                             DativeBondForm::from_order(1),
                         )
                     })

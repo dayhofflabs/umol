@@ -120,11 +120,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
             DescriptionLevel::Constitution,
             !attributes.constraints.is_empty(),
         ),
-        Delta::DativeBond(
-            DativeBondDelta::ReplaceDonors { .. }
-            | DativeBondDelta::ReplaceAcceptor { .. }
-            | DativeBondDelta::ModifyField { .. },
-        ) => DescriptionLevel::Constitution,
+        Delta::DativeBond(DativeBondDelta::ModifyField { .. }) => DescriptionLevel::Constitution,
         Delta::DativeBond(DativeBondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
         Delta::AromaticSystem(
             AromaticSystemDelta::Add { attributes, .. }
@@ -133,9 +129,9 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
             DescriptionLevel::Constitution,
             !attributes.constraints.is_empty(),
         ),
-        Delta::AromaticSystem(
-            AromaticSystemDelta::ReplaceAtoms { .. } | AromaticSystemDelta::ModifyField { .. },
-        ) => DescriptionLevel::Constitution,
+        Delta::AromaticSystem(AromaticSystemDelta::ModifyField { .. }) => {
+            DescriptionLevel::Constitution
+        }
         Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { .. }) => {
             DescriptionLevel::Full
         }
@@ -146,9 +142,9 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
             DescriptionLevel::Constitution,
             !attributes.constraints.is_empty(),
         ),
-        Delta::MulticenterBond(
-            MulticenterBondDelta::ReplaceAtoms { .. } | MulticenterBondDelta::ModifyField { .. },
-        ) => DescriptionLevel::Constitution,
+        Delta::MulticenterBond(MulticenterBondDelta::ModifyField { .. }) => {
+            DescriptionLevel::Constitution
+        }
         Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { .. }) => {
             DescriptionLevel::Full
         }
@@ -159,9 +155,9 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
             DescriptionLevel::Constitution,
             !attributes.constraints.is_empty(),
         ),
-        Delta::NoncovalentBond(
-            NoncovalentBondDelta::ReplaceAtoms { .. } | NoncovalentBondDelta::ModifyField { .. },
-        ) => DescriptionLevel::Constitution,
+        Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { .. }) => {
+            DescriptionLevel::Constitution
+        }
         Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { .. }) => {
             DescriptionLevel::Full
         }
@@ -171,11 +167,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
             DescriptionLevel::Structure,
             !attributes.constraints.is_empty(),
         ),
-        Delta::StereoAtom(
-            StereoAtomDelta::ReplaceSite { .. }
-            | StereoAtomDelta::ReplaceLigands { .. }
-            | StereoAtomDelta::ModifyField { .. },
-        ) => DescriptionLevel::Structure,
+        Delta::StereoAtom(StereoAtomDelta::ModifyField { .. }) => DescriptionLevel::Structure,
         Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
         Delta::StereoBond(
             StereoBondDelta::Add { attributes, .. } | StereoBondDelta::Remove { attributes, .. },
@@ -183,11 +175,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
             DescriptionLevel::Structure,
             !attributes.constraints.is_empty(),
         ),
-        Delta::StereoBond(
-            StereoBondDelta::ReplaceSite { .. }
-            | StereoBondDelta::ReplaceLigands { .. }
-            | StereoBondDelta::ModifyField { .. },
-        ) => DescriptionLevel::Structure,
+        Delta::StereoBond(StereoBondDelta::ModifyField { .. }) => DescriptionLevel::Structure,
         Delta::StereoBond(StereoBondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
         Delta::Constraint(_) => DescriptionLevel::Full,
     }
