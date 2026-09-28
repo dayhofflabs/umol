@@ -314,8 +314,7 @@ impl Molecule {
     ) -> Result<(), TransactionError> {
         match edit {
             Edit::AddAtoms { atoms } => {
-                for atom in atoms {
-                    let id = self.add_atom(atom);
+                for id in self.add_atoms(atoms) {
                     state.push_atom(id);
                 }
                 Ok(())
@@ -332,8 +331,7 @@ impl Molecule {
                         },
                     )
                     .collect::<Result<_, TransactionError>>()?;
-                for ([first, second], attributes) in bonds {
-                    let id = self.add_bond(first, second, attributes);
+                for id in self.add_bonds(bonds) {
                     state.push_bond(id);
                 }
                 Ok(())
@@ -740,12 +738,16 @@ impl Molecule {
     ) -> Result<Option<Undo>, TransactionError> {
         match edit {
             Edit::AddAtoms { atoms } => {
-                let mut added = Vec::with_capacity(atoms.len());
-                for attributes in atoms {
-                    let id = self.add_atom(attributes.clone());
-                    state.push_atom(id);
-                    added.push(AddedAtom { id, attributes });
-                }
+                let added = self
+                    .add_atoms(atoms)
+                    .map(|id| {
+                        state.push_atom(id);
+                        AddedAtom {
+                            id,
+                            attributes: self.atom(id).attributes().clone(),
+                        }
+                    })
+                    .collect();
                 Ok(Undo::RemoveAddedTopology {
                     atoms: added,
                     bonds: Vec::new(),
@@ -763,16 +765,18 @@ impl Molecule {
                         },
                     )
                     .collect::<Result<_, TransactionError>>()?;
-                let mut added = Vec::with_capacity(bonds.len());
-                for ([first, second], attributes) in bonds {
-                    let id = self.add_bond(first, second, attributes.clone());
-                    state.push_bond(id);
-                    added.push(AddedBond {
-                        id,
-                        endpoints: [first, second],
-                        attributes,
-                    });
-                }
+                let added = self
+                    .add_bonds(bonds)
+                    .map(|id| {
+                        state.push_bond(id);
+                        let view = self.bond(id);
+                        AddedBond {
+                            id,
+                            endpoints: view.atom_ids(),
+                            attributes: view.attributes().clone(),
+                        }
+                    })
+                    .collect();
                 Ok(Undo::RemoveAddedTopology {
                     atoms: Vec::new(),
                     bonds: added,
@@ -1152,13 +1156,14 @@ impl Molecule {
             } => {
                 let site = state.atom(site)?;
                 let ligands = state.stereo_ligands(ligands)?;
-                let id = self.add_stereo_atom(site, &ligands, attributes.clone());
+                let id = self.add_stereo_atom(site, &ligands, attributes);
                 state.push_stereo_atom(id);
+                let view = self.stereo_atom(id);
                 Ok(Undo::RemoveAddedStereoAtom(AddedStereoAtom {
                     id,
                     site,
                     ligands,
-                    attributes,
+                    attributes: view.attributes().clone(),
                 }))
             }
             Edit::RemoveStereoAtoms { removes } => {
@@ -1231,13 +1236,14 @@ impl Molecule {
             } => {
                 let site = state.bond(site)?;
                 let ligands = state.stereo_ligands(ligands)?;
-                let id = self.add_stereo_bond(site, &ligands, attributes.clone());
+                let id = self.add_stereo_bond(site, &ligands, attributes);
                 state.push_stereo_bond(id);
+                let view = self.stereo_bond(id);
                 Ok(Undo::RemoveAddedStereoBond(AddedStereoBond {
                     id,
                     site,
                     ligands,
-                    attributes,
+                    attributes: view.attributes().clone(),
                 }))
             }
             Edit::RemoveStereoBonds { removes } => {
@@ -1441,7 +1447,17 @@ impl Molecule {
         self.validate_undo(&undo)?;
         match undo {
             Undo::RemoveAddedTopology { atoms, bonds } => {
-                self.remove_added_topology(&atoms, &bonds);
+                let atoms = atoms
+                    .into_iter()
+                    .map(|entry| entry.id)
+                    .filter(|id| id.index() < self.atoms().count())
+                    .collect::<Vec<_>>();
+                let bonds = bonds
+                    .into_iter()
+                    .map(|entry| entry.id)
+                    .filter(|id| id.index() < self.bonds().count())
+                    .collect::<Vec<_>>();
+                self.remove_topology(&atoms, &bonds);
             }
             Undo::RestoreRemovedTopology {
                 atoms,
@@ -1509,7 +1525,11 @@ impl Molecule {
                 );
                 self.restore_constraints(&cascade);
             }
-            Undo::RemoveAddedDativeBond(added) => self.remove_added_dative_bond(&added),
+            Undo::RemoveAddedDativeBond(added) => {
+                if added.id.index() < self.dative_bonds().count() {
+                    self.remove_dative_bonds(&[added.id]);
+                }
+            }
             Undo::RestoreRemovedDativeBonds {
                 removed,
                 undo_compaction,
@@ -1530,7 +1550,11 @@ impl Molecule {
             Undo::RestoreDativeBondAcceptor { id, acceptor } => {
                 self.dative_bond_view_mut(id).replace_acceptor(acceptor);
             }
-            Undo::RemoveAddedAromaticSystem(added) => self.remove_added_aromatic_system(&added),
+            Undo::RemoveAddedAromaticSystem(added) => {
+                if added.id.index() < self.aromatic_systems().count() {
+                    self.remove_aromatic_systems(&[added.id]);
+                }
+            }
             Undo::RestoreRemovedAromaticSystems {
                 removed,
                 undo_compaction,
@@ -1548,7 +1572,11 @@ impl Molecule {
             Undo::RestoreAromaticSystemAtoms { id, atoms } => {
                 self.aromatic_system_view_mut(id).replace_atoms(&atoms);
             }
-            Undo::RemoveAddedMulticenterBond(added) => self.remove_added_multicenter_bond(&added),
+            Undo::RemoveAddedMulticenterBond(added) => {
+                if added.id.index() < self.multicenter_bonds().count() {
+                    self.remove_multicenter_bonds(&[added.id]);
+                }
+            }
             Undo::RestoreRemovedMulticenterBonds {
                 removed,
                 undo_compaction,
@@ -1566,7 +1594,11 @@ impl Molecule {
             Undo::RestoreMulticenterBondAtoms { id, atoms } => {
                 self.multicenter_bond_view_mut(id).replace_atoms(&atoms);
             }
-            Undo::RemoveAddedNoncovalentBond(added) => self.remove_added_noncovalent_bond(&added),
+            Undo::RemoveAddedNoncovalentBond(added) => {
+                if added.id.index() < self.noncovalent_bonds().count() {
+                    self.remove_noncovalent_bonds(&[added.id]);
+                }
+            }
             Undo::RestoreRemovedNoncovalentBonds {
                 removed,
                 undo_compaction,
@@ -1584,7 +1616,11 @@ impl Molecule {
             Undo::RestoreNoncovalentBondAtoms { id, atoms } => {
                 self.noncovalent_bond_view_mut(id).replace_atoms(atoms);
             }
-            Undo::RemoveAddedStereoAtom(added) => self.remove_added_stereo_atom(&added),
+            Undo::RemoveAddedStereoAtom(added) => {
+                if added.id.index() < self.stereo_atoms().count() {
+                    self.remove_stereo_atoms(&[added.id]);
+                }
+            }
             Undo::RestoreRemovedStereoAtoms {
                 removed,
                 undo_compaction,
@@ -1605,7 +1641,11 @@ impl Molecule {
             Undo::RestoreStereoAtomLigands { id, ligands } => {
                 self.stereo_atom_view_mut(id).replace_ligands(&ligands);
             }
-            Undo::RemoveAddedStereoBond(added) => self.remove_added_stereo_bond(&added),
+            Undo::RemoveAddedStereoBond(added) => {
+                if added.id.index() < self.stereo_bonds().count() {
+                    self.remove_stereo_bonds(&[added.id]);
+                }
+            }
             Undo::RestoreRemovedStereoBonds {
                 removed,
                 undo_compaction,
@@ -2641,6 +2681,7 @@ mod tests {
     use super::*;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
+    use crate::ir::molecule::MoleculeEntries;
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::stereo::StereoKind;
 
@@ -2749,6 +2790,376 @@ mod tests {
                 count: 3
             }),
         );
+    }
+
+    #[rstest]
+    fn test_molecule_apply_edit_additions(#[values(false, true)] journaled: bool) {
+        let initial = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            ..Default::default()
+        });
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edits = [
+            Edit::AddAtoms {
+                atoms: vec![
+                    AtomForm::from_element(Element::O),
+                    AtomForm::from_element(Element::F),
+                ],
+            },
+            Edit::AddBonds {
+                bonds: vec![
+                    AddBond {
+                        endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::New(0)],
+                        attributes: BondForm::from_order(2),
+                    },
+                    AddBond {
+                        endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(1)],
+                        attributes: BondForm::from_order(1),
+                    },
+                    AddBond {
+                        endpoints: [AtomHandle::New(0), AtomHandle::New(1)],
+                        attributes: BondForm::from_order(1),
+                    },
+                ],
+            },
+            Edit::AddDativeBond {
+                donors: vec![AtomHandle::New(1), AtomHandle::Id(AtomId(0))],
+                acceptor: AtomHandle::New(0),
+                attributes: DativeBondForm::from_order(1),
+            },
+            Edit::AddAromaticSystem {
+                atoms: vec![
+                    AtomHandle::New(0),
+                    AtomHandle::Id(AtomId(1)),
+                    AtomHandle::Id(AtomId(0)),
+                ],
+                attributes: AromaticSystemForm::from_electrons(vec![2, 1, 1]),
+            },
+            Edit::AddMulticenterBond {
+                atoms: vec![AtomHandle::New(1), AtomHandle::New(0)],
+                attributes: MulticenterBondForm::from_electrons(vec![1, 2]),
+            },
+            Edit::AddNoncovalentBond {
+                atoms: [AtomHandle::New(1), AtomHandle::Id(AtomId(0))],
+                attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            },
+            Edit::AddStereoAtom {
+                site: AtomHandle::Id(AtomId(0)),
+                ligands: vec![
+                    (AtomHandle::New(1), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(0)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
+                ],
+                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+            },
+            Edit::AddStereoBond {
+                site: BondHandle::New(0),
+                ligands: vec![
+                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(1)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                    (AtomHandle::New(1), StereoLigandKind::Atom),
+                    (AtomHandle::New(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+                attributes: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            },
+        ];
+        let mut undos = Vec::new();
+        for edit in edits {
+            if journaled {
+                undos.push(
+                    molecule
+                        .apply_edit_with_undo(edit, &mut state)
+                        .unwrap()
+                        .unwrap(),
+                );
+            } else {
+                molecule.apply_edit(edit, &mut state).unwrap();
+            }
+        }
+
+        let stereo_atom_ligands = vec![
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+        ];
+        let stereo_bond_ligands = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        ];
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::F),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            ],
+            dative: vec![(
+                vec![AtomId(3), AtomId(0)],
+                AtomId(2),
+                DativeBondForm::from_order(1),
+            )],
+            aromatic: vec![(
+                vec![AtomId(2), AtomId(1), AtomId(0)],
+                AromaticSystemForm::from_electrons(vec![2, 1, 1]),
+            )],
+            multicenter: vec![(
+                vec![AtomId(3), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![1, 2]),
+            )],
+            noncovalent: vec![(
+                [AtomId(3), AtomId(0)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            stereo_atoms: vec![(
+                AtomId(0),
+                stereo_atom_ligands.clone(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+            )],
+            stereo_bonds: vec![(
+                BondId(1),
+                stereo_bond_ligands.clone(),
+                StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            )],
+            ..Default::default()
+        });
+        assert_eq!(molecule, expected);
+        assert_eq!(state.atom(AtomHandle::Id(AtomId(1))), Ok(AtomId(1)));
+        assert_eq!(state.atom(AtomHandle::New(0)), Ok(AtomId(2)));
+        assert_eq!(state.atom(AtomHandle::New(1)), Ok(AtomId(3)));
+        assert_eq!(state.bond(BondHandle::Id(BondId(0))), Ok(BondId(0)));
+        assert_eq!(state.bond(BondHandle::New(0)), Ok(BondId(1)));
+        assert_eq!(state.bond(BondHandle::New(2)), Ok(BondId(3)));
+        assert_eq!(
+            state.dative_bond(DativeBondHandle::New(0)),
+            Ok(DativeBondId(0))
+        );
+        assert_eq!(
+            state.aromatic_system(AromaticSystemHandle::New(0)),
+            Ok(AromaticSystemId(0))
+        );
+        assert_eq!(
+            state.multicenter_bond(MulticenterBondHandle::New(0)),
+            Ok(MulticenterBondId(0))
+        );
+        assert_eq!(
+            state.noncovalent_bond(NoncovalentBondHandle::New(0)),
+            Ok(NoncovalentBondId(0))
+        );
+        assert_eq!(
+            state.stereo_atom(StereoAtomHandle::New(0)),
+            Ok(StereoAtomId(0))
+        );
+        assert_eq!(
+            state.stereo_bond(StereoBondHandle::New(0)),
+            Ok(StereoBondId(0))
+        );
+
+        if journaled {
+            assert_eq!(
+                undos,
+                vec![
+                    Undo::RemoveAddedTopology {
+                        atoms: vec![
+                            AddedAtom {
+                                id: AtomId(2),
+                                attributes: AtomForm::from_element(Element::O)
+                            },
+                            AddedAtom {
+                                id: AtomId(3),
+                                attributes: AtomForm::from_element(Element::F)
+                            },
+                        ],
+                        bonds: vec![],
+                    },
+                    Undo::RemoveAddedTopology {
+                        atoms: vec![],
+                        bonds: vec![
+                            AddedBond {
+                                id: BondId(1),
+                                endpoints: [AtomId(1), AtomId(2)],
+                                attributes: BondForm::from_order(2)
+                            },
+                            AddedBond {
+                                id: BondId(2),
+                                endpoints: [AtomId(0), AtomId(3)],
+                                attributes: BondForm::from_order(1)
+                            },
+                            AddedBond {
+                                id: BondId(3),
+                                endpoints: [AtomId(2), AtomId(3)],
+                                attributes: BondForm::from_order(1)
+                            },
+                        ],
+                    },
+                    Undo::RemoveAddedDativeBond(AddedDativeBond {
+                        id: DativeBondId(0),
+                        donors: vec![AtomId(3), AtomId(0)],
+                        acceptor: AtomId(2),
+                        attributes: DativeBondForm::from_order(1)
+                    }),
+                    Undo::RemoveAddedAromaticSystem(AddedAromaticSystem {
+                        id: AromaticSystemId(0),
+                        atoms: vec![AtomId(2), AtomId(1), AtomId(0)],
+                        attributes: AromaticSystemForm::from_electrons(vec![2, 1, 1])
+                    }),
+                    Undo::RemoveAddedMulticenterBond(AddedMulticenterBond {
+                        id: MulticenterBondId(0),
+                        atoms: vec![AtomId(3), AtomId(2)],
+                        attributes: MulticenterBondForm::from_electrons(vec![1, 2])
+                    }),
+                    Undo::RemoveAddedNoncovalentBond(AddedNoncovalentBond {
+                        id: NoncovalentBondId(0),
+                        atoms: [AtomId(3), AtomId(0)],
+                        attributes: NoncovalentBondForm::from_kind(
+                            NoncovalentBondKind::HydrogenBond
+                        )
+                    }),
+                    Undo::RemoveAddedStereoAtom(AddedStereoAtom {
+                        id: StereoAtomId(0),
+                        site: AtomId(0),
+                        ligands: stereo_atom_ligands,
+                        attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32)
+                    }),
+                    Undo::RemoveAddedStereoBond(AddedStereoBond {
+                        id: StereoBondId(0),
+                        site: BondId(1),
+                        ligands: stereo_bond_ligands,
+                        attributes: StereoBondForm::new(StereoKind::CisTrans, 1_u32)
+                    }),
+                ]
+            );
+            for undo in undos.into_iter().rev() {
+                molecule.apply_undo(undo);
+            }
+            assert_eq!(molecule, initial);
+        }
+    }
+
+    #[rstest]
+    #[case::first(0)]
+    #[case::middle(1)]
+    #[case::last(2)]
+    fn test_molecule_apply_edit_add_bonds_error(
+        #[case] invalid_position: usize,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            ..Default::default()
+        });
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let mut bonds = vec![
+            AddBond {
+                endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                attributes: BondForm::from_order(1),
+            },
+            AddBond {
+                endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+                attributes: BondForm::from_order(2),
+            },
+            AddBond {
+                endpoints: [AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(0))],
+                attributes: BondForm::from_order(1),
+            },
+        ];
+        bonds[invalid_position].endpoints[1] = AtomHandle::Id(AtomId(3));
+        let edit = Edit::AddBonds { bonds };
+        let error = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).unwrap_err()
+        } else {
+            molecule.apply_edit(edit, &mut state).unwrap_err()
+        };
+
+        assert_eq!(
+            error,
+            TransactionError::HandleOutOfRange {
+                kind: EntityKind::Atom,
+                index: 3,
+                count: 3
+            }
+        );
+        assert_eq!(molecule, initial);
+        assert_eq!(
+            state.bond(BondHandle::New(0)),
+            Err(TransactionError::HandleOutOfRange {
+                kind: EntityKind::Bond,
+                index: 0,
+                count: 0
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_apply_undo_added_topology() {
+        let initial = MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+            ],
+            ..Default::default()
+        };
+        let mut extended = initial.clone();
+        extended.atoms.push(AtomForm::from_element(Element::F));
+        extended
+            .bonds
+            .push((AtomId(2), AtomId(3), BondForm::from_order(1)));
+        let mut molecule = Molecule::from_entries(extended);
+
+        molecule.apply_undo(Undo::RemoveAddedTopology {
+            atoms: vec![AddedAtom {
+                id: AtomId(3),
+                attributes: AtomForm::from_element(Element::F),
+            }],
+            bonds: vec![AddedBond {
+                id: BondId(2),
+                endpoints: [AtomId(2), AtomId(3)],
+                attributes: BondForm::from_order(1),
+            }],
+        });
+
+        assert_eq!(molecule, Molecule::from_entries(initial));
+    }
+
+    #[rstest]
+    #[case::topology(Undo::RemoveAddedTopology {
+        atoms: vec![AddedAtom { id: AtomId(0), attributes: AtomForm::default() }],
+        bonds: vec![AddedBond { id: BondId(0), endpoints: [AtomId(0), AtomId(1)], attributes: BondForm::default() }],
+    })]
+    #[case::dative_bond(Undo::RemoveAddedDativeBond(AddedDativeBond { id: DativeBondId(0), donors: vec![], acceptor: AtomId(0), attributes: DativeBondForm::default() }))]
+    #[case::aromatic_system(Undo::RemoveAddedAromaticSystem(AddedAromaticSystem { id: AromaticSystemId(0), atoms: vec![], attributes: AromaticSystemForm::default() }))]
+    #[case::multicenter_bond(Undo::RemoveAddedMulticenterBond(AddedMulticenterBond { id: MulticenterBondId(0), atoms: vec![], attributes: MulticenterBondForm::default() }))]
+    #[case::noncovalent_bond(Undo::RemoveAddedNoncovalentBond(AddedNoncovalentBond { id: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)], attributes: NoncovalentBondForm::default() }))]
+    #[case::stereo_atom(Undo::RemoveAddedStereoAtom(AddedStereoAtom { id: StereoAtomId(0), site: AtomId(0), ligands: vec![], attributes: StereoAtomForm::default() }))]
+    #[case::stereo_bond(Undo::RemoveAddedStereoBond(AddedStereoBond { id: StereoBondId(0), site: BondId(0), ligands: vec![], attributes: StereoBondForm::default() }))]
+    fn test_molecule_apply_undo_added_entry_manipulated(#[case] undo: Undo) {
+        Molecule::default().apply_undo(undo);
     }
 
     #[rustfmt::skip]

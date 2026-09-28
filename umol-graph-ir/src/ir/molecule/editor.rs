@@ -18,10 +18,6 @@ use super::super::compact::MoleculeCompaction;
 use super::super::constraint::Constraints;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::{DativeBondForm, DativeBonds};
-use super::super::edit::{
-    AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
-    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond,
-};
 use super::super::entity::EntityKind;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -764,38 +760,6 @@ impl MoleculeEditor {
             .compact_right(&id_compaction)
             .expect("removal compaction describes the editor's current id spaces");
         id_compaction
-    }
-
-    // -- Undo of additions ----------------------------------------------------
-
-    fn remove_added_topology(&mut self, atoms: &[AddedAtom], bonds: &[AddedBond]) {
-        let atom_ids: Vec<AtomId> = atoms.iter().map(|a| a.id).collect();
-        let bond_ids: Vec<BondId> = bonds.iter().map(|b| b.id).collect();
-        self.remove_topology(&atom_ids, &bond_ids);
-    }
-
-    fn remove_added_dative_bond(&mut self, added: &AddedDativeBond) {
-        self.remove_dative_bonds(&[added.id]);
-    }
-
-    fn remove_added_aromatic_system(&mut self, added: &AddedAromaticSystem) {
-        self.remove_aromatic_systems(&[added.id]);
-    }
-
-    fn remove_added_multicenter_bond(&mut self, added: &AddedMulticenterBond) {
-        self.remove_multicenter_bonds(&[added.id]);
-    }
-
-    fn remove_added_noncovalent_bond(&mut self, added: &AddedNoncovalentBond) {
-        self.remove_noncovalent_bonds(&[added.id]);
-    }
-
-    fn remove_added_stereo_atom(&mut self, added: &AddedStereoAtom) {
-        self.remove_stereo_atoms(&[added.id]);
-    }
-
-    fn remove_added_stereo_bond(&mut self, added: &AddedStereoBond) {
-        self.remove_stereo_bonds(&[added.id]);
     }
 
     /// Materialize the editor's current state without consuming it, after checking molecule
@@ -1908,24 +1872,6 @@ mod tests {
         triatomic
             .molecule
             .restore_topology(compaction.graph(), removed_atoms, removed_bonds);
-
-        assert_eq!(triatomic.build(), expected);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_remove_added_topology(mut triatomic: MoleculeEditor) {
-        let expected = triatomic.clone().build();
-        let added_atom = AddedAtom {
-            id: triatomic.add_atom(AtomForm::from_element(Element::F)),
-            attributes: AtomForm::from_element(Element::F),
-        };
-        let added_bond = AddedBond {
-            id: triatomic.add_bond(AtomId(2), added_atom.id, BondForm::from_order(1)),
-            endpoints: [AtomId(2), added_atom.id],
-            attributes: BondForm::from_order(1),
-        };
-
-        triatomic.remove_added_topology(&[added_atom], &[added_bond]);
 
         assert_eq!(triatomic.build(), expected);
     }

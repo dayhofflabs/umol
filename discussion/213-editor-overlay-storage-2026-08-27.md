@@ -36,7 +36,7 @@ index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch loops remain under the editor module; single-edit execution and
 handle state are in molecule::apply. Fields remain private and internal Molecule
-mutation methods use pub(crate). S4b1–S4b3 are complete; S4b4 is next. The
+mutation methods use pub(crate). S4b1–S4b4 are complete; S4b5 is next. The
 S4b3–S4b8 migration is currently non-compiling.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -89,7 +89,7 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1–S4b3 are complete; S4b4 is next. The build returns green at S4b8.
+and S4b1–S4b4 are complete; S4b5 is next. The build returns green at S4b8.
 
 ## Editor and transaction API
 
@@ -5062,7 +5062,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   including the retained editor tracked batch/rollback behavior: Molecule
   execution no longer updates the editor's private session correspondence.
 
-- **S4b4 — Addition execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b3]
+- **S4b4 — completed 2026-09-28** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b3]
 
   **Additions.** Resolve the listed topology handles before calling the method;
   attribute forms are moved unchanged. Register returned ids in the batch's New
@@ -5091,6 +5091,26 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   Verify ids, handle registration, saved entries, and reverse removal after
   later dependent edits have been undone.
+
+  **Implemented — addition execution.** AddAtoms and AddBonds use one bulk
+  Molecule call per Edit in both execution paths. Bond handles are all resolved
+  before insertion. Journaled additions save the stored attributes and resolved
+  frames, with one bundled Undo per Edit; returned ids populate each kind's New
+  namespace in order. Stereo forms move into storage and their resolved ligand
+  vectors are retained for undo without another frame allocation.
+
+  The seven addition-undo branches call only untracked Molecule removal, with
+  local bounds guards. All seven editor remove_added_* adapters are removed;
+  their topology regression now exercises Molecule::apply_undo directly.
+  Tests cover all eight additions, full stored results and undo payloads, New
+  handles, reverse replay of dependent additions, rejected bond handles at each
+  position, and panic freedom for out-of-range added-entry undos.
+
+  **Verification — 2026-09-28.** Nightly formatting and diff checks/review pass.
+  The all-target graph-ir check still fails on S4b5's removal-compaction mapping
+  and S4b8's fallible replay body; addition-adapter errors are gone. The new
+  execution cases cannot run until that migration compiles. Aggregate undo
+  validation remains for removal in S4b8; no passing test result is claimed.
 
 - **S4b5 — Removal and cascading compaction execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b4]
 
@@ -5818,7 +5838,7 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b3 are complete; S4b4 is next.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b4 are complete; S4b5 is next.
   The build returns green at S4b8.
   S4b uses the additions and the component
   removal/restoration interfaces.
