@@ -13,7 +13,7 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
-## Design status — 2026-09-26
+## Design status — 2026-09-28
 
 This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
 S2a, the revised S2b, S2c, S2d, S2g, S2h, and S2i1 are implemented. The previous S2b mutable-view
@@ -29,8 +29,9 @@ S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
 S3a1–S3b are implemented. Replacement Deltas are withdrawn; the nine replacement
 Edits and their Undo variants remain. S3c/S3d record the selective removal and
 retained reaction integration; both are verified. S3e completes the Python Edit
-migration. S3f's graph-core bulk additions and S3g's relation-set bulk additions
-are implemented. S3h's typed-overlay extend methods are next. Graph-core mutation and
+migration. S3f's graph-core bulk additions, S3g's relation-set bulk additions,
+and S3h's typed-overlay extend methods are implemented. S3i's Molecule/editor bulk
+additions are next. Graph-core mutation and
 restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -81,8 +82,8 @@ incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-cons
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e–S3g are
-complete; S3h is next.
+approved reaction names, semantics, and dative-factor migration. S3e–S3h are
+complete; S3i is next.
 
 ## Editor and transaction API
 
@@ -4341,7 +4342,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   all-target Clippy with proptest, rustdoc with warnings denied, nightly formatting,
   and full diff review pass. Workspace and Rust 1.87 gates remain at S9b.
 
-- **S3h** (`ir::{aromatic,multicenter,dative,noncovalent,stereo}`;
+- **S3h — completed 2026-09-28** (`ir::{aromatic,multicenter,dative,noncovalent,stereo}`;
   additive, green) Add crate-private extend to AromaticSystems, MulticenterBonds,
   DativeBonds, NoncovalentBonds, StereoAtoms, and StereoBonds. Each takes &mut self
   and the exact Vec batch specified for the corresponding plural Molecule
@@ -4352,6 +4353,22 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   order, ids, incidence, unchanged shared originals, empty batches, and domain
   distinctions: dative donors/acceptor and stereo site/ligands.
   [dep: S1a, S1b, S1c, S3g]
+
+  All six sets implement the specified crate-private extend. Each nonempty
+  batch calls its relation set's extend once. Aromatic, multicenter, and dative
+  atom-id conversion uses one contiguous temporary node vector; stereo ligand
+  slices pass directly to graph-core. Attributes move into storage. Empty batches
+  retain the shared allocation, and returned id iterators retain no borrows.
+
+  **Checked — 2026-09-28.** The 36 new unit cases cover empty/populated sets,
+  unique/shared ownership, empty batches, row/factor order, repeated atoms,
+  independent incidence scans, dative roles, stereo sites and all ligand kinds,
+  and iterator use after inputs and receivers are dropped. All 50 tests selected
+  by `cargo test -p umol-graph-ir --lib _extend` pass, along with graph-ir all-target
+  Clippy, rustdoc with warnings denied, nightly formatting, and diff checks/review.
+  Graph-core's S3g properties cover the delegated batch algorithm; Molecule/editor
+  integration is S3i. Workspace and Rust 1.87 gates remain at S9b.
+
 - **S3i** (`ir::molecule`, `ir::molecule::editor`; additive, green) Add private
   Molecule and public editor add_atoms, add_bonds, add_dative_bonds,
   add_aromatic_systems, add_multicenter_bonds, add_noncovalent_bonds,
@@ -4927,7 +4944,11 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   build confirms that all methods in those impls have callers. Do not replace
   them with narrower dead-code allowances or retain unused mutation methods.
   Verify the non-test build, strict all-target Clippy, and the affected removal
-  and compaction tests. This subitem changes no mutation interface or behavior.
+  and compaction tests. The inherent methods must be included in a single impl
+  block and follow the agreed order: constructor, immutable getters, mutable
+  getters, mutators, destructuring methods (into_entries), "helpers". Free methods
+  taking the type as first argument (de facto inherent methods) should be placed
+  directly after the type. This subitem changes no mutation interface or behavior.
 
 - **S4c — moved to S5a1.** Introduce the scope guard with Transaction::run,
   which owns it. No unused recovery machinery or temporary public API is added

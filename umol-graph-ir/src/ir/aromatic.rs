@@ -98,6 +98,31 @@ impl AromaticSystems {
         Arc::make_mut(&mut self.0).add(&nodes, attributes).into()
     }
 
+    /// Append entries in input order and return their ids without retaining a borrow.
+    pub(crate) fn extend(
+        &mut self,
+        entries: Vec<(&[AtomId], AromaticSystemForm)>,
+    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + use<> {
+        let start = self.count();
+        if !entries.is_empty() {
+            let nodes: Vec<NodeId> = entries
+                .iter()
+                .flat_map(|(atoms, _)| atoms.iter().copied().map(NodeId::from))
+                .collect();
+            let mut remaining = nodes.as_slice();
+            let entries = entries
+                .into_iter()
+                .map(|(atoms, attributes)| {
+                    let (atoms, rest) = remaining.split_at(atoms.len());
+                    remaining = rest;
+                    (atoms, attributes)
+                })
+                .collect();
+            let _ = Arc::make_mut(&mut self.0).extend(entries);
+        }
+        (start..self.count()).map(AromaticSystemId::from)
+    }
+
     pub(crate) fn remove(&mut self, ids: &[AromaticSystemId]) {
         if ids.is_empty() {
             return;
@@ -709,6 +734,73 @@ mod tests {
             vec![id]
         );
         assert!(!systems.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![AromaticSystemId(0), AromaticSystemId(1), AromaticSystemId(2)])]
+    #[case::populated(vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::from_electrons(vec![1, 1]))], vec![AromaticSystemId(1), AromaticSystemId(2), AromaticSystemId(3)])]
+    fn test_aromatic_systems_extend(
+        #[case] initial: Vec<(Vec<AtomId>, AromaticSystemForm)>,
+        #[case] expected_ids: Vec<AromaticSystemId>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut systems = AromaticSystems::new(initial.clone());
+        let original = shared.then(|| systems.clone());
+        let mut expected = initial.clone();
+        expected.extend([
+            (
+                vec![AtomId(4), AtomId(1), AtomId(4)],
+                AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+            ),
+            (vec![], AromaticSystemForm::default()),
+            (
+                vec![AtomId(1), AtomId(3)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            ),
+        ]);
+        let mut ids = {
+            let first = [AtomId(4), AtomId(1), AtomId(4)];
+            let last = [AtomId(1), AtomId(3)];
+            systems.extend(vec![
+                (&first, AromaticSystemForm::from_electrons(vec![1, 2, 3])),
+                (&[], AromaticSystemForm::default()),
+                (&last, AromaticSystemForm::from_electrons(vec![2, 1])),
+            ])
+        };
+
+        assert_eq!(systems, AromaticSystems::new(expected.clone()));
+        for atom in (0..8).map(AtomId) {
+            let expected_ids: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(_, (atoms, _))| atoms.contains(&atom))
+                .map(|(index, _)| AromaticSystemId::from(index))
+                .collect();
+            assert_eq!(systems.incident_ids(atom).collect::<Vec<_>>(), expected_ids);
+            assert_eq!(systems.has_incident(atom), !expected_ids.is_empty());
+        }
+
+        if let Some(original) = original {
+            assert_eq!(original, AromaticSystems::new(initial));
+        }
+        drop(systems);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids.next(), Some(expected_ids[0]));
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.collect::<Vec<_>>(), expected_ids[1..]);
+    }
+
+    #[rstest]
+    #[case::empty(AromaticSystems::default())]
+    #[case::populated(AromaticSystems::new(vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::from_electrons(vec![1, 1]))]))]
+    fn test_aromatic_systems_extend_identity(#[case] original: AromaticSystems) {
+        let mut systems = original.clone();
+        let mut ids = systems.extend(vec![]);
+
+        assert_eq!(systems, original);
+        assert!(Arc::ptr_eq(&systems.0, &original.0));
+        assert_eq!(ids.len(), 0);
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]

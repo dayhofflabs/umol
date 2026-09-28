@@ -110,6 +110,22 @@ impl StereoAtoms {
             .into()
     }
 
+    /// Append entries in input order and return their ids without retaining a borrow.
+    pub(crate) fn extend(
+        &mut self,
+        entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
+    ) -> impl ExactSizeIterator<Item = StereoAtomId> + use<> {
+        let start = self.count();
+        if !entries.is_empty() {
+            let entries = entries
+                .into_iter()
+                .map(|(site, ligands, attributes)| ([NodeId::from(site)], ligands, attributes))
+                .collect();
+            let _ = Arc::make_mut(&mut self.0).extend(entries);
+        }
+        (start..self.count()).map(StereoAtomId::from)
+    }
+
     pub(crate) fn remove(&mut self, ids: &[StereoAtomId]) {
         if ids.is_empty() {
             return;
@@ -491,6 +507,22 @@ impl StereoBonds {
         Arc::make_mut(&mut self.0)
             .add([site.into()], ligands, attributes)
             .into()
+    }
+
+    /// Append entries in input order and return their ids without retaining a borrow.
+    pub(crate) fn extend(
+        &mut self,
+        entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
+    ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
+        let start = self.count();
+        if !entries.is_empty() {
+            let entries = entries
+                .into_iter()
+                .map(|(site, ligands, attributes)| ([EdgeId::from(site)], ligands, attributes))
+                .collect();
+            let _ = Arc::make_mut(&mut self.0).extend(entries);
+        }
+        (start..self.count()).map(StereoBondId::from)
     }
 
     pub(crate) fn remove(&mut self, ids: &[StereoBondId]) {
@@ -2286,6 +2318,98 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(vec![], vec![StereoAtomId(0), StereoAtomId(1), StereoAtomId(2)])]
+    #[case::populated(vec![(AtomId(0), vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)], StereoAtomForm::default())], vec![StereoAtomId(1), StereoAtomId(2), StereoAtomId(3)])]
+    fn test_stereo_atoms_extend(
+        #[case] initial: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
+        #[case] expected_ids: Vec<StereoAtomId>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut stereo_atoms = StereoAtoms::new(initial.clone());
+        let original = shared.then(|| stereo_atoms.clone());
+        let mut expected = initial.clone();
+        expected.extend([
+            (
+                AtomId(4),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+            ),
+            (AtomId(5), vec![], StereoAtomForm::default()),
+            (
+                AtomId(6),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+            ),
+        ]);
+        let mut ids = {
+            let first = [
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ];
+            let last = [StereoLigand::new(AtomId(1), StereoLigandKind::Atom)];
+            stereo_atoms.extend(vec![
+                (
+                    AtomId(4),
+                    &first,
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+                ),
+                (AtomId(5), &[], StereoAtomForm::default()),
+                (
+                    AtomId(6),
+                    &last,
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+                ),
+            ])
+        };
+
+        assert_eq!(stereo_atoms, StereoAtoms::new(expected.clone()));
+        for atom in (0..8).map(AtomId) {
+            let expected_ids: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(_, (site, ligands, _))| {
+                    *site == atom || ligands.iter().any(|ligand| ligand.atom_id == atom)
+                })
+                .map(|(index, _)| StereoAtomId::from(index))
+                .collect();
+            assert_eq!(
+                stereo_atoms.incident_ids(atom).collect::<Vec<_>>(),
+                expected_ids
+            );
+            assert_eq!(stereo_atoms.has_incident(atom), !expected_ids.is_empty());
+        }
+
+        if let Some(original) = original {
+            assert_eq!(original, StereoAtoms::new(initial));
+        }
+        drop(stereo_atoms);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids.next(), Some(expected_ids[0]));
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.collect::<Vec<_>>(), expected_ids[1..]);
+    }
+
+    #[rstest]
+    #[case::empty(StereoAtoms::default())]
+    #[case::populated(StereoAtoms::new(vec![(AtomId(0), vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)], StereoAtomForm::default())]))]
+    fn test_stereo_atoms_extend_identity(#[case] original: StereoAtoms) {
+        let mut stereo_atoms = original.clone();
+        let mut ids = stereo_atoms.extend(vec![]);
+
+        assert_eq!(stereo_atoms, original);
+        assert!(Arc::ptr_eq(&stereo_atoms.0, &original.0));
+        assert_eq!(ids.len(), 0);
+        assert_eq!(ids.next(), None);
+    }
+
+    #[rstest]
     fn test_stereo_atoms_tracked_remove(stereo_atoms: StereoAtoms) {
         let original = StereoAtoms::new(vec![
             (AtomId(1), vec![], StereoAtomForm::default()),
@@ -2859,6 +2983,116 @@ mod tests {
             vec![id]
         );
         assert_eq!(original.count(), 1);
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![StereoBondId(0), StereoBondId(1), StereoBondId(2)])]
+    #[case::populated(vec![(BondId(0), vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)], StereoBondForm::default())], vec![StereoBondId(1), StereoBondId(2), StereoBondId(3)])]
+    fn test_stereo_bonds_extend(
+        #[case] initial: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
+        #[case] expected_ids: Vec<StereoBondId>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut stereo_bonds = StereoBonds::new(initial.clone());
+        let original = shared.then(|| stereo_bonds.clone());
+        let mut expected = initial.clone();
+        expected.extend([
+            (
+                BondId(4),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            ),
+            (BondId(5), vec![], StereoBondForm::default()),
+            (
+                BondId(6),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+            ),
+        ]);
+        let mut ids = {
+            let first = [
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(6), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ];
+            let last = [StereoLigand::new(AtomId(1), StereoLigandKind::Atom)];
+            stereo_bonds.extend(vec![
+                (
+                    BondId(4),
+                    &first,
+                    StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+                ),
+                (BondId(5), &[], StereoBondForm::default()),
+                (
+                    BondId(6),
+                    &last,
+                    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+                ),
+            ])
+        };
+
+        assert_eq!(stereo_bonds, StereoBonds::new(expected.clone()));
+        for atom in (0..8).map(AtomId) {
+            let expected_ids: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, ligands, _))| ligands.iter().any(|ligand| ligand.atom_id == atom))
+                .map(|(index, _)| StereoBondId::from(index))
+                .collect();
+            assert_eq!(
+                stereo_bonds.incident_to_atom_ids(atom).collect::<Vec<_>>(),
+                expected_ids
+            );
+            assert_eq!(
+                stereo_bonds.has_incident_to_atom(atom),
+                !expected_ids.is_empty()
+            );
+        }
+
+        for bond in (0..8).map(BondId) {
+            let expected_ids: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(_, (site, _, _))| *site == bond)
+                .map(|(index, _)| StereoBondId::from(index))
+                .collect();
+            assert_eq!(
+                stereo_bonds.incident_to_bond_ids(bond).collect::<Vec<_>>(),
+                expected_ids
+            );
+            assert_eq!(
+                stereo_bonds.has_incident_to_bond(bond),
+                !expected_ids.is_empty()
+            );
+        }
+
+        if let Some(original) = original {
+            assert_eq!(original, StereoBonds::new(initial));
+        }
+        drop(stereo_bonds);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids.next(), Some(expected_ids[0]));
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.collect::<Vec<_>>(), expected_ids[1..]);
+    }
+
+    #[rstest]
+    #[case::empty(StereoBonds::default())]
+    #[case::populated(StereoBonds::new(vec![(BondId(0), vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)], StereoBondForm::default())]))]
+    fn test_stereo_bonds_extend_identity(#[case] original: StereoBonds) {
+        let mut stereo_bonds = original.clone();
+        let mut ids = stereo_bonds.extend(vec![]);
+
+        assert_eq!(stereo_bonds, original);
+        assert!(Arc::ptr_eq(&stereo_bonds.0, &original.0));
+        assert_eq!(ids.len(), 0);
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]

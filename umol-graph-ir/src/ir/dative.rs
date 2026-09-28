@@ -105,6 +105,31 @@ impl DativeBonds {
             .into()
     }
 
+    /// Append entries in input order and return their ids without retaining a borrow.
+    pub(crate) fn extend(
+        &mut self,
+        entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
+    ) -> impl ExactSizeIterator<Item = DativeBondId> + use<> {
+        let start = self.count();
+        if !entries.is_empty() {
+            let nodes: Vec<NodeId> = entries
+                .iter()
+                .flat_map(|(donors, _, _)| donors.iter().copied().map(NodeId::from))
+                .collect();
+            let mut remaining = nodes.as_slice();
+            let entries = entries
+                .into_iter()
+                .map(|(donors, acceptor, attributes)| {
+                    let (donors, rest) = remaining.split_at(donors.len());
+                    remaining = rest;
+                    ([NodeId::from(acceptor)], donors, attributes)
+                })
+                .collect();
+            let _ = Arc::make_mut(&mut self.0).extend(entries);
+        }
+        (start..self.count()).map(DativeBondId::from)
+    }
+
     pub(crate) fn remove(&mut self, ids: &[DativeBondId]) {
         if ids.is_empty() {
             return;
@@ -691,6 +716,75 @@ mod tests {
         assert_eq!(bonds.donors(id).collect::<Vec<_>>(), donors);
         assert_eq!(bonds.attributes(id), &attributes);
         assert_eq!(bonds.incident_ids(acceptor).collect::<Vec<_>>(), vec![id]);
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![DativeBondId(0), DativeBondId(1), DativeBondId(2)])]
+    #[case::populated(vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))], vec![DativeBondId(1), DativeBondId(2), DativeBondId(3)])]
+    fn test_dative_bonds_extend(
+        #[case] initial: Vec<(Vec<AtomId>, AtomId, DativeBondForm)>,
+        #[case] expected_ids: Vec<DativeBondId>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut bonds = DativeBonds::new(initial.clone());
+        let original = shared.then(|| bonds.clone());
+        let mut expected = initial.clone();
+        expected.extend([
+            (
+                vec![AtomId(4), AtomId(1), AtomId(4)],
+                AtomId(4),
+                DativeBondForm::from_order(2),
+            ),
+            (vec![], AtomId(6), DativeBondForm::from_order(3)),
+            (
+                vec![AtomId(1), AtomId(3)],
+                AtomId(5),
+                DativeBondForm::from_order(1),
+            ),
+        ]);
+        let mut ids = {
+            let first = [AtomId(4), AtomId(1), AtomId(4)];
+            let last = [AtomId(1), AtomId(3)];
+            bonds.extend(vec![
+                (&first, AtomId(4), DativeBondForm::from_order(2)),
+                (&[], AtomId(6), DativeBondForm::from_order(3)),
+                (&last, AtomId(5), DativeBondForm::from_order(1)),
+            ])
+        };
+
+        assert_eq!(bonds, DativeBonds::new(expected.clone()));
+        for atom in (0..8).map(AtomId) {
+            let expected_ids: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(_, (donors, acceptor, _))| donors.contains(&atom) || *acceptor == atom)
+                .map(|(index, _)| DativeBondId::from(index))
+                .collect();
+            assert_eq!(bonds.incident_ids(atom).collect::<Vec<_>>(), expected_ids);
+            assert_eq!(bonds.has_incident(atom), !expected_ids.is_empty());
+        }
+
+        if let Some(original) = original {
+            assert_eq!(original, DativeBonds::new(initial));
+        }
+        drop(bonds);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids.next(), Some(expected_ids[0]));
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.collect::<Vec<_>>(), expected_ids[1..]);
+    }
+
+    #[rstest]
+    #[case::empty(DativeBonds::default())]
+    #[case::populated(DativeBonds::new(vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))]))]
+    fn test_dative_bonds_extend_identity(#[case] original: DativeBonds) {
+        let mut bonds = original.clone();
+        let mut ids = bonds.extend(vec![]);
+
+        assert_eq!(bonds, original);
+        assert!(Arc::ptr_eq(&bonds.0, &original.0));
+        assert_eq!(ids.len(), 0);
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]

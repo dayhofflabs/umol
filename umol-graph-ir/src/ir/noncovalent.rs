@@ -93,6 +93,22 @@ impl NoncovalentBonds {
             .into()
     }
 
+    /// Append entries in input order and return their ids without retaining a borrow.
+    pub(crate) fn extend(
+        &mut self,
+        entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
+    ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + use<> {
+        let start = self.count();
+        if !entries.is_empty() {
+            let entries = entries
+                .into_iter()
+                .map(|(atoms, attributes)| (atoms.map(NodeId::from), attributes))
+                .collect();
+            let _ = Arc::make_mut(&mut self.0).extend(entries);
+        }
+        (start..self.count()).map(NoncovalentBondId::from)
+    }
+
     pub(crate) fn remove(&mut self, ids: &[NoncovalentBondId]) {
         if ids.is_empty() {
             return;
@@ -713,6 +729,69 @@ mod tests {
         assert_eq!(bonds.atoms(id), atoms);
         assert_eq!(bonds.attributes(id), &attributes);
         assert_eq!(bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(), vec![id]);
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![NoncovalentBondId(0), NoncovalentBondId(1), NoncovalentBondId(2)])]
+    #[case::populated(vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())], vec![NoncovalentBondId(1), NoncovalentBondId(2), NoncovalentBondId(3)])]
+    fn test_noncovalent_bonds_extend(
+        #[case] initial: Vec<([AtomId; 2], NoncovalentBondForm)>,
+        #[case] expected_ids: Vec<NoncovalentBondId>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut bonds = NoncovalentBonds::new(initial.clone());
+        let original = shared.then(|| bonds.clone());
+        let mut expected = initial.clone();
+        expected.extend([
+            (
+                [AtomId(4), AtomId(1)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            ([AtomId(4), AtomId(4)], NoncovalentBondForm::default()),
+            ([AtomId(4), AtomId(1)], NoncovalentBondForm::default()),
+        ]);
+        let mut ids = bonds.extend(vec![
+            (
+                [AtomId(4), AtomId(1)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            ([AtomId(4), AtomId(4)], NoncovalentBondForm::default()),
+            ([AtomId(4), AtomId(1)], NoncovalentBondForm::default()),
+        ]);
+
+        assert_eq!(bonds, NoncovalentBonds::new(expected.clone()));
+        for atom in (0..8).map(AtomId) {
+            let expected_ids: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(_, (atoms, _))| atoms.contains(&atom))
+                .map(|(index, _)| NoncovalentBondId::from(index))
+                .collect();
+            assert_eq!(bonds.incident_ids(atom).collect::<Vec<_>>(), expected_ids);
+            assert_eq!(bonds.has_incident(atom), !expected_ids.is_empty());
+        }
+
+        if let Some(original) = original {
+            assert_eq!(original, NoncovalentBonds::new(initial));
+        }
+        drop(bonds);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids.next(), Some(expected_ids[0]));
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.collect::<Vec<_>>(), expected_ids[1..]);
+    }
+
+    #[rstest]
+    #[case::empty(NoncovalentBonds::default())]
+    #[case::populated(NoncovalentBonds::new(vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())]))]
+    fn test_noncovalent_bonds_extend_identity(#[case] original: NoncovalentBonds) {
+        let mut bonds = original.clone();
+        let mut ids = bonds.extend(vec![]);
+
+        assert_eq!(bonds, original);
+        assert!(Arc::ptr_eq(&bonds.0, &original.0));
+        assert_eq!(ids.len(), 0);
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]

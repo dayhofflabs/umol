@@ -99,6 +99,31 @@ impl MulticenterBonds {
         Arc::make_mut(&mut self.0).add(&nodes, attributes).into()
     }
 
+    /// Append entries in input order and return their ids without retaining a borrow.
+    pub(crate) fn extend(
+        &mut self,
+        entries: Vec<(&[AtomId], MulticenterBondForm)>,
+    ) -> impl ExactSizeIterator<Item = MulticenterBondId> + use<> {
+        let start = self.count();
+        if !entries.is_empty() {
+            let nodes: Vec<NodeId> = entries
+                .iter()
+                .flat_map(|(atoms, _)| atoms.iter().copied().map(NodeId::from))
+                .collect();
+            let mut remaining = nodes.as_slice();
+            let entries = entries
+                .into_iter()
+                .map(|(atoms, attributes)| {
+                    let (atoms, rest) = remaining.split_at(atoms.len());
+                    remaining = rest;
+                    (atoms, attributes)
+                })
+                .collect();
+            let _ = Arc::make_mut(&mut self.0).extend(entries);
+        }
+        (start..self.count()).map(MulticenterBondId::from)
+    }
+
     pub(crate) fn remove(&mut self, ids: &[MulticenterBondId]) {
         if ids.is_empty() {
             return;
@@ -705,6 +730,73 @@ mod tests {
         assert_eq!(bonds.attributes(id), &attributes);
         assert_eq!(bonds.incident_ids(AtomId(4)).collect::<Vec<_>>(), vec![id]);
         assert!(!bonds.has_incident(AtomId(2)));
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![MulticenterBondId(0), MulticenterBondId(1), MulticenterBondId(2)])]
+    #[case::populated(vec![(vec![AtomId(0), AtomId(1)], MulticenterBondForm::from_electrons(vec![1, 1]))], vec![MulticenterBondId(1), MulticenterBondId(2), MulticenterBondId(3)])]
+    fn test_multicenter_bonds_extend(
+        #[case] initial: Vec<(Vec<AtomId>, MulticenterBondForm)>,
+        #[case] expected_ids: Vec<MulticenterBondId>,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut bonds = MulticenterBonds::new(initial.clone());
+        let original = shared.then(|| bonds.clone());
+        let mut expected = initial.clone();
+        expected.extend([
+            (
+                vec![AtomId(4), AtomId(1), AtomId(4)],
+                MulticenterBondForm::from_electrons(vec![1, 2, 3]),
+            ),
+            (vec![], MulticenterBondForm::default()),
+            (
+                vec![AtomId(1), AtomId(3)],
+                MulticenterBondForm::from_electrons(vec![2, 1]),
+            ),
+        ]);
+        let mut ids = {
+            let first = [AtomId(4), AtomId(1), AtomId(4)];
+            let last = [AtomId(1), AtomId(3)];
+            bonds.extend(vec![
+                (&first, MulticenterBondForm::from_electrons(vec![1, 2, 3])),
+                (&[], MulticenterBondForm::default()),
+                (&last, MulticenterBondForm::from_electrons(vec![2, 1])),
+            ])
+        };
+
+        assert_eq!(bonds, MulticenterBonds::new(expected.clone()));
+        for atom in (0..8).map(AtomId) {
+            let expected_ids: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(_, (atoms, _))| atoms.contains(&atom))
+                .map(|(index, _)| MulticenterBondId::from(index))
+                .collect();
+            assert_eq!(bonds.incident_ids(atom).collect::<Vec<_>>(), expected_ids);
+            assert_eq!(bonds.has_incident(atom), !expected_ids.is_empty());
+        }
+
+        if let Some(original) = original {
+            assert_eq!(original, MulticenterBonds::new(initial));
+        }
+        drop(bonds);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids.next(), Some(expected_ids[0]));
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.collect::<Vec<_>>(), expected_ids[1..]);
+    }
+
+    #[rstest]
+    #[case::empty(MulticenterBonds::default())]
+    #[case::populated(MulticenterBonds::new(vec![(vec![AtomId(0), AtomId(1)], MulticenterBondForm::from_electrons(vec![1, 1]))]))]
+    fn test_multicenter_bonds_extend_identity(#[case] original: MulticenterBonds) {
+        let mut bonds = original.clone();
+        let mut ids = bonds.extend(vec![]);
+
+        assert_eq!(bonds, original);
+        assert!(Arc::ptr_eq(&bonds.0, &original.0));
+        assert_eq!(ids.len(), 0);
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]
