@@ -11,7 +11,10 @@ pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
-use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId, UnionFind};
+use umol_graph_core::{
+    Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, NodeId,
+    UnionFind,
+};
 
 use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
@@ -22,7 +25,7 @@ use super::constraint::{
 };
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
-use super::edit::{AtomHandle, BondHandle, Edits};
+use super::edit::{AtomHandle, BondHandle, Edits, RemovedAtom, RemovedBond};
 use super::entity::EntityKind;
 use super::error::{Contradiction, MoleculeApplyError};
 use super::frame::OverlaysFrameAction;
@@ -1057,6 +1060,201 @@ impl Molecule {
         entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
     ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
         self.stereo_bonds.extend(entries)
+    }
+
+    /// Restore graph topology and atom/bond attributes from matching removal data.
+    ///
+    /// Surviving attributes retain their current values. Overlays and constraints are unchanged.
+    /// Manipulated history does not panic; its resulting state is unspecified.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_topology(
+        &mut self,
+        compaction: &GraphCompaction,
+        atoms: Vec<RemovedAtom>,
+        bonds: Vec<RemovedBond>,
+    ) {
+        if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        let endpoints: Vec<_> = bonds
+            .iter()
+            .map(|removed| {
+                (
+                    EdgeId::from(removed.id),
+                    removed.endpoints.map(NodeId::from),
+                )
+            })
+            .collect();
+        self.graph.restore(compaction, &endpoints);
+
+        if !compaction.nodes().removed().is_empty() {
+            let mut attributes = vec![None; self.atoms.len() + atoms.len()];
+            for (index, atom) in Arc::make_mut(&mut self.atoms).drain(..).enumerate() {
+                if let Some(id) = compaction.try_uncompact_node(NodeId::from(index)) {
+                    if let Some(slot) = attributes.get_mut(id.index()) {
+                        *slot = Some(atom);
+                    }
+                }
+            }
+            for removed in atoms {
+                if let Some(slot) = attributes.get_mut(removed.id.index()) {
+                    *slot = Some(removed.attributes);
+                }
+            }
+            *Arc::make_mut(&mut self.atoms) = attributes.into_iter().flatten().collect();
+        }
+
+        if !compaction.edges().removed().is_empty() {
+            let mut attributes = vec![None; self.bonds.len() + bonds.len()];
+            for (index, bond) in Arc::make_mut(&mut self.bonds).drain(..).enumerate() {
+                if let Some(id) = compaction.try_uncompact_edge(EdgeId::from(index)) {
+                    if let Some(slot) = attributes.get_mut(id.index()) {
+                        *slot = Some(bond);
+                    }
+                }
+            }
+            for removed in bonds {
+                if let Some(slot) = attributes.get_mut(removed.id.index()) {
+                    *slot = Some(removed.attributes);
+                }
+            }
+            *Arc::make_mut(&mut self.bonds) = attributes.into_iter().flatten().collect();
+        }
+    }
+
+    /// Reinsert saved dative bonds at their original ids.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_dative_bonds(
+        &mut self,
+        rows: &Compaction<DativeBondId>,
+        removed: Vec<(DativeBondId, Vec<AtomId>, AtomId, DativeBondForm)>,
+    ) {
+        self.dative_bonds.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving dative bonds.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_dative_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.dative_bonds.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved aromatic systems at their original ids.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_aromatic_systems(
+        &mut self,
+        rows: &Compaction<AromaticSystemId>,
+        removed: Vec<(AromaticSystemId, Vec<AtomId>, AromaticSystemForm)>,
+    ) {
+        self.aromatic_systems.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving aromatic systems.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_aromatic_system_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.aromatic_systems.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved multicenter bonds at their original ids.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_multicenter_bonds(
+        &mut self,
+        rows: &Compaction<MulticenterBondId>,
+        removed: Vec<(MulticenterBondId, Vec<AtomId>, MulticenterBondForm)>,
+    ) {
+        self.multicenter_bonds.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving multicenter bonds.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_multicenter_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.multicenter_bonds.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved noncovalent bonds at their original ids.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_noncovalent_bonds(
+        &mut self,
+        rows: &Compaction<NoncovalentBondId>,
+        removed: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondForm)>,
+    ) {
+        self.noncovalent_bonds.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving noncovalent bonds.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_noncovalent_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.noncovalent_bonds.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved stereo atoms at their original ids.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_stereo_atoms(
+        &mut self,
+        rows: &Compaction<StereoAtomId>,
+        removed: Vec<(StereoAtomId, AtomId, Vec<StereoLigand>, StereoAtomForm)>,
+    ) {
+        self.stereo_atoms.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving stereo atoms.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_stereo_atom_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.stereo_atoms.restore_topology_ids(topology);
+    }
+
+    /// Reinsert saved stereo bonds at their original ids.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_stereo_bonds(
+        &mut self,
+        rows: &Compaction<StereoBondId>,
+        removed: Vec<(StereoBondId, BondId, Vec<StereoLigand>, StereoBondForm)>,
+    ) {
+        self.stereo_bonds.restore(rows, removed);
+    }
+
+    /// Restore topology ids in surviving stereo bonds.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "molecule restoration primitive")
+    )]
+    fn restore_stereo_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+        self.stereo_bonds.restore_topology_ids(topology);
     }
 
     pub fn edit(&self) -> MoleculeEditor {

@@ -179,8 +179,7 @@ impl NoncovalentBonds {
     }
 
     pub(crate) fn replace_atom(&mut self, id: NoncovalentBondId, position: usize, atom: AtomId) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).replace_participant(id.into(), position, atom.into());
     }
 

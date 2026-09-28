@@ -127,10 +127,6 @@ impl MoleculeEditor {
     }
 
     /// Append atoms in input order and return their ids.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the resulting atom count exceeds `u32::MAX`.
     pub fn add_atoms(
         &mut self,
         atoms: Vec<AtomForm>,
@@ -163,8 +159,7 @@ impl MoleculeEditor {
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside the current atom space or the resulting
-    /// adjacency exceeds the capacity of its `u32` offsets.
+    /// Panics if an endpoint is outside the current atom space.
     pub fn add_bonds(
         &mut self,
         bonds: Vec<([AtomId; 2], BondForm)>,

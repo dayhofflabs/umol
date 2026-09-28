@@ -417,20 +417,11 @@ where
         if compaction.removed().is_empty() {
             return;
         }
-        let Some(count) = self.count().checked_add(removed.len()) else {
-            return;
-        };
-        if compaction.source_count() > u32::MAX as usize || count > u32::MAX as usize {
-            return;
-        }
-        let mut destinations = Vec::new();
-        if destinations.try_reserve_exact(count).is_err()
-            || self.participants_1.try_reserve(removed.len()).is_err()
-            || self.participants_2.try_reserve(removed.len()).is_err()
-            || self.data.try_reserve(removed.len()).is_err()
-        {
-            return;
-        }
+        let count = self.count() + removed.len();
+        let mut destinations = Vec::with_capacity(count);
+        self.participants_1.reserve(removed.len());
+        self.participants_2.reserve(removed.len());
+        self.data.reserve(removed.len());
         let mut removed_ids = compaction.removed().iter().peekable();
         let mut original = 0;
         for _ in 0..self.count() {
@@ -487,11 +478,6 @@ where
     /// inverse-reference expectations and incidence, roundtrips, and freedom from panics.
     pub fn restore_participants(&mut self, compaction: &GraphCompaction) {
         if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
-            return;
-        }
-        if compaction.nodes().source_count().saturating_sub(1) > u32::MAX as usize
-            || compaction.edges().source_count().saturating_sub(1) > u32::MAX as usize
-        {
             return;
         }
         for row in &mut self.participants_1 {

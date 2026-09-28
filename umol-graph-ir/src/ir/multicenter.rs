@@ -199,20 +199,17 @@ impl MulticenterBonds {
     }
 
     pub(crate) fn replace_atom(&mut self, id: MulticenterBondId, position: usize, atom: AtomId) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).replace_participant(id.into(), position, atom.into());
     }
 
     pub(crate) fn insert_atom(&mut self, id: MulticenterBondId, position: usize, atom: AtomId) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).insert_participant(id.into(), position, atom.into());
     }
 
     pub(crate) fn remove_atom(&mut self, id: MulticenterBondId, position: usize) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).remove_participant(id.into(), position);
     }
 

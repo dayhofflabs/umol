@@ -2143,9 +2143,7 @@ fn reconstruction_fits(
     mut uncompact: impl FnMut(usize) -> usize,
 ) -> bool {
     let removed: Vec<_> = removed.into_iter().collect();
-    let Some(restored_count) = current_count.checked_add(removed.len()) else {
-        return false;
-    };
+    let restored_count = current_count + removed.len();
     let mut occupied = vec![false; restored_count];
     for id in removed {
         if id >= restored_count || occupied[id] {
@@ -2167,7 +2165,7 @@ fn restored_constraints(
     update: &CascadedConstraints,
     current: &Constraints,
 ) -> Option<Constraints> {
-    let restored_count = current.as_slice().len().checked_add(update.removed.len())?;
+    let restored_count = current.as_slice().len() + update.removed.len();
     let mut removed = vec![None; restored_count];
     let mut modified = vec![None; restored_count];
 
@@ -2415,12 +2413,8 @@ impl MoleculeEditor {
                 undo_compaction,
                 cascade: _,
             } => {
-                let Some(atom_count) = self.atom_count().checked_add(atoms.len()) else {
-                    return Err(rollback_mismatch());
-                };
-                let Some(bond_count) = self.bond_count().checked_add(bonds.len()) else {
-                    return Err(rollback_mismatch());
-                };
+                let atom_count = self.atom_count() + atoms.len();
+                let bond_count = self.bond_count() + bonds.len();
                 undo_compaction.forward() == compaction
                     && reconstruction_fits(
                         self.atom_count(),

@@ -254,10 +254,6 @@ impl Graph {
     }
 
     /// Append one isolated node and return its id.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the resulting node count exceeds `u32::MAX`.
     pub fn add_node(&mut self) -> NodeId {
         self.extend_nodes(1).next().unwrap()
     }
@@ -266,8 +262,7 @@ impl Graph {
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside this graph or the resulting adjacency
-    /// exceeds the capacity of its `u32` offsets.
+    /// Panics if an endpoint is outside this graph.
     pub fn add_edge(&mut self, first: NodeId, second: NodeId) -> EdgeId {
         self.extend_edges(&[[first, second]]).next().unwrap()
     }
@@ -284,19 +279,13 @@ impl Graph {
     /// starting at the original node count. A zero count leaves storage unchanged;
     /// other clones retain their original graph. Properties in `tests/property/graph.rs`
     /// compare the result with independently constructed topology.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the resulting node count exceeds `u32::MAX`.
     pub fn extend_nodes(&mut self, count: usize) -> impl ExactSizeIterator<Item = NodeId> + use<> {
         let start = self.csr.node_count;
-        let end = start.checked_add(count).expect("node count overflow");
-        assert!(end <= u32::MAX as usize, "node count exceeds u32::MAX");
+        let end = start + count;
         if count != 0 {
-            let offset_count = end.checked_add(1).expect("node offset count overflow");
             let csr = Arc::make_mut(&mut self.csr);
             let offset = *csr.offsets.last().unwrap();
-            csr.offsets.resize(offset_count, offset);
+            csr.offsets.resize(end + 1, offset);
             csr.node_count = end;
         }
         (start..end).map(NodeId::from)
@@ -317,8 +306,7 @@ impl Graph {
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside this graph or the resulting adjacency
-    /// exceeds the capacity of its `u32` offsets.
+    /// Panics if an endpoint is outside this graph.
     pub fn extend_edges(
         &mut self,
         edges: &[[NodeId; 2]],
@@ -343,9 +331,7 @@ impl Graph {
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside the resulting node space, the resulting
-    /// node count exceeds `u32::MAX`, or adjacency exceeds the capacity of its
-    /// `u32` offsets.
+    /// Panics if an endpoint is outside the resulting node space.
     pub fn extend(
         &mut self,
         node_count: usize,
@@ -359,17 +345,7 @@ impl Graph {
         if edges.is_empty() {
             let _ = self.extend_nodes(node_count);
         } else {
-            let node_end = node_start
-                .checked_add(node_count)
-                .expect("node count overflow");
-            assert!(node_end <= u32::MAX as usize, "node count exceeds u32::MAX");
-            let edge_end = edge_start
-                .checked_add(edges.len())
-                .expect("edge count overflow");
-            assert!(
-                edge_end <= u32::MAX as usize / 2,
-                "adjacency count exceeds u32::MAX"
-            );
+            let node_end = node_start + node_count;
             let endpoints: Vec<_> = self
                 .csr
                 .endpoints
@@ -496,12 +472,7 @@ impl Graph {
         }
         let node_count = compaction.nodes().source_count();
         let edge_count = compaction.edges().source_count();
-        if node_count.saturating_sub(1) > u32::MAX as usize
-            || node_count >= isize::MAX as usize / size_of::<u32>()
-            || edge_count > u32::MAX as usize / 2
-            || edge_count > isize::MAX as usize / size_of::<Neighbor>() / 2
-            || (node_count == 0 && edge_count != 0)
-        {
+        if node_count == 0 && edge_count != 0 {
             return;
         }
         let mut endpoints = vec![[0; 2]; edge_count];
@@ -1381,21 +1352,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::nodes_only(usize::MAX, false)]
-    #[case::combined(usize::MAX, true)]
-    #[case::node_id_capacity(u32::MAX as usize, false)]
-    #[case::combined_node_id_capacity(u32::MAX as usize, true)]
-    #[should_panic(expected = "node count")]
-    fn test_graph_extend_capacity(#[case] count: usize, #[case] with_edges: bool) {
-        let mut graph = Graph::new(1, &[]);
-        if with_edges {
-            let _ = graph.extend(count, &[[NodeId(0), NodeId(0)]]);
-        } else {
-            let _ = graph.extend_nodes(count);
-        }
-    }
-
-    #[rstest]
     #[case::middle(1, Graph::new(2, &[]))]
     #[case::endpoint(0, Graph::new(2, &[[0, 1]]))]
     fn test_graph_remove_node_cascading(#[case] node: u32, #[case] expected: Graph) {
@@ -1626,21 +1582,6 @@ mod tests {
         Graph::new(1, &[[0, 0]]),
         GraphCompaction::new(Compaction::identity(1), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
         vec![(EdgeId(0), [NodeId(0), NodeId(0)])],
-    )]
-    #[case::node_capacity(
-        Graph::new(0, &[]),
-        GraphCompaction::new(Compaction::new(usize::MAX, vec![NodeId(0)]).unwrap(), Compaction::empty()),
-        vec![],
-    )]
-    #[case::edge_capacity(
-        Graph::new(0, &[]),
-        GraphCompaction::new(Compaction::identity(1), Compaction::new(usize::MAX, vec![EdgeId(0)]).unwrap()),
-        vec![],
-    )]
-    #[case::adjacency_capacity(
-        Graph::new(0, &[]),
-        GraphCompaction::new(Compaction::identity(1), Compaction::new(u32::MAX as usize, vec![EdgeId(0)]).unwrap()),
-        vec![],
     )]
     fn test_graph_restore_malformed(
         #[case] mut graph: Graph,

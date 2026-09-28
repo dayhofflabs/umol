@@ -207,8 +207,7 @@ impl StereoAtoms {
         position: usize,
         ligand: StereoLigand,
     ) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).replace_participant_2(id.into(), position, ligand);
     }
 
@@ -218,14 +217,12 @@ impl StereoAtoms {
         position: usize,
         ligand: StereoLigand,
     ) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).insert_participant_2(id.into(), position, ligand);
     }
 
     pub(crate) fn remove_ligand(&mut self, id: StereoAtomId, position: usize) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 
@@ -606,8 +603,7 @@ impl StereoBonds {
         position: usize,
         ligand: StereoLigand,
     ) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).replace_participant_2(id.into(), position, ligand);
     }
 
@@ -617,14 +613,12 @@ impl StereoBonds {
         position: usize,
         ligand: StereoLigand,
     ) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).insert_participant_2(id.into(), position, ligand);
     }
 
     pub(crate) fn remove_ligand(&mut self, id: StereoBondId, position: usize) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("ligand position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 

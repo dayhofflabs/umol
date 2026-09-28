@@ -463,37 +463,19 @@ where
         if compaction.removed().is_empty() {
             return;
         }
-        let Some(count) = self.count().checked_add(removed.len()) else {
-            return;
-        };
-        let Some(participant_count) = removed
+        let count = self.count() + removed.len();
+        let participant_count = removed
             .iter()
-            .try_fold(self.participants_2.len(), |total, (_, _, row, _)| {
-                total.checked_add(row.len())
-            })
-        else {
-            return;
-        };
-        if compaction.source_count() > u32::MAX as usize
-            || count > u32::MAX as usize
-            || participant_count > u32::MAX as usize
-        {
-            return;
-        }
-        let mut rows = Vec::new();
-        let mut participants = Vec::new();
-        if rows.try_reserve_exact(count).is_err()
-            || participants.try_reserve_exact(participant_count).is_err()
-            || self
-                .participants_2
-                .try_reserve(participant_count - self.participants_2.len())
-                .is_err()
-            || self.participants_1.try_reserve(removed.len()).is_err()
-            || self.f2_offsets.try_reserve(removed.len()).is_err()
-            || self.data.try_reserve(removed.len()).is_err()
-        {
-            return;
-        }
+            .fold(self.participants_2.len(), |total, (_, _, row, _)| {
+                total + row.len()
+            });
+        let mut rows = Vec::with_capacity(count);
+        let mut participants = Vec::with_capacity(participant_count);
+        self.participants_2
+            .reserve(participant_count - self.participants_2.len());
+        self.participants_1.reserve(removed.len());
+        self.f2_offsets.reserve(removed.len());
+        self.data.reserve(removed.len());
         rows.resize_with(count, || None);
         let mut removed_ids = compaction.removed().iter().peekable();
         let mut original = 0;
@@ -561,11 +543,6 @@ where
     /// and freedom from panics.
     pub fn restore_participants(&mut self, compaction: &GraphCompaction) {
         if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
-            return;
-        }
-        if compaction.nodes().source_count().saturating_sub(1) > u32::MAX as usize
-            || compaction.edges().source_count().saturating_sub(1) > u32::MAX as usize
-        {
             return;
         }
         for row in &mut self.participants_1 {

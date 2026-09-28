@@ -141,8 +141,6 @@ pub enum ReactionConveyError {
     Reactants(#[source] ConveyError),
     #[error("products: {0}")]
     Products(#[source] ConveyError),
-    #[error("atom correspondence pair {index} has no representable one-based map label")]
-    AtomMapLabel { index: usize },
 }
 
 impl UmolError for ReactionConveyError {
@@ -245,8 +243,7 @@ impl Convey for ReactionSmiles {
     ///
     /// # Errors
     ///
-    /// Reports materialization failures, side-specific projection or conversion failures, and
-    /// map labels that exceed TableIR's capacity.
+    /// Reports materialization failures and side-specific projection or conversion failures.
     fn convey(
         input: &Reaction,
         model: &ChemistryModel,
@@ -256,9 +253,7 @@ impl Convey for ReactionSmiles {
         let span = input.to_reaction_span()?;
         let correspondence = span.correspondence();
         let pairs = correspondence.atoms().matched_pairs();
-        let count = u32::try_from(pairs.len()).map_err(|_| ReactionConveyError::AtomMapLabel {
-            index: u32::MAX as usize,
-        })?;
+        let count = pairs.len() as u32;
         let labels = 1..=count;
         let resolver = Resolver::with_config(model, *resolve_config);
         let reactants = convey_molecule(

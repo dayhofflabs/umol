@@ -207,20 +207,17 @@ impl DativeBonds {
     }
 
     pub(crate) fn replace_donor(&mut self, id: DativeBondId, position: usize, donor: AtomId) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).replace_participant_2(id.into(), position, donor.into());
     }
 
     pub(crate) fn insert_donor(&mut self, id: DativeBondId, position: usize, donor: AtomId) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).insert_participant_2(id.into(), position, donor.into());
     }
 
     pub(crate) fn remove_donor(&mut self, id: DativeBondId, position: usize) {
-        let position =
-            ParticipantPosition(u32::try_from(position).expect("atom position fits u32"));
+        let position = ParticipantPosition(position as u32);
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 

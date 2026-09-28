@@ -928,7 +928,6 @@ fn test_fixed_var_birelation_set_restore_payload<const N1: usize>(
 #[case::too_many_survivors(1, vec![RelationId(0)], vec![RelationId(0)])]
 #[case::too_few_survivors(8, vec![RelationId(0)], vec![RelationId(0)])]
 #[case::identity_with_entries(1, vec![], vec![RelationId(0)])]
-#[case::oversized(usize::MAX, vec![RelationId(0)], vec![])]
 fn test_fixed_var_birelation_set_restore_malformed(
     #[case] count: usize,
     #[case] ids: Vec<RelationId>,
@@ -1108,8 +1107,6 @@ fn test_fixed_var_birelation_set_restore_participants_identity<const N1: usize>(
 #[case::first_edge(3, 3, None, Some(EdgeId(2)), false)]
 #[case::second_edge(3, 3, None, Some(EdgeId(2)), true)]
 #[case::both_domains(3, 3, Some(NodeId(u32::MAX)), Some(EdgeId(u32::MAX)), true)]
-#[case::oversized_nodes(usize::MAX, 3, Some(NodeId(0)), None, false)]
-#[case::oversized_edges(3, usize::MAX, None, Some(EdgeId(0)), true)]
 fn test_fixed_var_birelation_set_restore_participants_malformed(
     #[case] nodes: usize,
     #[case] edges: usize,

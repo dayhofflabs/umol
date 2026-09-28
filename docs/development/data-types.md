@@ -50,6 +50,19 @@ requires such a span reports the failure at that boundary. Host-dependent DPO ap
 conditions are a separate contextual concern. This guide generalizes that decision and makes it
 available independently of the reaction implementation history.
 
+## Index and count arithmetic
+
+Indices, positions, offsets, and collection counts are assumed to fit their integer
+representations. The u32 range is much larger than the molecules that can reasonably be
+represented and manipulated. Use infallible integer conversions and ordinary arithmetic for
+these values. Do not add checked or saturating arithmetic, maximum-value comparisons, or
+conversion errors to guard index overflow. All contracts involving indices use this size
+assumption, including restoration from manipulated history.
+
+Bounds checks against actual collections, endpoint/reference checks, and compatibility checks
+between correspondence or compaction domains retain their existing contracts. Lifecycle counters
+and integer forms (NumForm) follow the same rules.
+
 ## Operation taxonomy
 
 | Operation | Establishes | Does not implicitly do |
@@ -664,9 +677,8 @@ matching removal. The compaction and saved rows are supplied separately, but the
 relationship comes from that operation history; restoration does not revalidate the entire
 history. Matching inputs recover original storage. Manipulated or mismatched inputs must not
 panic, but have no specified result, diagnostic, or unchanged-receiver guarantee. Local guards
-protect indexing, inverse translation, size arithmetic, and capacity limits. Relation restoration
-assumes conforming RelationParticipant implementations, whose transported references are all
-reported by refs.
+protect indexing and inverse translation. Relation restoration assumes conforming
+RelationParticipant implementations, whose transported references are all reported by refs.
 
 Whole-row restoration reinstates saved rows at their original ids without translating their
 participants and preserves current surviving values. Participant restoration expands only

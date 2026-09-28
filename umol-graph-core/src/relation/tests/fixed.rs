@@ -679,7 +679,6 @@ fn test_fixed_relation_set_restore_payload<const N: usize>(
 #[case::too_many_survivors(1, vec![RelationId(0)], vec![RelationId(0)])]
 #[case::too_few_survivors(8, vec![RelationId(0)], vec![RelationId(0)])]
 #[case::identity_with_entries(1, vec![], vec![RelationId(0)])]
-#[case::oversized(usize::MAX, vec![RelationId(0)], vec![])]
 fn test_fixed_relation_set_restore_malformed(
     #[case] count: usize,
     #[case] ids: Vec<RelationId>,
@@ -824,8 +823,6 @@ fn test_fixed_relation_set_restore_participants_identity<const N: usize>(
 #[case::node_domain(3, 3, Some(NodeId(2)), None)]
 #[case::edge_domain(3, 3, None, Some(EdgeId(2)))]
 #[case::both_domains(3, 3, Some(NodeId(u32::MAX)), Some(EdgeId(u32::MAX)))]
-#[case::oversized_nodes(usize::MAX, 3, Some(NodeId(0)), None)]
-#[case::oversized_edges(3, usize::MAX, None, Some(EdgeId(0)))]
 fn test_fixed_relation_set_restore_participants_malformed(
     #[case] nodes: usize,
     #[case] edges: usize,

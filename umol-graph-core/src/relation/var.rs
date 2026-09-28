@@ -397,36 +397,18 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
         if compaction.removed().is_empty() {
             return;
         }
-        let Some(count) = self.count().checked_add(removed.len()) else {
-            return;
-        };
-        let Some(participant_count) = removed
+        let count = self.count() + removed.len();
+        let participant_count = removed
             .iter()
-            .try_fold(self.participants.len(), |total, (_, row, _)| {
-                total.checked_add(row.len())
-            })
-        else {
-            return;
-        };
-        if compaction.source_count() > u32::MAX as usize
-            || count > u32::MAX as usize
-            || participant_count > u32::MAX as usize
-        {
-            return;
-        }
-        let mut rows = Vec::new();
-        let mut participants = Vec::new();
-        if rows.try_reserve_exact(count).is_err()
-            || participants.try_reserve_exact(participant_count).is_err()
-            || self
-                .participants
-                .try_reserve(participant_count - self.participants.len())
-                .is_err()
-            || self.offsets.try_reserve(removed.len()).is_err()
-            || self.data.try_reserve(removed.len()).is_err()
-        {
-            return;
-        }
+            .fold(self.participants.len(), |total, (_, row, _)| {
+                total + row.len()
+            });
+        let mut rows = Vec::with_capacity(count);
+        let mut participants = Vec::with_capacity(participant_count);
+        self.participants
+            .reserve(participant_count - self.participants.len());
+        self.offsets.reserve(removed.len());
+        self.data.reserve(removed.len());
         rows.resize_with(count, || None);
         let mut removed_ids = compaction.removed().iter().peekable();
         let mut original = 0;
@@ -487,11 +469,6 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
     /// freedom from panics.
     pub fn restore_participants(&mut self, compaction: &GraphCompaction) {
         if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
-            return;
-        }
-        if compaction.nodes().source_count().saturating_sub(1) > u32::MAX as usize
-            || compaction.edges().source_count().saturating_sub(1) > u32::MAX as usize
-        {
             return;
         }
         for participant in &mut self.participants {

@@ -31,8 +31,10 @@ Edits and their Undo variants remain. S3c/S3d record the selective removal and
 retained reaction integration; both are verified. S3e completes the Python Edit
 migration. S3f's graph-core bulk additions, S3g's relation-set bulk additions,
 and S3h's typed-overlay extend methods are implemented. S3i's Molecule/editor bulk
-additions and S3j's mutable correspondence methods are implemented; S3 is complete.
-S4a1's Molecule restoration methods are next. Graph-core mutation and
+additions and S3j's mutable correspondence methods are implemented. S3k's
+index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
+S4a1's Molecule restoration methods are implemented; S4a2's constraint storage
+and undo wiring are next. Graph-core mutation and
 restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -83,8 +85,8 @@ incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-cons
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e–S3j are
-complete; S4a1 is next.
+approved reaction names, semantics, and dative-factor migration. S3e–S3k and S4a1
+are complete; S4a2 is next.
 
 ## Editor and transaction API
 
@@ -4227,7 +4229,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   iterators, and add_node/add_edge delegate to them. Node-only addition grows
   offsets, copying shared storage once when necessary; batches containing edges
   rebuild adjacency once. Empty batches preserve shared storage. Invalid endpoints
-  and counts exceeding node-id or adjacency-offset capacity panic.
+  panic.
 
   **Measurements — 2026-09-26.** The graph benchmark has a setup function and
   separate extend_nodes, extend_edges, and extend benchmark functions. Removal
@@ -4269,7 +4271,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   **Checked — 2026-09-26.** All 2,085 graph-core tests pass with proptest enabled,
   including independent topology/adjacency expectations, loops and parallel edges,
-  clone independence, invalid endpoints, capacity panics, and iterator lifetimes.
+  clone independence, invalid endpoints, and iterator lifetimes.
   All-target Clippy with proptest and rustdoc pass with warnings denied. The graph
   benchmark's 48 addition cases pass; the eight moved removal/pushout cases pass
   in Criterion test mode. Both benchmark targets pass Clippy with warnings denied.
@@ -4500,16 +4502,150 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   rustdoc with warnings denied, nightly formatting, diff checks, and full diff
   review pass. No new performance measurements were needed.
 
+- **S3k — completed 2026-09-28** (index and count arithmetic; group, green).
+  [dep: S3j]
+
+  Indices, positions, offsets, and collection counts are assumed to fit their
+  representations. The u32 range is much larger than the molecules that can
+  reasonably be represented and manipulated. Integer conversions for these
+  values are infallible; use ordinary arithmetic. Do not add checked or saturating
+  arithmetic, maximum-value comparisons, or conversion errors to guard index
+  overflow.
+
+  Retain bounds checks against actual collections, endpoint/reference checks,
+  and compatibility checks between supplied correspondence/compaction domains.
+  Their purpose is different from testing integer representability. The Python
+  accessor counter retains its separately settled overflow behavior. Chemical
+  values and external-format value ranges are not indices and retain their
+  existing conversion contracts. No new APIs, numeric wrappers, or generic
+  conversion helpers are needed.
+
+- **S3k1 — completed 2026-09-28**
+  (`umol-graph-core::graph`, `docs/development/data-types.md`; cleanup, green).
+  [dep: S3j]
+
+  Record the rule above in the data-type guide and remove its instruction to
+  guard index-size arithmetic and capacity limits during restoration. Keep the
+  matching-history and manipulated-history contracts, with index arithmetic
+  governed by the common representable-size assumption.
+
+  In Graph::extend_nodes and Graph::extend, replace the four checked additions
+  with ordinary additions and remove the three u32-limit assertions. In
+  Graph::restore, remove the saturated subtraction and u32/isize capacity
+  comparisons. Preserve the empty-node/nonempty-edge guard and the existing
+  local id and endpoint checks. All method names, visibility, arguments, and
+  return types remain unchanged; add_node/add_edge/extend_edges keep delegating.
+  Update their Panics sections and the MoleculeEditor bulk-addition rustdoc to
+  describe actual endpoint/index bounds, without an integer-overflow contract.
+
+  Remove the graph extension capacity-panic test and the three restoration
+  capacity cases. Retain ordinary addition/restoration fixtures, clone
+  independence, invalid endpoints, and mismatched-history coverage. Run the
+  focused graph tests and graph/restoration properties; no new benchmark campaign.
+
+  Graph uses ordinary arithmetic for additions and has no index-overflow guards
+  in restoration. The unused edge-count calculation is removed with its guard.
+  Endpoint/domain checks remain. Graph and MoleculeEditor rustdoc and the data-type
+  guide follow the index/count rule. The four extension capacity cases and three
+  restoration capacity cases are removed; all other tests and property laws remain.
+
+  **Checked — 2026-09-28.** All 175 Graph unit tests and 13 properties covering
+  graph operations, restoration, and common-subgraph consumers pass. Nightly
+  formatting, diff checks, and review against the S3k1 scope pass.
+
+- **S3k2 — completed 2026-09-28** (`umol-graph-core::relation`;
+  cleanup, green). [dep: S3k1]
+
+  Apply the same rule to restore and restore_participants on FixedRelationSet,
+  VarRelationSet, FixedFixedBirelationSet, FixedVarBirelationSet, and
+  VarVarBirelationSet. Replace checked row/participant-count additions and
+  try_fold accumulation with ordinary addition and fold. Remove u32-limit
+  comparisons and the saturated source-count checks in participant restoration.
+  Use ordinary allocation/reservation instead of the try_reserve early-return
+  branches. Keep the existing restoration algorithms and allocation sizes.
+
+  Preserve all ten signatures, payload movement, reference translation, current
+  surviving values, and incidence rebuilding. Keep guarded row/slot accesses
+  and reference-domain checks. Remove only oversized-count/capacity cases from
+  the five relation test modules; retain sparse ids, missing/duplicate/out-of-range
+  rows, matching-history results, and the independent restoration properties.
+  Run the focused relation restoration tests/properties and graph-core Clippy.
+
+  All five sets use ordinary count arithmetic and allocation in restoration.
+  Row/slot guards, reference-domain checks, signatures, and restoration algorithms
+  are unchanged. The 15 oversized-count test cases are removed; other cases and
+  property laws are unchanged.
+
+  **Checked — 2026-09-28.** All 221 focused Graph/relation restoration unit tests
+  and 38 restoration properties pass. Graph-core all-target Clippy with proptest
+  and warnings denied, nightly formatting, diff checks, and scope review pass.
+
+- **S3k3 — completed 2026-09-28**
+  (`ir::{aromatic,dative,multicenter,noncovalent,stereo,molecule::transact}`;
+  cleanup, green). [dep: S3k2]
+
+  Replace all 16 u32::try_from(position).expect(...) conversions with the direct
+  ParticipantPosition(position as u32) construction. The affected methods are
+  replace_atom/insert_atom/remove_atom on AromaticSystems and MulticenterBonds;
+  replace_donor/insert_donor/remove_donor on DativeBonds; replace_atom on
+  NoncovalentBonds; and replace_ligand/insert_ligand/remove_ligand on StereoAtoms
+  and StereoBonds. Retain their current usize arguments, visibility, storage
+  delegation, and bounds behavior for positions in the supported index range.
+
+  Replace the four checked count additions in molecule::transact::reconstruction_fits,
+  molecule::transact::restored_constraints, and the RestoreRemovedTopology arm of
+  MoleculeEditor::validate_undo with ordinary addition. Keep this edit limited to
+  arithmetic; S4 still owns removal of the old undo-validation machinery and
+  restoration rewiring. Do not introduce overflow checks into that replacement.
+
+  Run the existing affected entity-mutation and rollback tests, the S4a1
+  restoration tests, and graph-ir Clippy. Preserve invalid-id and invalid-position
+  tests that check actual collection bounds. Public view signatures are unchanged.
+
+  All 16 position conversions use ParticipantPosition(position as u32); the four
+  undo count calculations use ordinary addition. Signatures, bounds checks,
+  storage delegation, and tests are unchanged.
+
+  **Checked — 2026-09-28.** All 429 selected entity-mutation, transaction/rollback,
+  and Molecule restoration tests pass. Graph-IR all-target Clippy with proptest
+  and warnings denied, nightly formatting, diff checks, and scope review pass.
+
+- **S3k4 — completed 2026-09-28** (`umol-graph::export`; breaking enum
+  cleanup, green). [dep: S3k3]
+
+  In the reaction Convey implementation, use pairs.len() as u32 to generate the
+  same one-based labels. Remove ReactionConveyError::AtomMapLabel { index: usize },
+  whose sole producer is the count conversion. The enum retains Materialization,
+  Reactants, and Products; the convey signature and all other errors stay intact.
+  Update the method's Errors section. Retain checks on chemical attribute values
+  and other external-format representation limits.
+
+  Run the existing reaction convey tests and graph Clippy; verify exhaustive
+  consumers compile. Finish this group with warnings-denied rustdoc for the
+  affected Rust crates, nightly formatting, and a diff review against the scope
+  above. Workspace/Python rebuilds and Rust 1.87 remain at the final gate.
+
+  Reaction convey uses pairs.len() as u32 for the label count. AtomMapLabel is
+  removed from ReactionConveyError and the Errors section describes the three
+  remaining variants. No other code referenced the removed variant; labels,
+  mapping order, chemical-value checks, and tests are unchanged.
+
+  **Checked — 2026-09-28.** All 36 reaction convey/export tests pass. Graph
+  all-target Clippy with conformance/proptest and warnings denied passes.
+  Warnings-denied rustdoc passes for graph-core, graph-ir, and graph. Nightly
+  formatting, diff checks, and S3k scope review pass; S3k is complete.
+
 ### S4 — Recovery machinery before the public lifecycle switch
 
 - **S4a** (`ir::constraint::molecule`, `ir::molecule`, `ir::molecule::editor`,
   `ir::molecule::transact`; group; public rename and restoration rewire, green at S4a2). [dep: S2i, S3b]
 
-- **S4a1 — Molecule topology and overlay restoration** (`ir::molecule`; additive, green). [dep: S2i, S3b]
+- **S4a1 — completed 2026-09-28** (`ir::molecule`; additive, green). [dep: S2i, S3b]
 
   Route topology and relation restoration through the existing graph-core
   operations and add local attribute and target-access guards. Constraint
   restoration and its guards belong to S4a2.
+  Guard missing or out-of-range entries; do not add index-overflow checks.
   Implement private Molecule::restore_topology with
   `(&mut self, &GraphCompaction, Vec<RemovedAtom>, Vec<RemovedBond>) -> ()`.
   Its scope is Graph plus the atom/bond attribute vectors. S4a2 removes the editor's
@@ -4537,7 +4673,19 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Verify each method against matching removals, surviving topology-id translation,
   unchanged-topology restoration, and manipulated-input panic freedom.
 
-- **S4a2 — Constraint storage and undo restoration wiring** (`ir::constraint::molecule`, molecule/transact; breaking, red→green). [dep: S4a1]
+  All 13 private methods are implemented. restore_topology delegates topology
+  restoration to Graph::restore and restores only the atom/bond attribute vectors.
+  Saved attributes move into their original positions; surviving attributes keep
+  their current values and move when their storage is uniquely owned. Each overlay
+  delegate calls only its owning set's restore or restore_topology_ids method.
+
+  **Checked — 2026-09-28.** All 79 focused restoration tests pass, covering matching
+  removals, changed surviving attributes, shared-storage independence, identity,
+  separate overlay operations, and manipulated history. Strict graph-ir all-target
+  Clippy with proptest, rustdoc with warnings denied, nightly formatting, and diff
+  checks pass. The full diff was reviewed against the 13 approved signatures.
+
+- **S4a2 — Constraint storage and undo restoration wiring** (`ir::constraint::molecule`, molecule/transact; breaking, red→green). [dep: S4a1, S3k]
 
   Add public `Constraints::extend(&mut self, constraints: Vec<Constraint>) -> ()`,
   moving entries in order without normalization or reference checks. Retain the
@@ -4558,8 +4706,9 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   delegating only to Constraints::restore. These delegates do not add old-value
   checks, journals, or publication checks. Migrate undo callers to them; preserve
   the storage restoration contracts, including panic freedom for manipulated
-  history. Test topology-id restoration and row restoration together and
-  independently where topology is unchanged, covering all six overlay kinds.
+  history. Remove S4a1's temporary per-method dead_code expectations when these
+  methods gain production callers. Test topology-id restoration and row restoration
+  together and independently where topology is unchanged, covering all six overlay kinds.
   Keep the existing detached journal surface until S5. Test matching-history
   recovery under `normalized_eq` and panic freedom for manipulated undo data
   without asserting its result. Cover constraint compaction/restoration with
@@ -5565,8 +5714,10 @@ Within the revised S2:
   retain reaction integration; S3e closes the Python Edit migration.
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
-  correspondence mutation to mutable borrowing and migrates its callers, closing
-  S3. S4b uses the additions and the component removal/restoration interfaces.
+  correspondence mutation to mutable borrowing and migrates its callers.
+  S3k1–S3k4's index-overflow cleanup and S4a1 are complete; S4a2 is next.
+  S4b uses the additions and the component
+  removal/restoration interfaces.
 - S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is
   incorporated in S5a1.
 - S5a1–S5a2 introduce the guard and public lifecycle together; S5d1–S5d3
