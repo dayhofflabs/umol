@@ -54,6 +54,7 @@ use super::view::{
     StereoBondViewMut, StereoBondViews,
 };
 
+mod apply;
 mod build;
 mod editor;
 mod fragment;

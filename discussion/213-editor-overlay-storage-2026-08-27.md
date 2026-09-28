@@ -34,8 +34,10 @@ and S3h's typed-overlay extend methods are implemented. S3i's Molecule/editor bu
 additions and S3j's mutable correspondence methods are implemented. S3k's
 index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
-Editor batch execution is under the editor module, whose fields remain private;
-internal Molecule mutation methods use pub(crate). S4b1–S4b2 are complete; S4b3 is next.
+Editor batch loops remain under the editor module; single-edit execution and
+handle state are in molecule::apply. Fields remain private and internal Molecule
+mutation methods use pub(crate). S4b1–S4b3 are complete; S4b4 is next. The
+S4b3–S4b8 migration is currently non-compiling.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -87,7 +89,7 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1–S4b2 are complete; S4b3 is next.
+and S4b1–S4b3 are complete; S4b4 is next. The build returns green at S4b8.
 
 ## Editor and transaction API
 
@@ -4908,7 +4910,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   nightly formatting, and diff checks/review pass. All-target graph-ir Clippy
   with proptest reports only S4b1's unused primitives awaiting planned callers.
 
-- **S4b3 — Single-entry execution and batch ownership** (`ir::molecule::{apply,editor::transact}`; breaking, green at S4b8). [dep: S4b2]
+- **S4b3 — completed 2026-09-28** (`ir::molecule::{apply,editor::transact}`; breaking, green at S4b8). [dep: S4b2]
 
   Move apply_edit, apply_edit_with_undo, and apply_undo from impl MoleculeEditor
   to impl Molecule in a private ir::molecule::apply module. Move ApplicationState,
@@ -5038,6 +5040,27 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   Verify batch-local handles, completed-Edit journal entries, and no entry for
   a None-to-None constraint edit. Retain the existing public lifecycle until S5.
+
+  **Implemented — single-entry execution and batch ownership.** The private
+  molecule::apply module owns ApplicationState, HandleTable, the three
+  crate-private execution methods, and existing execution-only functions.
+  Initial handle maps allocate only on compaction; New handles retain their
+  per-kind ordinals. Editor loops call Molecule and append only Some(Undo);
+  all eight None-to-None entity-constraint edits produce no entry. The six
+  frame-comparison methods and their tests moved with execution and are private.
+  Structural writes use Molecule's editor-view accessors. Fields remain private;
+  no execution type, batch wrapper, or visibility exception was added.
+
+  **Verification — 2026-09-28.** Nightly formatting and diff checks pass.
+  cargo check -p umol-graph-ir --all-targets reaches library and unit-test
+  targets but fails in the scheduled removal/replay migrations: component
+  compactions still need S4b5's complete mappings; addition undos still call
+  the adapters replaced in S4b4/S4b8; the moved replay body still needs S4b8's
+  infallible implementation. Nineteen new handle/no-op cases and the migrated
+  comparison cases are not yet executable. No passing test result is claimed.
+  S4b4–S4b7 retain the per-family rewiring and S4b8 closes the migration,
+  including the retained editor tracked batch/rollback behavior: Molecule
+  execution no longer updates the editor's private session correspondence.
 
 - **S4b4 — Addition execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b3]
 
@@ -5795,7 +5818,8 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b2 are complete; S4b3 is next.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b3 are complete; S4b4 is next.
+  The build returns green at S4b8.
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is
