@@ -9,14 +9,14 @@ use std::mem;
 use std::sync::Arc;
 
 pub use transact::{Transaction, TransactionError};
-use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCompaction, NodeId};
+use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCompaction};
 use umol_perm::{DynPermutation, Permutation};
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::compact::MoleculeCompaction;
-use super::super::constraint::{Constraint, Constraints};
+use super::super::constraint::Constraints;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::{DativeBondForm, DativeBonds};
 use super::super::edit::{
@@ -121,10 +121,9 @@ impl MoleculeEditor {
     /// This is a low-level, non-transactional construction primitive. Use `transact` for checked
     /// atomic edits with rollback or `apply` for consuming application without an undo journal.
     pub fn add_atom(&mut self, atom: AtomForm) -> AtomId {
-        let id = self.molecule.graph.add_node();
-        Arc::make_mut(&mut self.molecule.atoms).push(atom);
+        let id = self.molecule.add_atom(atom);
         self.correspondence.extend_right(EntityKind::Atom, 1);
-        AtomId::from(id)
+        id
     }
 
     /// Append atoms in input order and return their ids.
@@ -145,13 +144,9 @@ impl MoleculeEditor {
     /// This is a low-level, non-transactional construction primitive. It
     /// assumes `first` and `second` are valid atom ids in the current dense layout.
     pub fn add_bond(&mut self, first: AtomId, second: AtomId, bond: BondForm) -> BondId {
-        let id = self
-            .molecule
-            .graph
-            .add_edge(NodeId::from(first), NodeId::from(second));
-        Arc::make_mut(&mut self.molecule.bonds).push(bond);
+        let id = self.molecule.add_bond(first, second, bond);
         self.correspondence.extend_right(EntityKind::Bond, 1);
-        BondId::from(id)
+        id
     }
 
     /// Append localized bonds in input order and return their ids.
@@ -181,7 +176,7 @@ impl MoleculeEditor {
         acceptor: AtomId,
         bond: DativeBondForm,
     ) -> DativeBondId {
-        let id = self.molecule.dative_bonds.add(donors, acceptor, bond);
+        let id = self.molecule.add_dative_bond(donors, acceptor, bond);
         self.correspondence.extend_right(EntityKind::DativeBond, 1);
         id
     }
@@ -208,7 +203,7 @@ impl MoleculeEditor {
         atoms: &[AtomId],
         data: AromaticSystemForm,
     ) -> AromaticSystemId {
-        let id = self.molecule.aromatic_systems.add(atoms, data);
+        let id = self.molecule.add_aromatic_system(atoms, data);
         self.correspondence
             .extend_right(EntityKind::AromaticSystem, 1);
         id
@@ -236,7 +231,7 @@ impl MoleculeEditor {
         atoms: &[AtomId],
         data: MulticenterBondForm,
     ) -> MulticenterBondId {
-        let id = self.molecule.multicenter_bonds.add(atoms, data);
+        let id = self.molecule.add_multicenter_bond(atoms, data);
         self.correspondence
             .extend_right(EntityKind::MulticenterBond, 1);
         id
@@ -264,7 +259,7 @@ impl MoleculeEditor {
         ends: [AtomId; 2],
         bond: NoncovalentBondForm,
     ) -> NoncovalentBondId {
-        let id = self.molecule.noncovalent_bonds.add(ends, bond);
+        let id = self.molecule.add_noncovalent_bond(ends, bond);
         self.correspondence
             .extend_right(EntityKind::NoncovalentBond, 1);
         id
@@ -293,7 +288,7 @@ impl MoleculeEditor {
         ligands: &[StereoLigand],
         attributes: StereoAtomForm,
     ) -> StereoAtomId {
-        let id = self.molecule.stereo_atoms.add(site, ligands, attributes);
+        let id = self.molecule.add_stereo_atom(site, ligands, attributes);
         self.correspondence.extend_right(EntityKind::StereoAtom, 1);
         id
     }
@@ -321,7 +316,7 @@ impl MoleculeEditor {
         ligands: &[StereoLigand],
         attributes: StereoBondForm,
     ) -> StereoBondId {
-        let id = self.molecule.stereo_bonds.add(site, ligands, attributes);
+        let id = self.molecule.add_stereo_bond(site, ligands, attributes);
         self.correspondence.extend_right(EntityKind::StereoBond, 1);
         id
     }
@@ -340,13 +335,6 @@ impl MoleculeEditor {
                 .extend_right(EntityKind::StereoBond, ids.len());
         }
         ids
-    }
-
-    /// Add a molecule-level constraint (molecule-scope predicate or
-    /// combinator). Unconditional per-entity constraints belong inline on the
-    /// entity — use `atom_mut(id).attributes_mut().constraints.set(c)` etc.
-    pub fn push_constraint(&mut self, c: Constraint) {
-        self.molecule.constraints.push(c);
     }
 
     // -- Attribute access -----------------------------------------------------
@@ -608,14 +596,14 @@ impl MoleculeEditor {
                 Compaction::identity(self.atom_count()),
                 Compaction::identity(self.bond_count()),
             ),
-            self.molecule.dative_bonds.tracked_remove(ids),
+            self.molecule.tracked_remove_dative_bonds(ids),
             Compaction::identity(self.aromatic_system_count()),
             Compaction::identity(self.multicenter_bond_count()),
             Compaction::identity(self.noncovalent_bond_count()),
             Compaction::identity(self.stereo_atom_count()),
             Compaction::identity(self.stereo_bond_count()),
         );
-        self.molecule.constraints.compact(&compaction);
+        self.molecule.compact_constraints(&compaction);
         self.correspondence
             .compact_right(&compaction)
             .expect("removal compaction describes the editor's current id spaces");
@@ -651,13 +639,13 @@ impl MoleculeEditor {
                 Compaction::identity(self.bond_count()),
             ),
             Compaction::identity(self.dative_bond_count()),
-            self.molecule.aromatic_systems.tracked_remove(ids),
+            self.molecule.tracked_remove_aromatic_systems(ids),
             Compaction::identity(self.multicenter_bond_count()),
             Compaction::identity(self.noncovalent_bond_count()),
             Compaction::identity(self.stereo_atom_count()),
             Compaction::identity(self.stereo_bond_count()),
         );
-        self.molecule.constraints.compact(&compaction);
+        self.molecule.compact_constraints(&compaction);
         self.correspondence
             .compact_right(&compaction)
             .expect("removal compaction describes the editor's current id spaces");
@@ -694,12 +682,12 @@ impl MoleculeEditor {
             ),
             Compaction::identity(self.dative_bond_count()),
             Compaction::identity(self.aromatic_system_count()),
-            self.molecule.multicenter_bonds.tracked_remove(ids),
+            self.molecule.tracked_remove_multicenter_bonds(ids),
             Compaction::identity(self.noncovalent_bond_count()),
             Compaction::identity(self.stereo_atom_count()),
             Compaction::identity(self.stereo_bond_count()),
         );
-        self.molecule.constraints.compact(&compaction);
+        self.molecule.compact_constraints(&compaction);
         self.correspondence
             .compact_right(&compaction)
             .expect("removal compaction describes the editor's current id spaces");
@@ -737,11 +725,11 @@ impl MoleculeEditor {
             Compaction::identity(self.dative_bond_count()),
             Compaction::identity(self.aromatic_system_count()),
             Compaction::identity(self.multicenter_bond_count()),
-            self.molecule.noncovalent_bonds.tracked_remove(ids),
+            self.molecule.tracked_remove_noncovalent_bonds(ids),
             Compaction::identity(self.stereo_atom_count()),
             Compaction::identity(self.stereo_bond_count()),
         );
-        self.molecule.constraints.compact(&compaction);
+        self.molecule.compact_constraints(&compaction);
         self.correspondence
             .compact_right(&compaction)
             .expect("removal compaction describes the editor's current id spaces");
@@ -773,10 +761,10 @@ impl MoleculeEditor {
             Compaction::identity(self.aromatic_system_count()),
             Compaction::identity(self.multicenter_bond_count()),
             Compaction::identity(self.noncovalent_bond_count()),
-            self.molecule.stereo_atoms.tracked_remove(ids),
+            self.molecule.tracked_remove_stereo_atoms(ids),
             Compaction::identity(self.stereo_bond_count()),
         );
-        self.molecule.constraints.compact(&compaction);
+        self.molecule.compact_constraints(&compaction);
         self.correspondence
             .compact_right(&compaction)
             .expect("removal compaction describes the editor's current id spaces");
@@ -809,9 +797,9 @@ impl MoleculeEditor {
             Compaction::identity(self.multicenter_bond_count()),
             Compaction::identity(self.noncovalent_bond_count()),
             Compaction::identity(self.stereo_atom_count()),
-            self.molecule.stereo_bonds.tracked_remove(ids),
+            self.molecule.tracked_remove_stereo_bonds(ids),
         );
-        self.molecule.constraints.compact(&compaction);
+        self.molecule.compact_constraints(&compaction);
         self.correspondence
             .compact_right(&compaction)
             .expect("removal compaction describes the editor's current id spaces");
@@ -827,42 +815,28 @@ impl MoleculeEditor {
     /// removed, and compacts molecule-level constraints. It does not build rollback
     /// data; checked transactions capture the removed payloads before calling
     /// this method.
-    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) {
-        self.tracked_remove(atoms, bonds);
+    pub fn remove_topology(&mut self, atoms: &[AtomId], bonds: &[BondId]) {
+        self.tracked_remove_topology(atoms, bonds);
     }
 
     /// Remove topology and return the source-to-result compaction for all eight entity kinds.
     ///
-    /// Leaves the same state as [`Self::remove`], including cascading relation and constraint
+    /// Leaves the same state as [`Self::remove_topology`], including cascading relation and constraint
     /// removal. Every component retains the source count from before removal.
-    pub fn tracked_remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> MoleculeCompaction {
-        let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
-        let compaction = self.molecule.graph.tracked_remove_cascading(&nodes, &edges);
-
-        let new_atoms = compaction.nodes().compact_vec(&self.molecule.atoms);
-        let new_bonds = compaction.edges().compact_vec(&self.molecule.bonds);
-        self.molecule.atoms = Arc::new(new_atoms);
-        self.molecule.bonds = Arc::new(new_bonds);
-
-        let (dative_bonds, removed_dative_bonds) =
-            self.molecule.dative_bonds.tracked_compact(&compaction);
-        self.molecule.dative_bonds = dative_bonds;
-        let (aromatic_systems, removed_aromatic_systems) =
-            self.molecule.aromatic_systems.tracked_compact(&compaction);
-        self.molecule.aromatic_systems = aromatic_systems;
-        let (multicenter_bonds, removed_multicenter_bonds) =
-            self.molecule.multicenter_bonds.tracked_compact(&compaction);
-        self.molecule.multicenter_bonds = multicenter_bonds;
-        let (noncovalent_bonds, removed_noncovalent_bonds) =
-            self.molecule.noncovalent_bonds.tracked_compact(&compaction);
-        self.molecule.noncovalent_bonds = noncovalent_bonds;
-        let (stereo_atoms, removed_stereo_atoms) =
-            self.molecule.stereo_atoms.tracked_compact(&compaction);
-        self.molecule.stereo_atoms = stereo_atoms;
-        let (stereo_bonds, removed_stereo_bonds) =
-            self.molecule.stereo_bonds.tracked_compact(&compaction);
-        self.molecule.stereo_bonds = stereo_bonds;
+    pub fn tracked_remove_topology(
+        &mut self,
+        atoms: &[AtomId],
+        bonds: &[BondId],
+    ) -> MoleculeCompaction {
+        let compaction = self.molecule.tracked_remove_topology(atoms, bonds);
+        let removed_dative_bonds = self.molecule.tracked_compact_dative_bonds(&compaction);
+        let removed_aromatic_systems = self.molecule.tracked_compact_aromatic_systems(&compaction);
+        let removed_multicenter_bonds =
+            self.molecule.tracked_compact_multicenter_bonds(&compaction);
+        let removed_noncovalent_bonds =
+            self.molecule.tracked_compact_noncovalent_bonds(&compaction);
+        let removed_stereo_atoms = self.molecule.tracked_compact_stereo_atoms(&compaction);
+        let removed_stereo_bonds = self.molecule.tracked_compact_stereo_bonds(&compaction);
 
         let id_compaction = MoleculeCompaction::new(
             compaction,
@@ -873,7 +847,7 @@ impl MoleculeEditor {
             removed_stereo_atoms,
             removed_stereo_bonds,
         );
-        self.molecule.constraints.compact(&id_compaction);
+        self.molecule.compact_constraints(&id_compaction);
         self.correspondence
             .compact_right(&id_compaction)
             .expect("removal compaction describes the editor's current id spaces");
@@ -885,7 +859,7 @@ impl MoleculeEditor {
     fn remove_added_topology(&mut self, atoms: &[AddedAtom], bonds: &[AddedBond]) {
         let atom_ids: Vec<AtomId> = atoms.iter().map(|a| a.id).collect();
         let bond_ids: Vec<BondId> = bonds.iter().map(|b| b.id).collect();
-        self.remove(&atom_ids, &bond_ids);
+        self.remove_topology(&atom_ids, &bond_ids);
     }
 
     fn remove_added_dative_bond(&mut self, added: &AddedDativeBond) {
@@ -992,7 +966,7 @@ mod tests {
     use super::*;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::constraint::MoleculeConstraint;
+    use crate::ir::constraint::{Constraint, MoleculeConstraint};
     use crate::ir::dative::DativeBondForm;
     use crate::ir::edit::{RemovedAtom, RemovedBond, RemovedDativeBond};
     use crate::ir::ligand::StereoLigandKind;
@@ -2290,7 +2264,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_tracked_remove_roundtrip(mut triatomic: MoleculeEditor) {
+    fn test_molecule_editor_tracked_remove_topology_roundtrip(mut triatomic: MoleculeEditor) {
         let expected = triatomic.clone().build();
         let removed_atoms = vec![RemovedAtom {
             id: AtomId(1),
@@ -2309,7 +2283,7 @@ mod tests {
             },
         ];
 
-        let compaction = triatomic.tracked_remove(&[AtomId(1)], &[]);
+        let compaction = triatomic.tracked_remove_topology(&[AtomId(1)], &[]);
         triatomic
             .molecule
             .restore_topology(compaction.graph(), removed_atoms, removed_bonds);
@@ -2570,7 +2544,7 @@ mod tests {
                 :stereo-atoms [{:site 1 :ligands [2 3 4 [:h 1]] :attrs "Th1"}]}"#
         );
         let mut editor = molecule.edit();
-        editor.remove(&remove_atoms, &[]);
+        editor.remove_topology(&remove_atoms, &[]);
         let surviving: Vec<Vec<AtomId>> = editor
             .build()
             .stereo_atoms()
@@ -2595,7 +2569,7 @@ mod tests {
                 :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
         );
         let mut editor = molecule.edit();
-        editor.remove(&[], &remove_bonds);
+        editor.remove_topology(&[], &remove_bonds);
         let surviving: Vec<BondId> = editor
             .build()
             .stereo_bonds()

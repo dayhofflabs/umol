@@ -471,7 +471,7 @@ impl Molecule {
             .map(|b| b.id())
             .collect();
         let mut builder = self.edit();
-        let compaction = builder.tracked_remove(&remove_atoms, &remove_bonds);
+        let compaction = builder.tracked_remove_topology(&remove_atoms, &remove_bonds);
         (builder.build(), compaction)
     }
 
@@ -995,6 +995,12 @@ impl Molecule {
         Ok(())
     }
 
+    pub(crate) fn add_atom(&mut self, attributes: AtomForm) -> AtomId {
+        let id = self.graph.add_node();
+        Arc::make_mut(&mut self.atoms).push(attributes);
+        AtomId::from(id)
+    }
+
     pub(crate) fn add_atoms(
         &mut self,
         atoms: Vec<AtomForm>,
@@ -1004,6 +1010,17 @@ impl Molecule {
             Arc::make_mut(&mut self.atoms).extend(atoms);
         }
         ids
+    }
+
+    pub(crate) fn add_bond(
+        &mut self,
+        first: AtomId,
+        second: AtomId,
+        attributes: BondForm,
+    ) -> BondId {
+        let id = self.graph.add_edge(first.into(), second.into());
+        Arc::make_mut(&mut self.bonds).push(attributes);
+        BondId::from(id)
     }
 
     pub(crate) fn add_bonds(
@@ -1022,11 +1039,28 @@ impl Molecule {
         ids
     }
 
+    pub(crate) fn add_dative_bond(
+        &mut self,
+        donors: &[AtomId],
+        acceptor: AtomId,
+        attributes: DativeBondForm,
+    ) -> DativeBondId {
+        self.dative_bonds.add(donors, acceptor, attributes)
+    }
+
     pub(crate) fn add_dative_bonds(
         &mut self,
         entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
     ) -> impl ExactSizeIterator<Item = DativeBondId> + use<> {
         self.dative_bonds.extend(entries)
+    }
+
+    pub(crate) fn add_aromatic_system(
+        &mut self,
+        atoms: &[AtomId],
+        attributes: AromaticSystemForm,
+    ) -> AromaticSystemId {
+        self.aromatic_systems.add(atoms, attributes)
     }
 
     pub(crate) fn add_aromatic_systems(
@@ -1036,11 +1070,27 @@ impl Molecule {
         self.aromatic_systems.extend(entries)
     }
 
+    pub(crate) fn add_multicenter_bond(
+        &mut self,
+        atoms: &[AtomId],
+        attributes: MulticenterBondForm,
+    ) -> MulticenterBondId {
+        self.multicenter_bonds.add(atoms, attributes)
+    }
+
     pub(crate) fn add_multicenter_bonds(
         &mut self,
         entries: Vec<(&[AtomId], MulticenterBondForm)>,
     ) -> impl ExactSizeIterator<Item = MulticenterBondId> + use<> {
         self.multicenter_bonds.extend(entries)
+    }
+
+    pub(crate) fn add_noncovalent_bond(
+        &mut self,
+        atoms: [AtomId; 2],
+        attributes: NoncovalentBondForm,
+    ) -> NoncovalentBondId {
+        self.noncovalent_bonds.add(atoms, attributes)
     }
 
     pub(crate) fn add_noncovalent_bonds(
@@ -1050,6 +1100,15 @@ impl Molecule {
         self.noncovalent_bonds.extend(entries)
     }
 
+    pub(crate) fn add_stereo_atom(
+        &mut self,
+        site: AtomId,
+        ligands: &[StereoLigand],
+        attributes: StereoAtomForm,
+    ) -> StereoAtomId {
+        self.stereo_atoms.add(site, ligands, attributes)
+    }
+
     pub(crate) fn add_stereo_atoms(
         &mut self,
         entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
@@ -1057,11 +1116,293 @@ impl Molecule {
         self.stereo_atoms.extend(entries)
     }
 
+    pub(crate) fn add_stereo_bond(
+        &mut self,
+        site: BondId,
+        ligands: &[StereoLigand],
+        attributes: StereoBondForm,
+    ) -> StereoBondId {
+        self.stereo_bonds.add(site, ligands, attributes)
+    }
+
     pub(crate) fn add_stereo_bonds(
         &mut self,
         entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
     ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
         self.stereo_bonds.extend(entries)
+    }
+
+    /// Remove atoms, requested bonds, and incident bonds, compacting their attributes.
+    /// Overlays and constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an atom or bond id is outside the current topology.
+    pub(crate) fn remove_topology(&mut self, atoms: &[AtomId], bonds: &[BondId]) {
+        self.tracked_remove_topology(atoms, bonds);
+    }
+
+    /// Remove topology and return its source-to-result compaction.
+    /// Overlays and constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an atom or bond id is outside the current topology.
+    pub(crate) fn tracked_remove_topology(
+        &mut self,
+        atoms: &[AtomId],
+        bonds: &[BondId],
+    ) -> GraphCompaction {
+        let nodes: Vec<_> = atoms.iter().copied().map(NodeId::from).collect();
+        let edges: Vec<_> = bonds.iter().copied().map(EdgeId::from).collect();
+        let compaction = self.graph.tracked_remove_cascading(&nodes, &edges);
+        self.atoms = Arc::new(compaction.nodes().compact_vec(&self.atoms));
+        self.bonds = Arc::new(compaction.edges().compact_vec(&self.bonds));
+        compaction
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
+        self.dative_bonds.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_dative_bonds(
+        &mut self,
+        ids: &[DativeBondId],
+    ) -> Compaction<DativeBondId> {
+        self.dative_bonds.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
+        self.aromatic_systems.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_aromatic_systems(
+        &mut self,
+        ids: &[AromaticSystemId],
+    ) -> Compaction<AromaticSystemId> {
+        self.aromatic_systems.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
+        self.multicenter_bonds.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_multicenter_bonds(
+        &mut self,
+        ids: &[MulticenterBondId],
+    ) -> Compaction<MulticenterBondId> {
+        self.multicenter_bonds.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
+        self.noncovalent_bonds.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_noncovalent_bonds(
+        &mut self,
+        ids: &[NoncovalentBondId],
+    ) -> Compaction<NoncovalentBondId> {
+        self.noncovalent_bonds.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
+        self.stereo_atoms.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_stereo_atoms(
+        &mut self,
+        ids: &[StereoAtomId],
+    ) -> Compaction<StereoAtomId> {
+        self.stereo_atoms.tracked_remove(ids)
+    }
+
+    /// Remove entries only from the owning set; constraints are unchanged.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
+        self.stereo_bonds.remove(ids);
+    }
+
+    /// Remove entries only from the owning set and return its compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an id is outside the current set.
+    pub(crate) fn tracked_remove_stereo_bonds(
+        &mut self,
+        ids: &[StereoBondId],
+    ) -> Compaction<StereoBondId> {
+        self.stereo_bonds.tracked_remove(ids)
+    }
+
+    /// Compact only the owning set through a topology removal.
+    pub(crate) fn compact_dative_bonds(&mut self, topology: &GraphCompaction) {
+        self.dative_bonds = self.dative_bonds.compact(topology);
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn tracked_compact_dative_bonds(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<DativeBondId> {
+        let (entries, compaction) = self.dative_bonds.tracked_compact(topology);
+        self.dative_bonds = entries;
+        compaction
+    }
+
+    /// Compact only the owning set through a topology removal.
+    pub(crate) fn compact_aromatic_systems(&mut self, topology: &GraphCompaction) {
+        self.aromatic_systems = self.aromatic_systems.compact(topology);
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn tracked_compact_aromatic_systems(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<AromaticSystemId> {
+        let (entries, compaction) = self.aromatic_systems.tracked_compact(topology);
+        self.aromatic_systems = entries;
+        compaction
+    }
+
+    /// Compact only the owning set through a topology removal.
+    pub(crate) fn compact_multicenter_bonds(&mut self, topology: &GraphCompaction) {
+        self.multicenter_bonds = self.multicenter_bonds.compact(topology);
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn tracked_compact_multicenter_bonds(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<MulticenterBondId> {
+        let (entries, compaction) = self.multicenter_bonds.tracked_compact(topology);
+        self.multicenter_bonds = entries;
+        compaction
+    }
+
+    /// Compact only the owning set through a topology removal.
+    pub(crate) fn compact_noncovalent_bonds(&mut self, topology: &GraphCompaction) {
+        self.noncovalent_bonds = self.noncovalent_bonds.compact(topology);
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn tracked_compact_noncovalent_bonds(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<NoncovalentBondId> {
+        let (entries, compaction) = self.noncovalent_bonds.tracked_compact(topology);
+        self.noncovalent_bonds = entries;
+        compaction
+    }
+
+    /// Compact only the owning set through a topology removal.
+    pub(crate) fn compact_stereo_atoms(&mut self, topology: &GraphCompaction) {
+        self.stereo_atoms = self.stereo_atoms.compact(topology);
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn tracked_compact_stereo_atoms(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<StereoAtomId> {
+        let (entries, compaction) = self.stereo_atoms.tracked_compact(topology);
+        self.stereo_atoms = entries;
+        compaction
+    }
+
+    /// Compact only the owning set through a topology removal.
+    pub(crate) fn compact_stereo_bonds(&mut self, topology: &GraphCompaction) {
+        self.stereo_bonds = self.stereo_bonds.compact(topology);
+    }
+
+    /// Compact only the owning set and return its source-to-result compaction.
+    pub(crate) fn tracked_compact_stereo_bonds(
+        &mut self,
+        topology: &GraphCompaction,
+    ) -> Compaction<StereoBondId> {
+        let (entries, compaction) = self.stereo_bonds.tracked_compact(topology);
+        self.stereo_bonds = entries;
+        compaction
+    }
+
+    pub(crate) fn push_constraint(&mut self, constraint: Constraint) {
+        self.constraints.push(constraint);
+    }
+
+    pub(crate) fn extend_constraints(&mut self, constraints: Vec<Constraint>) {
+        self.constraints.extend(constraints);
+    }
+
+    /// Remove a constraint at its stored position.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the position is outside the current constraints.
+    pub(crate) fn remove_constraint_at(&mut self, position: usize) -> Constraint {
+        self.constraints.remove_at(position)
+    }
+
+    pub(crate) fn compact_constraints(&mut self, compaction: &MoleculeCompaction) {
+        self.constraints.compact(compaction);
+    }
+
+    pub(crate) fn tracked_compact_constraints(
+        &mut self,
+        compaction: &MoleculeCompaction,
+    ) -> CascadedConstraints {
+        self.constraints.tracked_compact(compaction)
     }
 
     /// Restore graph topology and atom/bond attributes from matching removal data.
@@ -1863,7 +2204,9 @@ impl Molecule {
                         .first()
                         .is_some_and(|a| component_of(*a) == component)
                     {
-                        editor.push_constraint(constraint.clone().map(&correspondence));
+                        editor
+                            .constraints_mut()
+                            .push(constraint.clone().map(&correspondence));
                     }
                 }
                 let entities = editor.build();

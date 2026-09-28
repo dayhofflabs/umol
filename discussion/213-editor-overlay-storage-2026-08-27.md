@@ -35,8 +35,8 @@ additions and S3j's mutable correspondence methods are implemented. S3k's
 index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch execution is under the editor module, whose fields remain private;
-internal Molecule mutation methods use pub(crate). S4b1 is next. Graph-core
-mutation and restoration are complete in
+internal Molecule mutation methods use pub(crate). S4b1 is complete; S4b2 is next.
+Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -86,8 +86,8 @@ incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-cons
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e–S3k and S4a
-are complete; S4b1 is next.
+approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
+and S4b1 are complete; S4b2 is next.
 
 ## Editor and transaction API
 
@@ -4756,7 +4756,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Changes to journal return types and Undo variants may temporarily break callers
   within this group; migrate all of them by S4b8 without fallback match arms.
 
-- **S4b1 — Molecule addition, removal, and compaction methods** (`ir::molecule`; breaking rewire, green at S4b8). [dep: S4a, S3i]
+- **S4b1 — completed 2026-09-28** (`ir::molecule`; breaking rewire, green at S4b8). [dep: S4a, S3i]
 
   Move the eight add_* methods,
   push_constraint, and all seven untracked/tracked removal pairs to crate-private
@@ -4812,6 +4812,22 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   Verify component boundaries, untracked/tracked storage equivalence, bulk
   delegation, and unchanged unrelated components.
+
+  Molecule owns the recorded individual additions, component-only removal and
+  compaction pairs, and constraint delegates, all pub(crate). Editor additions
+  delegate; its removals compose these primitives and retain cascading updates.
+  Rust/Python topology removal is named remove_topology/tracked_remove_topology;
+  editor push_constraint is removed. Existing tracked editor removals remain
+  public until S4b2 removes that direct surface.
+
+  **Checked — 2026-09-28.** All 1,067 focused molecule/editor/correspondence unit
+  cases and 24 affected property tests pass. The 57 new unit cases cover isolated
+  storage changes, tracked/untracked equivalence, unchanged shared originals,
+  and constraint order/duplicates. The rebuilt Python extension passes all 164
+  transaction/import tests. Warnings-denied rustdoc, nightly formatting, and
+  diff checks/review pass. All-target graph-ir Clippy with proptest completes
+  with only dead_code warnings for new primitives awaiting their planned
+  production callers; no suppression attributes were added.
 
 - **S4b2 — Editor direct-mutation surface** (`ir::molecule::editor`; breaking rewire, green at S4b8). [dep: S4b1]
 
@@ -5763,7 +5779,7 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup and S4a are complete; S4b1 is next.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1 are complete; S4b2 is next.
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is

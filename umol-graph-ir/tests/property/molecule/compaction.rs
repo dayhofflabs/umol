@@ -32,9 +32,9 @@ proptest! {
             molecule.stereo_bonds().count(),
         );
         let mut editor = molecule.edit();
-        let compaction = editor.tracked_remove(&atoms, &bonds);
+        let compaction = editor.tracked_remove_topology(&atoms, &bonds);
         let mut plain = molecule.edit();
-        plain.remove(&atoms, &bonds);
+        plain.remove_topology(&atoms, &bonds);
         let publication = editor.try_tracked_build();
         let expected = plain.try_build().map(|molecule| (molecule, MoleculeCorrespondence::from(&compaction)));
         prop_assert_eq!(publication, expected);
@@ -94,9 +94,9 @@ proptest! {
         (molecule, atoms, bonds) in molecule_with_removals_strategy(),
     ) {
         let mut editor = molecule.edit();
-        let first = editor.tracked_remove(&atoms, &bonds);
+        let first = editor.tracked_remove_topology(&atoms, &bonds);
         editor.add_atom(AtomForm::from_element(Element::F));
-        let second = editor.tracked_remove(&[AtomId(0)], &[]);
+        let second = editor.tracked_remove_topology(&[AtomId(0)], &[]);
         let mut expected = MoleculeCorrespondence::from(&first);
         expected.extend_right(EntityKind::Atom, 1);
         let expected = expected.compose(&MoleculeCorrespondence::from(&second)).unwrap();
@@ -116,7 +116,7 @@ proptest! {
         let remapping = MoleculeCorrespondence::from(&remapping);
 
         let mut removal_editor = remapped.edit();
-        let compaction = removal_editor.tracked_remove(&removed, &[]);
+        let compaction = removal_editor.tracked_remove_topology(&removed, &[]);
         let compacted = removal_editor.build();
         let compaction = MoleculeCorrespondence::from(&compaction);
 

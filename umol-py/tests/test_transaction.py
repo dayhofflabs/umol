@@ -296,7 +296,7 @@ def test_molecule_editor_replace_error(replacement_case, method):
         assert editor.build() == original
 
 
-def test_molecule_editor_tracked_remove():
+def test_molecule_editor_tracked_remove_topology():
     molecule = Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(1)), (1, 2, BondForm(1))],
@@ -304,8 +304,8 @@ def test_molecule_editor_tracked_remove():
     plain = molecule.edit()
     tracked = molecule.edit()
 
-    plain.remove([1], [])
-    compaction = tracked.tracked_remove([1], [])
+    plain.remove_topology([1], [])
+    compaction = tracked.tracked_remove_topology([1], [])
 
     assert tracked.build() == plain.build()
     assert isinstance(compaction, MoleculeCompaction)
@@ -338,8 +338,8 @@ def test_molecule_editor_tracked_remove_entity_family(method, field):
 @pytest.mark.parametrize(
     ("method", "arguments", "message"),
     [
-        ("remove", ([5], []), "atom id out of range"),
-        ("remove", ([], [5]), "bond id out of range"),
+        ("remove_topology", ([5], []), "atom id out of range"),
+        ("remove_topology", ([], [5]), "bond id out of range"),
         ("remove_dative_bonds", ([1],), "dative bond id out of range"),
         ("remove_aromatic_systems", ([1],), "aromatic system id out of range"),
         ("remove_multicenter_bonds", ([1],), "multicenter bond id out of range"),

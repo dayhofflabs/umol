@@ -597,7 +597,7 @@ impl MoleculeEditor {
                     .collect::<Result<_, _>>()?;
                 ensure_unique(&atoms, EntityKind::Atom)?;
                 ensure_unique(&bonds, EntityKind::Bond)?;
-                let compaction = self.tracked_remove(&atoms, &bonds);
+                let compaction = self.tracked_remove_topology(&atoms, &bonds);
                 state.compact(&compaction);
                 Ok(())
             }
@@ -958,7 +958,7 @@ impl MoleculeEditor {
             }
             Edit::AddMoleculeConstraint { constraint } => {
                 let constraint = state.resolve_constraint(constraint)?;
-                self.push_constraint(constraint);
+                self.molecule.push_constraint(constraint);
                 Ok(())
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
@@ -1041,7 +1041,7 @@ impl MoleculeEditor {
                     self.capture_removed_topology(&atoms, &bonds);
                 let pre_constraints = self.constraints().clone();
                 let compaction = if !atoms.is_empty() || !bonds.is_empty() {
-                    self.tracked_remove(&atoms, &bonds)
+                    self.tracked_remove_topology(&atoms, &bonds)
                 } else {
                     MoleculeCompaction::new(
                         GraphCompaction::new(
@@ -1629,7 +1629,7 @@ impl MoleculeEditor {
             }
             Edit::AddMoleculeConstraint { constraint } => {
                 let constraint = state.resolve_constraint(constraint)?;
-                self.push_constraint(constraint.clone());
+                self.molecule.push_constraint(constraint.clone());
                 Ok(Undo::ApplyEdit(Box::new(Edit::RemoveMoleculeConstraint {
                     constraint: constraint.into(),
                 })))
@@ -3521,7 +3521,7 @@ mod tests {
     #[rstest]
     fn test_molecule_editor_transact_remove_molecule_constraint(mut empty: MoleculeEditor) {
         let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
-        empty.push_constraint(c.clone());
+        empty.constraints_mut().push(c.clone());
         empty
             .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
                 constraint: c.clone().into(),
@@ -3535,7 +3535,7 @@ mod tests {
         mut empty: MoleculeEditor,
     ) {
         let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
-        empty.push_constraint(c.clone());
+        empty.constraints_mut().push(c.clone());
         let err = empty
             .transact(Edits::from_iter([Edit::RemoveMoleculeConstraint {
                 constraint: Constraint::Molecule(MoleculeConstraint::ChargeSum {
@@ -3747,7 +3747,7 @@ mod tests {
             AromaticSystemId(1),
             AromaticSystemConstraintForm::electron_count(4_i64),
         );
-        batched_overlays.push_constraint(removed.clone());
+        batched_overlays.constraints_mut().push(removed.clone());
         let before = batched_overlays.clone().build();
         let mut edits = Edits::from_iter([Edit::RemoveAromaticSystems {
             removes: vec![(
@@ -5745,7 +5745,8 @@ mod tests {
                 let mut b = Molecule::default().edit();
                 b.add_atom(AtomForm::from_element(Element::C));
                 b.add_atom(AtomForm::from_element(Element::N));
-                b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraintForm::degree(3)));
+                b.constraints_mut()
+                    .push(Constraint::Atom(AtomId(1), AtomConstraintForm::degree(3)));
                 b
             }
             RollbackCase::RemoveTopology | RollbackCase::RemoveOverlay => triatomic_with_overlays(),
@@ -6151,9 +6152,9 @@ mod tests {
     fn test_transaction_rollback_molecule_constraint_order(mut one_atom: MoleculeEditor) {
         let repeated = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
         let middle = Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4));
-        one_atom.push_constraint(repeated.clone());
-        one_atom.push_constraint(middle.clone());
-        one_atom.push_constraint(repeated.clone());
+        one_atom.constraints_mut().push(repeated.clone());
+        one_atom.constraints_mut().push(middle.clone());
+        one_atom.constraints_mut().push(repeated.clone());
         let before = one_atom.clone().build();
 
         let transaction = one_atom

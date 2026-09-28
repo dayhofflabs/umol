@@ -61,7 +61,9 @@ the statuses recorded here remain authoritative.
   methods are implemented and verified. S3i's Molecule/editor bulk additions are
   complete, as are S3j's mutable correspondence methods and caller migration.
   S4a1's Molecule restoration methods and S3k's index-arithmetic cleanup are
-  complete. S4a2's constraint storage and undo restoration wiring are next.
+  complete. S4a2's constraint storage and undo restoration wiring and S4b1's
+  Molecule mutation delegates are complete. S4b2's editor direct-mutation surface
+  is next.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -279,7 +281,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue with S4b1: Molecule addition, removal, and compaction methods. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue with S4b2: editor direct-mutation surface. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

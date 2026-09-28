@@ -141,25 +141,29 @@ impl MoleculeEditor {
     }
 
     /// Remove atoms and bonds, cascading dependent entities.
-    fn remove(&mut self, atoms: Vec<u32>, bonds: Vec<u32>) -> PyResult<()> {
+    fn remove_topology(&mut self, atoms: Vec<u32>, bonds: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         ensure_in_range(&atoms, editor.atom_count(), "atom")?;
         ensure_in_range(&bonds, editor.bond_count(), "bond")?;
         let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
         let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
-        editor.remove(&atoms, &bonds);
+        editor.remove_topology(&atoms, &bonds);
         Ok(())
     }
 
     /// Remove atoms and bonds, returning the source-to-result compaction.
-    fn tracked_remove(&mut self, atoms: Vec<u32>, bonds: Vec<u32>) -> PyResult<MoleculeCompaction> {
+    fn tracked_remove_topology(
+        &mut self,
+        atoms: Vec<u32>,
+        bonds: Vec<u32>,
+    ) -> PyResult<MoleculeCompaction> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         ensure_in_range(&atoms, editor.atom_count(), "atom")?;
         ensure_in_range(&bonds, editor.bond_count(), "bond")?;
         let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
         let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
         Ok(MoleculeCompaction::from_rust(
-            editor.tracked_remove(&atoms, &bonds),
+            editor.tracked_remove_topology(&atoms, &bonds),
         ))
     }
 

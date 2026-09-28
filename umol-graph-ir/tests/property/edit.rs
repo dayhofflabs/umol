@@ -857,7 +857,7 @@ proptest! {
         let added = source.add_atom(AtomForm::from_element(Element::F));
         let source = source.build();
         let mut editor = source.edit();
-        editor.remove(&[added], &[]);
+        editor.remove_topology(&[added], &[]);
         let before = editor.tracked_snapshot().unwrap();
         let mut plain = editor.clone();
         let plain_first = plain.transact(first_edits.clone()).unwrap();
