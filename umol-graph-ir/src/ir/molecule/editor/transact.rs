@@ -19,14 +19,15 @@ use std::mem;
 use thiserror::Error;
 use umol_graph_core::{Compaction, Correspondence, GraphCompaction};
 
-use super::super::compact::{MoleculeCompaction, UndoCompaction};
-use super::super::constraint::{
-    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint, Constraints,
+use super::MoleculeEditor;
+use crate::ir::compact::{MoleculeCompaction, UndoCompaction};
+use crate::ir::constraint::{
+    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
     DativeBondConstraintForm, MulticenterBondConstraintForm, NoncovalentBondConstraintForm,
     StereoAtomConstraintForm, StereoBondConstraintForm,
 };
-use super::super::correspondence::MoleculeCorrespondence;
-use super::super::edit::{
+use crate::ir::correspondence::MoleculeCorrespondence;
+use crate::ir::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
     AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle,
@@ -37,14 +38,13 @@ use super::super::edit::{
     RemovedStereoAtom, RemovedStereoBond, StereoAtomFieldChange, StereoAtomHandle,
     StereoBondFieldChange, StereoBondHandle, Undo,
 };
-use super::super::entity::EntityKind;
-use super::super::id::{
+use crate::ir::entity::EntityKind;
+use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::traits::Normalize;
-use super::MoleculeEditor;
+use crate::ir::ligand::{StereoLigand, StereoLigandKind};
+use crate::ir::traits::Normalize;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum TransactionError {
@@ -82,10 +82,10 @@ pub enum TransactionError {
 
     /// The rollback journal cannot be structurally applied to the supplied editor state.
     ///
-    /// A transaction guarantees exact restoration only when rolled back against the exact
-    /// post-transaction state (or the end of the consecutive chain represented by an appended
-    /// journal). Other states are rejected when a required receiver or reconstruction entry is
-    /// absent; structurally compatible but unrelated states are outside that guarantee.
+    /// A transaction guarantees restoration under Molecule::normalized_eq when rolled back
+    /// against its post-transaction state or the end of its appended consecutive chain.
+    /// Other states are rejected when a required receiver or reconstruction entry is absent;
+    /// structurally compatible but unrelated states are outside that guarantee.
     #[error("rollback journal does not match editor state")]
     RollbackStateMismatch,
 }
@@ -93,10 +93,10 @@ pub enum TransactionError {
 /// Detached journal of the realized undos for one successfully applied edit batch.
 ///
 /// Detachment permits journals for consecutive transactions to be appended and rolled back as a
-/// unit. Exact restoration is guaranteed only for the exact post-transaction editor state, or the
-/// end state of the consecutively appended transaction chain. A structurally incompatible state
-/// returns [`TransactionError::RollbackStateMismatch`] without panicking; a structurally compatible
-/// but unrelated state is outside the semantic guarantee.
+/// unit. Restoration under Molecule::normalized_eq is guaranteed for the post-transaction editor
+/// state or the end of the consecutively appended chain. Manipulated history does not panic but
+/// has no specified result. Invalid undo targets or compactions may return
+/// [`TransactionError::RollbackStateMismatch`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Transaction {
     undo: Vec<Undo>,
@@ -114,10 +114,14 @@ impl Transaction {
 
     /// Reverse the journal against its exact post-transaction editor state.
     ///
-    /// This exactly restores the pre-transaction state when the editor is the state produced by
-    /// this transaction (or by its appended consecutive chain). Structural incompatibility returns
-    /// [`TransactionError::RollbackStateMismatch`] rather than panicking. No semantic result is
-    /// guaranteed when a different editor happens to satisfy the journal's structural requirements.
+    /// Restores the pre-transaction state under Molecule::normalized_eq when the editor is the
+    /// state produced by this transaction or its appended consecutive chain. Manipulated history
+    /// does not panic but has no specified result.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransactionError::RollbackStateMismatch`] for an incompatible undo target,
+    /// field value, or compaction.
     pub fn rollback(self, editor: &mut MoleculeEditor) -> Result<(), TransactionError> {
         rollback_journal(editor, self.undo)
     }
@@ -1054,7 +1058,7 @@ impl MoleculeEditor {
                 };
                 state.compact(&compaction);
                 let mut constraints = pre_constraints;
-                let cascade = constraints.compact_with_update(&compaction);
+                let cascade = constraints.tracked_compact(&compaction);
                 let undo_compaction = compaction.undo_compaction();
                 Ok(Undo::RestoreRemovedTopology {
                     atoms: removed_atoms,
@@ -1129,7 +1133,7 @@ impl MoleculeEditor {
                 let mut pre_constraints = self.constraints().clone();
                 let forward = self.tracked_remove_dative_bonds(&ids);
                 state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
+                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedDativeBonds {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1214,7 +1218,7 @@ impl MoleculeEditor {
                 let mut pre_constraints = self.constraints().clone();
                 let forward = self.tracked_remove_aromatic_systems(&ids);
                 state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
+                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedAromaticSystems {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1287,7 +1291,7 @@ impl MoleculeEditor {
                 let mut pre_constraints = self.constraints().clone();
                 let forward = self.tracked_remove_multicenter_bonds(&ids);
                 state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
+                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedMulticenterBonds {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1355,7 +1359,7 @@ impl MoleculeEditor {
                 let mut pre_constraints = self.constraints().clone();
                 let forward = self.tracked_remove_noncovalent_bonds(&ids);
                 state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
+                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedNoncovalentBonds {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1422,7 +1426,7 @@ impl MoleculeEditor {
                 let mut pre_constraints = self.constraints().clone();
                 let forward = self.tracked_remove_stereo_atoms(&ids);
                 state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
+                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedStereoAtoms {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1501,7 +1505,7 @@ impl MoleculeEditor {
                 let mut pre_constraints = self.constraints().clone();
                 let forward = self.tracked_remove_stereo_bonds(&ids);
                 state.compact(&forward);
-                let cascade = pre_constraints.compact_with_update(&forward);
+                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedStereoBonds {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1638,7 +1642,7 @@ impl MoleculeEditor {
                     .iter()
                     .rposition(|c| *c == constraint)
                     .ok_or(TransactionError::MissingEntry)?;
-                list.remove_at(position);
+                let constraint = list.remove_at(position);
                 Ok(Undo::ApplyCascadedConstraints(CascadedConstraints {
                     removed: vec![RemovedConstraint {
                         position,
@@ -2161,55 +2165,6 @@ fn reconstruction_fits(
     occupied.into_iter().all(|is_occupied| is_occupied)
 }
 
-fn restored_constraints(
-    update: &CascadedConstraints,
-    current: &Constraints,
-) -> Option<Constraints> {
-    let restored_count = current.as_slice().len() + update.removed.len();
-    let mut removed = vec![None; restored_count];
-    let mut modified = vec![None; restored_count];
-
-    for entry in &update.removed {
-        let target = removed.get_mut(entry.position)?;
-        if target.is_some() {
-            return None;
-        }
-        *target = Some(&entry.constraint);
-    }
-    for entry in &update.modified {
-        if removed.get(entry.position)?.is_some() {
-            return None;
-        }
-        let target = modified.get_mut(entry.position)?;
-        if target.is_some() {
-            return None;
-        }
-        *target = Some(entry);
-    }
-
-    let mut current = current.as_slice().iter();
-    let mut restored = Vec::with_capacity(restored_count);
-    for position in 0..restored_count {
-        if let Some(constraint) = removed[position] {
-            restored.push(constraint.clone());
-            continue;
-        }
-        let constraint = current.next()?;
-        if let Some(change) = modified[position] {
-            if constraint != &change.new {
-                return None;
-            }
-            restored.push(change.old.clone());
-        } else {
-            restored.push(constraint.clone());
-        }
-    }
-    if current.next().is_some() {
-        return None;
-    }
-    Some(restored.into_iter().collect())
-}
-
 fn removed_dative_bonds_fit(removed: &[RemovedDativeBond], atom_count: usize) -> bool {
     removed.iter().all(|entry| {
         entry.acceptor.index() < atom_count && entry.donors.iter().all(|id| id.index() < atom_count)
@@ -2582,13 +2537,73 @@ impl MoleculeEditor {
                 cascade,
                 ..
             } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_topology(atoms, bonds, overlays, &undo_compaction);
+                let compaction = undo_compaction.forward();
+                self.molecule
+                    .restore_topology(compaction.graph(), atoms, bonds);
+                self.molecule
+                    .restore_dative_bond_topology_ids(compaction.graph());
+                self.molecule.restore_dative_bonds(
+                    compaction.dative_bonds(),
+                    overlays
+                        .dative_bonds
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.donors, entry.acceptor, entry.attributes))
+                        .collect(),
+                );
+                self.molecule
+                    .restore_aromatic_system_topology_ids(compaction.graph());
+                self.molecule.restore_aromatic_systems(
+                    compaction.aromatic_systems(),
+                    overlays
+                        .aromatic_systems
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.atoms, entry.attributes))
+                        .collect(),
+                );
+                self.molecule
+                    .restore_multicenter_bond_topology_ids(compaction.graph());
+                self.molecule.restore_multicenter_bonds(
+                    compaction.multicenter_bonds(),
+                    overlays
+                        .multicenter_bonds
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.atoms, entry.attributes))
+                        .collect(),
+                );
+                self.molecule
+                    .restore_noncovalent_bond_topology_ids(compaction.graph());
+                self.molecule.restore_noncovalent_bonds(
+                    compaction.noncovalent_bonds(),
+                    overlays
+                        .noncovalent_bonds
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.atoms, entry.attributes))
+                        .collect(),
+                );
+                self.molecule
+                    .restore_stereo_atom_topology_ids(compaction.graph());
+                self.molecule.restore_stereo_atoms(
+                    compaction.stereo_atoms(),
+                    overlays
+                        .stereo_atoms
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.site, entry.ligands, entry.attributes))
+                        .collect(),
+                );
+                self.molecule
+                    .restore_stereo_bond_topology_ids(compaction.graph());
+                self.molecule.restore_stereo_bonds(
+                    compaction.stereo_bonds(),
+                    overlays
+                        .stereo_bonds
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.site, entry.ligands, entry.attributes))
+                        .collect(),
+                );
                 self.correspondence
                     .uncompact_right(undo_compaction.forward())
                     .expect("validated undo compaction describes the editor's current id spaces");
-                *self.constraints_mut() = constraints;
+                self.molecule.restore_constraints(&cascade);
             }
             Undo::RemoveAddedDativeBond(added) => self.remove_added_dative_bond(&added),
             Undo::RestoreRemovedDativeBonds {
@@ -2596,13 +2611,17 @@ impl MoleculeEditor {
                 undo_compaction,
                 cascade,
             } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_dative_bonds(removed, &undo_compaction);
+                self.molecule.restore_dative_bonds(
+                    undo_compaction.forward().dative_bonds(),
+                    removed
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.donors, entry.acceptor, entry.attributes))
+                        .collect(),
+                );
                 self.correspondence
                     .uncompact_right(undo_compaction.forward())
                     .expect("validated undo compaction describes the editor's current id spaces");
-                *self.constraints_mut() = constraints;
+                self.molecule.restore_constraints(&cascade);
             }
             Undo::RestoreDativeBondDonors { id, donors } => {
                 self.dative_bond_mut(id).replace_donors(&donors);
@@ -2616,13 +2635,17 @@ impl MoleculeEditor {
                 undo_compaction,
                 cascade,
             } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_aromatic_systems(removed, &undo_compaction);
+                self.molecule.restore_aromatic_systems(
+                    undo_compaction.forward().aromatic_systems(),
+                    removed
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.atoms, entry.attributes))
+                        .collect(),
+                );
                 self.correspondence
                     .uncompact_right(undo_compaction.forward())
                     .expect("validated undo compaction describes the editor's current id spaces");
-                *self.constraints_mut() = constraints;
+                self.molecule.restore_constraints(&cascade);
             }
             Undo::RestoreAromaticSystemAtoms { id, atoms } => {
                 self.aromatic_system_mut(id).replace_atoms(&atoms);
@@ -2633,13 +2656,17 @@ impl MoleculeEditor {
                 undo_compaction,
                 cascade,
             } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_multicenter_bonds(removed, &undo_compaction);
+                self.molecule.restore_multicenter_bonds(
+                    undo_compaction.forward().multicenter_bonds(),
+                    removed
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.atoms, entry.attributes))
+                        .collect(),
+                );
                 self.correspondence
                     .uncompact_right(undo_compaction.forward())
                     .expect("validated undo compaction describes the editor's current id spaces");
-                *self.constraints_mut() = constraints;
+                self.molecule.restore_constraints(&cascade);
             }
             Undo::RestoreMulticenterBondAtoms { id, atoms } => {
                 self.multicenter_bond_mut(id).replace_atoms(&atoms);
@@ -2650,13 +2677,17 @@ impl MoleculeEditor {
                 undo_compaction,
                 cascade,
             } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_noncovalent_bonds(removed, &undo_compaction);
+                self.molecule.restore_noncovalent_bonds(
+                    undo_compaction.forward().noncovalent_bonds(),
+                    removed
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.atoms, entry.attributes))
+                        .collect(),
+                );
                 self.correspondence
                     .uncompact_right(undo_compaction.forward())
                     .expect("validated undo compaction describes the editor's current id spaces");
-                *self.constraints_mut() = constraints;
+                self.molecule.restore_constraints(&cascade);
             }
             Undo::RestoreNoncovalentBondAtoms { id, atoms } => {
                 self.noncovalent_bond_mut(id).replace_atoms(atoms);
@@ -2667,13 +2698,17 @@ impl MoleculeEditor {
                 undo_compaction,
                 cascade,
             } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_stereo_atoms(removed, &undo_compaction);
+                self.molecule.restore_stereo_atoms(
+                    undo_compaction.forward().stereo_atoms(),
+                    removed
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.site, entry.ligands, entry.attributes))
+                        .collect(),
+                );
                 self.correspondence
                     .uncompact_right(undo_compaction.forward())
                     .expect("validated undo compaction describes the editor's current id spaces");
-                *self.constraints_mut() = constraints;
+                self.molecule.restore_constraints(&cascade);
             }
             Undo::RestoreStereoAtomSite { id, site } => {
                 self.stereo_atom_mut(id).replace_site(site);
@@ -2687,13 +2722,17 @@ impl MoleculeEditor {
                 undo_compaction,
                 cascade,
             } => {
-                let constraints = restored_constraints(&cascade, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                self.restore_stereo_bonds(removed, &undo_compaction);
+                self.molecule.restore_stereo_bonds(
+                    undo_compaction.forward().stereo_bonds(),
+                    removed
+                        .into_iter()
+                        .map(|entry| (entry.id, entry.site, entry.ligands, entry.attributes))
+                        .collect(),
+                );
                 self.correspondence
                     .uncompact_right(undo_compaction.forward())
                     .expect("validated undo compaction describes the editor's current id spaces");
-                *self.constraints_mut() = constraints;
+                self.molecule.restore_constraints(&cascade);
             }
             Undo::RestoreStereoBondSite { id, site } => {
                 self.stereo_bond_mut(id).replace_site(site);
@@ -2726,9 +2765,7 @@ impl MoleculeEditor {
                 .apply_modify_stereo_bond_field(id, change)
                 .map_err(|_| rollback_mismatch())?,
             Undo::ApplyCascadedConstraints(update) => {
-                let constraints = restored_constraints(&update, self.constraints())
-                    .ok_or_else(rollback_mismatch)?;
-                *self.constraints_mut() = constraints;
+                self.molecule.restore_constraints(&update);
             }
             Undo::ApplyEdit(edit) => {
                 let mut state = ApplicationState::new(self);
@@ -2747,31 +2784,31 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
-    use super::super::super::aromatic::AromaticSystemForm;
-    use super::super::super::atom::{AtomForm, ElementForm};
-    use super::super::super::bond::BondForm;
-    use super::super::super::constraint::{
+    use super::*;
+    use crate::ir::aromatic::AromaticSystemForm;
+    use crate::ir::atom::{AtomForm, ElementForm};
+    use crate::ir::bond::BondForm;
+    use crate::ir::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
         NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
         StereoBondConstraintForm, StereogenicityForm,
     };
-    use super::super::super::dative::DativeBondForm;
-    use super::super::super::edit::EntityHandle;
-    use super::super::super::entity::Entity;
-    use super::super::super::ligand::StereoLigandKind;
-    use super::super::super::multicenter::MulticenterBondForm;
-    use super::super::super::noncovalent::{
+    use crate::ir::dative::DativeBondForm;
+    use crate::ir::edit::EntityHandle;
+    use crate::ir::entity::Entity;
+    use crate::ir::ligand::StereoLigandKind;
+    use crate::ir::molecule::Molecule;
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
-    use super::super::super::num::NumForm;
-    use super::super::super::stereo::{
+    use crate::ir::num::NumForm;
+    use crate::ir::stereo::{
         CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
         StereoKind,
     };
-    use super::super::Molecule;
-    use super::*;
-    use crate::ir::BooleanForm;
+    use crate::ir::{BooleanForm, ModifiedConstraint};
 
     #[fixture]
     fn empty() -> MoleculeEditor {
@@ -5773,6 +5810,75 @@ mod tests {
         let tx = editor.transact(edits).unwrap();
         tx.rollback(&mut editor).unwrap();
         assert_eq!(editor.build(), before);
+    }
+
+    #[rstest]
+    #[case::first(vec![AtomHandle::Id(AtomId(0))], 2)]
+    #[case::middle(vec![AtomHandle::Id(AtomId(2))], 2)]
+    #[case::separated(vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(4))], 1)]
+    fn test_transaction_rollback_topology(
+        mut batched_overlays: MoleculeEditor,
+        #[case] atoms: Vec<AtomHandle>,
+        #[case] remaining: usize,
+    ) {
+        batched_overlays.constraints_mut().extend(vec![
+            Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
+            Constraint::Atom(AtomId(5), AtomConstraintForm::degree(1)),
+            Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
+        ]);
+        let before = batched_overlays.clone().build();
+        let transaction = batched_overlays
+            .transact(Edits::from_iter([Edit::RemoveTopology {
+                atoms,
+                bonds: vec![],
+            }]))
+            .unwrap();
+        assert_eq!(
+            [
+                batched_overlays.dative_bond_count(),
+                batched_overlays.aromatic_system_count(),
+                batched_overlays.multicenter_bond_count(),
+                batched_overlays.noncovalent_bond_count(),
+                batched_overlays.stereo_atom_count(),
+                batched_overlays.stereo_bond_count(),
+            ],
+            [remaining; 6],
+        );
+        transaction.rollback(&mut batched_overlays).unwrap();
+        let restored = batched_overlays.build();
+        assert!(restored.normalized_eq(&before));
+        assert_eq!(restored, before);
+    }
+
+    #[rstest]
+    #[case::missing(7)]
+    #[case::overlapping(0)]
+    fn test_transaction_rollback_constraint_history(
+        mut one_atom: MoleculeEditor,
+        #[case] position: usize,
+    ) {
+        let constraint = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
+        one_atom.constraints_mut().push(constraint.clone());
+        let transaction = Transaction {
+            undo: vec![Undo::ApplyCascadedConstraints(CascadedConstraints {
+                removed: vec![
+                    RemovedConstraint {
+                        position,
+                        constraint: constraint.clone(),
+                    },
+                    RemovedConstraint {
+                        position,
+                        constraint: constraint.clone(),
+                    },
+                ],
+                modified: vec![ModifiedConstraint {
+                    position,
+                    old: constraint,
+                    new: Constraint::Or(vec![]),
+                }],
+            })],
+        };
+        let _ = transaction.rollback(&mut one_atom);
     }
 
     #[rstest]

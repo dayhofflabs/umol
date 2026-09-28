@@ -33,9 +33,10 @@ migration. S3f's graph-core bulk additions, S3g's relation-set bulk additions,
 and S3h's typed-overlay extend methods are implemented. S3i's Molecule/editor bulk
 additions and S3j's mutable correspondence methods are implemented. S3k's
 index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
-S4a1's Molecule restoration methods are implemented; S4a2's constraint storage
-and undo wiring are next. Graph-core mutation and
-restoration are complete in
+S4a is complete: undo restoration calls Molecule and constraint storage methods.
+Editor batch execution is under the editor module, whose fields remain private;
+internal Molecule mutation methods use pub(crate). S4b1 is next. Graph-core
+mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
 Doc 228 is unchanged by this review and its withdrawn ownership migration is not
@@ -85,8 +86,8 @@ incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-cons
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e–S3k and S4a1
-are complete; S4a2 is next.
+approved reaction names, semantics, and dative-factor migration. S3e–S3k and S4a
+are complete; S4b1 is next.
 
 ## Editor and transaction API
 
@@ -216,7 +217,7 @@ between completed edits restores their journal. Recovery from allocation
 failure or internal panics during an edit is not part of the contract.
 
 There is one owning editor, without a mode or borrowed alternative. Transaction
-borrows Molecule directly and calls the same private mutation methods as the
+borrows Molecule directly and calls the same crate-private mutation methods as the
 editor. It exposes batches, not unrestricted mutable views. Transaction::run
 borrows the receiver, so errors do not need to carry the original molecule back
 to the caller. An editor does not provide transaction entry.
@@ -699,7 +700,7 @@ longer part of the intended API.
 ```rust
 impl Molecule {
     pub fn constraints(&self) -> &Constraints;
-    fn constraints_mut(&mut self) -> &mut Constraints;
+    pub(crate) fn constraints_mut(&mut self) -> &mut Constraints;
 }
 
 impl MoleculeEditor {
@@ -708,12 +709,12 @@ impl MoleculeEditor {
 }
 ```
 
-The private Molecule accessor supplies the editor's mutable borrow by delegation;
+The crate-private Molecule accessor supplies the editor's mutable borrow by delegation;
 it is not part of Molecule's public mutation surface.
 The editor borrow supports the existing Constraints operations and whole-collection
 assignment. It does not check writes individually or clone the collection.
 Remove MoleculeEditor::push_constraint; use constraints_mut().push instead.
-The private Molecule::push_constraint remains for Edit execution.
+The crate-private Molecule::push_constraint remains for Edit execution.
 Intermediate references may be invalid; publication checks the resulting molecule.
 S6a changes edit to consume the molecule and move its constraint collection into
 the editor; this decision needs no additional ownership mechanism.
@@ -1077,7 +1078,7 @@ Structural changes can break reference, uniqueness, or incidence integrity, so
 the editor publication boundary checks them. Attribute assignment does not change
 those structural links. No conversion from a molecule mutable view to an editor
 mutable view is exposed. Internal batch/undo execution obtains editor mutable
-views through private Molecule accessors.
+views through crate-private Molecule accessors.
 
 ### Participant mutation
 
@@ -1515,34 +1516,34 @@ API defined above; it is not a staged implementation plan.
 
 | Editor surface | Current implementation and required change |
 | --- | --- |
-| add_atom, add_bond | Move implementations to private Molecule methods; editor methods delegate and batch execution calls the same implementations. Retain Graph addition and parallel attribute-array updates; direct additions record no correspondence. |
-| add_dative_bond, add_aromatic_system, add_multicenter_bond, add_noncovalent_bond, add_stereo_atom, add_stereo_bond | Move implementations to private Molecule methods; editor methods delegate and batch execution calls the same implementations. Replace mutable-entry-vector insertion with relation add through the typed set; direct additions record no correspondence. |
+| add_atom, add_bond | Move implementations to crate-private Molecule methods; editor methods delegate and batch execution calls the same implementations. Retain Graph addition and parallel attribute-array updates; direct additions record no correspondence. |
+| add_dative_bond, add_aromatic_system, add_multicenter_bond, add_noncovalent_bond, add_stereo_atom, add_stereo_bond | Move implementations to crate-private Molecule methods; editor methods delegate and batch execution calls the same implementations. Replace mutable-entry-vector insertion with relation add through the typed set; direct additions record no correspondence. |
 | atom_mut, bond_mut | Already mutate copy-on-write attribute arrays. Retain graph-IR ownership of these arrays. |
 | Mutable attribute views for all six overlay kinds | Replace entry-vector materialization with typed-set access to relation payload mutation. Keep attributes and participants accessible in the entity view. |
-| constraints_mut, inline constraints through attribute views | Remove editor push_constraint; use constraints_mut().push. Keep private Molecule::push_constraint for Edit execution. Retain editor-only top-level mutable access and shared entity-attribute access; graph-core does not interpret molecular constraints. |
-| Each overlay remove_* / tracked_remove_* pair | Private Molecule methods remove entries from that owning set only; tracked forms return its typed compaction. Complete editor/batch removal separately assembles MoleculeCompaction and compacts constraints. Use the set's removal implementation; remove public tracked direct mutation. |
-| Topology remove / tracked_remove | Rename the editor operation to remove_topology. Private Molecule remove_topology / tracked_remove_topology mutate Graph and atom/bond attributes only; tracked removal returns GraphCompaction. Editor/batch execution separately compacts each overlay set, assembles MoleculeCompaction, and compacts constraints. Graph nomenclature is unchanged. |
-| Internal undo-addition removal and restore_* methods | Undo additions with private Molecule untracked removal only, without overlay or constraint compaction. Undo removals with restore_topology for Graph and atom/bond attributes, separate overlay topology-id/row restoration, then constraint restoration. S4a lists the restoration interfaces. |
-| Overlay and constraint compaction | Private Molecule compact_* / tracked_compact_* methods each delegate to one component. Overlay delegates install the returned replacement set; tracked forms also return its row mapping. Constraint delegates mutate the collection in place. S4b lists their interfaces. |
+| constraints_mut, inline constraints through attribute views | Remove editor push_constraint; use constraints_mut().push. Keep crate-private Molecule::push_constraint for Edit execution. Retain editor-only top-level mutable access and shared entity-attribute access; graph-core does not interpret molecular constraints. |
+| Each overlay remove_* / tracked_remove_* pair | Crate-private Molecule methods remove entries from that owning set only; tracked forms return its typed compaction. Complete editor/batch removal separately assembles MoleculeCompaction and compacts constraints. Use the set's removal implementation; remove public tracked direct mutation. |
+| Topology remove / tracked_remove | Rename the editor operation to remove_topology. Crate-private Molecule remove_topology / tracked_remove_topology mutate Graph and atom/bond attributes only; tracked removal returns GraphCompaction. Editor/batch execution separately compacts each overlay set, assembles MoleculeCompaction, and compacts constraints. Graph nomenclature is unchanged. |
+| Internal undo-addition removal and restore_* methods | Undo additions with crate-private Molecule untracked removal only, without overlay or constraint compaction. Undo removals with restore_topology for Graph and atom/bond attributes, separate overlay topology-id/row restoration, then constraint restoration. S4a lists the restoration interfaces. |
+| Overlay and constraint compaction | Crate-private Molecule compact_* / tracked_compact_* methods each delegate to one component. Overlay delegates install the returned replacement set; tracked forms also return its row mapping. Constraint delegates mutate the collection in place. S4b lists their interfaces. |
 | apply, transact, and tracked counterparts | Replace the current lifecycle with the editor/transaction API above. Both execution paths share graph-IR mutation operations; handle resolution and forward preconditions remain batch concerns, and undo capture/replay remains transactional. |
 | snapshot, try_build, build, and tracked counterparts | Remove relation-row rebuilding at publication. Replace editor publication with finish, Molecule::apply, or scoped commit, and replace snapshot with checked probe access. Fresh MoleculeBuilder retains asserted build. |
 | Overlay reads and views; six internal *_equiv methods | Remove storage-wrapper dispatch. Use typed-set accessors and graph-core participant comparison where applicable; retain graph-IR frame transport and payload comparison. |
 
-The private Molecule addition interfaces are:
+The crate-private Molecule addition interfaces are:
 
 ```rust
-fn add_atom(&mut self, attributes: AtomForm) -> AtomId;
-fn add_bond(&mut self, first: AtomId, second: AtomId, attributes: BondForm) -> BondId;
-fn add_dative_bond(&mut self, donors: &[AtomId], acceptor: AtomId, attributes: DativeBondForm) -> DativeBondId;
-fn add_aromatic_system(&mut self, atoms: &[AtomId], attributes: AromaticSystemForm) -> AromaticSystemId;
-fn add_multicenter_bond(&mut self, atoms: &[AtomId], attributes: MulticenterBondForm) -> MulticenterBondId;
-fn add_noncovalent_bond(&mut self, atoms: [AtomId; 2], attributes: NoncovalentBondForm) -> NoncovalentBondId;
-fn add_stereo_atom(&mut self, site: AtomId, ligands: &[StereoLigand], attributes: StereoAtomForm) -> StereoAtomId;
-fn add_stereo_bond(&mut self, site: BondId, ligands: &[StereoLigand], attributes: StereoBondForm) -> StereoBondId;
-fn push_constraint(&mut self, constraint: Constraint);
+pub(crate) fn add_atom(&mut self, attributes: AtomForm) -> AtomId;
+pub(crate) fn add_bond(&mut self, first: AtomId, second: AtomId, attributes: BondForm) -> BondId;
+pub(crate) fn add_dative_bond(&mut self, donors: &[AtomId], acceptor: AtomId, attributes: DativeBondForm) -> DativeBondId;
+pub(crate) fn add_aromatic_system(&mut self, atoms: &[AtomId], attributes: AromaticSystemForm) -> AromaticSystemId;
+pub(crate) fn add_multicenter_bond(&mut self, atoms: &[AtomId], attributes: MulticenterBondForm) -> MulticenterBondId;
+pub(crate) fn add_noncovalent_bond(&mut self, atoms: [AtomId; 2], attributes: NoncovalentBondForm) -> NoncovalentBondId;
+pub(crate) fn add_stereo_atom(&mut self, site: AtomId, ligands: &[StereoLigand], attributes: StereoAtomForm) -> StereoAtomId;
+pub(crate) fn add_stereo_bond(&mut self, site: BondId, ligands: &[StereoLigand], attributes: StereoBondForm) -> StereoBondId;
+pub(crate) fn push_constraint(&mut self, constraint: Constraint);
 ```
 
-Bulk additions have identical interfaces on private Molecule methods and public
+Bulk additions have identical interfaces on crate-private Molecule methods and public
 MoleculeEditor methods. Each takes &mut self and the listed owned batch vector;
 the return is `impl ExactSizeIterator<Item = Id> + use<>`, with Id from the last
 column. The editor delegates to Molecule. Variable participant lists remain
@@ -1569,7 +1570,7 @@ The plural Edits constructors continue to construct their existing variants;
 these storage additions do not authorize new bulk Edit variants or coalescing
 separate edits into a different execution unit.
 
-Each row below specifies a private Molecule removal pair. Both methods take
+Each row below specifies a crate-private Molecule removal pair. Both methods take
 &mut self and the listed arguments. The bare method returns (); the tracked_
 form returns the listed mapping. Neither form mutates top-level constraints.
 
@@ -1597,7 +1598,7 @@ These compositions may remain explicit in their consumers. Do not introduce
 combined helpers, output parameters, or recording modes solely to share the
 sequencing. Untracked-to-tracked delegation is the current implementation, not
 a settled efficiency requirement. Remove the seven remove_added_* adapters;
-each Undo match arm extracts saved ids and calls the private Molecule untracked
+each Undo match arm extracts saved ids and calls the crate-private Molecule untracked
 removal for the added kind directly. Under matching
 history, reverse replay has undone later dependencies and returned added entries
 to their appended positions; earlier ids do not change. No separate overlay or
@@ -1608,8 +1609,8 @@ without validating that it is matching history or requiring a trailing block.
 Restoration follows the same component boundaries:
 
 ```rust
-// Private Molecule method.
-fn restore_topology(
+// Crate-private Molecule method.
+pub(crate) fn restore_topology(
     &mut self,
     compaction: &GraphCompaction,
     atoms: Vec<RemovedAtom>,
@@ -1626,7 +1627,12 @@ restore and constraint restoration are needed. The existing typed-set restore
 signatures are recorded in S1a–S1c; add no combined overlay-restoration helper.
 Retain the matching-history and panic-free misuse contracts below.
 
-Single-entry execution belongs to private Molecule methods: apply_edit,
+Internal Molecule mutation methods and mutable accessors use pub(crate); storage
+fields stay private. Ordinary internal visibility is private or pub(crate), not
+pub(super) or path-restricted visibility. Module-test support may use pub(super);
+other exceptions require a specific, narrow justification.
+
+Single-entry execution belongs to crate-private Molecule methods: apply_edit,
 apply_edit_with_undo, and apply_undo, retaining the existing names. Edit and Undo
 remain data enums; Edits retains its construction API. Editor and Transaction
 own their batch loops and call these methods on the owned or borrowed Molecule.
@@ -1647,10 +1653,10 @@ planned structural replacement variants:
 
 | Edit family | Mutation implementation |
 | --- | --- |
-| AddAtoms, AddBonds, six overlay additions | Shared private Molecule add_* methods, with bulk topology addition for the existing AddAtoms/AddBonds variants. |
-| RemoveTopology, six overlay removals | Private Molecule removal primitives followed by the separate overlay/constraint compaction steps described above; batch execution retains the combined mapping for handle updates. |
+| AddAtoms, AddBonds, six overlay additions | Shared crate-private Molecule add_* methods, with bulk topology addition for the existing AddAtoms/AddBonds variants. |
+| RemoveTopology, six overlay removals | Crate-private Molecule removal primitives followed by the separate overlay/constraint compaction steps described above; batch execution retains the combined mapping for handle updates. |
 | Modify*Field for all eight entity kinds | Assignment through the existing/shared mutable attribute access. |
-| Nine Replace* variants for atoms, donors, acceptors, sites, and ligands | Structural methods on *EditorViewMut obtained through private Molecule access; those views delegate to their owning sets. |
+| Nine Replace* variants for atoms, donors, acceptors, sites, and ligands | Structural methods on *EditorViewMut obtained through crate-private Molecule access; those views delegate to their owning sets. |
 
 The shared attribute access and planned structural replacements complete this
 coverage; no additional Molecule modification family is needed. Neither optional
@@ -1923,7 +1929,7 @@ These recorded results are sufficient to delete the scratch files.
 A standalone std-only prototype compiled without warnings using rustc 1.96.0.
 Its model molecule owns a value vector and declared count; complete state was
 compared in each case. The selected shape has one owning MoleculeEditor and a
-transaction borrowing the existing molecule. Both use the same private edit
+transaction borrowing the existing molecule. Both use the same crate-private edit
 kernel. There is no copied draft, move-out, empty placeholder, or ownership mode.
 
 Eleven transaction cases passed: accepted commit; ordinary domain rejection;
@@ -3101,7 +3107,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   of the removed checked-view API. Python uses try_modify_constraints instead
   and its caller migration remains S2l.
 
-  Add private Molecule::constraints_mut(&mut self) -> &mut Constraints in the
+  Add crate-private Molecule::constraints_mut(&mut self) -> &mut Constraints in the
   owning molecule module. S2i3 uses it for the editor delegate; no public
   top-level constraint borrow is added. Remove the checked-view description
   from the nomenclature guide. Keep try_modify_constraints until S2k/S2l migrate
@@ -3113,7 +3119,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
 
   **Implemented and verified — 2026-09-26.** Removed ConstraintsViewMut,
   its exports/module, and its API-specific tests. Test setup uses the editor
-  and checked publication. Molecule retains a private constraints_mut accessor,
+  and checked publication. Molecule retains a crate-private constraints_mut accessor,
   used by the existing checked callback; editor delegation follows in S2i3.
   Constructor rejection cases remain, and editor publication tests cover invalid
   references, stereo kinds, frame sizes, permutation degrees, and positions.
@@ -3199,10 +3205,10 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   No public constructors. Each view has a crate-private new taking exactly its
   listed fields. Molecule owns the calls that construct views, establishes that
   the entity id exists, and selects the const specialization. Public Molecule
-  accessors return <false>; private access supplies the existing <true> views to
+  accessors return <false>; crate-private access supplies the existing <true> views to
   editor, batch, and undo execution. Editor accessors delegate to that private
   access rather than borrowing Molecule fields to construct views themselves.
-  Spell that private access as the following Molecule methods, each taking
+  Spell that crate-private access as the following Molecule methods, each taking
   &mut self and the listed id and returning the listed view. Public *_mut
   methods call the <false> specialization; editor access calls <true>.
 
@@ -3219,9 +3225,8 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
 
   These methods select and construct the existing view, not a second mutation
   API. They have the same invalid-id panic as the public accessors. Their bodies
-  live in the molecule module so its editor/transact children can call them
-  without pub(crate) visibility. Top-level mutable constraint access uses the
-  private Molecule::constraints_mut() -> &mut Constraints introduced in S2i1.
+  live in the molecule module and use pub(crate) visibility. Top-level mutable
+  constraint access uses the crate-private Molecule::constraints_mut() -> &mut Constraints introduced in S2i1.
   Internal attribute-only writes can use the ordinary <false> views. No new view
   family, public const-selection parameter, or false-to-true conversion is added.
   Export the shared family through ir. id copies the id; attributes,
@@ -3257,8 +3262,8 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   **Completed — 2026-09-26; group verification recorded in S2i4.** MoleculeEditor
   holds a private Molecule draft and its existing correspondence. The three
   storage-wrapper types and their Arc conversions are removed. All eight mutable
-  accessors delegate to Molecule's private constructors with EDITOR=true;
-  constraints_mut delegates to Molecule's private accessor. Overlay additions,
+  accessors delegate to Molecule's crate-private accessors with EDITOR=true;
+  constraints_mut delegates to Molecule's crate-private accessor. Overlay additions,
   removals, compaction, and restoration use the typed sets. Equivalence checks
   retain frame transport and normalized comparison. Snapshot and build check
   integrity before returning a Molecule; edit's ownership contract is unchanged.
@@ -3372,7 +3377,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
 
   Molecule's eight public *_mut(&mut self, id) methods return *ViewMut<'_> without
   a const argument. The synonymous editor methods return *EditorViewMut<'_>.
-  Molecule's existing private atom_view_mut, bond_view_mut, dative_bond_view_mut,
+  Molecule's existing crate-private atom_view_mut, bond_view_mut, dative_bond_view_mut,
   aromatic_system_view_mut, multicenter_bond_view_mut, noncovalent_bond_view_mut,
   stereo_atom_view_mut, and stereo_bond_view_mut keep their names and id arguments,
   lose the const parameter, and return the corresponding *EditorViewMut<'_>.
@@ -3401,7 +3406,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
 
   **Completed — 2026-09-26.** All eight mutable molecule/editor pairs are separate
   public types with matching existing methods and unchanged stored borrows.
-  Removed the const parameter, rewired public/private accessors, exported the
+  Removed the const parameter, rewired public/crate-private accessors, exported the
   editor mutable types, and updated the nomenclature guide. Existing assignment
   tests name both public return types explicitly; their assertions are unchanged.
   No immutable-view API changes or S2j getter/structural additions are included.
@@ -4045,7 +4050,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
 - **S3b** (`ir::molecule::transact`; breaking, green at S3e) Realize those edits
   through the structural methods on *EditorViewMut, obtained
-  from Molecule's private access introduced in S2i. Undo uses those same methods
+  from Molecule's crate-private access introduced in S2i. Undo uses those same methods
   with the saved components. Do not reach into typed sets from edit execution
   or construct views there from Molecule fields. Keep unrelated factors,
   attributes, constraints, and ids unchanged. Test each
@@ -4372,7 +4377,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Graph-core's S3g properties cover the delegated batch algorithm; Molecule/editor
   integration is S3i. Workspace and Rust 1.87 gates remain at S9b.
 
-- **S3i — completed 2026-09-28** (`ir::molecule`, `ir::molecule::editor`; additive, green) Add private
+- **S3i — completed 2026-09-28** (`ir::molecule`, `ir::molecule::editor`; additive, green) Add crate-private
   Molecule and public editor add_atoms, add_bonds, add_dative_bonds,
   add_aromatic_systems, add_multicenter_bonds, add_noncovalent_bonds,
   add_stereo_atoms, and add_stereo_bonds. Use the full bulk-addition interface
@@ -4387,7 +4392,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   stored entries against independent expected values, graph/attribute alignment,
   empty batches, and use through editor publication. [dep: S2i, S3f, S3h]
 
-  All eight private Molecule additions and public editor delegates are implemented.
+  All eight crate-private Molecule additions and public editor delegates are implemented.
   Graph and its atom/bond attribute vectors grow together; each overlay addition
   calls its typed set's extend. Forms move into storage, and the returned iterators
   own their bounds. Empty batches preserve shared storage.
@@ -4395,7 +4400,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   The existing editor still owns session correspondence until S6b1. Nonempty
   additions extend its target counts once per batch so current tracked publication
   and subsequent removals remain correct. This increments one count through a
-  mutable borrow without cloning pair vectors. The private Molecule
+  mutable borrow without cloning pair vectors. The crate-private Molecule
   methods do not maintain correspondence; S6b1 removes this editor bookkeeping
   together with the existing single-addition bookkeeping.
 
@@ -4637,8 +4642,8 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
 ### S4 — Recovery machinery before the public lifecycle switch
 
-- **S4a** (`ir::constraint::molecule`, `ir::molecule`, `ir::molecule::editor`,
-  `ir::molecule::transact`; group; public rename and restoration rewire, green at S4a2). [dep: S2i, S3b]
+- **S4a — completed 2026-09-28** (`ir::constraint::molecule`, `ir::molecule`, `ir::molecule::editor`,
+  `ir::molecule::editor::transact`; group; public rename and restoration rewire, green at S4a2). [dep: S2i, S3b]
 
 - **S4a1 — completed 2026-09-28** (`ir::molecule`; additive, green). [dep: S2i, S3b]
 
@@ -4646,16 +4651,16 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   operations and add local attribute and target-access guards. Constraint
   restoration and its guards belong to S4a2.
   Guard missing or out-of-range entries; do not add index-overflow checks.
-  Implement private Molecule::restore_topology with
+  Implement crate-private Molecule::restore_topology with
   `(&mut self, &GraphCompaction, Vec<RemovedAtom>, Vec<RemovedBond>) -> ()`.
   Its scope is Graph plus the atom/bond attribute vectors. S4a2 removes the editor's
   combined topology-and-overlay restoration body; undo execution composes this
-  primitive with separate private Molecule delegates to each set's existing
+  primitive with separate crate-private Molecule delegates to each set's existing
   restore_topology_ids and restore, followed by restore_constraints.
   Overlay-only undo calls the affected row-restoration delegate without
   topology-id restoration. Keep these as independent operations.
 
-  Each row defines two private Molecule methods. The row-restoration method
+  Each row defines two crate-private Molecule methods. The row-restoration method
   takes `(&mut self, rows: &Compaction<Id>, removed: Vec<Entry>) -> ()`.
   The topology-id method takes `(&mut self, topology: &GraphCompaction) -> ()`.
   Id is the first member of Entry. Each method forwards to just its owning set;
@@ -4673,7 +4678,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Verify each method against matching removals, surviving topology-id translation,
   unchanged-topology restoration, and manipulated-input panic freedom.
 
-  All 13 private methods are implemented. restore_topology delegates topology
+  All 13 crate-private methods are implemented. restore_topology delegates topology
   restoration to Graph::restore and restores only the atom/bond attribute vectors.
   Saved attributes move into their original positions; surviving attributes keep
   their current values and move when their storage is uniquely owned. Each overlay
@@ -4685,7 +4690,19 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Clippy with proptest, rustdoc with warnings denied, nightly formatting, and diff
   checks pass. The full diff was reviewed against the 13 approved signatures.
 
-- **S4a2 — Constraint storage and undo restoration wiring** (`ir::constraint::molecule`, molecule/transact; breaking, red→green). [dep: S4a1, S3k]
+- **S4a2 — completed 2026-09-28** (`ir::constraint::molecule`, `ir::molecule::{editor,editor::transact}`; breaking, green). [dep: S4a1, S3k]
+
+  Move the current molecule/transact.rs to molecule/editor/transact.rs and
+  declare it as a private child of editor. Keep MoleculeEditor.molecule and
+  MoleculeEditor.correspondence private. The current editor batch methods and
+  detached-journal rollback then access editor state within its owning module.
+  Re-export Transaction and TransactionError through editor and molecule,
+  preserving their public paths; migrate internal imports to those re-exports.
+  Move the correspondence-allocation test into the editor tests without importing
+  another test module. Make the seven editor remove_added_* methods private;
+  their callers are now descendants of editor. Use pub(crate) for from_parts and
+  the existing internal Molecule mutable accessors, additions, and restorations.
+  This changes placement and visibility, not lifecycle or mutation semantics.
 
   Add public `Constraints::extend(&mut self, constraints: Vec<Constraint>) -> ()`,
   moving entries in order without normalization or reference checks. Retain the
@@ -4701,7 +4718,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   transaction-level restored_constraints; preserve recorded positions and old
   values, guard local accesses, and remove post-value equality requirements.
   Retain `compact(&mut self, &MoleculeCompaction)`; add no tracked_restore.
-  Add private Molecule
+  Add crate-private Molecule
   `restore_constraints(&mut self, changes: &CascadedConstraints) -> ()`,
   delegating only to Constraints::restore. These delegates do not add old-value
   checks, journals, or publication checks. Migrate undo callers to them; preserve
@@ -4714,6 +4731,23 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   without asserting its result. Cover constraint compaction/restoration with
   removed and rewritten entries, duplicate entries, and preserved list order.
 
+  Constraint storage exposes extend, tracked_compact, and restore. Undo removal
+  branches call the Molecule restoration methods; constraint reconstruction and
+  its local guards are owned by Constraints. Explicit removal saves remove_at's
+  returned value and position. Editor restoration bodies and all 13 restoration
+  dead-code expectations are removed. Both editor fields are private;
+  editor::transact owns the current batch and detached-journal implementation.
+  Shared execution moves to molecule::apply in S4b3; borrowed transaction
+  ownership moves to molecule::transact in S5. Aggregate undo validation remains
+  until its scheduled removal in S4b8.
+
+  **Checked — 2026-09-28.** All 603 focused constraint, editor, transaction,
+  tracked-publication, and Molecule restoration unit cases pass. All 26 affected
+  constraint/edit property tests pass, including independently generated
+  restoration histories. Graph-ir all-target Clippy with proptest and warnings
+  denied, warnings-denied rustdoc, nightly formatting, and diff checks/review
+  pass. Workspace/Python rebuilds and Rust 1.87 remain at S9b.
+
 - **S4b — Molecule delegation and Edit/Undo execution** (group; breaking,
   green at S4b8; cleanup at S4b9). [dep: S4a, S3i]
 
@@ -4725,23 +4759,23 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 - **S4b1 — Molecule addition, removal, and compaction methods** (`ir::molecule`; breaking rewire, green at S4b8). [dep: S4a, S3i]
 
   Move the eight add_* methods,
-  push_constraint, and all seven untracked/tracked removal pairs to private
+  push_constraint, and all seven untracked/tracked removal pairs to crate-private
   Molecule methods, with the interfaces recorded under Storage delegation.
   Editor additions delegate; complete editor removals and batch execution compose
   the same primitives.
   Remove MoleculeEditor::push_constraint and migrate its callers to
-  editor.constraints_mut().push(constraint). Retain private
+  editor.constraints_mut().push(constraint). Retain crate-private
   Molecule::push_constraint for Edit execution. Do not replace the removed editor
   method with another top-level constraint convenience delegate.
   Reuse S3i's bulk add_atoms/add_bonds for the corresponding Edit variants;
   preserve individual overlay Edit execution and its existing undo boundaries.
-  Rename editor remove to remove_topology and private tracked_remove to
-  tracked_remove_topology, migrating callers. The private topology pair mutates
+  Rename editor remove to remove_topology and crate-private tracked_remove to
+  tracked_remove_topology, migrating callers. The crate-private topology pair mutates
   only Graph and atom/bond attributes and returns GraphCompaction when tracked;
   each overlay pair mutates only its owning set and returns Compaction<Id> when
   tracked. Public editor removal still completes all cascading updates.
 
-  Add the following private Molecule compaction pairs. Each method takes
+  Add the following crate-private Molecule compaction pairs. Each method takes
   `(&mut self, topology: &GraphCompaction)`. The bare method returns (); the
   tracked method returns the listed mapping. Both install the replacement set
   returned by that owning set's compact/tracked_compact. They mutate no other
@@ -4756,14 +4790,14 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   | compact_stereo_atoms | tracked_compact_stereo_atoms | Compaction<StereoAtomId> |
   | compact_stereo_bonds | tracked_compact_stereo_bonds | Compaction<StereoBondId> |
 
-  Complete the private Molecule constraint delegation surface:
+  Complete the crate-private Molecule constraint delegation surface:
 
   ```rust
-  fn push_constraint(&mut self, constraint: Constraint);
-  fn extend_constraints(&mut self, constraints: Vec<Constraint>);
-  fn remove_constraint_at(&mut self, position: usize) -> Constraint;
-  fn compact_constraints(&mut self, compaction: &MoleculeCompaction);
-  fn tracked_compact_constraints(
+  pub(crate) fn push_constraint(&mut self, constraint: Constraint);
+  pub(crate) fn extend_constraints(&mut self, constraints: Vec<Constraint>);
+  pub(crate) fn remove_constraint_at(&mut self, position: usize) -> Constraint;
+  pub(crate) fn compact_constraints(&mut self, compaction: &MoleculeCompaction);
+  pub(crate) fn tracked_compact_constraints(
       &mut self, compaction: &MoleculeCompaction,
   ) -> CascadedConstraints;
   // restore_constraints is supplied by S4a.
@@ -4784,7 +4818,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   **Complete editor direct-mutation inventory.** The following is the resulting
   public surface, including mutation reached through returned views/borrows.
   Addition signatures are in Storage delegation; all take &mut self and
-  delegate to synonymous private Molecule methods.
+  delegate to synonymous crate-private Molecule methods.
 
   | Individual addition | Bulk addition |
   | --- | --- |
@@ -4842,35 +4876,43 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   editor API and migrate all removed push_constraint callers, including bindings
   and tests where present.
 
-- **S4b3 — Single-entry execution and batch ownership** (`ir::molecule::transact`; breaking, green at S4b8). [dep: S4b2]
+- **S4b3 — Single-entry execution and batch ownership** (`ir::molecule::{apply,editor::transact}`; breaking, green at S4b8). [dep: S4b2]
 
   Move apply_edit, apply_edit_with_undo, and apply_undo from impl MoleculeEditor
-  to impl Molecule in ir::molecule::transact, retaining their private visibility
-  and names. Both forward methods take one Edit and the batch's mutable
-  ApplicationState; apply_edit_with_undo returns an optional Undo as specified
-  below. apply_undo takes one Undo. Initialize ApplicationState from Molecule
-  accessors rather than an editor. Editor and Transaction retain their batch
-  loops; Transaction retains journal storage and reverse replay. Add no execution
-  methods to Edit, Edits, or Undo and no separate execution type. These Molecule
-  methods obey the same accessor/mutation-method boundary as the inventory below;
-  moving their impl does not authorize direct storage access.
+  to impl Molecule in a private ir::molecule::apply module. Move ApplicationState,
+  HandleTable, and execution-only functions with them. Keep editor batch methods
+  and detached Transaction lifecycle in editor::transact until S5; they call the
+  shared execution methods rather than access one another's fields. S5 moves the
+  borrowed Transaction implementation to molecule::transact.
+
+  The three Molecule methods, ApplicationState, and its new constructor are
+  pub(crate). ApplicationState fields, HandleTable, and handle-processing methods
+  remain private to apply. Both forward methods take one Edit and the batch's
+  mutable ApplicationState; apply_edit_with_undo returns an optional Undo.
+  apply_undo takes one Undo. Initialize ApplicationState from Molecule accessors.
+  Editor and Transaction retain their batch loops; Transaction retains journal
+  storage and reverse replay. Add no execution methods to Edit, Edits, or Undo
+  and no separate execution type. Execution calls Molecule mutation methods and
+  accessors; its placement does not authorize direct storage access.
 
   ```rust
-  // Private methods in ir::molecule::transact; editor batch bodies stay here too.
-  fn apply_edit(&mut self, edit: Edit, state: &mut ApplicationState)
+  // In ir::molecule::apply, on Molecule:
+  pub(crate) fn apply_edit(&mut self, edit: Edit, state: &mut ApplicationState)
       -> Result<(), TransactionError>;
-  fn apply_edit_with_undo(&mut self, edit: Edit, state: &mut ApplicationState)
+  pub(crate) fn apply_edit_with_undo(&mut self, edit: Edit, state: &mut ApplicationState)
       -> Result<Option<Undo>, TransactionError>;
-  fn apply_undo(&mut self, undo: Undo);
-  // Existing private batch state, with a changed receiver source:
-  ApplicationState::new(molecule: &Molecule) -> ApplicationState;
+  pub(crate) fn apply_undo(&mut self, undo: Undo);
+  // Existing batch state; fields stay private:
+  pub(crate) struct ApplicationState { /* eight HandleTable fields */ }
+  impl ApplicationState {
+      pub(crate) fn new(molecule: &Molecule) -> Self;
+  }
   ```
 
   Execution returns the existing per-Edit error category. Public lifecycle
   methods wrap it in MoleculeApplyError::Transaction; integrity belongs to
-  probe/finish/commit. Undo has no Result or expected-post-value check. Keeping
-  execution and editor batch bodies in the same module makes these private
-  methods accessible without widening visibility.
+  probe/finish/commit. Undo has no Result or expected-post-value check. The shared
+  crate-private method interface keeps editor and transaction fields private.
 
   Retain ApplicationState's eight existing HandleTable fields, one per entity
   kind, and its typed lookup/push/compact methods. Replace eager initial-id
@@ -4909,7 +4951,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   delegates and assemble MoleculeCompaction. After explicit overlay removal,
   assemble that mapping with identity components for unchanged kinds. Then
   call compact_constraints or tracked_compact_constraints. Addition undo instead
-  calls only the private Molecule untracked removal, as listed below. Remove the
+  calls only the crate-private Molecule untracked removal, as listed below. Remove the
   seven remove_added_* adapters and make those calls in the Undo match arms,
   without overlay/constraint compaction or
   correspondence updates. Keep forward sequencing explicit; add no combined
@@ -4917,7 +4959,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Remove all sixteen apply_modify_*_field / apply_modify_*_constraint helpers.
   Keep handle resolution and old-value/precondition checks in batch execution,
   and perform field and entity-constraint writes through mutable views obtained
-  from Molecule. Top-level constraint changes use the private Molecule delegates.
+  from Molecule. Top-level constraint changes use the crate-private Molecule delegates.
   Structural Edit replacements and their undos use *EditorViewMut methods wired
   in S3b. Add no Molecule modification family. Prepare fallible data before
   writes, preserve each bundled edit as one
@@ -4944,7 +4986,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   **Edit-to-mutation inventory.** The tables here and S3b enumerate all 33
   current Edit variants and nine planned replacements. Calls without a view
-  receiver are private Molecule methods; m is the owned or borrowed Molecule.
+  receiver are crate-private Molecule methods; m is the owned or borrowed Molecule.
   Accessors and views supply all reads, including preconditions and undo capture.
   No execution or replay branch borrows Molecule fields, constructs a view from
   those fields, or directly mutates Graph, attribute vectors, typed sets, or
@@ -4965,7 +5007,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Verify batch-local handles, completed-Edit journal entries, and no entry for
   a None-to-None constraint edit. Retain the existing public lifecycle until S5.
 
-- **S4b4 — Addition execution** (`ir::molecule::transact`; rewire, green at S4b8). [dep: S4b3]
+- **S4b4 — Addition execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b3]
 
   **Additions.** Resolve the listed topology handles before calling the method;
   attribute forms are moved unchanged. Register returned ids in the batch's New
@@ -4984,7 +5026,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   | AddStereoBond | Resolve bond site and all ligand atoms | add_stereo_bond(site, &ligands, attributes) | RemoveAddedStereoBond: remove_stereo_bonds(&[id]) |
 
   The last column is the entire mutation needed for each addition undo. These
-  are private Molecule primitives, not the editor's complete cascading removal
+  are crate-private Molecule primitives, not the editor's complete cascading removal
   operations. Reverse replay has undone later references and compactions, so
   matching added entries again occupy trailing positions and earlier ids stay
   unchanged. Do not compact overlays or constraints, assemble MoleculeCompaction,
@@ -4995,7 +5037,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Verify ids, handle registration, saved entries, and reverse removal after
   later dependent edits have been undone.
 
-- **S4b5 — Removal and cascading compaction execution** (`ir::molecule::transact`; rewire, green at S4b8). [dep: S4b4]
+- **S4b5 — Removal and cascading compaction execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b4]
 
   **Topology removal.** RemoveTopology resolves atom/bond targets and rejects
   duplicate ids within each list. No offered-old payload is present. Journaled
@@ -5061,7 +5103,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Verify whole-Edit precondition rejection, all overlay cascades, constraint
   positions, and batch handle updates from the composed mappings.
 
-- **S4b6 — Attribute edit execution** (`ir::molecule::transact`; rewire, green at S4b8). [dep: S4b5]
+- **S4b6 — Attribute edit execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b5]
 
   **Attribute changes.** Resolve the target, read the selected field through
   its view, and require normalized_eq with the offered old value before writing.
@@ -5088,7 +5130,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   Cover every FieldChange member and equivalent offered-old forms.
 
-- **S4b7 — Constraint edits and explicit constraint Undo variants** (`ir::{edit,molecule::transact}`; breaking, green at S4b8). [dep: S4b6]
+- **S4b7 — Constraint edits and explicit constraint Undo variants** (`ir::{edit,molecule::apply}`; breaking, green at S4b8). [dep: S4b6]
 
   **Entity-level constraints.** Resolve the target. If old/new are both Some,
   require equal keys. At that key, require current and old to be both absent or
@@ -5160,7 +5202,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Test saved optional constraints, keys, duplicate top-level entries, position
   restoration, and the no-op journal case.
 
-- **S4b8 — Undo replay and migration closure** (`ir::molecule::transact`, Rust consumers; breaking, red→green). [dep: S4b7]
+- **S4b8 — Undo replay and migration closure** (`ir::molecule::apply`, Rust consumers; breaking, red→green). [dep: S4b7]
 
   Implement Molecule::apply_undo through the calls mapped in S3b and S4b4–S4b7.
   Remove the seven remove_added_* adapters, forward Edit recursion, old-value
@@ -5246,6 +5288,12 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
       Aborted,
   }
   ```
+
+  Create molecule/transact.rs for the borrowed Transaction lifecycle, independent
+  of editor. Retire the detached Transaction implementation in editor::transact;
+  editor apply/tracked_apply stay under editor. Update the Transaction re-export
+  to the new module. Transaction methods call Molecule's shared execution methods
+  in apply and never access editor fields.
 
   Both types and all fields are private to transact. Construct the guard directly
   in Transaction::run with an empty journal and Active status; no public
@@ -5501,7 +5549,7 @@ temporary cloning adapters is not a way to close an earlier subitem.
 
   Keep combine_from(&mut self, other: &Molecule) -> () and its existing
   disjoint-append semantics. Save the eight original entity counts solely as
-  offsets for other, then use private Molecule additions directly: atoms,
+  offsets for other, then use crate-private Molecule additions directly: atoms,
   bonds with shifted endpoints, and the six overlay kinds with shifted sites
   and atoms. Retain the existing correspondence-based ligand and constraint
   translation; append mapped constraints through extend_constraints. Only
@@ -5715,7 +5763,7 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup and S4a1 are complete; S4a2 is next.
+  S3k1–S3k4's index-overflow cleanup and S4a are complete; S4b1 is next.
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is

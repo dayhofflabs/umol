@@ -8,21 +8,20 @@
 use std::mem;
 use std::sync::Arc;
 
+pub use transact::{Transaction, TransactionError};
 use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCompaction, NodeId};
 use umol_perm::{DynPermutation, Permutation};
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
-use super::super::compact::{MoleculeCompaction, UndoCompaction};
+use super::super::compact::MoleculeCompaction;
 use super::super::constraint::{Constraint, Constraints};
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::{DativeBondForm, DativeBonds};
 use super::super::edit::{
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
-    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, RemovedAromaticSystem, RemovedAtom,
-    RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
-    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
+    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond,
 };
 use super::super::entity::EntityKind;
 use super::super::id::{
@@ -42,6 +41,8 @@ use super::super::view::{
     StereoBondEditorView, StereoBondEditorViewMut,
 };
 use super::{Molecule, MoleculeIntegrityError};
+
+mod transact;
 
 /// Editor for structural and attribute changes to a `Molecule`.
 ///
@@ -71,12 +72,12 @@ use super::{Molecule, MoleculeIntegrityError};
 #[derive(Clone)]
 pub struct MoleculeEditor {
     molecule: Molecule,
-    pub(super) correspondence: MoleculeCorrespondence,
+    correspondence: MoleculeCorrespondence,
 }
 
 impl MoleculeEditor {
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn from_parts(
+    pub(crate) fn from_parts(
         graph: Graph,
         atoms: Arc<Vec<AtomForm>>,
         bonds: Arc<Vec<BondForm>>,
@@ -881,226 +882,34 @@ impl MoleculeEditor {
 
     // -- Undo of additions ----------------------------------------------------
 
-    pub(super) fn remove_added_topology(&mut self, atoms: &[AddedAtom], bonds: &[AddedBond]) {
+    fn remove_added_topology(&mut self, atoms: &[AddedAtom], bonds: &[AddedBond]) {
         let atom_ids: Vec<AtomId> = atoms.iter().map(|a| a.id).collect();
         let bond_ids: Vec<BondId> = bonds.iter().map(|b| b.id).collect();
         self.remove(&atom_ids, &bond_ids);
     }
 
-    pub(super) fn remove_added_dative_bond(&mut self, added: &AddedDativeBond) {
+    fn remove_added_dative_bond(&mut self, added: &AddedDativeBond) {
         self.remove_dative_bonds(&[added.id]);
     }
 
-    pub(super) fn remove_added_aromatic_system(&mut self, added: &AddedAromaticSystem) {
+    fn remove_added_aromatic_system(&mut self, added: &AddedAromaticSystem) {
         self.remove_aromatic_systems(&[added.id]);
     }
 
-    pub(super) fn remove_added_multicenter_bond(&mut self, added: &AddedMulticenterBond) {
+    fn remove_added_multicenter_bond(&mut self, added: &AddedMulticenterBond) {
         self.remove_multicenter_bonds(&[added.id]);
     }
 
-    pub(super) fn remove_added_noncovalent_bond(&mut self, added: &AddedNoncovalentBond) {
+    fn remove_added_noncovalent_bond(&mut self, added: &AddedNoncovalentBond) {
         self.remove_noncovalent_bonds(&[added.id]);
     }
 
-    pub(super) fn remove_added_stereo_atom(&mut self, added: &AddedStereoAtom) {
+    fn remove_added_stereo_atom(&mut self, added: &AddedStereoAtom) {
         self.remove_stereo_atoms(&[added.id]);
     }
 
-    pub(super) fn remove_added_stereo_bond(&mut self, added: &AddedStereoBond) {
+    fn remove_added_stereo_bond(&mut self, added: &AddedStereoBond) {
         self.remove_stereo_bonds(&[added.id]);
-    }
-
-    // -- Undo of removals -----------------------------------------------------
-
-    // Undo application updates the session correspondence after all affected tables are restored.
-    pub(super) fn restore_topology(
-        &mut self,
-        atoms: Vec<RemovedAtom>,
-        bonds: Vec<RemovedBond>,
-        overlays: RemovedOverlays,
-        undo_compaction: &UndoCompaction,
-    ) {
-        self.restore_atoms(atoms, undo_compaction);
-        self.restore_bonds(bonds, undo_compaction);
-        self.restore_dative_bonds(overlays.dative_bonds, undo_compaction);
-        self.restore_aromatic_systems(overlays.aromatic_systems, undo_compaction);
-        self.restore_multicenter_bonds(overlays.multicenter_bonds, undo_compaction);
-        self.restore_noncovalent_bonds(overlays.noncovalent_bonds, undo_compaction);
-        self.restore_stereo_atoms(overlays.stereo_atoms, undo_compaction);
-        self.restore_stereo_bonds(overlays.stereo_bonds, undo_compaction);
-    }
-
-    // -- Restore primitives ---------------------------------------------------
-
-    fn restore_atoms(&mut self, removed: Vec<RemovedAtom>, undo_compaction: &UndoCompaction) {
-        let mut next = vec![None; self.molecule.atoms.len() + removed.len()];
-        for removed in removed {
-            next[removed.id.index()] = Some(removed.attributes);
-        }
-        for (idx, atom) in self.molecule.atoms.iter().cloned().enumerate() {
-            let old = undo_compaction.uncompact_atom(AtomId(idx as u32));
-            next[old.index()] = Some(atom);
-        }
-        self.molecule.atoms = Arc::new(next.into_iter().map(Option::unwrap).collect());
-    }
-
-    fn restore_bonds(&mut self, removed: Vec<RemovedBond>, undo_compaction: &UndoCompaction) {
-        let mut old_endpoints: Vec<Option<[AtomId; 2]>> =
-            vec![None; self.molecule.bonds.len() + removed.len()];
-        let mut old_bonds: Vec<Option<BondForm>> =
-            vec![None; self.molecule.bonds.len() + removed.len()];
-        for removed in removed {
-            old_endpoints[removed.id.index()] = Some(removed.endpoints);
-            old_bonds[removed.id.index()] = Some(removed.attributes);
-        }
-        for (idx, bond) in self.molecule.bonds.iter().cloned().enumerate() {
-            let old_id = undo_compaction.uncompact_bond(BondId(idx as u32));
-            let endpoints = self.molecule.graph.edge_endpoints(EdgeId(idx as u32));
-            old_endpoints[old_id.index()] = Some([
-                undo_compaction.uncompact_atom(AtomId::from(endpoints[0])),
-                undo_compaction.uncompact_atom(AtomId::from(endpoints[1])),
-            ]);
-            old_bonds[old_id.index()] = Some(bond);
-        }
-        let endpoints: Vec<[u32; 2]> = old_endpoints
-            .into_iter()
-            .map(|e| {
-                let e = e.unwrap();
-                [e[0].0, e[1].0]
-            })
-            .collect();
-        self.molecule.graph = Graph::new(self.molecule.atoms.len(), &endpoints);
-        self.molecule.bonds = Arc::new(old_bonds.into_iter().map(Option::unwrap).collect());
-    }
-
-    pub(super) fn restore_dative_bonds(
-        &mut self,
-        removed: Vec<RemovedDativeBond>,
-        undo_compaction: &UndoCompaction,
-    ) {
-        let compaction = undo_compaction.forward();
-        self.molecule
-            .dative_bonds
-            .restore_topology_ids(compaction.graph());
-        self.molecule.dative_bonds.restore(
-            compaction.dative_bonds(),
-            removed
-                .into_iter()
-                .map(|removed| {
-                    (
-                        removed.id,
-                        removed.donors,
-                        removed.acceptor,
-                        removed.attributes,
-                    )
-                })
-                .collect(),
-        );
-    }
-
-    pub(super) fn restore_aromatic_systems(
-        &mut self,
-        removed: Vec<RemovedAromaticSystem>,
-        undo_compaction: &UndoCompaction,
-    ) {
-        let compaction = undo_compaction.forward();
-        self.molecule
-            .aromatic_systems
-            .restore_topology_ids(compaction.graph());
-        self.molecule.aromatic_systems.restore(
-            compaction.aromatic_systems(),
-            removed
-                .into_iter()
-                .map(|removed| (removed.id, removed.atoms, removed.attributes))
-                .collect(),
-        );
-    }
-
-    pub(super) fn restore_multicenter_bonds(
-        &mut self,
-        removed: Vec<RemovedMulticenterBond>,
-        undo_compaction: &UndoCompaction,
-    ) {
-        let compaction = undo_compaction.forward();
-        self.molecule
-            .multicenter_bonds
-            .restore_topology_ids(compaction.graph());
-        self.molecule.multicenter_bonds.restore(
-            compaction.multicenter_bonds(),
-            removed
-                .into_iter()
-                .map(|removed| (removed.id, removed.atoms, removed.attributes))
-                .collect(),
-        );
-    }
-
-    pub(super) fn restore_noncovalent_bonds(
-        &mut self,
-        removed: Vec<RemovedNoncovalentBond>,
-        undo_compaction: &UndoCompaction,
-    ) {
-        let compaction = undo_compaction.forward();
-        self.molecule
-            .noncovalent_bonds
-            .restore_topology_ids(compaction.graph());
-        self.molecule.noncovalent_bonds.restore(
-            compaction.noncovalent_bonds(),
-            removed
-                .into_iter()
-                .map(|removed| (removed.id, removed.atoms, removed.attributes))
-                .collect(),
-        );
-    }
-
-    pub(super) fn restore_stereo_atoms(
-        &mut self,
-        removed: Vec<RemovedStereoAtom>,
-        undo_compaction: &UndoCompaction,
-    ) {
-        let compaction = undo_compaction.forward();
-        self.molecule
-            .stereo_atoms
-            .restore_topology_ids(compaction.graph());
-        self.molecule.stereo_atoms.restore(
-            compaction.stereo_atoms(),
-            removed
-                .into_iter()
-                .map(|removed| {
-                    (
-                        removed.id,
-                        removed.site,
-                        removed.ligands,
-                        removed.attributes,
-                    )
-                })
-                .collect(),
-        );
-    }
-
-    pub(super) fn restore_stereo_bonds(
-        &mut self,
-        removed: Vec<RemovedStereoBond>,
-        undo_compaction: &UndoCompaction,
-    ) {
-        let compaction = undo_compaction.forward();
-        self.molecule
-            .stereo_bonds
-            .restore_topology_ids(compaction.graph());
-        self.molecule.stereo_bonds.restore(
-            compaction.stereo_bonds(),
-            removed
-                .into_iter()
-                .map(|removed| {
-                    (
-                        removed.id,
-                        removed.site,
-                        removed.ligands,
-                        removed.attributes,
-                    )
-                })
-                .collect(),
-        );
     }
 
     /// Materialize the editor's current state without consuming it, after checking molecule
@@ -1183,10 +992,13 @@ mod tests {
     use super::*;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
+    use crate::ir::constraint::MoleculeConstraint;
     use crate::ir::dative::DativeBondForm;
+    use crate::ir::edit::{RemovedAtom, RemovedBond, RemovedDativeBond};
     use crate::ir::ligand::StereoLigandKind;
     use crate::ir::molecule::MoleculeEntries;
     use crate::ir::noncovalent::NoncovalentBondKind;
+    use crate::ir::num::NumForm;
     use crate::ir::stereo::StereoKind;
     use crate::mol_dsl;
 
@@ -1360,14 +1172,9 @@ mod tests {
         );
         assert_eq!(snapshot, expected);
 
-        triatomic.restore_dative_bonds(
-            vec![RemovedDativeBond {
-                id: first,
-                donors: vec![AtomId(0)],
-                acceptor: AtomId(1),
-                attributes,
-            }],
-            &compaction.undo_compaction(),
+        triatomic.molecule.restore_dative_bonds(
+            compaction.dative_bonds(),
+            vec![(first, vec![AtomId(0)], AtomId(1), attributes)],
         );
         assert_eq!(
             triatomic
@@ -1484,13 +1291,9 @@ mod tests {
         );
         assert_eq!(snapshot, expected);
 
-        triatomic.restore_aromatic_systems(
-            vec![RemovedAromaticSystem {
-                id: first,
-                atoms: vec![AtomId(0)],
-                attributes,
-            }],
-            &compaction.undo_compaction(),
+        triatomic.molecule.restore_aromatic_systems(
+            compaction.aromatic_systems(),
+            vec![(first, vec![AtomId(0)], attributes)],
         );
         assert_eq!(
             triatomic
@@ -1615,13 +1418,9 @@ mod tests {
         );
         assert_eq!(snapshot, expected);
 
-        triatomic.restore_multicenter_bonds(
-            vec![RemovedMulticenterBond {
-                id: first,
-                atoms: vec![AtomId(0), AtomId(1)],
-                attributes,
-            }],
-            &compaction.undo_compaction(),
+        triatomic.molecule.restore_multicenter_bonds(
+            compaction.multicenter_bonds(),
+            vec![(first, vec![AtomId(0), AtomId(1)], attributes)],
         );
         assert_eq!(
             triatomic
@@ -1746,13 +1545,9 @@ mod tests {
         );
         assert_eq!(snapshot, expected);
 
-        triatomic.restore_noncovalent_bonds(
-            vec![RemovedNoncovalentBond {
-                id: first,
-                atoms: [AtomId(0), AtomId(1)],
-                attributes,
-            }],
-            &compaction.undo_compaction(),
+        triatomic.molecule.restore_noncovalent_bonds(
+            compaction.noncovalent_bonds(),
+            vec![(first, [AtomId(0), AtomId(1)], attributes)],
         );
         assert_eq!(
             triatomic
@@ -1884,14 +1679,14 @@ mod tests {
         );
         assert_eq!(snapshot, expected);
 
-        triatomic.restore_stereo_atoms(
-            vec![RemovedStereoAtom {
-                id: first,
-                site: AtomId(0),
-                ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+        triatomic.molecule.restore_stereo_atoms(
+            compaction.stereo_atoms(),
+            vec![(
+                first,
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
                 attributes,
-            }],
-            &compaction.undo_compaction(),
+            )],
         );
         assert_eq!(
             triatomic
@@ -2085,19 +1880,19 @@ mod tests {
         );
         assert_eq!(snapshot, expected);
 
-        triatomic.restore_stereo_bonds(
-            vec![RemovedStereoBond {
-                id: first,
-                site: BondId(0),
-                ligands: vec![
+        triatomic.molecule.restore_stereo_bonds(
+            compaction.stereo_bonds(),
+            vec![(
+                first,
+                BondId(0),
+                vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
                 ],
                 attributes,
-            }],
-            &compaction.undo_compaction(),
+            )],
         );
         assert_eq!(
             triatomic
@@ -2495,7 +2290,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_restore_topology(mut triatomic: MoleculeEditor) {
+    fn test_molecule_editor_tracked_remove_roundtrip(mut triatomic: MoleculeEditor) {
         let expected = triatomic.clone().build();
         let removed_atoms = vec![RemovedAtom {
             id: AtomId(1),
@@ -2515,12 +2310,9 @@ mod tests {
         ];
 
         let compaction = triatomic.tracked_remove(&[AtomId(1)], &[]);
-        triatomic.restore_topology(
-            removed_atoms,
-            removed_bonds,
-            RemovedOverlays::default(),
-            &compaction.undo_compaction(),
-        );
+        triatomic
+            .molecule
+            .restore_topology(compaction.graph(), removed_atoms, removed_bonds);
 
         assert_eq!(triatomic.build(), expected);
     }
@@ -2544,7 +2336,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_restore_dative_bond() {
+    fn test_molecule_editor_remove_dative_bonds_roundtrip() {
         let mut b = Molecule::default().edit();
         b.add_atom(AtomForm::from_element(Element::C));
         b.add_atom(AtomForm::from_element(Element::N));
@@ -2571,7 +2363,15 @@ mod tests {
             Compaction::empty(),
         )
         .undo_compaction();
-        b.restore_dative_bonds(vec![removed], &undo);
+        b.molecule.restore_dative_bonds(
+            undo.forward().dative_bonds(),
+            vec![(
+                removed.id,
+                removed.donors,
+                removed.acceptor,
+                removed.attributes,
+            )],
+        );
 
         assert_eq!(b.build(), expected);
     }
@@ -2631,6 +2431,128 @@ mod tests {
                 :stereo-bonds [{:site 1 :ligands [0 [:h 1] [:h 2] [:lp 2]] :attrs "Ct1"}]}"#
         );
         assert_eq!(molecule.edit().build(), molecule);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_try_tracked_build_allocation() {
+        let mut carbon = AtomForm::from_element(Element::C);
+        carbon.charge = NumForm::Lit(1);
+
+        let entries = MoleculeEntries {
+            atoms: vec![
+                carbon,
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            ],
+            dative: vec![(
+                vec![AtomId(1), AtomId(2)],
+                AtomId(3),
+                DativeBondForm::from_order(1),
+            )],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 2, 0]),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![2, 1, 0]),
+            )],
+            noncovalent: vec![(
+                [AtomId(0), AtomId(3)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            stereo_atoms: vec![(
+                AtomId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            )],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 1u32),
+            )],
+            constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(0), AtomId(2)]),
+            })),
+        };
+        let source = Molecule::from_entries(entries);
+        let editor = source.edit();
+        let atoms_ptr = editor.correspondence.atoms().matched_pairs().as_ptr();
+        let bonds_ptr = editor.correspondence.bonds().matched_pairs().as_ptr();
+        let dative_bonds_ptr = editor
+            .correspondence
+            .dative_bonds()
+            .matched_pairs()
+            .as_ptr();
+        let aromatic_systems_ptr = editor
+            .correspondence
+            .aromatic_systems()
+            .matched_pairs()
+            .as_ptr();
+        let multicenter_bonds_ptr = editor
+            .correspondence
+            .multicenter_bonds()
+            .matched_pairs()
+            .as_ptr();
+        let noncovalent_bonds_ptr = editor
+            .correspondence
+            .noncovalent_bonds()
+            .matched_pairs()
+            .as_ptr();
+        let stereo_atoms_ptr = editor
+            .correspondence
+            .stereo_atoms()
+            .matched_pairs()
+            .as_ptr();
+        let stereo_bonds_ptr = editor
+            .correspondence
+            .stereo_bonds()
+            .matched_pairs()
+            .as_ptr();
+        let (result, witness) = editor.try_tracked_build().unwrap();
+        assert_eq!(result, source);
+        assert_eq!(witness.atoms().matched_pairs().as_ptr(), atoms_ptr);
+        assert_eq!(witness.bonds().matched_pairs().as_ptr(), bonds_ptr);
+        assert_eq!(
+            witness.dative_bonds().matched_pairs().as_ptr(),
+            dative_bonds_ptr
+        );
+        assert_eq!(
+            witness.aromatic_systems().matched_pairs().as_ptr(),
+            aromatic_systems_ptr
+        );
+        assert_eq!(
+            witness.multicenter_bonds().matched_pairs().as_ptr(),
+            multicenter_bonds_ptr
+        );
+        assert_eq!(
+            witness.noncovalent_bonds().matched_pairs().as_ptr(),
+            noncovalent_bonds_ptr
+        );
+        assert_eq!(
+            witness.stereo_atoms().matched_pairs().as_ptr(),
+            stereo_atoms_ptr
+        );
+        assert_eq!(
+            witness.stereo_bonds().matched_pairs().as_ptr(),
+            stereo_bonds_ptr
+        );
     }
 
     // `remove` forward-compacts stereo-atom node refs: removing a non-participant

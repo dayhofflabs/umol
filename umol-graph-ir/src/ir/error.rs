@@ -3,8 +3,7 @@
 use thiserror::Error;
 
 use super::entity::Entity;
-use super::molecule::transact::TransactionError;
-use super::molecule::MoleculeIntegrityError;
+use super::molecule::{MoleculeIntegrityError, TransactionError};
 use super::reaction::DpoContradiction;
 use super::substructure::SubstructureMatchError;
 

@@ -98,11 +98,10 @@ pub use id::{
 pub use incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
-pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{
     spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
     MoleculeIntegrityError, MoleculePushoutCorrespondence, MoleculeSpec, MoleculeSpecTerm, Port,
-    PortArg,
+    PortArg, Transaction, TransactionError,
 };
 pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds};
 pub use noncovalent::{

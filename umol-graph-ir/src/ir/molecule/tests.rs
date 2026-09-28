@@ -56,10 +56,10 @@ use super::super::stereo::{
     Topicity,
 };
 use super::super::traits::{FrameTransport, Normalize, Reframe};
-use super::transact::TransactionError;
 use super::{
     AromaticSystems, DativeBonds, Molecule, MoleculeApplyError, MoleculeEntries,
     MoleculeIntegrityError, MulticenterBonds, NoncovalentBonds, StereoAtoms, StereoBonds,
+    TransactionError,
 };
 use crate::ir::{
     AromaticSystemEditorViewMut, AromaticSystemViewMut, AtomEditorViewMut, AtomViewMut,
@@ -5175,74 +5175,6 @@ fn test_molecule_editor_tracked_build_attributes(
     assert_eq!(
         editor.tracked_build(),
         (Molecule::from_entries(entries), witness)
-    );
-}
-
-#[rstest]
-fn test_molecule_editor_try_tracked_build_allocation(
-    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
-) {
-    let source = Molecule::from_entries(entries);
-    let editor = source.edit();
-    let atoms_ptr = editor.correspondence.atoms().matched_pairs().as_ptr();
-    let bonds_ptr = editor.correspondence.bonds().matched_pairs().as_ptr();
-    let dative_bonds_ptr = editor
-        .correspondence
-        .dative_bonds()
-        .matched_pairs()
-        .as_ptr();
-    let aromatic_systems_ptr = editor
-        .correspondence
-        .aromatic_systems()
-        .matched_pairs()
-        .as_ptr();
-    let multicenter_bonds_ptr = editor
-        .correspondence
-        .multicenter_bonds()
-        .matched_pairs()
-        .as_ptr();
-    let noncovalent_bonds_ptr = editor
-        .correspondence
-        .noncovalent_bonds()
-        .matched_pairs()
-        .as_ptr();
-    let stereo_atoms_ptr = editor
-        .correspondence
-        .stereo_atoms()
-        .matched_pairs()
-        .as_ptr();
-    let stereo_bonds_ptr = editor
-        .correspondence
-        .stereo_bonds()
-        .matched_pairs()
-        .as_ptr();
-    let (result, witness) = editor.try_tracked_build().unwrap();
-    assert_eq!(result, source);
-    assert_eq!(witness.atoms().matched_pairs().as_ptr(), atoms_ptr);
-    assert_eq!(witness.bonds().matched_pairs().as_ptr(), bonds_ptr);
-    assert_eq!(
-        witness.dative_bonds().matched_pairs().as_ptr(),
-        dative_bonds_ptr
-    );
-    assert_eq!(
-        witness.aromatic_systems().matched_pairs().as_ptr(),
-        aromatic_systems_ptr
-    );
-    assert_eq!(
-        witness.multicenter_bonds().matched_pairs().as_ptr(),
-        multicenter_bonds_ptr
-    );
-    assert_eq!(
-        witness.noncovalent_bonds().matched_pairs().as_ptr(),
-        noncovalent_bonds_ptr
-    );
-    assert_eq!(
-        witness.stereo_atoms().matched_pairs().as_ptr(),
-        stereo_atoms_ptr
-    );
-    assert_eq!(
-        witness.stereo_bonds().matched_pairs().as_ptr(),
-        stereo_bonds_ptr
     );
 }
 

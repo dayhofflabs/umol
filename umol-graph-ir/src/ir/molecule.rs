@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 pub use build::MoleculeBuilder;
-pub use editor::MoleculeEditor;
+pub use editor::{MoleculeEditor, Transaction, TransactionError};
 pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use pushout::MoleculePushoutCorrespondence;
@@ -25,7 +25,7 @@ use super::constraint::{
 };
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
-use super::edit::{AtomHandle, BondHandle, Edits, RemovedAtom, RemovedBond};
+use super::edit::{AtomHandle, BondHandle, CascadedConstraints, Edits, RemovedAtom, RemovedBond};
 use super::entity::EntityKind;
 use super::error::{Contradiction, MoleculeApplyError};
 use super::frame::OverlaysFrameAction;
@@ -61,7 +61,6 @@ pub(crate) mod integrity;
 mod pushout;
 mod remap;
 pub mod spec;
-pub(crate) mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
@@ -554,7 +553,7 @@ impl Molecule {
         AtomViewMut::new(id, attributes)
     }
 
-    fn atom_view_mut(&mut self, id: AtomId) -> AtomEditorViewMut<'_> {
+    pub(crate) fn atom_view_mut(&mut self, id: AtomId) -> AtomEditorViewMut<'_> {
         let attributes = &mut Arc::make_mut(&mut self.atoms)[id.index()];
         AtomEditorViewMut::new(id, attributes)
     }
@@ -571,7 +570,7 @@ impl Molecule {
         BondViewMut::new(id, atoms, attributes)
     }
 
-    fn bond_view_mut(&mut self, id: BondId) -> BondEditorViewMut<'_> {
+    pub(crate) fn bond_view_mut(&mut self, id: BondId) -> BondEditorViewMut<'_> {
         let [s, t] = self.graph.edge_endpoints(id.into());
         let atoms = [AtomId::from(s), AtomId::from(t)];
         let attributes = &mut Arc::make_mut(&mut self.bonds)[id.index()];
@@ -588,7 +587,7 @@ impl Molecule {
         DativeBondViewMut::new(&mut self.dative_bonds, id)
     }
 
-    fn dative_bond_view_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
+    pub(crate) fn dative_bond_view_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
         assert!(self.dative_bonds.contains(id), "invalid dative bond id");
         DativeBondEditorViewMut::new(&mut self.dative_bonds, id)
     }
@@ -606,7 +605,7 @@ impl Molecule {
         AromaticSystemViewMut::new(&mut self.aromatic_systems, id)
     }
 
-    fn aromatic_system_view_mut(
+    pub(crate) fn aromatic_system_view_mut(
         &mut self,
         id: AromaticSystemId,
     ) -> AromaticSystemEditorViewMut<'_> {
@@ -630,7 +629,7 @@ impl Molecule {
         MulticenterBondViewMut::new(&mut self.multicenter_bonds, id)
     }
 
-    fn multicenter_bond_view_mut(
+    pub(crate) fn multicenter_bond_view_mut(
         &mut self,
         id: MulticenterBondId,
     ) -> MulticenterBondEditorViewMut<'_> {
@@ -654,7 +653,7 @@ impl Molecule {
         NoncovalentBondViewMut::new(&mut self.noncovalent_bonds, id)
     }
 
-    fn noncovalent_bond_view_mut(
+    pub(crate) fn noncovalent_bond_view_mut(
         &mut self,
         id: NoncovalentBondId,
     ) -> NoncovalentBondEditorViewMut<'_> {
@@ -675,7 +674,7 @@ impl Molecule {
         StereoAtomViewMut::new(&mut self.stereo_atoms, id)
     }
 
-    fn stereo_atom_view_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
+    pub(crate) fn stereo_atom_view_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
         assert!(self.stereo_atoms.contains(id), "invalid stereo atom id");
         StereoAtomEditorViewMut::new(&mut self.stereo_atoms, id)
     }
@@ -690,7 +689,7 @@ impl Molecule {
         StereoBondViewMut::new(&mut self.stereo_bonds, id)
     }
 
-    fn stereo_bond_view_mut(&mut self, id: StereoBondId) -> StereoBondEditorViewMut<'_> {
+    pub(crate) fn stereo_bond_view_mut(&mut self, id: StereoBondId) -> StereoBondEditorViewMut<'_> {
         assert!(self.stereo_bonds.contains(id), "invalid stereo bond id");
         StereoBondEditorViewMut::new(&mut self.stereo_bonds, id)
     }
@@ -699,7 +698,7 @@ impl Molecule {
         &self.constraints
     }
 
-    fn constraints_mut(&mut self) -> &mut Constraints {
+    pub(crate) fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
     }
 
@@ -996,7 +995,10 @@ impl Molecule {
         Ok(())
     }
 
-    fn add_atoms(&mut self, atoms: Vec<AtomForm>) -> impl ExactSizeIterator<Item = AtomId> + use<> {
+    pub(crate) fn add_atoms(
+        &mut self,
+        atoms: Vec<AtomForm>,
+    ) -> impl ExactSizeIterator<Item = AtomId> + use<> {
         let ids = self.graph.extend_nodes(atoms.len()).map(AtomId::from);
         if !atoms.is_empty() {
             Arc::make_mut(&mut self.atoms).extend(atoms);
@@ -1004,7 +1006,7 @@ impl Molecule {
         ids
     }
 
-    fn add_bonds(
+    pub(crate) fn add_bonds(
         &mut self,
         bonds: Vec<([AtomId; 2], BondForm)>,
     ) -> impl ExactSizeIterator<Item = BondId> + use<> {
@@ -1020,42 +1022,42 @@ impl Molecule {
         ids
     }
 
-    fn add_dative_bonds(
+    pub(crate) fn add_dative_bonds(
         &mut self,
         entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
     ) -> impl ExactSizeIterator<Item = DativeBondId> + use<> {
         self.dative_bonds.extend(entries)
     }
 
-    fn add_aromatic_systems(
+    pub(crate) fn add_aromatic_systems(
         &mut self,
         entries: Vec<(&[AtomId], AromaticSystemForm)>,
     ) -> impl ExactSizeIterator<Item = AromaticSystemId> + use<> {
         self.aromatic_systems.extend(entries)
     }
 
-    fn add_multicenter_bonds(
+    pub(crate) fn add_multicenter_bonds(
         &mut self,
         entries: Vec<(&[AtomId], MulticenterBondForm)>,
     ) -> impl ExactSizeIterator<Item = MulticenterBondId> + use<> {
         self.multicenter_bonds.extend(entries)
     }
 
-    fn add_noncovalent_bonds(
+    pub(crate) fn add_noncovalent_bonds(
         &mut self,
         entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
     ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + use<> {
         self.noncovalent_bonds.extend(entries)
     }
 
-    fn add_stereo_atoms(
+    pub(crate) fn add_stereo_atoms(
         &mut self,
         entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
     ) -> impl ExactSizeIterator<Item = StereoAtomId> + use<> {
         self.stereo_atoms.extend(entries)
     }
 
-    fn add_stereo_bonds(
+    pub(crate) fn add_stereo_bonds(
         &mut self,
         entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
     ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
@@ -1066,11 +1068,7 @@ impl Molecule {
     ///
     /// Surviving attributes retain their current values. Overlays and constraints are unchanged.
     /// Manipulated history does not panic; its resulting state is unspecified.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_topology(
+    pub(crate) fn restore_topology(
         &mut self,
         compaction: &GraphCompaction,
         atoms: Vec<RemovedAtom>,
@@ -1126,11 +1124,7 @@ impl Molecule {
     }
 
     /// Reinsert saved dative bonds at their original ids.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_dative_bonds(
+    pub(crate) fn restore_dative_bonds(
         &mut self,
         rows: &Compaction<DativeBondId>,
         removed: Vec<(DativeBondId, Vec<AtomId>, AtomId, DativeBondForm)>,
@@ -1139,20 +1133,12 @@ impl Molecule {
     }
 
     /// Restore topology ids in surviving dative bonds.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_dative_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+    pub(crate) fn restore_dative_bond_topology_ids(&mut self, topology: &GraphCompaction) {
         self.dative_bonds.restore_topology_ids(topology);
     }
 
     /// Reinsert saved aromatic systems at their original ids.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_aromatic_systems(
+    pub(crate) fn restore_aromatic_systems(
         &mut self,
         rows: &Compaction<AromaticSystemId>,
         removed: Vec<(AromaticSystemId, Vec<AtomId>, AromaticSystemForm)>,
@@ -1161,20 +1147,12 @@ impl Molecule {
     }
 
     /// Restore topology ids in surviving aromatic systems.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_aromatic_system_topology_ids(&mut self, topology: &GraphCompaction) {
+    pub(crate) fn restore_aromatic_system_topology_ids(&mut self, topology: &GraphCompaction) {
         self.aromatic_systems.restore_topology_ids(topology);
     }
 
     /// Reinsert saved multicenter bonds at their original ids.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_multicenter_bonds(
+    pub(crate) fn restore_multicenter_bonds(
         &mut self,
         rows: &Compaction<MulticenterBondId>,
         removed: Vec<(MulticenterBondId, Vec<AtomId>, MulticenterBondForm)>,
@@ -1183,20 +1161,12 @@ impl Molecule {
     }
 
     /// Restore topology ids in surviving multicenter bonds.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_multicenter_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+    pub(crate) fn restore_multicenter_bond_topology_ids(&mut self, topology: &GraphCompaction) {
         self.multicenter_bonds.restore_topology_ids(topology);
     }
 
     /// Reinsert saved noncovalent bonds at their original ids.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_noncovalent_bonds(
+    pub(crate) fn restore_noncovalent_bonds(
         &mut self,
         rows: &Compaction<NoncovalentBondId>,
         removed: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondForm)>,
@@ -1205,20 +1175,12 @@ impl Molecule {
     }
 
     /// Restore topology ids in surviving noncovalent bonds.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_noncovalent_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+    pub(crate) fn restore_noncovalent_bond_topology_ids(&mut self, topology: &GraphCompaction) {
         self.noncovalent_bonds.restore_topology_ids(topology);
     }
 
     /// Reinsert saved stereo atoms at their original ids.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_stereo_atoms(
+    pub(crate) fn restore_stereo_atoms(
         &mut self,
         rows: &Compaction<StereoAtomId>,
         removed: Vec<(StereoAtomId, AtomId, Vec<StereoLigand>, StereoAtomForm)>,
@@ -1227,20 +1189,12 @@ impl Molecule {
     }
 
     /// Restore topology ids in surviving stereo atoms.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_stereo_atom_topology_ids(&mut self, topology: &GraphCompaction) {
+    pub(crate) fn restore_stereo_atom_topology_ids(&mut self, topology: &GraphCompaction) {
         self.stereo_atoms.restore_topology_ids(topology);
     }
 
     /// Reinsert saved stereo bonds at their original ids.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_stereo_bonds(
+    pub(crate) fn restore_stereo_bonds(
         &mut self,
         rows: &Compaction<StereoBondId>,
         removed: Vec<(StereoBondId, BondId, Vec<StereoLigand>, StereoBondForm)>,
@@ -1249,12 +1203,13 @@ impl Molecule {
     }
 
     /// Restore topology ids in surviving stereo bonds.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "molecule restoration primitive")
-    )]
-    fn restore_stereo_bond_topology_ids(&mut self, topology: &GraphCompaction) {
+    pub(crate) fn restore_stereo_bond_topology_ids(&mut self, topology: &GraphCompaction) {
         self.stereo_bonds.restore_topology_ids(topology);
+    }
+
+    /// Restore molecule constraints from their saved positions and values.
+    pub(crate) fn restore_constraints(&mut self, changes: &CascadedConstraints) {
+        self.constraints.restore(changes);
     }
 
     pub fn edit(&self) -> MoleculeEditor {

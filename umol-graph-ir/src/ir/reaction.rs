@@ -2849,7 +2849,7 @@ mod tests {
     use super::super::entity::{Entity, EntityKind};
     use super::super::id::StereoLigandPosition;
     use super::super::ligand::StereoLigandKind;
-    use super::super::molecule::transact::TransactionError;
+    use super::super::molecule::TransactionError;
     use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use super::super::num::NumForm;
     use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Topicity};
