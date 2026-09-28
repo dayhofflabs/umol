@@ -7,7 +7,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 
-/// Molecule-level compaction produced by `MoleculeEditor::tracked_remove_topology`.
+/// Molecule-level compaction across topology and overlays.
 /// Translates a pre-removal id in any of the eight entity kinds to its post-removal id,
 /// or reports that the entity was removed.
 ///

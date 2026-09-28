@@ -11,7 +11,6 @@ from umol import (
     Edits,
     Element,
     Molecule,
-    MoleculeCompaction,
     MulticenterBondForm,
     NoncovalentBondForm,
     NoncovalentBondKind,
@@ -296,7 +295,7 @@ def test_molecule_editor_replace_error(replacement_case, method):
         assert editor.build() == original
 
 
-def test_molecule_editor_tracked_remove_topology():
+def test_molecule_editor_remove_topology():
     molecule = Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(1)), (1, 2, BondForm(1))],
@@ -305,12 +304,14 @@ def test_molecule_editor_tracked_remove_topology():
     tracked = molecule.edit()
 
     plain.remove_topology([1], [])
-    compaction = tracked.tracked_remove_topology([1], [])
+    tracked.remove_topology([1], [])
+    result, correspondence = tracked.tracked_build()
 
-    assert tracked.build() == plain.build()
-    assert isinstance(compaction, MoleculeCompaction)
-    assert compaction.atoms.removed == [1]
-    assert compaction.bonds.removed == [0, 1]
+    assert result == plain.build() == Molecule.from_entries(
+        [AtomForm(Element("C")), AtomForm(Element("N"))]
+    )
+    assert correspondence.atoms == Correspondence([(0, 0), (2, 1)], 3, 2)
+    assert correspondence.bonds == Correspondence([], 2, 0)
 
 
 @pytest.mark.parametrize(
@@ -324,15 +325,16 @@ def test_molecule_editor_tracked_remove_topology():
         ("remove_stereo_bonds", "stereo_bonds"),
     ],
 )
-def test_molecule_editor_tracked_remove_entity_family(method, field):
+def test_molecule_editor_remove_entity_family(method, field):
     plain = rich_molecule().edit()
     tracked = rich_molecule().edit()
 
     getattr(plain, method)([0])
-    compaction = getattr(tracked, f"tracked_{method}")([0])
+    getattr(tracked, method)([0])
+    result, correspondence = tracked.tracked_build()
 
-    assert tracked.build() == plain.build()
-    assert getattr(compaction, field).removed == [0]
+    assert result == plain.build()
+    assert getattr(correspondence, field) == Correspondence([], 1, 0)
 
 
 @pytest.mark.parametrize(

@@ -590,7 +590,10 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub fn tracked_remove_dative_bonds(&mut self, ids: &[DativeBondId]) -> MoleculeCompaction {
+    pub(crate) fn tracked_remove_dative_bonds(
+        &mut self,
+        ids: &[DativeBondId],
+    ) -> MoleculeCompaction {
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::identity(self.atom_count()),
@@ -629,7 +632,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub fn tracked_remove_aromatic_systems(
+    pub(crate) fn tracked_remove_aromatic_systems(
         &mut self,
         ids: &[AromaticSystemId],
     ) -> MoleculeCompaction {
@@ -671,7 +674,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub fn tracked_remove_multicenter_bonds(
+    pub(crate) fn tracked_remove_multicenter_bonds(
         &mut self,
         ids: &[MulticenterBondId],
     ) -> MoleculeCompaction {
@@ -713,7 +716,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub fn tracked_remove_noncovalent_bonds(
+    pub(crate) fn tracked_remove_noncovalent_bonds(
         &mut self,
         ids: &[NoncovalentBondId],
     ) -> MoleculeCompaction {
@@ -751,7 +754,10 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub fn tracked_remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) -> MoleculeCompaction {
+    pub(crate) fn tracked_remove_stereo_atoms(
+        &mut self,
+        ids: &[StereoAtomId],
+    ) -> MoleculeCompaction {
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::identity(self.atom_count()),
@@ -786,7 +792,10 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics when a supplied id is outside the current relation table.
-    pub fn tracked_remove_stereo_bonds(&mut self, ids: &[StereoBondId]) -> MoleculeCompaction {
+    pub(crate) fn tracked_remove_stereo_bonds(
+        &mut self,
+        ids: &[StereoBondId],
+    ) -> MoleculeCompaction {
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::identity(self.atom_count()),
@@ -823,7 +832,7 @@ impl MoleculeEditor {
     ///
     /// Leaves the same state as [`Self::remove_topology`], including cascading relation and constraint
     /// removal. Every component retains the source count from before removal.
-    pub fn tracked_remove_topology(
+    pub(crate) fn tracked_remove_topology(
         &mut self,
         atoms: &[AtomId],
         bonds: &[BondId],

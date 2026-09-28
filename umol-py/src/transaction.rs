@@ -8,7 +8,6 @@ use umol_graph_ir::ir::{
     Transaction as GraphIrTransaction,
 };
 
-use crate::compact::MoleculeCompaction;
 use crate::correspondence::MoleculeCorrespondence;
 use crate::edit::Edits;
 use crate::error::{molecule_integrity_error, transaction_error, ConsumedError};
@@ -151,22 +150,6 @@ impl MoleculeEditor {
         Ok(())
     }
 
-    /// Remove atoms and bonds, returning the source-to-result compaction.
-    fn tracked_remove_topology(
-        &mut self,
-        atoms: Vec<u32>,
-        bonds: Vec<u32>,
-    ) -> PyResult<MoleculeCompaction> {
-        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
-        ensure_in_range(&atoms, editor.atom_count(), "atom")?;
-        ensure_in_range(&bonds, editor.bond_count(), "bond")?;
-        let atoms = atoms.into_iter().map(AtomId).collect::<Vec<_>>();
-        let bonds = bonds.into_iter().map(BondId).collect::<Vec<_>>();
-        Ok(MoleculeCompaction::from_rust(
-            editor.tracked_remove_topology(&atoms, &bonds),
-        ))
-    }
-
     /// Remove dative bonds and compact that entity space.
     fn remove_dative_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
@@ -175,34 +158,12 @@ impl MoleculeEditor {
         Ok(())
     }
 
-    /// Remove dative bonds and return the source-to-result compaction.
-    fn tracked_remove_dative_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
-        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
-        ensure_in_range(&ids, editor.dative_bond_count(), "dative bond")?;
-        Ok(MoleculeCompaction::from_rust(
-            editor.tracked_remove_dative_bonds(
-                &ids.into_iter().map(DativeBondId).collect::<Vec<_>>(),
-            ),
-        ))
-    }
-
     /// Remove aromatic systems and compact that entity space.
     fn remove_aromatic_systems(&mut self, ids: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         ensure_in_range(&ids, editor.aromatic_system_count(), "aromatic system")?;
         editor.remove_aromatic_systems(&ids.into_iter().map(AromaticSystemId).collect::<Vec<_>>());
         Ok(())
-    }
-
-    /// Remove aromatic systems and return the source-to-result compaction.
-    fn tracked_remove_aromatic_systems(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
-        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
-        ensure_in_range(&ids, editor.aromatic_system_count(), "aromatic system")?;
-        Ok(MoleculeCompaction::from_rust(
-            editor.tracked_remove_aromatic_systems(
-                &ids.into_iter().map(AromaticSystemId).collect::<Vec<_>>(),
-            ),
-        ))
     }
 
     /// Remove multicenter bonds and compact that entity space.
@@ -214,17 +175,6 @@ impl MoleculeEditor {
         Ok(())
     }
 
-    /// Remove multicenter bonds and return the source-to-result compaction.
-    fn tracked_remove_multicenter_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
-        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
-        ensure_in_range(&ids, editor.multicenter_bond_count(), "multicenter bond")?;
-        Ok(MoleculeCompaction::from_rust(
-            editor.tracked_remove_multicenter_bonds(
-                &ids.into_iter().map(MulticenterBondId).collect::<Vec<_>>(),
-            ),
-        ))
-    }
-
     /// Remove noncovalent bonds and compact that entity space.
     fn remove_noncovalent_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
@@ -232,17 +182,6 @@ impl MoleculeEditor {
         editor
             .remove_noncovalent_bonds(&ids.into_iter().map(NoncovalentBondId).collect::<Vec<_>>());
         Ok(())
-    }
-
-    /// Remove noncovalent bonds and return the source-to-result compaction.
-    fn tracked_remove_noncovalent_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
-        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
-        ensure_in_range(&ids, editor.noncovalent_bond_count(), "noncovalent bond")?;
-        Ok(MoleculeCompaction::from_rust(
-            editor.tracked_remove_noncovalent_bonds(
-                &ids.into_iter().map(NoncovalentBondId).collect::<Vec<_>>(),
-            ),
-        ))
     }
 
     /// Remove stereo atoms and compact that entity space.
@@ -253,34 +192,12 @@ impl MoleculeEditor {
         Ok(())
     }
 
-    /// Remove stereo atoms and return the source-to-result compaction.
-    fn tracked_remove_stereo_atoms(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
-        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
-        ensure_in_range(&ids, editor.stereo_atom_count(), "stereo atom")?;
-        Ok(MoleculeCompaction::from_rust(
-            editor.tracked_remove_stereo_atoms(
-                &ids.into_iter().map(StereoAtomId).collect::<Vec<_>>(),
-            ),
-        ))
-    }
-
     /// Remove stereo bonds and compact that entity space.
     fn remove_stereo_bonds(&mut self, ids: Vec<u32>) -> PyResult<()> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         ensure_in_range(&ids, editor.stereo_bond_count(), "stereo bond")?;
         editor.remove_stereo_bonds(&ids.into_iter().map(StereoBondId).collect::<Vec<_>>());
         Ok(())
-    }
-
-    /// Remove stereo bonds and return the source-to-result compaction.
-    fn tracked_remove_stereo_bonds(&mut self, ids: Vec<u32>) -> PyResult<MoleculeCompaction> {
-        let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
-        ensure_in_range(&ids, editor.stereo_bond_count(), "stereo bond")?;
-        Ok(MoleculeCompaction::from_rust(
-            editor.tracked_remove_stereo_bonds(
-                &ids.into_iter().map(StereoBondId).collect::<Vec<_>>(),
-            ),
-        ))
     }
 }
 

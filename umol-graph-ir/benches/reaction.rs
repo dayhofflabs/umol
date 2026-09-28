@@ -276,19 +276,6 @@ fn benchmark_mutation(c: &mut Criterion) {
                 BatchSize::SmallInput,
             )
         });
-        group.bench_function(
-            BenchmarkId::new("tracked_remove_topology/path", size),
-            |b| {
-                b.iter_batched(
-                    || molecule.edit(),
-                    |mut editor| {
-                        let compaction = editor.tracked_remove_topology(black_box(&removed), &[]);
-                        black_box((editor, compaction))
-                    },
-                    BatchSize::SmallInput,
-                )
-            },
-        );
         group.bench_function(BenchmarkId::new("apply/path_three_edits", size), |b| {
             b.iter_batched(
                 || edits.clone(),

@@ -35,7 +35,7 @@ additions and S3j's mutable correspondence methods are implemented. S3k's
 index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch execution is under the editor module, whose fields remain private;
-internal Molecule mutation methods use pub(crate). S4b1 is complete; S4b2 is next.
+internal Molecule mutation methods use pub(crate). S4b1–S4b2 are complete; S4b3 is next.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -87,7 +87,7 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1 are complete; S4b2 is next.
+and S4b1–S4b2 are complete; S4b3 is next.
 
 ## Editor and transaction API
 
@@ -4829,7 +4829,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   with only dead_code warnings for new primitives awaiting their planned
   production callers; no suppression attributes were added.
 
-- **S4b2 — Editor direct-mutation surface** (`ir::molecule::editor`; breaking rewire, green at S4b8). [dep: S4b1]
+- **S4b2 — completed 2026-09-28** (`ir::molecule::editor`; breaking rewire, green at S4b8). [dep: S4b1]
 
   **Complete editor direct-mutation inventory.** The following is the resulting
   public surface, including mutation reached through returned views/borrows.
@@ -4864,7 +4864,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Mutable accessors are atom_mut, bond_mut, dative_bond_mut,
   aromatic_system_mut, multicenter_bond_mut, noncovalent_bond_mut,
   stereo_atom_mut, and stereo_bond_mut. Each takes its typed entity id and
-  returns the corresponding *ViewMut<'_, true> obtained from Molecule (S2i).
+  returns the corresponding *EditorViewMut<'_> obtained from Molecule (S2i5).
   Every view exposes attributes_mut() -> &mut Form, including direct mutation
   of entity-level constraints. Structural mutation uses these view methods,
   all taking &mut self and returning () (S2j):
@@ -4891,6 +4891,22 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   lifecycle surface specified above. Verify this inventory against the final
   editor API and migrate all removed push_constraint callers, including bindings
   and tests where present.
+
+  The seven tracked direct-removal methods are crate-private, and their Python
+  bindings are removed. Public removals return () and retain cascading updates.
+  The inventory matches all 16 additions, seven removals, eight mutable entity
+  accessors, constraints_mut, and the structural view methods above. Additions
+  and mutable access already delegate to Molecule; removal composes its storage
+  primitives. No view types or mutation semantics changed. External compaction
+  properties use public transaction results; their input domains and inverse/
+  composition assertions are preserved. The retired tracked-removal benchmark
+  is removed; direct-removal and batch benchmarks remain.
+
+  **Checked — 2026-09-28.** All 972 molecule/editor unit cases, three affected
+  compaction properties, and 157 Python transaction/import cases pass. The
+  Python extension was rebuilt with Python 3.13. Warnings-denied rustdoc,
+  nightly formatting, and diff checks/review pass. All-target graph-ir Clippy
+  with proptest reports only S4b1's unused primitives awaiting planned callers.
 
 - **S4b3 — Single-entry execution and batch ownership** (`ir::molecule::{apply,editor::transact}`; breaking, green at S4b8). [dep: S4b2]
 
@@ -5779,7 +5795,7 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1 are complete; S4b2 is next.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b2 are complete; S4b3 is next.
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is
