@@ -231,9 +231,8 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
     /// Append `count` unmatched ids to the right domain, reusing the pair vector.
     ///
     /// Existing pairings and the left count are unchanged.
-    pub fn extend_right(mut self, count: usize) -> Self {
+    pub fn extend_right(&mut self, count: usize) {
         self.right_count += count;
-        self
     }
 
     /// Compact the right domain in place, discarding pairs whose right id is removed.
@@ -243,15 +242,15 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
     /// # Errors
     ///
     /// Returns the incompatible counts when the right count differs from the compaction's
-    /// source count. The receiver is consumed on failure.
+    /// source count. The receiver is unchanged on failure.
     ///
     /// # Semantic properties
     ///
     /// Equivalent to composition with the compaction's correspondence.
     pub fn compact_right(
-        mut self,
+        &mut self,
         compaction: &Compaction<Id>,
-    ) -> Result<Self, CorrespondenceComposeError>
+    ) -> Result<(), CorrespondenceComposeError>
     where
         Id: Into<usize> + Add<usize, Output = Id> + Sub<usize, Output = Id>,
     {
@@ -270,7 +269,7 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
             }
         });
         self.right_count = compaction.result_count();
-        Ok(self)
+        Ok(())
     }
 
     /// Expand the right domain through the inverse compaction, leaving restored ids unmatched.
@@ -280,15 +279,15 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
     /// # Errors
     ///
     /// Returns the incompatible counts when the right count differs from the compaction's
-    /// result count. The receiver is consumed on failure.
+    /// result count. The receiver is unchanged on failure.
     ///
     /// # Semantic properties
     ///
     /// Equivalent to composition with the reversed compaction correspondence.
     pub fn uncompact_right(
-        mut self,
+        &mut self,
         compaction: &Compaction<Id>,
-    ) -> Result<Self, CorrespondenceComposeError>
+    ) -> Result<(), CorrespondenceComposeError>
     where
         Id: Into<usize> + Add<usize, Output = Id> + Sub<usize, Output = Id>,
     {
@@ -302,7 +301,7 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
             *right = compaction.uncompact(*right);
         }
         self.right_count = compaction.source_count();
-        Ok(self)
+        Ok(())
     }
 
     /// Relational composition: `self` (left↔middle) followed by `other` (middle↔right), yielding a
@@ -468,34 +467,47 @@ impl GraphCorrespondence {
     }
 
     /// Append unmatched nodes and edges to the right domains without changing existing pairs.
-    pub fn extend_right(self, nodes: usize, edges: usize) -> Self {
-        Self::new(
-            self.nodes.extend_right(nodes),
-            self.edges.extend_right(edges),
-        )
+    pub fn extend_right(&mut self, nodes: usize, edges: usize) {
+        self.nodes.extend_right(nodes);
+        self.edges.extend_right(edges);
     }
 
     /// Compact both right domains, reusing their pair vectors.
     ///
     /// # Errors
     ///
-    /// Returns the first source-count mismatch, nodes before edges. Consumes the receiver.
+    /// Returns the first source-count mismatch, nodes before edges. The receiver is unchanged
+    /// on failure.
     ///
     /// # Semantic properties
     ///
     /// Equivalent to composition with the compaction's correspondence.
     pub fn compact_right(
-        self,
+        &mut self,
         compaction: &GraphCompaction,
-    ) -> Result<Self, GraphCorrespondenceComposeError> {
-        Ok(Self::new(
-            self.nodes
-                .compact_right(compaction.nodes())
-                .map_err(GraphCorrespondenceComposeError::Nodes)?,
-            self.edges
-                .compact_right(compaction.edges())
-                .map_err(GraphCorrespondenceComposeError::Edges)?,
-        ))
+    ) -> Result<(), GraphCorrespondenceComposeError> {
+        if self.nodes.right_count() != compaction.nodes().source_count() {
+            return Err(GraphCorrespondenceComposeError::Nodes(
+                CorrespondenceComposeError {
+                    right_count: self.nodes.right_count(),
+                    next_left_count: compaction.nodes().source_count(),
+                },
+            ));
+        }
+        if self.edges.right_count() != compaction.edges().source_count() {
+            return Err(GraphCorrespondenceComposeError::Edges(
+                CorrespondenceComposeError {
+                    right_count: self.edges.right_count(),
+                    next_left_count: compaction.edges().source_count(),
+                },
+            ));
+        }
+        self.nodes
+            .compact_right(compaction.nodes())
+            .map_err(GraphCorrespondenceComposeError::Nodes)?;
+        self.edges
+            .compact_right(compaction.edges())
+            .map_err(GraphCorrespondenceComposeError::Edges)
     }
 
     /// Expand both right domains through the inverse compaction, leaving restored ids unmatched.
@@ -504,19 +516,34 @@ impl GraphCorrespondence {
     ///
     /// # Errors
     ///
-    /// Returns the first result-count mismatch, nodes before edges. Consumes the receiver.
+    /// Returns the first result-count mismatch, nodes before edges. The receiver is unchanged
+    /// on failure.
     pub fn uncompact_right(
-        self,
+        &mut self,
         compaction: &GraphCompaction,
-    ) -> Result<Self, GraphCorrespondenceComposeError> {
-        Ok(Self::new(
-            self.nodes
-                .uncompact_right(compaction.nodes())
-                .map_err(GraphCorrespondenceComposeError::Nodes)?,
-            self.edges
-                .uncompact_right(compaction.edges())
-                .map_err(GraphCorrespondenceComposeError::Edges)?,
-        ))
+    ) -> Result<(), GraphCorrespondenceComposeError> {
+        if self.nodes.right_count() != compaction.nodes().result_count() {
+            return Err(GraphCorrespondenceComposeError::Nodes(
+                CorrespondenceComposeError {
+                    right_count: self.nodes.right_count(),
+                    next_left_count: compaction.nodes().result_count(),
+                },
+            ));
+        }
+        if self.edges.right_count() != compaction.edges().result_count() {
+            return Err(GraphCorrespondenceComposeError::Edges(
+                CorrespondenceComposeError {
+                    right_count: self.edges.right_count(),
+                    next_left_count: compaction.edges().result_count(),
+                },
+            ));
+        }
+        self.nodes
+            .uncompact_right(compaction.nodes())
+            .map_err(GraphCorrespondenceComposeError::Nodes)?;
+        self.edges
+            .uncompact_right(compaction.edges())
+            .map_err(GraphCorrespondenceComposeError::Edges)
     }
 
     /// Relational composition of the node and edge correspondences.
@@ -704,7 +731,8 @@ mod tests {
         };
         let ptr = correspondence.matched_pairs.as_ptr();
         let capacity = correspondence.matched_pairs.capacity();
-        let result = correspondence.extend_right(added);
+        let mut result = correspondence;
+        result.extend_right(added);
         assert_eq!(result.matched_pairs.as_ptr(), ptr);
         assert_eq!(result.matched_pairs.capacity(), capacity);
         assert_eq!(
@@ -721,7 +749,9 @@ mod tests {
     #[case::empty(Correspondence::empty())]
     #[case::partial(Correspondence::new(vec![(NodeId(1), NodeId(0))], 3, 2).unwrap())]
     fn test_correspondence_extend_right_identity(#[case] correspondence: Correspondence<NodeId>) {
-        assert_eq!(correspondence.clone().extend_right(0), correspondence);
+        let mut result = correspondence.clone();
+        result.extend_right(0);
+        assert_eq!(result, correspondence);
     }
 
     #[rstest]
@@ -741,7 +771,8 @@ mod tests {
         let capacity = correspondence.matched_pairs.capacity();
         let result_count = 3 - removed.len();
         let compaction = Compaction::new(3, removed).unwrap();
-        let result = correspondence.compact_right(&compaction).unwrap();
+        let mut result = correspondence;
+        result.compact_right(&compaction).unwrap();
         assert_eq!(result.matched_pairs.as_ptr(), ptr);
         assert_eq!(result.matched_pairs.capacity(), capacity);
         assert_eq!(
@@ -759,17 +790,18 @@ mod tests {
     #[case::partial(Correspondence::new(vec![(NodeId(1), NodeId(0))], 3, 2).unwrap())]
     fn test_correspondence_compact_right_identity(#[case] correspondence: Correspondence<NodeId>) {
         let compaction = Compaction::identity(correspondence.right_count());
-        assert_eq!(
-            correspondence.clone().compact_right(&compaction),
-            Ok(correspondence)
-        );
+        let mut result = correspondence.clone();
+        result.compact_right(&compaction).unwrap();
+        assert_eq!(result, correspondence);
     }
 
     #[rstest]
     #[case::smaller(2)]
     #[case::larger(4)]
     fn test_correspondence_compact_right_error(#[case] source_count: usize) {
-        let correspondence = Correspondence::<NodeId>::new(vec![], 2, 3).unwrap();
+        let mut correspondence =
+            Correspondence::<NodeId>::new(vec![(NodeId(1), NodeId(2))], 2, 3).unwrap();
+        let original = correspondence.clone();
         assert_eq!(
             correspondence.compact_right(&Compaction::identity(source_count)),
             Err(CorrespondenceComposeError {
@@ -777,6 +809,7 @@ mod tests {
                 next_left_count: source_count
             })
         );
+        assert_eq!(correspondence, original);
     }
 
     #[rstest]
@@ -795,7 +828,8 @@ mod tests {
         let ptr = correspondence.matched_pairs.as_ptr();
         let capacity = correspondence.matched_pairs.capacity();
         let compaction = Compaction::new(4, removed).unwrap();
-        let result = correspondence.uncompact_right(&compaction).unwrap();
+        let mut result = correspondence;
+        result.uncompact_right(&compaction).unwrap();
         assert_eq!(result.matched_pairs.as_ptr(), ptr);
         assert_eq!(result.matched_pairs.capacity(), capacity);
         assert_eq!(
@@ -815,18 +849,19 @@ mod tests {
         #[case] correspondence: Correspondence<NodeId>,
     ) {
         let compaction = Compaction::identity(correspondence.right_count());
-        assert_eq!(
-            correspondence.clone().uncompact_right(&compaction),
-            Ok(correspondence)
-        );
+        let mut result = correspondence.clone();
+        result.uncompact_right(&compaction).unwrap();
+        assert_eq!(result, correspondence);
     }
 
     #[rstest]
     #[case::smaller(3)]
     #[case::larger(5)]
     fn test_correspondence_uncompact_right_error(#[case] source_count: usize) {
-        let correspondence = Correspondence::<NodeId>::new(vec![], 2, 3).unwrap();
+        let mut correspondence =
+            Correspondence::<NodeId>::new(vec![(NodeId(1), NodeId(2))], 2, 3).unwrap();
         let compaction = Compaction::new(source_count, vec![NodeId(0)]).unwrap();
+        let original = correspondence.clone();
         assert_eq!(
             correspondence.uncompact_right(&compaction),
             Err(CorrespondenceComposeError {
@@ -834,6 +869,7 @@ mod tests {
                 next_left_count: source_count - 1
             })
         );
+        assert_eq!(correspondence, original);
     }
 
     fn e(i: u32) -> EdgeId {
@@ -966,7 +1002,8 @@ mod tests {
     ) {
         let node_ptr = update_graph_correspondence.nodes().matched_pairs().as_ptr();
         let edge_ptr = update_graph_correspondence.edges().matched_pairs().as_ptr();
-        let result = update_graph_correspondence.extend_right(nodes, edges);
+        let mut result = update_graph_correspondence;
+        result.extend_right(nodes, edges);
         assert_eq!(result.nodes().matched_pairs().as_ptr(), node_ptr);
         assert_eq!(result.edges().matched_pairs().as_ptr(), edge_ptr);
         assert_eq!(
@@ -996,9 +1033,8 @@ mod tests {
         );
         let node_ptr = update_graph_correspondence.nodes().matched_pairs().as_ptr();
         let edge_ptr = update_graph_correspondence.edges().matched_pairs().as_ptr();
-        let result = update_graph_correspondence
-            .compact_right(&compaction)
-            .unwrap();
+        let mut result = update_graph_correspondence;
+        result.compact_right(&compaction).unwrap();
         assert_eq!(result.nodes().matched_pairs().as_ptr(), node_ptr);
         assert_eq!(result.edges().matched_pairs().as_ptr(), edge_ptr);
         assert_eq!(
@@ -1016,17 +1052,21 @@ mod tests {
     #[case::edges(4, 3, GraphCorrespondenceComposeError::Edges(CorrespondenceComposeError { right_count: 2, next_left_count: 3 }))]
     #[case::both(3, 3, GraphCorrespondenceComposeError::Nodes(CorrespondenceComposeError { right_count: 4, next_left_count: 3 }))]
     fn test_graph_correspondence_compact_right_error(
-        update_graph_correspondence: GraphCorrespondence,
+        mut update_graph_correspondence: GraphCorrespondence,
         #[case] nodes: usize,
         #[case] edges: usize,
         #[case] expected: GraphCorrespondenceComposeError,
     ) {
-        let compaction =
-            GraphCompaction::new(Compaction::identity(nodes), Compaction::identity(edges));
+        let compaction = GraphCompaction::new(
+            Compaction::new(nodes, vec![NodeId(0)]).unwrap(),
+            Compaction::new(edges, vec![EdgeId(0)]).unwrap(),
+        );
+        let original = update_graph_correspondence.clone();
         assert_eq!(
             update_graph_correspondence.compact_right(&compaction),
             Err(expected)
         );
+        assert_eq!(update_graph_correspondence, original);
     }
 
     #[rstest]
@@ -1037,9 +1077,8 @@ mod tests {
         );
         let node_ptr = update_graph_correspondence.nodes().matched_pairs().as_ptr();
         let edge_ptr = update_graph_correspondence.edges().matched_pairs().as_ptr();
-        let result = update_graph_correspondence
-            .uncompact_right(&compaction)
-            .unwrap();
+        let mut result = update_graph_correspondence;
+        result.uncompact_right(&compaction).unwrap();
         assert_eq!(result.nodes().matched_pairs().as_ptr(), node_ptr);
         assert_eq!(result.edges().matched_pairs().as_ptr(), edge_ptr);
         assert_eq!(
@@ -1058,27 +1097,30 @@ mod tests {
     #[case::edges(4, 3, GraphCorrespondenceComposeError::Edges(CorrespondenceComposeError { right_count: 2, next_left_count: 3 }))]
     #[case::both(3, 3, GraphCorrespondenceComposeError::Nodes(CorrespondenceComposeError { right_count: 4, next_left_count: 3 }))]
     fn test_graph_correspondence_uncompact_right_error(
-        update_graph_correspondence: GraphCorrespondence,
+        mut update_graph_correspondence: GraphCorrespondence,
         #[case] nodes: usize,
         #[case] edges: usize,
         #[case] expected: GraphCorrespondenceComposeError,
     ) {
-        let compaction =
-            GraphCompaction::new(Compaction::identity(nodes), Compaction::identity(edges));
+        let compaction = GraphCompaction::new(
+            Compaction::new(nodes + 1, vec![NodeId(0)]).unwrap(),
+            Compaction::new(edges + 1, vec![EdgeId(0)]).unwrap(),
+        );
+        let original = update_graph_correspondence.clone();
         assert_eq!(
             update_graph_correspondence.uncompact_right(&compaction),
             Err(expected)
         );
+        assert_eq!(update_graph_correspondence, original);
     }
 
     #[rstest]
     fn test_graph_correspondence_extend_right_identity(
         update_graph_correspondence: GraphCorrespondence,
     ) {
-        assert_eq!(
-            update_graph_correspondence.clone().extend_right(0, 0),
-            update_graph_correspondence
-        );
+        let mut result = update_graph_correspondence.clone();
+        result.extend_right(0, 0);
+        assert_eq!(result, update_graph_correspondence);
     }
 
     #[rstest]
@@ -1086,17 +1128,13 @@ mod tests {
         update_graph_correspondence: GraphCorrespondence,
     ) {
         let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::identity(2));
-        assert_eq!(
-            update_graph_correspondence
-                .clone()
-                .compact_right(&compaction),
-            Ok(update_graph_correspondence)
-        );
+        let mut result = update_graph_correspondence.clone();
+        result.compact_right(&compaction).unwrap();
+        assert_eq!(result, update_graph_correspondence);
         let empty = GraphCorrespondence::new(Correspondence::empty(), Correspondence::empty());
-        assert_eq!(
-            empty.clone().compact_right(&GraphCompaction::empty()),
-            Ok(empty)
-        );
+        let mut result = empty.clone();
+        result.compact_right(&GraphCompaction::empty()).unwrap();
+        assert_eq!(result, empty);
     }
 
     #[rstest]
@@ -1104,17 +1142,13 @@ mod tests {
         update_graph_correspondence: GraphCorrespondence,
     ) {
         let compaction = GraphCompaction::new(Compaction::identity(4), Compaction::identity(2));
-        assert_eq!(
-            update_graph_correspondence
-                .clone()
-                .uncompact_right(&compaction),
-            Ok(update_graph_correspondence)
-        );
+        let mut result = update_graph_correspondence.clone();
+        result.uncompact_right(&compaction).unwrap();
+        assert_eq!(result, update_graph_correspondence);
         let empty = GraphCorrespondence::new(Correspondence::empty(), Correspondence::empty());
-        assert_eq!(
-            empty.clone().uncompact_right(&GraphCompaction::empty()),
-            Ok(empty)
-        );
+        let mut result = empty.clone();
+        result.uncompact_right(&GraphCompaction::empty()).unwrap();
+        assert_eq!(result, empty);
     }
 
     #[fixture]

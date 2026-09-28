@@ -993,6 +993,72 @@ impl Molecule {
         Ok(())
     }
 
+    fn add_atoms(&mut self, atoms: Vec<AtomForm>) -> impl ExactSizeIterator<Item = AtomId> + use<> {
+        let ids = self.graph.extend_nodes(atoms.len()).map(AtomId::from);
+        if !atoms.is_empty() {
+            Arc::make_mut(&mut self.atoms).extend(atoms);
+        }
+        ids
+    }
+
+    fn add_bonds(
+        &mut self,
+        bonds: Vec<([AtomId; 2], BondForm)>,
+    ) -> impl ExactSizeIterator<Item = BondId> + use<> {
+        let edges: Vec<_> = bonds
+            .iter()
+            .map(|(atoms, _)| atoms.map(NodeId::from))
+            .collect();
+        let ids = self.graph.extend_edges(&edges).map(BondId::from);
+        if !bonds.is_empty() {
+            Arc::make_mut(&mut self.bonds)
+                .extend(bonds.into_iter().map(|(_, attributes)| attributes));
+        }
+        ids
+    }
+
+    fn add_dative_bonds(
+        &mut self,
+        entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
+    ) -> impl ExactSizeIterator<Item = DativeBondId> + use<> {
+        self.dative_bonds.extend(entries)
+    }
+
+    fn add_aromatic_systems(
+        &mut self,
+        entries: Vec<(&[AtomId], AromaticSystemForm)>,
+    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + use<> {
+        self.aromatic_systems.extend(entries)
+    }
+
+    fn add_multicenter_bonds(
+        &mut self,
+        entries: Vec<(&[AtomId], MulticenterBondForm)>,
+    ) -> impl ExactSizeIterator<Item = MulticenterBondId> + use<> {
+        self.multicenter_bonds.extend(entries)
+    }
+
+    fn add_noncovalent_bonds(
+        &mut self,
+        entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
+    ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + use<> {
+        self.noncovalent_bonds.extend(entries)
+    }
+
+    fn add_stereo_atoms(
+        &mut self,
+        entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
+    ) -> impl ExactSizeIterator<Item = StereoAtomId> + use<> {
+        self.stereo_atoms.extend(entries)
+    }
+
+    fn add_stereo_bonds(
+        &mut self,
+        entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
+    ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
+        self.stereo_bonds.extend(entries)
+    }
+
     pub fn edit(&self) -> MoleculeEditor {
         MoleculeEditor::from_parts(
             self.graph.clone(),

@@ -97,9 +97,9 @@ proptest! {
         let first = editor.tracked_remove(&atoms, &bonds);
         editor.add_atom(AtomForm::from_element(Element::F));
         let second = editor.tracked_remove(&[AtomId(0)], &[]);
-        let expected = MoleculeCorrespondence::from(&first)
-            .extend_right(EntityKind::Atom, 1)
-            .compose(&MoleculeCorrespondence::from(&second)).unwrap();
+        let mut expected = MoleculeCorrespondence::from(&first);
+        expected.extend_right(EntityKind::Atom, 1);
+        let expected = expected.compose(&MoleculeCorrespondence::from(&second)).unwrap();
         let plain = editor.clone().try_build();
         prop_assert_eq!(editor.try_tracked_build(), plain.map(|molecule| (molecule, expected)));
     }

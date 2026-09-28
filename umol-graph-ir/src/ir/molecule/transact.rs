@@ -2591,12 +2591,9 @@ impl MoleculeEditor {
                 let constraints = restored_constraints(&cascade, self.constraints())
                     .ok_or_else(rollback_mismatch)?;
                 self.restore_topology(atoms, bonds, overlays, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
+                self.correspondence
+                    .uncompact_right(undo_compaction.forward())
+                    .expect("validated undo compaction describes the editor's current id spaces");
                 *self.constraints_mut() = constraints;
             }
             Undo::RemoveAddedDativeBond(added) => self.remove_added_dative_bond(&added),
@@ -2608,12 +2605,9 @@ impl MoleculeEditor {
                 let constraints = restored_constraints(&cascade, self.constraints())
                     .ok_or_else(rollback_mismatch)?;
                 self.restore_dative_bonds(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
+                self.correspondence
+                    .uncompact_right(undo_compaction.forward())
+                    .expect("validated undo compaction describes the editor's current id spaces");
                 *self.constraints_mut() = constraints;
             }
             Undo::RestoreDativeBondDonors { id, donors } => {
@@ -2631,12 +2625,9 @@ impl MoleculeEditor {
                 let constraints = restored_constraints(&cascade, self.constraints())
                     .ok_or_else(rollback_mismatch)?;
                 self.restore_aromatic_systems(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
+                self.correspondence
+                    .uncompact_right(undo_compaction.forward())
+                    .expect("validated undo compaction describes the editor's current id spaces");
                 *self.constraints_mut() = constraints;
             }
             Undo::RestoreAromaticSystemAtoms { id, atoms } => {
@@ -2651,12 +2642,9 @@ impl MoleculeEditor {
                 let constraints = restored_constraints(&cascade, self.constraints())
                     .ok_or_else(rollback_mismatch)?;
                 self.restore_multicenter_bonds(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
+                self.correspondence
+                    .uncompact_right(undo_compaction.forward())
+                    .expect("validated undo compaction describes the editor's current id spaces");
                 *self.constraints_mut() = constraints;
             }
             Undo::RestoreMulticenterBondAtoms { id, atoms } => {
@@ -2671,12 +2659,9 @@ impl MoleculeEditor {
                 let constraints = restored_constraints(&cascade, self.constraints())
                     .ok_or_else(rollback_mismatch)?;
                 self.restore_noncovalent_bonds(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
+                self.correspondence
+                    .uncompact_right(undo_compaction.forward())
+                    .expect("validated undo compaction describes the editor's current id spaces");
                 *self.constraints_mut() = constraints;
             }
             Undo::RestoreNoncovalentBondAtoms { id, atoms } => {
@@ -2691,12 +2676,9 @@ impl MoleculeEditor {
                 let constraints = restored_constraints(&cascade, self.constraints())
                     .ok_or_else(rollback_mismatch)?;
                 self.restore_stereo_atoms(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
+                self.correspondence
+                    .uncompact_right(undo_compaction.forward())
+                    .expect("validated undo compaction describes the editor's current id spaces");
                 *self.constraints_mut() = constraints;
             }
             Undo::RestoreStereoAtomSite { id, site } => {
@@ -2714,12 +2696,9 @@ impl MoleculeEditor {
                 let constraints = restored_constraints(&cascade, self.constraints())
                     .ok_or_else(rollback_mismatch)?;
                 self.restore_stereo_bonds(removed, &undo_compaction);
-                self.correspondence =
-                    mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                        .uncompact_right(undo_compaction.forward())
-                        .expect(
-                            "validated undo compaction describes the editor's current id spaces",
-                        );
+                self.correspondence
+                    .uncompact_right(undo_compaction.forward())
+                    .expect("validated undo compaction describes the editor's current id spaces");
                 *self.constraints_mut() = constraints;
             }
             Undo::RestoreStereoBondSite { id, site } => {

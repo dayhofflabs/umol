@@ -52,7 +52,17 @@ use super::{Molecule, MoleculeIntegrityError};
 /// removals discard pairs. Restoration expands the id spaces without recreating discarded pairs.
 /// Attribute-only changes preserve the pairings.
 ///
+/// Bulk additions move attributes and copy supplied atom/ligand slices into storage.
+/// Mutation completes before return; the exact-size id iterators retain no receiver
+/// or input borrow. These are direct mutations, without an undo journal or integrity
+/// checks at addition.
+///
 /// # Semantic properties
+///
+/// Bulk additions preserve existing ids, attributes, and overlay frames. New ids are
+/// contiguous in input order. Empty batches leave storage unchanged. Splitting a
+/// batch into consecutive additions gives the same stored result. These properties
+/// are exercised through publication in `tests/property/edit.rs`.
 ///
 /// The session correspondence composes the id changes since editor creation. Discarding the
 /// correspondence from a tracked publication gives the same molecule or integrity error as its
@@ -112,10 +122,25 @@ impl MoleculeEditor {
     pub fn add_atom(&mut self, atom: AtomForm) -> AtomId {
         let id = self.molecule.graph.add_node();
         Arc::make_mut(&mut self.molecule.atoms).push(atom);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .extend_right(EntityKind::Atom, 1);
+        self.correspondence.extend_right(EntityKind::Atom, 1);
         AtomId::from(id)
+    }
+
+    /// Append atoms in input order and return their ids.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resulting atom count exceeds `u32::MAX`.
+    pub fn add_atoms(
+        &mut self,
+        atoms: Vec<AtomForm>,
+    ) -> impl ExactSizeIterator<Item = AtomId> + use<> {
+        let ids = self.molecule.add_atoms(atoms);
+        if ids.len() != 0 {
+            self.correspondence
+                .extend_right(EntityKind::Atom, ids.len());
+        }
+        ids
     }
 
     /// Append a localized bond directly to the editor.
@@ -128,10 +153,28 @@ impl MoleculeEditor {
             .graph
             .add_edge(NodeId::from(first), NodeId::from(second));
         Arc::make_mut(&mut self.molecule.bonds).push(bond);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .extend_right(EntityKind::Bond, 1);
+        self.correspondence.extend_right(EntityKind::Bond, 1);
         BondId::from(id)
+    }
+
+    /// Append localized bonds in input order and return their ids.
+    ///
+    /// Bond endpoints are stored in increasing atom-id order.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside the current atom space or the resulting
+    /// adjacency exceeds the capacity of its `u32` offsets.
+    pub fn add_bonds(
+        &mut self,
+        bonds: Vec<([AtomId; 2], BondForm)>,
+    ) -> impl ExactSizeIterator<Item = BondId> + use<> {
+        let ids = self.molecule.add_bonds(bonds);
+        if ids.len() != 0 {
+            self.correspondence
+                .extend_right(EntityKind::Bond, ids.len());
+        }
+        ids
     }
 
     /// Append a dative-bond overlay directly to the editor. The acceptor is factor 1; the donors
@@ -143,10 +186,24 @@ impl MoleculeEditor {
         bond: DativeBondForm,
     ) -> DativeBondId {
         let id = self.molecule.dative_bonds.add(donors, acceptor, bond);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .extend_right(EntityKind::DativeBond, 1);
+        self.correspondence.extend_right(EntityKind::DativeBond, 1);
         id
+    }
+
+    /// Append dative bonds in input order and return their ids.
+    ///
+    /// Donor and acceptor ids are not checked against the molecule here. Supplied
+    /// frame order is retained; molecule integrity is checked at publication.
+    pub fn add_dative_bonds(
+        &mut self,
+        entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
+    ) -> impl ExactSizeIterator<Item = DativeBondId> + use<> {
+        let ids = self.molecule.add_dative_bonds(entries);
+        if ids.len() != 0 {
+            self.correspondence
+                .extend_right(EntityKind::DativeBond, ids.len());
+        }
+        ids
     }
 
     /// Append an aromatic-system overlay directly to the editor.
@@ -156,10 +213,25 @@ impl MoleculeEditor {
         data: AromaticSystemForm,
     ) -> AromaticSystemId {
         let id = self.molecule.aromatic_systems.add(atoms, data);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .extend_right(EntityKind::AromaticSystem, 1);
+        self.correspondence
+            .extend_right(EntityKind::AromaticSystem, 1);
         id
+    }
+
+    /// Append aromatic systems in input order and return their ids.
+    ///
+    /// Atom ids are not checked against the molecule here. Supplied
+    /// frame order is retained; molecule integrity is checked at publication.
+    pub fn add_aromatic_systems(
+        &mut self,
+        entries: Vec<(&[AtomId], AromaticSystemForm)>,
+    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + use<> {
+        let ids = self.molecule.add_aromatic_systems(entries);
+        if ids.len() != 0 {
+            self.correspondence
+                .extend_right(EntityKind::AromaticSystem, ids.len());
+        }
+        ids
     }
 
     /// Append a multicenter-bond overlay directly to the editor.
@@ -169,10 +241,25 @@ impl MoleculeEditor {
         data: MulticenterBondForm,
     ) -> MulticenterBondId {
         let id = self.molecule.multicenter_bonds.add(atoms, data);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .extend_right(EntityKind::MulticenterBond, 1);
+        self.correspondence
+            .extend_right(EntityKind::MulticenterBond, 1);
         id
+    }
+
+    /// Append multicenter bonds in input order and return their ids.
+    ///
+    /// Atom ids are not checked against the molecule here. Supplied
+    /// frame order is retained; molecule integrity is checked at publication.
+    pub fn add_multicenter_bonds(
+        &mut self,
+        entries: Vec<(&[AtomId], MulticenterBondForm)>,
+    ) -> impl ExactSizeIterator<Item = MulticenterBondId> + use<> {
+        let ids = self.molecule.add_multicenter_bonds(entries);
+        if ids.len() != 0 {
+            self.correspondence
+                .extend_right(EntityKind::MulticenterBond, ids.len());
+        }
+        ids
     }
 
     /// Append a noncovalent-bond overlay directly to the editor.
@@ -182,10 +269,25 @@ impl MoleculeEditor {
         bond: NoncovalentBondForm,
     ) -> NoncovalentBondId {
         let id = self.molecule.noncovalent_bonds.add(ends, bond);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .extend_right(EntityKind::NoncovalentBond, 1);
+        self.correspondence
+            .extend_right(EntityKind::NoncovalentBond, 1);
         id
+    }
+
+    /// Append noncovalent bonds in input order and return their ids.
+    ///
+    /// Atom ids are not checked against the molecule here. Supplied
+    /// frame order is retained; molecule integrity is checked at publication.
+    pub fn add_noncovalent_bonds(
+        &mut self,
+        entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
+    ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + use<> {
+        let ids = self.molecule.add_noncovalent_bonds(entries);
+        if ids.len() != 0 {
+            self.correspondence
+                .extend_right(EntityKind::NoncovalentBond, ids.len());
+        }
+        ids
     }
 
     /// Append a stereo-atom overlay directly to the editor.
@@ -196,10 +298,24 @@ impl MoleculeEditor {
         attributes: StereoAtomForm,
     ) -> StereoAtomId {
         let id = self.molecule.stereo_atoms.add(site, ligands, attributes);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .extend_right(EntityKind::StereoAtom, 1);
+        self.correspondence.extend_right(EntityKind::StereoAtom, 1);
         id
+    }
+
+    /// Append stereo atoms in input order and return their ids.
+    ///
+    /// Site and ligand ids are not checked against the molecule here. Supplied
+    /// frame order is retained; molecule integrity is checked at publication.
+    pub fn add_stereo_atoms(
+        &mut self,
+        entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
+    ) -> impl ExactSizeIterator<Item = StereoAtomId> + use<> {
+        let ids = self.molecule.add_stereo_atoms(entries);
+        if ids.len() != 0 {
+            self.correspondence
+                .extend_right(EntityKind::StereoAtom, ids.len());
+        }
+        ids
     }
 
     /// Append a stereo-bond overlay directly to the editor.
@@ -210,10 +326,24 @@ impl MoleculeEditor {
         attributes: StereoBondForm,
     ) -> StereoBondId {
         let id = self.molecule.stereo_bonds.add(site, ligands, attributes);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .extend_right(EntityKind::StereoBond, 1);
+        self.correspondence.extend_right(EntityKind::StereoBond, 1);
         id
+    }
+
+    /// Append stereo bonds in input order and return their ids.
+    ///
+    /// Site and ligand ids are not checked against the molecule here. Supplied
+    /// frame order is retained; molecule integrity is checked at publication.
+    pub fn add_stereo_bonds(
+        &mut self,
+        entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
+    ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
+        let ids = self.molecule.add_stereo_bonds(entries);
+        if ids.len() != 0 {
+            self.correspondence
+                .extend_right(EntityKind::StereoBond, ids.len());
+        }
+        ids
     }
 
     /// Add a molecule-level constraint (molecule-scope predicate or
@@ -490,10 +620,9 @@ impl MoleculeEditor {
             Compaction::identity(self.stereo_bond_count()),
         );
         self.molecule.constraints.compact(&compaction);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .compact_right(&compaction)
-                .expect("removal compaction describes the editor's current id spaces");
+        self.correspondence
+            .compact_right(&compaction)
+            .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -533,10 +662,9 @@ impl MoleculeEditor {
             Compaction::identity(self.stereo_bond_count()),
         );
         self.molecule.constraints.compact(&compaction);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .compact_right(&compaction)
-                .expect("removal compaction describes the editor's current id spaces");
+        self.correspondence
+            .compact_right(&compaction)
+            .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -576,10 +704,9 @@ impl MoleculeEditor {
             Compaction::identity(self.stereo_bond_count()),
         );
         self.molecule.constraints.compact(&compaction);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .compact_right(&compaction)
-                .expect("removal compaction describes the editor's current id spaces");
+        self.correspondence
+            .compact_right(&compaction)
+            .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -619,10 +746,9 @@ impl MoleculeEditor {
             Compaction::identity(self.stereo_bond_count()),
         );
         self.molecule.constraints.compact(&compaction);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .compact_right(&compaction)
-                .expect("removal compaction describes the editor's current id spaces");
+        self.correspondence
+            .compact_right(&compaction)
+            .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -655,10 +781,9 @@ impl MoleculeEditor {
             Compaction::identity(self.stereo_bond_count()),
         );
         self.molecule.constraints.compact(&compaction);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .compact_right(&compaction)
-                .expect("removal compaction describes the editor's current id spaces");
+        self.correspondence
+            .compact_right(&compaction)
+            .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -691,10 +816,9 @@ impl MoleculeEditor {
             self.molecule.stereo_bonds.tracked_remove(ids),
         );
         self.molecule.constraints.compact(&compaction);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .compact_right(&compaction)
-                .expect("removal compaction describes the editor's current id spaces");
+        self.correspondence
+            .compact_right(&compaction)
+            .expect("removal compaction describes the editor's current id spaces");
         compaction
     }
 
@@ -754,10 +878,9 @@ impl MoleculeEditor {
             removed_stereo_bonds,
         );
         self.molecule.constraints.compact(&id_compaction);
-        self.correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty())
-                .compact_right(&id_compaction)
-                .expect("removal compaction describes the editor's current id spaces");
+        self.correspondence
+            .compact_right(&id_compaction)
+            .expect("removal compaction describes the editor's current id spaces");
         id_compaction
     }
 
@@ -1083,6 +1206,114 @@ mod tests {
         b
     }
 
+    #[fixture]
+    fn addition_entries() -> MoleculeEntries {
+        MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(2), AtomId(4), BondForm::from_order(2)),
+                (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(4), AtomId(0), BondForm::from_order(2)),
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_atoms(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        drop(source);
+        let mut ids = editor.add_atoms(vec![
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::O),
+        ]);
+
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.next(), Some(AtomId(6)));
+        assert_eq!(ids.len(), 1);
+        assert_eq!(editor.atom_count(), 8);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.atoms.extend([
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::O),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.try_build(), Ok(expected));
+        assert_eq!(ids.collect::<Vec<_>>(), vec![AtomId(7)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_atoms_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.snapshot().unwrap();
+        let correspondence = triatomic.correspondence.clone();
+        let mut ids = triatomic.add_atoms(vec![]);
+
+        assert!(Arc::ptr_eq(&triatomic.molecule.atoms, &original.atoms));
+
+        assert_eq!(ids.len(), 0);
+        assert_eq!(
+            triatomic.try_tracked_build(),
+            Ok((original, correspondence))
+        );
+        assert_eq!(ids.next(), None);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_bonds(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        drop(source);
+        let mut ids = editor.add_bonds(vec![
+            ([AtomId(5), AtomId(1)], BondForm::from_order(3)),
+            ([AtomId(3), AtomId(1)], BondForm::from_order(1)),
+        ]);
+
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.next(), Some(BondId(6)));
+        assert_eq!(ids.len(), 1);
+        assert_eq!(editor.bond_count(), 8);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.bonds.extend([
+            (AtomId(5), AtomId(1), BondForm::from_order(3)),
+            (AtomId(3), AtomId(1), BondForm::from_order(1)),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.try_build(), Ok(expected));
+        assert_eq!(ids.collect::<Vec<_>>(), vec![BondId(7)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_bonds_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.snapshot().unwrap();
+        let correspondence = triatomic.correspondence.clone();
+        let mut ids = triatomic.add_bonds(vec![]);
+
+        assert!(Arc::ptr_eq(&triatomic.molecule.bonds, &original.bonds));
+
+        assert_eq!(ids.len(), 0);
+        assert_eq!(
+            triatomic.try_tracked_build(),
+            Ok((original, correspondence))
+        );
+        assert_eq!(ids.next(), None);
+    }
+
     #[rstest]
     fn test_molecule_editor_add_dative_bond(mut triatomic: MoleculeEditor) {
         let attributes = DativeBondForm::from_order(1);
@@ -1155,6 +1386,59 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_editor_add_dative_bonds(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        addition_entries.dative = vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))];
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        drop(source);
+        let mut ids = {
+            let first = [AtomId(3), AtomId(2)];
+            let last = [AtomId(5)];
+            editor.add_dative_bonds(vec![
+                (&first, AtomId(4), DativeBondForm::from_order(2)),
+                (&last, AtomId(0), DativeBondForm::from_order(3)),
+            ])
+        };
+
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.next(), Some(DativeBondId(1)));
+        assert_eq!(ids.len(), 1);
+        assert_eq!(editor.dative_bond_count(), 3);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.dative.extend([
+            (
+                vec![AtomId(3), AtomId(2)],
+                AtomId(4),
+                DativeBondForm::from_order(2),
+            ),
+            (vec![AtomId(5)], AtomId(0), DativeBondForm::from_order(3)),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.try_build(), Ok(expected));
+        assert_eq!(ids.collect::<Vec<_>>(), vec![DativeBondId(2)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_dative_bonds_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.snapshot().unwrap();
+        let correspondence = triatomic.correspondence.clone();
+        let mut ids = triatomic.add_dative_bonds(vec![]);
+
+        assert_eq!(ids.len(), 0);
+        assert_eq!(
+            triatomic.try_tracked_build(),
+            Ok((original, correspondence))
+        );
+        assert_eq!(ids.next(), None);
+    }
+
+    #[rstest]
     fn test_molecule_editor_add_aromatic_system(mut triatomic: MoleculeEditor) {
         let attributes = AromaticSystemForm::default();
         let entries = MoleculeEntries {
@@ -1222,6 +1506,64 @@ mod tests {
             vec![AromaticSystemId(1)]
         );
         assert_eq!(triatomic.build(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_aromatic_systems(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        addition_entries.aromatic = vec![(
+            vec![AtomId(0), AtomId(1)],
+            AromaticSystemForm::from_electrons(vec![1, 1]),
+        )];
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        drop(source);
+        let mut ids = {
+            let first = [AtomId(3), AtomId(2)];
+            let last = [AtomId(5), AtomId(4)];
+            editor.add_aromatic_systems(vec![
+                (&first, AromaticSystemForm::from_electrons(vec![1, 2])),
+                (&last, AromaticSystemForm::from_electrons(vec![2, 1])),
+            ])
+        };
+
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.next(), Some(AromaticSystemId(1)));
+        assert_eq!(ids.len(), 1);
+        assert_eq!(editor.aromatic_system_count(), 3);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.aromatic.extend([
+            (
+                vec![AtomId(3), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 2]),
+            ),
+            (
+                vec![AtomId(5), AtomId(4)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            ),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.try_build(), Ok(expected));
+        assert_eq!(ids.collect::<Vec<_>>(), vec![AromaticSystemId(2)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_aromatic_systems_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.snapshot().unwrap();
+        let correspondence = triatomic.correspondence.clone();
+        let mut ids = triatomic.add_aromatic_systems(vec![]);
+
+        assert_eq!(ids.len(), 0);
+        assert_eq!(
+            triatomic.try_tracked_build(),
+            Ok((original, correspondence))
+        );
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]
@@ -1298,6 +1640,64 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_editor_add_multicenter_bonds(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        addition_entries.multicenter = vec![(
+            vec![AtomId(0), AtomId(1)],
+            MulticenterBondForm::from_electrons(vec![1, 1]),
+        )];
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        drop(source);
+        let mut ids = {
+            let first = [AtomId(3), AtomId(2)];
+            let last = [AtomId(5), AtomId(4)];
+            editor.add_multicenter_bonds(vec![
+                (&first, MulticenterBondForm::from_electrons(vec![1, 2])),
+                (&last, MulticenterBondForm::from_electrons(vec![2, 1])),
+            ])
+        };
+
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.next(), Some(MulticenterBondId(1)));
+        assert_eq!(ids.len(), 1);
+        assert_eq!(editor.multicenter_bond_count(), 3);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.multicenter.extend([
+            (
+                vec![AtomId(3), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![1, 2]),
+            ),
+            (
+                vec![AtomId(5), AtomId(4)],
+                MulticenterBondForm::from_electrons(vec![2, 1]),
+            ),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.try_build(), Ok(expected));
+        assert_eq!(ids.collect::<Vec<_>>(), vec![MulticenterBondId(2)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_multicenter_bonds_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.snapshot().unwrap();
+        let correspondence = triatomic.correspondence.clone();
+        let mut ids = triatomic.add_multicenter_bonds(vec![]);
+
+        assert_eq!(ids.len(), 0);
+        assert_eq!(
+            triatomic.try_tracked_build(),
+            Ok((original, correspondence))
+        );
+        assert_eq!(ids.next(), None);
+    }
+
+    #[rstest]
     fn test_molecule_editor_add_noncovalent_bond(mut triatomic: MoleculeEditor) {
         let attributes = NoncovalentBondForm::default();
         let entries = MoleculeEntries {
@@ -1368,6 +1768,58 @@ mod tests {
             vec![NoncovalentBondId(0), NoncovalentBondId(1)]
         );
         assert_eq!(triatomic.build(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_noncovalent_bonds(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        addition_entries.noncovalent =
+            vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())];
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        drop(source);
+        let mut ids = editor.add_noncovalent_bonds(vec![
+            (
+                [AtomId(3), AtomId(2)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            ([AtomId(5), AtomId(4)], NoncovalentBondForm::default()),
+        ]);
+
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.next(), Some(NoncovalentBondId(1)));
+        assert_eq!(ids.len(), 1);
+        assert_eq!(editor.noncovalent_bond_count(), 3);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.noncovalent.extend([
+            (
+                [AtomId(3), AtomId(2)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            ([AtomId(5), AtomId(4)], NoncovalentBondForm::default()),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.try_build(), Ok(expected));
+        assert_eq!(ids.collect::<Vec<_>>(), vec![NoncovalentBondId(2)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_noncovalent_bonds_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.snapshot().unwrap();
+        let correspondence = triatomic.correspondence.clone();
+        let mut ids = triatomic.add_noncovalent_bonds(vec![]);
+
+        assert_eq!(ids.len(), 0);
+        assert_eq!(
+            triatomic.try_tracked_build(),
+            Ok((original, correspondence))
+        );
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]
@@ -1455,6 +1907,100 @@ mod tests {
             vec![StereoAtomId(0), StereoAtomId(1)]
         );
         assert_eq!(triatomic.build(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_stereo_atoms(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        addition_entries.stereo_atoms = vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        )];
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        drop(source);
+        let mut ids = {
+            let first = [
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+            ];
+            let last = [
+                StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
+            ];
+            editor.add_stereo_atoms(vec![
+                (
+                    AtomId(2),
+                    &first,
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+                ),
+                (
+                    AtomId(4),
+                    &last,
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+                ),
+            ])
+        };
+
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.next(), Some(StereoAtomId(1)));
+        assert_eq!(ids.len(), 1);
+        assert_eq!(editor.stereo_atom_count(), 3);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.stereo_atoms.extend([
+            (
+                AtomId(2),
+                vec![
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+            ),
+            (
+                AtomId(4),
+                vec![
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+            ),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.try_build(), Ok(expected));
+        assert_eq!(ids.collect::<Vec<_>>(), vec![StereoAtomId(2)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_stereo_atoms_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.snapshot().unwrap();
+        let correspondence = triatomic.correspondence.clone();
+        let mut ids = triatomic.add_stereo_atoms(vec![]);
+
+        assert_eq!(ids.len(), 0);
+        assert_eq!(
+            triatomic.try_tracked_build(),
+            Ok((original, correspondence))
+        );
+        assert_eq!(ids.next(), None);
     }
 
     #[rstest]
@@ -1567,6 +2113,100 @@ mod tests {
             vec![StereoBondId(0), StereoBondId(1)]
         );
         assert_eq!(triatomic.build(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_stereo_bonds(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        addition_entries.stereo_bonds = vec![(
+            BondId(0),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+            StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+        )];
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        drop(source);
+        let mut ids = {
+            let first = [
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+            ];
+            let last = [
+                StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(5), StereoLigandKind::LonePair),
+            ];
+            editor.add_stereo_bonds(vec![
+                (
+                    BondId(2),
+                    &first,
+                    StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+                ),
+                (
+                    BondId(4),
+                    &last,
+                    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+                ),
+            ])
+        };
+
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.next(), Some(StereoBondId(1)));
+        assert_eq!(ids.len(), 1);
+        assert_eq!(editor.stereo_bond_count(), 3);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.stereo_bonds.extend([
+            (
+                BondId(2),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            ),
+            (
+                BondId(4),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+            ),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.try_build(), Ok(expected));
+        assert_eq!(ids.collect::<Vec<_>>(), vec![StereoBondId(2)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_stereo_bonds_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.snapshot().unwrap();
+        let correspondence = triatomic.correspondence.clone();
+        let mut ids = triatomic.add_stereo_bonds(vec![]);
+
+        assert_eq!(ids.len(), 0);
+        assert_eq!(
+            triatomic.try_tracked_build(),
+            Ok((original, correspondence))
+        );
+        assert_eq!(ids.next(), None);
     }
 
     /// Aromatic systems, where the alignment is genuinely used: `on_permutation` reindexes the

@@ -31,7 +31,8 @@ Edits and their Undo variants remain. S3c/S3d record the selective removal and
 retained reaction integration; both are verified. S3e completes the Python Edit
 migration. S3f's graph-core bulk additions, S3g's relation-set bulk additions,
 and S3h's typed-overlay extend methods are implemented. S3i's Molecule/editor bulk
-additions are next. Graph-core mutation and
+additions and S3j's mutable correspondence methods are implemented; S3 is complete.
+S4a1's Molecule restoration methods are next. Graph-core mutation and
 restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -82,8 +83,8 @@ incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-cons
 checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e–S3h are
-complete; S3i is next.
+approved reaction names, semantics, and dative-factor migration. S3e–S3j are
+complete; S4a1 is next.
 
 ## Editor and transaction API
 
@@ -4369,7 +4370,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Graph-core's S3g properties cover the delegated batch algorithm; Molecule/editor
   integration is S3i. Workspace and Rust 1.87 gates remain at S9b.
 
-- **S3i** (`ir::molecule`, `ir::molecule::editor`; additive, green) Add private
+- **S3i — completed 2026-09-28** (`ir::molecule`, `ir::molecule::editor`; additive, green) Add private
   Molecule and public editor add_atoms, add_bonds, add_dative_bonds,
   add_aromatic_systems, add_multicenter_bonds, add_noncovalent_bonds,
   add_stereo_atoms, and add_stereo_bonds. Use the full bulk-addition interface
@@ -4383,6 +4384,121 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   check, bulk Edit variant, or edit-coalescing behavior. Verify ids and complete
   stored entries against independent expected values, graph/attribute alignment,
   empty batches, and use through editor publication. [dep: S2i, S3f, S3h]
+
+  All eight private Molecule additions and public editor delegates are implemented.
+  Graph and its atom/bond attribute vectors grow together; each overlay addition
+  calls its typed set's extend. Forms move into storage, and the returned iterators
+  own their bounds. Empty batches preserve shared storage.
+
+  The existing editor still owns session correspondence until S6b1. Nonempty
+  additions extend its target counts once per batch so current tracked publication
+  and subsequent removals remain correct. This increments one count through a
+  mutable borrow without cloning pair vectors. The private Molecule
+  methods do not maintain correspondence; S6b1 removes this editor bookkeeping
+  together with the existing single-addition bookkeeping.
+
+  **Checked — 2026-09-28.** The 24 new unit cases cover every addition with unique
+  and shared storage, complete published entries, id order, empty batches, and
+  iterator use after input slices and the editor are gone. A public property
+  reconstructs generated MoleculeEntries through consecutive bulk additions of
+  varying size, checking ids, publication, and the current session correspondence.
+  `cargo test -p umol-graph-ir --features proptest` passes: 7,951 tests, including
+  415 properties; seven tests are ignored. Strict graph-ir Clippy with all targets
+  and proptest, rustdoc with warnings denied, nightly workspace formatting, and
+  `git diff --check` pass. The full diff was reviewed against S3i and local
+  conventions. Workspace and Rust 1.87 gates remain at S9b.
+
+- **S3j — completed 2026-09-28** (`umol-graph-core::correspondence`,
+  `ir::correspondence`, `ir::molecule::{editor,transact}`; breaking, green after
+  caller migration). [dep: S3i]
+
+  Change the three mutation methods on Correspondence, GraphCorrespondence, and
+  MoleculeCorrespondence from consuming receivers to mutable borrows. A
+  correspondence stored in another structure must be directly mutable without
+  moving it out and installing an empty placeholder. Retain public visibility,
+  names, arguments, existing generic bounds, and error types. The nine signatures
+  are:
+
+  ```rust
+  impl<Id> Correspondence<Id> {
+      pub fn extend_right(&mut self, count: usize);
+      pub fn compact_right(
+          &mut self, compaction: &Compaction<Id>,
+      ) -> Result<(), CorrespondenceComposeError>;
+      pub fn uncompact_right(
+          &mut self, compaction: &Compaction<Id>,
+      ) -> Result<(), CorrespondenceComposeError>;
+  }
+
+  impl GraphCorrespondence {
+      pub fn extend_right(&mut self, nodes: usize, edges: usize);
+      pub fn compact_right(
+          &mut self, compaction: &GraphCompaction,
+      ) -> Result<(), GraphCorrespondenceComposeError>;
+      pub fn uncompact_right(
+          &mut self, compaction: &GraphCompaction,
+      ) -> Result<(), GraphCorrespondenceComposeError>;
+  }
+
+  impl MoleculeCorrespondence {
+      pub fn extend_right(&mut self, kind: EntityKind, count: usize);
+      pub fn compact_right(
+          &mut self, compaction: &MoleculeCompaction,
+      ) -> Result<(), MoleculeCorrespondenceComposeError>;
+      pub fn uncompact_right(
+          &mut self, compaction: &MoleculeCompaction,
+      ) -> Result<(), MoleculeCorrespondenceComposeError>;
+  }
+  ```
+
+  **Semantics and failure.** extend_right increases the selected right counts;
+  all pairs remain unchanged. compact_right discards pairs whose right ids were
+  removed and translates survivors. uncompact_right expands surviving right ids;
+  restored positions remain unmatched, and discarded pairs are not recreated.
+  All three preserve left counts and reuse pair-vector allocations. Zero extension
+  and identity compaction/uncompaction leave the value unchanged.
+
+  compact_right requires each right count to equal its compaction's source count;
+  uncompact_right requires the result count instead. On a mismatch, return the
+  existing error and leave the entire receiver unchanged. GraphCorrespondence and
+  MoleculeCorrespondence check every applicable count before mutating any pairs.
+  Preserve existing error selection: nodes before edges, and molecule entity-kind
+  order. These checks require no clone or journal. Preserve the existing algorithms
+  and the atom/bond removed-id adaptation; this is a receiver-contract change.
+
+  **Migration.** Update graph-core first, then MoleculeCorrespondence, then editor
+  additions/removals and undo restoration. Replace the correspondence-specific
+  mem::replace/assignment sequences with direct method calls. Migrate chained
+  calls in tests, properties, and the existing correspondence benchmark. Keep
+  current session tracking until S6b1; S3j changes how its value is updated.
+  Construction, conversion, induction, queries, compose, compose_all, and reverse
+  retain their contracts. The Python bindings do not expose these three mutation
+  methods and need no new surface. Update rustdoc and the data-type guide's
+  consuming-correspondence section to describe mutable updates and error behavior.
+
+  **Verification.** Retain exact-result, identity, pair-allocation reuse, and
+  composition-equivalence coverage. Add unchanged-receiver assertions on count
+  errors at all three levels, including a later mismatching component when earlier
+  components would change. Exercise direct mutation through a containing field.
+  Run graph-core and graph-ir tests with proptest, strict all-target Clippy, and
+  rustdoc with warnings denied; adapt and compile the existing benchmark without
+  starting a new measurement campaign. Run nightly formatting and diff checks,
+  and review the full change against these nine signatures. Workspace and
+  Rust 1.87 gates remain at S9b.
+
+  All nine methods use mutable receivers with the signatures above. Graph and
+  molecule compaction/uncompaction check all counts before updating pairs.
+  Editor additions/removals and undo restoration call the methods directly;
+  their 30 move-out/assignment sequences are removed. Existing session tracking
+  remains until S6b1. Rustdoc and the data-type guide describe the new contracts.
+
+  **Checked — 2026-09-28.** Both crates pass with proptest: 10,115 tests passed,
+  including 624 properties; seven tests are ignored. The 26 count-error cases
+  assert unchanged receivers, with nonidentity compactions exercising late
+  mismatches. Existing editor tests cover correspondence mutation through its
+  containing field. Strict all-target Clippy, including the migrated benchmark,
+  rustdoc with warnings denied, nightly formatting, diff checks, and full diff
+  review pass. No new performance measurements were needed.
 
 ### S4 — Recovery machinery before the public lifecycle switch
 
@@ -5448,8 +5564,9 @@ Within the revised S2:
 - S3a depends on S2i; S3b requires S2j. S3c/S3d remove replacement Deltas and
   retain reaction integration; S3e closes the Python Edit migration.
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
-  extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S4b uses
-  those additions and the component removal/restoration interfaces.
+  extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
+  correspondence mutation to mutable borrowing and migrates its callers, closing
+  S3. S4b uses the additions and the component removal/restoration interfaces.
 - S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is
   incorporated in S5a1.
 - S5a1–S5a2 introduce the guard and public lifecycle together; S5d1–S5d3

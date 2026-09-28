@@ -750,13 +750,16 @@ Realized reactions and spans use the existing lhs-anchored representation and co
 normal form; their product projections preserve the produced molecule's semantics rather
 than promising its exact row ordering.
 
-### Consuming correspondence updates
+### Mutable correspondence updates
 
 `Correspondence::identity(count)` initializes a declared identity without temporary images.
-`extend_right` consumes the correspondence and adds unmatched right-domain ids by increasing
+`extend_right` mutably borrows the correspondence and adds unmatched right-domain ids by increasing
 its right count. `compact_right` discards affected pairs and compacts surviving right ids;
 `uncompact_right` expands those ids through the inverse compaction, leaving restored positions
 unmatched. Both check the applicable intermediate count using the existing composition errors.
+All three take `&mut self`: extension returns `()`, compaction and uncompaction return
+`Result<(), _>`. A count mismatch leaves the entire correspondence unchanged; graph and molecule
+correspondences check all applicable counts before updating any pairs.
 They preserve the left count and reuse the pair-vector allocation, including when all pairs
 are removed. Compaction followed by expansion does not recreate discarded pairings.
 

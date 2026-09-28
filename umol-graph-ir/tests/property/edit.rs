@@ -2,11 +2,119 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
-use umol_graph_ir::ir::{MoleculeApplyError, Transaction};
+use umol_graph_core::Correspondence;
+use umol_graph_ir::ir::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, Molecule, MoleculeApplyError,
+    MoleculeCorrespondence, MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
+    Transaction,
+};
 
-use crate::strategies::*;
+use crate::strategies::{molecule_entries_strategy, *};
 
 proptest! {
+    /// Consecutive bulk additions reconstruct the supplied complete entries for any
+    /// batch split. The constructor supplies the independent publication result.
+    #[test]
+    fn test_molecule_editor_try_tracked_build_bulk_additions(
+        entries in molecule_entries_strategy(),
+        batch_size in 1usize..=4,
+    ) {
+        let expected = Molecule::from_entries(entries.clone());
+        let mut editor = Molecule::new().edit();
+
+        for (index, batch) in entries.atoms.chunks(batch_size).enumerate() {
+            let ids = editor.add_atoms(batch.to_vec());
+            let start = index * batch_size;
+            let expected_ids: Vec<_> = (start..start + batch.len()).map(AtomId::from).collect();
+            prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
+        }
+
+        for (index, batch) in entries.bonds.chunks(batch_size).enumerate() {
+            let ids = editor.add_bonds(
+                batch.iter()
+                    .map(|(first, second, attributes)| ([*first, *second], attributes.clone()))
+                    .collect(),
+            );
+            let start = index * batch_size;
+            let expected_ids: Vec<_> = (start..start + batch.len()).map(BondId::from).collect();
+            prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
+        }
+
+        for (index, batch) in entries.dative.chunks(batch_size).enumerate() {
+            let ids = editor.add_dative_bonds(
+                batch.iter()
+                    .map(|(donors, acceptor, attributes)| (donors.as_slice(), *acceptor, attributes.clone()))
+                    .collect(),
+            );
+            let start = index * batch_size;
+            let expected_ids: Vec<_> = (start..start + batch.len()).map(DativeBondId::from).collect();
+            prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
+        }
+
+        for (index, batch) in entries.aromatic.chunks(batch_size).enumerate() {
+            let ids = editor.add_aromatic_systems(
+                batch.iter()
+                    .map(|(atoms, attributes)| (atoms.as_slice(), attributes.clone()))
+                    .collect(),
+            );
+            let start = index * batch_size;
+            let expected_ids: Vec<_> = (start..start + batch.len()).map(AromaticSystemId::from).collect();
+            prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
+        }
+
+        for (index, batch) in entries.multicenter.chunks(batch_size).enumerate() {
+            let ids = editor.add_multicenter_bonds(
+                batch.iter()
+                    .map(|(atoms, attributes)| (atoms.as_slice(), attributes.clone()))
+                    .collect(),
+            );
+            let start = index * batch_size;
+            let expected_ids: Vec<_> = (start..start + batch.len()).map(MulticenterBondId::from).collect();
+            prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
+        }
+
+        for (index, batch) in entries.noncovalent.chunks(batch_size).enumerate() {
+            let ids = editor.add_noncovalent_bonds(batch.to_vec());
+            let start = index * batch_size;
+            let expected_ids: Vec<_> = (start..start + batch.len()).map(NoncovalentBondId::from).collect();
+            prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
+        }
+
+        for (index, batch) in entries.stereo_atoms.chunks(batch_size).enumerate() {
+            let ids = editor.add_stereo_atoms(
+                batch.iter()
+                    .map(|(site, ligands, attributes)| (*site, ligands.as_slice(), attributes.clone()))
+                    .collect(),
+            );
+            let start = index * batch_size;
+            let expected_ids: Vec<_> = (start..start + batch.len()).map(StereoAtomId::from).collect();
+            prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
+        }
+
+        for (index, batch) in entries.stereo_bonds.chunks(batch_size).enumerate() {
+            let ids = editor.add_stereo_bonds(
+                batch.iter()
+                    .map(|(site, ligands, attributes)| (*site, ligands.as_slice(), attributes.clone()))
+                    .collect(),
+            );
+            let start = index * batch_size;
+            let expected_ids: Vec<_> = (start..start + batch.len()).map(StereoBondId::from).collect();
+            prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
+        }
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::new(vec![], 0, entries.atoms.len()).unwrap(),
+            Correspondence::new(vec![], 0, entries.bonds.len()).unwrap(),
+            Correspondence::new(vec![], 0, entries.dative.len()).unwrap(),
+            Correspondence::new(vec![], 0, entries.aromatic.len()).unwrap(),
+            Correspondence::new(vec![], 0, entries.multicenter.len()).unwrap(),
+            Correspondence::new(vec![], 0, entries.noncovalent.len()).unwrap(),
+            Correspondence::new(vec![], 0, entries.stereo_atoms.len()).unwrap(),
+            Correspondence::new(vec![], 0, entries.stereo_bonds.len()).unwrap(),
+        );
+        *editor.constraints_mut() = entries.constraints;
+        prop_assert_eq!(editor.try_tracked_build(), Ok((expected, correspondence)));
+    }
+
     /// The standalone edit surface preserves every ordered raw edit, including repeated entries,
     /// while rebuilding the per-kind creation ordinals through `Edits` construction.
     #[test]

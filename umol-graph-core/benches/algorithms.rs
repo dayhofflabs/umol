@@ -1465,7 +1465,10 @@ fn correspondence_updates(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("compact_right", size), |b| {
             b.iter_batched(
                 || correspondence.clone(),
-                |value| black_box(value.compact_right(black_box(&compaction)).unwrap()),
+                |mut value| {
+                    value.compact_right(black_box(&compaction)).unwrap();
+                    black_box(value)
+                },
                 BatchSize::SmallInput,
             )
         });

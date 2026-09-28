@@ -4244,9 +4244,10 @@ fn test_molecule_editor_tracked_build_session() {
         Correspondence::empty(),
         Correspondence::empty(),
     );
-    let composed = MoleculeCorrespondence::from(&first)
-        .extend_right(EntityKind::Atom, 1)
-        .extend_right(EntityKind::Bond, 1)
+    let mut composed = MoleculeCorrespondence::from(&first);
+    composed.extend_right(EntityKind::Atom, 1);
+    composed.extend_right(EntityKind::Bond, 1);
+    let composed = composed
         .compose(&MoleculeCorrespondence::from(&second))
         .unwrap();
     assert_eq!(composed, witness);
