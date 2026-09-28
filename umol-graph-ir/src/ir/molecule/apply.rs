@@ -353,7 +353,23 @@ impl Molecule {
                     .collect::<Result<_, _>>()?;
                 ensure_unique(&atoms, EntityKind::Atom)?;
                 ensure_unique(&bonds, EntityKind::Bond)?;
-                let compaction = self.tracked_remove_topology(&atoms, &bonds);
+                let graph = self.tracked_remove_topology(&atoms, &bonds);
+                let dative_bonds = self.tracked_compact_dative_bonds(&graph);
+                let aromatic_systems = self.tracked_compact_aromatic_systems(&graph);
+                let multicenter_bonds = self.tracked_compact_multicenter_bonds(&graph);
+                let noncovalent_bonds = self.tracked_compact_noncovalent_bonds(&graph);
+                let stereo_atoms = self.tracked_compact_stereo_atoms(&graph);
+                let stereo_bonds = self.tracked_compact_stereo_bonds(&graph);
+                let compaction = MoleculeCompaction::new(
+                    graph,
+                    dative_bonds,
+                    aromatic_systems,
+                    multicenter_bonds,
+                    noncovalent_bonds,
+                    stereo_atoms,
+                    stereo_bonds,
+                );
+                self.compact_constraints(&compaction);
                 state.compact(&compaction);
                 Ok(())
             }
@@ -394,7 +410,20 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::DativeBond)?;
-                let forward = self.tracked_remove_dative_bonds(&ids);
+                let dative_bonds = self.tracked_remove_dative_bonds(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    dative_bonds,
+                    Compaction::identity(self.aromatic_systems().count()),
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    Compaction::identity(self.stereo_atoms().count()),
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                self.compact_constraints(&forward);
                 state.compact(&forward);
                 Ok(())
             }
@@ -453,7 +482,20 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let forward = self.tracked_remove_aromatic_systems(&ids);
+                let aromatic_systems = self.tracked_remove_aromatic_systems(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    aromatic_systems,
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    Compaction::identity(self.stereo_atoms().count()),
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                self.compact_constraints(&forward);
                 state.compact(&forward);
                 Ok(())
             }
@@ -501,7 +543,20 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let forward = self.tracked_remove_multicenter_bonds(&ids);
+                let multicenter_bonds = self.tracked_remove_multicenter_bonds(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    Compaction::identity(self.aromatic_systems().count()),
+                    multicenter_bonds,
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    Compaction::identity(self.stereo_atoms().count()),
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                self.compact_constraints(&forward);
                 state.compact(&forward);
                 Ok(())
             }
@@ -545,7 +600,20 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let forward = self.tracked_remove_noncovalent_bonds(&ids);
+                let noncovalent_bonds = self.tracked_remove_noncovalent_bonds(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    Compaction::identity(self.aromatic_systems().count()),
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    noncovalent_bonds,
+                    Compaction::identity(self.stereo_atoms().count()),
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                self.compact_constraints(&forward);
                 state.compact(&forward);
                 Ok(())
             }
@@ -587,7 +655,20 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let forward = self.tracked_remove_stereo_atoms(&ids);
+                let stereo_atoms = self.tracked_remove_stereo_atoms(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    Compaction::identity(self.aromatic_systems().count()),
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    stereo_atoms,
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                self.compact_constraints(&forward);
                 state.compact(&forward);
                 Ok(())
             }
@@ -640,7 +721,20 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoBond)?;
-                let forward = self.tracked_remove_stereo_bonds(&ids);
+                let stereo_bonds = self.tracked_remove_stereo_bonds(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    Compaction::identity(self.aromatic_systems().count()),
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    Compaction::identity(self.stereo_atoms().count()),
+                    stereo_bonds,
+                );
+                self.compact_constraints(&forward);
                 state.compact(&forward);
                 Ok(())
             }
@@ -801,26 +895,24 @@ impl Molecule {
                 ensure_unique(&bonds, EntityKind::Bond)?;
                 let (removed_atoms, removed_bonds, overlays) =
                     self.capture_removed_topology(&atoms, &bonds);
-                let pre_constraints = self.constraints().clone();
-                let compaction = if !atoms.is_empty() || !bonds.is_empty() {
-                    self.tracked_remove_topology(&atoms, &bonds)
-                } else {
-                    MoleculeCompaction::new(
-                        GraphCompaction::new(
-                            Compaction::identity(self.atoms().count()),
-                            Compaction::identity(self.bonds().count()),
-                        ),
-                        Compaction::identity(self.dative_bonds().count()),
-                        Compaction::identity(self.aromatic_systems().count()),
-                        Compaction::identity(self.multicenter_bonds().count()),
-                        Compaction::identity(self.noncovalent_bonds().count()),
-                        Compaction::identity(self.stereo_atoms().count()),
-                        Compaction::identity(self.stereo_bonds().count()),
-                    )
-                };
+                let graph = self.tracked_remove_topology(&atoms, &bonds);
+                let dative_bonds = self.tracked_compact_dative_bonds(&graph);
+                let aromatic_systems = self.tracked_compact_aromatic_systems(&graph);
+                let multicenter_bonds = self.tracked_compact_multicenter_bonds(&graph);
+                let noncovalent_bonds = self.tracked_compact_noncovalent_bonds(&graph);
+                let stereo_atoms = self.tracked_compact_stereo_atoms(&graph);
+                let stereo_bonds = self.tracked_compact_stereo_bonds(&graph);
+                let compaction = MoleculeCompaction::new(
+                    graph,
+                    dative_bonds,
+                    aromatic_systems,
+                    multicenter_bonds,
+                    noncovalent_bonds,
+                    stereo_atoms,
+                    stereo_bonds,
+                );
+                let cascade = self.tracked_compact_constraints(&compaction);
                 state.compact(&compaction);
-                let mut constraints = pre_constraints;
-                let cascade = constraints.tracked_compact(&compaction);
                 let undo_compaction = compaction.undo_compaction();
                 Ok(Undo::RestoreRemovedTopology {
                     atoms: removed_atoms,
@@ -892,10 +984,21 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::DativeBond)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_dative_bonds(&ids);
+                let dative_bonds = self.tracked_remove_dative_bonds(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    dative_bonds,
+                    Compaction::identity(self.aromatic_systems().count()),
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    Compaction::identity(self.stereo_atoms().count()),
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedDativeBonds {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -977,10 +1080,21 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_aromatic_systems(&ids);
+                let aromatic_systems = self.tracked_remove_aromatic_systems(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    aromatic_systems,
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    Compaction::identity(self.stereo_atoms().count()),
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedAromaticSystems {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1050,10 +1164,21 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_multicenter_bonds(&ids);
+                let multicenter_bonds = self.tracked_remove_multicenter_bonds(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    Compaction::identity(self.aromatic_systems().count()),
+                    multicenter_bonds,
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    Compaction::identity(self.stereo_atoms().count()),
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedMulticenterBonds {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1118,10 +1243,21 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_noncovalent_bonds(&ids);
+                let noncovalent_bonds = self.tracked_remove_noncovalent_bonds(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    Compaction::identity(self.aromatic_systems().count()),
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    noncovalent_bonds,
+                    Compaction::identity(self.stereo_atoms().count()),
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedNoncovalentBonds {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1186,10 +1322,21 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_stereo_atoms(&ids);
+                let stereo_atoms = self.tracked_remove_stereo_atoms(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    Compaction::identity(self.aromatic_systems().count()),
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    stereo_atoms,
+                    Compaction::identity(self.stereo_bonds().count()),
+                );
+                let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedStereoAtoms {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -1266,10 +1413,21 @@ impl Molecule {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoBond)?;
-                let mut pre_constraints = self.constraints().clone();
-                let forward = self.tracked_remove_stereo_bonds(&ids);
+                let stereo_bonds = self.tracked_remove_stereo_bonds(&ids);
+                let forward = MoleculeCompaction::new(
+                    GraphCompaction::new(
+                        Compaction::identity(self.atoms().count()),
+                        Compaction::identity(self.bonds().count()),
+                    ),
+                    Compaction::identity(self.dative_bonds().count()),
+                    Compaction::identity(self.aromatic_systems().count()),
+                    Compaction::identity(self.multicenter_bonds().count()),
+                    Compaction::identity(self.noncovalent_bonds().count()),
+                    Compaction::identity(self.stereo_atoms().count()),
+                    stereo_bonds,
+                );
+                let cascade = self.tracked_compact_constraints(&forward);
                 state.compact(&forward);
-                let cascade = pre_constraints.tracked_compact(&forward);
                 Ok(Undo::RestoreRemovedStereoBonds {
                     removed,
                     undo_compaction: forward.undo_compaction(),
@@ -2681,6 +2839,8 @@ mod tests {
     use super::*;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
+    use crate::ir::constraint::{RelationalConstraint, StereogenicityForm};
+    use crate::ir::edit::ModifiedConstraint;
     use crate::ir::molecule::MoleculeEntries;
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::stereo::StereoKind;
@@ -3109,6 +3269,608 @@ mod tests {
                 count: 0
             })
         );
+    }
+
+    #[fixture]
+    fn removal_entries() -> MoleculeEntries {
+        MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            ],
+            dative: vec![
+                (vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1)),
+                (vec![AtomId(2)], AtomId(3), DativeBondForm::from_order(1)),
+            ],
+            aromatic: vec![
+                (
+                    vec![AtomId(0), AtomId(1)],
+                    AromaticSystemForm::from_electrons(vec![1, 2]),
+                ),
+                (
+                    vec![AtomId(2), AtomId(3)],
+                    AromaticSystemForm::from_electrons(vec![2, 1]),
+                ),
+            ],
+            multicenter: vec![
+                (
+                    vec![AtomId(0), AtomId(1)],
+                    MulticenterBondForm::from_electrons(vec![1, 2]),
+                ),
+                (
+                    vec![AtomId(2), AtomId(3)],
+                    MulticenterBondForm::from_electrons(vec![2, 1]),
+                ),
+            ],
+            noncovalent: vec![
+                (
+                    [AtomId(0), AtomId(1)],
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                ),
+                (
+                    [AtomId(2), AtomId(3)],
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                ),
+            ],
+            stereo_atoms: vec![
+                (
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    ],
+                    StereoAtomForm::default(),
+                ),
+                (
+                    AtomId(2),
+                    vec![
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                    ],
+                    StereoAtomForm::default(),
+                ),
+            ],
+            stereo_bonds: vec![
+                (
+                    BondId(0),
+                    vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                    ],
+                    StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+                ),
+                (
+                    BondId(1),
+                    vec![
+                        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                    ],
+                    StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+                ),
+            ],
+            constraints: Default::default(),
+        }
+    }
+
+    #[rstest]
+    fn test_molecule_apply_edit_remove_topology(
+        mut removal_entries: MoleculeEntries,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let removed_constraint = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
+        let old_constraint = Constraint::StereoBond(
+            StereoBondId(1),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+        );
+        let new_constraint = Constraint::StereoBond(
+            StereoBondId(0),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+        );
+        removal_entries.constraints = vec![
+            removed_constraint.clone(),
+            old_constraint.clone(),
+            removed_constraint.clone(),
+        ]
+        .into();
+        let initial = Molecule::from_entries(removal_entries);
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        molecule
+            .apply_edit(
+                Edit::AddAtoms {
+                    atoms: vec![AtomForm::from_element(Element::F)],
+                },
+                &mut state,
+            )
+            .unwrap();
+        let before_removal = molecule.clone();
+        let edit = Edit::RemoveTopology {
+            atoms: vec![AtomHandle::Id(AtomId(0))],
+            bonds: vec![],
+        };
+        let undo = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).unwrap()
+        } else {
+            molecule.apply_edit(edit, &mut state).unwrap();
+            None
+        };
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+            ],
+            bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(1))],
+            dative: vec![(vec![AtomId(1)], AtomId(2), DativeBondForm::from_order(1))],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            )],
+            multicenter: vec![(
+                vec![AtomId(1), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![2, 1]),
+            )],
+            noncovalent: vec![(
+                [AtomId(1), AtomId(2)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            stereo_atoms: vec![(
+                AtomId(1),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::default(),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            )],
+            constraints: vec![new_constraint.clone()].into(),
+        });
+        assert_eq!(molecule, expected);
+        assert_eq!(
+            state.atom(AtomHandle::Id(AtomId(0))),
+            Err(TransactionError::HandleRemoved {
+                kind: EntityKind::Atom,
+                index: 0,
+            })
+        );
+        assert_eq!(state.atom(AtomHandle::Id(AtomId(3))), Ok(AtomId(2)));
+        assert_eq!(state.atom(AtomHandle::New(0)), Ok(AtomId(3)));
+        assert_eq!(state.bond(BondHandle::Id(BondId(1))), Ok(BondId(0)));
+        assert_eq!(
+            state.dative_bond(DativeBondHandle::Id(DativeBondId(1))),
+            Ok(DativeBondId(0))
+        );
+        assert_eq!(
+            state.aromatic_system(AromaticSystemHandle::Id(AromaticSystemId(1))),
+            Ok(AromaticSystemId(0))
+        );
+        assert_eq!(
+            state.multicenter_bond(MulticenterBondHandle::Id(MulticenterBondId(1))),
+            Ok(MulticenterBondId(0))
+        );
+        assert_eq!(
+            state.noncovalent_bond(NoncovalentBondHandle::Id(NoncovalentBondId(1))),
+            Ok(NoncovalentBondId(0))
+        );
+        assert_eq!(
+            state.stereo_atom(StereoAtomHandle::Id(StereoAtomId(1))),
+            Ok(StereoAtomId(0))
+        );
+        assert_eq!(
+            state.stereo_bond(StereoBondHandle::Id(StereoBondId(1))),
+            Ok(StereoBondId(0))
+        );
+        if journaled {
+            let undo = undo.unwrap();
+            let Undo::RestoreRemovedTopology { cascade, .. } = &undo else {
+                panic!("expected topology restoration");
+            };
+            assert_eq!(
+                cascade,
+                &CascadedConstraints {
+                    removed: vec![
+                        RemovedConstraint {
+                            position: 0,
+                            constraint: removed_constraint.clone()
+                        },
+                        RemovedConstraint {
+                            position: 2,
+                            constraint: removed_constraint
+                        },
+                    ],
+                    modified: vec![ModifiedConstraint {
+                        position: 1,
+                        old: old_constraint,
+                        new: new_constraint
+                    }],
+                }
+            );
+            molecule.apply_undo(undo);
+            assert_eq!(molecule, before_removal);
+        }
+    }
+
+    #[rstest]
+    #[case::dative(EntityKind::DativeBond)]
+    #[case::aromatic(EntityKind::AromaticSystem)]
+    #[case::multicenter(EntityKind::MulticenterBond)]
+    #[case::noncovalent(EntityKind::NoncovalentBond)]
+    #[case::stereo_atom(EntityKind::StereoAtom)]
+    #[case::stereo_bond(EntityKind::StereoBond)]
+    fn test_molecule_apply_edit_remove_overlays(
+        mut removal_entries: MoleculeEntries,
+        #[case] kind: EntityKind,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let (edit, removed_constraint, old_constraint) = match kind {
+            EntityKind::DativeBond => (
+                Edit::RemoveDativeBonds {
+                    removes: vec![(
+                        DativeBondHandle::Id(DativeBondId(0)),
+                        vec![AtomHandle::Id(AtomId(0))],
+                        AtomHandle::Id(AtomId(1)),
+                        DativeBondForm::from_order(1),
+                    )],
+                },
+                Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(false)),
+                Constraint::DativeBond(DativeBondId(1), DativeBondConstraintForm::aromatic(false)),
+            ),
+            EntityKind::AromaticSystem => (
+                Edit::RemoveAromaticSystems {
+                    removes: vec![(
+                        AromaticSystemHandle::Id(AromaticSystemId(0)),
+                        vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))],
+                        AromaticSystemForm::from_electrons(vec![2, 1]),
+                    )],
+                },
+                Constraint::AromaticSystem(
+                    AromaticSystemId(0),
+                    AromaticSystemConstraintForm::electron_count(3),
+                ),
+                Constraint::AromaticSystem(
+                    AromaticSystemId(1),
+                    AromaticSystemConstraintForm::electron_count(3),
+                ),
+            ),
+            EntityKind::MulticenterBond => (
+                Edit::RemoveMulticenterBonds {
+                    removes: vec![(
+                        MulticenterBondHandle::Id(MulticenterBondId(0)),
+                        vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))],
+                        MulticenterBondForm::from_electrons(vec![2, 1]),
+                    )],
+                },
+                Constraint::MulticenterBond(
+                    MulticenterBondId(0),
+                    MulticenterBondConstraintForm::ElectronCount(3.into()),
+                ),
+                Constraint::MulticenterBond(
+                    MulticenterBondId(1),
+                    MulticenterBondConstraintForm::ElectronCount(3.into()),
+                ),
+            ),
+            EntityKind::NoncovalentBond => (
+                Edit::RemoveNoncovalentBonds {
+                    removes: vec![(
+                        NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                        [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))],
+                        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    )],
+                },
+                Constraint::NoncovalentBond(
+                    NoncovalentBondId(0),
+                    NoncovalentBondConstraintForm::intramolecular(true),
+                ),
+                Constraint::NoncovalentBond(
+                    NoncovalentBondId(1),
+                    NoncovalentBondConstraintForm::intramolecular(true),
+                ),
+            ),
+            EntityKind::StereoAtom => (
+                Edit::RemoveStereoAtoms {
+                    removes: vec![(
+                        StereoAtomHandle::Id(StereoAtomId(0)),
+                        AtomHandle::Id(AtomId(0)),
+                        vec![
+                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
+                            (
+                                AtomHandle::Id(AtomId(0)),
+                                StereoLigandKind::ImplicitHydrogen,
+                            ),
+                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                        ],
+                        StereoAtomForm::default(),
+                    )],
+                },
+                Constraint::Relational(RelationalConstraint::StereoAtomAllLigands {
+                    stereo_atom: StereoAtomId(0),
+                    predicate: Box::new(AtomConstraintForm::degree(1)),
+                }),
+                Constraint::Relational(RelationalConstraint::StereoAtomAllLigands {
+                    stereo_atom: StereoAtomId(1),
+                    predicate: Box::new(AtomConstraintForm::degree(1)),
+                }),
+            ),
+            EntityKind::StereoBond => (
+                Edit::RemoveStereoBonds {
+                    removes: vec![(
+                        StereoBondHandle::Id(StereoBondId(0)),
+                        BondHandle::Id(BondId(0)),
+                        vec![
+                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
+                            (
+                                AtomHandle::Id(AtomId(0)),
+                                StereoLigandKind::ImplicitHydrogen,
+                            ),
+                            (
+                                AtomHandle::Id(AtomId(1)),
+                                StereoLigandKind::ImplicitHydrogen,
+                            ),
+                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
+                        ],
+                        StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+                    )],
+                },
+                Constraint::StereoBond(
+                    StereoBondId(0),
+                    StereoKind::CisTrans,
+                    StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+                ),
+                Constraint::StereoBond(
+                    StereoBondId(1),
+                    StereoKind::CisTrans,
+                    StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+                ),
+            ),
+            EntityKind::Atom | EntityKind::Bond => unreachable!(),
+        };
+        let unchanged = Constraint::Atom(AtomId(3), AtomConstraintForm::degree(1));
+        removal_entries.constraints = vec![
+            removed_constraint.clone(),
+            unchanged.clone(),
+            old_constraint.clone(),
+            removed_constraint.clone(),
+        ]
+        .into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let undo = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).unwrap()
+        } else {
+            molecule.apply_edit(edit, &mut state).unwrap();
+            None
+        };
+        match kind {
+            EntityKind::DativeBond => {
+                removal_entries.dative.remove(0);
+            }
+            EntityKind::AromaticSystem => {
+                removal_entries.aromatic.remove(0);
+            }
+            EntityKind::MulticenterBond => {
+                removal_entries.multicenter.remove(0);
+            }
+            EntityKind::NoncovalentBond => {
+                removal_entries.noncovalent.remove(0);
+            }
+            EntityKind::StereoAtom => {
+                removal_entries.stereo_atoms.remove(0);
+            }
+            EntityKind::StereoBond => {
+                removal_entries.stereo_bonds.remove(0);
+            }
+            EntityKind::Atom | EntityKind::Bond => unreachable!(),
+        }
+        removal_entries.constraints = vec![unchanged, removed_constraint.clone()].into();
+        assert_eq!(molecule, Molecule::from_entries(removal_entries));
+        assert_eq!(state.atom(AtomHandle::Id(AtomId(3))), Ok(AtomId(3)));
+        assert_eq!(state.bond(BondHandle::Id(BondId(1))), Ok(BondId(1)));
+        for (current_kind, removed, survivor) in [
+            (
+                EntityKind::DativeBond,
+                state
+                    .dative_bond(DativeBondHandle::Id(DativeBondId(0)))
+                    .map(|id| id.index()),
+                state
+                    .dative_bond(DativeBondHandle::Id(DativeBondId(1)))
+                    .map(|id| id.index()),
+            ),
+            (
+                EntityKind::AromaticSystem,
+                state
+                    .aromatic_system(AromaticSystemHandle::Id(AromaticSystemId(0)))
+                    .map(|id| id.index()),
+                state
+                    .aromatic_system(AromaticSystemHandle::Id(AromaticSystemId(1)))
+                    .map(|id| id.index()),
+            ),
+            (
+                EntityKind::MulticenterBond,
+                state
+                    .multicenter_bond(MulticenterBondHandle::Id(MulticenterBondId(0)))
+                    .map(|id| id.index()),
+                state
+                    .multicenter_bond(MulticenterBondHandle::Id(MulticenterBondId(1)))
+                    .map(|id| id.index()),
+            ),
+            (
+                EntityKind::NoncovalentBond,
+                state
+                    .noncovalent_bond(NoncovalentBondHandle::Id(NoncovalentBondId(0)))
+                    .map(|id| id.index()),
+                state
+                    .noncovalent_bond(NoncovalentBondHandle::Id(NoncovalentBondId(1)))
+                    .map(|id| id.index()),
+            ),
+            (
+                EntityKind::StereoAtom,
+                state
+                    .stereo_atom(StereoAtomHandle::Id(StereoAtomId(0)))
+                    .map(|id| id.index()),
+                state
+                    .stereo_atom(StereoAtomHandle::Id(StereoAtomId(1)))
+                    .map(|id| id.index()),
+            ),
+            (
+                EntityKind::StereoBond,
+                state
+                    .stereo_bond(StereoBondHandle::Id(StereoBondId(0)))
+                    .map(|id| id.index()),
+                state
+                    .stereo_bond(StereoBondHandle::Id(StereoBondId(1)))
+                    .map(|id| id.index()),
+            ),
+        ] {
+            if current_kind == kind {
+                assert_eq!(
+                    removed,
+                    Err(TransactionError::HandleRemoved { kind, index: 0 })
+                );
+                assert_eq!(survivor, Ok(0));
+            } else {
+                assert_eq!(removed, Ok(0));
+                assert_eq!(survivor, Ok(1));
+            }
+        }
+        if journaled {
+            let undo = undo.unwrap();
+            let cascade = match &undo {
+                Undo::RestoreRemovedDativeBonds { cascade, .. }
+                | Undo::RestoreRemovedAromaticSystems { cascade, .. }
+                | Undo::RestoreRemovedMulticenterBonds { cascade, .. }
+                | Undo::RestoreRemovedNoncovalentBonds { cascade, .. }
+                | Undo::RestoreRemovedStereoAtoms { cascade, .. }
+                | Undo::RestoreRemovedStereoBonds { cascade, .. } => cascade,
+                _ => panic!("expected overlay restoration"),
+            };
+            assert_eq!(
+                cascade,
+                &CascadedConstraints {
+                    removed: vec![
+                        RemovedConstraint {
+                            position: 0,
+                            constraint: removed_constraint.clone()
+                        },
+                        RemovedConstraint {
+                            position: 3,
+                            constraint: removed_constraint.clone()
+                        },
+                    ],
+                    modified: vec![ModifiedConstraint {
+                        position: 2,
+                        old: old_constraint,
+                        new: removed_constraint
+                    }],
+                }
+            );
+            molecule.apply_undo(undo);
+            assert_eq!(molecule, initial);
+        }
+    }
+
+    #[rstest]
+    #[case::duplicate_atom(Edit::RemoveTopology {
+        atoms: vec![AtomHandle::Id(AtomId(0)); 2], bonds: vec![],
+    }, TransactionError::DuplicateRemoval { kind: EntityKind::Atom })]
+    #[case::duplicate_bond(Edit::RemoveTopology {
+        atoms: vec![], bonds: vec![BondHandle::Id(BondId(0)); 2],
+    }, TransactionError::DuplicateRemoval { kind: EntityKind::Bond })]
+    #[case::missing_atom(Edit::RemoveTopology {
+        atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(4))], bonds: vec![],
+    }, TransactionError::HandleOutOfRange { kind: EntityKind::Atom, index: 4, count: 4 })]
+    #[case::missing_bond(Edit::RemoveTopology {
+        atoms: vec![AtomHandle::Id(AtomId(0))], bonds: vec![BondHandle::Id(BondId(2))],
+    }, TransactionError::HandleOutOfRange { kind: EntityKind::Bond, index: 2, count: 2 })]
+    #[case::duplicate_dative_bond(Edit::RemoveDativeBonds { removes: vec![(
+        DativeBondHandle::Id(DativeBondId(0)), vec![AtomHandle::Id(AtomId(0))],
+        AtomHandle::Id(AtomId(1)), DativeBondForm::from_order(1),
+    ); 2] }, TransactionError::DuplicateRemoval { kind: EntityKind::DativeBond })]
+    #[case::dative_bond_old_state(Edit::RemoveDativeBonds { removes: vec![
+        (DativeBondHandle::Id(DativeBondId(0)), vec![AtomHandle::Id(AtomId(0))],
+         AtomHandle::Id(AtomId(1)), DativeBondForm::from_order(1)),
+        (DativeBondHandle::Id(DativeBondId(1)), vec![AtomHandle::Id(AtomId(2))],
+         AtomHandle::Id(AtomId(3)), DativeBondForm::from_order(2)),
+    ] }, TransactionError::OldStateMismatch)]
+    fn test_molecule_apply_edit_remove_error(
+        removal_entries: MoleculeEntries,
+        #[case] edit: Edit,
+        #[case] expected: TransactionError,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries);
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let result = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(result, Err(expected));
+        assert_eq!(molecule, initial);
+        assert_eq!(state.atoms.initial, None);
+        assert_eq!(state.bonds.initial, None);
+        assert_eq!(state.dative_bonds.initial, None);
+        assert_eq!(state.aromatic_systems.initial, None);
+        assert_eq!(state.multicenter_bonds.initial, None);
+        assert_eq!(state.noncovalent_bonds.initial, None);
+        assert_eq!(state.stereo_atoms.initial, None);
+        assert_eq!(state.stereo_bonds.initial, None);
+    }
+
+    #[rstest]
+    #[case::identity(vec![])]
+    #[case::site(vec![BondHandle::Id(BondId(0))])]
+    fn test_molecule_apply_edit_remove_bonds(
+        mut removal_entries: MoleculeEntries,
+        #[case] bonds: Vec<BondHandle>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.stereo_atoms.clear();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        if !bonds.is_empty() {
+            removal_entries.bonds.remove(0);
+            removal_entries.stereo_bonds.remove(0);
+            removal_entries.stereo_bonds[0].0 = BondId(0);
+        }
+        let expected = Molecule::from_entries(removal_entries);
+        let edit = Edit::RemoveTopology {
+            atoms: vec![],
+            bonds,
+        };
+        let undo = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).unwrap()
+        } else {
+            molecule.apply_edit(edit, &mut state).unwrap();
+            None
+        };
+        assert_eq!(molecule, expected);
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert_eq!(molecule, initial);
+        }
     }
 
     #[rstest]

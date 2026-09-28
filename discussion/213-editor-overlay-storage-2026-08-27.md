@@ -36,7 +36,7 @@ index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch loops remain under the editor module; single-edit execution and
 handle state are in molecule::apply. Fields remain private and internal Molecule
-mutation methods use pub(crate). S4b1–S4b4 are complete; S4b5 is next. The
+mutation methods use pub(crate). S4b1–S4b5 are complete; S4b6 is next. The
 S4b3–S4b8 migration is currently non-compiling.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -89,7 +89,7 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1–S4b4 are complete; S4b5 is next. The build returns green at S4b8.
+and S4b1–S4b5 are complete; S4b6 is next. The build returns green at S4b8.
 
 ## Editor and transaction API
 
@@ -5112,7 +5112,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   execution cases cannot run until that migration compiles. Aggregate undo
   validation remains for removal in S4b8; no passing test result is claimed.
 
-- **S4b5 — Removal and cascading compaction execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b4]
+- **S4b5 — completed 2026-09-28** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b4]
 
   **Topology removal.** RemoveTopology resolves atom/bond targets and rejects
   duplicate ids within each list. No offered-old payload is present. Journaled
@@ -5177,6 +5177,25 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   Verify whole-Edit precondition rejection, all overlay cascades, constraint
   positions, and batch handle updates from the composed mappings.
+
+  **Implemented — removal execution.** Both execution paths compose the graph
+  and six overlay compactions before compacting stored constraints and batch
+  handles. Explicit overlay removals use identity mappings for unchanged kinds.
+  Journaled removal records the cascade returned by tracked_compact_constraints;
+  it no longer clones the complete constraint list or compacts a second copy.
+  Target resolution, duplicate rejection, frame alignment, and stored-entry
+  capture all precede removal. Replay uses the existing per-kind restoration
+  calls followed by constraint restoration.
+
+  Thirty added cases cover both execution paths: topology cascades, explicit
+  bond-site removal, empty topology removal, all six overlay removals, reordered
+  offered frames, constraint positions and duplicates, initial/New handle
+  remapping, whole-Edit rejection before writes, and matching-history replay.
+
+  **Verification — 2026-09-28.** Nightly formatting and diff checks/review pass.
+  The all-target graph-ir check reports only the ten existing errors from `?`
+  in the infallible apply_undo body, scheduled for S4b8. Removal-compaction
+  errors are resolved. Tests remain unexecuted until that migration compiles.
 
 - **S4b6 — Attribute edit execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b5]
 
@@ -5838,7 +5857,7 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b4 are complete; S4b5 is next.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b5 are complete; S4b6 is next.
   The build returns green at S4b8.
   S4b uses the additions and the component
   removal/restoration interfaces.

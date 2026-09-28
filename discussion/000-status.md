@@ -64,8 +64,9 @@ the statuses recorded here remain authoritative.
   complete. S4a2's constraint storage and undo restoration wiring and S4b1's
   Molecule mutation delegates are complete. S4b2 completes the editor direct-mutation
   surface. S4b3 moves single-entry execution and lazy handle state to Molecule.
-  S4b4 wires addition execution and removes the addition-undo adapters. S4b5's
-  removal execution is next; the migration is non-compiling until S4b8.
+  S4b4 wires addition execution and removes the addition-undo adapters. S4b5
+  wires removal and constraint compaction. S4b6's attribute execution is next;
+  the migration is non-compiling until S4b8.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -283,7 +284,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue with S4b5: removal and cascading compaction execution. S4b3–S4b8 is currently non-compiling. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue with S4b6: attribute edit execution. S4b3–S4b8 is currently non-compiling. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |
