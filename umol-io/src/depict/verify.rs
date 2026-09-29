@@ -1,16 +1,13 @@
 //! Verification of a supplied molecule layout against the molecule it depicts.
 
-use umol_geometric_core::{
-    finite_difference, normalizable_direction, same_side_of_axis, Point2D, Point3D,
-};
-use umol_graph_ir::ir::{AtomId, CisTransConfiguration, Entity, Molecule};
+use umol_geometric_core::{same_side_of_axis, Point2D, Point3D};
+use umol_graph_ir::ir::{AtomId, CisTransConfiguration, Molecule};
 
 use super::molecule::{tetrahedral_wedges, MoleculeDepictionError};
 use crate::layout::stereo::{cis_trans_site, CisTransSite};
 use crate::layout::MoleculeLayout;
 
-/// Checks frame agreement, definite cis/trans agreement, finite derived geometry, and tetrahedral
-/// wedge selection, in order.
+/// Checks frame agreement, definite cis/trans agreement, and tetrahedral wedge selection, in order.
 pub(crate) fn verify_molecule_layout(
     molecule: &Molecule,
     layout: &MoleculeLayout,
@@ -21,7 +18,6 @@ pub(crate) fn verify_molecule_layout(
             check_cis_trans(layout, site)?;
         }
     }
-    check_finite_geometry(molecule, layout)?;
     tetrahedral_wedges(molecule, layout).map(drop)
 }
 
@@ -62,36 +58,6 @@ fn degenerate_ligand(
         .zip(points)
         .find(|&(_, point)| same_side_of_axis(site_0, site_1, point, point).is_none())
         .map_or(ligands[0], |(ligand, _)| ligand)
-}
-
-fn check_finite_geometry(
-    molecule: &Molecule,
-    layout: &MoleculeLayout,
-) -> Result<(), MoleculeDepictionError> {
-    for bond in molecule.bonds().iter() {
-        let [first, second] = bond.atom_ids().map(|atom| position(layout, atom));
-        if normalizable_direction(first, second).is_none() {
-            return Err(MoleculeDepictionError::NonFiniteGeometry {
-                entity: Entity::Bond(bond.id),
-            });
-        }
-    }
-    let Some(origin) = layout
-        .positions()
-        .iter()
-        .copied()
-        .reduce(|min, position| Point2D::new(min.x.min(position.x), min.y.min(position.y)))
-    else {
-        return Ok(());
-    };
-    for atom in molecule.atoms().iter() {
-        if finite_difference(origin, position(layout, atom.id)).is_none() {
-            return Err(MoleculeDepictionError::NonFiniteGeometry {
-                entity: Entity::Atom(atom.id),
-            });
-        }
-    }
-    Ok(())
 }
 
 fn position(layout: &MoleculeLayout, atom: AtomId) -> Point2D {
@@ -189,40 +155,6 @@ mod tests {
                 bond: BondId(1),
                 ligand,
             })
-        );
-    }
-
-    #[rstest]
-    #[case::coincident_bonded_atoms(
-        r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#,
-        vec![[0.0, 0.0], [1.0, 0.0], [1.0, 0.0]],
-        Entity::Bond(BondId(1))
-    )]
-    #[case::overflowing_bond_difference(
-        r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#,
-        vec![[1e308, 0.0], [-1e308, 0.0]],
-        Entity::Bond(BondId(0))
-    )]
-    #[case::nonliteral_bond_order(
-        r#"{:atoms ["C" "O"] :bonds [[0 1 "*"]]}"#,
-        vec![[0.5, 0.5], [0.5, 0.5]],
-        Entity::Bond(BondId(0))
-    )]
-    #[case::overflowing_extent(
-        r#"{:atoms ["C" "O"] :bonds []}"#,
-        vec![[-1e308, 0.0], [1e308, 0.0]],
-        Entity::Atom(AtomId(1))
-    )]
-    fn test_verify_non_finite_geometry(
-        #[case] input: &str,
-        #[case] positions: Vec<[f64; 2]>,
-        #[case] entity: Entity,
-    ) {
-        let molecule = mol_dsl!(input);
-
-        assert_eq!(
-            molecule.verify_layout(&layout(&positions)),
-            Err(MoleculeDepictionError::NonFiniteGeometry { entity })
         );
     }
 

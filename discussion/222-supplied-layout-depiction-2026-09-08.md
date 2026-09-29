@@ -215,18 +215,13 @@ free-function surface § 1 withdraws and gives `Reaction::verify_layout` — bot
    coordinates draw the opposite relation; `CisTransDegenerate { bond, ligand }` — a ligand is
    within tolerance of the axis, so neither relation is drawn. Collinear covers both a ligand on the
    axis line and a zero-length site bond.
-3. **Finite derived geometry** — the quantities the lowering and the SVG writer compute from
-   positions must themselves be finite. Finite input coordinates do not guarantee this: two atoms
-   at `±1e308` give an infinite difference; coincident atoms give a `NaN` direction. Two checks
-   cover the derived quantities: every bond must have a normalizable direction (finite difference,
-   non-zero length) — the bond perpendiculars, wedge polygons and the pair-number offsets of
-   `mapping_index_offset` all derive from bond directions — and every atom's offset from the
-   layout's minimum corner must be finite, which is what the drawing extent and the mask
-   rectangles derive from. The predicates — finite difference, non-zero length, normalizable
-   direction — live in `umol-geometric-core`; `umol-io` names which entity failed
-   (`NonFiniteGeometry { entity }`, with `entity` the bond or atom).
-4. **Tetrahedral wedges** — `tetrahedral_wedges` retained as today, `TetrahedralGeometry {
+3. **Tetrahedral wedges** — `tetrahedral_wedges` retained as today, `TetrahedralGeometry {
    stereo_atom }` unchanged (`molecule.rs:133`–`135`).
+
+A finite-derived-geometry step (overflowing bond differences, coincident atoms, a
+`NonFiniteGeometry { entity }` variant and its predicates in `umol-geometric-core`) was proposed
+here and implemented, then removed on review of the implementation as unnecessary defensive
+programming. Finite input coordinates remain guaranteed by `MoleculeLayout`'s own construction.
 
 Nothing is repaired: no coordinate is moved, no stereo descriptor is re-perceived from geometry, no
 degenerate ligand is nudged. A rejection names the entity and leaves both molecule and layout as
@@ -244,9 +239,8 @@ re-checked cheaply), mapping side failures through `LhsDepiction` / `RhsDepictio
 (`reaction.rs:124`–`129`) unchanged.
 
 Test cases, as the review lists: for one definite cis/trans bond, coordinates that match, that are
-opposite, and that put a ligand collinear with the site axis; a zero-length site bond; finite
-coordinates whose derived quantities overflow (`1e308` and `-1e308` on one bond) and coincident
-atoms; a frame mismatch; a supplied layout equal to the generated one depicting byte-identically to
+opposite, and that put a ligand collinear with the site axis; a zero-length site bond; a frame
+mismatch; a supplied layout equal to the generated one depicting byte-identically to
 `depict()`; a tetrahedral centre whose supplied coordinates admit no wedge. Each error variant is
 asserted by pattern, with its entity id.
 
@@ -290,7 +284,7 @@ tuples; no `Point2D` class.
 
 | Rust | Python | Why |
 | --- | --- | --- |
-| `LayoutFrame`, `CisTransMismatch`, `CisTransDegenerate`, `NonFiniteGeometry`, and `TetrahedralGeometry` **when raised from `verify_layout` / `depict_layout`** | `ValueError`, message naming the entity id | The caller supplied coordinates that do not fit the molecule. |
+| `LayoutFrame`, `CisTransMismatch`, `CisTransDegenerate`, and `TetrahedralGeometry` **when raised from `verify_layout` / `depict_layout`** | `ValueError`, message naming the entity id | The caller supplied coordinates that do not fit the molecule. |
 | `Layout` (backend failure) and `TetrahedralGeometry` **when raised from `depict` / `depict_with`** | `RuntimeError` | Operational failure of the backend or of umol's own generated geometry; the caller supplied nothing. |
 | `ReactionDepictionError::Materialization` | `ContradictionError` | Unchanged. |
 | `ReactionLayoutError` (arrow) | `ValueError` | Argument error at construction or `set_arrow`. |
@@ -351,7 +345,7 @@ operation lets it check a drop before drawing.
 A merged record is one multi-component `Molecule`; `Molecule.layout()` on `CC(=O)O.OCC` places the
 fragments apart (observed on 0.8.0: acetic acid's bonds at `y ≈ 0`, ethanol's at `y ≈ 3`, one
 `viewBox`). Requirement: none beyond that. A supplied layout with **overlapping** fragments is legal
-geometry — overlap is neither a stereo nor a finiteness failure — and is **not** refused; a chemist
+geometry — overlap is not a stereo failure — and is **not** refused; a chemist
 who drags one fragment onto another sees exactly that. **No conflict.**
 
 ### (f) What the editor does not need

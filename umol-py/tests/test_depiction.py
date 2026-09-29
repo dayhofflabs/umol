@@ -339,28 +339,6 @@ def test_molecule_verify_layout_cis_trans_degenerate_error():
         molecule.verify_layout(MoleculeLayout([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (3.0, 1.0)]))
 
 
-@pytest.mark.parametrize(
-    ("positions", "message"),
-    [
-        pytest.param(
-            [(0.0, 0.0), (1.0, 0.0), (1.0, 0.0)],
-            "^bond 1 has non-finite or degenerate derived geometry$",
-            id="coincident-bonded-atoms",
-        ),
-        pytest.param(
-            [(1e308, 0.0), (-1e308, 0.0), (0.0, 1.0)],
-            "^bond 0 has non-finite or degenerate derived geometry$",
-            id="overflowing-bond",
-        ),
-    ],
-)
-def test_molecule_verify_layout_geometry_error(positions, message):
-    molecule = Molecule.parse('{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}')
-
-    with pytest.raises(ValueError, match=message):
-        molecule.verify_layout(MoleculeLayout(positions))
-
-
 def test_molecule_verify_layout_frame_error():
     molecule = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "1"]]}')
 

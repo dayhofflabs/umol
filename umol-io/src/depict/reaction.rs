@@ -662,11 +662,12 @@ mod tests {
         } else {
             layout.rhs_mut()
         };
-        let coincident = *side.position(AtomId(1)).unwrap();
-        side.set_position(AtomId(0), coincident).unwrap();
-        let expected = MoleculeDepictionError::NonFiniteGeometry {
-            entity: Entity::Bond(BondId(0)),
-        };
+        *side = MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap();
+        let expected =
+            MoleculeDepictionError::LayoutFrame(MoleculeLayoutError::FrameSizeMismatch {
+                molecule_atom_count: 2,
+                layout_atom_count: 1,
+            });
 
         assert_eq!(
             reaction.verify_layout(&layout),

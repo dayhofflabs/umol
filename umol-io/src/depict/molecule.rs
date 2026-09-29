@@ -152,9 +152,6 @@ pub enum MoleculeDepictionError {
     /// A selected ligand of a definite cis/trans bond lies on the site axis, so no side is drawn.
     #[error("bond {bond}: ligand atom {ligand} lies on the cis/trans site axis")]
     CisTransDegenerate { bond: BondId, ligand: AtomId },
-    /// A quantity the depiction derives from the supplied positions of `entity` is not finite.
-    #[error("{entity} has non-finite or degenerate derived geometry")]
-    NonFiniteGeometry { entity: Entity },
     /// A definite tetrahedral stereo atom could not be represented by a display wedge.
     #[error("tetrahedral geometry cannot establish a display wedge for stereo atom {stereo_atom}")]
     TetrahedralGeometry { stereo_atom: StereoAtomId },

@@ -164,7 +164,7 @@ impl Molecule {
     ///
     /// Raises `ValueError` naming the first entity whose supplied geometry cannot be depicted:
     /// a frame mismatch, a definite cis/trans bond drawn in the other configuration or with a
-    /// ligand on its axis, non-finite derived geometry, or a tetrahedral centre admitting no wedge.
+    /// ligand on its axis, or a tetrahedral centre admitting no wedge.
     fn verify_layout(&self, layout: &MoleculeLayout) -> PyResult<()> {
         self.to_rust()
             .verify_layout(layout.to_rust())
