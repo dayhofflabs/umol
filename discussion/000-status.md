@@ -69,8 +69,9 @@ the statuses recorded here remain authoritative.
   through mutable views. S4b7 wires constraint execution and replaces boxed
   inverse Edits with explicit Undo variants. S4b8 completes replay and fixes
   unrelated-history rollback with a local restoration count guard.
-  S4d1–S4d6 add the six single-entity entries. S4d7 has migrated and optimized
-  comparisons; closeout awaits S4b9's unused methods and strict lint gate.
+  S4b9 consolidates the entity-set implementations and names their mapping-returning
+  methods compact. S4d completes single-entity entries and comparison migration;
+  strict lint and rustdoc pass. S5a1's borrowed transaction lifecycle is next.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -288,7 +289,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Finish S4b9 and close S4d7's strict lint gate. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Start S5a1's borrowed transaction lifecycle. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

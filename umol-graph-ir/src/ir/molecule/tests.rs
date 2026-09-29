@@ -4044,10 +4044,7 @@ fn test_molecule_remove_stereo_bonds(
 }
 
 #[rstest]
-fn test_molecule_compact_dative_bonds(
-    restoration_entries: MoleculeEntries,
-    #[values(false, true)] tracked: bool,
-) {
+fn test_molecule_compact_dative_bonds(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4061,23 +4058,16 @@ fn test_molecule_compact_dative_bonds(
         Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
-    if tracked {
-        assert_eq!(
-            molecule.tracked_compact_dative_bonds(&topology),
-            Compaction::new(2, vec![DativeBondId(0)]).unwrap()
-        );
-    } else {
-        molecule.compact_dative_bonds(&topology);
-    }
+    assert_eq!(
+        molecule.compact_dative_bonds(&topology),
+        Compaction::new(2, vec![DativeBondId(0)]).unwrap()
+    );
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_aromatic_systems(
-    restoration_entries: MoleculeEntries,
-    #[values(false, true)] tracked: bool,
-) {
+fn test_molecule_compact_aromatic_systems(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4089,23 +4079,16 @@ fn test_molecule_compact_aromatic_systems(
         Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
-    if tracked {
-        assert_eq!(
-            molecule.tracked_compact_aromatic_systems(&topology),
-            Compaction::new(2, vec![AromaticSystemId(0)]).unwrap()
-        );
-    } else {
-        molecule.compact_aromatic_systems(&topology);
-    }
+    assert_eq!(
+        molecule.compact_aromatic_systems(&topology),
+        Compaction::new(2, vec![AromaticSystemId(0)]).unwrap()
+    );
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_multicenter_bonds(
-    restoration_entries: MoleculeEntries,
-    #[values(false, true)] tracked: bool,
-) {
+fn test_molecule_compact_multicenter_bonds(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4117,23 +4100,16 @@ fn test_molecule_compact_multicenter_bonds(
         Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
-    if tracked {
-        assert_eq!(
-            molecule.tracked_compact_multicenter_bonds(&topology),
-            Compaction::new(2, vec![MulticenterBondId(0)]).unwrap()
-        );
-    } else {
-        molecule.compact_multicenter_bonds(&topology);
-    }
+    assert_eq!(
+        molecule.compact_multicenter_bonds(&topology),
+        Compaction::new(2, vec![MulticenterBondId(0)]).unwrap()
+    );
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_noncovalent_bonds(
-    restoration_entries: MoleculeEntries,
-    #[values(false, true)] tracked: bool,
-) {
+fn test_molecule_compact_noncovalent_bonds(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4145,23 +4121,16 @@ fn test_molecule_compact_noncovalent_bonds(
         Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
-    if tracked {
-        assert_eq!(
-            molecule.tracked_compact_noncovalent_bonds(&topology),
-            Compaction::new(2, vec![NoncovalentBondId(0)]).unwrap()
-        );
-    } else {
-        molecule.compact_noncovalent_bonds(&topology);
-    }
+    assert_eq!(
+        molecule.compact_noncovalent_bonds(&topology),
+        Compaction::new(2, vec![NoncovalentBondId(0)]).unwrap()
+    );
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_stereo_atoms(
-    restoration_entries: MoleculeEntries,
-    #[values(false, true)] tracked: bool,
-) {
+fn test_molecule_compact_stereo_atoms(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4175,23 +4144,16 @@ fn test_molecule_compact_stereo_atoms(
         Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
-    if tracked {
-        assert_eq!(
-            molecule.tracked_compact_stereo_atoms(&topology),
-            Compaction::new(2, vec![StereoAtomId(0)]).unwrap()
-        );
-    } else {
-        molecule.compact_stereo_atoms(&topology);
-    }
+    assert_eq!(
+        molecule.compact_stereo_atoms(&topology),
+        Compaction::new(2, vec![StereoAtomId(0)]).unwrap()
+    );
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
 
 #[rstest]
-fn test_molecule_compact_stereo_bonds(
-    restoration_entries: MoleculeEntries,
-    #[values(false, true)] tracked: bool,
-) {
+fn test_molecule_compact_stereo_bonds(restoration_entries: MoleculeEntries) {
     let original = Molecule::from_entries(restoration_entries.clone());
     let mut molecule = original.clone();
     let mut expected = restoration_entries.clone();
@@ -4205,14 +4167,10 @@ fn test_molecule_compact_stereo_bonds(
         Compaction::new(8, (0..4).map(NodeId).collect()).unwrap(),
         Compaction::new(6, (0..3).map(EdgeId).collect()).unwrap(),
     );
-    if tracked {
-        assert_eq!(
-            molecule.tracked_compact_stereo_bonds(&topology),
-            Compaction::new(2, vec![StereoBondId(0)]).unwrap()
-        );
-    } else {
-        molecule.compact_stereo_bonds(&topology);
-    }
+    assert_eq!(
+        molecule.compact_stereo_bonds(&topology),
+        Compaction::new(2, vec![StereoBondId(0)]).unwrap()
+    );
     assert_eq!(molecule, Molecule::from_entries(expected));
     assert_eq!(original, Molecule::from_entries(restoration_entries));
 }
@@ -4487,9 +4445,9 @@ fn test_molecule_restore_dative_bond_topology_ids(
     let mut graph = expected.graph.clone();
     let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.dative_bonds = compacted.dative_bonds.compact(&topology);
+    compacted.compact_dative_bonds(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.dative_bonds = molecule.dative_bonds.compact(&topology);
+    molecule.compact_dative_bonds(&topology);
     expected.dative_bonds.remove(&[DativeBondId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_dative_bond_topology_ids(&topology);
@@ -4560,9 +4518,9 @@ fn test_molecule_restore_aromatic_system_topology_ids(
     let mut graph = expected.graph.clone();
     let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.aromatic_systems = compacted.aromatic_systems.compact(&topology);
+    compacted.compact_aromatic_systems(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.aromatic_systems = molecule.aromatic_systems.compact(&topology);
+    molecule.compact_aromatic_systems(&topology);
     expected.aromatic_systems.remove(&[AromaticSystemId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_aromatic_system_topology_ids(&topology);
@@ -4633,9 +4591,9 @@ fn test_molecule_restore_multicenter_bond_topology_ids(
     let mut graph = expected.graph.clone();
     let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.multicenter_bonds = compacted.multicenter_bonds.compact(&topology);
+    compacted.compact_multicenter_bonds(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.multicenter_bonds = molecule.multicenter_bonds.compact(&topology);
+    molecule.compact_multicenter_bonds(&topology);
     expected.multicenter_bonds.remove(&[MulticenterBondId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_multicenter_bond_topology_ids(&topology);
@@ -4706,9 +4664,9 @@ fn test_molecule_restore_noncovalent_bond_topology_ids(
     let mut graph = expected.graph.clone();
     let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.noncovalent_bonds = compacted.noncovalent_bonds.compact(&topology);
+    compacted.compact_noncovalent_bonds(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.noncovalent_bonds = molecule.noncovalent_bonds.compact(&topology);
+    molecule.compact_noncovalent_bonds(&topology);
     expected.noncovalent_bonds.remove(&[NoncovalentBondId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_noncovalent_bond_topology_ids(&topology);
@@ -4777,9 +4735,9 @@ fn test_molecule_restore_stereo_atom_topology_ids(
     let mut graph = expected.graph.clone();
     let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.stereo_atoms = compacted.stereo_atoms.compact(&topology);
+    compacted.compact_stereo_atoms(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.stereo_atoms = molecule.stereo_atoms.compact(&topology);
+    molecule.compact_stereo_atoms(&topology);
     expected.stereo_atoms.remove(&[StereoAtomId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_stereo_atom_topology_ids(&topology);
@@ -4848,9 +4806,9 @@ fn test_molecule_restore_stereo_bond_topology_ids(
     let mut graph = expected.graph.clone();
     let topology = graph.tracked_remove_cascading(&[NodeId(0)], &[]);
     let mut compacted = Molecule::from_entries(restoration_entries.clone());
-    compacted.stereo_bonds = compacted.stereo_bonds.compact(&topology);
+    compacted.compact_stereo_bonds(&topology);
     let mut molecule = Molecule::from_entries(restoration_entries);
-    molecule.stereo_bonds = molecule.stereo_bonds.compact(&topology);
+    molecule.compact_stereo_bonds(&topology);
     expected.stereo_bonds.remove(&[StereoBondId(0)]);
     let original = shared.then(|| molecule.clone());
     molecule.restore_stereo_bond_topology_ids(&topology);

@@ -737,14 +737,12 @@ impl MoleculeEditor {
         bonds: &[BondId],
     ) -> MoleculeCompaction {
         let compaction = self.molecule.tracked_remove_topology(atoms, bonds);
-        let removed_dative_bonds = self.molecule.tracked_compact_dative_bonds(&compaction);
-        let removed_aromatic_systems = self.molecule.tracked_compact_aromatic_systems(&compaction);
-        let removed_multicenter_bonds =
-            self.molecule.tracked_compact_multicenter_bonds(&compaction);
-        let removed_noncovalent_bonds =
-            self.molecule.tracked_compact_noncovalent_bonds(&compaction);
-        let removed_stereo_atoms = self.molecule.tracked_compact_stereo_atoms(&compaction);
-        let removed_stereo_bonds = self.molecule.tracked_compact_stereo_bonds(&compaction);
+        let removed_dative_bonds = self.molecule.compact_dative_bonds(&compaction);
+        let removed_aromatic_systems = self.molecule.compact_aromatic_systems(&compaction);
+        let removed_multicenter_bonds = self.molecule.compact_multicenter_bonds(&compaction);
+        let removed_noncovalent_bonds = self.molecule.compact_noncovalent_bonds(&compaction);
+        let removed_stereo_atoms = self.molecule.compact_stereo_atoms(&compaction);
+        let removed_stereo_bonds = self.molecule.compact_stereo_bonds(&compaction);
 
         let id_compaction = MoleculeCompaction::new(
             compaction,

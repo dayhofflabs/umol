@@ -129,10 +129,6 @@ impl NoncovalentBonds {
         }
     }
 
-    pub(crate) fn attributes_mut(&mut self, id: NoncovalentBondId) -> &mut NoncovalentBondForm {
-        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
-    }
-
     /// Ids of the noncovalent bonds `atom` takes part in. Integrity rejects a parallel pair, so an
     /// atom pairs at most once with any given partner but may bond several partners.
     pub fn incident_ids(
@@ -148,13 +144,41 @@ impl NoncovalentBonds {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
-}
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "entity-set mutation primitives")
-)]
-impl NoncovalentBonds {
+    /// Whether bond `id` is the one between `first` and `second` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: NoncovalentBondId, first: AtomId, second: AtomId) -> bool {
+        self.0.is_coincident(
+            RelationId::from(id),
+            &[NodeId::from(first), NodeId::from(second)],
+        )
+    }
+
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {
+        // A noncovalent bond anchors on either endpoint atom; the first narrows as well as the
+        // second.
+        self.0
+            .coincident_to_node(
+                NodeId::from(first),
+                &[NodeId::from(first), NodeId::from(second)],
+            )
+            .map(NoncovalentBondId::from)
+    }
+
+    pub(crate) fn attributes_mut(&mut self, id: NoncovalentBondId) -> &mut NoncovalentBondForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut NoncovalentBondForm> {
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, attributes)| attributes)
+    }
+
     pub(crate) fn add(
         &mut self,
         atoms: [AtomId; 2],
@@ -255,11 +279,7 @@ impl NoncovalentBonds {
         Arc::make_mut(&mut self.0).replace_participant(id.into(), position, atom.into());
     }
 
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
-    }
-
-    pub(crate) fn tracked_compact(
+    pub(crate) fn compact(
         &self,
         compaction: &GraphCompaction,
     ) -> (Self, Compaction<NoncovalentBondId>) {
@@ -275,25 +295,6 @@ impl NoncovalentBonds {
         )
         .expect("relation compaction contains valid noncovalent bond ids");
         (Self(Arc::new(set)), relations)
-    }
-}
-
-impl NoncovalentBonds {
-    pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], NoncovalentBondForm)> {
-        Arc::try_unwrap(self.0)
-            .unwrap_or_else(|shared| (*shared).clone())
-            .into_entries()
-            .into_iter()
-            .map(|(atoms, attributes)| (atoms.map(AtomId::from), attributes))
-            .collect()
-    }
-
-    pub(crate) fn attributes_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = &mut NoncovalentBondForm> {
-        Arc::make_mut(&mut self.0)
-            .iter_mut()
-            .map(|(_, _, attributes)| attributes)
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -335,27 +336,34 @@ impl NoncovalentBonds {
             .map(|object| Self(Arc::new(object)))
     }
 
-    /// Whether bond `id` is the one between `first` and `second` — the known-id sibling of
-    /// [`coincident_id`](Self::coincident_id).
-    pub fn is_coincident(&self, id: NoncovalentBondId, first: AtomId, second: AtomId) -> bool {
-        self.0.is_coincident(
-            RelationId::from(id),
-            &[NodeId::from(first), NodeId::from(second)],
-        )
+    pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], NoncovalentBondForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, attributes)| (atoms.map(AtomId::from), attributes))
+            .collect()
     }
+}
 
-    /// Id of the entity coinciding with these participants — the one whose participants equal
-    /// them as a multiset. The identity question, distinct from lookup.
-    pub fn coincident_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {
-        // A noncovalent bond anchors on either endpoint atom; the first narrows as well as the
-        // second.
-        self.0
-            .coincident_to_node(
-                NodeId::from(first),
-                &[NodeId::from(first), NodeId::from(second)],
-            )
-            .map(NoncovalentBondId::from)
+pub(crate) fn reframe_noncovalent_bonds_with(
+    mut noncovalent_bonds: NoncovalentBonds,
+    mut visit: impl FnMut(NoncovalentBondId, &DynPermutation),
+) -> Result<NoncovalentBonds, Contradiction> {
+    let set = Arc::make_mut(&mut noncovalent_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = NoncovalentBondId::from(relation_id);
+        let stored = set.participants(relation_id).map(AtomId::from);
+        let action = noncovalent_bond_representative_action(stored);
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_participants(relation_id, &participant_order(&action));
+        visit(id, &action);
     }
+    Ok(noncovalent_bonds)
 }
 
 impl Normalize for NoncovalentBonds {
@@ -397,26 +405,6 @@ impl Reframe for NoncovalentBonds {
     fn reframe(self) -> Result<Self, Contradiction> {
         reframe_noncovalent_bonds_with(self, |_, _| {})
     }
-}
-
-pub(crate) fn reframe_noncovalent_bonds_with(
-    mut noncovalent_bonds: NoncovalentBonds,
-    mut visit: impl FnMut(NoncovalentBondId, &DynPermutation),
-) -> Result<NoncovalentBonds, Contradiction> {
-    let set = Arc::make_mut(&mut noncovalent_bonds.0);
-    for relation_id in set.ids().collect::<Vec<_>>() {
-        let id = NoncovalentBondId::from(relation_id);
-        let stored = set.participants(relation_id).map(AtomId::from);
-        let action = noncovalent_bond_representative_action(stored);
-        let attributes = set.data(relation_id).clone().normalize()?;
-        *set.data_mut(relation_id) = attributes
-            .reframe_by(&action)
-            .ok_or(Contradiction)?
-            .normalize()?;
-        set.permute_participants(relation_id, &participant_order(&action));
-        visit(id, &action);
-    }
-    Ok(noncovalent_bonds)
 }
 
 /// The reaction span's noncovalent bonds, one [`EntitySpan`] per entity against a single
@@ -1123,7 +1111,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bonds_tracked_compact() {
+    fn test_noncovalent_bonds_compact() {
         let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
         let original = NoncovalentBonds::new(vec![
             ([AtomId(3), AtomId(2)], attributes.clone()),
@@ -1133,13 +1121,12 @@ mod tests {
             Compaction::new(5, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.tracked_compact(&graph);
+        let (mut compacted, rows) = original.compact(&graph);
 
         assert_eq!(
             rows,
             Compaction::new(2, vec![NoncovalentBondId(1)]).unwrap()
         );
-        assert_eq!(compacted, original.compact(&graph));
         assert_eq!(
             compacted,
             NoncovalentBonds::new(vec![([AtomId(2), AtomId(1)], attributes.clone()),])

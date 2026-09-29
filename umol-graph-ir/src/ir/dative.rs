@@ -144,10 +144,6 @@ impl DativeBonds {
         }
     }
 
-    pub(crate) fn attributes_mut(&mut self, id: DativeBondId) -> &mut DativeBondForm {
-        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
-    }
-
     /// Ids of the dative bonds `atom` takes part in, as acceptor or donor.
     pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = DativeBondId> + '_ {
         self.0
@@ -159,13 +155,49 @@ impl DativeBonds {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
-}
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "entity-set mutation primitives")
-)]
-impl DativeBonds {
+    /// Whether bond `id` is the one from `donors` to `acceptor` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: DativeBondId, acceptor: AtomId, donors: &[AtomId]) -> bool {
+        let donors: Vec<NodeId> = donors.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0
+            .is_coincident(RelationId::from(id), &[NodeId::from(acceptor)], &donors)
+    }
+
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
+        // The acceptor is a single atom, so it is the sharpest node anchor available.
+        let donors: Vec<NodeId> = donors.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0
+            .coincident_to_node(NodeId::from(acceptor), &[NodeId::from(acceptor)], &donors)
+            .map(DativeBondId::from)
+    }
+
+    /// The acceptor of `id` as a graph node, for graph-core interop that is not yet typed in
+    /// graph-IR ids. The public accessor is [`Self::acceptor`].
+    pub(crate) fn acceptor_node(&self, id: DativeBondId) -> NodeId {
+        self.0.participants_1(RelationId::from(id))[0]
+    }
+
+    /// The donors of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
+    /// ids. The public accessor is [`Self::donors`].
+    pub(crate) fn donor_nodes(&self, id: DativeBondId) -> &[NodeId] {
+        self.0.participants_2(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_mut(&mut self, id: DativeBondId) -> &mut DativeBondForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut DativeBondForm> {
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, _, attributes)| attributes)
+    }
+
     pub(crate) fn add(
         &mut self,
         donors: &[AtomId],
@@ -294,14 +326,7 @@ impl DativeBonds {
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
-    }
-
-    pub(crate) fn tracked_compact(
-        &self,
-        compaction: &GraphCompaction,
-    ) -> (Self, Compaction<DativeBondId>) {
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<DativeBondId>) {
         let (set, relations) = self.0.tracked_compact(compaction);
         let relations = Compaction::new(
             relations.source_count(),
@@ -314,43 +339,6 @@ impl DativeBonds {
         )
         .expect("relation compaction contains valid dative bond ids");
         (Self(Arc::new(set)), relations)
-    }
-}
-
-impl DativeBonds {
-    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, DativeBondForm)> {
-        Arc::try_unwrap(self.0)
-            .unwrap_or_else(|shared| (*shared).clone())
-            .into_entries()
-            .into_iter()
-            .map(|(acceptor, donors, attributes)| {
-                (
-                    donors.into_iter().map(AtomId::from).collect(),
-                    AtomId::from(acceptor[0]),
-                    attributes,
-                )
-            })
-            .collect()
-    }
-
-    /// The acceptor of `id` as a graph node, for graph-core interop that is not yet typed in
-    /// graph-IR ids. The public accessor is [`Self::acceptor`].
-    pub(crate) fn acceptor_node(&self, id: DativeBondId) -> NodeId {
-        self.0.participants_1(RelationId::from(id))[0]
-    }
-
-    /// The donors of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
-    /// ids. The public accessor is [`Self::donors`].
-    pub(crate) fn donor_nodes(&self, id: DativeBondId) -> &[NodeId] {
-        self.0.participants_2(RelationId::from(id))
-    }
-
-    pub(crate) fn attributes_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = &mut DativeBondForm> {
-        Arc::make_mut(&mut self.0)
-            .iter_mut()
-            .map(|(_, _, _, attributes)| attributes)
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -392,23 +380,44 @@ impl DativeBonds {
             .map(|object| Self(Arc::new(object)))
     }
 
-    /// Whether bond `id` is the one from `donors` to `acceptor` — the known-id sibling of
-    /// [`coincident_id`](Self::coincident_id).
-    pub fn is_coincident(&self, id: DativeBondId, acceptor: AtomId, donors: &[AtomId]) -> bool {
-        let donors: Vec<NodeId> = donors.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0
-            .is_coincident(RelationId::from(id), &[NodeId::from(acceptor)], &donors)
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, DativeBondForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(acceptor, donors, attributes)| {
+                (
+                    donors.into_iter().map(AtomId::from).collect(),
+                    AtomId::from(acceptor[0]),
+                    attributes,
+                )
+            })
+            .collect()
     }
+}
 
-    /// Id of the entity coinciding with these participants — the one whose participants equal
-    /// them as a multiset. The identity question, distinct from lookup.
-    pub fn coincident_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
-        // The acceptor is a single atom, so it is the sharpest node anchor available.
-        let donors: Vec<NodeId> = donors.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0
-            .coincident_to_node(NodeId::from(acceptor), &[NodeId::from(acceptor)], &donors)
-            .map(DativeBondId::from)
+pub(crate) fn reframe_dative_bonds_with(
+    mut dative_bonds: DativeBonds,
+    mut visit: impl FnMut(DativeBondId, &DynPermutation),
+) -> Result<DativeBonds, Contradiction> {
+    let set = Arc::make_mut(&mut dative_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = DativeBondId::from(relation_id);
+        let stored = set
+            .participants_2(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = dative_bond_representative_action(stored);
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_participants_2(relation_id, &participant_order(&action));
+        visit(id, &action);
     }
+    Ok(dative_bonds)
 }
 
 impl Normalize for DativeBonds {
@@ -450,30 +459,6 @@ impl Reframe for DativeBonds {
     fn reframe(self) -> Result<Self, Contradiction> {
         reframe_dative_bonds_with(self, |_, _| {})
     }
-}
-
-pub(crate) fn reframe_dative_bonds_with(
-    mut dative_bonds: DativeBonds,
-    mut visit: impl FnMut(DativeBondId, &DynPermutation),
-) -> Result<DativeBonds, Contradiction> {
-    let set = Arc::make_mut(&mut dative_bonds.0);
-    for relation_id in set.ids().collect::<Vec<_>>() {
-        let id = DativeBondId::from(relation_id);
-        let stored = set
-            .participants_2(relation_id)
-            .iter()
-            .map(|&atom| AtomId::from(atom))
-            .collect();
-        let action = dative_bond_representative_action(stored);
-        let attributes = set.data(relation_id).clone().normalize()?;
-        *set.data_mut(relation_id) = attributes
-            .reframe_by(&action)
-            .ok_or(Contradiction)?
-            .normalize()?;
-        set.permute_participants_2(relation_id, &participant_order(&action));
-        visit(id, &action);
-    }
-    Ok(dative_bonds)
 }
 
 /// The reaction span's dative bonds, one [`EntitySpan`] per entity against a single donor frame.
@@ -1242,7 +1227,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bonds_tracked_compact() {
+    fn test_dative_bonds_compact() {
         let original = DativeBonds::new(vec![
             (
                 vec![AtomId(4), AtomId(2)],
@@ -1257,13 +1242,12 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.tracked_compact(&graph);
+        let (mut compacted, rows) = original.compact(&graph);
 
         assert_eq!(
             rows,
             Compaction::new(4, vec![DativeBondId(1), DativeBondId(2)]).unwrap()
         );
-        assert_eq!(compacted, original.compact(&graph));
         assert_eq!(
             compacted,
             DativeBonds::new(vec![

@@ -36,11 +36,11 @@ index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch loops remain under the editor module; single-edit execution and
 handle state are in molecule::apply. Fields remain private and internal Molecule
-mutation methods use pub(crate). S4b1–S4b8 are complete.
-S4d1–S4d6 are complete: comparable single-entity entries live in their owning
-entity modules. S4d7 uses specialized framed_eq implementations in both Edit
-execution paths. Its closeout awaits S4b9's unused mutation methods before the
-S5 lifecycle switch.
+mutation methods use pub(crate). S4b is complete: S4b9 consolidates the entity-set
+implementations and names their mapping-returning compaction methods compact.
+S4d is complete: comparable single-entity entries live in their owning entity
+modules, and both Edit execution paths use specialized framed_eq implementations.
+The next subitem is S5a1's borrowed transaction lifecycle.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -92,9 +92,8 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1–S4b8 are complete. S4d1–S4d6 are complete;
-S4d7 caller migration and comparison optimization are implemented; its final
-lint gate remains open for S4b9's unused methods.
+and S4b are complete. S4d's caller migration and comparison optimization are
+complete; S4b9 closes the strict lint gate. S5a1 is next.
 
 ## Editor and transaction API
 
@@ -1531,7 +1530,7 @@ API defined above; it is not a staged implementation plan.
 | Each overlay remove_* / tracked_remove_* pair | Crate-private Molecule methods remove entries from that owning set only; tracked forms return its typed compaction. Complete editor/batch removal separately assembles MoleculeCompaction and compacts constraints. Use the set's removal implementation; remove public tracked direct mutation. |
 | Topology remove / tracked_remove | Rename the editor operation to remove_topology. Crate-private Molecule remove_topology / tracked_remove_topology mutate Graph and atom/bond attributes only; tracked removal returns GraphCompaction. Editor/batch execution separately compacts each overlay set, assembles MoleculeCompaction, and compacts constraints. Graph nomenclature is unchanged. |
 | Internal undo-addition removal and restore_* methods | Undo additions with crate-private Molecule untracked removal only, without overlay or constraint compaction. Undo removals with restore_topology for Graph and atom/bond attributes, separate overlay topology-id/row restoration, then constraint restoration. S4a lists the restoration interfaces. |
-| Overlay and constraint compaction | Crate-private Molecule compact_* / tracked_compact_* methods each delegate to one component. Overlay delegates install the returned replacement set; tracked forms also return its row mapping. Constraint delegates mutate the collection in place. S4b lists their interfaces. |
+| Overlay and constraint compaction | Crate-private Molecule compact_<overlay> methods install the returned set and return its row mapping. Constraint delegates compact_constraints / tracked_compact_constraints mutate the collection in place. S4b lists their interfaces. |
 | apply, transact, and tracked counterparts | Replace the current lifecycle with the editor/transaction API above. Both execution paths share graph-IR mutation operations; handle resolution and forward preconditions remain batch concerns, and undo capture/replay remains transactional. |
 | snapshot, try_build, build, and tracked counterparts | Remove relation-row rebuilding at publication. Replace editor publication with finish, Molecule::apply, or scoped commit, and replace snapshot with checked probe access. Fresh MoleculeBuilder retains asserted build. |
 | Overlay reads and views; six internal *_equiv methods | Remove storage-wrapper dispatch. Use typed-set accessors and graph-core participant comparison where applicable; retain graph-IR frame transport and payload comparison. |
@@ -1593,13 +1592,14 @@ form returns the listed mapping. Neither form mutates top-level constraints.
 
 Private topology removal leaves overlays to their separate compaction operations.
 The editor's public remove_topology remains a complete cascading removal: call
-tracked_remove_topology, call the six Molecule tracked_compact_* overlay
+tracked_remove_topology, call the six Molecule compact_* overlay
 delegates with its GraphCompaction, assemble MoleculeCompaction::new from the
 graph and six row mappings, then call compact_constraints. Batch execution uses
 that same sequence and retains the mappings it needs. Explicit overlay removal instead
 assembles MoleculeCompaction from the one changed row mapping and identity
 mappings for the unchanged kinds. No other overlay set changes in that path.
-The typed-set compact/tracked_compact interfaces are recorded in S1a–S1c.
+The typed-set compact interfaces are recorded in S1a–S1c. Their returned row
+mappings are required to update dependent constraints and handles.
 
 These compositions may remain explicit in their consumers. Do not introduce
 combined helpers, output parameters, or recording modes solely to share the
@@ -2483,8 +2483,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   Set::replace_atom(&mut self, id: Id, position: usize, atom: AtomId)
   Set::insert_atom(&mut self, id: Id, position: usize, atom: AtomId)
   Set::remove_atom(&mut self, id: Id, position: usize)
-  Set::compact(&self, graph: &GraphCompaction) -> Self
-  Set::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<Id>)
+  Set::compact(&self, graph: &GraphCompaction) -> (Self, Compaction<Id>)
   ```
 
   These methods are `pub(crate)`; S2j exposes public mutation through the editor
@@ -2513,8 +2512,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   DativeBonds::replace_donor(&mut self, id: DativeBondId, position: usize, donor: AtomId)
   DativeBonds::insert_donor(&mut self, id: DativeBondId, position: usize, donor: AtomId)
   DativeBonds::remove_donor(&mut self, id: DativeBondId, position: usize)
-  DativeBonds::compact(&self, graph: &GraphCompaction) -> Self
-  DativeBonds::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<DativeBondId>)
+  DativeBonds::compact(&self, graph: &GraphCompaction) -> (Self, Compaction<DativeBondId>)
   ```
 
   `NoncovalentBonds` uses a fixed ordered pair; there is no endpoint insertion
@@ -2528,8 +2526,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   NoncovalentBonds::restore_topology_ids(&mut self, graph: &GraphCompaction)
   NoncovalentBonds::replace_atoms(&mut self, id: NoncovalentBondId, atoms: [AtomId; 2])
   NoncovalentBonds::replace_atom(&mut self, id: NoncovalentBondId, position: usize, atom: AtomId)
-  NoncovalentBonds::compact(&self, graph: &GraphCompaction) -> Self
-  NoncovalentBonds::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<NoncovalentBondId>)
+  NoncovalentBonds::compact(&self, graph: &GraphCompaction) -> (Self, Compaction<NoncovalentBondId>)
   ```
 
   These are crate-private set methods. S2j exposes the domain-level
@@ -2561,8 +2558,7 @@ to graph-core's `restore_participants` and `restore`, respectively.
   Set::replace_ligand(&mut self, id: Id, position: usize, ligand: StereoLigand)
   Set::insert_ligand(&mut self, id: Id, position: usize, ligand: StereoLigand)
   Set::remove_ligand(&mut self, id: Id, position: usize)
-  Set::compact(&self, graph: &GraphCompaction) -> Self
-  Set::tracked_compact(&self, graph: &GraphCompaction) -> (Self, Compaction<Id>)
+  Set::compact(&self, graph: &GraphCompaction) -> (Self, Compaction<Id>)
   ```
 
   StereoBonds restoration translates its bond sites and the atom references in
@@ -4782,20 +4778,21 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   each overlay pair mutates only its owning set and returns Compaction<Id> when
   tracked. Public editor removal still completes all cascading updates.
 
-  Add the following crate-private Molecule compaction pairs. Each method takes
-  `(&mut self, topology: &GraphCompaction)`. The bare method returns (); the
-  tracked method returns the listed mapping. Both install the replacement set
-  returned by that owning set's compact/tracked_compact. They mutate no other
-  component and perform no extra validation or journal recording.
+  Add the following crate-private Molecule compaction methods. Each takes
+  `(&mut self, topology: &GraphCompaction)` and returns the listed mapping.
+  Each installs the set returned by its owning set's compact operation. They
+  mutate no other component and perform no extra validation or journal recording.
+  The row mapping is required for dependent updates; there is no separate
+  mapping-discarding method.
 
-  | Bare method | Tracked method | Tracked return |
-  | --- | --- | --- |
-  | compact_dative_bonds | tracked_compact_dative_bonds | Compaction<DativeBondId> |
-  | compact_aromatic_systems | tracked_compact_aromatic_systems | Compaction<AromaticSystemId> |
-  | compact_multicenter_bonds | tracked_compact_multicenter_bonds | Compaction<MulticenterBondId> |
-  | compact_noncovalent_bonds | tracked_compact_noncovalent_bonds | Compaction<NoncovalentBondId> |
-  | compact_stereo_atoms | tracked_compact_stereo_atoms | Compaction<StereoAtomId> |
-  | compact_stereo_bonds | tracked_compact_stereo_bonds | Compaction<StereoBondId> |
+  | Method | Return |
+  | --- | --- |
+  | compact_dative_bonds | Compaction<DativeBondId> |
+  | compact_aromatic_systems | Compaction<AromaticSystemId> |
+  | compact_multicenter_bonds | Compaction<MulticenterBondId> |
+  | compact_noncovalent_bonds | Compaction<NoncovalentBondId> |
+  | compact_stereo_atoms | Compaction<StereoAtomId> |
+  | compact_stereo_bonds | Compaction<StereoBondId> |
 
   Complete the crate-private Molecule constraint delegation surface:
 
@@ -4986,7 +4983,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   work. Plural Edit variants already use the corresponding bulk mutation
   methods where provided by this plan.
 
-  After forward topology removal, call all six Molecule tracked_compact_* overlay
+  After forward topology removal, call all six Molecule compact_* overlay
   delegates and assemble MoleculeCompaction. After explicit overlay removal,
   assemble that mapping with identity components for unchanged kinds. Then
   call compact_constraints or tracked_compact_constraints. Addition undo instead
@@ -5142,12 +5139,12 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   | Forward compaction call | Undo: surviving topology-id call | Undo: removed-row call |
   | --- | --- | --- |
-  | tracked_compact_dative_bonds | restore_dative_bond_topology_ids | restore_dative_bonds |
-  | tracked_compact_aromatic_systems | restore_aromatic_system_topology_ids | restore_aromatic_systems |
-  | tracked_compact_multicenter_bonds | restore_multicenter_bond_topology_ids | restore_multicenter_bonds |
-  | tracked_compact_noncovalent_bonds | restore_noncovalent_bond_topology_ids | restore_noncovalent_bonds |
-  | tracked_compact_stereo_atoms | restore_stereo_atom_topology_ids | restore_stereo_atoms |
-  | tracked_compact_stereo_bonds | restore_stereo_bond_topology_ids | restore_stereo_bonds |
+  | compact_dative_bonds | restore_dative_bond_topology_ids | restore_dative_bonds |
+  | compact_aromatic_systems | restore_aromatic_system_topology_ids | restore_aromatic_systems |
+  | compact_multicenter_bonds | restore_multicenter_bond_topology_ids | restore_multicenter_bonds |
+  | compact_noncovalent_bonds | restore_noncovalent_bond_topology_ids | restore_noncovalent_bonds |
+  | compact_stereo_atoms | restore_stereo_atom_topology_ids | restore_stereo_atoms |
+  | compact_stereo_bonds | restore_stereo_bond_topology_ids | restore_stereo_bonds |
 
   Undo first calls restore_topology(compaction.graph(), atoms, bonds). Then,
   for each row above, restore surviving topology ids with compaction.graph()
@@ -5437,21 +5434,37 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   entries, empty factors, non-Clone payloads, incidence, and manipulated history;
   their assertions and generators are unchanged.
 
-- **S4b9 — Remove temporary entity-set dead-code expectations**
-  (`ir::{aromatic,dative,multicenter,noncovalent,stereo}`; cleanup, green).
+- **S4b9 — completed 2026-09-28**
+  (`ir::{aromatic,dative,multicenter,noncovalent,stereo,molecule}`; cleanup and internal rename, green).
   [dep: S4b8]
 
-  S4b1–S4b8 must put each typed entity set's `remove` and `compact` methods to
-  use through Molecule mutation. Remove the six impl-level
-  `#[cfg_attr(not(test), expect(dead_code, ...))]` attributes once the non-test
-  build confirms that all methods in those impls have callers. Do not replace
-  them with narrower dead-code allowances or retain unused mutation methods.
-  Verify the non-test build, strict all-target Clippy, and the affected removal
-  and compaction tests. The inherent methods must be included in a single impl
-  block and follow the agreed order: constructor, immutable getters, mutable
-  getters, mutators, destructuring methods (into_entries), "helpers". Free methods
-  taking the type as first argument (de facto inherent methods) should be placed
-  directly after the type. This subitem changes no mutation interface or behavior.
+  Remove the six impl-level `#[cfg_attr(not(test), expect(dead_code, ...))]`
+  attributes. The six owning overlay sets expose
+  `compact(&self, &GraphCompaction) -> (Self, Compaction<Id>)`; their Molecule
+  delegates expose `compact_<entity>(&mut self, &GraphCompaction) -> Compaction<Id>`.
+  Remove the mapping-discarding methods and rename the mapping-returning methods
+  to these bare names. The mappings are required for dependent constraint and
+  handle updates. Keep graph-core's public compact/tracked_compact pairs.
+  Migrate both Edit execution paths, direct editor removal, and tests. Preserve
+  assertions on resulting storage, returned mappings, incidence, and restoration;
+  remove only the duplicate cases and comparisons for the deleted counterparts.
+  Use extend_constraints for lift_constraints' accumulated additions.
+
+  Merge each owning set's inherent impl blocks in this order: constructor,
+  immutable getters, mutable getters, mutators, destructuring methods
+  (into_entries), helpers. Place its existing reframe_*_with free function
+  directly after the inherent impl. Preserve method bodies and visibility.
+  Verify the non-test build, strict all-target Clippy, the affected removal and
+  compaction tests, and rustdoc. Add no dead-code allowances.
+
+  **Implementation and verification.** The six owning sets each have one ordered
+  inherent impl. Their compact methods and Molecule delegates return the required
+  row mappings; the twelve mapping-discarding methods are removed. No new method,
+  visibility change, or dead-code allowance is introduced. lift_constraints
+  passes its accumulated additions to extend_constraints with order and duplicates
+  preserved. All 2,785 focused entity/molecule unit cases pass. The non-test build,
+  strict all-target Clippy, and private-item rustdoc with warnings denied pass.
+  Nightly formatting and full diff review pass. This also closes S4d7's lint gate.
 
 - **S4c — moved to S5a1.** Introduce the scope guard with Transaction::run,
   which owns it. No unused recovery machinery or temporary public API is added
@@ -5680,7 +5693,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   noncovalent/stereo getters borrow attributes without allocation, and stereo
   getters also borrow ligand slices.
 
-- **S4d7 — Migrate entity comparison callers** (`ir::molecule::apply`,
+- **S4d7 — completed 2026-09-28** (`ir::molecule::apply`,
   entity tests, `benches/editor.rs`; rewire, green).
   [dep: S4b9, S4d1, S4d2, S4d3, S4d4, S4d5, S4d6]
 
@@ -5709,7 +5722,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   in the data-type guide, then run affected-crate checks, strict Clippy, rustdoc,
   nightly formatting, and full diff review. Workspace/Python/MSRV gates remain S9b.
 
-  **Implemented; gates pending — 2026-09-28.** Both Edit execution paths
+  **Implementation.** Both Edit execution paths
   construct old entries and call framed_eq after the incidence check. The six
   Molecule comparison methods are removed. Each entry specializes framed_eq:
   structural equality returns immediately; otherwise it transports one form
@@ -5755,12 +5768,10 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   **Verification.** All 2,177 entry and molecule unit cases pass, including 764
   new definition-comparison cases and 24 removal-incidence cases. The affected
   public Edit/frame/reframe property run passes all 52 properties after S4b8's
-  replay correction. Strict Clippy stops on six unused
-  Molecule compact_<overlay> methods and extend_constraints, pending S4b9.
-  Private-item rustdoc with warnings denied passes. Nightly formatting and full
-  diff review pass. S4d7 remains open until the lint gate passes; no lint
-  suppression was added. S4b8 records the unrelated-history property's corrected
-  scope.
+  replay correction. S4b9 closes the strict all-target Clippy gate and verifies
+  the non-test build. Private-item rustdoc with warnings denied, nightly
+  formatting, and full diff review pass. No lint suppression was added.
+  S4b8 records the unrelated-history property's corrected scope.
 
 ### S5 — Borrowed transaction API
 
@@ -6264,12 +6275,11 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b8 are complete.
+  S3k1–S3k4's index-overflow cleanup, S4a, S4b, and S4d are complete.
   S4b uses the additions and the component
   removal/restoration interfaces.
-- S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is
-  incorporated in S5a1. S4d1–S4d6 are complete. S4d7's comparison migration is
-  implemented; S4b9 clears its remaining lint gate before the S5 lifecycle switch.
+- S4a, S4b, and S4d are complete. S4c is incorporated in S5a1, the next
+  subitem for the S5 lifecycle switch.
 - S5a1–S5a2 introduce the guard and public lifecycle together; S5d1–S5d3
   complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

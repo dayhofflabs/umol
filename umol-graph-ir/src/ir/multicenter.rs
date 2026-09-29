@@ -134,10 +134,6 @@ impl MulticenterBonds {
         }
     }
 
-    pub(crate) fn attributes_mut(&mut self, id: MulticenterBondId) -> &mut MulticenterBondForm {
-        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
-    }
-
     /// Ids of the multicenter bonds `atom` belongs to. Unlike aromatic systems these may overlap,
     /// so an atom can belong to several; integrity rejects only identical atom sets.
     pub fn incident_ids(
@@ -153,13 +149,43 @@ impl MulticenterBonds {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
-}
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "entity-set mutation primitives")
-)]
-impl MulticenterBonds {
+    /// Whether bond `id` is the one over `atoms` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: MulticenterBondId, atoms: &[AtomId]) -> bool {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0.is_coincident(RelationId::from(id), &query)
+    }
+
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<MulticenterBondId> {
+        // Multicenter bonds anchor on their atoms, so the node index is the one to scan.
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        let anchor = *query.first()?;
+        self.0
+            .coincident_to_node(anchor, &query)
+            .map(MulticenterBondId::from)
+    }
+
+    /// The atoms of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
+    /// ids. The public accessor is [`Self::atoms`].
+    pub(crate) fn atom_nodes(&self, id: MulticenterBondId) -> &[NodeId] {
+        self.0.participants(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_mut(&mut self, id: MulticenterBondId) -> &mut MulticenterBondForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut MulticenterBondForm> {
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, attributes)| attributes)
+    }
+
     pub(crate) fn add(
         &mut self,
         atoms: &[AtomId],
@@ -283,11 +309,7 @@ impl MulticenterBonds {
         Arc::make_mut(&mut self.0).remove_participant(id.into(), position);
     }
 
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
-    }
-
-    pub(crate) fn tracked_compact(
+    pub(crate) fn compact(
         &self,
         compaction: &GraphCompaction,
     ) -> (Self, Compaction<MulticenterBondId>) {
@@ -303,31 +325,6 @@ impl MulticenterBonds {
         )
         .expect("relation compaction contains valid multicenter bond ids");
         (Self(Arc::new(set)), relations)
-    }
-}
-
-impl MulticenterBonds {
-    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, MulticenterBondForm)> {
-        Arc::try_unwrap(self.0)
-            .unwrap_or_else(|shared| (*shared).clone())
-            .into_entries()
-            .into_iter()
-            .map(|(atoms, attributes)| (atoms.into_iter().map(AtomId::from).collect(), attributes))
-            .collect()
-    }
-
-    /// The atoms of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
-    /// ids. The public accessor is [`Self::atoms`].
-    pub(crate) fn atom_nodes(&self, id: MulticenterBondId) -> &[NodeId] {
-        self.0.participants(RelationId::from(id))
-    }
-
-    pub(crate) fn attributes_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = &mut MulticenterBondForm> {
-        Arc::make_mut(&mut self.0)
-            .iter_mut()
-            .map(|(_, _, attributes)| attributes)
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -373,23 +370,38 @@ impl MulticenterBonds {
             .map(|object| Self(Arc::new(object)))
     }
 
-    /// Whether bond `id` is the one over `atoms` — the known-id sibling of
-    /// [`coincident_id`](Self::coincident_id).
-    pub fn is_coincident(&self, id: MulticenterBondId, atoms: &[AtomId]) -> bool {
-        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0.is_coincident(RelationId::from(id), &query)
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, MulticenterBondForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, attributes)| (atoms.into_iter().map(AtomId::from).collect(), attributes))
+            .collect()
     }
+}
 
-    /// Id of the entity coinciding with these participants — the one whose participants equal
-    /// them as a multiset. The identity question, distinct from lookup.
-    pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<MulticenterBondId> {
-        // Multicenter bonds anchor on their atoms, so the node index is the one to scan.
-        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        let anchor = *query.first()?;
-        self.0
-            .coincident_to_node(anchor, &query)
-            .map(MulticenterBondId::from)
+pub(crate) fn reframe_multicenter_bonds_with(
+    mut multicenter_bonds: MulticenterBonds,
+    mut visit: impl FnMut(MulticenterBondId, &DynPermutation),
+) -> Result<MulticenterBonds, Contradiction> {
+    let set = Arc::make_mut(&mut multicenter_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = MulticenterBondId::from(relation_id);
+        let stored = set
+            .participants(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = multicenter_bond_representative_action(stored);
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_participants(relation_id, &participant_order(&action));
+        visit(id, &action);
     }
+    Ok(multicenter_bonds)
 }
 
 impl Normalize for MulticenterBonds {
@@ -431,30 +443,6 @@ impl Reframe for MulticenterBonds {
     fn reframe(self) -> Result<Self, Contradiction> {
         reframe_multicenter_bonds_with(self, |_, _| {})
     }
-}
-
-pub(crate) fn reframe_multicenter_bonds_with(
-    mut multicenter_bonds: MulticenterBonds,
-    mut visit: impl FnMut(MulticenterBondId, &DynPermutation),
-) -> Result<MulticenterBonds, Contradiction> {
-    let set = Arc::make_mut(&mut multicenter_bonds.0);
-    for relation_id in set.ids().collect::<Vec<_>>() {
-        let id = MulticenterBondId::from(relation_id);
-        let stored = set
-            .participants(relation_id)
-            .iter()
-            .map(|&atom| AtomId::from(atom))
-            .collect();
-        let action = multicenter_bond_representative_action(stored);
-        let attributes = set.data(relation_id).clone().normalize()?;
-        *set.data_mut(relation_id) = attributes
-            .reframe_by(&action)
-            .ok_or(Contradiction)?
-            .normalize()?;
-        set.permute_participants(relation_id, &participant_order(&action));
-        visit(id, &action);
-    }
-    Ok(multicenter_bonds)
 }
 
 /// The reaction span's multicenter bonds, one [`EntitySpan`] per entity against a single participant frame.
@@ -1223,7 +1211,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bonds_tracked_compact() {
+    fn test_multicenter_bonds_compact() {
         let original = MulticenterBonds::new(vec![
             (
                 vec![AtomId(0), AtomId(2)],
@@ -1242,13 +1230,12 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.tracked_compact(&graph);
+        let (mut compacted, rows) = original.compact(&graph);
 
         assert_eq!(
             rows,
             Compaction::new(3, vec![MulticenterBondId(1)]).unwrap()
         );
-        assert_eq!(compacted, original.compact(&graph));
         assert_eq!(
             compacted.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1)]

@@ -134,10 +134,6 @@ impl AromaticSystems {
         }
     }
 
-    pub(crate) fn attributes_mut(&mut self, id: AromaticSystemId) -> &mut AromaticSystemForm {
-        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
-    }
-
     /// Ids of the systems `atom` belongs to. Systems are atom-disjoint, so there is at most one.
     pub fn incident_ids(
         &self,
@@ -152,13 +148,45 @@ impl AromaticSystems {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
-}
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "entity-set mutation primitives")
-)]
-impl AromaticSystems {
+    /// Whether system `id` is the one over `atoms` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: AromaticSystemId, atoms: &[AtomId]) -> bool {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0.is_coincident(RelationId::from(id), &query)
+    }
+
+    /// Id of the system coinciding with `atoms` — the one whose atoms equal them as a multiset.
+    ///
+    /// The identity question, distinct from lookup: an aromatic system's uniqueness key is any
+    /// member atom, which names it from a part; this names it from the whole.
+    pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<AromaticSystemId> {
+        // Aromatic systems anchor on their atoms, so the node index is the one to scan.
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        let anchor = *query.first()?;
+        self.0
+            .coincident_to_node(anchor, &query)
+            .map(AromaticSystemId::from)
+    }
+
+    /// The atoms of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
+    /// ids. The public accessor is [`Self::atoms`].
+    pub(crate) fn atom_nodes(&self, id: AromaticSystemId) -> &[NodeId] {
+        self.0.participants(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_mut(&mut self, id: AromaticSystemId) -> &mut AromaticSystemForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut AromaticSystemForm> {
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, attributes)| attributes)
+    }
+
     pub(crate) fn add(
         &mut self,
         atoms: &[AtomId],
@@ -282,11 +310,7 @@ impl AromaticSystems {
         Arc::make_mut(&mut self.0).remove_participant(id.into(), position);
     }
 
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
-    }
-
-    pub(crate) fn tracked_compact(
+    pub(crate) fn compact(
         &self,
         compaction: &GraphCompaction,
     ) -> (Self, Compaction<AromaticSystemId>) {
@@ -302,31 +326,6 @@ impl AromaticSystems {
         )
         .expect("relation compaction contains valid aromatic system ids");
         (Self(Arc::new(set)), relations)
-    }
-}
-
-impl AromaticSystems {
-    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AromaticSystemForm)> {
-        Arc::try_unwrap(self.0)
-            .unwrap_or_else(|shared| (*shared).clone())
-            .into_entries()
-            .into_iter()
-            .map(|(atoms, attributes)| (atoms.into_iter().map(AtomId::from).collect(), attributes))
-            .collect()
-    }
-
-    /// The atoms of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
-    /// ids. The public accessor is [`Self::atoms`].
-    pub(crate) fn atom_nodes(&self, id: AromaticSystemId) -> &[NodeId] {
-        self.0.participants(RelationId::from(id))
-    }
-
-    pub(crate) fn attributes_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = &mut AromaticSystemForm> {
-        Arc::make_mut(&mut self.0)
-            .iter_mut()
-            .map(|(_, _, attributes)| attributes)
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -372,25 +371,38 @@ impl AromaticSystems {
             .map(|object| Self(Arc::new(object)))
     }
 
-    /// Whether system `id` is the one over `atoms` — the known-id sibling of
-    /// [`coincident_id`](Self::coincident_id).
-    pub fn is_coincident(&self, id: AromaticSystemId, atoms: &[AtomId]) -> bool {
-        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0.is_coincident(RelationId::from(id), &query)
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AromaticSystemForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, attributes)| (atoms.into_iter().map(AtomId::from).collect(), attributes))
+            .collect()
     }
+}
 
-    /// Id of the system coinciding with `atoms` — the one whose atoms equal them as a multiset.
-    ///
-    /// The identity question, distinct from lookup: an aromatic system's uniqueness key is any
-    /// member atom, which names it from a part; this names it from the whole.
-    pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<AromaticSystemId> {
-        // Aromatic systems anchor on their atoms, so the node index is the one to scan.
-        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        let anchor = *query.first()?;
-        self.0
-            .coincident_to_node(anchor, &query)
-            .map(AromaticSystemId::from)
+pub(crate) fn reframe_aromatic_systems_with(
+    mut aromatic_systems: AromaticSystems,
+    mut visit: impl FnMut(AromaticSystemId, &DynPermutation),
+) -> Result<AromaticSystems, Contradiction> {
+    let set = Arc::make_mut(&mut aromatic_systems.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = AromaticSystemId::from(relation_id);
+        let stored = set
+            .participants(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = aromatic_system_representative_action(stored);
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_participants(relation_id, &participant_order(&action));
+        visit(id, &action);
     }
+    Ok(aromatic_systems)
 }
 
 impl Normalize for AromaticSystems {
@@ -432,30 +444,6 @@ impl Reframe for AromaticSystems {
     fn reframe(self) -> Result<Self, Contradiction> {
         reframe_aromatic_systems_with(self, |_, _| {})
     }
-}
-
-pub(crate) fn reframe_aromatic_systems_with(
-    mut aromatic_systems: AromaticSystems,
-    mut visit: impl FnMut(AromaticSystemId, &DynPermutation),
-) -> Result<AromaticSystems, Contradiction> {
-    let set = Arc::make_mut(&mut aromatic_systems.0);
-    for relation_id in set.ids().collect::<Vec<_>>() {
-        let id = AromaticSystemId::from(relation_id);
-        let stored = set
-            .participants(relation_id)
-            .iter()
-            .map(|&atom| AtomId::from(atom))
-            .collect();
-        let action = aromatic_system_representative_action(stored);
-        let attributes = set.data(relation_id).clone().normalize()?;
-        *set.data_mut(relation_id) = attributes
-            .reframe_by(&action)
-            .ok_or(Contradiction)?
-            .normalize()?;
-        set.permute_participants(relation_id, &participant_order(&action));
-        visit(id, &action);
-    }
-    Ok(aromatic_systems)
 }
 
 /// The reaction span's aromatic systems, one [`EntitySpan`] per entity against a single participant frame.
@@ -1218,7 +1206,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_systems_tracked_compact() {
+    fn test_aromatic_systems_compact() {
         let original = AromaticSystems::new(vec![
             (
                 vec![AtomId(0), AtomId(2)],
@@ -1237,10 +1225,9 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.tracked_compact(&graph);
+        let (mut compacted, rows) = original.compact(&graph);
 
         assert_eq!(rows, Compaction::new(3, vec![AromaticSystemId(1)]).unwrap());
-        assert_eq!(compacted, original.compact(&graph));
         assert_eq!(
             compacted.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1)]

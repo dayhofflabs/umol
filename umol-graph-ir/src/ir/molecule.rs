@@ -828,9 +828,7 @@ impl Molecule {
                 additions.push(Constraint::StereoBond(id, kind, c));
             }
         }
-        for c in additions {
-            self.constraints.push(c);
-        }
+        self.extend_constraints(additions);
     }
 
     /// Push every entity inline constraints from `self.constraints`
@@ -1288,92 +1286,62 @@ impl Molecule {
         self.stereo_bonds.tracked_remove(ids)
     }
 
-    /// Compact only the owning set through a topology removal.
-    pub(crate) fn compact_dative_bonds(&mut self, topology: &GraphCompaction) {
-        self.dative_bonds = self.dative_bonds.compact(topology);
-    }
-
     /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn tracked_compact_dative_bonds(
+    pub(crate) fn compact_dative_bonds(
         &mut self,
         topology: &GraphCompaction,
     ) -> Compaction<DativeBondId> {
-        let (entries, compaction) = self.dative_bonds.tracked_compact(topology);
+        let (entries, compaction) = self.dative_bonds.compact(topology);
         self.dative_bonds = entries;
         compaction
     }
 
-    /// Compact only the owning set through a topology removal.
-    pub(crate) fn compact_aromatic_systems(&mut self, topology: &GraphCompaction) {
-        self.aromatic_systems = self.aromatic_systems.compact(topology);
-    }
-
     /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn tracked_compact_aromatic_systems(
+    pub(crate) fn compact_aromatic_systems(
         &mut self,
         topology: &GraphCompaction,
     ) -> Compaction<AromaticSystemId> {
-        let (entries, compaction) = self.aromatic_systems.tracked_compact(topology);
+        let (entries, compaction) = self.aromatic_systems.compact(topology);
         self.aromatic_systems = entries;
         compaction
     }
 
-    /// Compact only the owning set through a topology removal.
-    pub(crate) fn compact_multicenter_bonds(&mut self, topology: &GraphCompaction) {
-        self.multicenter_bonds = self.multicenter_bonds.compact(topology);
-    }
-
     /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn tracked_compact_multicenter_bonds(
+    pub(crate) fn compact_multicenter_bonds(
         &mut self,
         topology: &GraphCompaction,
     ) -> Compaction<MulticenterBondId> {
-        let (entries, compaction) = self.multicenter_bonds.tracked_compact(topology);
+        let (entries, compaction) = self.multicenter_bonds.compact(topology);
         self.multicenter_bonds = entries;
         compaction
     }
 
-    /// Compact only the owning set through a topology removal.
-    pub(crate) fn compact_noncovalent_bonds(&mut self, topology: &GraphCompaction) {
-        self.noncovalent_bonds = self.noncovalent_bonds.compact(topology);
-    }
-
     /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn tracked_compact_noncovalent_bonds(
+    pub(crate) fn compact_noncovalent_bonds(
         &mut self,
         topology: &GraphCompaction,
     ) -> Compaction<NoncovalentBondId> {
-        let (entries, compaction) = self.noncovalent_bonds.tracked_compact(topology);
+        let (entries, compaction) = self.noncovalent_bonds.compact(topology);
         self.noncovalent_bonds = entries;
         compaction
     }
 
-    /// Compact only the owning set through a topology removal.
-    pub(crate) fn compact_stereo_atoms(&mut self, topology: &GraphCompaction) {
-        self.stereo_atoms = self.stereo_atoms.compact(topology);
-    }
-
     /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn tracked_compact_stereo_atoms(
+    pub(crate) fn compact_stereo_atoms(
         &mut self,
         topology: &GraphCompaction,
     ) -> Compaction<StereoAtomId> {
-        let (entries, compaction) = self.stereo_atoms.tracked_compact(topology);
+        let (entries, compaction) = self.stereo_atoms.compact(topology);
         self.stereo_atoms = entries;
         compaction
     }
 
-    /// Compact only the owning set through a topology removal.
-    pub(crate) fn compact_stereo_bonds(&mut self, topology: &GraphCompaction) {
-        self.stereo_bonds = self.stereo_bonds.compact(topology);
-    }
-
     /// Compact only the owning set and return its source-to-result compaction.
-    pub(crate) fn tracked_compact_stereo_bonds(
+    pub(crate) fn compact_stereo_bonds(
         &mut self,
         topology: &GraphCompaction,
     ) -> Compaction<StereoBondId> {
-        let (entries, compaction) = self.stereo_bonds.tracked_compact(topology);
+        let (entries, compaction) = self.stereo_bonds.compact(topology);
         self.stereo_bonds = entries;
         compaction
     }

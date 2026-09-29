@@ -473,12 +473,12 @@ impl Molecule {
                 ensure_unique(&atoms, EntityKind::Atom)?;
                 ensure_unique(&bonds, EntityKind::Bond)?;
                 let graph = self.tracked_remove_topology(&atoms, &bonds);
-                let dative_bonds = self.tracked_compact_dative_bonds(&graph);
-                let aromatic_systems = self.tracked_compact_aromatic_systems(&graph);
-                let multicenter_bonds = self.tracked_compact_multicenter_bonds(&graph);
-                let noncovalent_bonds = self.tracked_compact_noncovalent_bonds(&graph);
-                let stereo_atoms = self.tracked_compact_stereo_atoms(&graph);
-                let stereo_bonds = self.tracked_compact_stereo_bonds(&graph);
+                let dative_bonds = self.compact_dative_bonds(&graph);
+                let aromatic_systems = self.compact_aromatic_systems(&graph);
+                let multicenter_bonds = self.compact_multicenter_bonds(&graph);
+                let noncovalent_bonds = self.compact_noncovalent_bonds(&graph);
+                let stereo_atoms = self.compact_stereo_atoms(&graph);
+                let stereo_bonds = self.compact_stereo_bonds(&graph);
                 let compaction = MoleculeCompaction::new(
                     graph,
                     dative_bonds,
@@ -1365,12 +1365,12 @@ impl Molecule {
                 let (removed_atoms, removed_bonds, overlays) =
                     self.capture_removed_topology(&atoms, &bonds);
                 let graph = self.tracked_remove_topology(&atoms, &bonds);
-                let dative_bonds = self.tracked_compact_dative_bonds(&graph);
-                let aromatic_systems = self.tracked_compact_aromatic_systems(&graph);
-                let multicenter_bonds = self.tracked_compact_multicenter_bonds(&graph);
-                let noncovalent_bonds = self.tracked_compact_noncovalent_bonds(&graph);
-                let stereo_atoms = self.tracked_compact_stereo_atoms(&graph);
-                let stereo_bonds = self.tracked_compact_stereo_bonds(&graph);
+                let dative_bonds = self.compact_dative_bonds(&graph);
+                let aromatic_systems = self.compact_aromatic_systems(&graph);
+                let multicenter_bonds = self.compact_multicenter_bonds(&graph);
+                let noncovalent_bonds = self.compact_noncovalent_bonds(&graph);
+                let stereo_atoms = self.compact_stereo_atoms(&graph);
+                let stereo_bonds = self.compact_stereo_bonds(&graph);
                 let compaction = MoleculeCompaction::new(
                     graph,
                     dative_bonds,

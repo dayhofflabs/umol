@@ -854,6 +854,11 @@ Single-node/edge cascading-removal conveniences return no witness. Relation-set
 `compact` returns the resulting set; `tracked_compact` returns that set
 and its relation-id compaction. Each pair preserves the same output and failure behavior.
 
+The graph-IR owning overlay sets expose crate-private `compact` returning the resulting set
+and its row compaction. Molecule's crate-private `compact_<entity>` delegates install the set
+and return the row compaction. These mappings are required to update dependent constraints
+and handles, so these internal operations have no separate tracked counterpart.
+
 Molecule editor `remove` and the six bulk relation-removal methods return `()`; their
 `tracked_` companions return a full `MoleculeCompaction`, including unchanged-family counts.
 Molecule `extract` returns only the molecule; `tracked_extract` pairs it with the actual

@@ -157,10 +157,6 @@ impl StereoAtoms {
         }
     }
 
-    pub(crate) fn attributes_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
-        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
-    }
-
     /// Ids of the stereo atoms `atom` takes part in, as site or as ligand.
     pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoAtomId> + '_ {
         self.0
@@ -172,13 +168,36 @@ impl StereoAtoms {
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.0.has_incident_to_node(NodeId::from(atom))
     }
-}
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "entity-set mutation primitives")
-)]
-impl StereoAtoms {
+    /// Whether stereo atom `id` is the one on `site` over `ligands` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: StereoAtomId, site: AtomId, ligands: &[StereoLigand]) -> bool {
+        self.0
+            .is_coincident(RelationId::from(id), &[NodeId::from(site)], ligands)
+    }
+
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
+        // A stereo atom's site is an atom, and integrity makes it unique, so it is the sharpest
+        // node anchor available.
+        self.0
+            .coincident_to_node(NodeId::from(site), &[NodeId::from(site)], ligands)
+            .map(StereoAtomId::from)
+    }
+
+    pub(crate) fn attributes_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut StereoAtomForm> {
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, _, attributes)| attributes)
+    }
+
     pub(crate) fn add(
         &mut self,
         site: AtomId,
@@ -306,14 +325,7 @@ impl StereoAtoms {
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
-    }
-
-    pub(crate) fn tracked_compact(
-        &self,
-        compaction: &GraphCompaction,
-    ) -> (Self, Compaction<StereoAtomId>) {
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<StereoAtomId>) {
         let (set, relations) = self.0.tracked_compact(compaction);
         let relations = Compaction::new(
             relations.source_count(),
@@ -326,25 +338,6 @@ impl StereoAtoms {
         )
         .expect("relation compaction contains valid stereo atom ids");
         (Self(Arc::new(set)), relations)
-    }
-}
-
-impl StereoAtoms {
-    pub(crate) fn into_entries(self) -> Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> {
-        Arc::try_unwrap(self.0)
-            .unwrap_or_else(|shared| (*shared).clone())
-            .into_entries()
-            .into_iter()
-            .map(|(site, ligands, attributes)| (AtomId::from(site[0]), ligands, attributes))
-            .collect()
-    }
-
-    pub(crate) fn attributes_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = &mut StereoAtomForm> {
-        Arc::make_mut(&mut self.0)
-            .iter_mut()
-            .map(|(_, _, _, attributes)| attributes)
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -387,22 +380,34 @@ impl StereoAtoms {
             .map(|object| Self(Arc::new(object)))
     }
 
-    /// Whether stereo atom `id` is the one on `site` over `ligands` — the known-id sibling of
-    /// [`coincident_id`](Self::coincident_id).
-    pub fn is_coincident(&self, id: StereoAtomId, site: AtomId, ligands: &[StereoLigand]) -> bool {
-        self.0
-            .is_coincident(RelationId::from(id), &[NodeId::from(site)], ligands)
+    pub(crate) fn into_entries(self) -> Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(site, ligands, attributes)| (AtomId::from(site[0]), ligands, attributes))
+            .collect()
     }
+}
 
-    /// Id of the entity coinciding with these participants — the one whose participants equal
-    /// them as a multiset. The identity question, distinct from lookup.
-    pub fn coincident_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
-        // A stereo atom's site is an atom, and integrity makes it unique, so it is the sharpest
-        // node anchor available.
-        self.0
-            .coincident_to_node(NodeId::from(site), &[NodeId::from(site)], ligands)
-            .map(StereoAtomId::from)
+pub(crate) fn reframe_stereo_atoms_with(
+    mut stereo_atoms: StereoAtoms,
+    mut visit: impl FnMut(StereoAtomId, Permutation),
+) -> Result<StereoAtoms, Contradiction> {
+    let set = Arc::make_mut(&mut stereo_atoms.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = StereoAtomId::from(relation_id);
+        let action = stereo_atom_representative_action(set.participants_2(relation_id))
+            .ok_or(Contradiction)?;
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_participants_2(relation_id, &participant_order(action));
+        visit(id, action);
     }
+    Ok(stereo_atoms)
 }
 
 pub(crate) fn stereo_atom_representative_action(frame: &[StereoLigand]) -> Option<Permutation> {
@@ -463,26 +468,6 @@ impl Reframe for StereoAtoms {
     fn reframe(self) -> Result<Self, Contradiction> {
         reframe_stereo_atoms_with(self, |_, _| {})
     }
-}
-
-pub(crate) fn reframe_stereo_atoms_with(
-    mut stereo_atoms: StereoAtoms,
-    mut visit: impl FnMut(StereoAtomId, Permutation),
-) -> Result<StereoAtoms, Contradiction> {
-    let set = Arc::make_mut(&mut stereo_atoms.0);
-    for relation_id in set.ids().collect::<Vec<_>>() {
-        let id = StereoAtomId::from(relation_id);
-        let action = stereo_atom_representative_action(set.participants_2(relation_id))
-            .ok_or(Contradiction)?;
-        let attributes = set.data(relation_id).clone().normalize()?;
-        *set.data_mut(relation_id) = attributes
-            .reframe_by(&action)
-            .ok_or(Contradiction)?
-            .normalize()?;
-        set.permute_participants_2(relation_id, &participant_order(action));
-        visit(id, action);
-    }
-    Ok(stereo_atoms)
 }
 
 /// A stereo bond's site, ligand frame, and attributes.
@@ -611,10 +596,6 @@ impl StereoBonds {
         }
     }
 
-    pub(crate) fn attributes_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
-        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
-    }
-
     /// Ids of stereo bonds with a ligand anchored on `atom`.
     ///
     /// Includes atom and virtual ligands. A site-bond endpoint contributes only
@@ -649,13 +630,35 @@ impl StereoBonds {
     pub fn has_incident_to_bond(&self, bond: BondId) -> bool {
         self.0.has_incident_to_edge(EdgeId::from(bond))
     }
-}
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "entity-set mutation primitives")
-)]
-impl StereoBonds {
+    /// Whether stereo bond `id` is the one on `site` over `ligands` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: StereoBondId, site: BondId, ligands: &[StereoLigand]) -> bool {
+        self.0
+            .is_coincident(RelationId::from(id), &[EdgeId::from(site)], ligands)
+    }
+
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
+        // A stereo bond's site is a bond, so this is the one entity kind that scans the edge index.
+        self.0
+            .coincident_to_edge(EdgeId::from(site), &[EdgeId::from(site)], ligands)
+            .map(StereoBondId::from)
+    }
+
+    pub(crate) fn attributes_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut StereoBondForm> {
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, _, attributes)| attributes)
+    }
+
     pub(crate) fn add(
         &mut self,
         site: BondId,
@@ -783,14 +786,7 @@ impl StereoBonds {
         Arc::make_mut(&mut self.0).remove_participant_2(id.into(), position);
     }
 
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
-    }
-
-    pub(crate) fn tracked_compact(
-        &self,
-        compaction: &GraphCompaction,
-    ) -> (Self, Compaction<StereoBondId>) {
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<StereoBondId>) {
         let (set, relations) = self.0.tracked_compact(compaction);
         let relations = Compaction::new(
             relations.source_count(),
@@ -803,25 +799,6 @@ impl StereoBonds {
         )
         .expect("relation compaction contains valid stereo bond ids");
         (Self(Arc::new(set)), relations)
-    }
-}
-
-impl StereoBonds {
-    pub(crate) fn into_entries(self) -> Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> {
-        Arc::try_unwrap(self.0)
-            .unwrap_or_else(|shared| (*shared).clone())
-            .into_entries()
-            .into_iter()
-            .map(|(site, ligands, attributes)| (BondId::from(site[0]), ligands, attributes))
-            .collect()
-    }
-
-    pub(crate) fn attributes_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = &mut StereoBondForm> {
-        Arc::make_mut(&mut self.0)
-            .iter_mut()
-            .map(|(_, _, _, attributes)| attributes)
     }
 
     /// Map participant references, preserving entity ids, row order, attributes, and frames.
@@ -864,21 +841,34 @@ impl StereoBonds {
             .map(|object| Self(Arc::new(object)))
     }
 
-    /// Whether stereo bond `id` is the one on `site` over `ligands` — the known-id sibling of
-    /// [`coincident_id`](Self::coincident_id).
-    pub fn is_coincident(&self, id: StereoBondId, site: BondId, ligands: &[StereoLigand]) -> bool {
-        self.0
-            .is_coincident(RelationId::from(id), &[EdgeId::from(site)], ligands)
+    pub(crate) fn into_entries(self) -> Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(site, ligands, attributes)| (BondId::from(site[0]), ligands, attributes))
+            .collect()
     }
+}
 
-    /// Id of the entity coinciding with these participants — the one whose participants equal
-    /// them as a multiset. The identity question, distinct from lookup.
-    pub fn coincident_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
-        // A stereo bond's site is a bond, so this is the one entity kind that scans the edge index.
-        self.0
-            .coincident_to_edge(EdgeId::from(site), &[EdgeId::from(site)], ligands)
-            .map(StereoBondId::from)
+pub(crate) fn reframe_stereo_bonds_with(
+    mut stereo_bonds: StereoBonds,
+    mut visit: impl FnMut(StereoBondId, Permutation),
+) -> Result<StereoBonds, Contradiction> {
+    let set = Arc::make_mut(&mut stereo_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = StereoBondId::from(relation_id);
+        let action = stereo_bond_representative_action(set.participants_2(relation_id))
+            .ok_or(Contradiction)?;
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_participants_2(relation_id, &participant_order(action));
+        visit(id, action);
     }
+    Ok(stereo_bonds)
 }
 
 impl Normalize for StereoBonds {
@@ -923,26 +913,6 @@ impl Reframe for StereoBonds {
     fn reframe(self) -> Result<Self, Contradiction> {
         reframe_stereo_bonds_with(self, |_, _| {})
     }
-}
-
-pub(crate) fn reframe_stereo_bonds_with(
-    mut stereo_bonds: StereoBonds,
-    mut visit: impl FnMut(StereoBondId, Permutation),
-) -> Result<StereoBonds, Contradiction> {
-    let set = Arc::make_mut(&mut stereo_bonds.0);
-    for relation_id in set.ids().collect::<Vec<_>>() {
-        let id = StereoBondId::from(relation_id);
-        let action = stereo_bond_representative_action(set.participants_2(relation_id))
-            .ok_or(Contradiction)?;
-        let attributes = set.data(relation_id).clone().normalize()?;
-        *set.data_mut(relation_id) = attributes
-            .reframe_by(&action)
-            .ok_or(Contradiction)?
-            .normalize()?;
-        set.permute_participants_2(relation_id, &participant_order(action));
-        visit(id, action);
-    }
-    Ok(stereo_bonds)
 }
 
 /// The reaction span's stereo atoms, one [`EntitySpan`] per entity against a single ligand frame.
@@ -3075,7 +3045,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atoms_tracked_compact(stereo_atoms: StereoAtoms) {
+    fn test_stereo_atoms_compact(stereo_atoms: StereoAtoms) {
         let attributes = stereo_atoms.attributes(StereoAtomId(0)).clone();
         let ligands = vec![
             StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
@@ -3094,13 +3064,12 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::identity(0),
         );
-        let (mut compacted, rows) = original.tracked_compact(&graph);
+        let (mut compacted, rows) = original.compact(&graph);
 
         assert_eq!(
             rows,
             Compaction::new(4, vec![StereoAtomId(1), StereoAtomId(2)]).unwrap()
         );
-        assert_eq!(compacted, original.compact(&graph));
         assert_eq!(
             compacted,
             StereoAtoms::new(vec![
@@ -4140,7 +4109,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bonds_tracked_compact(stereo_bonds: StereoBonds) {
+    fn test_stereo_bonds_compact(stereo_bonds: StereoBonds) {
         let attributes = stereo_bonds.attributes(StereoBondId(0)).clone();
         let ligands = vec![
             StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
@@ -4160,13 +4129,12 @@ mod tests {
             Compaction::new(6, vec![NodeId(1)]).unwrap(),
             Compaction::new(4, vec![EdgeId(1)]).unwrap(),
         );
-        let (mut compacted, rows) = original.tracked_compact(&graph);
+        let (mut compacted, rows) = original.compact(&graph);
 
         assert_eq!(
             rows,
             Compaction::new(4, vec![StereoBondId(1), StereoBondId(2)]).unwrap()
         );
-        assert_eq!(compacted, original.compact(&graph));
         assert_eq!(
             compacted,
             StereoBonds::new(vec![
