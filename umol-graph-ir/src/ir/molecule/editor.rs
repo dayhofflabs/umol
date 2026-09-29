@@ -5,7 +5,6 @@
 //! The editor owns a molecule draft. Mutable access uses its copy-on-write storage;
 //! publication checks molecule integrity.
 
-use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCompaction};
@@ -58,10 +57,8 @@ mod transact;
 /// batch into consecutive additions gives the same stored result. These properties
 /// are exercised through publication in `tests/property/edit.rs`.
 ///
-/// The session correspondence composes the id changes since editor creation. Discarding the
-/// correspondence from a tracked publication gives the same molecule or integrity error as its
-/// plain counterpart. Repeated snapshots without intervening edits are equal; later edits do not
-/// change an earlier snapshot or its correspondence.
+/// Probe and finish establish the same integrity contract as molecule construction. A failed
+/// probe retains the editor for further changes. A failed finish drops its state.
 #[derive(Clone)]
 pub struct MoleculeEditor {
     molecule: Molecule,
@@ -759,74 +756,30 @@ impl MoleculeEditor {
         id_compaction
     }
 
-    /// Materialize the editor's current state without consuming it, after checking molecule
-    /// integrity.
+    /// Borrow the current molecule after checking its integrity.
     ///
-    /// Subsequent editor changes are independent of the returned immutable snapshot.
+    /// The borrow prevents editing while it remains in use. No molecule copy is made.
     ///
     /// # Errors
     ///
-    /// Returns [`MoleculeIntegrityError`] when the transient editor state cannot be published as a
-    /// molecule.
-    pub fn snapshot(&self) -> Result<Molecule, MoleculeIntegrityError> {
+    /// Returns MoleculeIntegrityError if the current state cannot be published as a molecule.
+    /// Failure leaves the editor available for inspection and repair.
+    pub fn probe(&self) -> Result<&Molecule, MoleculeIntegrityError> {
         self.molecule.check_integrity()?;
-        Ok(self.molecule.clone())
+        Ok(&self.molecule)
     }
 
-    /// Publish a reusable snapshot and the initial-to-current session correspondence.
+    /// Consume the editor and publish its molecule after checking integrity.
     ///
-    /// Subsequent edits do not change either returned value.
+    /// Moves the stored topology, attributes, overlays, and constraints into the result.
     ///
     /// # Errors
     ///
-    /// Returns the same integrity error as [`Self::snapshot`].
-    pub fn tracked_snapshot(
-        &self,
-    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeIntegrityError> {
-        Ok((self.snapshot()?, self.correspondence.clone()))
-    }
-
-    /// Publish the editor's current state after checking molecule integrity.
-    pub fn try_build(self) -> Result<Molecule, MoleculeIntegrityError> {
+    /// Returns MoleculeIntegrityError if the current state cannot be published as a molecule.
+    /// Failure drops the editor and its changes.
+    pub fn finish(self) -> Result<Molecule, MoleculeIntegrityError> {
         self.molecule.check_integrity()?;
         Ok(self.molecule)
-    }
-
-    /// Consume the editor, publishing its molecule and initial-to-current session correspondence.
-    ///
-    /// Moves the accumulated id-pair vectors into the result without copying them.
-    ///
-    /// # Errors
-    ///
-    /// Returns the same integrity error as [`Self::try_build`]. The editor is consumed on failure.
-    pub fn try_tracked_build(
-        mut self,
-    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeIntegrityError> {
-        let correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty());
-        Ok((self.try_build()?, correspondence))
-    }
-
-    /// Publish editor state whose molecule integrity is established by the producer.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the editor does not contain a representation-integral molecule. Use
-    /// [`Self::try_build`] for independently assembled or potentially conflicting edits.
-    pub fn build(self) -> Molecule {
-        self.try_build()
-            .unwrap_or_else(|error| panic!("invalid molecule editor state: {error}"))
-    }
-
-    /// Consume an integrity-established editor, returning its molecule and session correspondence.
-    ///
-    /// # Panics
-    ///
-    /// Panics on the same integrity failure as [`Self::build`]. Use [`Self::try_tracked_build`]
-    /// when the edits do not establish molecule integrity.
-    pub fn tracked_build(self) -> (Molecule, MoleculeCorrespondence) {
-        self.try_tracked_build()
-            .unwrap_or_else(|error| panic!("invalid molecule editor state: {error}"))
     }
 }
 
@@ -1915,19 +1868,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_snapshot(mut triatomic: MoleculeEditor) {
-        let snapshot = triatomic
-            .snapshot()
-            .expect("the editor contains an integral molecule");
-        triatomic.add_atom(AtomForm::from_element(Element::F));
-
+    fn test_molecule_editor_probe(mut triatomic: MoleculeEditor) {
+        let molecule = triatomic.probe().unwrap();
         assert_eq!(
-            snapshot,
-            mol_dsl!(r#"{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "2"]]}"#)
+            molecule,
+            &mol_dsl!(r#"{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "2"]]}"#)
         );
+        triatomic.add_atom(AtomForm::from_element(Element::F));
         assert_eq!(
-            triatomic.build(),
-            mol_dsl!(r#"{:atoms ["C" "N" "O" "F"] :bonds [[0 1 "1"] [1 2 "2"]]}"#)
+            triatomic.probe(),
+            Ok(&mol_dsl!(
+                r#"{:atoms ["C" "N" "O" "F"] :bonds [[0 1 "1"] [1 2 "2"]]}"#
+            ))
         );
     }
 
@@ -1935,20 +1887,41 @@ mod tests {
     #[case::parallel_bond(MoleculeIntegrityError::ParallelBonds {
         atoms: [AtomId(0), AtomId(1)],
     })]
-    fn test_molecule_editor_snapshot_error(
+    fn test_molecule_editor_probe_error(
         #[from(triatomic)] mut editor: MoleculeEditor,
         #[case] expected: MoleculeIntegrityError,
     ) {
-        editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+        let duplicate = editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
 
-        assert_eq!(editor.snapshot(), Err(expected));
+        assert_eq!(editor.probe(), Err(expected));
+
+        editor.remove_topology(&[], &[duplicate]);
+        assert_eq!(
+            editor.finish(),
+            Ok(mol_dsl!(
+                r#"{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "2"]]}"#
+            ))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_editor_finish() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "F" "Cl"]
+                :bonds [[0 1 "1"] [1 2 "2"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 3 4 [:h 0]] :attrs "Th1"}]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] [:h 2] [:lp 2]] :attrs "Ct1"}]}"#
+        );
+        let expected = molecule.clone();
+
+        assert_eq!(molecule.edit().finish(), Ok(expected));
     }
 
     #[rstest]
     #[case::parallel_bond(AtomId(0), AtomId(1), MoleculeIntegrityError::ParallelBonds {
         atoms: [AtomId(0), AtomId(1)],
     })]
-    fn test_molecule_editor_try_build_error(
+    fn test_molecule_editor_finish_error(
         #[from(triatomic)] mut editor: MoleculeEditor,
         #[case] first: AtomId,
         #[case] second: AtomId,
@@ -1956,23 +1929,25 @@ mod tests {
     ) {
         editor.add_bond(first, second, BondForm::from_order(1));
 
-        assert_eq!(editor.try_build(), Err(expected));
+        let entries = MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (first, second, BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(Molecule::try_from_entries(entries), Err(expected.clone()));
+        assert_eq!(editor.finish(), Err(expected));
     }
 
-    // `edit()` → `build()` reproduces the molecule including both stereo overlays.
     #[rstest]
-    fn test_molecule_editor_build() {
-        let molecule = mol_dsl!(
-            r#"{:atoms ["C" "C" "C" "F" "Cl"]
-                :bonds [[0 1 "1"] [1 2 "2"] [0 3 "1"] [0 4 "1"]]
-                :stereo-atoms [{:site 0 :ligands [1 3 4 [:h 0]] :attrs "Th1"}]
-                :stereo-bonds [{:site 1 :ligands [0 [:h 1] [:h 2] [:lp 2]] :attrs "Ct1"}]}"#
-        );
-        assert_eq!(molecule.edit().build(), molecule);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_try_tracked_build_allocation() {
+    fn test_molecule_editor_finish_allocation() {
         let mut carbon = AtomForm::from_element(Element::C);
         carbon.charge = NumForm::Lit(1);
 
@@ -2029,67 +2004,23 @@ mod tests {
                 atoms: Some(vec![AtomId(0), AtomId(2)]),
             })),
         };
+        let mut expected = Molecule::from_entries(entries.clone());
+        expected.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(2);
         let source = Molecule::from_entries(entries);
-        let editor = source.edit();
-        let atoms_ptr = editor.correspondence.atoms().matched_pairs().as_ptr();
-        let bonds_ptr = editor.correspondence.bonds().matched_pairs().as_ptr();
-        let dative_bonds_ptr = editor
-            .correspondence
-            .dative_bonds()
-            .matched_pairs()
-            .as_ptr();
-        let aromatic_systems_ptr = editor
-            .correspondence
-            .aromatic_systems()
-            .matched_pairs()
-            .as_ptr();
-        let multicenter_bonds_ptr = editor
-            .correspondence
-            .multicenter_bonds()
-            .matched_pairs()
-            .as_ptr();
-        let noncovalent_bonds_ptr = editor
-            .correspondence
-            .noncovalent_bonds()
-            .matched_pairs()
-            .as_ptr();
-        let stereo_atoms_ptr = editor
-            .correspondence
-            .stereo_atoms()
-            .matched_pairs()
-            .as_ptr();
-        let stereo_bonds_ptr = editor
-            .correspondence
-            .stereo_bonds()
-            .matched_pairs()
-            .as_ptr();
-        let (result, witness) = editor.try_tracked_build().unwrap();
-        assert_eq!(result, source);
-        assert_eq!(witness.atoms().matched_pairs().as_ptr(), atoms_ptr);
-        assert_eq!(witness.bonds().matched_pairs().as_ptr(), bonds_ptr);
+        let atoms_ptr = source.atoms.as_ptr();
+        let bonds_ptr = source.bonds.as_ptr();
+        let constraints_ptr = source.constraints.iter().as_slice().as_ptr();
+
+        let mut editor = source.edit();
+        editor.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(2);
+        let result = editor.finish().unwrap();
+
+        assert_eq!(result, expected);
+        assert_eq!(result.atoms.as_ptr(), atoms_ptr);
+        assert_eq!(result.bonds.as_ptr(), bonds_ptr);
         assert_eq!(
-            witness.dative_bonds().matched_pairs().as_ptr(),
-            dative_bonds_ptr
-        );
-        assert_eq!(
-            witness.aromatic_systems().matched_pairs().as_ptr(),
-            aromatic_systems_ptr
-        );
-        assert_eq!(
-            witness.multicenter_bonds().matched_pairs().as_ptr(),
-            multicenter_bonds_ptr
-        );
-        assert_eq!(
-            witness.noncovalent_bonds().matched_pairs().as_ptr(),
-            noncovalent_bonds_ptr
-        );
-        assert_eq!(
-            witness.stereo_atoms().matched_pairs().as_ptr(),
-            stereo_atoms_ptr
-        );
-        assert_eq!(
-            witness.stereo_bonds().matched_pairs().as_ptr(),
-            stereo_bonds_ptr
+            result.constraints.iter().as_slice().as_ptr(),
+            constraints_ptr
         );
     }
 

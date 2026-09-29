@@ -47,7 +47,9 @@ test migration is complete; graph-ir passes its checks. S5c's borrowed graph
 operations use scoped transactions and pass the graph checks. S5d1 implements
 Python Edits consumption. S5d2 implements accessor counters and Storage names.
 S5d3 implements prepared-batch Python transactions; S5 is complete.
-S6a's owning editor migration is next.
+S6a implements consuming edit/application and checked probe/finish publication.
+S6b1's graph-ir caller and correspondence migration is next; S6 returns green
+after the remaining Rust and Python consumers migrate.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -101,7 +103,8 @@ and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
 complete; S4b9 closes the strict lint gate. S5a–S5d3 are complete, including
-Python runtime verification. S6a is next.
+Python runtime verification. S6a's owning editor interfaces are implemented;
+caller migration continues in S6b1.
 
 ## Editor and transaction API
 
@@ -155,9 +158,9 @@ impl Transaction<'_> {
 }
 ```
 
-The transaction surface above is implemented. The editor ownership migration
-remains in S6: Molecule::edit and Molecule::apply still borrow &self and create an
-independent result; snapshot/try_build/build still publish editor state.
+The transaction surface and owning editor interfaces above are implemented.
+Editor publication uses probe/finish, and Molecule edit/application consume their
+input. S6b–S6d migrate callers and remove editor session correspondence.
 MoleculeBuilder retains its asserted build for fresh construction.
 
 Transaction::run is the scoped execution entry point, not a constructor returning
@@ -6153,7 +6156,7 @@ S6a–S6d are one ownership migration, returning green after S6d. Migrate every
 consumer of the changed signatures, including tests and benchmarks; retaining
 temporary cloning adapters is not a way to close an earlier subitem.
 
-- **S6a** (`ir::molecule`, `ir::molecule::editor`; breaking, green at S6d) Make
+- **S6a — completed 2026-09-28** (`ir::molecule`, `ir::molecule::editor`; breaking, green at S6d) Make
   `edit(self)` own its Molecule, make Molecule `apply`/`tracked_apply` consume,
   and replace editor snapshot/build methods with checked `probe`/`finish`.
   Retain MoleculeBuilder's asserted build and the S2 uniform mutable attribute access.
@@ -6161,6 +6164,27 @@ temporary cloning adapters is not a way to close an earlier subitem.
   Test direct/batch interleaving, invalid probe then repair, destructive failure, and
   constructor-equivalent publication.
   [dep: S2m, S5d]
+
+  **Implemented.** Molecule.edit moves every storage field, including Constraints,
+  into the editor. Molecule apply/tracked_apply consume and finish; the tracked
+  form obtains its correspondence from the editor's tracked_apply. Editor batch
+  methods return MoleculeApplyError. They retain transient state until probe or
+  finish invokes the same check_integrity used by construction. The six editor
+  snapshot/build methods are removed. MoleculeBuilder.build calls finish and
+  asserts its producer contract. Session correspondence remains until S6b1.
+
+  Publication tests now cover borrowed probes, repair after rejection, constructor
+  agreement, and moving the atom/bond/constraint allocations through editing.
+  Added direct/batch interleaving and consuming-failure cases; updated molecule
+  application tests to the consuming contract.
+
+  **Verification boundary.** Nightly formatting and diff review pass.
+  cargo check -p umol-graph-ir --lib reports seven caller-migration errors:
+  fragment/extract/combine/split still call editor build, and reaction application
+  still uses try_build and the previous editor error type. These belong to
+  S6b1/S6b2. The added tests cannot execute until the graph-ir callers compile;
+  no compatibility adapters were added. The workspace returns green at S6d.
+
 - **S6b — Graph-IR ownership migration** (group; breaking, green at S6d).
   [dep: S6a]
 
@@ -6407,7 +6431,7 @@ Within the revised S2:
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
   scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a is next.
+  S6a's owning editor interfaces are implemented; S6b1 is next.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.

@@ -1533,23 +1533,27 @@ impl Molecule {
         self.constraints.restore(changes);
     }
 
-    pub fn edit(&self) -> MoleculeEditor {
+    /// Consume the molecule and move its storage into an editor.
+    ///
+    /// Direct changes and edit batches may be interleaved. Use MoleculeEditor::probe
+    /// for checked read access and MoleculeEditor::finish to publish the result.
+    /// Editing has no rollback guarantee; clone explicitly to retain an independent input.
+    pub fn edit(self) -> MoleculeEditor {
         MoleculeEditor::from_parts(
-            self.graph.clone(),
-            Arc::clone(&self.atoms),
-            Arc::clone(&self.bonds),
-            self.dative_bonds.clone(),
-            self.aromatic_systems.clone(),
-            self.multicenter_bonds.clone(),
-            self.noncovalent_bonds.clone(),
-            self.stereo_atoms.clone(),
-            self.stereo_bonds.clone(),
-            self.constraints.clone(),
+            self.graph,
+            self.atoms,
+            self.bonds,
+            self.dative_bonds,
+            self.aromatic_systems,
+            self.multicenter_bonds,
+            self.noncovalent_bonds,
+            self.stereo_atoms,
+            self.stereo_bonds,
+            self.constraints,
         )
     }
 
-    /// Apply a checked edit batch to an immutable molecule, returning the modified molecule while
-    /// leaving `self` unchanged.
+    /// Consume the molecule, apply an edit batch, and publish the checked result.
     ///
     /// # Errors
     ///
@@ -1559,28 +1563,29 @@ impl Molecule {
     ///
     /// # Semantic properties
     ///
-    /// On success, the returned molecule satisfies all molecule integrity requirements. On either
-    /// failure, `self` remains unchanged and no partially modified molecule is returned.
-    pub fn apply(&self, edits: Edits) -> Result<Molecule, MoleculeApplyError> {
+    /// Success establishes the same integrity contract as construction. Failure drops the input
+    /// and any applied changes. No molecule copy or undo journal is created for recovery.
+    pub fn apply(self, edits: Edits) -> Result<Self, MoleculeApplyError> {
         let editor = self.edit().apply(edits)?;
-        Ok(editor.try_build()?)
+        Ok(editor.finish()?)
     }
 
     /// Apply a batch and return the resulting molecule with its source-to-result correspondence.
     ///
     /// # Errors
     ///
-    /// Returns the same transaction or integrity error as [`Self::apply`]. The source is unchanged.
+    /// Returns the same transaction or integrity error as Self::apply, consuming the input
+    /// on failure.
     ///
     /// # Semantic properties
     ///
     /// Discarding the correspondence gives the same molecule as the plain operation.
     pub fn tracked_apply(
-        &self,
+        self,
         edits: Edits,
-    ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeApplyError> {
-        let editor = self.edit().apply(edits)?;
-        Ok(editor.try_tracked_build()?)
+    ) -> Result<(Self, MoleculeCorrespondence), MoleculeApplyError> {
+        let (editor, correspondence) = self.edit().tracked_apply(edits)?;
+        Ok((editor.finish()?, correspondence))
     }
 
     /// Combine molecules by disjoint concatenation. Input order determines each entity kind's

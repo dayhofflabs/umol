@@ -75,8 +75,9 @@ the statuses recorded here remain authoritative.
   batch Molecule methods and S5b's graph-ir caller migration are complete.
   Graph-ir checks pass. S5c's graph-operation migration, S5d1's Edits consumption,
   and S5d2's accessor counters and Storage names are implemented. S5d3 completes
-  prepared-batch Python transactions and the workspace stage gate. S6a's owning
-  editor migration is next.
+  prepared-batch Python transactions and the workspace stage gate. S6a implements
+  the owning editor interfaces; S6b1's graph-ir caller and correspondence migration
+  is next. S6's build returns green after the Rust and Python caller migrations.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -294,7 +295,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue S6a's owning editor and publication migration. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue S6b1's graph-ir caller and correspondence migration; S6 returns green at S6d. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

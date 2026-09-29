@@ -193,8 +193,14 @@ impl MoleculeBuilder {
     }
 
     /// Finalize into a `Molecule`. Unspecified atom fields stay open for resolution.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the assembled entries violate molecule integrity.
     pub fn build(self) -> Molecule {
-        self.editor.build()
+        self.editor
+            .finish()
+            .unwrap_or_else(|error| panic!("invalid molecule builder state: {error}"))
     }
 }
 

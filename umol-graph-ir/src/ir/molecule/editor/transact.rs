@@ -7,26 +7,27 @@ use umol_graph_core::Correspondence;
 use super::MoleculeEditor;
 use crate::ir::correspondence::MoleculeCorrespondence;
 use crate::ir::edit::Edits;
+use crate::ir::error::MoleculeApplyError;
 use crate::ir::molecule::apply::ApplicationState;
-use crate::ir::molecule::TransactionError;
 
 impl MoleculeEditor {
     /// Apply an ordered [`Edits`] batch without constructing an undo journal.
     ///
     /// The editor is consumed so that a failed batch cannot expose partially applied state. On
-    /// success, the returned editor remains transient; [`MoleculeEditor::try_build`] or
-    /// [`MoleculeEditor::build`] performs the molecule-integrity publication gate.
+    /// success, the returned editor remains transient. MoleculeEditor::probe and
+    /// MoleculeEditor::finish check molecule integrity before publishing access or ownership.
     ///
     /// # Errors
     ///
-    /// Returns [`TransactionError`] when an edit handle, precondition, or shape is invalid for the
-    /// evolving editor state.
+    /// Returns MoleculeApplyError::Transaction when an edit handle, precondition, or shape is
+    /// invalid for the evolving editor state. No editor is returned on failure, including any
+    /// earlier direct or batch changes.
     ///
     /// # Semantic properties
     ///
     /// Applying the same batch with or without undo recording produces the same molecule on
     /// successful publication. On failure, no intermediate editor state is returned.
-    pub fn apply(mut self, edits: Edits) -> Result<Self, TransactionError> {
+    pub fn apply(mut self, edits: Edits) -> Result<Self, MoleculeApplyError> {
         let mut state = ApplicationState::new(&self.molecule);
         for edit in edits {
             self.molecule.apply_edit(edit, &mut state)?;
@@ -51,7 +52,7 @@ impl MoleculeEditor {
     pub fn tracked_apply(
         mut self,
         edits: Edits,
-    ) -> Result<(Self, MoleculeCorrespondence), TransactionError> {
+    ) -> Result<(Self, MoleculeCorrespondence), MoleculeApplyError> {
         let identity = MoleculeCorrespondence::new(
             Correspondence::identity(self.atom_count()),
             Correspondence::identity(self.bond_count()),
@@ -85,12 +86,15 @@ mod tests {
     use crate::ir::dative::DativeBondForm;
     use crate::ir::edit::{AtomHandle, DativeBondHandle, Edit, Edits};
     use crate::ir::entity::EntityKind;
-    use crate::ir::id::{AtomId, DativeBondId};
+    use crate::ir::error::MoleculeApplyError;
+    use crate::ir::id::{AtomId, BondId, DativeBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{Molecule, TransactionError};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
+    use crate::ir::num::NumForm;
     use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
+    use crate::mol_dsl;
 
     #[fixture]
     fn empty() -> MoleculeEditor {
@@ -150,6 +154,30 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_editor_apply_interleaving() {
+        let mut editor = mol_dsl!(r#"{:atoms ["C"]}"#).edit();
+        editor.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(1);
+        editor.add_atom(AtomForm::from_element(Element::N));
+        let mut first = Edits::new();
+        let oxygen = first.add_atom(AtomForm::from_element(Element::O));
+        first.add_bond(AtomHandle::Id(AtomId(0)), oxygen, BondForm::from_order(1));
+
+        let mut editor = editor.apply(first).unwrap();
+        editor.bond_mut(BondId(0)).attributes_mut().order = NumForm::Lit(2);
+        let mut second = Edits::new();
+        let fluorine = second.add_atom(AtomForm::from_element(Element::F));
+        second.add_bond(AtomHandle::Id(AtomId(1)), fluorine, BondForm::from_order(1));
+
+        let editor = editor.apply(second).unwrap();
+        assert_eq!(
+            editor.finish(),
+            Ok(mol_dsl!(
+                r#"{:atoms ["C#c1" "N" "O" "F"] :bonds [[0 2 "2"] [1 3 "1"]]}"#
+            ))
+        );
+    }
+
+    #[rstest]
     fn test_molecule_editor_apply_replace_dative_bond_acceptor(batched_overlays: MoleculeEditor) {
         let editor = batched_overlays
             .apply(Edits::from_iter([Edit::ReplaceDativeBondAcceptor {
@@ -171,11 +199,42 @@ mod tests {
         };
         assert_eq!(
             error,
-            TransactionError::HandleOutOfRange {
+            MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange {
                 kind: EntityKind::Atom,
                 index: 0,
                 count: 0,
-            }
+            })
+        );
+    }
+
+    #[rstest]
+    #[case::plain(false)]
+    #[case::tracked(true)]
+    fn test_molecule_editor_apply_destructive_error(
+        mut empty: MoleculeEditor,
+        #[case] tracked: bool,
+    ) {
+        empty.add_atom(AtomForm::from_element(Element::C));
+        let mut first = Edits::new();
+        first.add_atom(AtomForm::from_element(Element::N));
+        let editor = empty.apply(first).unwrap();
+        let mut second = Edits::new();
+        second.add_atom(AtomForm::from_element(Element::O));
+        second.remove_atom(AtomHandle::Id(AtomId(7)));
+
+        let error = if tracked {
+            editor.tracked_apply(second).err().unwrap()
+        } else {
+            editor.apply(second).err().unwrap()
+        };
+
+        assert_eq!(
+            error,
+            MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange {
+                kind: EntityKind::Atom,
+                index: 7,
+                count: 2,
+            })
         );
     }
 }

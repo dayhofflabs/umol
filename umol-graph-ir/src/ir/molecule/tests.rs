@@ -4864,10 +4864,7 @@ fn test_molecule_apply(
     #[case] edits: Edits,
     #[case] expected: Molecule,
 ) {
-    let original = molecule.clone();
-
     assert_eq!(molecule.apply(edits), Ok(expected));
-    assert_eq!(molecule, original);
 }
 
 #[rstest]
@@ -4904,11 +4901,11 @@ fn test_molecule_apply_error(
     #[case] edits: Edits,
     #[case] expected: MoleculeApplyError,
 ) {
-    let original = molecule.clone();
-
-    assert_eq!(molecule.tracked_apply(edits.clone()), Err(expected.clone()));
+    assert_eq!(
+        molecule.clone().tracked_apply(edits.clone()),
+        Err(expected.clone())
+    );
     assert_eq!(molecule.apply(edits), Err(expected));
-    assert_eq!(molecule, original);
 }
 
 #[rstest]
@@ -4954,7 +4951,7 @@ fn test_molecule_tracked_apply(
             Correspondence::identity(1),
         )
     };
-    assert_eq!(source.apply(edits.clone()), Ok(expected.clone()));
+    assert_eq!(source.clone().apply(edits.clone()), Ok(expected.clone()));
     assert_eq!(source.tracked_apply(edits), Ok((expected, witness)));
 }
 
@@ -5179,14 +5176,14 @@ fn test_molecule_editor_tracked_apply_transient() {
     );
     assert_eq!(applied, expected);
     assert_eq!(
-        editor.snapshot(),
+        editor.probe(),
         Err(MoleculeIntegrityError::ParallelBonds {
             atoms: [AtomId(0), AtomId(1)]
         })
     );
     plain.remove_topology(&[], &[BondId(1)]);
     editor.remove_topology(&[], &[BondId(1)]);
-    assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
+    assert_eq!(editor.finish(), plain.finish());
 }
 
 #[rstest]
