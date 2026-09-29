@@ -17,7 +17,7 @@ pub struct Contradiction;
 #[error("no join: elements have no least upper bound")]
 pub struct NoJoinError;
 
-/// Error from applying an edit batch to an immutable molecule.
+/// Failure of molecule edit application or the integrity check on its result.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeApplyError {
     /// The edit batch could not be applied to the evolving draft.

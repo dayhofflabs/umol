@@ -1730,25 +1730,25 @@ the returned mappings retain their categorical direction; the prefix does not im
 **Not:** a transaction, which records undo actions; a result-delivery prefix; a general marker for
 any method returning more than one value.
 **In code:** `tracked_remove`, `tracked_apply`, `tracked_split`, `tracked_pushout`,
-`tracked_rollback`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`, `try_tracked_build`.
+`tracked_commit`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`, `try_tracked_build`.
 
 ### Transaction
 
-A **transaction** is the journal of realized undos for one batch of edits. `transact` applies a batch
-and returns it; `rollback` consumes it to restore the prior state; `append` concatenates two so a
-multi-stage operation can be reversed as a unit.
+A **transaction** scopes one or more edit batches against a mutably borrowed molecule, with
+journal-based rollback. Transaction::run lends a handle to its callback and owns the restoration
+guard. Each apply executes immediately in a separate handle namespace. Commit checks integrity and
+requests acceptance; the callback must also return Ok. Application or commit failure aborts the
+transaction and restores its entry state. Explicit rollback, cancellation, and callback unwinding
+between completed edits also restore that state.
 
-`transact` borrows an editor mutably, restores it on application failure, and returns a journal on
-success. Editor `apply` consumes the editor and returns its modified state without producing a
-journal; on failure, the consumed partial state is dropped. Molecule `apply` additionally publishes
-the modified state as a checked `Molecule` while leaving its source unchanged, and distinguishes
-transaction failure from failure of the molecule-integrity publication gate.
+Molecule::transact applies prepared batches and commits once. Its tracked counterpart returns the
+whole transaction's entity correspondence, constructed from the journal on request. The journal is
+private; Undo remains a public data type.
 
-**Not:** *application*, which executes a plan and publishes only on success; a transaction is the
-rollback mechanism for callers that retain an editor. Not *patch algebra*, which is the entity-level
-`apply`/`diff` pair.
-**In code:** `Transaction`, `transact`, `rollback`, `append`, `TransactionError`;
-`MoleculeEditor::apply`, `Molecule::apply`.
+**Not:** a detached journal container; *patch algebra*, which is the entity-level `apply`/`diff` pair.
+**In code:** `Transaction`, `TransactionError`; Transaction::run, Transaction::apply,
+Transaction::probe, Transaction::commit, Transaction::tracked_commit, Transaction::rollback;
+Molecule::transact, Molecule::tracked_transact.
 
 ### Transformation
 
@@ -1765,7 +1765,7 @@ The **`try_*` prefix** distinguishes a checked operation from an unprefixed asse
 counterpart, or marks an attempt at a restricted input-domain dispatch for which the caller may use
 a fallback. It does not merely announce that a method returns `Option` or `Result`. An operation
 whose ordinary contract is fallible keeps its ordinary verb and expresses failure in its return
-type, as `apply`, `parse`, `rollback`, `reverse`, and `to_reaction_span` do. Standard trait names
+type, as `apply`, `parse`, `reverse`, and `to_reaction_span` do. Standard trait names
 such as `TryFrom` and `TryInto` are unaffected.
 
 Use checked/asserted pairs only when both public routes are useful. An internal producer that knows

@@ -2144,10 +2144,10 @@ impl CascadedConstraints {
 /// The information needed to reverse one applied [`Edit`], captured as it was applied.
 ///
 /// Checked application resolves symbolic handles and observes concrete allocations, compactions,
-/// and cascaded removals that cannot be derived from the edit alone. Recorded undo entries are
-/// replayed immediately if a later edit in the same batch fails. After successful application they
-/// are returned in a [`Transaction`](crate::ir::Transaction) for explicit rollback against the
-/// exact post-transaction state.
+/// and cascaded removals that cannot be derived from the edit alone. A transaction retains these
+/// entries in its private journal until its changes are accepted. Rollback replays them in reverse
+/// order to restore transaction-entry state under Molecule::normalized_eq, preserving participant
+/// order. Manipulated history must not panic but has no specified result.
 ///
 /// Entity-constraint entries retain the accepted old optional value and its key.
 /// Added molecule constraints record their insertion position.

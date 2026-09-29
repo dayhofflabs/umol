@@ -666,11 +666,16 @@ construction. A valid partial bijection is not necessarily a correspondence over
 molecules supplied to a later operation. `MoleculeCorrespondence` is likewise not bound to molecule
 instances by its ids.
 
-An **operation-issued value** may instead be provenance-bound. A `Transaction` is issued by applying
-edits and records how to undo that particular successful application. It has no public constructor
-for independently asserting that provenance. Replacing it with another transaction or mutating the
-object independently violates the operation contract; rollback must not panic, but it does not owe
-correct restoration for the compromised pairing.
+An **operation-issued value** may instead be provenance-bound. Transaction is a scoped handle issued
+by Transaction::run, borrowing a molecule and its private undo journal. Callers cannot replace the
+receiver or alter that journal. Commit checks representation integrity; acceptance also requires
+the callback to return Ok. Application or commit failure, or cancellation, restores transaction-entry
+state under Molecule::normalized_eq, preserving participant order. The guard belongs to run, so forgetting the
+handle cannot prevent restoration of completed edits. Recovery from allocation failure or an
+internal panic during an Edit is outside this contract.
+
+Undo payloads remain public. Restoration from matching history is correct under the stated
+equivalence; manipulated history must not panic but has no specified result.
 
 Graph::restore and relation-set restore/restore_participants likewise consume undo data from a
 matching removal. The compaction and saved rows are supplied separately, but their required
@@ -865,8 +870,8 @@ Molecule `extract` returns only the molecule; `tracked_extract` pairs it with th
 host-to-result compaction. Its sub-to-host input describes selection, not result numbering:
 extraction preserves host order. Both forms retain the same cascades and constraint transport.
 
-Rollback checks result counts against the current editor before applying an inverse compaction.
-A mismatch remains `TransactionError::RollbackStateMismatch`, not an indexing panic.
+Restoration uses local count and indexing guards to avoid panics on manipulated history.
+It does not validate the history or report a rollback error.
 
 ## Remapping
 

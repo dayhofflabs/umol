@@ -71,9 +71,9 @@ the statuses recorded here remain authoritative.
   unrelated-history rollback with a local restoration count guard.
   S4b9 consolidates the entity-set implementations and names their mapping-returning
   methods compact. S4d completes single-entity entries and comparison migration;
-  strict lint and rustdoc pass. S5a1's guard and scoped run are implemented;
-  S5a2's application/completion methods are next. Verification awaits S5's
-  caller migration.
+  strict lint and rustdoc pass. S5a's scoped transaction lifecycle and prepared-
+  batch Molecule methods are implemented. S5b's graph-ir caller migration is
+  next; verification awaits that migration and the S5d3 stage gate.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -291,7 +291,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue S5a2's application and completion methods. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue S5b's graph-ir transaction caller migration. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

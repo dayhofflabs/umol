@@ -40,9 +40,11 @@ mutation methods use pub(crate). S4b is complete: S4b9 consolidates the entity-s
 implementations and names their mapping-returning compaction methods compact.
 S4d is complete: comparable single-entity entries live in their owning entity
 modules, and both Edit execution paths use specialized framed_eq implementations.
-S5a1's guard, borrowed handle, and scoped run are implemented. S5a2 supplies the
-handle's application and completion methods next; S5's caller migration remains
-necessary before the build and tests return green.
+S5a is implemented: scoped transactions provide immediate batch application,
+checked probes and commit, rollback, and optional correspondence. Molecule's
+prepared-batch conveniences use the same lifecycle. S5b's graph-ir caller
+migration is next; S5's caller migration remains necessary before the build and
+tests return green.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -95,7 +97,7 @@ complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
-complete; S4b9 closes the strict lint gate. S5a1 is implemented; S5a2 is next.
+complete; S4b9 closes the strict lint gate. S5a is implemented; S5b is next.
 
 ## Editor and transaction API
 
@@ -149,10 +151,9 @@ impl Transaction<'_> {
 }
 ```
 
-The block expresses the accepted editor and transaction interface. Currently
-Molecule::edit and Molecule::apply borrow &self and create an independent result;
-editor transact returns a detached journal; snapshot/try_build/build publish the
-working state. Those lifecycle methods are replaced by the surface above.
+The transaction surface above is implemented. The editor ownership migration
+remains in S6: Molecule::edit and Molecule::apply still borrow &self and create an
+independent result; snapshot/try_build/build still publish editor state.
 MoleculeBuilder retains its asserted build for fresh construction.
 
 Transaction::run is the scoped execution entry point, not a constructor returning
@@ -5850,15 +5851,10 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   **Implementation and verification.** The guard, borrowed handle, and run live
   in molecule::transact. TransactionError moves there and gains Aborted. The
   detached journal and editor transaction entry points are removed; editor
-  apply/tracked_apply retain their implementations. Ten unit cases cover guard
-  acceptance and restoration, callback errors/unwinding, forgotten handles, and
-  terminal status handling. These exercise the guard directly; S5a2 adds public
-  handle-method coverage. The tests have not run: `cargo check -p umol-graph-ir
-  --lib` stops at the old editor transact call in reaction.rs, whose migration is
-  S5b. No diagnostic was reported in the new transaction module. Nightly
-  formatting and full diff review pass; the stage gate remains S5d3.
+  apply/tracked_apply retain their implementations. S5a2 exercises the guard
+  through public lifecycle methods. The stage gate remains S5d3.
 
-- **S5a2 — Batch application, completion, and Molecule conveniences**
+- **S5a2 — completed 2026-09-28** — Batch application, completion, and Molecule conveniences
   (`ir::molecule::transact`, `ir::error`; breaking, green at S5d3). [dep: S5a1]
 
   Complete the detached Transaction replacement with immediate `apply`, checked
@@ -5878,6 +5874,24 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   No unconditionally maintained correspondence field is added to the guard.
   Prepared Molecule calls apply each batch, then commit once. Verify matching
   ordinary/tracked results, separate namespaces, and the S5a1 lifecycle table.
+
+  **Implementation and verification.** All seven methods are implemented in
+  molecule::transact. Application and commit errors drain the full journal and
+  latch Aborted. probe and commit call Molecule::check_integrity. Ordinary commit
+  constructs no correspondence; tracked_commit derives starting counts by reading
+  the journal backward, then applies its recorded additions and compactions to
+  the correspondence in execution order. It does not replay edits or mutate the
+  molecule. RollbackFailed and RollbackStateMismatch are removed; Undo rustdoc and
+  the data-type/nomenclature guides describe the scoped lifecycle.
+
+  The 32 public-API unit cases cover callback return/error/unwind, forgotten
+  handles, abort latching, separate batch namespaces, probe repair, constructor-
+  equivalent integrity rejection, explicit rollback, and correspondence across
+  topology and all six overlay kinds. They have not run. Library and test
+  compilation still fail at legacy editor transaction callers, including
+  reaction.rs:2128; no diagnostic targets the new transaction implementation or
+  its tests. S5b migrates the graph-ir callers and existing suites. Nightly
+  formatting and full diff review pass; the stage gate remains S5d3.
 
 - **S5b** (`umol-graph-ir` reaction and molecule callers; breaking, green at S5d)
   Migrate uses of detached journals. Preserve reaction `Ok(None)` versus error
@@ -6291,10 +6305,10 @@ Within the revised S2:
   S3k1–S3k4's index-overflow cleanup, S4a, S4b, and S4d are complete.
   S4b uses the additions and the component
   removal/restoration interfaces.
-- S4a, S4b, and S4d are complete. S4c is incorporated in the implemented S5a1
-  guard and scoped run. S5a2 is next; S5's build and test gate remains S5d3.
-- S5a1–S5a2 introduce the guard and public lifecycle together; S5d1–S5d3
-  complete Python ownership, counters, and prepared transactions.
+- S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
+  scoped run. S5a's public lifecycle is implemented; S5b is next. S5's build
+  and test gate remains S5d3.
+- S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.
 
