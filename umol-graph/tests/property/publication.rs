@@ -41,7 +41,7 @@ proptest! {
             .transform(&source)
             .map_err(|error| TestCaseError::fail(format!("aromatization failed: {error}")))?;
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 
     #[test]
@@ -50,7 +50,7 @@ proptest! {
             .transform(&source)
             .expect("delocalized-charge transformation is infallible");
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 
     #[test]
@@ -68,7 +68,7 @@ proptest! {
             .transform(&source)
             .map_err(|error| TestCaseError::fail(format!("kekulization failed: {error}")))?;
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 
     #[test]
@@ -81,6 +81,6 @@ proptest! {
             .resolve(&mut source)
             .map_err(|error| TestCaseError::fail(format!("resolution failed: {error}")))?;
 
-        prop_assert_eq!(source.edit().try_build(), Ok(source));
+        prop_assert_eq!(source.clone().edit().finish(), Ok(source));
     }
 }

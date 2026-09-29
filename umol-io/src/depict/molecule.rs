@@ -1584,7 +1584,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let molecule = editor.build();
+        let molecule = editor.finish().unwrap();
 
         let depiction = depict(&molecule, &layout).unwrap();
 

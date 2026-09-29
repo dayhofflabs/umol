@@ -290,7 +290,7 @@ fn test_resolver_project_phase_error(#[case] smiles: &str) {
     let source = ingest_smiles(smiles).unwrap();
     let mut editor = source.edit();
     editor.atom_mut(AtomId(0)).attributes_mut().isotope_mass = IsotopeMassForm::Undetermined;
-    let mut molecule = editor.try_build().unwrap();
+    let mut molecule = editor.finish().unwrap();
     let original = molecule.clone();
     let model = ChemistryModel::default();
 
@@ -372,7 +372,7 @@ proptest! {
                 [5 10 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"]]}"#);
         let mut editor = base.edit();
         if natural {
-            for atom in base.atoms().ids() {
+            for atom in (0..editor.atom_count()).map(AtomId::from) {
                 editor.atom_mut(atom).attributes_mut().isotope_mass = IsotopeMassForm::Undetermined;
             }
         }
@@ -383,7 +383,7 @@ proptest! {
             TetrahedralStereoForm::Stereo(StereoCoset::Lit(u32::from(clockwise)))));
         editor.bond_mut(BondId(3)).attributes_mut().constraints.set(BondConstraintForm::CisTransStereo(
             CisTransStereoForm::Stereo(StereoCoset::Lit(u32::from(trans)))));
-        let expected = editor.build();
+        let expected = editor.finish().unwrap();
         prop_assert_eq!(Resolver::with_config(&model, config).project(&mut molecule, ProjectFlags::all()), Ok(Solution::Determined(())));
         prop_assert_eq!(molecule, expected);
     }
@@ -502,7 +502,7 @@ proptest! {
         let mut editor = base.edit();
         editor.atom_mut(AtomId(0)).attributes_mut().constraints.set(
             AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Stereo(projected)));
-        let expected = editor.build();
+        let expected = editor.finish().unwrap();
         let model = ChemistryModel::default();
         let resolver = Resolver::new(&model);
         prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
@@ -551,7 +551,7 @@ proptest! {
         let mut editor = base.edit();
         editor.bond_mut(BondId(0)).attributes_mut().constraints.set(
             BondConstraintForm::CisTransStereo(CisTransStereoForm::Stereo(projected)));
-        let expected = editor.build();
+        let expected = editor.finish().unwrap();
         let model = ChemistryModel::default();
         let resolver = Resolver::new(&model);
         prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));

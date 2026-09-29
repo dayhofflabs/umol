@@ -50,8 +50,8 @@ S5d3 implements prepared-batch Python transactions; S5 is complete.
 S6a implements consuming edit/application and checked probe/finish publication.
 S6b1 migrates graph-ir callers and removes editor session correspondence. S6b2
 rewrites combine_from to append through Molecule methods. S6c1 implements the
-transformation plans and borrowed execution. S6c2's remaining caller migration is
-next; Python consumers follow.
+transformation plans and borrowed execution. S6c2 completes the remaining Rust
+caller migration. S6d1's Python Molecule ownership storage is next.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -106,8 +106,8 @@ approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
 complete; S4b9 closes the strict lint gate. S5a–S5d3 are complete, including
 Python runtime verification. S6a–S6b2 implement the owning editor, migrate
-graph-ir callers, and rewire combine_from. S6c1's transformation migration is
-complete; S6c2 is next.
+graph-ir callers, and rewire combine_from. S6c1–S6c2 complete the remaining Rust
+caller migration; S6d1 is next.
 
 ## Editor and transaction API
 
@@ -6319,13 +6319,28 @@ temporary cloning adapters is not a way to close an earlier subitem.
   Clippy pass; nightly formatting and diff checks pass. The S6 workspace gate
   remains at S6d; remaining boundary/property-fixture callers belong to S6c2.
 
-- **S6c2 — Remaining ingest, parse, and export callers** (`umol-graph`, `umol-io`; breaking, green at S6d). [dep: S6c1]
+- **S6c2 — completed 2026-09-28 — Remaining ingest, parse, and export callers** (`umol-graph`, `umol-io`; breaking, green at S6d). [dep: S6c1]
 
   Migrate remaining edit/build/snapshot call sites to the owning editor and
   finish while retaining their current public signatures. Preserve each source
   copy already required for an independent output; do not add recovery copies.
   Resolver names and report removal change in S7, not here. Verify boundary
   outputs, error categories, and unchanged retained sources.
+
+  **Implemented.** The remaining editor publication calls were in graph
+  projection/publication properties and the C60 depiction fixture; all use
+  finish. Projection fixtures read atom counts from the owning editor.
+  Publication properties retain their whole-molecule equality assertions with
+  explicit test copies. Production ingest and parse already use the migrated
+  resolver; export retains its independent projection copy. No production
+  signatures, error categories, or copying behavior change in this subitem.
+
+  **Verification.** 610 selected tests pass: ingest, parse, export, projection
+  and publication properties, and the C60 depiction fixture, with proptest and
+  depiction features enabled. These retain exact boundary/error assertions and
+  source-preservation checks. Focused strict Clippy, nightly formatting, and
+  diff checks pass. No retired editor build/try_build/snapshot calls remain in
+  umol-graph or umol-io. The workspace gate remains at S6d3.
 
 - **S6d — Python Molecule ownership migration** (group; breaking, closes
   S6 green at S6d3). [dep: S5d, S6a, S6b, S6c]
@@ -6492,7 +6507,7 @@ Within the revised S2:
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
   scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a–S6c1 are complete; S6c2 is next.
+  S6a–S6c2 are complete; S6d1 is next.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.
