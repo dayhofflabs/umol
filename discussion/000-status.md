@@ -267,3 +267,4 @@ the statuses recorded here remain authoritative.
 | [226-smiles-roundtrip-design-2026-09-10.md](226-smiles-roundtrip-design-2026-09-10.md)                           | Completed     | 2026-09-14  | |
 | [227-repository-structure-hygiene-2026-09-10.md](227-repository-structure-hygiene-2026-09-10.md)                 | Proposed      | 2026-09-10   | Settle thresholds, check tooling, tiered gate, and the order against the doc 117 collapse and crate split. |
 | [228-svg-render-configuration-2026-09-15.md](228-svg-render-configuration-2026-09-15.md)                         | Completed     | 2026-09-15   | Implemented in the proposing pull request: `SvgConfig`, `Depiction::render_svg_with`, Python `SvgConfig` and `Depiction.render_svg_with`. |
+| [230-label-mask-extents-2026-09-29.md](230-label-mask-extents-2026-09-29.md)                                 | Completed     | 2026-09-29   | |
