@@ -77,7 +77,7 @@ fn bench_resolve(c: &mut Criterion) {
         let mut checked = molecule.clone();
         assert!(
             matches!(
-                resolver.resolve(&mut checked).unwrap(),
+                resolver.resolve_into(&mut checked).unwrap(),
                 Solution::Determined(_)
             ),
             "{name}"
@@ -85,7 +85,7 @@ fn bench_resolve(c: &mut Criterion) {
         group.bench_function(name, |b| {
             b.iter_batched_ref(
                 || molecule.clone(),
-                |molecule| resolver.resolve(black_box(molecule)).unwrap(),
+                |molecule| resolver.resolve_into(black_box(molecule)).unwrap(),
                 BatchSize::SmallInput,
             );
         });
@@ -106,14 +106,19 @@ fn bench_aromaticity_project(c: &mut Criterion) {
         let source = ingest_smiles(input).unwrap();
         let mut checked = source.clone();
         assert_eq!(
-            resolver.aromaticity.project(&mut checked),
+            resolver.aromaticity.project_into(&mut checked),
             Ok(Solution::Determined(()))
         );
         assert!(!checked.has_aromatic_systems());
         group.bench_function(name, |b| {
             b.iter_batched_ref(
                 || source.clone(),
-                |molecule| resolver.aromaticity.project(black_box(molecule)).unwrap(),
+                |molecule| {
+                    resolver
+                        .aromaticity
+                        .project_into(black_box(molecule))
+                        .unwrap()
+                },
                 BatchSize::SmallInput,
             );
         });
@@ -136,14 +141,14 @@ fn bench_stereo_project(c: &mut Criterion) {
         assert!(source.has_stereo_atoms() || source.has_stereo_bonds());
         let mut checked = source.clone();
         assert_eq!(
-            resolver.stereo.project(&mut checked),
+            resolver.stereo.project_into(&mut checked),
             Ok(Solution::Determined(()))
         );
         assert!(!checked.has_stereo_atoms() && !checked.has_stereo_bonds());
         group.bench_function(name, |b| {
             b.iter_batched_ref(
                 || source.clone(),
-                |molecule| resolver.stereo.project(black_box(molecule)).unwrap(),
+                |molecule| resolver.stereo.project_into(black_box(molecule)).unwrap(),
                 BatchSize::SmallInput,
             );
         });
@@ -189,7 +194,7 @@ fn bench_project(c: &mut Criterion) {
                 let source = ingest_smiles(input).unwrap();
                 let mut checked = source.clone();
                 assert_eq!(
-                    resolver.project(&mut checked, ProjectFlags::all()),
+                    resolver.project_into(&mut checked, ProjectFlags::all()),
                     Ok(Solution::Determined(()))
                 );
                 assert!(
@@ -207,7 +212,7 @@ fn bench_project(c: &mut Criterion) {
                             || source.clone(),
                             |molecule| {
                                 resolver
-                                    .project(black_box(molecule), ProjectFlags::all())
+                                    .project_into(black_box(molecule), ProjectFlags::all())
                                     .unwrap()
                             },
                             BatchSize::SmallInput,
@@ -240,12 +245,12 @@ fn bench_resolve_project_ownership(c: &mut Criterion) {
         let projected = ingest_smiles(smiles).unwrap();
         let mut checked = raw.clone();
         assert!(matches!(
-            resolver.resolve(&mut checked).unwrap(),
+            resolver.resolve_into(&mut checked).unwrap(),
             Solution::Determined(_)
         ));
         let mut checked = projected.clone();
         assert_eq!(
-            resolver.project(&mut checked, ProjectFlags::all()),
+            resolver.project_into(&mut checked, ProjectFlags::all()),
             Ok(Solution::Determined(()))
         );
         for (ownership, unique) in [("unique", true), ("shared", false)] {
@@ -261,7 +266,7 @@ fn bench_resolve_project_ownership(c: &mut Criterion) {
                                 raw.clone()
                             }
                         },
-                        |molecule| black_box(resolver.resolve(molecule).unwrap()),
+                        |molecule| black_box(resolver.resolve_into(molecule).unwrap()),
                         BatchSize::SmallInput,
                     );
                 },
@@ -278,7 +283,11 @@ fn bench_resolve_project_ownership(c: &mut Criterion) {
                             }
                         },
                         |molecule| {
-                            black_box(resolver.project(molecule, ProjectFlags::all()).unwrap())
+                            black_box(
+                                resolver
+                                    .project_into(molecule, ProjectFlags::all())
+                                    .unwrap(),
+                            )
                         },
                         BatchSize::SmallInput,
                     );

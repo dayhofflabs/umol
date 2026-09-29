@@ -27,7 +27,7 @@ impl BondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `molecule`.
-    pub fn plan(&self, molecule: &Molecule) -> Edits {
+    pub fn plan_resolve(&self, molecule: &Molecule) -> Edits {
         let mut edits = Edits::new();
         for bond_id in molecule.bonds().ids() {
             let bond = molecule.bond(bond_id).attributes();
@@ -49,12 +49,42 @@ impl BondsResolver {
         edits
     }
 
-    /// Plan and atomically apply localized-bond defaults.
+    /// Resolves the molecule, consuming its storage without a recovery journal.
+    ///
+    /// Uses the same plan as [BondsResolver::resolve_into]. A determined result has checked
+    /// molecule integrity. Rejection drops the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns BondsError::Apply if application or the final integrity check fails.
     pub fn resolve(
+        &self,
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, BondsContradiction, ()>, BondsError> {
+        let edits = self.plan_resolve(&molecule);
+        let molecule = molecule
+            .edit()
+            .apply(edits)?
+            .finish()
+            .map_err(MoleculeApplyError::from)?;
+        Ok(Solution::Determined(molecule))
+    }
+
+    /// Plan and atomically apply localized-bond defaults.
+    ///
+    /// # Semantic properties
+    ///
+    /// Only Determined retains changes. Every other outcome preserves the molecule
+    /// under Molecule::normalized_eq, including participant order.
+    ///
+    /// # Errors
+    ///
+    /// Returns BondsError::Apply if application or the final integrity check fails.
+    pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), BondsContradiction>, BondsError> {
-        let edits = self.plan(molecule);
+        let edits = self.plan_resolve(molecule);
         molecule.transact([edits])?;
         Ok(Solution::Determined(()))
     }
@@ -101,14 +131,14 @@ mod tests {
             },
         }])
     )]
-    fn test_bonds_resolver_plan(#[case] molecule: Molecule, #[case] expected: Edits) {
-        assert_eq!(BondsResolver::new().plan(&molecule), expected);
+    fn test_bonds_resolver_plan_resolve(#[case] molecule: Molecule, #[case] expected: Edits) {
+        assert_eq!(BondsResolver::new().plan_resolve(&molecule), expected);
     }
 
     #[rstest]
     #[case::determined(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#c+#u2#s1"]]}"#))]
-    fn test_bonds_resolver_plan_identity(#[case] molecule: Molecule) {
-        assert_eq!(BondsResolver::new().plan(&molecule), Edits::new());
+    fn test_bonds_resolver_plan_resolve_identity(#[case] molecule: Molecule) {
+        assert_eq!(BondsResolver::new().plan_resolve(&molecule), Edits::new());
     }
 
     #[rstest]
@@ -118,18 +148,28 @@ mod tests {
     )]
     fn test_bonds_resolver_resolve(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
         assert_eq!(
-            BondsResolver::new().resolve(&mut molecule),
+            BondsResolver::new().resolve(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            BondsResolver::new().resolve_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
     }
 
     #[rstest]
-    fn test_bonds_resolver_plan_stale() {
+    fn test_bonds_resolver_plan_resolve_stale() {
         let mut molecule = mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
-        let edits = BondsResolver::new().plan(&molecule);
+        let edits = BondsResolver::new().plan_resolve(&molecule);
         molecule.bond_mut(BondId(1)).attributes_mut().charge = NumForm::Lit(9);
         let expected = molecule.clone();
+        assert_eq!(
+            molecule.clone().edit().apply(edits.clone()).map(|_| ()),
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch
+            ))
+        );
         assert_eq!(
             molecule.transact([edits]),
             Err(MoleculeApplyError::Transaction(

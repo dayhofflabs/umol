@@ -13,7 +13,7 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
-## Design status — 2026-09-28
+## Design status — 2026-09-29
 
 This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
 S2a, the revised S2b, S2c, S2d, S2g, S2h, and S2i1 are implemented. The previous S2b mutable-view
@@ -52,7 +52,9 @@ S6b1 migrates graph-ir callers and removes editor session correspondence. S6b2
 rewrites combine_from to append through Molecule methods. S6c1 implements the
 transformation plans and borrowed execution. S6c2 completes the remaining Rust
 caller migration. S6d1–S6d3 complete Python Molecule consumption, fallible owner
-access, and editor finish; the S6 workspace gate passes. S7a is next.
+access, and editor finish; the S6 workspace gate passes. S7a implements consuming
+resolve/project and recovering resolve_into/project_into, with shared phase plans.
+S7b is next: separate opt-in reporting from the composite resolver's borrowed path.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -6429,7 +6431,7 @@ temporary cloning adapters is not a way to close an earlier subitem.
 
 S7a–S7d form one public signature/result migration, returning green at S7d.
 
-- **S7a** (`umol-graph::ops::resolve` and phase modules; breaking, green at S7d)
+- **S7a — completed 2026-09-29** (`umol-graph::ops::resolve` and phase modules; breaking, green at S7d)
   Reuse S5c's shared planning and plan_project methods, rename phase `plan` to
   `plan_resolve`, and implement consuming `resolve`/`project` alongside
   recovering `resolve_into`/`project_into`. Preserve phase order, rejection
@@ -6461,6 +6463,26 @@ S7a–S7d form one public signature/result migration, returning green at S7d.
   signatures and immutable/no-op behavior; there is no invented valence edit
   path. An underdetermined consuming operation returns (), dropping its input;
   borrowed underdetermination preserves the receiver as already specified.
+
+  **Implementation and verification:** All five standalone resolvers and the
+  composite resolver expose the ownership split above; isotope/aromaticity/stereo
+  and composite projection expose both routes. Consuming execution uses one owning
+  editor without a recovery copy or journal; borrowed execution uses a transaction.
+  Every successful route finishes/commits, including empty plans. The first selected
+  projection phase plans against the original input; later phases use checked probes.
+  Existing callers and benchmarks use the renamed borrowed methods. S7b owns the
+  report split: composite resolve_into still returns its existing ResolveReport;
+  the new consuming resolve returns Molecule or payload-free underdetermination.
+  S7c/S7d own boundary and Python lifecycle changes.
+
+  Both ownership routes are covered by expected-result and rejection cases, including
+  late-phase failures, stale plans, all projection flag combinations, and output
+  integrity. Error conversions preserve MoleculeApplyError through each phase's error
+  type; no integrity predicate or error type changed. Validation: 1,979 graph unit
+  tests, 683 resolution conformance cases, and 14 resolver/projection/isotope
+  properties pass. Graph all-feature/all-target strict Clippy and warnings-denied
+  rustdoc pass; the Python caller compiles under Python 3.13. Nightly formatting and
+  diff review pass. Timing comparisons remain in S9b; scratch is empty.
 
 - **S7b** (`umol-graph::ops::resolve`; breaking, green at S7d) Make reports opt-in
   with `resolve_with_report` and `resolve_into_with_report`; avoid default

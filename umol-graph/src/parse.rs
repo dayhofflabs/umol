@@ -48,7 +48,7 @@ pub fn parse_mol_bytes_with(
 ) -> Result<Molecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
     let mut molecule: Molecule = (&table_mol).try_into_ir(&())?;
-    match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
+    match Resolver::with_config(model, *resolve_config).resolve_into(&mut molecule)? {
         Solution::Determined(_) => Ok(molecule),
         Solution::Underdetermined(report) => Err(Box::new(ResolveUnderdetermined { report })),
         Solution::Contradictory(c) => Err(Box::new(c)),
@@ -102,7 +102,7 @@ mod tests {
             },
             ..ChemistryModel::default()
         };
-        Resolver::new(&model).resolve(&mut molecule).unwrap();
+        Resolver::new(&model).resolve_into(&mut molecule).unwrap();
         assert_eq!(molecule.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
             assert_eq!(

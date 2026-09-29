@@ -9,6 +9,7 @@ use umol_graph::ops::transform::{
     Aromatizer, DelocalizeCharge, KekulizeConfig, Kekulizer, MaximumMatchingAlgorithm, Transformer,
 };
 use umol_graph_ir::ir::{AtomId, Molecule};
+use umol_utils::solution::Solution;
 
 fn molecule_from_smiles(source: &str) -> Molecule {
     ingest_smiles(source).expect("publication-property SMILES fixture resolves")
@@ -77,8 +78,15 @@ proptest! {
             valence: ValenceModel::smiles(),
             ..ChemistryModel::default()
         };
-        Resolver::new(&model)
-            .resolve(&mut source)
+        let resolver = Resolver::new(&model);
+        let consumed = resolver.resolve(source.clone())
+            .map_err(|error| TestCaseError::fail(format!("resolution failed: {error}")))?;
+        let Solution::Determined(published) = consumed else {
+            return Err(TestCaseError::fail("resolved input must remain determined"));
+        };
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
+        resolver
+            .resolve_into(&mut source)
             .map_err(|error| TestCaseError::fail(format!("resolution failed: {error}")))?;
 
         prop_assert_eq!(source.clone().edit().finish(), Ok(source));

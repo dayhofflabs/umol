@@ -108,7 +108,7 @@ impl StereoResolver {
     }
 
     /// Construct the complete stereo edit plan without mutating `molecule`.
-    pub fn plan(
+    pub fn plan_resolve(
         &self,
         molecule: &Molecule,
     ) -> Result<Solution<Edits, StereoContradiction>, StereoError> {
@@ -378,12 +378,48 @@ impl StereoResolver {
         Ok(Solution::Determined(edits))
     }
 
-    /// Plan and atomically apply structural stereo resolution.
+    /// Resolves the molecule, consuming its storage without a recovery journal.
+    ///
+    /// Uses the same plan as [StereoResolver::resolve_into]. A determined result has checked
+    /// molecule integrity. Rejection drops the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the planning or application error, including failure of the final integrity check.
     pub fn resolve(
+        &self,
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, StereoContradiction, ()>, StereoError> {
+        let edits = match self.plan_resolve(&molecule)? {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        let molecule = molecule
+            .edit()
+            .apply(edits)?
+            .finish()
+            .map_err(MoleculeApplyError::from)?;
+        Ok(Solution::Determined(molecule))
+    }
+
+    /// Plan and atomically apply structural stereo resolution.
+    ///
+    /// # Semantic properties
+    ///
+    /// Only Determined retains changes. Every other outcome preserves the molecule
+    /// under Molecule::normalized_eq, including participant order.
+    ///
+    /// # Errors
+    ///
+    /// Returns StereoError for planning, application, or final integrity-check failure.
+    pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), StereoContradiction>, StereoError> {
-        let edits = match self.plan(molecule)? {
+        let edits = match self.plan_resolve(molecule)? {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
@@ -392,6 +428,27 @@ impl StereoResolver {
         };
         molecule.transact([edits])?;
         Ok(Solution::Determined(()))
+    }
+
+    /// Projects the molecule, consuming its storage without a recovery journal.
+    ///
+    /// Uses the same plan as [StereoResolver::project_into]. A determined result has checked
+    /// molecule integrity. Rejection drops the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the planning or application error, including failure of the final integrity check.
+    pub fn project(
+        &self,
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, StereoContradiction, ()>, StereoProjectError> {
+        let edits = self.plan_project(&molecule)?;
+        let molecule = molecule
+            .edit()
+            .apply(edits)?
+            .finish()
+            .map_err(MoleculeApplyError::from)?;
+        Ok(Solution::Determined(molecule))
     }
 
     /// Replaces tetrahedral and cis-trans entities with their fixed-frame #T and #C assertions.
@@ -408,21 +465,19 @@ impl StereoResolver {
     ///
     /// Projection is idempotent. Transporting an entity's configuration together with its
     /// ligand frame preserves the resulting assertion. Other atom and bond fields are unchanged.
-    /// Success publishes all edits together; every error preserves the input exactly.
+    /// Success publishes all edits together; every error preserves the input under Molecule::normalized_eq.
     ///
     /// # Errors
     ///
     /// Rejects unsupported or undetermined kinds, unavailable model reference frames, ligand
     /// frames that cannot transport to those references, and conflicting existing assertions.
     /// Apply reports an edit-application or final integrity-check failure.
-    pub fn project(
+    pub fn project_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), StereoContradiction>, StereoProjectError> {
         let edits = self.plan_project(molecule)?;
-        if !edits.is_empty() {
-            molecule.transact([edits])?;
-        }
+        molecule.transact([edits])?;
         Ok(Solution::Determined(()))
     }
 
@@ -681,13 +736,13 @@ mod tests {
             new: None,
         }])
     )]
-    fn test_stereo_resolver_plan(
+    fn test_stereo_resolver_plan_resolve(
         stereo_model: StereoModel,
         #[case] molecule: Molecule,
         #[case] expected: Edits,
     ) {
         assert_eq!(
-            StereoResolver::new(&stereo_model).plan(&molecule),
+            StereoResolver::new(&stereo_model).plan_resolve(&molecule),
             Ok(Solution::Determined(expected))
         );
     }
@@ -720,7 +775,7 @@ mod tests {
             new: None,
         }])
     )]
-    fn test_stereo_resolver_plan_stereo_bond_minimum_ring_size(
+    fn test_stereo_resolver_plan_resolve_stereo_bond_minimum_ring_size(
         #[case] stereo_bond_minimum_ring_size: u32,
         #[case] molecule: Molecule,
         #[case] expected: Edits,
@@ -730,7 +785,7 @@ mod tests {
             ..StereoModel::default()
         };
         assert_eq!(
-            StereoResolver::new(&model).plan(&molecule),
+            StereoResolver::new(&model).plan_resolve(&molecule),
             Ok(Solution::Determined(expected))
         );
     }
@@ -744,9 +799,12 @@ mod tests {
         :atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
         :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]
     }"#))]
-    fn test_stereo_resolver_plan_partial(stereo_model: StereoModel, #[case] molecule: Molecule) {
+    fn test_stereo_resolver_plan_resolve_partial(
+        stereo_model: StereoModel,
+        #[case] molecule: Molecule,
+    ) {
         assert_eq!(
-            StereoResolver::new(&stereo_model).plan(&molecule),
+            StereoResolver::new(&stereo_model).plan_resolve(&molecule),
             Ok(Solution::Underdetermined(Edits::new()))
         );
     }
@@ -759,9 +817,12 @@ mod tests {
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
     }"#))]
-    fn test_stereo_resolver_plan_identity(stereo_model: StereoModel, #[case] molecule: Molecule) {
+    fn test_stereo_resolver_plan_resolve_identity(
+        stereo_model: StereoModel,
+        #[case] molecule: Molecule,
+    ) {
         assert_eq!(
-            StereoResolver::new(&stereo_model).plan(&molecule),
+            StereoResolver::new(&stereo_model).plan_resolve(&molecule),
             Ok(Solution::Determined(Edits::new()))
         );
     }
@@ -825,7 +886,7 @@ mod tests {
             StereoInconsistency::CisTransStereoFailure { bond: BondId(1) }
         ))
     )]
-    fn test_stereo_resolver_plan_constraint_failure(
+    fn test_stereo_resolver_plan_resolve_constraint_failure(
         stereo_model: StereoModel,
         #[case] policy: StereoFailurePolicy,
         #[case] molecule: Molecule,
@@ -840,7 +901,7 @@ mod tests {
                     ..StereoResolveConfig::default()
                 },
             )
-            .plan(&molecule),
+            .plan_resolve(&molecule),
             Ok(expected)
         );
     }
@@ -874,7 +935,7 @@ mod tests {
             )],
         }]))
     )]
-    fn test_stereo_resolver_plan_stereo_atom_failure(
+    fn test_stereo_resolver_plan_resolve_stereo_atom_failure(
         stereo_model: StereoModel,
         tetrahedral_entity_failure_molecule: Molecule,
         #[case] policy: StereoFailurePolicy,
@@ -888,7 +949,7 @@ mod tests {
                     ..StereoResolveConfig::default()
                 },
             )
-            .plan(&tetrahedral_entity_failure_molecule),
+            .plan_resolve(&tetrahedral_entity_failure_molecule),
             Ok(expected)
         );
     }
@@ -925,7 +986,7 @@ mod tests {
             )],
         }]))
     )]
-    fn test_stereo_resolver_plan_stereo_bond_failure(
+    fn test_stereo_resolver_plan_resolve_stereo_bond_failure(
         stereo_model: StereoModel,
         cis_trans_entity_failure_molecule: Molecule,
         #[case] policy: StereoFailurePolicy,
@@ -939,7 +1000,7 @@ mod tests {
                     ..StereoResolveConfig::default()
                 },
             )
-            .plan(&cis_trans_entity_failure_molecule),
+            .plan_resolve(&cis_trans_entity_failure_molecule),
             Ok(expected)
         );
     }
@@ -1027,7 +1088,7 @@ mod tests {
             },
         ]))
     )]
-    fn test_stereo_resolver_plan_tetrahedral_mismatch(
+    fn test_stereo_resolver_plan_resolve_tetrahedral_mismatch(
         stereo_model: StereoModel,
         tetrahedral_mismatch_molecule: Molecule,
         #[case] policy: StereoMismatchPolicy,
@@ -1041,7 +1102,7 @@ mod tests {
                     ..StereoResolveConfig::default()
                 },
             )
-            .plan(&tetrahedral_mismatch_molecule),
+            .plan_resolve(&tetrahedral_mismatch_molecule),
             Ok(expected)
         );
     }
@@ -1138,7 +1199,7 @@ mod tests {
             },
         ]))
     )]
-    fn test_stereo_resolver_plan_cis_trans_mismatch(
+    fn test_stereo_resolver_plan_resolve_cis_trans_mismatch(
         stereo_model: StereoModel,
         cis_trans_mismatch_molecule: Molecule,
         #[case] policy: StereoMismatchPolicy,
@@ -1152,7 +1213,7 @@ mod tests {
                     ..StereoResolveConfig::default()
                 },
             )
-            .plan(&cis_trans_mismatch_molecule),
+            .plan_resolve(&cis_trans_mismatch_molecule),
             Ok(expected)
         );
     }
@@ -1207,7 +1268,7 @@ mod tests {
             )],
         }])
     )]
-    fn test_stereo_resolver_plan_not_stereo_mismatch(
+    fn test_stereo_resolver_plan_resolve_not_stereo_mismatch(
         stereo_model: StereoModel,
         #[case] molecule: Molecule,
         #[case] expected: Edits,
@@ -1221,7 +1282,7 @@ mod tests {
                     ..StereoResolveConfig::default()
                 },
             )
-            .plan(&molecule),
+            .plan_resolve(&molecule),
             Ok(Solution::Determined(expected))
         );
     }
@@ -1258,7 +1319,11 @@ mod tests {
             },
         );
         assert_eq!(
-            resolver.resolve(&mut molecule),
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
@@ -1286,7 +1351,11 @@ mod tests {
     ) {
         let original = molecule.clone();
         assert_eq!(
-            StereoResolver::new(&stereo_model).resolve(&mut molecule),
+            StereoResolver::new(&stereo_model).resolve(molecule.clone()),
+            Ok(Solution::Contradictory(expected.clone()))
+        );
+        assert_eq!(
+            StereoResolver::new(&stereo_model).resolve_into(&mut molecule),
             Ok(Solution::Contradictory(expected))
         );
         assert_eq!(molecule, original);
@@ -1358,12 +1427,16 @@ mod tests {
         };
         let resolver = StereoResolver::with_config(&stereo_model, config);
         assert_eq!(
-            resolver.project(&mut molecule),
+            resolver.project(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            resolver.project_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
         assert_eq!(
-            resolver.project(&mut molecule),
+            resolver.project_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
@@ -1378,7 +1451,11 @@ mod tests {
     ) {
         let original = molecule.clone();
         assert_eq!(
-            StereoResolver::new(&stereo_model).project(&mut molecule),
+            StereoResolver::new(&stereo_model).project(molecule.clone()),
+            Ok(Solution::Determined(original.clone()))
+        );
+        assert_eq!(
+            StereoResolver::new(&stereo_model).project_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, original);
@@ -1453,7 +1530,8 @@ mod tests {
             },
         );
         let original = molecule.clone();
-        assert_eq!(resolver.project(&mut molecule), Err(expected));
+        assert_eq!(resolver.project(molecule.clone()), Err(expected.clone()));
+        assert_eq!(resolver.project_into(&mut molecule), Err(expected));
         assert_eq!(molecule, original);
     }
 
@@ -1475,7 +1553,11 @@ mod tests {
         model.kind_models[kind as usize] = None;
         let original = molecule.clone();
         assert_eq!(
-            StereoResolver::new(&model).project(&mut molecule),
+            StereoResolver::new(&model).project(molecule.clone()),
+            Err(expected.clone())
+        );
+        assert_eq!(
+            StereoResolver::new(&model).project_into(&mut molecule),
             Err(expected)
         );
         assert_eq!(molecule, original);
@@ -1514,7 +1596,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            StereoResolver::new(&model.stereo).project(&mut molecule),
+            StereoResolver::new(&model.stereo).project(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            StereoResolver::new(&model.stereo).project_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);

@@ -26,7 +26,8 @@ pub enum IsotopePolicy {
 ///
 /// Resolution is idempotent and preserves every supplied non-Undetermined isotope.
 /// It publishes changes only when every isotope is ground after completion.
-/// Underdetermination and errors preserve the caller's molecule exactly.
+/// resolve_into preserves the caller's molecule on underdetermination or error;
+/// resolve consumes it on every outcome.
 ///
 /// For every molecule with ground isotope fields, successful projection followed
 /// by resolution under the same policy recovers the original molecule exactly.
@@ -67,7 +68,7 @@ impl IsotopeResolver {
     /// Under Natural, only Undetermined becomes Natural. Strict makes no edits.
     /// Remaining non-ground isotopes yield Underdetermined with any proposed
     /// default edits retained in the plan.
-    pub fn plan(&self, molecule: &Molecule) -> Solution<Edits, IsotopeContradiction> {
+    pub fn plan_resolve(&self, molecule: &Molecule) -> Solution<Edits, IsotopeContradiction> {
         let mut edits = Edits::new();
         let mut determined = true;
         for atom in molecule.atoms().iter() {
@@ -93,6 +94,31 @@ impl IsotopeResolver {
         }
     }
 
+    /// Resolves the molecule, consuming its storage without a recovery journal.
+    ///
+    /// Uses the same plan as [IsotopeResolver::resolve_into]. A determined result has checked
+    /// molecule integrity. Rejection drops the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns IsotopeError::Apply if application or the final integrity check fails.
+    pub fn resolve(
+        &self,
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, IsotopeContradiction, ()>, IsotopeError> {
+        let edits = match self.plan_resolve(&molecule) {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => match contradiction {},
+        };
+        let molecule = molecule
+            .edit()
+            .apply(edits)?
+            .finish()
+            .map_err(MoleculeApplyError::from)?;
+        Ok(Solution::Determined(molecule))
+    }
+
     /// Plans and atomically applies a determined isotope completion.
     ///
     /// Underdetermination leaves the entire molecule unchanged, including fields
@@ -101,19 +127,38 @@ impl IsotopeResolver {
     /// # Errors
     ///
     /// Returns IsotopeError::Apply if edit application or the final integrity check fails.
-    pub fn resolve(
+    pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), IsotopeContradiction>, IsotopeError> {
-        let edits = match self.plan(molecule) {
+        let edits = match self.plan_resolve(molecule) {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => match contradiction {},
         };
-        if !edits.is_empty() {
-            molecule.transact([edits])?;
-        }
+        molecule.transact([edits])?;
         Ok(Solution::Determined(()))
+    }
+
+    /// Projects the molecule, consuming its storage without a recovery journal.
+    ///
+    /// Uses the same plan as [IsotopeResolver::project_into]. A determined result has checked
+    /// molecule integrity. Rejection drops the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the planning or application error, including failure of the final integrity check.
+    pub fn project(
+        &self,
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, IsotopeContradiction, ()>, IsotopeProjectError> {
+        let edits = self.plan_project(&molecule)?;
+        let molecule = molecule
+            .edit()
+            .apply(edits)?
+            .finish()
+            .map_err(MoleculeApplyError::from)?;
+        Ok(Solution::Determined(molecule))
     }
 
     /// Elides Natural isotope composition when this policy restores it on resolution.
@@ -126,15 +171,14 @@ impl IsotopeResolver {
     ///
     /// Returns IsotopeProjectError::NonGroundIsotope for the first atom whose
     /// isotope is Undetermined, a set, or a variable, or Apply if edit application
-    /// or the final integrity check fails. Every error preserves the caller's molecule.
-    pub fn project(
+    /// or the final integrity check fails. Every error preserves the caller's molecule
+    /// under Molecule::normalized_eq.
+    pub fn project_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), IsotopeContradiction>, IsotopeProjectError> {
         let edits = self.plan_project(molecule)?;
-        if !edits.is_empty() {
-            molecule.transact([edits])?;
-        }
+        molecule.transact([edits])?;
         Ok(Solution::Determined(()))
     }
 
@@ -214,23 +258,26 @@ mod tests {
             },
         ])),
     )]
-    fn test_isotope_resolver_plan(
+    fn test_isotope_resolver_plan_resolve(
         #[case] policy: IsotopePolicy,
         #[case] molecule: Molecule,
         #[case] expected: Solution<Edits, IsotopeContradiction>,
     ) {
-        assert_eq!(IsotopeResolver::new(policy).plan(&molecule), expected);
+        assert_eq!(
+            IsotopeResolver::new(policy).plan_resolve(&molecule),
+            expected
+        );
     }
 
     #[rstest]
     #[case::empty(Molecule::new())]
     #[case::ground(mol_dsl!(r#"{:atoms ["C#i=" "C#i13"]}"#))]
-    fn test_isotope_resolver_plan_identity(
+    fn test_isotope_resolver_plan_resolve_identity(
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] policy: IsotopePolicy,
         #[case] molecule: Molecule,
     ) {
         assert_eq!(
-            IsotopeResolver::new(policy).plan(&molecule),
+            IsotopeResolver::new(policy).plan_resolve(&molecule),
             Solution::Determined(Edits::new()),
         );
     }
@@ -241,7 +288,7 @@ mod tests {
     #[case::empty_set(IsotopeMassForm::lit_set([]))]
     #[case::variable(IsotopeMassForm::var("mass"))]
     #[case::restricted_variable(IsotopeMassForm::var_in("mass", [12, 13]))]
-    fn test_isotope_resolver_plan_partial(
+    fn test_isotope_resolver_plan_resolve_partial(
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] policy: IsotopePolicy,
         #[case] isotope: IsotopeMassForm,
     ) {
@@ -253,21 +300,27 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(
-            IsotopeResolver::new(policy).plan(&molecule),
+            IsotopeResolver::new(policy).plan_resolve(&molecule),
             Solution::Underdetermined(Edits::new()),
         );
     }
 
     #[rstest]
-    fn test_isotope_resolver_plan_stale() {
+    fn test_isotope_resolver_plan_resolve_stale() {
         let mut molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
         let Solution::Determined(edits) =
-            IsotopeResolver::new(IsotopePolicy::Natural).plan(&molecule)
+            IsotopeResolver::new(IsotopePolicy::Natural).plan_resolve(&molecule)
         else {
             panic!("fixture must produce a determined edit plan");
         };
         molecule.atom_mut(AtomId(1)).attributes_mut().isotope_mass = IsotopeMassForm::Lit(18);
         let expected = molecule.clone();
+        assert_eq!(
+            molecule.clone().edit().apply(edits.clone()).map(|_| ()),
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch
+            ))
+        );
         assert_eq!(
             molecule.transact([edits]),
             Err(MoleculeApplyError::Transaction(
@@ -288,7 +341,11 @@ mod tests {
     )]
     fn test_isotope_resolver_resolve(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
         assert_eq!(
-            IsotopeResolver::new(IsotopePolicy::Natural).resolve(&mut molecule),
+            IsotopeResolver::new(IsotopePolicy::Natural).resolve(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            IsotopeResolver::new(IsotopePolicy::Natural).resolve_into(&mut molecule),
             Ok(Solution::Determined(())),
         );
         assert_eq!(molecule, expected);
@@ -299,14 +356,14 @@ mod tests {
     #[case::ground(mol_dsl!(r#"{:atoms ["C#i=" "C#i13"]}"#), Solution::Determined(()))]
     #[case::variable(mol_dsl!(r#"{:atoms ["C#i?mass"]}"#), Solution::Underdetermined(()))]
     #[case::set(mol_dsl!(r#"{:atoms ["C#i{12,13}"]}"#), Solution::Underdetermined(()))]
-    fn test_isotope_resolver_resolve_identity(
+    fn test_isotope_resolver_resolve_into_identity(
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] policy: IsotopePolicy,
         #[case] mut molecule: Molecule,
         #[case] expected: Solution<(), IsotopeContradiction>,
     ) {
         let original = molecule.clone();
         assert_eq!(
-            IsotopeResolver::new(policy).resolve(&mut molecule),
+            IsotopeResolver::new(policy).resolve_into(&mut molecule),
             Ok(expected)
         );
         assert_eq!(molecule, original);
@@ -323,7 +380,11 @@ mod tests {
     ) {
         let original = molecule.clone();
         assert_eq!(
-            resolver.resolve(&mut molecule),
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule),
             Ok(Solution::Underdetermined(()))
         );
         assert_eq!(molecule, original);
@@ -340,7 +401,11 @@ mod tests {
     )]
     fn test_isotope_resolver_project(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
         assert_eq!(
-            IsotopeResolver::new(IsotopePolicy::Natural).project(&mut molecule),
+            IsotopeResolver::new(IsotopePolicy::Natural).project(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            IsotopeResolver::new(IsotopePolicy::Natural).project_into(&mut molecule),
             Ok(Solution::Determined(())),
         );
         assert_eq!(molecule, expected);
@@ -359,7 +424,11 @@ mod tests {
     ) {
         let original = molecule.clone();
         assert_eq!(
-            resolver.project(&mut molecule),
+            resolver.project(molecule.clone()),
+            Ok(Solution::Determined(original.clone()))
+        );
+        assert_eq!(
+            resolver.project_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, original);
@@ -391,7 +460,11 @@ mod tests {
         });
         let original = molecule.clone();
         assert_eq!(
-            IsotopeResolver::new(policy).project(&mut molecule),
+            IsotopeResolver::new(policy).project(molecule.clone()),
+            Err(IsotopeProjectError::NonGroundIsotope { atom: AtomId(1) }),
+        );
+        assert_eq!(
+            IsotopeResolver::new(policy).project_into(&mut molecule),
             Err(IsotopeProjectError::NonGroundIsotope { atom: AtomId(1) }),
         );
         assert_eq!(molecule, original);

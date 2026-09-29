@@ -286,7 +286,7 @@ proptest! {
 
 #[rstest]
 #[case::late_isotope("[13CH3][C@H](F)/C=C/c1ccccc1")]
-fn test_resolver_project_phase_error(#[case] smiles: &str) {
+fn test_resolver_project_into_phase_error(#[case] smiles: &str) {
     let source = ingest_smiles(smiles).unwrap();
     let mut editor = source.edit();
     editor.atom_mut(AtomId(0)).attributes_mut().isotope_mass = IsotopeMassForm::Undetermined;
@@ -295,7 +295,7 @@ fn test_resolver_project_phase_error(#[case] smiles: &str) {
     let model = ChemistryModel::default();
 
     assert_eq!(
-        Resolver::new(&model).project(&mut molecule, ProjectFlags::all()),
+        Resolver::new(&model).project_into(&mut molecule, ProjectFlags::all()),
         Err(ProjectError::Isotope(
             IsotopeProjectError::NonGroundIsotope { atom: AtomId(0) }
         ))
@@ -327,19 +327,20 @@ proptest! {
             let flags = ProjectFlags::from_bits_retain(bits);
             let mut expected = original.clone();
             if flags.contains(ProjectFlags::STEREO) {
-                prop_assert_eq!(resolver.stereo.project(&mut expected), Ok(Solution::Determined(())));
+                prop_assert_eq!(resolver.stereo.project_into(&mut expected), Ok(Solution::Determined(())));
             }
             if flags.contains(ProjectFlags::AROMATICITY) {
-                prop_assert_eq!(resolver.aromaticity.project(&mut expected), Ok(Solution::Determined(())));
+                prop_assert_eq!(resolver.aromaticity.project_into(&mut expected), Ok(Solution::Determined(())));
             }
             if flags.contains(ProjectFlags::VALENCE) {
                 prop_assert_eq!(resolver.valence.project(&mut expected, model.valence.tie_break), Ok(Solution::Determined(())));
             }
             if flags.contains(ProjectFlags::ISOTOPE) {
-                prop_assert_eq!(resolver.isotope.project(&mut expected), Ok(Solution::Determined(())));
+                prop_assert_eq!(resolver.isotope.project_into(&mut expected), Ok(Solution::Determined(())));
             }
+            prop_assert_eq!(resolver.project(original.clone(), flags), Ok(Solution::Determined(expected.clone())));
             let mut projected = original.clone();
-            prop_assert_eq!(resolver.project(&mut projected, flags), Ok(Solution::Determined(())));
+            prop_assert_eq!(resolver.project_into(&mut projected, flags), Ok(Solution::Determined(())));
             prop_assert_eq!(&projected, &expected);
             let retained = projected.atoms().iter().map(|atom| atom.implicit_hydrogens().clone()).collect::<Vec<_>>();
             prop_assert_eq!(&retained, &hydrogens);
@@ -347,7 +348,7 @@ proptest! {
     }
 
     #[test]
-    fn test_resolver_project_input(
+    fn test_resolver_project_into_input(
         mass in prop::sample::select(vec![None, Some(13u32), Some(14u32)]),
         clockwise in any::<bool>(), trans in any::<bool>(),
         natural in any::<bool>(), typing in any::<bool>(),
@@ -384,12 +385,12 @@ proptest! {
         editor.bond_mut(BondId(3)).attributes_mut().constraints.set(BondConstraintForm::CisTransStereo(
             CisTransStereoForm::Stereo(StereoCoset::Lit(u32::from(trans)))));
         let expected = editor.finish().unwrap();
-        prop_assert_eq!(Resolver::with_config(&model, config).project(&mut molecule, ProjectFlags::all()), Ok(Solution::Determined(())));
+        prop_assert_eq!(Resolver::with_config(&model, config).project_into(&mut molecule, ProjectFlags::all()), Ok(Solution::Determined(())));
         prop_assert_eq!(molecule, expected);
     }
 
     #[test]
-    fn test_aromaticity_resolver_project(
+    fn test_aromaticity_resolver_project_into(
         rings in prop::collection::vec((0u8..5, 0usize..6, any::<bool>()), 1..5),
         typing in any::<bool>(),
     ) {
@@ -450,20 +451,20 @@ proptest! {
         let resolver = Resolver::new(&model);
         let mut molecule = Molecule::from_entries(entries);
         let expected_projection = Molecule::from_entries(expected.clone());
-        prop_assert_eq!(resolver.aromaticity.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.aromaticity.project_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(&molecule, &expected_projection);
-        prop_assert_eq!(resolver.aromaticity.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.aromaticity.project_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(molecule, expected_projection);
 
         let mut ingested = ingest_smiles_with(&smiles.join("."), &SmilesIoConfig::opensmiles(),
             &model, &ResolveConfig::default()).unwrap();
-        prop_assert_eq!(resolver.aromaticity.project(&mut ingested), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.aromaticity.project_into(&mut ingested), Ok(Solution::Determined(())));
         expected.bonds = parsed_bonds;
         prop_assert_eq!(ingested, Molecule::from_entries(expected));
     }
 
     #[test]
-    fn test_stereo_resolver_project_tetrahedral(
+    fn test_stereo_resolver_project_into_tetrahedral(
         kind in 0u8..4,
         permutation in Just(vec![0usize, 1, 2, 3]).prop_shuffle(),
         coset in 0u32..2,
@@ -505,14 +506,14 @@ proptest! {
         let expected = editor.finish().unwrap();
         let model = ChemistryModel::default();
         let resolver = Resolver::new(&model);
-        prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.stereo.project_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(&molecule, &expected);
-        prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.stereo.project_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(molecule, expected);
     }
 
     #[test]
-    fn test_stereo_resolver_project_cis_trans(
+    fn test_stereo_resolver_project_into_cis_trans(
         kind in 0u8..3,
         first_swap in any::<bool>(), second_swap in any::<bool>(), endpoints_swap in any::<bool>(),
         coset in 0u32..2, open in any::<bool>(),
@@ -554,9 +555,9 @@ proptest! {
         let expected = editor.finish().unwrap();
         let model = ChemistryModel::default();
         let resolver = Resolver::new(&model);
-        prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.stereo.project_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(&molecule, &expected);
-        prop_assert_eq!(resolver.stereo.project(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(resolver.stereo.project_into(&mut molecule), Ok(Solution::Determined(())));
         prop_assert_eq!(molecule, expected);
     }
 
@@ -593,7 +594,7 @@ proptest! {
         let io = SmilesIoConfig::opensmiles();
         let mut source = parse_mol_to_ir(&input).unwrap();
         let raised = source.clone();
-        let result = Resolver::with_config(&model, config).resolve(&mut source).unwrap();
+        let result = Resolver::with_config(&model, config).resolve_into(&mut source).unwrap();
         if state == 3 {
             prop_assert_eq!(result, Solution::Underdetermined(ResolveReport::default()));
             prop_assert_eq!(source, raised);

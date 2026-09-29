@@ -20,7 +20,7 @@ proptest! {
     // Fixed-H carbon chains separate isotope policy from valence selection. Exact
     // publication/nonpublication and idempotence are checked for every policy/model pair.
     #[test]
-    fn test_resolver_resolve_isotope(
+    fn test_resolver_resolve_into_isotope(
         isotopes in prop::collection::vec(prop_oneof![
             Just(IsotopeMassForm::Undetermined), Just(IsotopeMassForm::Natural),
             (12u32..15).prop_map(IsotopeMassForm::Lit),
@@ -58,7 +58,7 @@ proptest! {
                 for isotope in [IsotopePolicy::Strict, IsotopePolicy::Natural] {
                     let resolver = Resolver::with_config(&model, ResolveConfig { isotope, ..Default::default() });
                     let mut molecule = source.clone();
-                    let result = resolver.resolve(&mut molecule).unwrap();
+                    let result = resolver.resolve_into(&mut molecule).unwrap();
                     if isotope == IsotopePolicy::Strict && omitted {
                         prop_assert_eq!(&result, &Solution::Underdetermined(ResolveReport::default()));
                         prop_assert_eq!(&molecule, &source);
@@ -67,7 +67,7 @@ proptest! {
                         prop_assert_eq!(&molecule, &expected);
                     }
                     let once = molecule.clone();
-                    prop_assert_eq!(resolver.resolve(&mut molecule), Ok(result));
+                    prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(result));
                     prop_assert_eq!(molecule, once);
                 }
             }
@@ -75,7 +75,7 @@ proptest! {
     }
 
     #[test]
-    fn test_isotope_resolver_project_roundtrip(
+    fn test_isotope_resolver_project_into_roundtrip(
         fields in prop::collection::vec((
             prop_oneof![Just(IsotopeMassForm::Natural), any::<u32>().prop_map(IsotopeMassForm::Lit)],
             -3i64..4,
@@ -104,15 +104,15 @@ proptest! {
                     }
                 }
             }
-            prop_assert_eq!(resolver.project(&mut projected), Ok(Solution::Determined(())));
+            prop_assert_eq!(resolver.project_into(&mut projected), Ok(Solution::Determined(())));
             prop_assert_eq!(&projected, &expected);
-            prop_assert_eq!(resolver.resolve(&mut projected), Ok(Solution::Determined(())));
+            prop_assert_eq!(resolver.resolve_into(&mut projected), Ok(Solution::Determined(())));
             prop_assert_eq!(&projected, &source);
         }
     }
 
     #[test]
-    fn test_isotope_resolver_resolve_idempotence(
+    fn test_isotope_resolver_resolve_into_idempotence(
         isotopes in prop::collection::vec(prop_oneof![
             Just(IsotopeMassForm::Undetermined),
             Just(IsotopeMassForm::Natural),
@@ -131,8 +131,8 @@ proptest! {
         for policy in [IsotopePolicy::Strict, IsotopePolicy::Natural] {
             let resolver = IsotopeResolver::new(policy);
             let mut resolved = source.clone();
-            let result = resolver.resolve(&mut resolved).unwrap();
-            match resolver.plan(&source) {
+            let result = resolver.resolve_into(&mut resolved).unwrap();
+            match resolver.plan_resolve(&source) {
                 Solution::Determined(edits) => {
                     let mut expected = source.clone();
                     expected.transact([edits]).unwrap();
@@ -146,7 +146,7 @@ proptest! {
                 Solution::Contradictory(contradiction) => match contradiction {},
             }
             let once = resolved.clone();
-            prop_assert_eq!(resolver.resolve(&mut resolved), Ok(result));
+            prop_assert_eq!(resolver.resolve_into(&mut resolved), Ok(result));
             prop_assert_eq!(resolved, once);
         }
     }

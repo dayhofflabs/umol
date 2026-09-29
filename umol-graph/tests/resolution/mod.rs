@@ -75,7 +75,7 @@ fn resolve_test(
             ..Default::default()
         },
     )
-    .resolve(&mut molecule)
+    .resolve_into(&mut molecule)
     {
         Ok(Solution::Determined(report)) => ResolveResult {
             success: true,

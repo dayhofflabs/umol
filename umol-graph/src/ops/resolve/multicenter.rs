@@ -33,7 +33,10 @@ impl MulticenterBondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `molecule`.
-    pub fn plan(&self, molecule: &Molecule) -> Solution<Edits, MulticenterBondsContradiction> {
+    pub fn plan_resolve(
+        &self,
+        molecule: &Molecule,
+    ) -> Solution<Edits, MulticenterBondsContradiction> {
         for atom in molecule.atoms().ids() {
             match IncidenceConstraintInvariantsValidator
                 .validate_molecule_atom_constraint(
@@ -75,12 +78,48 @@ impl MulticenterBondsResolver {
         Solution::Determined(edits)
     }
 
-    /// Plan and atomically apply multicenter-bond defaults.
+    /// Resolves the molecule, consuming its storage without a recovery journal.
+    ///
+    /// Uses the same plan as [MulticenterBondsResolver::resolve_into]. A determined result has checked
+    /// molecule integrity. Rejection drops the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns MulticenterBondsError::Apply if application or the final integrity check fails.
     pub fn resolve(
+        &self,
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, MulticenterBondsContradiction, ()>, MulticenterBondsError> {
+        let edits = match self.plan_resolve(&molecule) {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        let molecule = molecule
+            .edit()
+            .apply(edits)?
+            .finish()
+            .map_err(MoleculeApplyError::from)?;
+        Ok(Solution::Determined(molecule))
+    }
+
+    /// Plan and atomically apply multicenter-bond defaults.
+    ///
+    /// # Semantic properties
+    ///
+    /// Only Determined retains changes. Every other outcome preserves the molecule
+    /// under Molecule::normalized_eq, including participant order.
+    ///
+    /// # Errors
+    ///
+    /// Returns MulticenterBondsError::Apply if application or the final integrity check fails.
+    pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), MulticenterBondsContradiction>, MulticenterBondsError> {
-        let edits = match self.plan(molecule) {
+        let edits = match self.plan_resolve(molecule) {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
@@ -138,9 +177,12 @@ mod tests {
             },
         }])
     )]
-    fn test_multicenter_bonds_resolver_plan(#[case] molecule: Molecule, #[case] expected: Edits) {
+    fn test_multicenter_bonds_resolver_plan_resolve(
+        #[case] molecule: Molecule,
+        #[case] expected: Edits,
+    ) {
         assert_eq!(
-            MulticenterBondsResolver::new().plan(&molecule),
+            MulticenterBondsResolver::new().plan_resolve(&molecule),
             Solution::Determined(expected)
         );
     }
@@ -148,9 +190,9 @@ mod tests {
     #[rstest]
     #[case::determined(mol_dsl!(r#"{:atoms ["B" "H" "B"]
         :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]#c-#u2#s1"}]}"#))]
-    fn test_multicenter_bonds_resolver_plan_identity(#[case] molecule: Molecule) {
+    fn test_multicenter_bonds_resolver_plan_resolve_identity(#[case] molecule: Molecule) {
         assert_eq!(
-            MulticenterBondsResolver::new().plan(&molecule),
+            MulticenterBondsResolver::new().plan_resolve(&molecule),
             Solution::Determined(Edits::new())
         );
     }
@@ -176,11 +218,14 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C#m*"]}"#),
         Solution::Determined(Edits::new()),
     )]
-    fn test_multicenter_bonds_resolver_plan_constraints(
+    fn test_multicenter_bonds_resolver_plan_resolve_constraints(
         #[case] molecule: Molecule,
         #[case] expected: Solution<Edits, MulticenterBondsContradiction>,
     ) {
-        assert_eq!(MulticenterBondsResolver::new().plan(&molecule), expected);
+        assert_eq!(
+            MulticenterBondsResolver::new().plan_resolve(&molecule),
+            expected
+        );
     }
 
     #[rstest]
@@ -195,14 +240,18 @@ mod tests {
         #[case] expected: Molecule,
     ) {
         assert_eq!(
-            MulticenterBondsResolver::new().resolve(&mut molecule),
+            MulticenterBondsResolver::new().resolve(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            MulticenterBondsResolver::new().resolve_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
     }
 
     #[rstest]
-    fn test_multicenter_bonds_resolver_plan_stale() {
+    fn test_multicenter_bonds_resolver_plan_resolve_stale() {
         let mut molecule = mol_dsl!(
             r#"{
             :atoms ["B" "H" "B" "H" "B"]
@@ -212,7 +261,8 @@ mod tests {
             ]
         }"#
         );
-        let Solution::Determined(edits) = MulticenterBondsResolver::new().plan(&molecule) else {
+        let Solution::Determined(edits) = MulticenterBondsResolver::new().plan_resolve(&molecule)
+        else {
             panic!("fixture must produce a determined edit plan");
         };
         molecule
@@ -220,6 +270,12 @@ mod tests {
             .attributes_mut()
             .charge = NumForm::Lit(9);
         let expected = molecule.clone();
+        assert_eq!(
+            molecule.clone().edit().apply(edits.clone()).map(|_| ()),
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch
+            ))
+        );
         assert_eq!(
             molecule.transact([edits]),
             Err(MoleculeApplyError::Transaction(

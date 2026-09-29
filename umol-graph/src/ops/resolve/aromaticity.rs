@@ -115,7 +115,7 @@ impl AromaticityResolver {
     }
 
     /// Construct the complete aromaticity edit plan without mutating `molecule`.
-    pub fn plan(
+    pub fn plan_resolve(
         &self,
         molecule: &Molecule,
     ) -> Result<Solution<Edits, AromaticityContradiction>, AromaticityError> {
@@ -274,12 +274,48 @@ impl AromaticityResolver {
         }
     }
 
-    /// Plan and atomically apply aromaticity resolution.
+    /// Resolves the molecule, consuming its storage without a recovery journal.
+    ///
+    /// Uses the same plan as [AromaticityResolver::resolve_into]. A determined result has checked
+    /// molecule integrity. Rejection drops the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the planning or application error, including failure of the final integrity check.
     pub fn resolve(
+        &self,
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, AromaticityContradiction, ()>, AromaticityError> {
+        let edits = match self.plan_resolve(&molecule)? {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        let molecule = molecule
+            .edit()
+            .apply(edits)?
+            .finish()
+            .map_err(MoleculeApplyError::from)?;
+        Ok(Solution::Determined(molecule))
+    }
+
+    /// Plan and atomically apply aromaticity resolution.
+    ///
+    /// # Semantic properties
+    ///
+    /// Only Determined retains changes. Every other outcome preserves the molecule
+    /// under Molecule::normalized_eq, including participant order.
+    ///
+    /// # Errors
+    ///
+    /// Returns AromaticityError for planning, application, or final integrity-check failure.
+    pub fn resolve_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityError> {
-        let edits = match self.plan(molecule)? {
+        let edits = match self.plan_resolve(molecule)? {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
@@ -288,6 +324,27 @@ impl AromaticityResolver {
         };
         molecule.transact([edits])?;
         Ok(Solution::Determined(()))
+    }
+
+    /// Projects the molecule, consuming its storage without a recovery journal.
+    ///
+    /// Uses the same plan as [AromaticityResolver::project_into]. A determined result has checked
+    /// molecule integrity. Rejection drops the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the planning or application error, including failure of the final integrity check.
+    pub fn project(
+        &self,
+        molecule: Molecule,
+    ) -> Result<Solution<Molecule, AromaticityContradiction, ()>, AromaticityProjectError> {
+        let edits = self.plan_project(&molecule)?;
+        let molecule = molecule
+            .edit()
+            .apply(edits)?
+            .finish()
+            .map_err(MoleculeApplyError::from)?;
+        Ok(Solution::Determined(molecule))
     }
 
     /// Replaces existing aromatic systems with atom contribution and bond assertions.
@@ -301,22 +358,20 @@ impl AromaticityResolver {
     ///
     /// Projection is idempotent and independent of system participant order when electron
     /// counts are transported with their participants. Successful projection publishes all
-    /// edits together; every failure preserves the input exactly. System removal compacts
-    /// constraints that refer to the removed systems.
+    /// edits together; every failure preserves the input under Molecule::normalized_eq.
+    /// System removal compacts constraints that refer to the removed systems.
     ///
     /// # Errors
     ///
     /// Rejects non-concrete system contributions, charge, or spin; nonzero system charge;
     /// non-singlet or nonzero-unpaired system spin; and incompatible atom or bond assertions.
     /// Apply reports an edit-application or final integrity-check failure.
-    pub fn project(
+    pub fn project_into(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityProjectError> {
         let edits = self.plan_project(molecule)?;
-        if !edits.is_empty() {
-            molecule.transact([edits])?;
-        }
+        molecule.transact([edits])?;
         Ok(Solution::Determined(()))
     }
 
@@ -1238,7 +1293,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_plan(aromaticity_model: AromaticityModel, benzene: Molecule) {
+    fn test_aromaticity_resolver_plan_resolve(
+        aromaticity_model: AromaticityModel,
+        benzene: Molecule,
+    ) {
         assert_eq!(
             AromaticityResolver::with_config(
                 &aromaticity_model,
@@ -1256,7 +1314,7 @@ mod tests {
                     ..AromaticityResolveConfig::default()
                 },
             )
-            .plan(&benzene),
+            .plan_resolve(&benzene),
             Ok(Solution::Determined(Edits::from_iter([
                 Edit::AddAromaticSystem {
                     atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
@@ -1299,7 +1357,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_plan_partial(aromaticity_model: AromaticityModel) {
+    fn test_aromaticity_resolver_plan_resolve_partial(aromaticity_model: AromaticityModel) {
         let molecule = mol_dsl!(
             r#"{
             :atoms ["C#a+" "C#a" "C#a" "C#a" "C#a" "C#a"]
@@ -1309,7 +1367,7 @@ mod tests {
         );
 
         assert_eq!(
-            AromaticityResolver::new(&aromaticity_model).plan(&molecule),
+            AromaticityResolver::new(&aromaticity_model).plan_resolve(&molecule),
             Ok(Solution::Underdetermined(Edits::new()))
         );
     }
@@ -1362,7 +1420,7 @@ mod tests {
             },
         ]))
     )]
-    fn test_aromaticity_resolver_plan_aromatic_valence_mismatch(
+    fn test_aromaticity_resolver_plan_resolve_aromatic_valence_mismatch(
         aromaticity_model: AromaticityModel,
         aromatic_valence_mismatch: Molecule,
         #[case] policy: AromaticityMismatchPolicy,
@@ -1376,11 +1434,14 @@ mod tests {
             },
         );
 
-        assert_eq!(resolver.plan(&aromatic_valence_mismatch), Ok(expected));
+        assert_eq!(
+            resolver.plan_resolve(&aromatic_valence_mismatch),
+            Ok(expected)
+        );
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_resolve_aromatic_valence_mismatch_reset(
+    fn test_aromaticity_resolver_resolve_into_aromatic_valence_mismatch_reset(
         aromaticity_model: AromaticityModel,
         mut aromatic_valence_mismatch: Molecule,
     ) {
@@ -1405,7 +1466,7 @@ mod tests {
         );
 
         assert_eq!(
-            resolver.resolve(&mut aromatic_valence_mismatch),
+            resolver.resolve_into(&mut aromatic_valence_mismatch),
             Ok(Solution::Determined(()))
         );
         assert_eq!(aromatic_valence_mismatch, expected);
@@ -1433,7 +1494,7 @@ mod tests {
             new: None,
         }]))
     )]
-    fn test_aromaticity_resolver_plan_aromatic_bond_constraint_mismatch(
+    fn test_aromaticity_resolver_plan_resolve_aromatic_bond_constraint_mismatch(
         aromaticity_model: AromaticityModel,
         aromatic_bond_constraint_mismatch: Molecule,
         #[case] policy: AromaticBondConstraintMismatchPolicy,
@@ -1448,7 +1509,7 @@ mod tests {
         );
 
         assert_eq!(
-            resolver.plan(&aromatic_bond_constraint_mismatch),
+            resolver.plan_resolve(&aromatic_bond_constraint_mismatch),
             Ok(expected)
         );
     }
@@ -1490,13 +1551,13 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]
         }"#)
     )]
-    fn test_aromaticity_resolver_plan_identity(
+    fn test_aromaticity_resolver_plan_resolve_identity(
         #[case] model: AromaticityModel,
         #[case] config: AromaticityResolveConfig,
         #[case] molecule: Molecule,
     ) {
         assert_eq!(
-            AromaticityResolver::with_config(&model, config).plan(&molecule),
+            AromaticityResolver::with_config(&model, config).plan_resolve(&molecule),
             Ok(Solution::Determined(Edits::new()))
         );
     }
@@ -1567,8 +1628,11 @@ mod tests {
         #[case] expected_atom_charges: Vec<NumForm>,
         #[case] expected_aromatic_valences: Vec<Option<AromaticValenceForm>>,
     ) {
+        let consumed =
+            AromaticityResolver::with_config(&aromaticity_model, config).resolve(molecule.clone());
         assert_eq!(
-            AromaticityResolver::with_config(&aromaticity_model, config).resolve(&mut molecule),
+            AromaticityResolver::with_config(&aromaticity_model, config)
+                .resolve_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule.aromatic_systems().count(), 1);
@@ -1601,6 +1665,7 @@ mod tests {
                 .get(BondConstraintKey::Aromatic),
             Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))
         )));
+        assert_eq!(consumed, Ok(Solution::Determined(molecule)));
     }
 
     type SelectOutcome = Solution<ResolveState, AromaticityContradiction>;
@@ -1674,12 +1739,16 @@ mod tests {
     ) {
         let resolver = AromaticityResolver::new(&model);
         assert_eq!(
-            resolver.project(&mut molecule),
+            resolver.project(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            resolver.project_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
         assert_eq!(
-            resolver.project(&mut molecule),
+            resolver.project_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
@@ -1693,7 +1762,11 @@ mod tests {
         let model = AromaticityModel::daylight();
         let original = molecule.clone();
         assert_eq!(
-            AromaticityResolver::new(&model).project(&mut molecule),
+            AromaticityResolver::new(&model).project(molecule.clone()),
+            Ok(Solution::Determined(original.clone()))
+        );
+        assert_eq!(
+            AromaticityResolver::new(&model).project_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, original);
@@ -1720,7 +1793,11 @@ mod tests {
         let mut molecule = editor.finish().unwrap();
         let original = molecule.clone();
         assert_eq!(
-            AromaticityResolver::new(&model).project(&mut molecule),
+            AromaticityResolver::new(&model).project(molecule.clone()),
+            Err(expected.clone())
+        );
+        assert_eq!(
+            AromaticityResolver::new(&model).project_into(&mut molecule),
             Err(expected)
         );
         assert_eq!(molecule, original);
@@ -1758,7 +1835,11 @@ mod tests {
         let mut molecule = editor.finish().unwrap();
         let original = molecule.clone();
         assert_eq!(
-            AromaticityResolver::new(&model).project(&mut molecule),
+            AromaticityResolver::new(&model).project(molecule.clone()),
+            Err(expected.clone())
+        );
+        assert_eq!(
+            AromaticityResolver::new(&model).project_into(&mut molecule),
             Err(expected)
         );
         assert_eq!(molecule, original);
@@ -2297,15 +2378,21 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_resolve_identity(
+    fn test_aromaticity_resolver_resolve_into_identity(
         aromaticity_model: AromaticityModel,
         mut benzene: Molecule,
     ) {
         let resolver = AromaticityResolver::new(&aromaticity_model);
-        assert_eq!(resolver.resolve(&mut benzene), Ok(Solution::Determined(())));
+        assert_eq!(
+            resolver.resolve_into(&mut benzene),
+            Ok(Solution::Determined(()))
+        );
         let expected = benzene.clone();
 
-        assert_eq!(resolver.resolve(&mut benzene), Ok(Solution::Determined(())));
+        assert_eq!(
+            resolver.resolve_into(&mut benzene),
+            Ok(Solution::Determined(()))
+        );
         assert_eq!(benzene, expected);
     }
 
@@ -2346,7 +2433,11 @@ mod tests {
     ) {
         let original = molecule.clone();
         assert_eq!(
-            AromaticityResolver::new(&model).resolve(&mut molecule),
+            AromaticityResolver::new(&model).resolve(molecule.clone()),
+            Ok(Solution::Contradictory(expected.clone()))
+        );
+        assert_eq!(
+            AromaticityResolver::new(&model).resolve_into(&mut molecule),
             Ok(Solution::Contradictory(expected))
         );
         assert_eq!(molecule, original);

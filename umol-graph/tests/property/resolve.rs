@@ -431,12 +431,13 @@ proptest! {
             ..if typing {ValenceModel::default()} else {ValenceModel::smiles()}
         }, ..Default::default()};
         let resolver = Resolver::new(&model);
-        prop_assert_eq!(resolver.resolve(&mut input), Ok(Solution::Determined(ResolveReport::default())));
+        prop_assert_eq!(resolver.resolve(input.clone()), Ok(Solution::Determined(original.clone())));
+        prop_assert_eq!(resolver.resolve_into(&mut input), Ok(Solution::Determined(ResolveReport::default())));
         prop_assert_eq!(input, original);
     }
 
     #[test]
-    fn test_resolver_resolve_heteroatoms(
+    fn test_resolver_resolve_into_heteroatoms(
         sites in prop::collection::vec((0usize..8, 0i64..3), 1..24),
     ) {
         let states = [
@@ -485,7 +486,7 @@ proptest! {
                 };
                 let resolver = Resolver::new(&model);
                 let mut molecule = input.clone();
-                prop_assert_eq!(resolver.resolve(&mut molecule), Ok(Solution::Determined(ResolveReport::default())));
+                prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(ResolveReport::default())));
                 prop_assert_eq!(&molecule, &source);
             }
         }

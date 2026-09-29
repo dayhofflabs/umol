@@ -420,7 +420,7 @@ impl Molecule {
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
         let mut molecule = self.to_rust()?.clone();
         let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
-            .resolve(&mut molecule)
+            .resolve_into(&mut molecule)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         Ok(match solution {
             GraphSolution::Determined(report) => Solution::Determined {

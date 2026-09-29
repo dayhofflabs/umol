@@ -381,7 +381,7 @@ fn convey_molecule(
     labels: impl Iterator<Item = (AtomId, u32)>,
 ) -> Result<TableMolecule, ConveyError> {
     let mut projected = input.clone();
-    match resolver.project(&mut projected, ProjectFlags::all())? {
+    match resolver.project_into(&mut projected, ProjectFlags::all())? {
         Solution::Determined(()) => {}
         Solution::Underdetermined(()) => return Err(ConveyError::Underdetermined),
         Solution::Contradictory(error) => return Err(error.into()),
