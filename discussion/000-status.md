@@ -66,8 +66,9 @@ the statuses recorded here remain authoritative.
   surface. S4b3 moves single-entry execution and lazy handle state to Molecule.
   S4b4 wires addition execution and removes the addition-undo adapters. S4b5
   wires removal and constraint compaction; S4b6 wires field edits and replay
-  through mutable views. S4b7's constraint execution is next; the migration
-  is non-compiling until S4b8.
+  through mutable views. S4b7 wires constraint execution and replaces boxed
+  inverse Edits with explicit Undo variants. S4b8's replay closure is next;
+  the migration remains non-compiling until then.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -285,7 +286,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue with S4b7: constraint edits and explicit constraint Undo variants. S4b3–S4b8 is currently non-compiling. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Continue with S4b8: undo replay and migration closure. S4b3–S4b8 is currently non-compiling. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

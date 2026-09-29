@@ -9,11 +9,7 @@ use umol_perm::{DynPermutation, Permutation};
 use super::{Molecule, TransactionError};
 use crate::ir::aromatic::AromaticSystemForm;
 use crate::ir::compact::{MoleculeCompaction, UndoCompaction};
-use crate::ir::constraint::{
-    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
-    DativeBondConstraintForm, MulticenterBondConstraintForm, NoncovalentBondConstraintForm,
-    StereoAtomConstraintForm, StereoBondConstraintForm,
-};
+use crate::ir::constraint::Constraint;
 use crate::ir::dative::DativeBondForm;
 use crate::ir::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
@@ -912,27 +908,147 @@ impl Molecule {
             }
             Edit::ModifyAtomConstraint { id, old, new } => {
                 let id = state.atom(id)?;
-                self.apply_modify_atom_constraint(id, old, new)
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(()),
+                };
+                let mut view = self.atom_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
+                }
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyBondConstraint { id, old, new } => {
                 let id = state.bond(id)?;
-                self.apply_modify_bond_constraint(id, old, new)
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(()),
+                };
+                let mut view = self.bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
+                }
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyDativeBondConstraint { id, old, new } => {
                 let id = state.dative_bond(id)?;
-                self.apply_modify_dative_bond_constraint(id, old, new)
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(()),
+                };
+                let mut view = self.dative_bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
+                }
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyAromaticSystemConstraint { id, old, new } => {
                 let id = state.aromatic_system(id)?;
-                self.apply_modify_aromatic_system_constraint(id, old, new)
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(()),
+                };
+                let mut view = self.aromatic_system_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
+                }
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyMulticenterBondConstraint { id, old, new } => {
                 let id = state.multicenter_bond(id)?;
-                self.apply_modify_multicenter_bond_constraint(id, old, new)
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(()),
+                };
+                let mut view = self.multicenter_bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
+                }
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyNoncovalentBondConstraint { id, old, new } => {
                 let id = state.noncovalent_bond(id)?;
-                self.apply_modify_noncovalent_bond_constraint(id, old, new)
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(()),
+                };
+                let mut view = self.noncovalent_bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
+                }
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyStereoAtomConstraint {
                 id,
@@ -941,7 +1057,27 @@ impl Molecule {
                 new,
             } => {
                 let id = state.stereo_atom(id)?;
-                self.apply_modify_stereo_atom_constraint(id, old, new)
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(()),
+                };
+                let mut view = self.stereo_atom_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
+                }
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyStereoBondConstraint {
                 id,
@@ -950,7 +1086,27 @@ impl Molecule {
                 new,
             } => {
                 let id = state.stereo_bond(id)?;
-                self.apply_modify_stereo_bond_constraint(id, old, new)
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(()),
+                };
+                let mut view = self.stereo_bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
+                }
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(())
             }
             Edit::AddMoleculeConstraint { constraint } => {
                 let constraint = state.resolve_constraint(constraint)?;
@@ -959,13 +1115,13 @@ impl Molecule {
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
                 let constraint = state.resolve_constraint(constraint)?;
-                let list = self.constraints_mut();
-                let position = list
+                let position = self
+                    .constraints()
                     .as_slice()
                     .iter()
                     .rposition(|c| *c == constraint)
                     .ok_or(TransactionError::MissingEntry)?;
-                list.remove_at(position);
+                self.remove_constraint_at(position);
                 Ok(())
             }
         }
@@ -1744,128 +1900,255 @@ impl Molecule {
                 })
             }
             Edit::ModifyAtomConstraint { id, old, new } => {
-                let id = state.atom(id.clone())?;
-                if old.is_none() && new.is_none() {
-                    return Ok(None);
+                let id = state.atom(id)?;
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(None),
+                };
+                let mut view = self.atom_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
                 }
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_atom_constraint(id, old, new)?;
-                Ok(undo)
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(Undo::RestoreAtomConstraint {
+                    id,
+                    key,
+                    constraint: old,
+                })
             }
             Edit::ModifyBondConstraint { id, old, new } => {
-                let id = state.bond(id.clone())?;
-                if old.is_none() && new.is_none() {
-                    return Ok(None);
+                let id = state.bond(id)?;
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(None),
+                };
+                let mut view = self.bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
                 }
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_bond_constraint(id, old, new)?;
-                Ok(undo)
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(Undo::RestoreBondConstraint {
+                    id,
+                    key,
+                    constraint: old,
+                })
             }
             Edit::ModifyDativeBondConstraint { id, old, new } => {
-                let id = state.dative_bond(id.clone())?;
-                if old.is_none() && new.is_none() {
-                    return Ok(None);
+                let id = state.dative_bond(id)?;
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(None),
+                };
+                let mut view = self.dative_bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
                 }
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyDativeBondConstraint {
-                    id: DativeBondHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_dative_bond_constraint(id, old, new)?;
-                Ok(undo)
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(Undo::RestoreDativeBondConstraint {
+                    id,
+                    key,
+                    constraint: old,
+                })
             }
             Edit::ModifyAromaticSystemConstraint { id, old, new } => {
-                let id = state.aromatic_system(id.clone())?;
-                if old.is_none() && new.is_none() {
-                    return Ok(None);
+                let id = state.aromatic_system(id)?;
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(None),
+                };
+                let mut view = self.aromatic_system_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
                 }
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyAromaticSystemConstraint {
-                    id: AromaticSystemHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_aromatic_system_constraint(id, old, new)?;
-                Ok(undo)
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(Undo::RestoreAromaticSystemConstraint {
+                    id,
+                    key,
+                    constraint: old,
+                })
             }
             Edit::ModifyMulticenterBondConstraint { id, old, new } => {
-                let id = state.multicenter_bond(id.clone())?;
-                if old.is_none() && new.is_none() {
-                    return Ok(None);
+                let id = state.multicenter_bond(id)?;
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(None),
+                };
+                let mut view = self.multicenter_bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
                 }
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyMulticenterBondConstraint {
-                    id: MulticenterBondHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_multicenter_bond_constraint(id, old, new)?;
-                Ok(undo)
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(Undo::RestoreMulticenterBondConstraint {
+                    id,
+                    key,
+                    constraint: old,
+                })
             }
             Edit::ModifyNoncovalentBondConstraint { id, old, new } => {
-                let id = state.noncovalent_bond(id.clone())?;
-                if old.is_none() && new.is_none() {
-                    return Ok(None);
+                let id = state.noncovalent_bond(id)?;
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(None),
+                };
+                let mut view = self.noncovalent_bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
                 }
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyNoncovalentBondConstraint {
-                    id: NoncovalentBondHandle::Id(id),
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_noncovalent_bond_constraint(id, old, new)?;
-                Ok(undo)
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(Undo::RestoreNoncovalentBondConstraint {
+                    id,
+                    key,
+                    constraint: old,
+                })
             }
-            Edit::ModifyStereoAtomConstraint { id, kind, old, new } => {
-                let id = state.stereo_atom(id.clone())?;
-                if old.is_none() && new.is_none() {
-                    return Ok(None);
+            Edit::ModifyStereoAtomConstraint {
+                id,
+                kind: _,
+                old,
+                new,
+            } => {
+                let id = state.stereo_atom(id)?;
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(None),
+                };
+                let mut view = self.stereo_atom_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
                 }
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyStereoAtomConstraint {
-                    id: StereoAtomHandle::Id(id),
-                    kind,
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_stereo_atom_constraint(id, old, new)?;
-                Ok(undo)
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(Undo::RestoreStereoAtomConstraint {
+                    id,
+                    key,
+                    constraint: old,
+                })
             }
-            Edit::ModifyStereoBondConstraint { id, kind, old, new } => {
-                let id = state.stereo_bond(id.clone())?;
-                if old.is_none() && new.is_none() {
-                    return Ok(None);
+            Edit::ModifyStereoBondConstraint {
+                id,
+                kind: _,
+                old,
+                new,
+            } => {
+                let id = state.stereo_bond(id)?;
+                let key = match (&old, &new) {
+                    (Some(old), Some(new)) if old.key() != new.key() => {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
+                    (None, None) => return Ok(None),
+                };
+                let mut view = self.stereo_bond_mut(id);
+                let constraints = &mut view.attributes_mut().constraints;
+                match (constraints.get(key), old.as_ref()) {
+                    (None, None) => {}
+                    (Some(current), Some(old)) if current.normalized_eq(old) => {}
+                    _ => return Err(TransactionError::OldStateMismatch),
                 }
-                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyStereoBondConstraint {
-                    id: StereoBondHandle::Id(id),
-                    kind,
-                    old: new.clone(),
-                    new: old.clone(),
-                }));
-                self.apply_modify_stereo_bond_constraint(id, old, new)?;
-                Ok(undo)
+                match new {
+                    Some(constraint) => constraints.set(constraint),
+                    None => {
+                        constraints.remove(key);
+                    }
+                }
+                Ok(Undo::RestoreStereoBondConstraint {
+                    id,
+                    key,
+                    constraint: old,
+                })
             }
             Edit::AddMoleculeConstraint { constraint } => {
                 let constraint = state.resolve_constraint(constraint)?;
-                self.push_constraint(constraint.clone());
-                Ok(Undo::ApplyEdit(Box::new(Edit::RemoveMoleculeConstraint {
-                    constraint: constraint.into(),
-                })))
+                let position = self.constraints().len();
+                self.push_constraint(constraint);
+                Ok(Undo::RemoveAddedMoleculeConstraint { position })
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
                 let constraint = state.resolve_constraint(constraint)?;
-                let list = self.constraints_mut();
-                let position = list
+                let position = self
+                    .constraints()
                     .as_slice()
                     .iter()
                     .rposition(|c| *c == constraint)
                     .ok_or(TransactionError::MissingEntry)?;
-                let constraint = list.remove_at(position);
-                Ok(Undo::ApplyCascadedConstraints(CascadedConstraints {
+                let constraint = self.remove_constraint_at(position);
+                Ok(Undo::RestoreMoleculeConstraints(CascadedConstraints {
                     removed: vec![RemovedConstraint {
                         position,
                         constraint,
@@ -2221,13 +2504,141 @@ impl Molecule {
                     }
                 }
             }
-            Undo::ApplyCascadedConstraints(update) => {
-                self.restore_constraints(&update);
+            Undo::RestoreAtomConstraint {
+                id,
+                key,
+                constraint,
+            } => {
+                if id.index() < self.atoms().count() {
+                    let mut view = self.atom_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match constraint {
+                        Some(constraint) => constraints.set(constraint),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
             }
-            Undo::ApplyEdit(edit) => {
-                let mut state = ApplicationState::new(self);
-                self.apply_edit(*edit, &mut state)
-                    .map_err(|_| rollback_mismatch())?;
+            Undo::RestoreBondConstraint {
+                id,
+                key,
+                constraint,
+            } => {
+                if id.index() < self.bonds().count() {
+                    let mut view = self.bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match constraint {
+                        Some(constraint) => constraints.set(constraint),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreDativeBondConstraint {
+                id,
+                key,
+                constraint,
+            } => {
+                if id.index() < self.dative_bonds().count() {
+                    let mut view = self.dative_bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match constraint {
+                        Some(constraint) => constraints.set(constraint),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreAromaticSystemConstraint {
+                id,
+                key,
+                constraint,
+            } => {
+                if id.index() < self.aromatic_systems().count() {
+                    let mut view = self.aromatic_system_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match constraint {
+                        Some(constraint) => constraints.set(constraint),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreMulticenterBondConstraint {
+                id,
+                key,
+                constraint,
+            } => {
+                if id.index() < self.multicenter_bonds().count() {
+                    let mut view = self.multicenter_bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match constraint {
+                        Some(constraint) => constraints.set(constraint),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreNoncovalentBondConstraint {
+                id,
+                key,
+                constraint,
+            } => {
+                if id.index() < self.noncovalent_bonds().count() {
+                    let mut view = self.noncovalent_bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match constraint {
+                        Some(constraint) => constraints.set(constraint),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreStereoAtomConstraint {
+                id,
+                key,
+                constraint,
+            } => {
+                if id.index() < self.stereo_atoms().count() {
+                    let mut view = self.stereo_atom_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match constraint {
+                        Some(constraint) => constraints.set(constraint),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RestoreStereoBondConstraint {
+                id,
+                key,
+                constraint,
+            } => {
+                if id.index() < self.stereo_bonds().count() {
+                    let mut view = self.stereo_bond_mut(id);
+                    let constraints = &mut view.attributes_mut().constraints;
+                    match constraint {
+                        Some(constraint) => constraints.set(constraint),
+                        None => {
+                            constraints.remove(key);
+                        }
+                    }
+                }
+            }
+            Undo::RemoveAddedMoleculeConstraint { position } => {
+                if position < self.constraints().len() {
+                    self.remove_constraint_at(position);
+                }
+            }
+            Undo::RestoreMoleculeConstraints(update) => {
+                self.restore_constraints(&update);
             }
         }
     }
@@ -2474,125 +2885,6 @@ impl Molecule {
         )
     }
 
-    fn apply_modify_atom_constraint(
-        &mut self,
-        id: AtomId,
-        old: Option<AtomConstraintForm>,
-        new: Option<AtomConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.atom_mut(id)
-            .attributes_mut()
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_bond_constraint(
-        &mut self,
-        id: BondId,
-        old: Option<BondConstraintForm>,
-        new: Option<BondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.bond_mut(id)
-            .attributes_mut()
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_dative_bond_constraint(
-        &mut self,
-        id: DativeBondId,
-        old: Option<DativeBondConstraintForm>,
-        new: Option<DativeBondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.dative_bond_mut(id)
-            .attributes_mut()
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_aromatic_system_constraint(
-        &mut self,
-        id: AromaticSystemId,
-        old: Option<AromaticSystemConstraintForm>,
-        new: Option<AromaticSystemConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.aromatic_system_mut(id)
-            .attributes_mut()
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_multicenter_bond_constraint(
-        &mut self,
-        id: MulticenterBondId,
-        old: Option<MulticenterBondConstraintForm>,
-        new: Option<MulticenterBondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.multicenter_bond_mut(id)
-            .attributes_mut()
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_noncovalent_bond_constraint(
-        &mut self,
-        id: NoncovalentBondId,
-        old: Option<NoncovalentBondConstraintForm>,
-        new: Option<NoncovalentBondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.noncovalent_bond_mut(id)
-            .attributes_mut()
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_stereo_atom_constraint(
-        &mut self,
-        id: StereoAtomId,
-        old: Option<StereoAtomConstraintForm>,
-        new: Option<StereoAtomConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.stereo_atom_mut(id)
-            .attributes_mut()
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
-
-    fn apply_modify_stereo_bond_constraint(
-        &mut self,
-        id: StereoBondId,
-        old: Option<StereoBondConstraintForm>,
-        new: Option<StereoBondConstraintForm>,
-    ) -> Result<(), TransactionError> {
-        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
-        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
-        self.stereo_bond_mut(id)
-            .attributes_mut()
-            .constraints
-            .compare_and_set(old, new)
-            .map_err(|_| TransactionError::OldStateMismatch)
-    }
     fn validate_undo(&self, undo: &Undo) -> Result<(), TransactionError> {
         let compaction = match undo {
             Undo::RestoreRemovedTopology {
@@ -2830,8 +3122,16 @@ impl Molecule {
             }
             Undo::ModifyStereoAtomField { id, .. } => id.index() < self.stereo_atoms().count(),
             Undo::ModifyStereoBondField { id, .. } => id.index() < self.stereo_bonds().count(),
-            Undo::ApplyCascadedConstraints(_) => true,
-            Undo::ApplyEdit(_) => true,
+            Undo::RestoreAtomConstraint { .. }
+            | Undo::RestoreBondConstraint { .. }
+            | Undo::RestoreDativeBondConstraint { .. }
+            | Undo::RestoreAromaticSystemConstraint { .. }
+            | Undo::RestoreMulticenterBondConstraint { .. }
+            | Undo::RestoreNoncovalentBondConstraint { .. }
+            | Undo::RestoreStereoAtomConstraint { .. }
+            | Undo::RestoreStereoBondConstraint { .. }
+            | Undo::RemoveAddedMoleculeConstraint { .. }
+            | Undo::RestoreMoleculeConstraints(_) => true,
         };
         fits.then_some(()).ok_or_else(rollback_mismatch)
     }
@@ -3010,14 +3310,21 @@ mod tests {
     use super::*;
     use crate::ir::atom::{AtomForm, ElementForm, IsotopeMassForm};
     use crate::ir::bond::BondForm;
-    use crate::ir::constraint::{RelationalConstraint, StereogenicityForm};
+    use crate::ir::constraint::{
+        AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
+        AtomConstraintKey, BondConstraintForm, BondConstraintKey, DativeBondConstraintForm,
+        DativeBondConstraintKey, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
+        NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, RelationalConstraint,
+        StereoAtomConstraintForm, StereoAtomConstraintKey, StereoBondConstraintForm,
+        StereoBondConstraintKey, StereogenicityForm,
+    };
     use crate::ir::edit::ModifiedConstraint;
     use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::molecule::MoleculeEntries;
     use crate::ir::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
     use crate::ir::num::NumForm;
     use crate::ir::spin::UnpairedElectronsForm;
-    use crate::ir::stereo::{StereoConfigurationForm, StereoCoset, StereoKind};
+    use crate::ir::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity};
 
     #[rstest]
     #[case::first(3, 0, Ok(AtomId(0)))]
@@ -4476,6 +4783,812 @@ mod tests {
     }
 
     #[rstest]
+    #[case::addition(None, None, Some(AtomConstraintForm::degree(3)))]
+    #[case::modification(
+        Some(AtomConstraintForm::degree(2)),
+        Some(AtomConstraintForm::degree(2)),
+        Some(AtomConstraintForm::degree(3))
+    )]
+    #[case::removal(
+        Some(AtomConstraintForm::degree(2)),
+        Some(AtomConstraintForm::degree(2)),
+        None
+    )]
+    #[case::absent(None, None, None)]
+    #[case::equivalent_old(Some(AtomConstraintForm::degree(2)), Some(AtomConstraintForm::degree(NumForm::lit_set([2]))), Some(AtomConstraintForm::degree(3)))]
+    fn test_molecule_apply_edit_modify_atom_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[case] current: Option<AtomConstraintForm>,
+        #[case] old: Option<AtomConstraintForm>,
+        #[case] new: Option<AtomConstraintForm>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.atoms[0].constraints = current.into_iter().collect::<Vec<_>>().into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyAtomConstraint {
+            id: AtomHandle::Id(AtomId(0)),
+            old: old.clone(),
+            new: new.clone(),
+        };
+        let expected_undo = if old.is_none() && new.is_none() {
+            None
+        } else {
+            Some(Undo::RestoreAtomConstraint {
+                id: AtomId(0),
+                key: AtomConstraintKey::Degree,
+                constraint: old,
+            })
+        };
+        let undo = if journaled {
+            let undo = molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap();
+            assert_eq!(undo, expected_undo);
+            undo
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.atoms[0].constraints = new.into_iter().collect::<Vec<_>>().into();
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        if expected_undo.is_some() {
+            let repeated = if journaled {
+                molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+            } else {
+                molecule.apply_edit(edit, &mut state)
+            };
+            assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, expected);
+        }
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::key(AtomConstraintForm::degree(2), AtomConstraintForm::valence(2))]
+    #[case::value(AtomConstraintForm::degree(3), AtomConstraintForm::degree(4))]
+    fn test_molecule_apply_edit_modify_atom_constraint_error(
+        mut removal_entries: MoleculeEntries,
+        #[case] old: AtomConstraintForm,
+        #[case] new: AtomConstraintForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.atoms[0].constraints = vec![AtomConstraintForm::degree(2)].into();
+        let initial = Molecule::from_entries(removal_entries);
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyAtomConstraint {
+            id: AtomHandle::Id(AtomId(0)),
+            old: Some(old),
+            new: Some(new),
+        };
+        let result = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(result, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, initial);
+    }
+
+    #[rstest]
+    #[case::addition(None, None, Some(BondConstraintForm::aromatic(false)))]
+    #[case::modification(
+        Some(BondConstraintForm::aromatic(true)),
+        Some(BondConstraintForm::aromatic(true)),
+        Some(BondConstraintForm::aromatic(false))
+    )]
+    #[case::removal(
+        Some(BondConstraintForm::aromatic(true)),
+        Some(BondConstraintForm::aromatic(true)),
+        None
+    )]
+    #[case::absent(None, None, None)]
+    fn test_molecule_apply_edit_modify_bond_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[case] current: Option<BondConstraintForm>,
+        #[case] old: Option<BondConstraintForm>,
+        #[case] new: Option<BondConstraintForm>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.bonds[0].2.constraints = current.into_iter().collect::<Vec<_>>().into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyBondConstraint {
+            id: BondHandle::Id(BondId(0)),
+            old: old.clone(),
+            new: new.clone(),
+        };
+        let expected_undo = if old.is_none() && new.is_none() {
+            None
+        } else {
+            Some(Undo::RestoreBondConstraint {
+                id: BondId(0),
+                key: BondConstraintKey::Aromatic,
+                constraint: old,
+            })
+        };
+        let undo = if journaled {
+            let undo = molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap();
+            assert_eq!(undo, expected_undo);
+            undo
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.bonds[0].2.constraints = new.into_iter().collect::<Vec<_>>().into();
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        if expected_undo.is_some() {
+            let repeated = if journaled {
+                molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+            } else {
+                molecule.apply_edit(edit, &mut state)
+            };
+            assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, expected);
+        }
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::addition(None, None, Some(DativeBondConstraintForm::aromatic(false)))]
+    #[case::modification(
+        Some(DativeBondConstraintForm::aromatic(true)),
+        Some(DativeBondConstraintForm::aromatic(true)),
+        Some(DativeBondConstraintForm::aromatic(false))
+    )]
+    #[case::removal(
+        Some(DativeBondConstraintForm::aromatic(true)),
+        Some(DativeBondConstraintForm::aromatic(true)),
+        None
+    )]
+    #[case::absent(None, None, None)]
+    fn test_molecule_apply_edit_modify_dative_bond_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[case] current: Option<DativeBondConstraintForm>,
+        #[case] old: Option<DativeBondConstraintForm>,
+        #[case] new: Option<DativeBondConstraintForm>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.dative[0].2.constraints = current.into_iter().collect::<Vec<_>>().into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyDativeBondConstraint {
+            id: DativeBondHandle::Id(DativeBondId(0)),
+            old: old.clone(),
+            new: new.clone(),
+        };
+        let expected_undo = if old.is_none() && new.is_none() {
+            None
+        } else {
+            Some(Undo::RestoreDativeBondConstraint {
+                id: DativeBondId(0),
+                key: DativeBondConstraintKey::Aromatic,
+                constraint: old,
+            })
+        };
+        let undo = if journaled {
+            let undo = molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap();
+            assert_eq!(undo, expected_undo);
+            undo
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.dative[0].2.constraints = new.into_iter().collect::<Vec<_>>().into();
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        if expected_undo.is_some() {
+            let repeated = if journaled {
+                molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+            } else {
+                molecule.apply_edit(edit, &mut state)
+            };
+            assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, expected);
+        }
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::addition(None, None, Some(AromaticSystemConstraintForm::electron_count(4)))]
+    #[case::modification(
+        Some(AromaticSystemConstraintForm::electron_count(2)),
+        Some(AromaticSystemConstraintForm::electron_count(2)),
+        Some(AromaticSystemConstraintForm::electron_count(4))
+    )]
+    #[case::removal(
+        Some(AromaticSystemConstraintForm::electron_count(2)),
+        Some(AromaticSystemConstraintForm::electron_count(2)),
+        None
+    )]
+    #[case::absent(None, None, None)]
+    #[case::equivalent_old(Some(AromaticSystemConstraintForm::electron_count(2)), Some(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([2]))), Some(AromaticSystemConstraintForm::electron_count(4)))]
+    fn test_molecule_apply_edit_modify_aromatic_system_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[case] current: Option<AromaticSystemConstraintForm>,
+        #[case] old: Option<AromaticSystemConstraintForm>,
+        #[case] new: Option<AromaticSystemConstraintForm>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.aromatic[0].1.constraints = current.into_iter().collect::<Vec<_>>().into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyAromaticSystemConstraint {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            old: old.clone(),
+            new: new.clone(),
+        };
+        let expected_undo = if old.is_none() && new.is_none() {
+            None
+        } else {
+            Some(Undo::RestoreAromaticSystemConstraint {
+                id: AromaticSystemId(0),
+                key: AromaticSystemConstraintKey::ElectronCount,
+                constraint: old,
+            })
+        };
+        let undo = if journaled {
+            let undo = molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap();
+            assert_eq!(undo, expected_undo);
+            undo
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.aromatic[0].1.constraints = new.into_iter().collect::<Vec<_>>().into();
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        if expected_undo.is_some() {
+            let repeated = if journaled {
+                molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+            } else {
+                molecule.apply_edit(edit, &mut state)
+            };
+            assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, expected);
+        }
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::addition(None, None, Some(MulticenterBondConstraintForm::electron_count(4)))]
+    #[case::modification(
+        Some(MulticenterBondConstraintForm::electron_count(2)),
+        Some(MulticenterBondConstraintForm::electron_count(2)),
+        Some(MulticenterBondConstraintForm::electron_count(4))
+    )]
+    #[case::removal(
+        Some(MulticenterBondConstraintForm::electron_count(2)),
+        Some(MulticenterBondConstraintForm::electron_count(2)),
+        None
+    )]
+    #[case::absent(None, None, None)]
+    #[case::equivalent_old(Some(MulticenterBondConstraintForm::electron_count(2)), Some(MulticenterBondConstraintForm::electron_count(NumForm::lit_set([2]))), Some(MulticenterBondConstraintForm::electron_count(4)))]
+    fn test_molecule_apply_edit_modify_multicenter_bond_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[case] current: Option<MulticenterBondConstraintForm>,
+        #[case] old: Option<MulticenterBondConstraintForm>,
+        #[case] new: Option<MulticenterBondConstraintForm>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.multicenter[0].1.constraints =
+            current.into_iter().collect::<Vec<_>>().into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyMulticenterBondConstraint {
+            id: MulticenterBondHandle::Id(MulticenterBondId(0)),
+            old: old.clone(),
+            new: new.clone(),
+        };
+        let expected_undo = if old.is_none() && new.is_none() {
+            None
+        } else {
+            Some(Undo::RestoreMulticenterBondConstraint {
+                id: MulticenterBondId(0),
+                key: MulticenterBondConstraintKey::ElectronCount,
+                constraint: old,
+            })
+        };
+        let undo = if journaled {
+            let undo = molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap();
+            assert_eq!(undo, expected_undo);
+            undo
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.multicenter[0].1.constraints = new.into_iter().collect::<Vec<_>>().into();
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        if expected_undo.is_some() {
+            let repeated = if journaled {
+                molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+            } else {
+                molecule.apply_edit(edit, &mut state)
+            };
+            assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, expected);
+        }
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::addition(None, None, Some(NoncovalentBondConstraintForm::intramolecular(false)))]
+    #[case::modification(
+        Some(NoncovalentBondConstraintForm::intramolecular(true)),
+        Some(NoncovalentBondConstraintForm::intramolecular(true)),
+        Some(NoncovalentBondConstraintForm::intramolecular(false))
+    )]
+    #[case::removal(
+        Some(NoncovalentBondConstraintForm::intramolecular(true)),
+        Some(NoncovalentBondConstraintForm::intramolecular(true)),
+        None
+    )]
+    #[case::absent(None, None, None)]
+    fn test_molecule_apply_edit_modify_noncovalent_bond_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[case] current: Option<NoncovalentBondConstraintForm>,
+        #[case] old: Option<NoncovalentBondConstraintForm>,
+        #[case] new: Option<NoncovalentBondConstraintForm>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.noncovalent[0].1.constraints =
+            current.into_iter().collect::<Vec<_>>().into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyNoncovalentBondConstraint {
+            id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            old: old.clone(),
+            new: new.clone(),
+        };
+        let expected_undo = if old.is_none() && new.is_none() {
+            None
+        } else {
+            Some(Undo::RestoreNoncovalentBondConstraint {
+                id: NoncovalentBondId(0),
+                key: NoncovalentBondConstraintKey::Intramolecular,
+                constraint: old,
+            })
+        };
+        let undo = if journaled {
+            let undo = molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap();
+            assert_eq!(undo, expected_undo);
+            undo
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.noncovalent[0].1.constraints = new.into_iter().collect::<Vec<_>>().into();
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        if expected_undo.is_some() {
+            let repeated = if journaled {
+                molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+            } else {
+                molecule.apply_edit(edit, &mut state)
+            };
+            assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, expected);
+        }
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::addition(
+        None,
+        None,
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        )))
+    )]
+    #[case::modification(
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        )))
+    )]
+    #[case::removal(
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        None
+    )]
+    #[case::absent(None, None, None)]
+    fn test_molecule_apply_edit_modify_stereo_atom_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[case] current: Option<StereoAtomConstraintForm>,
+        #[case] old: Option<StereoAtomConstraintForm>,
+        #[case] new: Option<StereoAtomConstraintForm>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.stereo_atoms[0].2.constraints =
+            current.into_iter().collect::<Vec<_>>().into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyStereoAtomConstraint {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            kind: Some(StereoKind::CisTrans),
+            old: old.clone(),
+            new: new.clone(),
+        };
+        let expected_undo = if old.is_none() && new.is_none() {
+            None
+        } else {
+            Some(Undo::RestoreStereoAtomConstraint {
+                id: StereoAtomId(0),
+                key: StereoAtomConstraintKey::Stereogenicity,
+                constraint: old,
+            })
+        };
+        let undo = if journaled {
+            let undo = molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap();
+            assert_eq!(undo, expected_undo);
+            undo
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.stereo_atoms[0].2.constraints = new.into_iter().collect::<Vec<_>>().into();
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        if expected_undo.is_some() {
+            let repeated = if journaled {
+                molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+            } else {
+                molecule.apply_edit(edit, &mut state)
+            };
+            assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, expected);
+        }
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::addition(
+        None,
+        None,
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        )))
+    )]
+    #[case::modification(
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        )))
+    )]
+    #[case::removal(
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        None
+    )]
+    #[case::absent(None, None, None)]
+    fn test_molecule_apply_edit_modify_stereo_bond_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[case] current: Option<StereoBondConstraintForm>,
+        #[case] old: Option<StereoBondConstraintForm>,
+        #[case] new: Option<StereoBondConstraintForm>,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.stereo_bonds[0].2.constraints =
+            current.into_iter().collect::<Vec<_>>().into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyStereoBondConstraint {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            kind: Some(StereoKind::Tetrahedral),
+            old: old.clone(),
+            new: new.clone(),
+        };
+        let expected_undo = if old.is_none() && new.is_none() {
+            None
+        } else {
+            Some(Undo::RestoreStereoBondConstraint {
+                id: StereoBondId(0),
+                key: StereoBondConstraintKey::Stereogenicity,
+                constraint: old,
+            })
+        };
+        let undo = if journaled {
+            let undo = molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap();
+            assert_eq!(undo, expected_undo);
+            undo
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.stereo_bonds[0].2.constraints = new.into_iter().collect::<Vec<_>>().into();
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        if expected_undo.is_some() {
+            let repeated = if journaled {
+                molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+            } else {
+                molecule.apply_edit(edit, &mut state)
+            };
+            assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, expected);
+        }
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::atom(Edit::ModifyAtomConstraint {
+        id: AtomHandle::Id(AtomId(0)), old: None, new: None,
+    }, EntityKind::Atom)]
+    #[case::bond(Edit::ModifyBondConstraint {
+        id: BondHandle::Id(BondId(0)), old: None, new: None,
+    }, EntityKind::Bond)]
+    #[case::dative_bond(Edit::ModifyDativeBondConstraint {
+        id: DativeBondHandle::Id(DativeBondId(0)), old: None, new: None,
+    }, EntityKind::DativeBond)]
+    #[case::aromatic_system(Edit::ModifyAromaticSystemConstraint {
+        id: AromaticSystemHandle::Id(AromaticSystemId(0)), old: None, new: None,
+    }, EntityKind::AromaticSystem)]
+    #[case::multicenter_bond(Edit::ModifyMulticenterBondConstraint {
+        id: MulticenterBondHandle::Id(MulticenterBondId(0)), old: None, new: None,
+    }, EntityKind::MulticenterBond)]
+    #[case::noncovalent_bond(Edit::ModifyNoncovalentBondConstraint {
+        id: NoncovalentBondHandle::Id(NoncovalentBondId(0)), old: None, new: None,
+    }, EntityKind::NoncovalentBond)]
+    #[case::stereo_atom(Edit::ModifyStereoAtomConstraint {
+        id: StereoAtomHandle::Id(StereoAtomId(0)), kind: None, old: None, new: None,
+    }, EntityKind::StereoAtom)]
+    #[case::stereo_bond(Edit::ModifyStereoBondConstraint {
+        id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: None, new: None,
+    }, EntityKind::StereoBond)]
+    fn test_molecule_apply_edit_constraint_target_error(
+        #[case] edit: Edit,
+        #[case] kind: EntityKind,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let mut molecule = Molecule::default();
+        let mut state = ApplicationState::new(&molecule);
+        let result = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(
+            result,
+            Err(TransactionError::HandleOutOfRange {
+                kind,
+                index: 0,
+                count: 0
+            })
+        );
+        assert_eq!(molecule, Molecule::default());
+    }
+
+    #[rstest]
+    fn test_molecule_apply_edit_add_molecule_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let repeated = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
+        let middle = Constraint::Atom(AtomId(1), AtomConstraintForm::degree(2));
+        removal_entries.constraints = vec![repeated.clone(), middle, repeated.clone()].into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::AddMoleculeConstraint {
+            constraint: repeated.clone().into(),
+        };
+        let undo = if journaled {
+            let undo = molecule.apply_edit_with_undo(edit, &mut state).unwrap();
+            assert_eq!(
+                undo,
+                Some(Undo::RemoveAddedMoleculeConstraint { position: 3 })
+            );
+            undo
+        } else {
+            molecule.apply_edit(edit, &mut state).unwrap();
+            None
+        };
+        removal_entries.constraints.push(repeated);
+        assert_eq!(molecule, Molecule::from_entries(removal_entries));
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert_eq!(molecule, initial);
+        }
+    }
+
+    #[rstest]
+    fn test_molecule_apply_edit_remove_molecule_constraint(
+        mut removal_entries: MoleculeEntries,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let repeated = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
+        let middle = Constraint::Atom(AtomId(1), AtomConstraintForm::degree(2));
+        removal_entries.constraints =
+            vec![repeated.clone(), middle.clone(), repeated.clone()].into();
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::RemoveMoleculeConstraint {
+            constraint: repeated.clone().into(),
+        };
+        let undo = if journaled {
+            let undo = molecule.apply_edit_with_undo(edit, &mut state).unwrap();
+            assert_eq!(
+                undo,
+                Some(Undo::RestoreMoleculeConstraints(CascadedConstraints {
+                    removed: vec![RemovedConstraint {
+                        position: 2,
+                        constraint: repeated.clone()
+                    }],
+                    modified: Vec::new(),
+                }))
+            );
+            undo
+        } else {
+            molecule.apply_edit(edit, &mut state).unwrap();
+            None
+        };
+        removal_entries.constraints = vec![repeated, middle].into();
+        assert_eq!(molecule, Molecule::from_entries(removal_entries));
+        if let Some(undo) = undo {
+            molecule.apply_undo(undo);
+            assert_eq!(molecule, initial);
+        }
+    }
+
+    #[rstest]
+    #[case::missing(Edit::RemoveMoleculeConstraint {
+        constraint: Constraint::Atom(AtomId(0), AtomConstraintForm::degree(2)).into(),
+    }, TransactionError::MissingEntry)]
+    #[case::equivalent(Edit::RemoveMoleculeConstraint {
+        constraint: Constraint::Atom(AtomId(0), AtomConstraintForm::degree(NumForm::lit_set([1]))).into(),
+    }, TransactionError::MissingEntry)]
+    #[case::add_nested(Edit::AddMoleculeConstraint {
+        constraint: Constraint::And(vec![
+            Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
+            Constraint::Or(vec![Constraint::Bond(BondId(2), BondConstraintForm::aromatic(true))]),
+        ]).into(),
+    }, TransactionError::HandleOutOfRange { kind: EntityKind::Bond, index: 2, count: 2 })]
+    #[case::remove_nested(Edit::RemoveMoleculeConstraint {
+        constraint: Constraint::And(vec![
+            Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
+            Constraint::Or(vec![Constraint::Bond(BondId(2), BondConstraintForm::aromatic(true))]),
+        ]).into(),
+    }, TransactionError::HandleOutOfRange { kind: EntityKind::Bond, index: 2, count: 2 })]
+    fn test_molecule_apply_edit_molecule_constraint_error(
+        mut removal_entries: MoleculeEntries,
+        #[case] edit: Edit,
+        #[case] expected: TransactionError,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.constraints =
+            vec![Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1))].into();
+        let initial = Molecule::from_entries(removal_entries);
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let result = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(result, Err(expected));
+        assert_eq!(molecule, initial);
+    }
+
+    #[rstest]
+    fn test_molecule_apply_undo_constraint_position(mut removal_entries: MoleculeEntries) {
+        let removed = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
+        let repeated = Constraint::Atom(AtomId(3), AtomConstraintForm::degree(2));
+        removal_entries.constraints = vec![removed, repeated.clone()].into();
+        let initial = Molecule::from_entries(removal_entries);
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let added = molecule
+            .apply_edit_with_undo(
+                Edit::AddMoleculeConstraint {
+                    constraint: repeated.clone().into(),
+                },
+                &mut state,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(added, Undo::RemoveAddedMoleculeConstraint { position: 2 });
+        let before_removal = molecule.clone();
+        let topology = molecule
+            .apply_edit_with_undo(
+                Edit::RemoveTopology {
+                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    bonds: Vec::new(),
+                },
+                &mut state,
+            )
+            .unwrap()
+            .unwrap();
+        let after_removal = molecule.clone();
+        let constraint = molecule
+            .apply_edit_with_undo(
+                Edit::RemoveMoleculeConstraint {
+                    constraint: repeated.into(),
+                },
+                &mut state,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            constraint,
+            Undo::RestoreMoleculeConstraints(CascadedConstraints {
+                removed: vec![RemovedConstraint {
+                    position: 1,
+                    constraint: Constraint::Atom(AtomId(2), AtomConstraintForm::degree(2)),
+                }],
+                modified: Vec::new(),
+            })
+        );
+
+        molecule.apply_undo(constraint);
+        assert_eq!(molecule, after_removal);
+        molecule.apply_undo(topology);
+        assert_eq!(molecule, before_removal);
+        molecule.apply_undo(added);
+        assert_eq!(molecule, initial);
+    }
+
+    #[rstest]
     fn test_molecule_apply_undo_added_topology() {
         let initial = MoleculeEntries {
             atoms: vec![
@@ -4569,6 +5682,36 @@ mod tests {
         },
     })]
     fn test_molecule_apply_undo_field_manipulated(#[case] undo: Undo) {
+        Molecule::default().apply_undo(undo);
+    }
+
+    #[rstest]
+    #[case::atom(Undo::RestoreAtomConstraint {
+        id: AtomId(0), key: AtomConstraintKey::Degree, constraint: None,
+    })]
+    #[case::bond(Undo::RestoreBondConstraint {
+        id: BondId(0), key: BondConstraintKey::Aromatic, constraint: None,
+    })]
+    #[case::dative_bond(Undo::RestoreDativeBondConstraint {
+        id: DativeBondId(0), key: DativeBondConstraintKey::Aromatic, constraint: None,
+    })]
+    #[case::aromatic_system(Undo::RestoreAromaticSystemConstraint {
+        id: AromaticSystemId(0), key: AromaticSystemConstraintKey::ElectronCount, constraint: None,
+    })]
+    #[case::multicenter_bond(Undo::RestoreMulticenterBondConstraint {
+        id: MulticenterBondId(0), key: MulticenterBondConstraintKey::ElectronCount, constraint: None,
+    })]
+    #[case::noncovalent_bond(Undo::RestoreNoncovalentBondConstraint {
+        id: NoncovalentBondId(0), key: NoncovalentBondConstraintKey::Intramolecular, constraint: None,
+    })]
+    #[case::stereo_atom(Undo::RestoreStereoAtomConstraint {
+        id: StereoAtomId(0), key: StereoAtomConstraintKey::Stereogenicity, constraint: None,
+    })]
+    #[case::stereo_bond(Undo::RestoreStereoBondConstraint {
+        id: StereoBondId(0), key: StereoBondConstraintKey::Stereogenicity, constraint: None,
+    })]
+    #[case::molecule(Undo::RemoveAddedMoleculeConstraint { position: 0 })]
+    fn test_molecule_apply_undo_constraint_manipulated(#[case] undo: Undo) {
         Molecule::default().apply_undo(undo);
     }
 

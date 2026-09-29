@@ -18,10 +18,12 @@ use super::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use super::bond::{BondForm, BondUpdate};
 use super::compact::{MoleculeCompaction, UndoCompaction};
 use super::constraint::{
-    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
-    DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-    NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintForm,
-    StereoBondConstraintForm,
+    AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
+    AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintForm,
+    DativeBondConstraintKey, MoleculeConstraint, MulticenterBondConstraintForm,
+    MulticenterBondConstraintKey, NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
+    RelationalConstraint, StereoAtomConstraintForm, StereoAtomConstraintKey,
+    StereoBondConstraintForm, StereoBondConstraintKey,
 };
 use super::dative::{DativeBondForm, DativeBondUpdate};
 use super::electrons::ElectronCountsForm;
@@ -2146,6 +2148,9 @@ impl CascadedConstraints {
 /// replayed immediately if a later edit in the same batch fails. After successful application they
 /// are returned in a [`Transaction`](crate::ir::Transaction) for explicit rollback against the
 /// exact post-transaction state.
+///
+/// Entity-constraint entries retain the accepted old optional value and its key.
+/// Added molecule constraints record their insertion position.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Undo {
@@ -2265,8 +2270,50 @@ pub enum Undo {
         id: StereoBondId,
         change: StereoBondFieldChange,
     },
-    ApplyCascadedConstraints(CascadedConstraints),
-    ApplyEdit(Box<Edit>),
+    RestoreAtomConstraint {
+        id: AtomId,
+        key: AtomConstraintKey,
+        constraint: Option<AtomConstraintForm>,
+    },
+    RestoreBondConstraint {
+        id: BondId,
+        key: BondConstraintKey,
+        constraint: Option<BondConstraintForm>,
+    },
+    RestoreDativeBondConstraint {
+        id: DativeBondId,
+        key: DativeBondConstraintKey,
+        constraint: Option<DativeBondConstraintForm>,
+    },
+    RestoreAromaticSystemConstraint {
+        id: AromaticSystemId,
+        key: AromaticSystemConstraintKey,
+        constraint: Option<AromaticSystemConstraintForm>,
+    },
+    RestoreMulticenterBondConstraint {
+        id: MulticenterBondId,
+        key: MulticenterBondConstraintKey,
+        constraint: Option<MulticenterBondConstraintForm>,
+    },
+    RestoreNoncovalentBondConstraint {
+        id: NoncovalentBondId,
+        key: NoncovalentBondConstraintKey,
+        constraint: Option<NoncovalentBondConstraintForm>,
+    },
+    RestoreStereoAtomConstraint {
+        id: StereoAtomId,
+        key: StereoAtomConstraintKey,
+        constraint: Option<StereoAtomConstraintForm>,
+    },
+    RestoreStereoBondConstraint {
+        id: StereoBondId,
+        key: StereoBondConstraintKey,
+        constraint: Option<StereoBondConstraintForm>,
+    },
+    RemoveAddedMoleculeConstraint {
+        position: usize,
+    },
+    RestoreMoleculeConstraints(CascadedConstraints),
 }
 
 impl Undo {

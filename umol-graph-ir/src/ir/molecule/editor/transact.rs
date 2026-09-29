@@ -3390,7 +3390,7 @@ mod tests {
         let constraint = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
         one_atom.constraints_mut().push(constraint.clone());
         let transaction = Transaction {
-            undo: vec![Undo::ApplyCascadedConstraints(CascadedConstraints {
+            undo: vec![Undo::RestoreMoleculeConstraints(CascadedConstraints {
                 removed: vec![
                     RemovedConstraint {
                         position,
@@ -3498,73 +3498,6 @@ mod tests {
 
         assert_eq!(
             (Transaction { undo: vec![undo] }).rollback(&mut empty),
-            Err(TransactionError::RollbackStateMismatch),
-        );
-    }
-
-    #[rstest]
-    #[case::atom(EntityKind::Atom)]
-    #[case::bond(EntityKind::Bond)]
-    #[case::dative_bond(EntityKind::DativeBond)]
-    #[case::aromatic_system(EntityKind::AromaticSystem)]
-    #[case::multicenter_bond(EntityKind::MulticenterBond)]
-    #[case::noncovalent_bond(EntityKind::NoncovalentBond)]
-    #[case::stereo_atom(EntityKind::StereoAtom)]
-    #[case::stereo_bond(EntityKind::StereoBond)]
-    fn test_transaction_rollback_constraint_receiver(
-        mut empty: MoleculeEditor,
-        #[case] kind: EntityKind,
-    ) {
-        let edit = match kind {
-            EntityKind::Atom => Edit::ModifyAtomConstraint {
-                id: AtomHandle::Id(AtomId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::Bond => Edit::ModifyBondConstraint {
-                id: BondHandle::Id(BondId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::DativeBond => Edit::ModifyDativeBondConstraint {
-                id: DativeBondHandle::Id(DativeBondId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::AromaticSystem => Edit::ModifyAromaticSystemConstraint {
-                id: AromaticSystemHandle::Id(AromaticSystemId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::MulticenterBond => Edit::ModifyMulticenterBondConstraint {
-                id: MulticenterBondHandle::Id(MulticenterBondId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::NoncovalentBond => Edit::ModifyNoncovalentBondConstraint {
-                id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
-                old: None,
-                new: None,
-            },
-            EntityKind::StereoAtom => Edit::ModifyStereoAtomConstraint {
-                id: StereoAtomHandle::Id(StereoAtomId(0)),
-                kind: None,
-                old: None,
-                new: None,
-            },
-            EntityKind::StereoBond => Edit::ModifyStereoBondConstraint {
-                id: StereoBondHandle::Id(StereoBondId(0)),
-                kind: None,
-                old: None,
-                new: None,
-            },
-        };
-
-        assert_eq!(
-            (Transaction {
-                undo: vec![Undo::ApplyEdit(Box::new(edit))],
-            })
-            .rollback(&mut empty),
             Err(TransactionError::RollbackStateMismatch),
         );
     }

@@ -36,7 +36,7 @@ index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch loops remain under the editor module; single-edit execution and
 handle state are in molecule::apply. Fields remain private and internal Molecule
-mutation methods use pub(crate). S4b1–S4b6 are complete; S4b7 is next. The
+mutation methods use pub(crate). S4b1–S4b7 are complete; S4b8 is next. The
 S4b3–S4b8 migration is currently non-compiling.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -89,7 +89,7 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1–S4b6 are complete; S4b7 is next. The build returns green at S4b8.
+and S4b1–S4b7 are complete; S4b8 is next. The build returns green at S4b8.
 
 ## Editor and transaction API
 
@@ -5242,7 +5242,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Those are removed in S4b7/S4b8. Tests remain unexecuted until the migration
   compiles.
 
-- **S4b7 — Constraint edits and explicit constraint Undo variants** (`ir::{edit,molecule::apply}`; breaking, green at S4b8). [dep: S4b6]
+- **S4b7 — completed 2026-09-28** (`ir::{edit,molecule::apply}`; breaking, green at S4b8). [dep: S4b6]
 
   **Entity-level constraints.** Resolve the target. If old/new are both Some,
   require equal keys. At that key, require current and old to be both absent or
@@ -5292,7 +5292,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   | Edit | Additional precondition | Molecule mutation | Undo capture and replay |
   | --- | --- | --- | --- |
   | AddMoleculeConstraint | None | push_constraint(constraint) | RemoveAddedMoleculeConstraint { position }, recording m.constraints().len() before insertion. Replay guards the position, then calls remove_constraint_at(position). |
-  | RemoveMoleculeConstraint | Find the last exact-equal entry through m.constraints(); MissingEntry if absent | remove_constraint_at(position) | ApplyCascadedConstraints containing RemovedConstraint with that position and the returned stored value. Replay calls restore_constraints(&changes). |
+  | RemoveMoleculeConstraint | Find the last exact-equal entry through m.constraints(); MissingEntry if absent | remove_constraint_at(position) | RestoreMoleculeConstraints containing RemovedConstraint with that position and the returned stored value. Replay calls restore_constraints(&changes). |
 
   The ninth replacement variant is:
 
@@ -5313,6 +5313,26 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   Test saved optional constraints, keys, duplicate top-level entries, position
   restoration, and the no-op journal case.
+
+  **Implemented — constraint execution.** Both Edit executors check keys and
+  offered old values inline, then call set/remove through entity mutable views.
+  The eight constraint wrappers and Undo::ApplyEdit are removed. Eight explicit
+  constraint undos retain the resolved id, key, and accepted old optional value;
+  replay restores through the same views with local target guards. Molecule
+  constraints use push_constraint/remove_constraint_at and restore_constraints.
+  Addition undo records and guards the insertion position.
+
+  Added cases cover all eight entity kinds in both execution paths, optional
+  values, equivalent offered-old forms, key/value mismatches, and no-op journals.
+  Further cases cover target resolution for no-ops, duplicate molecule constraints,
+  exact-equality removal, nested handle failures before writes, and restoration
+  of an insertion position after later removal/compaction is undone. The former
+  boxed-Edit receiver test is replaced by nine explicit-undo guard cases.
+
+  **Verification — 2026-09-28.** Nightly formatting and diff checks/review pass.
+  The all-target graph-ir check reports only the remaining aggregate undo
+  validation `?` in infallible apply_undo, removed in S4b8. Tests remain unexecuted
+  until that migration compiles.
 
 - **S4b8 — Undo replay and migration closure** (`ir::molecule::apply`, Rust consumers; breaking, red→green). [dep: S4b7]
 
@@ -5875,7 +5895,7 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b6 are complete; S4b7 is next.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b7 are complete; S4b8 is next.
   The build returns green at S4b8.
   S4b uses the additions and the component
   removal/restoration interfaces.
