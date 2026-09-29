@@ -22,14 +22,17 @@ const TEXT_SIZE: f64 = 0.45;
 pub(crate) const MAPPING_INDEX_TEXT_SIZE: f64 = TEXT_SIZE * 0.85;
 const SCRIPT_TEXT_SIZE: f64 = 0.315;
 pub(crate) const ATOM_LABEL_MASK_ID: &str = "umol-atom-label-mask";
-const ATOM_LABEL_CHARACTER_ADVANCE: f64 = 0.36;
-const ATOM_LABEL_SCRIPT_CHARACTER_ADVANCE: f64 = 0.252;
+const ATOM_LABEL_FONT_UNITS_PER_EM: f64 = 2048.0;
+const ATOM_LABEL_WIDEST_CHARACTER_ADVANCE: u32 = 2025;
 const ATOM_LABEL_HORIZONTAL_CLEARANCE: f64 = 0.08;
 const ATOM_LABEL_VERTICAL_CLEARANCE: f64 = 0.08;
-const ATOM_LABEL_BASE_HALF_HEIGHT: f64 = 0.2475;
-const ATOM_LABEL_SCRIPT_HALF_HEIGHT: f64 = 0.17325;
-const ATOM_LABEL_SUPERSCRIPT_RISE: f64 = 0.1575;
-const ATOM_LABEL_SUBSCRIPT_DROP: f64 = 0.1125;
+const ATOM_LABEL_BASE_ASCENT: f64 = 847.0 / ATOM_LABEL_FONT_UNITS_PER_EM * TEXT_SIZE;
+const ATOM_LABEL_BASE_DEPTH: f64 = 750.0 / ATOM_LABEL_FONT_UNITS_PER_EM * TEXT_SIZE;
+const ATOM_LABEL_BASE_DESCENDER_DEPTH: f64 = 1160.0 / ATOM_LABEL_FONT_UNITS_PER_EM * TEXT_SIZE;
+const ATOM_LABEL_SCRIPT_ASCENT: f64 = 811.0 / ATOM_LABEL_FONT_UNITS_PER_EM * SCRIPT_TEXT_SIZE;
+const ATOM_LABEL_SCRIPT_DEPTH: f64 = 750.0 / ATOM_LABEL_FONT_UNITS_PER_EM * SCRIPT_TEXT_SIZE;
+const ATOM_LABEL_SCRIPT_SHIFT: f64 =
+    2384.0 / (2.0 * ATOM_LABEL_FONT_UNITS_PER_EM) * SCRIPT_TEXT_SIZE;
 const ARROW_HEAD_LENGTH: f64 = 0.24;
 const ARROW_HEAD_HALF_WIDTH: f64 = 0.11;
 
@@ -37,9 +40,9 @@ const ARROW_HEAD_HALF_WIDTH: f64 = 0.11;
 ///
 /// Depiction item order is preserved among item groups. When atom labels are present, one leading
 /// definition, identified by the configured mask id, masks molecular strokes beneath continuous
-/// conservative label rectangles without painting a page-background color. Mapping-index text uses
-/// the configured size; all other text uses fixed sizes. Coordinates are converted from the
-/// depiction's y-up convention to SVG's y-down convention. The view box covers both depiction
+/// conservative rounded label rectangles without painting a page-background color. Mapping-index
+/// text uses the configured size; all other text uses fixed sizes. Coordinates are converted from
+/// the depiction's y-up convention to SVG's y-down convention. The view box covers both depiction
 /// anchors and estimated atom-label extents, then adds half a nominal bond length on each side; an
 /// empty depiction uses a centered one-by-one view box. Structured
 /// references are encoded in the `data-umol-references` attribute as ordered, space-separated path
@@ -166,7 +169,7 @@ fn include_svg_box(extents: &mut Option<SvgExtents>, label_box: SvgBox) {
 
 fn atom_label_box(atom: &AtomItem) -> SvgBox {
     let label = &atom.label;
-    let base_width = character_count(&label.base) * ATOM_LABEL_CHARACTER_ADVANCE;
+    let base_width = atom_label_advance(&label.base, TEXT_SIZE);
     let script_width = [
         &label.left_superscript,
         &label.right_subscript,
@@ -174,20 +177,24 @@ fn atom_label_box(atom: &AtomItem) -> SvgBox {
     ]
     .into_iter()
     .flatten()
-    .map(|text| character_count(text) * ATOM_LABEL_SCRIPT_CHARACTER_ADVANCE)
+    .map(|text| atom_label_advance(text, SCRIPT_TEXT_SIZE))
     .sum::<f64>();
     let width = base_width + script_width + 2.0 * ATOM_LABEL_HORIZONTAL_CLEARANCE;
     let has_superscript = label.left_superscript.is_some() || label.right_superscript.is_some();
     let top = if has_superscript {
-        (ATOM_LABEL_SUPERSCRIPT_RISE + ATOM_LABEL_SCRIPT_HALF_HEIGHT)
-            .max(ATOM_LABEL_BASE_HALF_HEIGHT)
+        (ATOM_LABEL_SCRIPT_SHIFT + ATOM_LABEL_SCRIPT_ASCENT).max(ATOM_LABEL_BASE_ASCENT)
     } else {
-        ATOM_LABEL_BASE_HALF_HEIGHT
+        ATOM_LABEL_BASE_ASCENT
     } + ATOM_LABEL_VERTICAL_CLEARANCE;
-    let bottom = if label.right_subscript.is_some() {
-        (ATOM_LABEL_SUBSCRIPT_DROP + ATOM_LABEL_SCRIPT_HALF_HEIGHT).max(ATOM_LABEL_BASE_HALF_HEIGHT)
+    let base_depth = if label.base.chars().any(has_descender) {
+        ATOM_LABEL_BASE_DESCENDER_DEPTH
     } else {
-        ATOM_LABEL_BASE_HALF_HEIGHT
+        ATOM_LABEL_BASE_DEPTH
+    };
+    let bottom = if label.right_subscript.is_some() {
+        (ATOM_LABEL_SCRIPT_SHIFT + ATOM_LABEL_SCRIPT_DEPTH).max(base_depth)
+    } else {
+        base_depth
     } + ATOM_LABEL_VERTICAL_CLEARANCE;
 
     SvgBox {
@@ -198,8 +205,56 @@ fn atom_label_box(atom: &AtomItem) -> SvgBox {
     }
 }
 
-fn character_count(text: &str) -> f64 {
-    text.chars().count() as f64
+fn atom_label_advance(text: &str, text_size: f64) -> f64 {
+    let units = text.chars().map(character_advance).sum::<u32>();
+    f64::from(units) / ATOM_LABEL_FONT_UNITS_PER_EM * text_size
+}
+
+/// Returns the larger of the DejaVu Sans and Liberation Sans advances, in font units.
+fn character_advance(character: char) -> u32 {
+    match character {
+        'A' | 'V' => 1401,
+        'B' => 1405,
+        'C' | 'R' => 1479,
+        'D' => 1577,
+        'E' | 'K' | 'P' | 'S' | 'Y' => 1366,
+        'F' | 'T' => 1251,
+        'G' => 1593,
+        'H' => 1540,
+        'I' => 604,
+        'J' => 1024,
+        'L' => 1141,
+        'M' => 1767,
+        'N' => 1532,
+        'O' | 'Q' => 1612,
+        'U' => 1499,
+        'W' => 2025,
+        'X' | 'Z' => 1403,
+        'a' => 1255,
+        'b' | 'd' | 'g' | 'p' | 'q' => 1300,
+        'c' => 1126,
+        'e' => 1260,
+        'f' => 721,
+        'h' | 'n' | 'u' => 1298,
+        'i' | 'j' | 'l' => 569,
+        'k' => 1186,
+        'm' => 1995,
+        'o' => 1253,
+        'r' => 842,
+        's' => 1067,
+        't' => 803,
+        'v' | 'x' | 'y' => 1212,
+        'w' => 1675,
+        'z' => 1075,
+        '0'..='9' => 1303,
+        '+' | '−' => 1716,
+        '•' => 1208,
+        _ => ATOM_LABEL_WIDEST_CHARACTER_ADVANCE,
+    }
+}
+
+fn has_descender(character: char) -> bool {
+    matches!(character, 'J' | 'Q' | 'g' | 'j' | 'p' | 'q' | 'y')
 }
 
 fn render_atom_mask(
@@ -240,6 +295,10 @@ fn render_atom_mask(
             write_number(output, label_box.width);
             output.push_str(r#"" height=""#);
             write_number(output, label_box.height);
+            output.push_str(r#"" rx=""#);
+            write_number(output, ATOM_LABEL_HORIZONTAL_CLEARANCE);
+            output.push_str(r#"" ry=""#);
+            write_number(output, ATOM_LABEL_VERTICAL_CLEARANCE);
             output.push_str(r#"" fill="black"/>"#);
         }
     }
@@ -613,6 +672,119 @@ mod tests {
     use crate::layout::MoleculeLayout;
 
     #[rstest]
+    #[case::oxygen(
+        AtomLabel { base: "O".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        ["0.742900390625", "1.7338916015625", "0.51419921875", "0.5109033203125"]
+    )]
+    #[case::amine(
+        AtomLabel { base: "NH".to_owned(), left_superscript: None, right_subscript: Some("2".to_owned()), right_superscript: None },
+        ["0.482293701171875", "1.7338916015625", "1.03541259765625", "0.6448046875"]
+    )]
+    #[case::chlorine(
+        AtomLabel { base: "Cl".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        ["0.6950000000000001", "1.7338916015625", "0.61", "0.5109033203125"]
+    )]
+    #[case::fluorine(
+        AtomLabel { base: "F".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        ["0.78256103515625", "1.7338916015625", "0.43487792968750005", "0.5109033203125"]
+    )]
+    #[case::descender(
+        AtomLabel { base: "Mg".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        ["0.58304931640625", "1.7338916015625", "0.8339013671875001", "0.6009912109375"]
+    )]
+    #[case::isotope(
+        AtomLabel { base: "C".to_owned(), left_superscript: Some("13".to_owned()), right_subscript: None, right_superscript: None },
+        ["0.557099609375", "1.61192138671875", "0.8858007812500001", "0.63287353515625"]
+    )]
+    #[case::ammonium(
+        AtomLabel { base: "NH".to_owned(), left_superscript: None, right_subscript: Some("4".to_owned()), right_superscript: Some("+".to_owned()) },
+        ["0.350325927734375", "1.61192138671875", "1.29934814453125", "0.76677490234375"]
+    )]
+    #[case::anion(
+        AtomLabel { base: "O".to_owned(), left_superscript: None, right_subscript: None, right_superscript: Some("−".to_owned()) },
+        ["0.6109326171875", "1.61192138671875", "0.7781347656250001", "0.63287353515625"]
+    )]
+    #[case::outside_alphabet_as_widest(
+        AtomLabel { base: "&".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        ["0.6975268554687499", "1.7338916015625", "0.6049462890625", "0.5109033203125"]
+    )]
+    fn test_atom_label_box(#[case] label: AtomLabel, #[case] expected: [&str; 4]) {
+        let atom = AtomItem {
+            position: Point2D::new(1.0, -2.0),
+            label,
+            references: Vec::new(),
+        };
+
+        let label_box = atom_label_box(&atom);
+
+        assert_eq!(
+            [label_box.x, label_box.y, label_box.width, label_box.height].map(|value| {
+                let mut output = String::new();
+                write_number(&mut output, value);
+                output
+            }),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::oxygen(
+        AtomLabel { base: "O".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        0.35419921875, 0.3500244140625, None
+    )]
+    #[case::amine(
+        AtomLabel { base: "NH".to_owned(), left_superscript: None, right_subscript: Some("2".to_owned()), right_superscript: None },
+        0.87541259765625, 0.8251391601562501, Some(1.132)
+    )]
+    #[case::chlorine(
+        AtomLabel { base: "Cl".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        0.43923339843750003, 0.42495117187500003, Some(0.88)
+    )]
+    #[case::fluorine(
+        AtomLabel { base: "F".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        0.258837890625, 0.2748779296875, Some(0.52)
+    )]
+    #[case::descender(
+        AtomLabel { base: "Mg".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        0.6739013671875, 0.6251220703125, Some(0.88)
+    )]
+    #[case::isotope(
+        AtomLabel { base: "C".to_owned(), left_superscript: Some("13".to_owned()), right_subscript: None, right_superscript: None },
+        0.7150341796874999, 0.6753515625000001, Some(1.024)
+    )]
+    #[case::ammonium(
+        AtomLabel { base: "NH".to_owned(), left_superscript: None, right_subscript: Some("4".to_owned()), right_superscript: Some("+".to_owned()) },
+        1.13934814453125, 1.00909423828125, Some(1.384)
+    )]
+    #[case::anion(
+        AtomLabel { base: "O".to_owned(), left_superscript: None, right_subscript: None, right_superscript: Some("−".to_owned()) },
+        0.618134765625, 0.5339794921875001, None
+    )]
+    #[case::widest_character(
+        AtomLabel { base: "W".to_owned(), left_superscript: None, right_subscript: None, right_superscript: None },
+        0.4449462890625, 0.4247314453125, None
+    )]
+    fn test_atom_label_box_reference_fonts(
+        #[case] label: AtomLabel,
+        #[case] dejavu_sans_advance: f64,
+        #[case] liberation_sans_advance: f64,
+        #[case] previous_width: Option<f64>,
+    ) {
+        let atom = AtomItem {
+            position: Point2D::new(0.0, 0.0),
+            label,
+            references: Vec::new(),
+        };
+
+        let width = atom_label_box(&atom).width;
+
+        assert!(width >= dejavu_sans_advance.max(liberation_sans_advance) + 0.16);
+        if let Some(previous_width) = previous_width {
+            assert!(width < previous_width);
+        }
+    }
+
+    #[rstest]
     fn test_render_atom_mask() {
         let molecule = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
         let layout =
@@ -648,10 +820,18 @@ mod tests {
         );
         assert_eq!(mask_children[0].attribute("fill"), Some("white"));
         assert_eq!(mask_children[1].attribute("class"), Some("umol-atom-mask"));
-        assert_eq!(mask_children[1].attribute("x"), Some("1.74"));
-        assert_eq!(mask_children[1].attribute("y"), Some("-0.3275"));
-        assert_eq!(mask_children[1].attribute("width"), Some("0.52"));
-        assert_eq!(mask_children[1].attribute("height"), Some("0.655"));
+        assert_eq!(mask_children[1].attribute("x"), Some("1.751689453125"));
+        assert_eq!(mask_children[1].attribute("y"), Some("-0.2661083984375"));
+        assert_eq!(
+            mask_children[1].attribute("width"),
+            Some("0.49662109374999996")
+        );
+        assert_eq!(
+            mask_children[1].attribute("height"),
+            Some("0.5109033203125")
+        );
+        assert_eq!(mask_children[1].attribute("rx"), Some("0.08"));
+        assert_eq!(mask_children[1].attribute("ry"), Some("0.08"));
         assert_eq!(mask_children[1].attribute("fill"), Some("black"));
         assert_eq!(
             groups
@@ -870,7 +1050,10 @@ mod tests {
             .filter(|child| child.has_tag_name("g"))
             .collect::<Vec<_>>();
 
-        assert_eq!(root.attribute("viewBox"), Some("-1.5 -2.5 5.26 7.3275"));
+        assert_eq!(
+            root.attribute("viewBox"),
+            Some("-1.5 -2.5 5.257099609375 7.244794921875")
+        );
         assert_eq!(
             children
                 .iter()
@@ -936,8 +1119,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(mask_boxes.len(), 2);
-        assert_eq!(mask_boxes[0].attribute("width"), Some("0.52"));
-        assert_eq!(mask_boxes[1].attribute("width"), Some("0.52"));
+        assert_eq!(mask_boxes[0].attribute("width"), Some("0.51419921875"));
+        assert_eq!(mask_boxes[1].attribute("width"), Some("0.51419921875"));
         assert_eq!(
             bond_groups
                 .iter()
