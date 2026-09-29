@@ -408,7 +408,7 @@ impl BondConstraintsForm {
     #[getter]
     pub(crate) fn ring_size_count(slf: Py<Self>) -> BondRingSizeCounts {
         BondRingSizeCounts {
-            backing: BondRingSizeBacking::Value(slf),
+            storage: BondRingSizeStorage::Value(slf),
         }
     }
 
@@ -526,9 +526,10 @@ pub(crate) fn bond_constraints_asdict<'py>(
 
 /// What a `BondConstraintsView` writes through to: a bond within a molecule (by
 /// index) or a standalone `BondForm`.
-pub(crate) enum BondConstraintsBacking {
+pub(crate) enum BondConstraintsStorage {
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrBondId,
     },
     Bond(Py<BondForm>),
@@ -540,7 +541,7 @@ pub(crate) enum BondConstraintsBacking {
 /// without a clone-and-writeback.
 #[pyclass]
 pub struct BondConstraintsView {
-    pub(crate) backing: BondConstraintsBacking,
+    pub(crate) storage: BondConstraintsStorage,
 }
 
 impl BondConstraintsView {
@@ -550,9 +551,10 @@ impl BondConstraintsView {
         py: Python<'_>,
         f: impl FnOnce(&GraphIrBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(BondConstraintsView))?;
                 let view = molecule
                     .to_rust()
                     .bonds()
@@ -560,7 +562,7 @@ impl BondConstraintsView {
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
                 f(&view.attributes().constraints)
             }
-            BondConstraintsBacking::Bond(bond) => {
+            BondConstraintsStorage::Bond(bond) => {
                 let bond = bond.bind(py).borrow();
                 f(&bond.to_rust().constraints)
             }
@@ -573,9 +575,10 @@ impl BondConstraintsView {
         py: Python<'_>,
         constraint: GraphIrBondConstraintForm,
     ) -> PyResult<()> {
-        match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(BondConstraintsView))?;
                 if !molecule.to_rust().bonds().contains(*id) {
                     return Err(PyIndexError::new_err("bond id out of range"));
                 }
@@ -584,7 +587,7 @@ impl BondConstraintsView {
                 cs.set(constraint);
                 Ok(())
             }
-            BondConstraintsBacking::Bond(value) => {
+            BondConstraintsStorage::Bond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 cs.set(constraint);
@@ -599,9 +602,10 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: GraphIrBondConstraintKey,
     ) -> PyResult<Option<GraphIrBondConstraintForm>> {
-        match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(BondConstraintsView))?;
                 if !molecule.to_rust().bonds().contains(*id) {
                     return Err(PyIndexError::new_err("bond id out of range"));
                 }
@@ -609,7 +613,7 @@ impl BondConstraintsView {
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
-            BondConstraintsBacking::Bond(value) => {
+            BondConstraintsStorage::Bond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 Ok(cs.remove(key))
@@ -663,9 +667,10 @@ impl BondConstraintsView {
     /// view aliasing the same bond is not a double-borrow panic.
     pub(crate) fn update(&self, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(BondConstraintsView))?;
                 if !molecule.to_rust().bonds().contains(*id) {
                     return Err(PyIndexError::new_err("bond id out of range"));
                 }
@@ -674,7 +679,7 @@ impl BondConstraintsView {
                 resolved.apply(cs);
                 Ok(())
             }
-            BondConstraintsBacking::Bond(value) => {
+            BondConstraintsStorage::Bond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 resolved.apply(cs);
@@ -811,15 +816,21 @@ impl BondConstraintsView {
     /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
     /// size: `constraints.ring_size_count[6]`, `[6] = 3`, `del [6]`.
     #[getter]
-    pub(crate) fn ring_size_count(&self, py: Python<'_>) -> BondRingSizeCounts {
-        let backing = match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => BondRingSizeBacking::Molecule {
-                owner: owner.clone_ref(py),
-                id: *id,
-            },
-            BondConstraintsBacking::Bond(bond) => BondRingSizeBacking::Bond(bond.clone_ref(py)),
+    pub(crate) fn ring_size_count(&self, py: Python<'_>) -> PyResult<BondRingSizeCounts> {
+        let storage = match &self.storage {
+            BondConstraintsStorage::Molecule { owner, counter, id } => {
+                owner
+                    .try_borrow(py)?
+                    .check_access(*counter, stringify!(BondConstraintsView))?;
+                BondRingSizeStorage::Molecule {
+                    owner: owner.clone_ref(py),
+                    counter: *counter,
+                    id: *id,
+                }
+            }
+            BondConstraintsStorage::Bond(bond) => BondRingSizeStorage::Bond(bond.clone_ref(py)),
         };
-        BondRingSizeCounts { backing }
+        Ok(BondRingSizeCounts { storage })
     }
 
     /// The present constraints as a dict keyed by snake_case name.
@@ -830,9 +841,10 @@ impl BondConstraintsView {
 
 /// What a `BondRingSizeCounts` proxy reads/writes through to: a bond within a
 /// molecule, a standalone `BondForm`, or a standalone `BondConstraintsForm` value.
-pub(crate) enum BondRingSizeBacking {
+pub(crate) enum BondRingSizeStorage {
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrBondId,
     },
     Bond(Py<BondForm>),
@@ -845,7 +857,7 @@ pub(crate) enum BondRingSizeBacking {
 /// `BondConstraintsView`).
 #[pyclass]
 pub struct BondRingSizeCounts {
-    pub(crate) backing: BondRingSizeBacking,
+    pub(crate) storage: BondRingSizeStorage,
 }
 
 impl BondRingSizeCounts {
@@ -855,9 +867,10 @@ impl BondRingSizeCounts {
         py: Python<'_>,
         f: impl FnOnce(&GraphIrBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            BondRingSizeBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            BondRingSizeStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(BondRingSizeCounts))?;
                 let view = molecule
                     .to_rust()
                     .bonds()
@@ -865,8 +878,8 @@ impl BondRingSizeCounts {
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
                 f(&view.attributes().constraints)
             }
-            BondRingSizeBacking::Bond(bond) => f(&bond.bind(py).borrow().to_rust().constraints),
-            BondRingSizeBacking::Value(value) => f(value.bind(py).borrow().to_rust()),
+            BondRingSizeStorage::Bond(bond) => f(&bond.bind(py).borrow().to_rust().constraints),
+            BondRingSizeStorage::Value(value) => f(value.bind(py).borrow().to_rust()),
         }
     }
 
@@ -876,17 +889,20 @@ impl BondRingSizeCounts {
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrBondConstraintsForm),
     ) -> PyResult<()> {
-        match &self.backing {
-            BondRingSizeBacking::Molecule { owner, id } => f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .bond_mut(*id)
-                .attributes_mut()
-                .constraints),
-            BondRingSizeBacking::Bond(bond) => {
+        match &self.storage {
+            BondRingSizeStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(BondRingSizeCounts))?;
+                f(&mut molecule
+                    .to_rust_mut()
+                    .bond_mut(*id)
+                    .attributes_mut()
+                    .constraints);
+            }
+            BondRingSizeStorage::Bond(bond) => {
                 f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints)
             }
-            BondRingSizeBacking::Value(value) => f(value.borrow_mut(py).to_rust_mut()),
+            BondRingSizeStorage::Value(value) => f(value.borrow_mut(py).to_rust_mut()),
         }
         Ok(())
     }

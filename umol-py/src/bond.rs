@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::constraint::bond::{
-    bond_constraints_asdict, BondConstraintsBacking, BondConstraintsForm, BondConstraintsLike,
+    bond_constraints_asdict, BondConstraintsForm, BondConstraintsLike, BondConstraintsStorage,
     BondConstraintsView,
 };
 use crate::convert::hash_rust;
@@ -246,7 +246,7 @@ impl BondForm {
     #[getter]
     fn constraints(slf: Py<Self>) -> BondConstraintsView {
         BondConstraintsView {
-            backing: BondConstraintsBacking::Bond(slf),
+            storage: BondConstraintsStorage::Bond(slf),
         }
     }
 
@@ -340,9 +340,11 @@ impl_py_lattice!(
 
 /// A view of one bond within a molecule: a handle to the molecule plus the bond's
 /// index. Field reads rebuild the transient Rust view; the molecule is never copied.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct BondView {
     owner: Py<Molecule>,
+    counter: u64,
     id: GraphIrBondId,
 }
 
@@ -359,15 +361,18 @@ impl BondView {
 #[pymethods]
 impl BondView {
     #[getter]
-    fn id(&self) -> u32 {
-        self.id.0
+    fn id(&self, py: Python<'_>) -> PyResult<u32> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
+        Ok(self.id.0)
     }
 
     /// The two atom indices incident to this bond (read-only — endpoints are
     /// topology, not part of the bond value).
     #[getter]
     fn atom_ids(&self, py: Python<'_>) -> PyResult<(u32, u32)> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
         let view = molecule
             .to_rust()
             .bonds()
@@ -377,87 +382,111 @@ impl BondView {
         Ok((first.0, second.0))
     }
 
-    fn __repr__(&self) -> String {
-        format!("BondView(id={})", self.id.0)
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
+        Ok(format!("BondView(id={})", self.id.0))
     }
 
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
         NumForm::from_rust(py, &self.bond(molecule.to_rust())?.order)
     }
 
     #[setter]
-    fn set_order(&self, py: Python<'_>, value: NumLike) {
-        self.owner
-            .borrow_mut(py)
+    fn set_order(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
+        molecule
             .to_rust_mut()
             .bond_mut(self.id)
             .attributes_mut()
-            .order = value.to_rust(py);
+            .order = value;
+        Ok(())
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
         NumForm::from_rust(py, &self.bond(molecule.to_rust())?.charge)
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: NumLike) {
-        self.owner
-            .borrow_mut(py)
+    fn set_charge(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
+        molecule
             .to_rust_mut()
             .bond_mut(self.id)
             .attributes_mut()
-            .charge = value.to_rust(py);
+            .charge = value;
+        Ok(())
     }
 
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
         UnpairedElectronsForm::from_rust(py, &self.bond(molecule.to_rust())?.unpaired_electrons)
     }
 
     #[setter]
-    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
-        self.owner
-            .borrow_mut(py)
+    fn set_unpaired_electrons(
+        &self,
+        py: Python<'_>,
+        value: PyRef<'_, UnpairedElectronsForm>,
+    ) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
+        molecule
             .to_rust_mut()
             .bond_mut(self.id)
             .attributes_mut()
-            .unpaired_electrons = value.to_rust(py);
+            .unpaired_electrons = value;
+        Ok(())
     }
 
     /// The bond's constraints as a live handle onto the molecule: reads borrow the
     /// current state, mutators write through to the bond in place.
     #[getter]
-    fn constraints(&self, py: Python<'_>) -> BondConstraintsView {
-        BondConstraintsView {
-            backing: BondConstraintsBacking::Molecule {
+    fn constraints(&self, py: Python<'_>) -> PyResult<BondConstraintsView> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
+        Ok(BondConstraintsView {
+            storage: BondConstraintsStorage::Molecule {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id: self.id,
             },
-        }
+        })
     }
 
     /// Replace the whole constraint set of the backing bond in place (wipe-and-set)
     /// from a value container or a live view.
     #[setter]
     fn set_constraints(&self, py: Python<'_>, value: BondConstraintsLike) -> PyResult<()> {
-        self.owner
-            .borrow_mut(py)
+        let value = value.to_rust(py)?;
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
+        molecule
             .to_rust_mut()
             .bond_mut(self.id)
             .attributes_mut()
-            .constraints = value.to_rust(py)?;
+            .constraints = value;
         Ok(())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `BondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondView))?;
         let bond = self.bond(molecule.to_rust())?;
         let dict = PyDict::new(py);
         dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
@@ -495,94 +524,109 @@ fn resolve_bond_index(molecule: &GraphIrMolecule, index: isize) -> PyResult<Grap
 }
 
 /// The bonds of a molecule, indexed by integer position.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct BondViews {
     owner: Py<Molecule>,
+    counter: u64,
 }
 
 #[pymethods]
 impl BondViews {
-    fn __len__(&self, py: Python<'_>) -> usize {
-        self.owner.bind(py).borrow().to_rust().bonds().count()
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondViews))?;
+        Ok(molecule.to_rust().bonds().count())
     }
 
-    fn __repr__(&self, py: Python<'_>) -> String {
-        format!(
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondViews))?;
+        Ok(format!(
             "BondViews(len={})",
-            self.owner.bind(py).borrow().to_rust().bonds().count()
-        )
+            molecule.to_rust().bonds().count()
+        ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<BondView> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondViews))?;
         let id = resolve_bond_index(molecule.to_rust(), index)?;
         Ok(BondView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
         })
     }
 
     /// Replace the whole bond value at `index` in place (endpoints unchanged).
     fn __setitem__(&self, py: Python<'_>, index: isize, bond: PyRef<'_, BondForm>) -> PyResult<()> {
-        let mut molecule = self.owner.borrow_mut(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(BondViews))?;
         let id = resolve_bond_index(molecule.to_rust(), index)?;
         *molecule.to_rust_mut().bond_mut(id).attributes_mut() = bond.to_rust().clone();
         Ok(())
     }
 
     /// The bond between atoms `first` and `second`, or `None`.
-    fn of(&self, py: Python<'_>, first: u32, second: u32) -> Option<BondView> {
-        let molecule = self.owner.bind(py).borrow();
-        molecule
+    fn of(&self, py: Python<'_>, first: u32, second: u32) -> PyResult<Option<BondView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondViews))?;
+        Ok(molecule
             .to_rust()
             .bonds()
             .of_id(GraphIrAtomId(first), GraphIrAtomId(second))
             .map(|id| BondView {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id,
-            })
+            }))
     }
 
-    fn __iter__(&self, py: Python<'_>) -> BondViewIter {
-        let ids = self
-            .owner
-            .bind(py)
-            .borrow()
-            .to_rust()
-            .bonds()
-            .ids()
-            .collect::<Vec<_>>();
-        BondViewIter {
+    fn __iter__(&self, py: Python<'_>) -> PyResult<BondViewIter> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondViews))?;
+        let ids = molecule.to_rust().bonds().ids().collect::<Vec<_>>();
+        Ok(BondViewIter {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             ids: ids.into_iter(),
-        }
+        })
     }
 }
 
 impl BondViews {
     /// Build the bond-views handle for `owner` (the `.bonds` accessor on the molecule).
-    pub(crate) fn new(owner: Py<Molecule>) -> BondViews {
-        BondViews { owner }
+    pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<BondViews> {
+        let counter = owner.try_borrow(py)?.view_counter()?;
+        Ok(BondViews { owner, counter })
     }
 }
 
 #[pyclass]
 struct BondViewIter {
     owner: Py<Molecule>,
+    counter: u64,
     ids: IntoIter<GraphIrBondId>,
 }
 
 #[pymethods]
 impl BondViewIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
+    fn __iter__(slf: PyRef<'_, Self>) -> PyResult<PyRef<'_, Self>> {
+        slf.owner
+            .try_borrow(slf.py())?
+            .check_access(slf.counter, stringify!(BondViewIter))?;
+        Ok(slf)
     }
 
-    fn __next__(&mut self, py: Python<'_>) -> Option<BondView> {
-        self.ids.next().map(|id| BondView {
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<BondView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(BondViewIter))?;
+        Ok(self.ids.next().map(|id| BondView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
-        })
+        }))
     }
 }
 
@@ -659,7 +703,7 @@ mod tests {
             let view = Py::new(
                 py,
                 BondConstraintsView {
-                    backing: BondConstraintsBacking::Bond(src),
+                    storage: BondConstraintsStorage::Bond(src),
                 },
             )
             .unwrap();
@@ -1043,7 +1087,7 @@ mod tests {
             let own_view = Py::new(
                 py,
                 BondConstraintsView {
-                    backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                    storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
                 },
             )
             .unwrap();
@@ -1070,12 +1114,12 @@ mod tests {
             )
             .unwrap();
             let view = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             let other = Py::new(
                 py,
                 BondConstraintsView {
-                    backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                    storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
                 },
             )
             .unwrap();
@@ -1175,7 +1219,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             let aromatic = into_py_variant(
                 py,
@@ -1189,7 +1233,7 @@ mod tests {
             view.set(py, aromatic).unwrap();
             // a fresh view proves the write hit the standalone bond, not a copy
             let fresh = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond),
+                storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             match fresh
@@ -1218,7 +1262,7 @@ mod tests {
             )
             .unwrap();
             let view = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             let removed = view
                 .pop(
@@ -1233,7 +1277,7 @@ mod tests {
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
             let fresh = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond),
+                storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 0);
         });
@@ -1244,7 +1288,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             let mut other = GraphIrBondConstraintsForm::new();
             other.set(GraphIrBondConstraintForm::aromatic(
@@ -1262,7 +1306,7 @@ mod tests {
             )
             .unwrap();
             let fresh = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond),
+                storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 2);
         });
@@ -1273,7 +1317,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             assert_eq!(
                 view.aromatic(py).unwrap().to_rust(),
@@ -1281,7 +1325,7 @@ mod tests {
             );
             view.set_aromatic(py, BooleanLike::Lit(true)).unwrap();
             let fresh = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond),
+                storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(
                 fresh.aromatic(py).unwrap().to_rust(),
@@ -1310,17 +1354,19 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             view.ring_size_count(py)
+                .unwrap()
                 .__setitem__(py, 5, NumLike::Lit(1))
                 .unwrap();
             let fresh = BondConstraintsView {
-                backing: BondConstraintsBacking::Bond(bond),
+                storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(
                 fresh
                     .ring_size_count(py)
+                    .unwrap()
                     .__getitem__(py, 5)
                     .unwrap()
                     .unwrap()
@@ -1355,9 +1401,10 @@ mod tests {
         Python::attach(|py| {
             let view = BondView {
                 owner: ethene(py),
+                counter: 0,
                 id: GraphIrBondId(0),
             };
-            assert_eq!(view.id(), 0);
+            assert_eq!(view.id(py).unwrap(), 0);
             assert_eq!(view.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(2));
         });
     }
@@ -1367,6 +1414,7 @@ mod tests {
         Python::attach(|py| {
             let view = BondView {
                 owner: ethene(py),
+                counter: 0,
                 id: GraphIrBondId(0),
             };
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
@@ -1379,11 +1427,13 @@ mod tests {
             let owner = ethene(py);
             let view = BondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrBondId(0),
             };
-            view.set_order(py, NumLike::Lit(1));
+            view.set_order(py, NumLike::Lit(1)).unwrap();
             let fresh = BondView {
                 owner,
+                counter: 0,
                 id: GraphIrBondId(0),
             };
             assert_eq!(fresh.order(py).unwrap().to_rust(py), GraphIrNumForm::Lit(1));
@@ -1396,11 +1446,13 @@ mod tests {
             let owner = ethene(py);
             let view = BondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrBondId(0),
             };
-            view.set_charge(py, NumLike::Lit(-1));
+            view.set_charge(py, NumLike::Lit(-1)).unwrap();
             let fresh = BondView {
                 owner,
+                counter: 0,
                 id: GraphIrBondId(0),
             };
             assert_eq!(
@@ -1415,10 +1467,11 @@ mod tests {
         Python::attach(|py| {
             let view = BondView {
                 owner: ethene(py),
+                counter: 0,
                 id: GraphIrBondId(0),
             };
-            match view.constraints(py).backing {
-                BondConstraintsBacking::Molecule { id, .. } => assert_eq!(id, GraphIrBondId(0)),
+            match view.constraints(py).unwrap().storage {
+                BondConstraintsStorage::Molecule { id, .. } => assert_eq!(id, GraphIrBondId(0)),
                 _ => panic!("expected molecule-backed view"),
             }
         });
@@ -1429,8 +1482,9 @@ mod tests {
         Python::attach(|py| {
             let owner = ethene(py);
             let view = BondConstraintsView {
-                backing: BondConstraintsBacking::Molecule {
+                storage: BondConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrBondId(0),
                 },
             };
@@ -1445,8 +1499,9 @@ mod tests {
             .unwrap();
             view.set(py, aromatic).unwrap();
             let fresh = BondConstraintsView {
-                backing: BondConstraintsBacking::Molecule {
+                storage: BondConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrBondId(0),
                 },
             };
@@ -1463,23 +1518,27 @@ mod tests {
         Python::attach(|py| {
             let owner = ethene(py);
             let view = BondConstraintsView {
-                backing: BondConstraintsBacking::Molecule {
+                storage: BondConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrBondId(0),
                 },
             };
             view.ring_size_count(py)
+                .unwrap()
                 .__setitem__(py, 6, NumLike::Lit(1))
                 .unwrap();
             let fresh = BondConstraintsView {
-                backing: BondConstraintsBacking::Molecule {
+                storage: BondConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrBondId(0),
                 },
             };
             assert_eq!(
                 fresh
                     .ring_size_count(py)
+                    .unwrap()
                     .__getitem__(py, 6)
                     .unwrap()
                     .unwrap()
@@ -1492,10 +1551,13 @@ mod tests {
     #[rstest]
     fn test_bond_views_len_and_getitem() {
         Python::attach(|py| {
-            let views = BondViews { owner: ethene(py) };
-            assert_eq!(views.__len__(py), 1);
-            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
-            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 0);
+            let views = BondViews {
+                owner: ethene(py),
+                counter: 0,
+            };
+            assert_eq!(views.__len__(py).unwrap(), 1);
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(py).unwrap(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(py).unwrap(), 0);
             assert!(views.__getitem__(py, 5).is_err());
             assert!(views.__getitem__(py, -2).is_err());
         });
@@ -1507,6 +1569,7 @@ mod tests {
             let owner = ethene(py);
             let views = BondViews {
                 owner: owner.clone_ref(py),
+                counter: 0,
             };
             let single = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
@@ -1520,7 +1583,10 @@ mod tests {
     #[rstest]
     fn test_bond_views_setitem_error() {
         Python::attach(|py| {
-            let views = BondViews { owner: ethene(py) };
+            let views = BondViews {
+                owner: ethene(py),
+                counter: 0,
+            };
             let single = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             assert!(views.__setitem__(py, 5, single.bind(py).borrow()).is_err());
         });
@@ -1544,10 +1610,10 @@ mod tests {
                 ..Default::default()
             });
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
-            let views = BondViews { owner };
-            assert_eq!(views.of(py, 0, 1).unwrap().id(), 0);
-            assert_eq!(views.of(py, 1, 0).unwrap().id(), 0);
-            assert!(views.of(py, 1, 2).is_none());
+            let views = BondViews { owner, counter: 0 };
+            assert_eq!(views.of(py, 0, 1).unwrap().unwrap().id(py).unwrap(), 0);
+            assert_eq!(views.of(py, 1, 0).unwrap().unwrap().id(py).unwrap(), 0);
+            assert!(views.of(py, 1, 2).unwrap().is_none());
         });
     }
 }

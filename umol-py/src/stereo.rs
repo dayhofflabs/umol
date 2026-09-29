@@ -1170,9 +1170,9 @@ use crate::constraint::stereo::{
     StereogenicityForm, TopicityForm, TopicityRelationForm, TopicityRelationLike,
 };
 use crate::constraint::stereo::{
-    StereoAtomConstraintForm, StereoAtomConstraintsBacking, StereoAtomConstraintsForm,
-    StereoAtomConstraintsLike, StereoAtomConstraintsView, StereoBondConstraintForm,
-    StereoBondConstraintsBacking, StereoBondConstraintsForm, StereoBondConstraintsLike,
+    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoAtomConstraintsLike,
+    StereoAtomConstraintsStorage, StereoAtomConstraintsView, StereoBondConstraintForm,
+    StereoBondConstraintsForm, StereoBondConstraintsLike, StereoBondConstraintsStorage,
     StereoBondConstraintsView,
 };
 
@@ -1199,7 +1199,7 @@ macro_rules! stereo_value {
     };
     (
         $value:ident, $rust_form:ident, $constraint:ident, $constraints:ident, $like:ident,
-        $view:ident, $backing:ident, $from_rust:ident $(,)?
+        $view:ident, $storage:ident, $from_rust:ident $(,)?
     ) => {
         #[pyclass]
         pub struct $value {
@@ -1258,7 +1258,7 @@ macro_rules! stereo_value {
             #[getter]
             fn constraints(slf: Py<Self>) -> $view {
                 $view {
-                    backing: $backing::Value(slf),
+                    storage: $storage::Value(slf),
                 }
             }
 
@@ -1342,12 +1342,12 @@ macro_rules! stereo_value {
 
 stereo_value! {
     StereoAtomForm, GraphIrStereoAtomForm, StereoAtomConstraintForm, StereoAtomConstraintsForm,
-    StereoAtomConstraintsLike, StereoAtomConstraintsView, StereoAtomConstraintsBacking, production,
+    StereoAtomConstraintsLike, StereoAtomConstraintsView, StereoAtomConstraintsStorage, production,
 }
 
 stereo_value! {
     StereoBondForm, GraphIrStereoBondForm, StereoBondConstraintForm, StereoBondConstraintsForm,
-    StereoBondConstraintsLike, StereoBondConstraintsView, StereoBondConstraintsBacking, production,
+    StereoBondConstraintsLike, StereoBondConstraintsView, StereoBondConstraintsStorage, production,
 }
 
 /// Per-entity molecule-embedded stereo view — `StereoAtomView` / `StereoBondView` — a handle
@@ -1357,12 +1357,14 @@ stereo_value! {
 macro_rules! stereo_view {
     (
         $view:ident, $rust_view:ident, $rust_id:ident, $namespace:ident, $entity_mut:ident,
-        $id_error:literal, $constraint:ident, $constraints_view:ident, $constraints_backing:ident,
+        $id_error:literal, $constraint:ident, $constraints_view:ident, $constraints_storage:ident,
         $like:ident $(,)?
     ) => {
+        /// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
         #[pyclass]
         pub struct $view {
             owner: Py<Molecule>,
+            counter: u64,
             id: $rust_id,
         }
 
@@ -1380,25 +1382,31 @@ macro_rules! stereo_view {
         #[pymethods]
         impl $view {
             #[getter]
-            fn id(&self) -> u32 {
-                self.id.0
+            fn id(&self, py: Python<'_>) -> PyResult<u32> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
+                Ok(self.id.0)
             }
 
-            fn __repr__(&self) -> String {
-                format!("{}(id={})", stringify!($view), self.id.0)
+            fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
+                Ok(format!("{}(id={})", stringify!($view), self.id.0))
             }
 
             /// The site atom/bond index this stereo entity sits on (read-only topology).
             #[getter]
             fn site_id(&self, py: Python<'_>) -> PyResult<u32> {
-                let molecule = self.owner.bind(py).borrow();
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
                 Ok(self.view(molecule.to_rust())?.site_id().0)
             }
 
             /// The ligands in frame order (read-only topology).
             #[getter]
             fn ligands(&self, py: Python<'_>) -> PyResult<Vec<StereoLigand>> {
-                let molecule = self.owner.bind(py).borrow();
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
                 Ok(self
                     .view(molecule.to_rust())?
                     .ligand_ids()
@@ -1411,21 +1419,24 @@ macro_rules! stereo_view {
             /// The coordination-geometry kind (from the configuration).
             #[getter]
             fn kind(&self, py: Python<'_>) -> PyResult<StereoKind> {
-                let molecule = self.owner.bind(py).borrow();
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
                 Ok(StereoKind::from_rust(self.view(molecule.to_rust())?.kind()))
             }
 
             /// The coset (from the configuration).
             #[getter]
             fn coset(&self, py: Python<'_>) -> PyResult<StereoCoset> {
-                let molecule = self.owner.bind(py).borrow();
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
                 StereoCoset::from_rust(py, self.view(molecule.to_rust())?.coset())
             }
 
             /// The stereo configuration (geometry + coset).
             #[getter]
             fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationForm> {
-                let molecule = self.owner.bind(py).borrow();
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
                 StereoConfigurationForm::from_rust(
                     py,
                     &self.view(molecule.to_rust())?.attributes().configuration,
@@ -1439,7 +1450,8 @@ macro_rules! stereo_view {
                 value: StereoConfigurationLike,
             ) -> PyResult<()> {
                 let configuration = value.to_rust(py);
-                let mut molecule = self.owner.borrow_mut(py);
+                let mut molecule = self.owner.try_borrow_mut(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
                 if !molecule.to_rust().$namespace().contains(self.id) {
                     return Err(PyIndexError::new_err($id_error));
                 }
@@ -1454,13 +1466,16 @@ macro_rules! stereo_view {
             /// The entity's constraints as a live handle onto the molecule: reads borrow the
             /// current state, mutators write through to the entity in place.
             #[getter]
-            fn constraints(&self, py: Python<'_>) -> $constraints_view {
-                $constraints_view {
-                    backing: $constraints_backing::Molecule {
+            fn constraints(&self, py: Python<'_>) -> PyResult<$constraints_view> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
+                Ok($constraints_view {
+                    storage: $constraints_storage::Molecule {
                         owner: self.owner.clone_ref(py),
+                        counter: self.counter,
                         id: self.id,
                     },
-                }
+                })
             }
 
             /// Replace the whole constraint set of the backing entity in place (wipe-and-set)
@@ -1468,7 +1483,8 @@ macro_rules! stereo_view {
             #[setter]
             fn set_constraints(&self, py: Python<'_>, value: $like) -> PyResult<()> {
                 let constraints = value.to_rust(py)?;
-                let mut molecule = self.owner.borrow_mut(py);
+                let mut molecule = self.owner.try_borrow_mut(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
                 if !molecule.to_rust().$namespace().contains(self.id) {
                     return Err(PyIndexError::new_err($id_error));
                 }
@@ -1483,7 +1499,8 @@ macro_rules! stereo_view {
             /// The value fields as a dict: `configuration` plus a `constraints` list of the
             /// entries — symmetric with the value pyclass's `asdict`, read through the view.
             fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-                let molecule = self.owner.bind(py).borrow();
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
                 let attributes = self.view(molecule.to_rust())?.attributes();
                 let dict = PyDict::new(py);
                 dict.set_item(
@@ -1505,13 +1522,13 @@ macro_rules! stereo_view {
 stereo_view! {
     StereoAtomView, GraphIrStereoAtomView, GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut,
     "stereo atom id out of range", StereoAtomConstraintForm, StereoAtomConstraintsView,
-    StereoAtomConstraintsBacking, StereoAtomConstraintsLike,
+    StereoAtomConstraintsStorage, StereoAtomConstraintsLike,
 }
 
 stereo_view! {
     StereoBondView, GraphIrStereoBondView, GraphIrStereoBondId, stereo_bonds, stereo_bond_mut,
     "stereo bond id out of range", StereoBondConstraintForm, StereoBondConstraintsView,
-    StereoBondConstraintsBacking, StereoBondConstraintsLike,
+    StereoBondConstraintsStorage, StereoBondConstraintsLike,
 }
 
 /// Per-entity molecule-level stereo collection — `StereoAtomViews` / `StereoBondViews` — the
@@ -1542,30 +1559,38 @@ macro_rules! stereo_views {
             }
         }
 
+        /// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
         #[pyclass]
         pub struct $views {
             owner: Py<Molecule>,
+            counter: u64,
         }
 
         #[pymethods]
         impl $views {
-            fn __len__(&self, py: Python<'_>) -> usize {
-                self.owner.bind(py).borrow().to_rust().$namespace().count()
+            fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($views))?;
+                Ok(molecule.to_rust().$namespace().count())
             }
 
-            fn __repr__(&self, py: Python<'_>) -> String {
-                format!(
+            fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($views))?;
+                Ok(format!(
                     "{}(len={})",
                     stringify!($views),
-                    self.owner.bind(py).borrow().to_rust().$namespace().count()
-                )
+                    molecule.to_rust().$namespace().count()
+                ))
             }
 
             fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<$view> {
-                let molecule = self.owner.bind(py).borrow();
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($views))?;
                 let id = $resolve_index(molecule.to_rust(), index)?;
                 Ok($view {
                     owner: self.owner.clone_ref(py),
+                    counter: self.counter,
                     id,
                 })
             }
@@ -1578,7 +1603,8 @@ macro_rules! stereo_views {
                 index: isize,
                 value: PyRef<'_, $value>,
             ) -> PyResult<()> {
-                let mut molecule = self.owner.borrow_mut(py);
+                let mut molecule = self.owner.try_borrow_mut(py)?;
+                molecule.check_access(self.counter, stringify!($views))?;
                 let id = $resolve_index(molecule.to_rust(), index)?;
                 let attributes = value.to_rust().clone();
                 *molecule.to_rust_mut().$entity_mut(id).attributes_mut() = attributes;
@@ -1587,73 +1613,86 @@ macro_rules! stereo_views {
 
             /// The stereo entity sitting on the atom/bond with id `site`, or `None`. Keyed by
             /// site id, *not* by position — use `views[i]` to index by position.
-            fn at(&self, py: Python<'_>, site: u32) -> Option<$view> {
-                let molecule = self.owner.bind(py).borrow();
-                molecule
+            fn at(&self, py: Python<'_>, site: u32) -> PyResult<Option<$view>> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($views))?;
+                Ok(molecule
                     .to_rust()
                     .$namespace()
                     .at_id($site_id(site))
                     .map(|id| $view {
                         owner: self.owner.clone_ref(py),
+                        counter: self.counter,
                         id,
-                    })
+                    }))
             }
 
             /// The stereo entity on `site` with exactly `ligands` (order-independent), or `None`.
-            fn of(&self, py: Python<'_>, site: u32, ligands: Vec<StereoLigand>) -> Option<$view> {
+            fn of(
+                &self,
+                py: Python<'_>,
+                site: u32,
+                ligands: Vec<StereoLigand>,
+            ) -> PyResult<Option<$view>> {
                 let ligands: Vec<GraphIrStereoLigand> =
                     ligands.into_iter().map(StereoLigand::to_rust).collect();
-                let molecule = self.owner.bind(py).borrow();
-                molecule
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($views))?;
+                Ok(molecule
                     .to_rust()
                     .$namespace()
                     .of_id($site_id(site), &ligands)
                     .map(|id| $view {
                         owner: self.owner.clone_ref(py),
+                        counter: self.counter,
                         id,
-                    })
+                    }))
             }
 
-            fn __iter__(&self, py: Python<'_>) -> $iter {
-                let ids = self
-                    .owner
-                    .bind(py)
-                    .borrow()
-                    .to_rust()
-                    .$namespace()
-                    .ids()
-                    .collect::<Vec<_>>();
-                $iter {
+            fn __iter__(&self, py: Python<'_>) -> PyResult<$iter> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($views))?;
+                let ids = molecule.to_rust().$namespace().ids().collect::<Vec<_>>();
+                Ok($iter {
                     owner: self.owner.clone_ref(py),
+                    counter: self.counter,
                     ids: ids.into_iter(),
-                }
+                })
             }
         }
 
         impl $views {
             /// Build the stereo-views handle for `owner` (the `mol.stereo_{atoms,bonds}` accessor).
-            pub(crate) fn new(owner: Py<Molecule>) -> $views {
-                $views { owner }
+            pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<$views> {
+                let counter = owner.try_borrow(py)?.view_counter()?;
+                Ok($views { owner, counter })
             }
         }
 
         #[pyclass]
         struct $iter {
             owner: Py<Molecule>,
+            counter: u64,
             ids: IntoIter<$rust_id>,
         }
 
         #[pymethods]
         impl $iter {
-            fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-                slf
+            fn __iter__(slf: PyRef<'_, Self>) -> PyResult<PyRef<'_, Self>> {
+                slf.owner
+                    .try_borrow(slf.py())?
+                    .check_access(slf.counter, stringify!($iter))?;
+                Ok(slf)
             }
 
-            fn __next__(&mut self, py: Python<'_>) -> Option<$view> {
-                self.ids.next().map(|id| $view {
+            fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<$view>> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($iter))?;
+                Ok(self.ids.next().map(|id| $view {
                     owner: self.owner.clone_ref(py),
+                    counter: self.counter,
                     id,
-                })
+                }))
             }
         }
     };
@@ -2673,7 +2712,7 @@ mod tests {
             )
             .unwrap();
             let view = StereoAtomConstraintsView {
-                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+                storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
             };
             let stereogenicity = into_py_variant(
                 py,
@@ -2713,7 +2752,7 @@ mod tests {
             )
             .unwrap();
             let view = StereoAtomConstraintsView {
-                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+                storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
             };
             let key = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
             let popped = view.pop(py, key).unwrap();
@@ -2746,7 +2785,7 @@ mod tests {
             )
             .unwrap();
             let view = StereoAtomConstraintsView {
-                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+                storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
             };
             assert_eq!(view.__len__(py).unwrap(), 1);
             let present = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
@@ -2797,7 +2836,7 @@ mod tests {
             )
             .unwrap();
             let view = StereoAtomConstraintsView {
-                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+                storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
             };
             let keys: Vec<GraphIrStereoAtomConstraintKey> = view
                 .keys(py)
@@ -2832,7 +2871,7 @@ mod tests {
             )
             .unwrap();
             let view = StereoAtomConstraintsView {
-                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+                storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
             };
             let entry = into_py_variant(
                 py,
@@ -2882,7 +2921,7 @@ mod tests {
             )
             .unwrap();
             let view = StereoAtomConstraintsView {
-                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+                storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
             };
             assert_eq!(
                 view.stereogenicity(py).unwrap().to_rust(),
@@ -2979,7 +3018,7 @@ mod tests {
             )
             .unwrap();
             let view = StereoAtomConstraintsView {
-                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+                storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
             };
             let own = StereoAtomForm::constraints(value.clone_ref(py));
             view.update(
@@ -3003,7 +3042,7 @@ mod tests {
             )
             .unwrap();
             let view = StereoBondConstraintsView {
-                backing: StereoBondConstraintsBacking::Value(value.clone_ref(py)),
+                storage: StereoBondConstraintsStorage::Value(value.clone_ref(py)),
             };
             let stereogenicity = into_py_variant(
                 py,
@@ -3344,10 +3383,11 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
-            assert_eq!(view.id(), 0);
-            assert_eq!(view.__repr__(), "StereoAtomView(id=0)");
+            assert_eq!(view.id(py).unwrap(), 0);
+            assert_eq!(view.__repr__(py).unwrap(), "StereoAtomView(id=0)");
         });
     }
 
@@ -3356,6 +3396,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             assert_eq!(view.site_id(py).unwrap(), 0);
@@ -3367,6 +3408,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             assert_eq!(
@@ -3390,6 +3432,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             assert_eq!(view.kind(py).unwrap(), StereoKind::Tetrahedral);
@@ -3401,6 +3444,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             assert_eq!(
@@ -3415,6 +3459,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             assert_eq!(
@@ -3449,6 +3494,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             view.set_configuration(py, configuration).unwrap();
@@ -3461,6 +3507,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             let stereogenicity = into_py_variant(
@@ -3474,10 +3521,17 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.constraints(py).set(py, stereogenicity).unwrap();
+            view.constraints(py)
+                .unwrap()
+                .set(py, stereogenicity)
+                .unwrap();
             // a fresh molecule-backed handle proves the write hit the molecule
             assert_eq!(
-                view.constraints(py).stereogenicity(py).unwrap().to_rust(),
+                view.constraints(py)
+                    .unwrap()
+                    .stereogenicity(py)
+                    .unwrap()
+                    .to_rust(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
@@ -3488,6 +3542,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             let mut rust_constraints = GraphIrStereoAtomConstraintsForm::new();
@@ -3499,7 +3554,11 @@ mod tests {
             view.set_constraints(py, StereoAtomConstraintsLike::Container(container))
                 .unwrap();
             assert_eq!(
-                view.constraints(py).stereogenicity(py).unwrap().to_rust(),
+                view.constraints(py)
+                    .unwrap()
+                    .stereogenicity(py)
+                    .unwrap()
+                    .to_rust(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
@@ -3510,6 +3569,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(0),
             };
             let dict = view.asdict(py).unwrap();
@@ -3543,6 +3603,7 @@ mod tests {
         Python::attach(|py| {
             let view = StereoAtomView {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
                 id: GraphIrStereoAtomId(5),
             };
             assert!(view.site_id(py).is_err());
@@ -3554,9 +3615,10 @@ mod tests {
         Python::attach(|py| {
             let view = StereoBondView {
                 owner: stereo_bond_molecule(py),
+                counter: 0,
                 id: GraphIrStereoBondId(0),
             };
-            assert_eq!(view.id(), 0);
+            assert_eq!(view.id(py).unwrap(), 0);
             assert_eq!(view.site_id(py).unwrap(), 0);
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
@@ -3573,8 +3635,9 @@ mod tests {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
             };
-            assert_eq!(views.__len__(py), 1);
+            assert_eq!(views.__len__(py).unwrap(), 1);
         });
     }
 
@@ -3585,8 +3648,12 @@ mod tests {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
             };
-            assert_eq!(views.__getitem__(py, index).unwrap().id(), expected_id);
+            assert_eq!(
+                views.__getitem__(py, index).unwrap().id(py).unwrap(),
+                expected_id
+            );
         });
     }
 
@@ -3597,6 +3664,7 @@ mod tests {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
             };
             assert!(views.__getitem__(py, index).is_err());
         });
@@ -3607,6 +3675,7 @@ mod tests {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
             };
             let replacement = Py::new(
                 py,
@@ -3638,8 +3707,12 @@ mod tests {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
             };
-            assert_eq!(views.at(py, site).map(|v| v.id()), expected_id);
+            assert_eq!(
+                views.at(py, site).unwrap().map(|v| v.id(py).unwrap()),
+                expected_id
+            );
         });
     }
 
@@ -3648,28 +3721,33 @@ mod tests {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
             };
             // order-independent full-ligand-set match
-            let matched = views.of(
-                py,
-                0,
-                vec![
-                    StereoLigand::new(4, StereoLigandKind::Atom),
-                    StereoLigand::new(3, StereoLigandKind::Atom),
-                    StereoLigand::new(2, StereoLigandKind::Atom),
-                    StereoLigand::new(1, StereoLigandKind::Atom),
-                ],
-            );
-            assert_eq!(matched.map(|v| v.id()), Some(0));
+            let matched = views
+                .of(
+                    py,
+                    0,
+                    vec![
+                        StereoLigand::new(4, StereoLigandKind::Atom),
+                        StereoLigand::new(3, StereoLigandKind::Atom),
+                        StereoLigand::new(2, StereoLigandKind::Atom),
+                        StereoLigand::new(1, StereoLigandKind::Atom),
+                    ],
+                )
+                .unwrap();
+            assert_eq!(matched.map(|v| v.id(py).unwrap()), Some(0));
             // a partial ligand set does not match
-            let missed = views.of(
-                py,
-                0,
-                vec![
-                    StereoLigand::new(1, StereoLigandKind::Atom),
-                    StereoLigand::new(2, StereoLigandKind::Atom),
-                ],
-            );
+            let missed = views
+                .of(
+                    py,
+                    0,
+                    vec![
+                        StereoLigand::new(1, StereoLigandKind::Atom),
+                        StereoLigand::new(2, StereoLigandKind::Atom),
+                    ],
+                )
+                .unwrap();
             assert!(missed.is_none());
         });
     }
@@ -3679,11 +3757,12 @@ mod tests {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
+                counter: 0,
             };
-            let mut iter = views.__iter__(py);
+            let mut iter = views.__iter__(py).unwrap();
             let mut ids = Vec::new();
-            while let Some(view) = iter.__next__(py) {
-                ids.push(view.id());
+            while let Some(view) = iter.__next__(py).unwrap() {
+                ids.push(view.id(py).unwrap());
             }
             assert_eq!(ids, vec![0]);
         });
@@ -3694,11 +3773,12 @@ mod tests {
         Python::attach(|py| {
             let views = StereoBondViews {
                 owner: stereo_bond_molecule(py),
+                counter: 0,
             };
-            assert_eq!(views.__len__(py), 1);
-            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
-            assert_eq!(views.at(py, 0).map(|v| v.id()), Some(0));
-            assert!(views.at(py, 2).is_none());
+            assert_eq!(views.__len__(py).unwrap(), 1);
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(py).unwrap(), 0);
+            assert_eq!(views.at(py, 0).unwrap().map(|v| v.id(py).unwrap()), Some(0));
+            assert!(views.at(py, 2).unwrap().is_none());
         });
     }
 }

@@ -482,9 +482,10 @@ pub(crate) fn aromatic_system_constraints_asdict<'py>(
 
 /// What an `AromaticSystemConstraintsView` writes through to: an aromatic system
 /// within a molecule (by index) or a standalone `AromaticSystemForm`.
-pub(crate) enum AromaticSystemConstraintsBacking {
+pub(crate) enum AromaticSystemConstraintsStorage {
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrAromaticSystemId,
     },
     AromaticSystem(Py<AromaticSystemForm>),
@@ -492,11 +493,11 @@ pub(crate) enum AromaticSystemConstraintsBacking {
 
 /// A live handle onto one aromatic system's constraints, backed by either a
 /// molecule-system or a standalone `AromaticSystemForm`. Reads borrow the constraints
-/// and read only the item they need. Mutators on a molecule-backed view publish atomically through
-/// the molecule integrity gate; standalone forms mutate directly.
+/// and read only the item they need. Mutators write directly to the stored constraints.
+/// Whole-molecule mutation invalidates molecule-backed accessors.
 #[pyclass]
 pub struct AromaticSystemConstraintsView {
-    pub(crate) backing: AromaticSystemConstraintsBacking,
+    pub(crate) storage: AromaticSystemConstraintsStorage,
 }
 
 impl AromaticSystemConstraintsView {
@@ -506,9 +507,10 @@ impl AromaticSystemConstraintsView {
         py: Python<'_>,
         f: impl FnOnce(&GraphIrAromaticSystemConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
                 let view = molecule
                     .to_rust()
                     .aromatic_systems()
@@ -516,7 +518,7 @@ impl AromaticSystemConstraintsView {
                     .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
                 f(&view.attributes().constraints)
             }
-            AromaticSystemConstraintsBacking::AromaticSystem(system) => {
+            AromaticSystemConstraintsStorage::AromaticSystem(system) => {
                 let system = system.bind(py).borrow();
                 f(&system.to_rust().constraints)
             }
@@ -529,9 +531,10 @@ impl AromaticSystemConstraintsView {
         py: Python<'_>,
         constraint: GraphIrAromaticSystemConstraintForm,
     ) -> PyResult<()> {
-        match &self.backing {
-            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
                 if !molecule.to_rust().aromatic_systems().contains(*id) {
                     return Err(PyIndexError::new_err("aromatic system id out of range"));
                 }
@@ -540,7 +543,7 @@ impl AromaticSystemConstraintsView {
                 cs.set(constraint);
                 Ok(())
             }
-            AromaticSystemConstraintsBacking::AromaticSystem(value) => {
+            AromaticSystemConstraintsStorage::AromaticSystem(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 cs.set(constraint);
@@ -555,9 +558,10 @@ impl AromaticSystemConstraintsView {
         py: Python<'_>,
         key: GraphIrAromaticSystemConstraintKey,
     ) -> PyResult<Option<GraphIrAromaticSystemConstraintForm>> {
-        match &self.backing {
-            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
                 if !molecule.to_rust().aromatic_systems().contains(*id) {
                     return Err(PyIndexError::new_err("aromatic system id out of range"));
                 }
@@ -565,7 +569,7 @@ impl AromaticSystemConstraintsView {
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
-            AromaticSystemConstraintsBacking::AromaticSystem(value) => {
+            AromaticSystemConstraintsStorage::AromaticSystem(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 Ok(cs.remove(key))
@@ -627,9 +631,10 @@ impl AromaticSystemConstraintsView {
         other: AromaticSystemConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        match &self.backing {
-            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
                 if !molecule.to_rust().aromatic_systems().contains(*id) {
                     return Err(PyIndexError::new_err("aromatic system id out of range"));
                 }
@@ -638,7 +643,7 @@ impl AromaticSystemConstraintsView {
                 resolved.apply(cs);
                 Ok(())
             }
-            AromaticSystemConstraintsBacking::AromaticSystem(value) => {
+            AromaticSystemConstraintsStorage::AromaticSystem(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 resolved.apply(cs);

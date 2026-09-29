@@ -45,8 +45,8 @@ checked probes and commit, rollback, and optional correspondence. Molecule's
 prepared-batch conveniences use the same lifecycle. S5b's graph-ir caller and
 test migration is complete; graph-ir passes its checks. S5c's borrowed graph
 operations use scoped transactions and pass the graph checks. S5d1 implements
-Python Edits consumption. S5d2's accessors and S5d3's transaction bindings remain
-before the stage gate.
+Python Edits consumption. S5d2 implements accessor counters and Storage names.
+S5d3's transaction bindings and the stage gate remain.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -99,8 +99,8 @@ complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
-complete; S4b9 closes the strict lint gate. S5a–S5c and S5d1 are complete;
-S5d2 is next. Python runtime verification remains at S5d3.
+complete; S4b9 closes the strict lint gate. S5a–S5c and S5d1–S5d2 are complete;
+S5d3 is next, including Python runtime verification.
 
 ## Editor and transaction API
 
@@ -6052,7 +6052,7 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   Runtime tests cannot run until S5d3 removes those bindings and rebuilds the
   extension. S5d2 is next.
 
-- **S5d2 — Molecule accessor counters and Storage names** (`umol-py::molecule`, entity/constraint/collection views; breaking, green at S5d3). [dep: S5d1]
+- **S5d2 — completed 2026-09-28: Molecule accessor counters and Storage names** (`umol-py::molecule`, entity/constraint/collection views; breaking, green at S5d3). [dep: S5d1]
 
   Implement the [approved accessor invalidation contract](#python-accessor-invalidation).
   Current AtomView stores an owner and a dense id; deleting an earlier atom can make it
@@ -6068,6 +6068,24 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   Test all eight entity kinds, nested constraints and ring sizes, exhausted
   iterators, and ordinary setter usability. Molecule storage is not Option yet;
   S6d adds consumption without changing these counter rules.
+
+  All eight entity views, collections, and owner-backed iterators now check their
+  captured counter under the storage borrow. Constraint and ring-size accessors
+  inherit it; stale parents cannot create fresh descendants. Id, repr, lookup,
+  iteration (including exhaustion), assignment, and conversion paths check access.
+  The eleven Backing enums and their fields/macro parameters use the approved
+  Storage names. Ordinary setters do not advance the counter. Existing owned
+  constraint-entry and ring-size iterators retain their copying semantics.
+
+  Python tests cover all eight entity kinds, empty/nonempty combine_from,
+  nested ring-size access, live/exhausted iterators, rejected arguments,
+  independent values, and ordinary setters. Rust tests use the fallible binding
+  accessors. Nightly formatting, Python syntax checking, and diff review pass.
+  Python 3.13 all-target Cargo checking reports only the same six existing
+  transaction-binding/test errors recorded in S5d1. Runtime tests remain at
+  S5d3, together with transaction invalidation and rollback cases. Later *_into
+  bindings must advance the same counter at their execution boundary as specified
+  above; those bindings are not present yet. S5d3 is next.
 
 - **S5d3 — Prepared-batch transaction bindings** (`umol-py::{molecule,transaction}`; breaking, red→green). [dep: S5d2]
 
@@ -6363,7 +6381,7 @@ Within the revised S2:
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
-  scoped run. S5a–S5c and S5d1 are complete; S5d2 is next. S5's build
+  scoped run. S5a–S5c and S5d1–S5d2 are complete; S5d3 is next. S5's build
   and test gate remains S5d3.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

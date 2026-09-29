@@ -15,8 +15,9 @@ use umol_graph_ir::ir::{
 };
 
 use crate::constraint::multicenter::{
-    multicenter_bond_constraints_asdict, MulticenterBondConstraintsBacking,
-    MulticenterBondConstraintsForm, MulticenterBondConstraintsLike, MulticenterBondConstraintsView,
+    multicenter_bond_constraints_asdict, MulticenterBondConstraintsForm,
+    MulticenterBondConstraintsLike, MulticenterBondConstraintsStorage,
+    MulticenterBondConstraintsView,
 };
 #[cfg(test)]
 use crate::constraint::multicenter::{
@@ -219,7 +220,7 @@ impl MulticenterBondForm {
     #[getter]
     fn constraints(slf: Py<Self>) -> MulticenterBondConstraintsView {
         MulticenterBondConstraintsView {
-            backing: MulticenterBondConstraintsBacking::MulticenterBond(slf),
+            storage: MulticenterBondConstraintsStorage::MulticenterBond(slf),
         }
     }
 
@@ -315,9 +316,11 @@ impl_py_lattice!(
 /// the bond's index. Field reads rebuild the transient Rust view; the molecule is
 /// never copied. The member atom indices are read-only topology; the electrons,
 /// charge, unpaired electrons, and constraints are the mutable bond value.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct MulticenterBondView {
     owner: Py<Molecule>,
+    counter: u64,
     id: GraphIrMulticenterBondId,
 }
 
@@ -336,15 +339,18 @@ impl MulticenterBondView {
 #[pymethods]
 impl MulticenterBondView {
     #[getter]
-    fn id(&self) -> u32 {
-        self.id.0
+    fn id(&self, py: Python<'_>) -> PyResult<u32> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
+        Ok(self.id.0)
     }
 
     /// The member atom indices (read-only — participants are topology, not part of
     /// the bond value).
     #[getter]
     fn atom_ids<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         let atom_ids: Vec<u32> = self
             .multicenter_bond(molecule.to_rust())?
             .atom_ids()
@@ -353,14 +359,17 @@ impl MulticenterBondView {
         PyTuple::new(py, atom_ids)
     }
 
-    fn __repr__(&self) -> String {
-        format!("MulticenterBondView(id={})", self.id.0)
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
+        Ok(format!("MulticenterBondView(id={})", self.id.0))
     }
 
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
     fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         Ok(ElectronCountsForm::from_rust(
             &self
                 .multicenter_bond(molecule.to_rust())?
@@ -373,6 +382,7 @@ impl MulticenterBondView {
     fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         if !molecule.to_rust().multicenter_bonds().contains(self.id) {
             return Err(PyIndexError::new_err("multicenter bond id out of range"));
         }
@@ -386,7 +396,8 @@ impl MulticenterBondView {
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         NumForm::from_rust(
             py,
             &self
@@ -400,6 +411,7 @@ impl MulticenterBondView {
     fn set_charge(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         if !molecule.to_rust().multicenter_bonds().contains(self.id) {
             return Err(PyIndexError::new_err("multicenter bond id out of range"));
         }
@@ -413,7 +425,8 @@ impl MulticenterBondView {
 
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         UnpairedElectronsForm::from_rust(
             py,
             &self
@@ -431,6 +444,7 @@ impl MulticenterBondView {
     ) -> PyResult<()> {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         if !molecule.to_rust().multicenter_bonds().contains(self.id) {
             return Err(PyIndexError::new_err("multicenter bond id out of range"));
         }
@@ -445,13 +459,16 @@ impl MulticenterBondView {
     /// The bond's constraints as a live handle onto the molecule: reads borrow the
     /// current state, mutators write through to the bond in place.
     #[getter]
-    fn constraints(&self, py: Python<'_>) -> MulticenterBondConstraintsView {
-        MulticenterBondConstraintsView {
-            backing: MulticenterBondConstraintsBacking::Molecule {
+    fn constraints(&self, py: Python<'_>) -> PyResult<MulticenterBondConstraintsView> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
+        Ok(MulticenterBondConstraintsView {
+            storage: MulticenterBondConstraintsStorage::Molecule {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id: self.id,
             },
-        }
+        })
     }
 
     /// Replace the whole constraint set of the backing bond in place (wipe-and-set)
@@ -464,6 +481,7 @@ impl MulticenterBondView {
     ) -> PyResult<()> {
         let value = value.to_rust(py)?;
         let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         if !molecule.to_rust().multicenter_bonds().contains(self.id) {
             return Err(PyIndexError::new_err("multicenter bond id out of range"));
         }
@@ -478,7 +496,8 @@ impl MulticenterBondView {
     /// The value fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `MulticenterBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         let bond = self.multicenter_bond(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item("electrons", ElectronCountsForm::from_rust(&bond.electrons))?;
@@ -520,39 +539,37 @@ fn resolve_multicenter_bond_index(
 }
 
 /// The multicenter bonds of a molecule, indexed by integer position.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct MulticenterBondViews {
     owner: Py<Molecule>,
+    counter: u64,
 }
 
 #[pymethods]
 impl MulticenterBondViews {
-    fn __len__(&self, py: Python<'_>) -> usize {
-        self.owner
-            .bind(py)
-            .borrow()
-            .to_rust()
-            .multicenter_bonds()
-            .count()
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
+        Ok(molecule.to_rust().multicenter_bonds().count())
     }
 
-    fn __repr__(&self, py: Python<'_>) -> String {
-        format!(
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
+        Ok(format!(
             "MulticenterBondViews(len={})",
-            self.owner
-                .bind(py)
-                .borrow()
-                .to_rust()
-                .multicenter_bonds()
-                .count()
-        )
+            molecule.to_rust().multicenter_bonds().count()
+        ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<MulticenterBondView> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
         let id = resolve_multicenter_bond_index(molecule.to_rust(), index)?;
         Ok(MulticenterBondView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
         })
     }
@@ -564,7 +581,8 @@ impl MulticenterBondViews {
         index: isize,
         bond: PyRef<'_, MulticenterBondForm>,
     ) -> PyResult<()> {
-        let mut molecule = self.owner.borrow_mut(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
         let id = resolve_multicenter_bond_index(molecule.to_rust(), index)?;
         let bond = bond.to_rust().clone();
         *molecule
@@ -575,72 +593,84 @@ impl MulticenterBondViews {
     }
 
     /// The multicenter bond whose member atom set equals `atoms`, or `None`.
-    fn of(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<MulticenterBondView> {
-        let molecule = self.owner.bind(py).borrow();
-        molecule
+    fn of(&self, py: Python<'_>, atoms: Vec<u32>) -> PyResult<Option<MulticenterBondView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
+        Ok(molecule
             .to_rust()
             .multicenter_bonds()
             .of_id(atoms.into_iter().map(GraphIrAtomId))
             .map(|id| MulticenterBondView {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id,
-            })
+            }))
     }
 
     /// The multicenter bonds `atom` is a member of.
-    fn incident(&self, py: Python<'_>, atom: u32) -> Vec<MulticenterBondView> {
-        let molecule = self.owner.bind(py).borrow();
-        molecule
+    fn incident(&self, py: Python<'_>, atom: u32) -> PyResult<Vec<MulticenterBondView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
+        Ok(molecule
             .to_rust()
             .multicenter_bonds()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| MulticenterBondView {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id,
             })
-            .collect()
+            .collect())
     }
 
-    fn __iter__(&self, py: Python<'_>) -> MulticenterBondViewIter {
-        let ids = self
-            .owner
-            .bind(py)
-            .borrow()
+    fn __iter__(&self, py: Python<'_>) -> PyResult<MulticenterBondViewIter> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
+        let ids = molecule
             .to_rust()
             .multicenter_bonds()
             .ids()
             .collect::<Vec<_>>();
-        MulticenterBondViewIter {
+        Ok(MulticenterBondViewIter {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             ids: ids.into_iter(),
-        }
+        })
     }
 }
 
 impl MulticenterBondViews {
     /// Build the multicenter-bond-views handle for `owner` (the `.multicenter_bonds` accessor).
-    pub(crate) fn new(owner: Py<Molecule>) -> MulticenterBondViews {
-        MulticenterBondViews { owner }
+    pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<MulticenterBondViews> {
+        let counter = owner.try_borrow(py)?.view_counter()?;
+        Ok(MulticenterBondViews { owner, counter })
     }
 }
 
 #[pyclass]
 struct MulticenterBondViewIter {
     owner: Py<Molecule>,
+    counter: u64,
     ids: IntoIter<GraphIrMulticenterBondId>,
 }
 
 #[pymethods]
 impl MulticenterBondViewIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
+    fn __iter__(slf: PyRef<'_, Self>) -> PyResult<PyRef<'_, Self>> {
+        slf.owner
+            .try_borrow(slf.py())?
+            .check_access(slf.counter, stringify!(MulticenterBondViewIter))?;
+        Ok(slf)
     }
 
-    fn __next__(&mut self, py: Python<'_>) -> Option<MulticenterBondView> {
-        self.ids.next().map(|id| MulticenterBondView {
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<MulticenterBondView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(MulticenterBondViewIter))?;
+        Ok(self.ids.next().map(|id| MulticenterBondView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
-        })
+        }))
     }
 }
 
@@ -816,7 +846,7 @@ mod tests {
             let view = Py::new(
                 py,
                 MulticenterBondConstraintsView {
-                    backing: MulticenterBondConstraintsBacking::MulticenterBond(src),
+                    storage: MulticenterBondConstraintsStorage::MulticenterBond(src),
                 },
             )
             .unwrap();
@@ -863,12 +893,13 @@ mod tests {
         Python::attach(|py| {
             let view = MulticenterBondView {
                 owner: three_center_bond(py),
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
-            assert_eq!(view.id(), 0);
+            assert_eq!(view.id(py).unwrap(), 0);
             let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
             assert_eq!(atom_ids, vec![0, 1, 2]);
-            assert_eq!(view.__repr__(), "MulticenterBondView(id=0)");
+            assert_eq!(view.__repr__(py).unwrap(), "MulticenterBondView(id=0)");
         });
     }
 
@@ -878,6 +909,7 @@ mod tests {
             let owner = three_center_bond(py);
             let view = MulticenterBondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
@@ -888,6 +920,7 @@ mod tests {
                 .unwrap();
             let fresh = MulticenterBondView {
                 owner,
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
@@ -903,11 +936,13 @@ mod tests {
             let owner = three_center_bond(py);
             let view = MulticenterBondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             view.set_charge(py, NumLike::Lit(-1)).unwrap();
             let fresh = MulticenterBondView {
                 owner,
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
@@ -929,12 +964,14 @@ mod tests {
             let owner = three_center_bond(py);
             let view = MulticenterBondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow())
                 .unwrap();
             let fresh = MulticenterBondView {
                 owner,
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
@@ -949,10 +986,11 @@ mod tests {
         Python::attach(|py| {
             let view = MulticenterBondView {
                 owner: three_center_bond(py),
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
-            match view.constraints(py).backing {
-                MulticenterBondConstraintsBacking::Molecule { id, .. } => {
+            match view.constraints(py).unwrap().storage {
+                MulticenterBondConstraintsStorage::Molecule { id, .. } => {
                     assert_eq!(id, GraphIrMulticenterBondId(0))
                 }
                 _ => panic!("expected molecule-backed view"),
@@ -966,6 +1004,7 @@ mod tests {
             let owner = three_center_bond(py);
             let view = MulticenterBondView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             let constraints = Py::new(
@@ -988,11 +1027,13 @@ mod tests {
                 .unwrap();
             let fresh = MulticenterBondView {
                 owner,
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             assert_eq!(
                 fresh
                     .constraints(py)
+                    .unwrap()
                     .electron_count(py)
                     .unwrap()
                     .to_rust(py),
@@ -1006,6 +1047,7 @@ mod tests {
         Python::attach(|py| {
             let view = MulticenterBondView {
                 owner: three_center_bond(py),
+                counter: 0,
                 id: GraphIrMulticenterBondId(0),
             };
             let dict = view.asdict(py).unwrap();
@@ -1024,10 +1066,11 @@ mod tests {
         Python::attach(|py| {
             let views = MulticenterBondViews {
                 owner: three_center_bond(py),
+                counter: 0,
             };
-            assert_eq!(views.__len__(py), 1);
-            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
-            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 0);
+            assert_eq!(views.__len__(py).unwrap(), 1);
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(py).unwrap(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(py).unwrap(), 0);
             assert!(views.__getitem__(py, 5).is_err());
             assert!(views.__getitem__(py, -2).is_err());
         });
@@ -1038,8 +1081,9 @@ mod tests {
         Python::attach(|py| {
             let views = MulticenterBondViews {
                 owner: three_center_bond(py),
+                counter: 0,
             };
-            assert_eq!(views.__repr__(py), "MulticenterBondViews(len=1)");
+            assert_eq!(views.__repr__(py).unwrap(), "MulticenterBondViews(len=1)");
         });
     }
 
@@ -1049,6 +1093,7 @@ mod tests {
             let owner = three_center_bond(py);
             let views = MulticenterBondViews {
                 owner: owner.clone_ref(py),
+                counter: 0,
             };
             let replacement = Py::new(
                 py,
@@ -1076,6 +1121,7 @@ mod tests {
         Python::attach(|py| {
             let views = MulticenterBondViews {
                 owner: three_center_bond(py),
+                counter: 0,
             };
             let replacement = Py::new(
                 py,
@@ -1095,10 +1141,19 @@ mod tests {
         Python::attach(|py| {
             let views = MulticenterBondViews {
                 owner: three_center_bond(py),
+                counter: 0,
             };
-            assert_eq!(views.of(py, vec![0, 1, 2]).unwrap().id(), 0);
+            assert_eq!(
+                views
+                    .of(py, vec![0, 1, 2])
+                    .unwrap()
+                    .unwrap()
+                    .id(py)
+                    .unwrap(),
+                0
+            );
             // a subset is not the bond's exact atom set
-            assert!(views.of(py, vec![0, 1]).is_none());
+            assert!(views.of(py, vec![0, 1]).unwrap().is_none());
         });
     }
 
@@ -1116,16 +1171,18 @@ mod tests {
             });
             let views = MulticenterBondViews {
                 owner: Py::new(py, Molecule::from_rust(molecule)).unwrap(),
+                counter: 0,
             };
             assert_eq!(
                 views
                     .incident(py, 0)
+                    .unwrap()
                     .iter()
-                    .map(|v| v.id())
+                    .map(|v| v.id(py).unwrap())
                     .collect::<Vec<_>>(),
                 vec![0]
             );
-            assert!(views.incident(py, 3).is_empty());
+            assert!(views.incident(py, 3).unwrap().is_empty());
         });
     }
 
@@ -1134,10 +1191,11 @@ mod tests {
         Python::attach(|py| {
             let views = MulticenterBondViews {
                 owner: three_center_bond(py),
+                counter: 0,
             };
-            let mut iter = views.__iter__(py);
-            assert_eq!(iter.__next__(py).unwrap().id(), 0);
-            assert!(iter.__next__(py).is_none());
+            let mut iter = views.__iter__(py).unwrap();
+            assert_eq!(iter.__next__(py).unwrap().unwrap().id(py).unwrap(), 0);
+            assert!(iter.__next__(py).unwrap().is_none());
         });
     }
 
@@ -1371,7 +1429,7 @@ mod tests {
             let own_view = Py::new(
                 py,
                 MulticenterBondConstraintsView {
-                    backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                    storage: MulticenterBondConstraintsStorage::MulticenterBond(bond.clone_ref(py)),
                 },
             )
             .unwrap();
@@ -1406,12 +1464,12 @@ mod tests {
             )
             .unwrap();
             let view = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond.clone_ref(py)),
             };
             let other = Py::new(
                 py,
                 MulticenterBondConstraintsView {
-                    backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                    storage: MulticenterBondConstraintsStorage::MulticenterBond(bond.clone_ref(py)),
                 },
             )
             .unwrap();
@@ -1640,7 +1698,7 @@ mod tests {
             )
             .unwrap();
             let view = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond.clone_ref(py)),
             };
             let ec = into_py_variant(
                 py,
@@ -1654,7 +1712,7 @@ mod tests {
             view.set(py, ec).unwrap();
             // a fresh view proves the write hit the standalone bond, not a copy
             let fresh = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
@@ -1676,7 +1734,7 @@ mod tests {
             )
             .unwrap();
             let view = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond.clone_ref(py)),
             };
             let removed = view
                 .pop(
@@ -1691,7 +1749,7 @@ mod tests {
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
             let fresh = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 0);
         });
@@ -1708,7 +1766,7 @@ mod tests {
             )
             .unwrap();
             let view = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond.clone_ref(py)),
             };
             let mut other = GraphIrMulticenterBondConstraintsForm::new();
             other.set(GraphIrMulticenterBondConstraintForm::electron_count(6));
@@ -1720,7 +1778,7 @@ mod tests {
             )
             .unwrap();
             let fresh = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
@@ -1741,7 +1799,7 @@ mod tests {
             )
             .unwrap();
             let view = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond.clone_ref(py)),
             };
             assert_eq!(
                 view.electron_count(py).unwrap().to_rust(py),
@@ -1749,7 +1807,7 @@ mod tests {
             );
             view.set_electron_count(py, NumLike::Lit(6)).unwrap();
             let fresh = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
+                storage: MulticenterBondConstraintsStorage::MulticenterBond(bond),
             };
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
@@ -1763,8 +1821,9 @@ mod tests {
         Python::attach(|py| {
             let owner = three_center_bond(py);
             let view = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::Molecule {
+                storage: MulticenterBondConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrMulticenterBondId(0),
                 },
             };
@@ -1779,8 +1838,9 @@ mod tests {
             .unwrap();
             view.set(py, ec).unwrap();
             let fresh = MulticenterBondConstraintsView {
-                backing: MulticenterBondConstraintsBacking::Molecule {
+                storage: MulticenterBondConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrMulticenterBondId(0),
                 },
             };

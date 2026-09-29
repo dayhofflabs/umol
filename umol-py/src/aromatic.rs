@@ -210,7 +210,7 @@ impl AromaticSystemForm {
     #[getter]
     fn constraints(slf: Py<Self>) -> AromaticSystemConstraintsView {
         AromaticSystemConstraintsView {
-            backing: AromaticSystemConstraintsBacking::AromaticSystem(slf),
+            storage: AromaticSystemConstraintsStorage::AromaticSystem(slf),
         }
     }
 
@@ -306,9 +306,11 @@ impl_py_lattice!(
 /// the system's index. Field reads rebuild the transient Rust view; the molecule is
 /// never copied. The member atom indices are read-only topology; the electrons,
 /// charge, unpaired electrons, and constraints are the mutable system value.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct AromaticSystemView {
     owner: Py<Molecule>,
+    counter: u64,
     id: GraphIrAromaticSystemId,
 }
 
@@ -327,15 +329,18 @@ impl AromaticSystemView {
 #[pymethods]
 impl AromaticSystemView {
     #[getter]
-    fn id(&self) -> u32 {
-        self.id.0
+    fn id(&self, py: Python<'_>) -> PyResult<u32> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
+        Ok(self.id.0)
     }
 
     /// The member atom indices (read-only — participants are topology, not part of
     /// the system value).
     #[getter]
     fn atom_ids<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         let atom_ids: Vec<u32> = self
             .aromatic_system(molecule.to_rust())?
             .atom_ids()
@@ -344,14 +349,17 @@ impl AromaticSystemView {
         PyTuple::new(py, atom_ids)
     }
 
-    fn __repr__(&self) -> String {
-        format!("AromaticSystemView(id={})", self.id.0)
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
+        Ok(format!("AromaticSystemView(id={})", self.id.0))
     }
 
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
     fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         Ok(ElectronCountsForm::from_rust(
             &self
                 .aromatic_system(molecule.to_rust())?
@@ -364,6 +372,7 @@ impl AromaticSystemView {
     fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         if !molecule.to_rust().aromatic_systems().contains(self.id) {
             return Err(PyIndexError::new_err("aromatic system id out of range"));
         }
@@ -377,7 +386,8 @@ impl AromaticSystemView {
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         NumForm::from_rust(
             py,
             &self
@@ -391,6 +401,7 @@ impl AromaticSystemView {
     fn set_charge(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         if !molecule.to_rust().aromatic_systems().contains(self.id) {
             return Err(PyIndexError::new_err("aromatic system id out of range"));
         }
@@ -404,7 +415,8 @@ impl AromaticSystemView {
 
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         UnpairedElectronsForm::from_rust(
             py,
             &self
@@ -422,6 +434,7 @@ impl AromaticSystemView {
     ) -> PyResult<()> {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         if !molecule.to_rust().aromatic_systems().contains(self.id) {
             return Err(PyIndexError::new_err("aromatic system id out of range"));
         }
@@ -436,13 +449,16 @@ impl AromaticSystemView {
     /// The system's constraints as a live handle onto the molecule: reads borrow the
     /// current state, mutators write through to the system in place.
     #[getter]
-    fn constraints(&self, py: Python<'_>) -> AromaticSystemConstraintsView {
-        AromaticSystemConstraintsView {
-            backing: AromaticSystemConstraintsBacking::Molecule {
+    fn constraints(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintsView> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
+        Ok(AromaticSystemConstraintsView {
+            storage: AromaticSystemConstraintsStorage::Molecule {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id: self.id,
             },
-        }
+        })
     }
 
     /// Replace the whole constraint set of the backing system in place (wipe-and-set)
@@ -455,6 +471,7 @@ impl AromaticSystemView {
     ) -> PyResult<()> {
         let value = value.to_rust(py)?;
         let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         if !molecule.to_rust().aromatic_systems().contains(self.id) {
             return Err(PyIndexError::new_err("aromatic system id out of range"));
         }
@@ -469,7 +486,8 @@ impl AromaticSystemView {
     /// The value fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `AromaticSystemForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
         let system = self.aromatic_system(molecule.to_rust())?.attributes();
         let dict = PyDict::new(py);
         dict.set_item(
@@ -514,39 +532,37 @@ fn resolve_aromatic_system_index(
 }
 
 /// The aromatic systems of a molecule, indexed by integer position.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct AromaticSystemViews {
     owner: Py<Molecule>,
+    counter: u64,
 }
 
 #[pymethods]
 impl AromaticSystemViews {
-    fn __len__(&self, py: Python<'_>) -> usize {
-        self.owner
-            .bind(py)
-            .borrow()
-            .to_rust()
-            .aromatic_systems()
-            .count()
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
+        Ok(molecule.to_rust().aromatic_systems().count())
     }
 
-    fn __repr__(&self, py: Python<'_>) -> String {
-        format!(
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
+        Ok(format!(
             "AromaticSystemViews(len={})",
-            self.owner
-                .bind(py)
-                .borrow()
-                .to_rust()
-                .aromatic_systems()
-                .count()
-        )
+            molecule.to_rust().aromatic_systems().count()
+        ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<AromaticSystemView> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
         let id = resolve_aromatic_system_index(molecule.to_rust(), index)?;
         Ok(AromaticSystemView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
         })
     }
@@ -558,7 +574,8 @@ impl AromaticSystemViews {
         index: isize,
         system: PyRef<'_, AromaticSystemForm>,
     ) -> PyResult<()> {
-        let mut molecule = self.owner.borrow_mut(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
         let id = resolve_aromatic_system_index(molecule.to_rust(), index)?;
         let system = system.to_rust().clone();
         *molecule
@@ -569,78 +586,90 @@ impl AromaticSystemViews {
     }
 
     /// The aromatic system whose member atom set equals `atoms`, or `None`.
-    fn of(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<AromaticSystemView> {
-        let molecule = self.owner.bind(py).borrow();
-        molecule
+    fn of(&self, py: Python<'_>, atoms: Vec<u32>) -> PyResult<Option<AromaticSystemView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
+        Ok(molecule
             .to_rust()
             .aromatic_systems()
             .of_id(atoms.into_iter().map(GraphIrAtomId))
             .map(|id| AromaticSystemView {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id,
-            })
+            }))
     }
 
     /// The aromatic systems `atom` is a member of.
-    fn incident(&self, py: Python<'_>, atom: u32) -> Vec<AromaticSystemView> {
-        let molecule = self.owner.bind(py).borrow();
-        molecule
+    fn incident(&self, py: Python<'_>, atom: u32) -> PyResult<Vec<AromaticSystemView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
+        Ok(molecule
             .to_rust()
             .aromatic_systems()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| AromaticSystemView {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id,
             })
-            .collect()
+            .collect())
     }
 
-    fn __iter__(&self, py: Python<'_>) -> AromaticSystemViewIter {
-        let ids = self
-            .owner
-            .bind(py)
-            .borrow()
+    fn __iter__(&self, py: Python<'_>) -> PyResult<AromaticSystemViewIter> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemViews))?;
+        let ids = molecule
             .to_rust()
             .aromatic_systems()
             .ids()
             .collect::<Vec<_>>();
-        AromaticSystemViewIter {
+        Ok(AromaticSystemViewIter {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             ids: ids.into_iter(),
-        }
+        })
     }
 }
 
 impl AromaticSystemViews {
     /// Build the aromatic-system-views handle for `owner` (the `.aromatic_systems` accessor).
-    pub(crate) fn new(owner: Py<Molecule>) -> AromaticSystemViews {
-        AromaticSystemViews { owner }
+    pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<AromaticSystemViews> {
+        let counter = owner.try_borrow(py)?.view_counter()?;
+        Ok(AromaticSystemViews { owner, counter })
     }
 }
 
 #[pyclass]
 struct AromaticSystemViewIter {
     owner: Py<Molecule>,
+    counter: u64,
     ids: IntoIter<GraphIrAromaticSystemId>,
 }
 
 #[pymethods]
 impl AromaticSystemViewIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
+    fn __iter__(slf: PyRef<'_, Self>) -> PyResult<PyRef<'_, Self>> {
+        slf.owner
+            .try_borrow(slf.py())?
+            .check_access(slf.counter, stringify!(AromaticSystemViewIter))?;
+        Ok(slf)
     }
 
-    fn __next__(&mut self, py: Python<'_>) -> Option<AromaticSystemView> {
-        self.ids.next().map(|id| AromaticSystemView {
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<AromaticSystemView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemViewIter))?;
+        Ok(self.ids.next().map(|id| AromaticSystemView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
-        })
+        }))
     }
 }
 
 use crate::constraint::aromatic::{
-    aromatic_system_constraints_asdict, AromaticSystemConstraintsBacking,
-    AromaticSystemConstraintsForm, AromaticSystemConstraintsLike, AromaticSystemConstraintsView,
+    aromatic_system_constraints_asdict, AromaticSystemConstraintsForm,
+    AromaticSystemConstraintsLike, AromaticSystemConstraintsStorage, AromaticSystemConstraintsView,
 };
 #[cfg(test)]
 use crate::constraint::aromatic::{
@@ -821,7 +850,7 @@ mod tests {
             let view = Py::new(
                 py,
                 AromaticSystemConstraintsView {
-                    backing: AromaticSystemConstraintsBacking::AromaticSystem(src),
+                    storage: AromaticSystemConstraintsStorage::AromaticSystem(src),
                 },
             )
             .unwrap();
@@ -868,12 +897,13 @@ mod tests {
         Python::attach(|py| {
             let view = AromaticSystemView {
                 owner: benzene(py),
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
-            assert_eq!(view.id(), 0);
+            assert_eq!(view.id(py).unwrap(), 0);
             let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
             assert_eq!(atom_ids, vec![0, 1, 2, 3, 4, 5]);
-            assert_eq!(view.__repr__(), "AromaticSystemView(id=0)");
+            assert_eq!(view.__repr__(py).unwrap(), "AromaticSystemView(id=0)");
         });
     }
 
@@ -883,6 +913,7 @@ mod tests {
             let owner = benzene(py);
             let view = AromaticSystemView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             assert_eq!(
@@ -893,6 +924,7 @@ mod tests {
                 .unwrap();
             let fresh = AromaticSystemView {
                 owner,
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             assert_eq!(
@@ -908,11 +940,13 @@ mod tests {
             let owner = benzene(py);
             let view = AromaticSystemView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             view.set_charge(py, NumLike::Lit(-1)).unwrap();
             let fresh = AromaticSystemView {
                 owner,
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             assert_eq!(
@@ -934,12 +968,14 @@ mod tests {
             let owner = benzene(py);
             let view = AromaticSystemView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow())
                 .unwrap();
             let fresh = AromaticSystemView {
                 owner,
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             assert_eq!(
@@ -954,10 +990,11 @@ mod tests {
         Python::attach(|py| {
             let view = AromaticSystemView {
                 owner: benzene(py),
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
-            match view.constraints(py).backing {
-                AromaticSystemConstraintsBacking::Molecule { id, .. } => {
+            match view.constraints(py).unwrap().storage {
+                AromaticSystemConstraintsStorage::Molecule { id, .. } => {
                     assert_eq!(id, GraphIrAromaticSystemId(0))
                 }
                 _ => panic!("expected molecule-backed view"),
@@ -971,6 +1008,7 @@ mod tests {
             let owner = benzene(py);
             let view = AromaticSystemView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             let constraints = Py::new(
@@ -993,11 +1031,13 @@ mod tests {
                 .unwrap();
             let fresh = AromaticSystemView {
                 owner,
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             assert_eq!(
                 fresh
                     .constraints(py)
+                    .unwrap()
                     .electron_count(py)
                     .unwrap()
                     .to_rust(py),
@@ -1011,6 +1051,7 @@ mod tests {
         Python::attach(|py| {
             let view = AromaticSystemView {
                 owner: benzene(py),
+                counter: 0,
                 id: GraphIrAromaticSystemId(0),
             };
             let dict = view.asdict(py).unwrap();
@@ -1028,10 +1069,13 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_views_len_and_getitem() {
         Python::attach(|py| {
-            let views = AromaticSystemViews { owner: benzene(py) };
-            assert_eq!(views.__len__(py), 1);
-            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
-            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 0);
+            let views = AromaticSystemViews {
+                owner: benzene(py),
+                counter: 0,
+            };
+            assert_eq!(views.__len__(py).unwrap(), 1);
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(py).unwrap(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(py).unwrap(), 0);
             assert!(views.__getitem__(py, 5).is_err());
             assert!(views.__getitem__(py, -2).is_err());
         });
@@ -1040,8 +1084,11 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_views_repr() {
         Python::attach(|py| {
-            let views = AromaticSystemViews { owner: benzene(py) };
-            assert_eq!(views.__repr__(py), "AromaticSystemViews(len=1)");
+            let views = AromaticSystemViews {
+                owner: benzene(py),
+                counter: 0,
+            };
+            assert_eq!(views.__repr__(py).unwrap(), "AromaticSystemViews(len=1)");
         });
     }
 
@@ -1051,6 +1098,7 @@ mod tests {
             let owner = benzene(py);
             let views = AromaticSystemViews {
                 owner: owner.clone_ref(py),
+                counter: 0,
             };
             let replacement = Py::new(
                 py,
@@ -1076,7 +1124,10 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_views_setitem_error() {
         Python::attach(|py| {
-            let views = AromaticSystemViews { owner: benzene(py) };
+            let views = AromaticSystemViews {
+                owner: benzene(py),
+                counter: 0,
+            };
             let replacement = Py::new(
                 py,
                 AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
@@ -1093,10 +1144,21 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_views_of() {
         Python::attach(|py| {
-            let views = AromaticSystemViews { owner: benzene(py) };
-            assert_eq!(views.of(py, vec![0, 1, 2, 3, 4, 5]).unwrap().id(), 0);
+            let views = AromaticSystemViews {
+                owner: benzene(py),
+                counter: 0,
+            };
+            assert_eq!(
+                views
+                    .of(py, vec![0, 1, 2, 3, 4, 5])
+                    .unwrap()
+                    .unwrap()
+                    .id(py)
+                    .unwrap(),
+                0
+            );
             // a subset is not the system's exact atom set
-            assert!(views.of(py, vec![0, 1, 2]).is_none());
+            assert!(views.of(py, vec![0, 1, 2]).unwrap().is_none());
         });
     }
 
@@ -1114,26 +1176,31 @@ mod tests {
             });
             let views = AromaticSystemViews {
                 owner: Py::new(py, Molecule::from_rust(molecule)).unwrap(),
+                counter: 0,
             };
             assert_eq!(
                 views
                     .incident(py, 0)
+                    .unwrap()
                     .iter()
-                    .map(|v| v.id())
+                    .map(|v| v.id(py).unwrap())
                     .collect::<Vec<_>>(),
                 vec![0]
             );
-            assert!(views.incident(py, 6).is_empty());
+            assert!(views.incident(py, 6).unwrap().is_empty());
         });
     }
 
     #[rstest]
     fn test_aromatic_system_views_iter() {
         Python::attach(|py| {
-            let views = AromaticSystemViews { owner: benzene(py) };
-            let mut iter = views.__iter__(py);
-            assert_eq!(iter.__next__(py).unwrap().id(), 0);
-            assert!(iter.__next__(py).is_none());
+            let views = AromaticSystemViews {
+                owner: benzene(py),
+                counter: 0,
+            };
+            let mut iter = views.__iter__(py).unwrap();
+            assert_eq!(iter.__next__(py).unwrap().unwrap().id(py).unwrap(), 0);
+            assert!(iter.__next__(py).unwrap().is_none());
         });
     }
 
@@ -1367,7 +1434,7 @@ mod tests {
             let own_view = Py::new(
                 py,
                 AromaticSystemConstraintsView {
-                    backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                    storage: AromaticSystemConstraintsStorage::AromaticSystem(system.clone_ref(py)),
                 },
             )
             .unwrap();
@@ -1403,12 +1470,12 @@ mod tests {
             )
             .unwrap();
             let view = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system.clone_ref(py)),
             };
             let other = Py::new(
                 py,
                 AromaticSystemConstraintsView {
-                    backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                    storage: AromaticSystemConstraintsStorage::AromaticSystem(system.clone_ref(py)),
                 },
             )
             .unwrap();
@@ -1638,7 +1705,7 @@ mod tests {
             )
             .unwrap();
             let view = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system.clone_ref(py)),
             };
             let ec = into_py_variant(
                 py,
@@ -1652,7 +1719,7 @@ mod tests {
             view.set(py, ec).unwrap();
             // a fresh view proves the write hit the standalone system, not a copy
             let fresh = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
@@ -1674,7 +1741,7 @@ mod tests {
             )
             .unwrap();
             let view = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system.clone_ref(py)),
             };
             let removed = view
                 .pop(
@@ -1689,7 +1756,7 @@ mod tests {
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
             let fresh = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 0);
         });
@@ -1706,7 +1773,7 @@ mod tests {
             )
             .unwrap();
             let view = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system.clone_ref(py)),
             };
             let mut other = GraphIrAromaticSystemConstraintsForm::new();
             other.set(GraphIrAromaticSystemConstraintForm::electron_count(6));
@@ -1718,7 +1785,7 @@ mod tests {
             )
             .unwrap();
             let fresh = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
@@ -1739,7 +1806,7 @@ mod tests {
             )
             .unwrap();
             let view = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system.clone_ref(py)),
             };
             assert_eq!(
                 view.electron_count(py).unwrap().to_rust(py),
@@ -1747,7 +1814,7 @@ mod tests {
             );
             view.set_electron_count(py, NumLike::Lit(6)).unwrap();
             let fresh = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
+                storage: AromaticSystemConstraintsStorage::AromaticSystem(system),
             };
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_rust(py),
@@ -1761,8 +1828,9 @@ mod tests {
         Python::attach(|py| {
             let owner = benzene(py);
             let view = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::Molecule {
+                storage: AromaticSystemConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrAromaticSystemId(0),
                 },
             };
@@ -1777,8 +1845,9 @@ mod tests {
             .unwrap();
             view.set(py, ec).unwrap();
             let fresh = AromaticSystemConstraintsView {
-                backing: AromaticSystemConstraintsBacking::Molecule {
+                storage: AromaticSystemConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrAromaticSystemId(0),
                 },
             };

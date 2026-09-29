@@ -550,9 +550,10 @@ impl NoncovalentBondConstraintsLike {
 
 /// What a `NoncovalentBondConstraintsView` writes through to: a noncovalent bond within
 /// a molecule (by index) or a standalone `NoncovalentBondForm`.
-pub(crate) enum NoncovalentBondConstraintsBacking {
+pub(crate) enum NoncovalentBondConstraintsStorage {
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrNoncovalentBondId,
     },
     Noncovalent(Py<NoncovalentBondForm>),
@@ -564,7 +565,7 @@ pub(crate) enum NoncovalentBondConstraintsBacking {
 /// bond in place, without a clone-and-writeback.
 #[pyclass]
 pub struct NoncovalentBondConstraintsView {
-    pub(crate) backing: NoncovalentBondConstraintsBacking,
+    pub(crate) storage: NoncovalentBondConstraintsStorage,
 }
 
 impl NoncovalentBondConstraintsView {
@@ -574,9 +575,10 @@ impl NoncovalentBondConstraintsView {
         py: Python<'_>,
         f: impl FnOnce(&GraphIrNoncovalentBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            NoncovalentBondConstraintsStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(NoncovalentBondConstraintsView))?;
                 let view = molecule
                     .to_rust()
                     .noncovalent_bonds()
@@ -584,7 +586,7 @@ impl NoncovalentBondConstraintsView {
                     .ok_or_else(|| PyIndexError::new_err("noncovalent bond id out of range"))?;
                 f(&view.attributes().constraints)
             }
-            NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
+            NoncovalentBondConstraintsStorage::Noncovalent(bond) => {
                 let bond = bond.bind(py).borrow();
                 f(&bond.to_rust().constraints)
             }
@@ -597,9 +599,10 @@ impl NoncovalentBondConstraintsView {
         py: Python<'_>,
         constraint: GraphIrNoncovalentBondConstraintForm,
     ) -> PyResult<()> {
-        match &self.backing {
-            NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            NoncovalentBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(NoncovalentBondConstraintsView))?;
                 if !molecule.to_rust().noncovalent_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("noncovalent bond id out of range"));
                 }
@@ -608,7 +611,7 @@ impl NoncovalentBondConstraintsView {
                 cs.set(constraint);
                 Ok(())
             }
-            NoncovalentBondConstraintsBacking::Noncovalent(value) => {
+            NoncovalentBondConstraintsStorage::Noncovalent(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 cs.set(constraint);
@@ -623,9 +626,10 @@ impl NoncovalentBondConstraintsView {
         py: Python<'_>,
         key: GraphIrNoncovalentBondConstraintKey,
     ) -> PyResult<Option<GraphIrNoncovalentBondConstraintForm>> {
-        match &self.backing {
-            NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            NoncovalentBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(NoncovalentBondConstraintsView))?;
                 if !molecule.to_rust().noncovalent_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("noncovalent bond id out of range"));
                 }
@@ -633,7 +637,7 @@ impl NoncovalentBondConstraintsView {
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
-            NoncovalentBondConstraintsBacking::Noncovalent(value) => {
+            NoncovalentBondConstraintsStorage::Noncovalent(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 Ok(cs.remove(key))
@@ -697,9 +701,10 @@ impl NoncovalentBondConstraintsView {
         // the same bond (`bond.constraints.update(bond.constraints)`) reads while the
         // bond is unborrowed instead of self-aliasing into a double-borrow panic.
         let resolved = other.resolve(py)?;
-        match &self.backing {
-            NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            NoncovalentBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(NoncovalentBondConstraintsView))?;
                 if !molecule.to_rust().noncovalent_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("noncovalent bond id out of range"));
                 }
@@ -708,7 +713,7 @@ impl NoncovalentBondConstraintsView {
                 resolved.apply(cs);
                 Ok(())
             }
-            NoncovalentBondConstraintsBacking::Noncovalent(value) => {
+            NoncovalentBondConstraintsStorage::Noncovalent(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 resolved.apply(cs);

@@ -398,7 +398,7 @@ impl DativeBondConstraintsForm {
     #[getter]
     pub(crate) fn ring_size_count(slf: Py<Self>) -> DativeBondRingSizeCounts {
         DativeBondRingSizeCounts {
-            backing: DativeBondRingSizeBacking::Value(slf),
+            storage: DativeBondRingSizeStorage::Value(slf),
         }
     }
 
@@ -521,9 +521,10 @@ pub(crate) fn dative_bond_constraints_asdict<'py>(
 
 /// What a `DativeBondConstraintsView` writes through to. Only the standalone
 /// `DativeBondForm` backing or a dative bond within a molecule (by index).
-pub(crate) enum DativeBondConstraintsBacking {
+pub(crate) enum DativeBondConstraintsStorage {
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrDativeBondId,
     },
     DativeBond(Py<DativeBondForm>),
@@ -535,7 +536,7 @@ pub(crate) enum DativeBondConstraintsBacking {
 /// mutators write through to the bond in place, without a clone-and-writeback.
 #[pyclass]
 pub struct DativeBondConstraintsView {
-    pub(crate) backing: DativeBondConstraintsBacking,
+    pub(crate) storage: DativeBondConstraintsStorage,
 }
 
 impl DativeBondConstraintsView {
@@ -545,9 +546,10 @@ impl DativeBondConstraintsView {
         py: Python<'_>,
         f: impl FnOnce(&GraphIrDativeBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            DativeBondConstraintsBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
                 let view = molecule
                     .to_rust()
                     .dative_bonds()
@@ -555,7 +557,7 @@ impl DativeBondConstraintsView {
                     .ok_or_else(|| PyIndexError::new_err("dative bond id out of range"))?;
                 f(&view.attributes().constraints)
             }
-            DativeBondConstraintsBacking::DativeBond(bond) => {
+            DativeBondConstraintsStorage::DativeBond(bond) => {
                 let bond = bond.bind(py).borrow();
                 f(&bond.to_rust().constraints)
             }
@@ -568,9 +570,10 @@ impl DativeBondConstraintsView {
         py: Python<'_>,
         constraint: GraphIrDativeBondConstraintForm,
     ) -> PyResult<()> {
-        match &self.backing {
-            DativeBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
                 if !molecule.to_rust().dative_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("dative bond id out of range"));
                 }
@@ -579,7 +582,7 @@ impl DativeBondConstraintsView {
                 cs.set(constraint);
                 Ok(())
             }
-            DativeBondConstraintsBacking::DativeBond(value) => {
+            DativeBondConstraintsStorage::DativeBond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 cs.set(constraint);
@@ -594,9 +597,10 @@ impl DativeBondConstraintsView {
         py: Python<'_>,
         key: GraphIrDativeBondConstraintKey,
     ) -> PyResult<Option<GraphIrDativeBondConstraintForm>> {
-        match &self.backing {
-            DativeBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
                 if !molecule.to_rust().dative_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("dative bond id out of range"));
                 }
@@ -604,7 +608,7 @@ impl DativeBondConstraintsView {
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
-            DativeBondConstraintsBacking::DativeBond(value) => {
+            DativeBondConstraintsStorage::DativeBond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 Ok(cs.remove(key))
@@ -666,9 +670,10 @@ impl DativeBondConstraintsView {
         other: DativeBondConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        match &self.backing {
-            DativeBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
                 if !molecule.to_rust().dative_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("dative bond id out of range"));
                 }
@@ -677,7 +682,7 @@ impl DativeBondConstraintsView {
                 resolved.apply(cs);
                 Ok(())
             }
-            DativeBondConstraintsBacking::DativeBond(value) => {
+            DativeBondConstraintsStorage::DativeBond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 resolved.apply(cs);
@@ -798,19 +803,23 @@ impl DativeBondConstraintsView {
     /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
     /// size: `constraints.ring_size_count[6]`, `[6] = 3`, `del [6]`.
     #[getter]
-    pub(crate) fn ring_size_count(&self, py: Python<'_>) -> DativeBondRingSizeCounts {
-        let backing = match &self.backing {
-            DativeBondConstraintsBacking::Molecule { owner, id } => {
-                DativeBondRingSizeBacking::Molecule {
+    pub(crate) fn ring_size_count(&self, py: Python<'_>) -> PyResult<DativeBondRingSizeCounts> {
+        let storage = match &self.storage {
+            DativeBondConstraintsStorage::Molecule { owner, counter, id } => {
+                owner
+                    .try_borrow(py)?
+                    .check_access(*counter, stringify!(DativeBondConstraintsView))?;
+                DativeBondRingSizeStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: *counter,
                     id: *id,
                 }
             }
-            DativeBondConstraintsBacking::DativeBond(bond) => {
-                DativeBondRingSizeBacking::DativeBond(bond.clone_ref(py))
+            DativeBondConstraintsStorage::DativeBond(bond) => {
+                DativeBondRingSizeStorage::DativeBond(bond.clone_ref(py))
             }
         };
-        DativeBondRingSizeCounts { backing }
+        Ok(DativeBondRingSizeCounts { storage })
     }
 
     /// The present constraints as a dict keyed by snake_case name.
@@ -822,9 +831,10 @@ impl DativeBondConstraintsView {
 /// What a `DativeBondRingSizeCounts` proxy reads/writes through to: a dative bond
 /// within a molecule, a standalone `DativeBondForm`, or a standalone
 /// `DativeBondConstraintsForm` value.
-pub(crate) enum DativeBondRingSizeBacking {
+pub(crate) enum DativeBondRingSizeStorage {
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrDativeBondId,
     },
     DativeBond(Py<DativeBondForm>),
@@ -837,7 +847,7 @@ pub(crate) enum DativeBondRingSizeBacking {
 /// like `DativeBondConstraintsView`).
 #[pyclass]
 pub struct DativeBondRingSizeCounts {
-    pub(crate) backing: DativeBondRingSizeBacking,
+    pub(crate) storage: DativeBondRingSizeStorage,
 }
 
 impl DativeBondRingSizeCounts {
@@ -847,9 +857,10 @@ impl DativeBondRingSizeCounts {
         py: Python<'_>,
         f: impl FnOnce(&GraphIrDativeBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            DativeBondRingSizeBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            DativeBondRingSizeStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(DativeBondRingSizeCounts))?;
                 let view = molecule
                     .to_rust()
                     .dative_bonds()
@@ -857,10 +868,10 @@ impl DativeBondRingSizeCounts {
                     .ok_or_else(|| PyIndexError::new_err("dative bond id out of range"))?;
                 f(&view.attributes().constraints)
             }
-            DativeBondRingSizeBacking::DativeBond(bond) => {
+            DativeBondRingSizeStorage::DativeBond(bond) => {
                 f(&bond.bind(py).borrow().to_rust().constraints)
             }
-            DativeBondRingSizeBacking::Value(value) => f(value.bind(py).borrow().to_rust()),
+            DativeBondRingSizeStorage::Value(value) => f(value.bind(py).borrow().to_rust()),
         }
     }
 
@@ -870,17 +881,20 @@ impl DativeBondRingSizeCounts {
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrDativeBondConstraintsForm),
     ) -> PyResult<()> {
-        match &self.backing {
-            DativeBondRingSizeBacking::Molecule { owner, id } => f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .dative_bond_mut(*id)
-                .attributes_mut()
-                .constraints),
-            DativeBondRingSizeBacking::DativeBond(bond) => {
+        match &self.storage {
+            DativeBondRingSizeStorage::Molecule { owner, counter, id } => {
+                let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(DativeBondRingSizeCounts))?;
+                f(&mut molecule
+                    .to_rust_mut()
+                    .dative_bond_mut(*id)
+                    .attributes_mut()
+                    .constraints);
+            }
+            DativeBondRingSizeStorage::DativeBond(bond) => {
                 f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints)
             }
-            DativeBondRingSizeBacking::Value(value) => f(value.borrow_mut(py).to_rust_mut()),
+            DativeBondRingSizeStorage::Value(value) => f(value.borrow_mut(py).to_rust_mut()),
         }
         Ok(())
     }

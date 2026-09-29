@@ -467,7 +467,7 @@ macro_rules! stereo_constraints {
         $update:ident, $resolved:ident, $like:ident,
         $key_iter:ident, $iter:ident, $items_iter:ident,
         $rust_key:ident, $rust_constraint:ident, $rust_constraints:ident,
-        $value:ident, $view:ident, $backing:ident,
+        $value:ident, $view:ident, $storage:ident,
         $rust_id:ident, $namespace:ident, $entity_mut:ident, $id_error:literal $(,)?
     ) => {
         /// The key (identity) of a stereo constraint: the sub-keyed oriented/ligand
@@ -970,8 +970,12 @@ macro_rules! stereo_constraints {
 
         /// What a `$view` writes through to: a stereo entity within a molecule (by id) or a
         /// standalone own-value stereo entity (`Py<$value>`).
-        pub(crate) enum $backing {
-            Molecule { owner: Py<Molecule>, id: $rust_id },
+        pub(crate) enum $storage {
+            Molecule {
+                owner: Py<Molecule>,
+                counter: u64,
+                id: $rust_id,
+            },
             Value(Py<$value>),
         }
 
@@ -980,7 +984,7 @@ macro_rules! stereo_constraints {
         /// only what they need; mutations write directly to the stored constraints.
         #[pyclass]
         pub struct $view {
-            pub(crate) backing: $backing,
+            pub(crate) storage: $storage,
         }
 
         impl $view {
@@ -990,9 +994,10 @@ macro_rules! stereo_constraints {
                 py: Python<'_>,
                 f: impl FnOnce(&$rust_constraints) -> PyResult<R>,
             ) -> PyResult<R> {
-                match &self.backing {
-                    $backing::Molecule { owner, id } => {
-                        let molecule = owner.bind(py).borrow();
+                match &self.storage {
+                    $storage::Molecule { owner, counter, id } => {
+                        let molecule = owner.try_borrow(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
                         let view = molecule
                             .to_rust()
                             .$namespace()
@@ -1000,7 +1005,7 @@ macro_rules! stereo_constraints {
                             .ok_or_else(|| PyIndexError::new_err($id_error))?;
                         f(&view.attributes().constraints)
                     }
-                    $backing::Value(entity) => {
+                    $storage::Value(entity) => {
                         let entity = entity.bind(py).borrow();
                         f(&entity.to_rust().constraints)
                     }
@@ -1019,9 +1024,10 @@ macro_rules! stereo_constraints {
             /// (last-wins).
             pub(crate) fn set(&self, py: Python<'_>, c: Py<$constraint>) -> PyResult<()> {
                 let constraint = c.bind(py).borrow().to_rust(py);
-                match &self.backing {
-                    $backing::Molecule { owner, id } => {
+                match &self.storage {
+                    $storage::Molecule { owner, counter, id } => {
                         let mut molecule = owner.try_borrow_mut(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
                         if !molecule.to_rust().$namespace().contains(*id) {
                             return Err(PyIndexError::new_err($id_error));
                         }
@@ -1030,7 +1036,7 @@ macro_rules! stereo_constraints {
                         cs.set(constraint);
                         Ok(())
                     }
-                    $backing::Value(value) => {
+                    $storage::Value(value) => {
                         let mut value = value.try_borrow_mut(py)?;
                         let cs = &mut value.to_rust_mut()?.constraints;
                         cs.set(constraint);
@@ -1046,9 +1052,10 @@ macro_rules! stereo_constraints {
                 key: Py<$key>,
             ) -> PyResult<Option<$constraint>> {
                 let rust_key = key.bind(py).borrow().to_rust(py);
-                let removed = match &self.backing {
-                    $backing::Molecule { owner, id } => {
+                let removed = match &self.storage {
+                    $storage::Molecule { owner, counter, id } => {
                         let mut molecule = owner.try_borrow_mut(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
                         if !molecule.to_rust().$namespace().contains(*id) {
                             return Err(PyIndexError::new_err($id_error));
                         }
@@ -1056,7 +1063,7 @@ macro_rules! stereo_constraints {
                         let cs = &mut view.attributes_mut().constraints;
                         cs.remove(rust_key)
                     }
-                    $backing::Value(value) => {
+                    $storage::Value(value) => {
                         let mut value = value.try_borrow_mut(py)?;
                         let cs = &mut value.to_rust_mut()?.constraints;
                         cs.remove(rust_key)
@@ -1068,9 +1075,10 @@ macro_rules! stereo_constraints {
             /// Remove the entry with the given key; raises `KeyError` if absent.
             pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<()> {
                 let rust_key = key.bind(py).borrow().to_rust(py);
-                let removed = match &self.backing {
-                    $backing::Molecule { owner, id } => {
+                let removed = match &self.storage {
+                    $storage::Molecule { owner, counter, id } => {
                         let mut molecule = owner.try_borrow_mut(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
                         if !molecule.to_rust().$namespace().contains(*id) {
                             return Err(PyIndexError::new_err($id_error));
                         }
@@ -1078,7 +1086,7 @@ macro_rules! stereo_constraints {
                         let cs = &mut view.attributes_mut().constraints;
                         cs.remove(rust_key)
                     }
-                    $backing::Value(value) => {
+                    $storage::Value(value) => {
                         let mut value = value.try_borrow_mut(py)?;
                         let cs = &mut value.to_rust_mut()?.constraints;
                         cs.remove(rust_key)
@@ -1098,9 +1106,10 @@ macro_rules! stereo_constraints {
             /// entries remove). Resolves `other` before the write borrow (self-alias safe).
             pub(crate) fn update(&self, py: Python<'_>, other: $update) -> PyResult<()> {
                 let resolved = other.resolve(py)?;
-                match &self.backing {
-                    $backing::Molecule { owner, id } => {
+                match &self.storage {
+                    $storage::Molecule { owner, counter, id } => {
                         let mut molecule = owner.try_borrow_mut(py)?;
+                        molecule.check_access(*counter, stringify!($view))?;
                         if !molecule.to_rust().$namespace().contains(*id) {
                             return Err(PyIndexError::new_err($id_error));
                         }
@@ -1109,7 +1118,7 @@ macro_rules! stereo_constraints {
                         resolved.apply(cs);
                         Ok(())
                     }
-                    $backing::Value(value) => {
+                    $storage::Value(value) => {
                         let mut value = value.try_borrow_mut(py)?;
                         let cs = &mut value.to_rust_mut()?.constraints;
                         resolved.apply(cs);
@@ -1293,7 +1302,7 @@ stereo_constraints! {
     StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsLike,
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
     GraphIrStereoAtomConstraintKey, GraphIrStereoAtomConstraintForm, GraphIrStereoAtomConstraintsForm,
-    StereoAtomForm, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
+    StereoAtomForm, StereoAtomConstraintsView, StereoAtomConstraintsStorage,
     GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut, "stereo atom id out of range",
 }
 
@@ -1302,6 +1311,6 @@ stereo_constraints! {
     StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsLike,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     GraphIrStereoBondConstraintKey, GraphIrStereoBondConstraintForm, GraphIrStereoBondConstraintsForm,
-    StereoBondForm, StereoBondConstraintsView, StereoBondConstraintsBacking,
+    StereoBondForm, StereoBondConstraintsView, StereoBondConstraintsStorage,
     GraphIrStereoBondId, stereo_bonds, stereo_bond_mut, "stereo bond id out of range",
 }

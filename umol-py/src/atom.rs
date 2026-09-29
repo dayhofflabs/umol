@@ -16,7 +16,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::constraint::atom::{
-    atom_constraints_asdict, AtomConstraintsBacking, AtomConstraintsForm, AtomConstraintsLike,
+    atom_constraints_asdict, AtomConstraintsForm, AtomConstraintsLike, AtomConstraintsStorage,
     AtomConstraintsView,
 };
 use crate::convert::{hash_rust, variant_repr};
@@ -499,7 +499,7 @@ impl AtomForm {
     #[getter]
     fn constraints(slf: Py<Self>) -> AtomConstraintsView {
         AtomConstraintsView {
-            backing: AtomConstraintsBacking::Atom(slf),
+            storage: AtomConstraintsStorage::Atom(slf),
         }
     }
 
@@ -667,9 +667,11 @@ impl EntityForm for AtomForm {
 
 /// A view of one atom within a molecule: a handle to the molecule plus the atom's
 /// index. Field reads rebuild the transient Rust view; the molecule is never copied.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct AtomView {
     owner: Py<Molecule>,
+    counter: u64,
     id: GraphIrAtomId,
 }
 
@@ -686,143 +688,181 @@ impl AtomView {
 #[pymethods]
 impl AtomView {
     #[getter]
-    fn id(&self) -> u32 {
-        self.id.0
+    fn id(&self, py: Python<'_>) -> PyResult<u32> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        Ok(self.id.0)
     }
 
-    fn __repr__(&self) -> String {
-        format!("AtomView(id={})", self.id.0)
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        Ok(format!("AtomView(id={})", self.id.0))
     }
 
     #[getter]
     fn element(&self, py: Python<'_>) -> PyResult<ElementForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
         Ok(ElementForm::from_rust(
             &self.atom(molecule.to_rust())?.element,
         ))
     }
 
     #[setter]
-    fn set_element(&self, py: Python<'_>, value: ElementLike) {
-        self.owner
-            .borrow_mut(py)
+    fn set_element(&self, py: Python<'_>, value: ElementLike) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        molecule
             .to_rust_mut()
             .atom_mut(self.id)
             .attributes_mut()
-            .element = value.to_rust(py);
+            .element = value;
+        Ok(())
     }
 
     #[getter]
     fn isotope_mass(&self, py: Python<'_>) -> PyResult<IsotopeMassForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
         Ok(IsotopeMassForm::from_rust(
             &self.atom(molecule.to_rust())?.isotope_mass,
         ))
     }
 
     #[setter]
-    fn set_isotope_mass(&self, py: Python<'_>, value: IsotopeMassLike) {
-        self.owner
-            .borrow_mut(py)
+    fn set_isotope_mass(&self, py: Python<'_>, value: IsotopeMassLike) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        molecule
             .to_rust_mut()
             .atom_mut(self.id)
             .attributes_mut()
-            .isotope_mass = value.to_rust(py);
+            .isotope_mass = value;
+        Ok(())
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
         NumForm::from_rust(py, &self.atom(molecule.to_rust())?.charge)
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: NumLike) {
-        self.owner
-            .borrow_mut(py)
+    fn set_charge(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        molecule
             .to_rust_mut()
             .atom_mut(self.id)
             .attributes_mut()
-            .charge = value.to_rust(py);
+            .charge = value;
+        Ok(())
     }
 
     #[getter]
     fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<NumForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
         NumForm::from_rust(py, &self.atom(molecule.to_rust())?.implicit_hydrogens)
     }
 
     #[setter]
-    fn set_implicit_hydrogens(&self, py: Python<'_>, value: NumLike) {
-        self.owner
-            .borrow_mut(py)
+    fn set_implicit_hydrogens(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        molecule
             .to_rust_mut()
             .atom_mut(self.id)
             .attributes_mut()
-            .implicit_hydrogens = value.to_rust(py);
+            .implicit_hydrogens = value;
+        Ok(())
     }
 
     #[getter]
     fn lone_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
         NumForm::from_rust(py, &self.atom(molecule.to_rust())?.lone_pairs)
     }
 
     #[setter]
-    fn set_lone_pairs(&self, py: Python<'_>, value: NumLike) {
-        self.owner
-            .borrow_mut(py)
+    fn set_lone_pairs(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        molecule
             .to_rust_mut()
             .atom_mut(self.id)
             .attributes_mut()
-            .lone_pairs = value.to_rust(py);
+            .lone_pairs = value;
+        Ok(())
     }
 
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
         UnpairedElectronsForm::from_rust(py, &self.atom(molecule.to_rust())?.unpaired_electrons)
     }
 
     #[setter]
-    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
-        self.owner
-            .borrow_mut(py)
+    fn set_unpaired_electrons(
+        &self,
+        py: Python<'_>,
+        value: PyRef<'_, UnpairedElectronsForm>,
+    ) -> PyResult<()> {
+        let value = value.to_rust(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        molecule
             .to_rust_mut()
             .atom_mut(self.id)
             .attributes_mut()
-            .unpaired_electrons = value.to_rust(py);
+            .unpaired_electrons = value;
+        Ok(())
     }
 
     /// The atom's constraints as a live handle onto the molecule: reads borrow the
     /// current state, mutators write through to the atom in place.
     #[getter]
-    fn constraints(&self, py: Python<'_>) -> AtomConstraintsView {
-        AtomConstraintsView {
-            backing: AtomConstraintsBacking::Molecule {
+    fn constraints(&self, py: Python<'_>) -> PyResult<AtomConstraintsView> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        Ok(AtomConstraintsView {
+            storage: AtomConstraintsStorage::Molecule {
                 owner: self.owner.clone_ref(py),
+                counter: self.counter,
                 id: self.id,
             },
-        }
+        })
     }
 
     /// Replace the whole constraint set of the backing atom in place (wipe-and-set)
     /// from a value container or a live view.
     #[setter]
     fn set_constraints(&self, py: Python<'_>, value: AtomConstraintsLike) -> PyResult<()> {
-        self.owner
-            .borrow_mut(py)
+        let value = value.to_rust(py)?;
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        molecule
             .to_rust_mut()
             .atom_mut(self.id)
             .attributes_mut()
-            .constraints = value.to_rust(py)?;
+            .constraints = value;
         Ok(())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `AtomForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
         let atom = self.atom(molecule.to_rust())?;
         let dict = PyDict::new(py);
         dict.set_item("element", ElementForm::from_rust(&atom.element))?;
@@ -869,81 +909,94 @@ fn resolve_atom_index(molecule: &GraphIrMolecule, index: isize) -> PyResult<Grap
 }
 
 /// The atoms of a molecule, indexed by integer position.
+/// Whole-molecule mutation invalidates this accessor; ordinary attribute changes remain visible.
 #[pyclass]
 pub struct AtomViews {
     owner: Py<Molecule>,
+    counter: u64,
 }
 
 #[pymethods]
 impl AtomViews {
-    fn __len__(&self, py: Python<'_>) -> usize {
-        self.owner.bind(py).borrow().to_rust().atoms().count()
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomViews))?;
+        Ok(molecule.to_rust().atoms().count())
     }
 
-    fn __repr__(&self, py: Python<'_>) -> String {
-        format!(
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomViews))?;
+        Ok(format!(
             "AtomViews(len={})",
-            self.owner.bind(py).borrow().to_rust().atoms().count()
-        )
+            molecule.to_rust().atoms().count()
+        ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<AtomView> {
-        let molecule = self.owner.bind(py).borrow();
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomViews))?;
         let id = resolve_atom_index(molecule.to_rust(), index)?;
         Ok(AtomView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
         })
     }
 
     /// Replace the whole atom at `index` in place.
     fn __setitem__(&self, py: Python<'_>, index: isize, atom: PyRef<'_, AtomForm>) -> PyResult<()> {
-        let mut molecule = self.owner.borrow_mut(py);
+        let mut molecule = self.owner.try_borrow_mut(py)?;
+        molecule.check_access(self.counter, stringify!(AtomViews))?;
         let id = resolve_atom_index(molecule.to_rust(), index)?;
         *molecule.to_rust_mut().atom_mut(id).attributes_mut() = atom.to_rust().clone();
         Ok(())
     }
 
-    fn __iter__(&self, py: Python<'_>) -> AtomViewIter {
-        let ids = self
-            .owner
-            .bind(py)
-            .borrow()
-            .to_rust()
-            .atoms()
-            .ids()
-            .collect::<Vec<_>>();
-        AtomViewIter {
+    fn __iter__(&self, py: Python<'_>) -> PyResult<AtomViewIter> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomViews))?;
+        let ids = molecule.to_rust().atoms().ids().collect::<Vec<_>>();
+        Ok(AtomViewIter {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             ids: ids.into_iter(),
-        }
+        })
     }
 }
 
 impl AtomViews {
     /// Build the atom-views handle for `owner` (the `.atoms` accessor on the molecule).
-    pub(crate) fn new(owner: Py<Molecule>) -> AtomViews {
-        AtomViews { owner }
+    pub(crate) fn new(owner: Py<Molecule>, py: Python<'_>) -> PyResult<AtomViews> {
+        let counter = owner.try_borrow(py)?.view_counter()?;
+        Ok(AtomViews { owner, counter })
     }
 }
 
 #[pyclass]
 struct AtomViewIter {
     owner: Py<Molecule>,
+    counter: u64,
     ids: IntoIter<GraphIrAtomId>,
 }
 
 #[pymethods]
 impl AtomViewIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
+    fn __iter__(slf: PyRef<'_, Self>) -> PyResult<PyRef<'_, Self>> {
+        slf.owner
+            .try_borrow(slf.py())?
+            .check_access(slf.counter, stringify!(AtomViewIter))?;
+        Ok(slf)
     }
 
-    fn __next__(&mut self, py: Python<'_>) -> Option<AtomView> {
-        self.ids.next().map(|id| AtomView {
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<AtomView>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomViewIter))?;
+        Ok(self.ids.next().map(|id| AtomView {
             owner: self.owner.clone_ref(py),
+            counter: self.counter,
             id,
-        })
+        }))
     }
 }
 
@@ -1046,9 +1099,10 @@ mod tests {
         Python::attach(|py| {
             let view = AtomView {
                 owner: carbon_oxygen(py),
+                counter: 0,
                 id: GraphIrAtomId(1),
             };
-            assert_eq!(view.id(), 1);
+            assert_eq!(view.id(py).unwrap(), 1);
             match view.element(py).unwrap() {
                 ElementForm::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::O),
                 _ => panic!("expected Lit"),
@@ -1062,11 +1116,13 @@ mod tests {
             let owner = carbon_oxygen(py);
             let view = AtomView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrAtomId(0),
             };
-            view.set_charge(py, NumLike::Lit(-1));
+            view.set_charge(py, NumLike::Lit(-1)).unwrap();
             let fresh = AtomView {
                 owner,
+                counter: 0,
                 id: GraphIrAtomId(0),
             };
             match fresh.charge(py).unwrap() {
@@ -1082,11 +1138,14 @@ mod tests {
             let owner = carbon_oxygen(py);
             let view = AtomView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrAtomId(0),
             };
-            view.set_element(py, ElementLike::Lit(Element::from(ChemElement::N)));
+            view.set_element(py, ElementLike::Lit(Element::from(ChemElement::N)))
+                .unwrap();
             let fresh = AtomView {
                 owner,
+                counter: 0,
                 id: GraphIrAtomId(0),
             };
             match fresh.element(py).unwrap() {
@@ -1102,11 +1161,13 @@ mod tests {
             let owner = carbon_oxygen(py);
             let view = AtomView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrAtomId(0),
             };
-            view.set_isotope_mass(py, IsotopeMassLike::Lit(13));
+            view.set_isotope_mass(py, IsotopeMassLike::Lit(13)).unwrap();
             let fresh = AtomView {
                 owner,
+                counter: 0,
                 id: GraphIrAtomId(0),
             };
             match fresh.isotope_mass(py).unwrap() {
@@ -1122,6 +1183,7 @@ mod tests {
             let owner = carbon_oxygen(py);
             let view = AtomView {
                 owner: owner.clone_ref(py),
+                counter: 0,
                 id: GraphIrAtomId(0),
             };
             let unpaired_electrons = Py::new(
@@ -1136,9 +1198,11 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
+            view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow())
+                .unwrap();
             let fresh = AtomView {
                 owner,
+                counter: 0,
                 id: GraphIrAtomId(0),
             };
             assert_eq!(
@@ -1156,11 +1220,12 @@ mod tests {
         Python::attach(|py| {
             let views = AtomViews {
                 owner: carbon_oxygen(py),
+                counter: 0,
             };
-            assert_eq!(views.__len__(py), 2);
-            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
-            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 1);
-            assert_eq!(views.__getitem__(py, -2).unwrap().id(), 0);
+            assert_eq!(views.__len__(py).unwrap(), 2);
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(py).unwrap(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(py).unwrap(), 1);
+            assert_eq!(views.__getitem__(py, -2).unwrap().id(py).unwrap(), 0);
             assert!(views.__getitem__(py, 5).is_err());
             assert!(views.__getitem__(py, -3).is_err());
         });
@@ -1171,6 +1236,7 @@ mod tests {
         Python::attach(|py| {
             let views = AtomViews {
                 owner: carbon_oxygen(py),
+                counter: 0,
             };
             let nitrogen = Py::new(
                 py,
@@ -1192,6 +1258,7 @@ mod tests {
         Python::attach(|py| {
             let views = AtomViews {
                 owner: carbon_oxygen(py),
+                counter: 0,
             };
             let nitrogen = Py::new(
                 py,
@@ -1244,7 +1311,7 @@ mod tests {
             let view = Py::new(
                 py,
                 AtomConstraintsView {
-                    backing: AtomConstraintsBacking::Atom(src),
+                    storage: AtomConstraintsStorage::Atom(src),
                 },
             )
             .unwrap();
@@ -1285,7 +1352,7 @@ mod tests {
             let own_view = Py::new(
                 py,
                 AtomConstraintsView {
-                    backing: AtomConstraintsBacking::Atom(atom.clone_ref(py)),
+                    storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
                 },
             )
             .unwrap();
@@ -1309,10 +1376,11 @@ mod tests {
         Python::attach(|py| {
             let view = AtomView {
                 owner: carbon_oxygen(py),
+                counter: 0,
                 id: GraphIrAtomId(1),
             };
-            match view.constraints(py).backing {
-                AtomConstraintsBacking::Molecule { id, .. } => assert_eq!(id, GraphIrAtomId(1)),
+            match view.constraints(py).unwrap().storage {
+                AtomConstraintsStorage::Molecule { id, .. } => assert_eq!(id, GraphIrAtomId(1)),
                 _ => panic!("expected molecule-backed view"),
             }
         });
@@ -1594,8 +1662,9 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
@@ -1606,8 +1675,9 @@ mod tests {
             .unwrap();
             view.set(py, valence).unwrap();
             let fresh = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
@@ -1641,8 +1711,9 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
@@ -1659,8 +1730,9 @@ mod tests {
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
             let fresh = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
@@ -1680,8 +1752,9 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
@@ -1696,8 +1769,9 @@ mod tests {
             )
             .unwrap();
             let fresh = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
@@ -1714,7 +1788,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Atom(atom.clone_ref(py)),
+                storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
             };
             let valence = into_py_variant(
                 py,
@@ -1724,7 +1798,7 @@ mod tests {
             view.set(py, valence).unwrap();
             // a fresh view proves the write hit the standalone atom, not a copy
             let fresh = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Atom(atom),
+                storage: AtomConstraintsStorage::Atom(atom),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             match fresh
@@ -1754,7 +1828,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Atom(atom.clone_ref(py)),
+                storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
             };
             let removed = view
                 .pop(
@@ -1769,7 +1843,7 @@ mod tests {
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
             let fresh = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Atom(atom),
+                storage: AtomConstraintsStorage::Atom(atom),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 0);
         });
@@ -1784,7 +1858,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Atom(atom.clone_ref(py)),
+                storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
             };
             let mut other = GraphIrAtomConstraintsForm::new();
             other.set(GraphIrAtomConstraintForm::valence(4));
@@ -1797,7 +1871,7 @@ mod tests {
             )
             .unwrap();
             let fresh = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Atom(atom),
+                storage: AtomConstraintsStorage::Atom(atom),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 2);
         });
@@ -1894,16 +1968,18 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
             view.set_aromatic_valence(py, AromaticValenceLike::Value(NumLike::Lit(1)))
                 .unwrap();
             let fresh = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
@@ -1943,23 +2019,27 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
             view.ring_size_count(py)
+                .unwrap()
                 .__setitem__(py, 5, NumLike::Lit(1))
                 .unwrap();
             let fresh = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Molecule {
+                storage: AtomConstraintsStorage::Molecule {
                     owner,
+                    counter: 0,
                     id: GraphIrAtomId(0),
                 },
             };
             assert_eq!(
                 fresh
                     .ring_size_count(py)
+                    .unwrap()
                     .__getitem__(py, 5)
                     .unwrap()
                     .unwrap()
@@ -2038,12 +2118,12 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
-                backing: AtomConstraintsBacking::Atom(atom.clone_ref(py)),
+                storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
             };
             let other = Py::new(
                 py,
                 AtomConstraintsView {
-                    backing: AtomConstraintsBacking::Atom(atom.clone_ref(py)),
+                    storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
                 },
             )
             .unwrap();

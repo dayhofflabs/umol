@@ -492,9 +492,10 @@ pub(crate) fn multicenter_bond_constraints_asdict<'py>(
 
 /// What a `MulticenterBondConstraintsView` writes through to: a multicenter bond
 /// within a molecule (by index) or a standalone `MulticenterBondForm`.
-pub(crate) enum MulticenterBondConstraintsBacking {
+pub(crate) enum MulticenterBondConstraintsStorage {
     Molecule {
         owner: Py<Molecule>,
+        counter: u64,
         id: GraphIrMulticenterBondId,
     },
     MulticenterBond(Py<MulticenterBondForm>),
@@ -502,11 +503,11 @@ pub(crate) enum MulticenterBondConstraintsBacking {
 
 /// A live handle onto one multicenter bond's constraints, backed by either a
 /// molecule-bond or a standalone `MulticenterBondForm`. Reads borrow the constraints
-/// and read only the item they need. Mutators on a molecule-backed view publish atomically through
-/// the molecule integrity gate; standalone forms mutate directly.
+/// and read only the item they need. Mutators write directly to the stored constraints.
+/// Whole-molecule mutation invalidates molecule-backed accessors.
 #[pyclass]
 pub struct MulticenterBondConstraintsView {
-    pub(crate) backing: MulticenterBondConstraintsBacking,
+    pub(crate) storage: MulticenterBondConstraintsStorage,
 }
 
 impl MulticenterBondConstraintsView {
@@ -516,9 +517,10 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         f: impl FnOnce(&GraphIrMulticenterBondConstraintsForm) -> PyResult<R>,
     ) -> PyResult<R> {
-        match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
-                let molecule = owner.bind(py).borrow();
+        match &self.storage {
+            MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
                 let view = molecule
                     .to_rust()
                     .multicenter_bonds()
@@ -526,7 +528,7 @@ impl MulticenterBondConstraintsView {
                     .ok_or_else(|| PyIndexError::new_err("multicenter bond id out of range"))?;
                 f(&view.attributes().constraints)
             }
-            MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
+            MulticenterBondConstraintsStorage::MulticenterBond(bond) => {
                 let bond = bond.bind(py).borrow();
                 f(&bond.to_rust().constraints)
             }
@@ -539,9 +541,10 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         constraint: GraphIrMulticenterBondConstraintForm,
     ) -> PyResult<()> {
-        match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
                 if !molecule.to_rust().multicenter_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("multicenter bond id out of range"));
                 }
@@ -550,7 +553,7 @@ impl MulticenterBondConstraintsView {
                 cs.set(constraint);
                 Ok(())
             }
-            MulticenterBondConstraintsBacking::MulticenterBond(value) => {
+            MulticenterBondConstraintsStorage::MulticenterBond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 cs.set(constraint);
@@ -565,9 +568,10 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         key: GraphIrMulticenterBondConstraintKey,
     ) -> PyResult<Option<GraphIrMulticenterBondConstraintForm>> {
-        match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
                 if !molecule.to_rust().multicenter_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("multicenter bond id out of range"));
                 }
@@ -575,7 +579,7 @@ impl MulticenterBondConstraintsView {
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
-            MulticenterBondConstraintsBacking::MulticenterBond(value) => {
+            MulticenterBondConstraintsStorage::MulticenterBond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 Ok(cs.remove(key))
@@ -637,9 +641,10 @@ impl MulticenterBondConstraintsView {
         other: MulticenterBondConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
+        match &self.storage {
+            MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
+                molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
                 if !molecule.to_rust().multicenter_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("multicenter bond id out of range"));
                 }
@@ -648,7 +653,7 @@ impl MulticenterBondConstraintsView {
                 resolved.apply(cs);
                 Ok(())
             }
-            MulticenterBondConstraintsBacking::MulticenterBond(value) => {
+            MulticenterBondConstraintsStorage::MulticenterBond(value) => {
                 let mut value = value.try_borrow_mut(py)?;
                 let cs = &mut value.to_rust_mut()?.constraints;
                 resolved.apply(cs);

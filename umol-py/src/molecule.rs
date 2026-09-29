@@ -548,50 +548,50 @@ impl Molecule {
 
     /// The atoms, indexed by integer position.
     #[getter]
-    fn atoms(slf: Py<Self>) -> AtomViews {
-        AtomViews::new(slf)
+    fn atoms(slf: Py<Self>, py: Python<'_>) -> PyResult<AtomViews> {
+        AtomViews::new(slf, py)
     }
 
     /// The bonds, indexed by integer position.
     #[getter]
-    fn bonds(slf: Py<Self>) -> BondViews {
-        BondViews::new(slf)
+    fn bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<BondViews> {
+        BondViews::new(slf, py)
     }
 
     /// The dative bonds, indexed by integer position.
     #[getter]
-    fn dative_bonds(slf: Py<Self>) -> DativeBondViews {
-        DativeBondViews::new(slf)
+    fn dative_bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<DativeBondViews> {
+        DativeBondViews::new(slf, py)
     }
 
     /// The aromatic systems, indexed by integer position.
     #[getter]
-    fn aromatic_systems(slf: Py<Self>) -> AromaticSystemViews {
-        AromaticSystemViews::new(slf)
+    fn aromatic_systems(slf: Py<Self>, py: Python<'_>) -> PyResult<AromaticSystemViews> {
+        AromaticSystemViews::new(slf, py)
     }
 
     /// The multicenter bonds, indexed by integer position.
     #[getter]
-    fn multicenter_bonds(slf: Py<Self>) -> MulticenterBondViews {
-        MulticenterBondViews::new(slf)
+    fn multicenter_bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<MulticenterBondViews> {
+        MulticenterBondViews::new(slf, py)
     }
 
     /// The noncovalent bonds, indexed by integer position.
     #[getter]
-    fn noncovalent_bonds(slf: Py<Self>) -> NoncovalentBondViews {
-        NoncovalentBondViews::new(slf)
+    fn noncovalent_bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<NoncovalentBondViews> {
+        NoncovalentBondViews::new(slf, py)
     }
 
     /// The stereo atoms, indexed by integer position.
     #[getter]
-    fn stereo_atoms(slf: Py<Self>) -> StereoAtomViews {
-        StereoAtomViews::new(slf)
+    fn stereo_atoms(slf: Py<Self>, py: Python<'_>) -> PyResult<StereoAtomViews> {
+        StereoAtomViews::new(slf, py)
     }
 
     /// The stereo bonds, indexed by integer position.
     #[getter]
-    fn stereo_bonds(slf: Py<Self>) -> StereoBondViews {
-        StereoBondViews::new(slf)
+    fn stereo_bonds(slf: Py<Self>, py: Python<'_>) -> PyResult<StereoBondViews> {
+        StereoBondViews::new(slf, py)
     }
 
     /// The molecule-level constraints in insertion order.
