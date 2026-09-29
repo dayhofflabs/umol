@@ -36,7 +36,7 @@ index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch loops remain under the editor module; single-edit execution and
 handle state are in molecule::apply. Fields remain private and internal Molecule
-mutation methods use pub(crate). S4b1–S4b5 are complete; S4b6 is next. The
+mutation methods use pub(crate). S4b1–S4b6 are complete; S4b7 is next. The
 S4b3–S4b8 migration is currently non-compiling.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
@@ -89,7 +89,7 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1–S4b5 are complete; S4b6 is next. The build returns green at S4b8.
+and S4b1–S4b6 are complete; S4b7 is next. The build returns green at S4b8.
 
 ## Editor and transaction API
 
@@ -5197,7 +5197,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   in the infallible apply_undo body, scheduled for S4b8. Removal-compaction
   errors are resolved. Tests remain unexecuted until that migration compiles.
 
-- **S4b6 — Attribute edit execution** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b5]
+- **S4b6 — completed 2026-09-28** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b5]
 
   **Attribute changes.** Resolve the target, read the selected field through
   its view, and require normalized_eq with the offered old value before writing.
@@ -5223,6 +5223,24 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   apply_modify_* wrappers are introduced.
 
   Cover every FieldChange member and equivalent offered-old forms.
+
+  **Implemented — attribute execution.** The eight field wrappers are removed.
+  Both Edit executors select and assign fields directly through the listed
+  mutable views. Journaled execution clones only the new field value and moves
+  the offered old value into the inverse change. Field replay assigns the saved
+  value without comparing old state, with local target bounds guards.
+
+  Fifty-four cases cover every FieldChange member in both execution paths,
+  equivalent offered-old forms, whole-molecule results, repeated-edit rejection,
+  and restoration modulo normalized_eq. They include assignments of electron
+  counts with differing lengths and out-of-range cosets. Eight further cases
+  exercise panic freedom for field undo with missing targets.
+
+  **Verification — 2026-09-28.** Nightly formatting and diff checks/review pass.
+  The all-target graph-ir check reports only two existing errors: aggregate undo
+  validation and ApplyEdit recursion still use `?` in infallible apply_undo.
+  Those are removed in S4b7/S4b8. Tests remain unexecuted until the migration
+  compiles.
 
 - **S4b7 — Constraint edits and explicit constraint Undo variants** (`ir::{edit,molecule::apply}`; breaking, green at S4b8). [dep: S4b6]
 
@@ -5857,7 +5875,7 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b5 are complete; S4b6 is next.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b6 are complete; S4b7 is next.
   The build returns green at S4b8.
   S4b uses the additions and the component
   removal/restoration interfaces.

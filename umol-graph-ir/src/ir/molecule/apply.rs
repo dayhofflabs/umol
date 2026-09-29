@@ -375,11 +375,73 @@ impl Molecule {
             }
             Edit::ModifyAtomField { id, change } => {
                 let id = state.atom(id)?;
-                self.apply_modify_atom_field(id, change)
+                let mut view = self.atom_mut(id);
+                let attributes = view.attributes_mut();
+                match change {
+                    AtomFieldChange::Element { old, new } => {
+                        if !attributes.element.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.element = new;
+                    }
+                    AtomFieldChange::IsotopeMass { old, new } => {
+                        if !attributes.isotope_mass.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.isotope_mass = new;
+                    }
+                    AtomFieldChange::Charge { old, new } => {
+                        if !attributes.charge.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new;
+                    }
+                    AtomFieldChange::ImplicitHydrogens { old, new } => {
+                        if !attributes.implicit_hydrogens.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.implicit_hydrogens = new;
+                    }
+                    AtomFieldChange::LonePairs { old, new } => {
+                        if !attributes.lone_pairs.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.lone_pairs = new;
+                    }
+                    AtomFieldChange::UnpairedElectrons { old, new } => {
+                        if !attributes.unpaired_electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new;
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyBondField { id, change } => {
                 let id = state.bond(id)?;
-                self.apply_modify_bond_field(id, change)
+                let mut view = self.bond_mut(id);
+                let attributes = view.attributes_mut();
+                match change {
+                    BondFieldChange::Order { old, new } => {
+                        if !attributes.order.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.order = new;
+                    }
+                    BondFieldChange::Charge { old, new } => {
+                        if !attributes.charge.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new;
+                    }
+                    BondFieldChange::UnpairedElectrons { old, new } => {
+                        if !attributes.unpaired_electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new;
+                    }
+                }
+                Ok(())
             }
             Edit::AddDativeBond {
                 donors,
@@ -457,7 +519,17 @@ impl Molecule {
             }
             Edit::ModifyDativeBondField { id, change } => {
                 let id = state.dative_bond(id)?;
-                self.apply_modify_dative_bond_field(id, change)
+                let mut view = self.dative_bond_mut(id);
+                let attributes = view.attributes_mut();
+                match change {
+                    DativeBondFieldChange::Order { old, new } => {
+                        if !attributes.order.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.order = new;
+                    }
+                }
+                Ok(())
             }
             Edit::AddAromaticSystem { atoms, attributes } => {
                 let resolved: Vec<AtomId> = atoms
@@ -518,7 +590,29 @@ impl Molecule {
             }
             Edit::ModifyAromaticSystemField { id, change } => {
                 let id = state.aromatic_system(id)?;
-                self.apply_modify_aromatic_system_field(id, change)
+                let mut view = self.aromatic_system_mut(id);
+                let attributes = view.attributes_mut();
+                match change {
+                    AromaticSystemFieldChange::Electrons { old, new } => {
+                        if !attributes.electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.electrons = new;
+                    }
+                    AromaticSystemFieldChange::Charge { old, new } => {
+                        if !attributes.charge.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new;
+                    }
+                    AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
+                        if !attributes.unpaired_electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new;
+                    }
+                }
+                Ok(())
             }
             Edit::AddMulticenterBond { atoms, attributes } => {
                 let resolved: Vec<AtomId> = atoms
@@ -579,7 +673,29 @@ impl Molecule {
             }
             Edit::ModifyMulticenterBondField { id, change } => {
                 let id = state.multicenter_bond(id)?;
-                self.apply_modify_multicenter_bond_field(id, change)
+                let mut view = self.multicenter_bond_mut(id);
+                let attributes = view.attributes_mut();
+                match change {
+                    MulticenterBondFieldChange::Electrons { old, new } => {
+                        if !attributes.electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.electrons = new;
+                    }
+                    MulticenterBondFieldChange::Charge { old, new } => {
+                        if !attributes.charge.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new;
+                    }
+                    MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
+                        if !attributes.unpaired_electrons.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new;
+                    }
+                }
+                Ok(())
             }
             Edit::AddNoncovalentBond { atoms, attributes } => {
                 let a = state.atom(atoms[0].clone())?;
@@ -630,7 +746,17 @@ impl Molecule {
             }
             Edit::ModifyNoncovalentBondField { id, change } => {
                 let id = state.noncovalent_bond(id)?;
-                self.apply_modify_noncovalent_bond_field(id, change)
+                let mut view = self.noncovalent_bond_mut(id);
+                let attributes = view.attributes_mut();
+                match change {
+                    NoncovalentBondFieldChange::Kind { old, new } => {
+                        if !attributes.kind.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.kind = new;
+                    }
+                }
+                Ok(())
             }
             Edit::AddStereoAtom {
                 site,
@@ -696,7 +822,17 @@ impl Molecule {
             }
             Edit::ModifyStereoAtomField { id, change } => {
                 let id = state.stereo_atom(id)?;
-                self.apply_modify_stereo_atom_field(id, change)
+                let mut view = self.stereo_atom_mut(id);
+                let attributes = view.attributes_mut();
+                match change {
+                    StereoAtomFieldChange::Configuration { old, new } => {
+                        if !attributes.configuration.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.configuration = new;
+                    }
+                }
+                Ok(())
             }
             Edit::AddStereoBond {
                 site,
@@ -762,7 +898,17 @@ impl Molecule {
             }
             Edit::ModifyStereoBondField { id, change } => {
                 let id = state.stereo_bond(id)?;
-                self.apply_modify_stereo_bond_field(id, change)
+                let mut view = self.stereo_bond_mut(id);
+                let attributes = view.attributes_mut();
+                match change {
+                    StereoBondFieldChange::Configuration { old, new } => {
+                        if !attributes.configuration.normalized_eq(&old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.configuration = new;
+                    }
+                }
+                Ok(())
             }
             Edit::ModifyAtomConstraint { id, old, new } => {
                 let id = state.atom(id)?;
@@ -925,21 +1071,79 @@ impl Molecule {
             }
             Edit::ModifyAtomField { id, change } => {
                 let id = state.atom(id)?;
-                let undo = Undo::ModifyAtomField {
+                let mut view = self.atom_mut(id);
+                let attributes = view.attributes_mut();
+                match &change {
+                    AtomFieldChange::Element { old, new } => {
+                        if !attributes.element.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.element = new.clone();
+                    }
+                    AtomFieldChange::IsotopeMass { old, new } => {
+                        if !attributes.isotope_mass.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.isotope_mass = new.clone();
+                    }
+                    AtomFieldChange::Charge { old, new } => {
+                        if !attributes.charge.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new.clone();
+                    }
+                    AtomFieldChange::ImplicitHydrogens { old, new } => {
+                        if !attributes.implicit_hydrogens.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.implicit_hydrogens = new.clone();
+                    }
+                    AtomFieldChange::LonePairs { old, new } => {
+                        if !attributes.lone_pairs.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.lone_pairs = new.clone();
+                    }
+                    AtomFieldChange::UnpairedElectrons { old, new } => {
+                        if !attributes.unpaired_electrons.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new.clone();
+                    }
+                }
+                Ok(Undo::ModifyAtomField {
                     id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_atom_field(id, change)?;
-                Ok(undo)
+                    change: change.inverse(),
+                })
             }
             Edit::ModifyBondField { id, change } => {
                 let id = state.bond(id)?;
-                let undo = Undo::ModifyBondField {
+                let mut view = self.bond_mut(id);
+                let attributes = view.attributes_mut();
+                match &change {
+                    BondFieldChange::Order { old, new } => {
+                        if !attributes.order.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.order = new.clone();
+                    }
+                    BondFieldChange::Charge { old, new } => {
+                        if !attributes.charge.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new.clone();
+                    }
+                    BondFieldChange::UnpairedElectrons { old, new } => {
+                        if !attributes.unpaired_electrons.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new.clone();
+                    }
+                }
+                Ok(Undo::ModifyBondField {
                     id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_bond_field(id, change)?;
-                Ok(undo)
+                    change: change.inverse(),
+                })
             }
             Edit::AddDativeBond {
                 donors,
@@ -1037,12 +1241,20 @@ impl Molecule {
             }
             Edit::ModifyDativeBondField { id, change } => {
                 let id = state.dative_bond(id)?;
-                let undo = Undo::ModifyDativeBondField {
+                let mut view = self.dative_bond_mut(id);
+                let attributes = view.attributes_mut();
+                match &change {
+                    DativeBondFieldChange::Order { old, new } => {
+                        if !attributes.order.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.order = new.clone();
+                    }
+                }
+                Ok(Undo::ModifyDativeBondField {
                     id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_dative_bond_field(id, change)?;
-                Ok(undo)
+                    change: change.inverse(),
+                })
             }
             Edit::AddAromaticSystem { atoms, attributes } => {
                 let resolved: Vec<AtomId> = atoms
@@ -1121,12 +1333,32 @@ impl Molecule {
             }
             Edit::ModifyAromaticSystemField { id, change } => {
                 let id = state.aromatic_system(id)?;
-                let undo = Undo::ModifyAromaticSystemField {
+                let mut view = self.aromatic_system_mut(id);
+                let attributes = view.attributes_mut();
+                match &change {
+                    AromaticSystemFieldChange::Electrons { old, new } => {
+                        if !attributes.electrons.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.electrons = new.clone();
+                    }
+                    AromaticSystemFieldChange::Charge { old, new } => {
+                        if !attributes.charge.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new.clone();
+                    }
+                    AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
+                        if !attributes.unpaired_electrons.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new.clone();
+                    }
+                }
+                Ok(Undo::ModifyAromaticSystemField {
                     id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_aromatic_system_field(id, change)?;
-                Ok(undo)
+                    change: change.inverse(),
+                })
             }
             Edit::AddMulticenterBond { atoms, attributes } => {
                 let resolved: Vec<AtomId> = atoms
@@ -1205,12 +1437,32 @@ impl Molecule {
             }
             Edit::ModifyMulticenterBondField { id, change } => {
                 let id = state.multicenter_bond(id)?;
-                let undo = Undo::ModifyMulticenterBondField {
+                let mut view = self.multicenter_bond_mut(id);
+                let attributes = view.attributes_mut();
+                match &change {
+                    MulticenterBondFieldChange::Electrons { old, new } => {
+                        if !attributes.electrons.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.electrons = new.clone();
+                    }
+                    MulticenterBondFieldChange::Charge { old, new } => {
+                        if !attributes.charge.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.charge = new.clone();
+                    }
+                    MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
+                        if !attributes.unpaired_electrons.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.unpaired_electrons = new.clone();
+                    }
+                }
+                Ok(Undo::ModifyMulticenterBondField {
                     id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_multicenter_bond_field(id, change)?;
-                Ok(undo)
+                    change: change.inverse(),
+                })
             }
             Edit::AddNoncovalentBond { atoms, attributes } => {
                 let a = state.atom(atoms[0].clone())?;
@@ -1278,12 +1530,20 @@ impl Molecule {
             }
             Edit::ModifyNoncovalentBondField { id, change } => {
                 let id = state.noncovalent_bond(id)?;
-                let undo = Undo::ModifyNoncovalentBondField {
+                let mut view = self.noncovalent_bond_mut(id);
+                let attributes = view.attributes_mut();
+                match &change {
+                    NoncovalentBondFieldChange::Kind { old, new } => {
+                        if !attributes.kind.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.kind = new.clone();
+                    }
+                }
+                Ok(Undo::ModifyNoncovalentBondField {
                     id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_noncovalent_bond_field(id, change)?;
-                Ok(undo)
+                    change: change.inverse(),
+                })
             }
             Edit::AddStereoAtom {
                 site,
@@ -1369,12 +1629,20 @@ impl Molecule {
             }
             Edit::ModifyStereoAtomField { id, change } => {
                 let id = state.stereo_atom(id)?;
-                let undo = Undo::ModifyStereoAtomField {
+                let mut view = self.stereo_atom_mut(id);
+                let attributes = view.attributes_mut();
+                match &change {
+                    StereoAtomFieldChange::Configuration { old, new } => {
+                        if !attributes.configuration.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.configuration = new.clone();
+                    }
+                }
+                Ok(Undo::ModifyStereoAtomField {
                     id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_stereo_atom_field(id, change)?;
-                Ok(undo)
+                    change: change.inverse(),
+                })
             }
             Edit::AddStereoBond {
                 site,
@@ -1460,12 +1728,20 @@ impl Molecule {
             }
             Edit::ModifyStereoBondField { id, change } => {
                 let id = state.stereo_bond(id)?;
-                let undo = Undo::ModifyStereoBondField {
+                let mut view = self.stereo_bond_mut(id);
+                let attributes = view.attributes_mut();
+                match &change {
+                    StereoBondFieldChange::Configuration { old, new } => {
+                        if !attributes.configuration.normalized_eq(old) {
+                            return Err(TransactionError::OldStateMismatch);
+                        }
+                        attributes.configuration = new.clone();
+                    }
+                }
+                Ok(Undo::ModifyStereoBondField {
                     id,
-                    change: change.clone().inverse(),
-                };
-                self.apply_modify_stereo_bond_field(id, change)?;
-                Ok(undo)
+                    change: change.inverse(),
+                })
             }
             Edit::ModifyAtomConstraint { id, old, new } => {
                 let id = state.atom(id.clone())?;
@@ -1824,30 +2100,127 @@ impl Molecule {
             Undo::RestoreStereoBondLigands { id, ligands } => {
                 self.stereo_bond_view_mut(id).replace_ligands(&ligands);
             }
-            Undo::ModifyAtomField { id, change } => self
-                .apply_modify_atom_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyBondField { id, change } => self
-                .apply_modify_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyDativeBondField { id, change } => self
-                .apply_modify_dative_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyAromaticSystemField { id, change } => self
-                .apply_modify_aromatic_system_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyMulticenterBondField { id, change } => self
-                .apply_modify_multicenter_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyNoncovalentBondField { id, change } => self
-                .apply_modify_noncovalent_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyStereoAtomField { id, change } => self
-                .apply_modify_stereo_atom_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
-            Undo::ModifyStereoBondField { id, change } => self
-                .apply_modify_stereo_bond_field(id, change)
-                .map_err(|_| rollback_mismatch())?,
+            Undo::ModifyAtomField { id, change } => {
+                if id.index() < self.atoms().count() {
+                    let mut view = self.atom_mut(id);
+                    let attributes = view.attributes_mut();
+                    match change {
+                        AtomFieldChange::Element { new, .. } => {
+                            attributes.element = new;
+                        }
+                        AtomFieldChange::IsotopeMass { new, .. } => {
+                            attributes.isotope_mass = new;
+                        }
+                        AtomFieldChange::Charge { new, .. } => {
+                            attributes.charge = new;
+                        }
+                        AtomFieldChange::ImplicitHydrogens { new, .. } => {
+                            attributes.implicit_hydrogens = new;
+                        }
+                        AtomFieldChange::LonePairs { new, .. } => {
+                            attributes.lone_pairs = new;
+                        }
+                        AtomFieldChange::UnpairedElectrons { new, .. } => {
+                            attributes.unpaired_electrons = new;
+                        }
+                    }
+                }
+            }
+            Undo::ModifyBondField { id, change } => {
+                if id.index() < self.bonds().count() {
+                    let mut view = self.bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    match change {
+                        BondFieldChange::Order { new, .. } => {
+                            attributes.order = new;
+                        }
+                        BondFieldChange::Charge { new, .. } => {
+                            attributes.charge = new;
+                        }
+                        BondFieldChange::UnpairedElectrons { new, .. } => {
+                            attributes.unpaired_electrons = new;
+                        }
+                    }
+                }
+            }
+            Undo::ModifyDativeBondField { id, change } => {
+                if id.index() < self.dative_bonds().count() {
+                    let mut view = self.dative_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    match change {
+                        DativeBondFieldChange::Order { new, .. } => {
+                            attributes.order = new;
+                        }
+                    }
+                }
+            }
+            Undo::ModifyAromaticSystemField { id, change } => {
+                if id.index() < self.aromatic_systems().count() {
+                    let mut view = self.aromatic_system_mut(id);
+                    let attributes = view.attributes_mut();
+                    match change {
+                        AromaticSystemFieldChange::Electrons { new, .. } => {
+                            attributes.electrons = new;
+                        }
+                        AromaticSystemFieldChange::Charge { new, .. } => {
+                            attributes.charge = new;
+                        }
+                        AromaticSystemFieldChange::UnpairedElectrons { new, .. } => {
+                            attributes.unpaired_electrons = new;
+                        }
+                    }
+                }
+            }
+            Undo::ModifyMulticenterBondField { id, change } => {
+                if id.index() < self.multicenter_bonds().count() {
+                    let mut view = self.multicenter_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    match change {
+                        MulticenterBondFieldChange::Electrons { new, .. } => {
+                            attributes.electrons = new;
+                        }
+                        MulticenterBondFieldChange::Charge { new, .. } => {
+                            attributes.charge = new;
+                        }
+                        MulticenterBondFieldChange::UnpairedElectrons { new, .. } => {
+                            attributes.unpaired_electrons = new;
+                        }
+                    }
+                }
+            }
+            Undo::ModifyNoncovalentBondField { id, change } => {
+                if id.index() < self.noncovalent_bonds().count() {
+                    let mut view = self.noncovalent_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    match change {
+                        NoncovalentBondFieldChange::Kind { new, .. } => {
+                            attributes.kind = new;
+                        }
+                    }
+                }
+            }
+            Undo::ModifyStereoAtomField { id, change } => {
+                if id.index() < self.stereo_atoms().count() {
+                    let mut view = self.stereo_atom_mut(id);
+                    let attributes = view.attributes_mut();
+                    match change {
+                        StereoAtomFieldChange::Configuration { new, .. } => {
+                            attributes.configuration = new;
+                        }
+                    }
+                }
+            }
+            Undo::ModifyStereoBondField { id, change } => {
+                if id.index() < self.stereo_bonds().count() {
+                    let mut view = self.stereo_bond_mut(id);
+                    let attributes = view.attributes_mut();
+                    match change {
+                        StereoBondFieldChange::Configuration { new, .. } => {
+                            attributes.configuration = new;
+                        }
+                    }
+                }
+            }
             Undo::ApplyCascadedConstraints(update) => {
                 self.restore_constraints(&update);
             }
@@ -2099,208 +2472,6 @@ impl Molecule {
                 stereo_bonds,
             },
         )
-    }
-
-    fn apply_modify_atom_field(
-        &mut self,
-        id: AtomId,
-        change: AtomFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mut atom = self.atom_mut(id);
-        match change {
-            AtomFieldChange::Element { old, new } => {
-                if !atom.attributes().element.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes_mut().element = new;
-            }
-            AtomFieldChange::IsotopeMass { old, new } => {
-                if !atom.attributes().isotope_mass.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes_mut().isotope_mass = new;
-            }
-            AtomFieldChange::Charge { old, new } => {
-                if !atom.attributes().charge.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes_mut().charge = new;
-            }
-            AtomFieldChange::ImplicitHydrogens { old, new } => {
-                if !atom.attributes().implicit_hydrogens.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes_mut().implicit_hydrogens = new;
-            }
-            AtomFieldChange::LonePairs { old, new } => {
-                if !atom.attributes().lone_pairs.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes_mut().lone_pairs = new;
-            }
-            AtomFieldChange::UnpairedElectrons { old, new } => {
-                if !atom.attributes().unpaired_electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                atom.attributes_mut().unpaired_electrons = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_bond_field(
-        &mut self,
-        id: BondId,
-        change: BondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mut bond = self.bond_mut(id);
-        match change {
-            BondFieldChange::Order { old, new } => {
-                if !bond.attributes().order.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                bond.attributes_mut().order = new;
-            }
-            BondFieldChange::Charge { old, new } => {
-                if !bond.attributes().charge.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                bond.attributes_mut().charge = new;
-            }
-            BondFieldChange::UnpairedElectrons { old, new } => {
-                if !bond.attributes().unpaired_electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                bond.attributes_mut().unpaired_electrons = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_dative_bond_field(
-        &mut self,
-        id: DativeBondId,
-        change: DativeBondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mut dat = self.dative_bond_mut(id);
-        match change {
-            DativeBondFieldChange::Order { old, new } => {
-                if !dat.attributes().order.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                dat.attributes_mut().order = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_aromatic_system_field(
-        &mut self,
-        id: AromaticSystemId,
-        change: AromaticSystemFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mut ar = self.aromatic_system_mut(id);
-        match change {
-            AromaticSystemFieldChange::Electrons { old, new } => {
-                if !ar.attributes().electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                ar.attributes_mut().electrons = new;
-            }
-            AromaticSystemFieldChange::Charge { old, new } => {
-                if !ar.attributes().charge.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                ar.attributes_mut().charge = new;
-            }
-            AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
-                if !ar.attributes().unpaired_electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                ar.attributes_mut().unpaired_electrons = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_multicenter_bond_field(
-        &mut self,
-        id: MulticenterBondId,
-        change: MulticenterBondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mut mc = self.multicenter_bond_mut(id);
-        match change {
-            MulticenterBondFieldChange::Electrons { old, new } => {
-                if !mc.attributes().electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                mc.attributes_mut().electrons = new;
-            }
-            MulticenterBondFieldChange::Charge { old, new } => {
-                if !mc.attributes().charge.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                mc.attributes_mut().charge = new;
-            }
-            MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
-                if !mc.attributes().unpaired_electrons.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                mc.attributes_mut().unpaired_electrons = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_noncovalent_bond_field(
-        &mut self,
-        id: NoncovalentBondId,
-        change: NoncovalentBondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mut nc = self.noncovalent_bond_mut(id);
-        match change {
-            NoncovalentBondFieldChange::Kind { old, new } => {
-                if !nc.attributes().kind.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                nc.attributes_mut().kind = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_stereo_atom_field(
-        &mut self,
-        id: StereoAtomId,
-        change: StereoAtomFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mut sa = self.stereo_atom_mut(id);
-        match change {
-            StereoAtomFieldChange::Configuration { old, new } => {
-                if !sa.attributes().configuration.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                sa.attributes_mut().configuration = new;
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_modify_stereo_bond_field(
-        &mut self,
-        id: StereoBondId,
-        change: StereoBondFieldChange,
-    ) -> Result<(), TransactionError> {
-        let mut sb = self.stereo_bond_mut(id);
-        match change {
-            StereoBondFieldChange::Configuration { old, new } => {
-                if !sb.attributes().configuration.normalized_eq(&old) {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                sb.attributes_mut().configuration = new;
-            }
-        }
-        Ok(())
     }
 
     fn apply_modify_atom_constraint(
@@ -2837,13 +3008,16 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::atom::AtomForm;
+    use crate::ir::atom::{AtomForm, ElementForm, IsotopeMassForm};
     use crate::ir::bond::BondForm;
     use crate::ir::constraint::{RelationalConstraint, StereogenicityForm};
     use crate::ir::edit::ModifiedConstraint;
+    use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::molecule::MoleculeEntries;
-    use crate::ir::noncovalent::NoncovalentBondKind;
-    use crate::ir::stereo::StereoKind;
+    use crate::ir::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
+    use crate::ir::num::NumForm;
+    use crate::ir::spin::UnpairedElectronsForm;
+    use crate::ir::stereo::{StereoConfigurationForm, StereoCoset, StereoKind};
 
     #[rstest]
     #[case::first(3, 0, Ok(AtomId(0)))]
@@ -3874,6 +4048,434 @@ mod tests {
     }
 
     #[rstest]
+    #[case::element(
+        AtomFieldChange::Element { old: ElementForm::Lit(Element::C), new: ElementForm::Lit(Element::N) },
+        AtomForm::from_element(Element::N),
+    )]
+    #[case::element_equivalent(
+        AtomFieldChange::Element { old: ElementForm::lit_set([Element::C]), new: ElementForm::Lit(Element::N) },
+        AtomForm::from_element(Element::N),
+    )]
+    #[case::isotope_mass(
+        AtomFieldChange::IsotopeMass { old: IsotopeMassForm::Undetermined, new: IsotopeMassForm::Lit(13) },
+        AtomForm { isotope_mass: IsotopeMassForm::Lit(13), ..AtomForm::from_element(Element::C) },
+    )]
+    #[case::charge(
+        AtomFieldChange::Charge { old: NumForm::Undetermined, new: NumForm::Lit(-1) },
+        AtomForm { charge: NumForm::Lit(-1), ..AtomForm::from_element(Element::C) },
+    )]
+    #[case::implicit_hydrogens(
+        AtomFieldChange::ImplicitHydrogens { old: NumForm::Undetermined, new: NumForm::Lit(2) },
+        AtomForm { implicit_hydrogens: NumForm::Lit(2), ..AtomForm::from_element(Element::C) },
+    )]
+    #[case::lone_pairs(
+        AtomFieldChange::LonePairs { old: NumForm::Undetermined, new: NumForm::Lit(1) },
+        AtomForm { lone_pairs: NumForm::Lit(1), ..AtomForm::from_element(Element::C) },
+    )]
+    #[case::unpaired_electrons(
+        AtomFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::default(), new: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) } },
+        AtomForm { unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }, ..AtomForm::from_element(Element::C) },
+    )]
+    fn test_molecule_apply_edit_modify_atom_field(
+        mut removal_entries: MoleculeEntries,
+        #[case] change: AtomFieldChange,
+        #[case] expected: AtomForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change,
+        };
+        let undo = if journaled {
+            molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap()
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.atoms[0] = expected;
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        let repeated = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, expected);
+
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::order(
+        BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
+        BondForm::from_order(2),
+    )]
+    #[case::order_equivalent(
+        BondFieldChange::Order { old: NumForm::lit_set([1]), new: NumForm::Lit(2) },
+        BondForm::from_order(2),
+    )]
+    #[case::charge(
+        BondFieldChange::Charge { old: NumForm::Undetermined, new: NumForm::Lit(1) },
+        BondForm { charge: NumForm::Lit(1), ..BondForm::from_order(1) },
+    )]
+    #[case::unpaired_electrons(
+        BondFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::default(), new: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) } },
+        BondForm { unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }, ..BondForm::from_order(1) },
+    )]
+    fn test_molecule_apply_edit_modify_bond_field(
+        mut removal_entries: MoleculeEntries,
+        #[case] change: BondFieldChange,
+        #[case] expected: BondForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyBondField {
+            id: BondHandle::Id(BondId(0)),
+            change,
+        };
+        let undo = if journaled {
+            molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap()
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.bonds[0].2 = expected;
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        let repeated = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, expected);
+
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::order(
+        DativeBondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
+        DativeBondForm::from_order(2),
+    )]
+    #[case::order_equivalent(
+        DativeBondFieldChange::Order { old: NumForm::lit_set([1]), new: NumForm::Lit(2) },
+        DativeBondForm::from_order(2),
+    )]
+    fn test_molecule_apply_edit_modify_dative_bond_field(
+        mut removal_entries: MoleculeEntries,
+        #[case] change: DativeBondFieldChange,
+        #[case] expected: DativeBondForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyDativeBondField {
+            id: DativeBondHandle::Id(DativeBondId(0)),
+            change,
+        };
+        let undo = if journaled {
+            molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap()
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.dative[0].2 = expected;
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        let repeated = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, expected);
+
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::electrons(
+        AromaticSystemFieldChange::Electrons { old: ElectronCountsForm::Lit(vec![1, 2]), new: ElectronCountsForm::Lit(vec![2, 2]) },
+        AromaticSystemForm::from_electrons(vec![2, 2]),
+    )]
+    #[case::electron_count_length(
+        AromaticSystemFieldChange::Electrons { old: ElectronCountsForm::Lit(vec![1, 2]), new: ElectronCountsForm::Lit(vec![2]) },
+        AromaticSystemForm::from_electrons(vec![2]),
+    )]
+    #[case::charge(
+        AromaticSystemFieldChange::Charge { old: NumForm::Undetermined, new: NumForm::Lit(1) },
+        AromaticSystemForm { charge: NumForm::Lit(1), ..AromaticSystemForm::from_electrons(vec![1, 2]) },
+    )]
+    #[case::unpaired_electrons(
+        AromaticSystemFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::default(), new: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) } },
+        AromaticSystemForm { unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }, ..AromaticSystemForm::from_electrons(vec![1, 2]) },
+    )]
+    fn test_molecule_apply_edit_modify_aromatic_system_field(
+        mut removal_entries: MoleculeEntries,
+        #[case] change: AromaticSystemFieldChange,
+        #[case] expected: AromaticSystemForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyAromaticSystemField {
+            id: AromaticSystemHandle::Id(AromaticSystemId(0)),
+            change,
+        };
+        let undo = if journaled {
+            molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap()
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.aromatic[0].1 = expected;
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        let repeated = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, expected);
+
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::electrons(
+        MulticenterBondFieldChange::Electrons { old: ElectronCountsForm::Lit(vec![1, 2]), new: ElectronCountsForm::Lit(vec![2, 2]) },
+        MulticenterBondForm::from_electrons(vec![2, 2]),
+    )]
+    #[case::electron_count_length(
+        MulticenterBondFieldChange::Electrons { old: ElectronCountsForm::Lit(vec![1, 2]), new: ElectronCountsForm::Lit(vec![2, 1, 2]) },
+        MulticenterBondForm::from_electrons(vec![2, 1, 2]),
+    )]
+    #[case::charge(
+        MulticenterBondFieldChange::Charge { old: NumForm::Undetermined, new: NumForm::Lit(-1) },
+        MulticenterBondForm { charge: NumForm::Lit(-1), ..MulticenterBondForm::from_electrons(vec![1, 2]) },
+    )]
+    #[case::unpaired_electrons(
+        MulticenterBondFieldChange::UnpairedElectrons { old: UnpairedElectronsForm::default(), new: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) } },
+        MulticenterBondForm { unpaired_electrons: UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(2) }, ..MulticenterBondForm::from_electrons(vec![1, 2]) },
+    )]
+    fn test_molecule_apply_edit_modify_multicenter_bond_field(
+        mut removal_entries: MoleculeEntries,
+        #[case] change: MulticenterBondFieldChange,
+        #[case] expected: MulticenterBondForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyMulticenterBondField {
+            id: MulticenterBondHandle::Id(MulticenterBondId(0)),
+            change,
+        };
+        let undo = if journaled {
+            molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap()
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.multicenter[0].1 = expected;
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        let repeated = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, expected);
+
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::kind(
+        NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic) },
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+    )]
+    fn test_molecule_apply_edit_modify_noncovalent_bond_field(
+        mut removal_entries: MoleculeEntries,
+        #[case] change: NoncovalentBondFieldChange,
+        #[case] expected: NoncovalentBondForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyNoncovalentBondField {
+            id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+            change,
+        };
+        let undo = if journaled {
+            molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap()
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.noncovalent[0].1 = expected;
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        let repeated = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, expected);
+
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::configuration(
+        StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::Undetermined, new: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)) },
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+    )]
+    #[case::coset_range(
+        StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::Undetermined, new: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(2)) },
+        StereoAtomForm::new(StereoKind::Tetrahedral, 2_u32),
+    )]
+    fn test_molecule_apply_edit_modify_stereo_atom_field(
+        mut removal_entries: MoleculeEntries,
+        #[case] change: StereoAtomFieldChange,
+        #[case] expected: StereoAtomForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyStereoAtomField {
+            id: StereoAtomHandle::Id(StereoAtomId(0)),
+            change,
+        };
+        let undo = if journaled {
+            molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap()
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.stereo_atoms[0].2 = expected;
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        let repeated = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, expected);
+
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
+    #[case::configuration(
+        StereoBondFieldChange::Configuration { old: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)), new: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)) },
+        StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    )]
+    #[case::configuration_equivalent(
+        StereoBondFieldChange::Configuration { old: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::lit_set([1])), new: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(0)) },
+        StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    )]
+    #[case::coset_range(
+        StereoBondFieldChange::Configuration { old: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)), new: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(2)) },
+        StereoBondForm::new(StereoKind::CisTrans, 2_u32),
+    )]
+    fn test_molecule_apply_edit_modify_stereo_bond_field(
+        mut removal_entries: MoleculeEntries,
+        #[case] change: StereoBondFieldChange,
+        #[case] expected: StereoBondForm,
+        #[values(false, true)] journaled: bool,
+    ) {
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let edit = Edit::ModifyStereoBondField {
+            id: StereoBondHandle::Id(StereoBondId(0)),
+            change,
+        };
+        let undo = if journaled {
+            molecule
+                .apply_edit_with_undo(edit.clone(), &mut state)
+                .unwrap()
+        } else {
+            molecule.apply_edit(edit.clone(), &mut state).unwrap();
+            None
+        };
+        removal_entries.stereo_bonds[0].2 = expected;
+        let expected = Molecule::from_entries(removal_entries);
+        assert_eq!(molecule, expected);
+
+        let repeated = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state).map(|_| ())
+        } else {
+            molecule.apply_edit(edit, &mut state)
+        };
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(molecule, expected);
+
+        if journaled {
+            molecule.apply_undo(undo.unwrap());
+            assert!(molecule.normalized_eq(&initial));
+        }
+    }
+
+    #[rstest]
     fn test_molecule_apply_undo_added_topology() {
         let initial = MoleculeEntries {
             atoms: vec![
@@ -3921,6 +4523,52 @@ mod tests {
     #[case::stereo_atom(Undo::RemoveAddedStereoAtom(AddedStereoAtom { id: StereoAtomId(0), site: AtomId(0), ligands: vec![], attributes: StereoAtomForm::default() }))]
     #[case::stereo_bond(Undo::RemoveAddedStereoBond(AddedStereoBond { id: StereoBondId(0), site: BondId(0), ligands: vec![], attributes: StereoBondForm::default() }))]
     fn test_molecule_apply_undo_added_entry_manipulated(#[case] undo: Undo) {
+        Molecule::default().apply_undo(undo);
+    }
+
+    #[rstest]
+    #[case::atom(Undo::ModifyAtomField {
+        id: AtomId(0),
+        change: AtomFieldChange::Charge { old: NumForm::Lit(1), new: NumForm::Lit(0) },
+    })]
+    #[case::bond(Undo::ModifyBondField {
+        id: BondId(0),
+        change: BondFieldChange::Order { old: NumForm::Lit(2), new: NumForm::Lit(1) },
+    })]
+    #[case::dative_bond(Undo::ModifyDativeBondField {
+        id: DativeBondId(0),
+        change: DativeBondFieldChange::Order { old: NumForm::Lit(2), new: NumForm::Lit(1) },
+    })]
+    #[case::aromatic_system(Undo::ModifyAromaticSystemField {
+        id: AromaticSystemId(0),
+        change: AromaticSystemFieldChange::Charge { old: NumForm::Lit(1), new: NumForm::Lit(0) },
+    })]
+    #[case::multicenter_bond(Undo::ModifyMulticenterBondField {
+        id: MulticenterBondId(0),
+        change: MulticenterBondFieldChange::Charge { old: NumForm::Lit(1), new: NumForm::Lit(0) },
+    })]
+    #[case::noncovalent_bond(Undo::ModifyNoncovalentBondField {
+        id: NoncovalentBondId(0),
+        change: NoncovalentBondFieldChange::Kind {
+            old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
+            new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+        },
+    })]
+    #[case::stereo_atom(Undo::ModifyStereoAtomField {
+        id: StereoAtomId(0),
+        change: StereoAtomFieldChange::Configuration {
+            old: StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            new: StereoConfigurationForm::Undetermined,
+        },
+    })]
+    #[case::stereo_bond(Undo::ModifyStereoBondField {
+        id: StereoBondId(0),
+        change: StereoBondFieldChange::Configuration {
+            old: StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            new: StereoConfigurationForm::Undetermined,
+        },
+    })]
+    fn test_molecule_apply_undo_field_manipulated(#[case] undo: Undo) {
         Molecule::default().apply_undo(undo);
     }
 
