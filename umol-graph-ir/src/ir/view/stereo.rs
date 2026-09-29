@@ -1708,7 +1708,7 @@ mod tests {
             assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
         }
         stereo_entries.stereo_atoms[0].0 = AtomId(5);
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         assert_eq!(
             molecule.stereo_atoms().at_id(AtomId(5)),
             Some(StereoAtomId(0))
@@ -1727,7 +1727,7 @@ mod tests {
     ) {
         let mut editor = Molecule::from_entries(stereo_entries).edit();
         editor.stereo_atom_mut(StereoAtomId(0)).replace_site(site);
-        assert_eq!(editor.try_build(), Err(expected));
+        assert_eq!(editor.finish(), Err(expected));
     }
 
     #[rstest]
@@ -1749,10 +1749,7 @@ mod tests {
             assert_eq!(view.attributes(), &stereo_entries.stereo_atoms[0].2);
         }
         stereo_entries.stereo_atoms[0].1 = ligands;
-        assert_eq!(
-            editor.try_build(),
-            Ok(Molecule::from_entries(stereo_entries))
-        );
+        assert_eq!(editor.finish(), Ok(Molecule::from_entries(stereo_entries)));
     }
 
     #[rstest]
@@ -1768,7 +1765,7 @@ mod tests {
         editor
             .stereo_atom_mut(StereoAtomId(0))
             .replace_ligands(&ligands);
-        assert_eq!(editor.try_build(), Err(expected));
+        assert_eq!(editor.finish(), Err(expected));
     }
 
     #[rstest]
@@ -1801,10 +1798,7 @@ mod tests {
         }
         stereo_entries.stereo_atoms[0].1 = ligands;
         stereo_entries.stereo_atoms[0].2 = attributes;
-        assert_eq!(
-            editor.try_build(),
-            Ok(Molecule::from_entries(stereo_entries))
-        );
+        assert_eq!(editor.finish(), Ok(Molecule::from_entries(stereo_entries)));
     }
 
     #[rstest]
@@ -1830,7 +1824,7 @@ mod tests {
             StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
         ];
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         assert_eq!(
             molecule
                 .stereo_atoms()
@@ -2603,7 +2597,7 @@ mod tests {
             assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
         }
         stereo_entries.stereo_bonds[0].0 = BondId(1);
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         assert_eq!(
             molecule.stereo_bonds().at_id(BondId(1)),
             Some(StereoBondId(0))
@@ -2622,7 +2616,7 @@ mod tests {
     ) {
         let mut editor = Molecule::from_entries(stereo_entries).edit();
         editor.stereo_bond_mut(StereoBondId(0)).replace_site(site);
-        assert_eq!(editor.try_build(), Err(expected));
+        assert_eq!(editor.finish(), Err(expected));
     }
 
     #[rstest]
@@ -2642,10 +2636,7 @@ mod tests {
             assert_eq!(view.attributes(), &stereo_entries.stereo_bonds[0].2);
         }
         stereo_entries.stereo_bonds[0].1 = ligands;
-        assert_eq!(
-            editor.try_build(),
-            Ok(Molecule::from_entries(stereo_entries))
-        );
+        assert_eq!(editor.finish(), Ok(Molecule::from_entries(stereo_entries)));
     }
 
     #[rstest]
@@ -2661,7 +2652,7 @@ mod tests {
         editor
             .stereo_bond_mut(StereoBondId(0))
             .replace_ligands(&ligands);
-        assert_eq!(editor.try_build(), Err(expected));
+        assert_eq!(editor.finish(), Err(expected));
     }
 
     #[rstest]
@@ -2694,10 +2685,7 @@ mod tests {
         }
         stereo_entries.stereo_bonds[0].1 = ligands;
         stereo_entries.stereo_bonds[0].2 = attributes;
-        assert_eq!(
-            editor.try_build(),
-            Ok(Molecule::from_entries(stereo_entries))
-        );
+        assert_eq!(editor.finish(), Ok(Molecule::from_entries(stereo_entries)));
     }
 
     #[rstest]
@@ -2723,7 +2711,7 @@ mod tests {
             StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
         ];
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         assert_eq!(
             molecule
                 .stereo_bonds()

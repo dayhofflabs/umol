@@ -978,10 +978,7 @@ mod tests {
             donors
         );
         dative_entries.dative[0].0 = donors;
-        assert_eq!(
-            editor.try_build(),
-            Ok(Molecule::from_entries(dative_entries))
-        );
+        assert_eq!(editor.finish(), Ok(Molecule::from_entries(dative_entries)));
     }
 
     #[rstest]
@@ -991,7 +988,7 @@ mod tests {
             .dative_bond_mut(DativeBondId(0))
             .replace_acceptor(AtomId(3));
         dative_entries.dative[0].1 = AtomId(3);
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         assert_eq!(molecule, Molecule::from_entries(dative_entries));
         assert_eq!(
             molecule
@@ -1029,10 +1026,7 @@ mod tests {
             expected
         );
         dative_entries.dative[0].0 = expected;
-        assert_eq!(
-            editor.try_build(),
-            Ok(Molecule::from_entries(dative_entries))
-        );
+        assert_eq!(editor.finish(), Ok(Molecule::from_entries(dative_entries)));
     }
 
     #[rstest]
@@ -1059,10 +1053,7 @@ mod tests {
             expected
         );
         dative_entries.dative[0].0 = expected;
-        assert_eq!(
-            editor.try_build(),
-            Ok(Molecule::from_entries(dative_entries))
-        );
+        assert_eq!(editor.finish(), Ok(Molecule::from_entries(dative_entries)));
     }
 
     #[rstest]
@@ -1088,10 +1079,7 @@ mod tests {
             expected
         );
         dative_entries.dative[0].0 = expected;
-        assert_eq!(
-            editor.try_build(),
-            Ok(Molecule::from_entries(dative_entries))
-        );
+        assert_eq!(editor.finish(), Ok(Molecule::from_entries(dative_entries)));
     }
 
     #[rstest]
@@ -1105,7 +1093,7 @@ mod tests {
             view.remove_donor(AtomPosition(0));
             view.replace_acceptor(AtomId(3));
         }
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         let incidence: Vec<Vec<_>> = molecule
             .atoms()
             .ids()
@@ -1183,6 +1171,6 @@ mod tests {
         editor
             .dative_bond_mut(DativeBondId(0))
             .replace_donors(&donors);
-        assert_eq!(editor.try_build(), Err(expected));
+        assert_eq!(editor.finish(), Err(expected));
     }
 }

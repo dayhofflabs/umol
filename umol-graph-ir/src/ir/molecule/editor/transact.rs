@@ -1,7 +1,5 @@
 //! Journal-free batch application for the molecule editor.
 
-use std::mem;
-
 use umol_graph_core::Correspondence;
 
 use super::MoleculeEditor;
@@ -32,7 +30,6 @@ impl MoleculeEditor {
         for edit in edits {
             self.molecule.apply_edit(edit, &mut state)?;
         }
-        state.update_correspondence(&mut self.correspondence);
         Ok(self)
     }
 
@@ -47,13 +44,13 @@ impl MoleculeEditor {
     ///
     /// # Semantic properties
     ///
-    /// Discarding the witness gives the same editor as the plain operation. Composing the previous
-    /// session correspondence with this witness gives the resulting session correspondence.
+    /// Discarding the witness gives the same editor as the plain operation. Earlier direct changes
+    /// and batches are outside this correspondence; its source is the state at this call.
     pub fn tracked_apply(
         mut self,
         edits: Edits,
     ) -> Result<(Self, MoleculeCorrespondence), MoleculeApplyError> {
-        let identity = MoleculeCorrespondence::new(
+        let mut correspondence = MoleculeCorrespondence::new(
             Correspondence::identity(self.atom_count()),
             Correspondence::identity(self.bond_count()),
             Correspondence::identity(self.dative_bond_count()),
@@ -63,14 +60,12 @@ impl MoleculeEditor {
             Correspondence::identity(self.stereo_atom_count()),
             Correspondence::identity(self.stereo_bond_count()),
         );
-        let session = mem::replace(&mut self.correspondence, identity);
-        let mut editor = self.apply(edits)?;
-        let correspondence =
-            mem::replace(&mut editor.correspondence, MoleculeCorrespondence::empty());
-        editor.correspondence = session
-            .compose(&correspondence)
-            .expect("batch correspondence starts in the current editor id spaces");
-        Ok((editor, correspondence))
+        let mut state = ApplicationState::new(&self.molecule);
+        for edit in edits {
+            self.molecule.apply_edit(edit, &mut state)?;
+        }
+        state.update_correspondence(&mut correspondence);
+        Ok((self, correspondence))
     }
 }
 

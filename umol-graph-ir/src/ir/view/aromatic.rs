@@ -1059,7 +1059,7 @@ mod tests {
         }
         aromatic_entries.aromatic[0].0 = atoms;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(aromatic_entries))
         );
     }
@@ -1077,7 +1077,7 @@ mod tests {
         editor
             .aromatic_system_mut(AromaticSystemId(0))
             .replace_atoms(&atoms);
-        assert_eq!(editor.try_build(), Err(expected));
+        assert_eq!(editor.finish(), Err(expected));
     }
 
     #[rstest]
@@ -1105,7 +1105,7 @@ mod tests {
         aromatic_entries.aromatic[0].0 = atoms.to_vec();
         aromatic_entries.aromatic[0].1.electrons = electrons;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(aromatic_entries))
         );
     }
@@ -1131,7 +1131,7 @@ mod tests {
         );
         aromatic_entries.aromatic[0].0 = expected;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(aromatic_entries))
         );
     }
@@ -1177,7 +1177,7 @@ mod tests {
         );
         aromatic_entries.aromatic[0].0 = expected;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(aromatic_entries))
         );
     }
@@ -1222,7 +1222,7 @@ mod tests {
         );
         aromatic_entries.aromatic[0].0 = expected;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(aromatic_entries))
         );
     }
@@ -1255,7 +1255,7 @@ mod tests {
             view.insert_atom(AtomPosition(2), AtomId(1));
             view.remove_atom(AtomPosition(0));
         }
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         let incidence: Vec<Vec<_>> = molecule
             .atoms()
             .ids()

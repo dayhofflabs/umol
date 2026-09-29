@@ -436,8 +436,8 @@ proptest! {
         let rhs = span.rhs();
         let reaction = span.to_reaction();
 
-        prop_assert_eq!(lhs.edit().try_build(), Ok(lhs));
-        prop_assert_eq!(rhs.edit().try_build(), Ok(rhs));
+        prop_assert_eq!(lhs.clone().edit().finish(), Ok(lhs));
+        prop_assert_eq!(rhs.clone().edit().finish(), Ok(rhs));
         prop_assert_eq!(
             Reaction::try_new(reaction.lhs().clone(), reaction.deltas().clone()),
             Ok(reaction),

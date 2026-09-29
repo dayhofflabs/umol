@@ -532,7 +532,7 @@ fn test_molecule_dsl_to_edn_vacuous_constraints(
     for c in pushed {
         editor.constraints_mut().push(Constraint::Molecule(c));
     }
-    let molecule = editor.try_build().unwrap();
+    let molecule = editor.finish().unwrap();
     let dsl = MoleculeDsl::new(molecule, MoleculeMetadata::default()).unwrap();
     let reparsed = Molecule::from_edn(&dsl.to_edn()).unwrap();
     let surviving: Vec<MoleculeConstraint> = reparsed

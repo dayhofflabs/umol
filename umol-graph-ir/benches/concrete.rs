@@ -52,7 +52,7 @@ fn indole_with_bool_expr_fields() -> Molecule {
         MemOp::In,
         BTreeSet::from([0, 1, 2]),
     ));
-    molecule = b.build();
+    molecule = b.finish().unwrap();
     molecule
 }
 

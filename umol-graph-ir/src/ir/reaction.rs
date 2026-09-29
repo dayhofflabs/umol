@@ -39,7 +39,7 @@ use super::edit::{
     StereoAtomRemoval, StereoBondFieldChange, StereoBondHandle, StereoBondRemoval,
 };
 use super::entity::Entity;
-use super::error::{ApplyError, ApplyPreconditionError, Contradiction};
+use super::error::{ApplyError, ApplyPreconditionError, Contradiction, MoleculeApplyError};
 use super::frame::{
     AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
     NoncovalentBondsFrameAction, OverlaysFrameAction, StereoAtomsFrameAction,
@@ -2124,10 +2124,9 @@ impl Reaction {
             edits.remove_topology(remove_atoms, remove_bonds);
         }
 
-        let editor = host.edit().apply(edits)?;
-        let product = match editor.try_build() {
+        let product = match host.clone().apply(edits) {
             Ok(product) => product,
-            Err(
+            Err(MoleculeApplyError::Integrity(
                 MoleculeIntegrityError::DuplicateAtom { .. }
                 | MoleculeIntegrityError::ParallelBonds { .. }
                 | MoleculeIntegrityError::IdenticalDativeBonds { .. }
@@ -2137,10 +2136,11 @@ impl Reaction {
                 | MoleculeIntegrityError::DuplicateStereoAtomSites { .. }
                 | MoleculeIntegrityError::DuplicateStereoBondSites { .. }
                 | MoleculeIntegrityError::StereoLigandIncidenceMismatch { .. },
-            ) => {
+            )) => {
                 return Ok(None);
             }
-            Err(_) => return Err(ApplyError::InternalInvariant),
+            Err(MoleculeApplyError::Transaction(error)) => return Err(error.into()),
+            Err(MoleculeApplyError::Integrity(_)) => return Err(ApplyError::InternalInvariant),
         };
 
         // The host↔product comap: preserved host atoms match their compacted product id (survivors

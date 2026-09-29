@@ -748,7 +748,7 @@ mod tests {
         }
         noncovalent_entries.noncovalent[0].0 = atoms;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(noncovalent_entries))
         );
     }
@@ -766,7 +766,7 @@ mod tests {
         editor
             .noncovalent_bond_mut(NoncovalentBondId(0))
             .replace_atoms(atoms);
-        assert_eq!(editor.try_build(), Err(expected));
+        assert_eq!(editor.finish(), Err(expected));
     }
 
     #[rstest]
@@ -786,7 +786,7 @@ mod tests {
         }
         noncovalent_entries.noncovalent[0].0 = expected;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(noncovalent_entries))
         );
     }
@@ -815,7 +815,7 @@ mod tests {
             view.replace_atoms([AtomId(4), AtomId(1)]);
             view.replace_atom(AtomPosition(1), AtomId(3));
         }
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         let incidence: Vec<Vec<_>> = molecule
             .atoms()
             .ids()

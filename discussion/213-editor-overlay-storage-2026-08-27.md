@@ -48,8 +48,8 @@ operations use scoped transactions and pass the graph checks. S5d1 implements
 Python Edits consumption. S5d2 implements accessor counters and Storage names.
 S5d3 implements prepared-batch Python transactions; S5 is complete.
 S6a implements consuming edit/application and checked probe/finish publication.
-S6b1's graph-ir caller and correspondence migration is next; S6 returns green
-after the remaining Rust and Python consumers migrate.
+S6b1 migrates graph-ir callers and removes editor session correspondence. S6b2's
+combine_from rewrite is next; the remaining Rust and Python consumers follow.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -103,8 +103,8 @@ and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
 complete; S4b9 closes the strict lint gate. S5a–S5d3 are complete, including
-Python runtime verification. S6a's owning editor interfaces are implemented;
-caller migration continues in S6b1.
+Python runtime verification. S6a and S6b1 implement the owning editor and migrate
+graph-ir callers. S6b2 is next.
 
 ## Editor and transaction API
 
@@ -160,7 +160,8 @@ impl Transaction<'_> {
 
 The transaction surface and owning editor interfaces above are implemented.
 Editor publication uses probe/finish, and Molecule edit/application consume their
-input. S6b–S6d migrate callers and remove editor session correspondence.
+input. S6b1 removes editor session correspondence and migrates graph-ir callers;
+S6c–S6d migrate chemistry, format, and Python callers.
 MoleculeBuilder retains its asserted build for fresh construction.
 
 Transaction::run is the scoped execution entry point, not a constructor returning
@@ -6188,7 +6189,7 @@ temporary cloning adapters is not a way to close an earlier subitem.
 - **S6b — Graph-IR ownership migration** (group; breaking, green at S6d).
   [dep: S6a]
 
-- **S6b1 — Graph-IR callers and correspondence** (`umol-graph-ir` reaction/molecule callers; breaking, green at S6d). [dep: S6a]
+- **S6b1 — completed 2026-09-28 — Graph-IR callers and correspondence** (`umol-graph-ir` reaction/molecule callers; breaking, green at S6d). [dep: S6a]
 
   Migrate editor construction/publication and remove session
   correspondence accumulation and public tracked direct removal. Use one
@@ -6197,6 +6198,30 @@ temporary cloning adapters is not a way to close an earlier subitem.
   correspondence laws.
   Keep reaction product failure classification and one intentional host copy.
   A rejected product candidate is dropped; it needs no recovery transaction.
+
+  **Implemented.** MoleculeEditor holds only its Molecule. Direct additions,
+  removals, and plain apply no longer accumulate correspondence. tracked_apply
+  constructs one mapping for its own batch. Tracked direct removal remains
+  crate-private for extraction and internal compaction; no public tracked direct
+  removal is exposed. Reaction application uses one explicit host clone and
+  consuming Molecule.apply, retaining product-conflict rejection and execution
+  errors. Fragment, extraction, split, tests, and benchmarks use probe/finish.
+  combine_from's publication call is migrated; its storage rewrite remains S6b2.
+
+  Tests retain direct mutation, cascading removal, restoration, and publication
+  assertions. Retired session-mapping assertions are replaced by batch identity,
+  batch composition versus transaction correspondence, and mixed remapping /
+  compaction / batch correspondence checks. The retired asserted editor-build
+  panic test is removed; finish/probe rejection and repair remain covered.
+  Benchmark consuming inputs are prepared outside timed apply/tracked_apply;
+  editor_session retains its source-preserving copy inside the timed operation.
+
+  **Verification.** Graph-ir library/tests/benches compile with proptest enabled.
+  Focused nextest selection: 3,119 passed, covering molecule/editor/transaction,
+  reaction, correspondence, affected views and construction tests, integrity,
+  and edit/publication/reaction properties (64 generated cases per property).
+  Strict graph-ir all-target Clippy with proptest, rustdoc, nightly formatting,
+  and diff checks pass. No workspace or MSRV gate was run for this subitem.
 
 - **S6b2 — Disjoint append on a borrowed molecule** (`ir::molecule`; breaking rewire, green at S6d). [dep: S6b1, S4b1]
 
@@ -6431,7 +6456,7 @@ Within the revised S2:
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
   scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a's owning editor interfaces are implemented; S6b1 is next.
+  S6a and S6b1 are complete; S6b2 is next.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.

@@ -1849,7 +1849,7 @@ fn test_canonicalize_structure_stereo_atom_constraints(
         .constraints = constraint.clone().into();
     *editor.constraints_mut() =
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
-    let source = editor.try_build().unwrap();
+    let source = editor.finish().unwrap();
     let reframed = source
         .clone()
         .reframe()
@@ -1877,7 +1877,7 @@ fn test_canonicalize_structure_stereo_bond_constraints(
         .constraints = constraint.clone().into();
     *editor.constraints_mut() =
         Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, constraint).into();
-    let source = editor.try_build().unwrap();
+    let source = editor.finish().unwrap();
     let reframed = source
         .clone()
         .reframe()
@@ -2054,7 +2054,7 @@ fn test_molecule_canonicalize_stereo_frame(
         .constraints = constraint.clone().into();
     *editor.constraints_mut() =
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
-    let source = editor.try_build().unwrap();
+    let source = editor.finish().unwrap();
     let reframed = source
         .clone()
         .reframe()

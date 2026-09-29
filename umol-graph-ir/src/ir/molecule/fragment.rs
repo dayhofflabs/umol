@@ -131,7 +131,9 @@ impl Fragment {
             let wildcard = editor.add_atom(AtomForm::new(ElementForm::undetermined()));
             editor.add_bond(port.atom, wildcard, port.bond);
         }
-        editor.build()
+        editor
+            .finish()
+            .expect("fragment assembly preserves molecule integrity")
     }
 
     /// Attach `self`'s `self_port` to `other`'s `other_port` — the operadic composition (the only
@@ -164,7 +166,9 @@ impl Fragment {
         let other_atom = AtomId(other_port_atom.0 + atom_offset);
         let mut editor = body.edit();
         editor.add_bond(self_atom, other_atom, bond);
-        let body = editor.build();
+        let body = editor
+            .finish()
+            .expect("fragment assembly preserves molecule integrity");
 
         let mut ports: Vec<Port> = self
             .ports

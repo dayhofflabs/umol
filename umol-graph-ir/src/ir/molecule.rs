@@ -473,9 +473,14 @@ impl Molecule {
             })
             .map(|b| b.id())
             .collect();
-        let mut builder = self.edit();
+        let mut builder = self.clone().edit();
         let compaction = builder.tracked_remove_topology(&remove_atoms, &remove_bonds);
-        (builder.build(), compaction)
+        (
+            builder
+                .finish()
+                .expect("extraction preserves molecule integrity"),
+            compaction,
+        )
     }
 
     /// Edits transforming `self` into the extracted subgraph `sub`: one `RemoveTopology` over the
@@ -1926,7 +1931,9 @@ impl Molecule {
                 .constraints_mut()
                 .push(constraint.clone().map(&correspondence));
         }
-        *self = editor.build();
+        *self = editor
+            .finish()
+            .expect("disjoint combination preserves molecule integrity");
     }
 
     /// Decompose into connected components — a conservative partition where every relation keeps its
@@ -2137,7 +2144,9 @@ impl Molecule {
                         stereo_bond_pairs.push((rid, added));
                     }
                 }
-                let entities = editor.build();
+                let entities = editor
+                    .finish()
+                    .expect("component extraction preserves molecule integrity");
 
                 let correspondence = MoleculeCorrespondence::new(
                     atom_correspondence,
@@ -2194,7 +2203,9 @@ impl Molecule {
                             .push(constraint.clone().map(&correspondence));
                     }
                 }
-                let entities = editor.build();
+                let entities = editor
+                    .finish()
+                    .expect("component extraction preserves molecule integrity");
                 (entities, correspondence)
             })
             .collect()

@@ -82,7 +82,7 @@ fn batched_overlays() -> Molecule {
             StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
     }
-    editor.build()
+    editor.finish().unwrap()
 }
 
 #[rstest]

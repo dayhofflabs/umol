@@ -1,10 +1,8 @@
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
-use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomId, BondId, DativeBondId, Molecule, MoleculeApplyError,
-    MoleculeCorrespondence, MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
-    Transaction,
+    MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId, Transaction,
 };
 
 use crate::strategies::{molecule_entries_strategy, *};
@@ -13,7 +11,7 @@ proptest! {
     /// Consecutive bulk additions reconstruct the supplied complete entries for any
     /// batch split. The constructor supplies the independent publication result.
     #[test]
-    fn test_molecule_editor_try_tracked_build_bulk_additions(
+    fn test_molecule_editor_finish_bulk_additions(
         entries in molecule_entries_strategy(),
         batch_size in 1usize..=4,
     ) {
@@ -99,18 +97,8 @@ proptest! {
             let expected_ids: Vec<_> = (start..start + batch.len()).map(StereoBondId::from).collect();
             prop_assert_eq!(ids.collect::<Vec<_>>(), expected_ids);
         }
-        let correspondence = MoleculeCorrespondence::new(
-            Correspondence::new(vec![], 0, entries.atoms.len()).unwrap(),
-            Correspondence::new(vec![], 0, entries.bonds.len()).unwrap(),
-            Correspondence::new(vec![], 0, entries.dative.len()).unwrap(),
-            Correspondence::new(vec![], 0, entries.aromatic.len()).unwrap(),
-            Correspondence::new(vec![], 0, entries.multicenter.len()).unwrap(),
-            Correspondence::new(vec![], 0, entries.noncovalent.len()).unwrap(),
-            Correspondence::new(vec![], 0, entries.stereo_atoms.len()).unwrap(),
-            Correspondence::new(vec![], 0, entries.stereo_bonds.len()).unwrap(),
-        );
         *editor.constraints_mut() = entries.constraints;
-        prop_assert_eq!(editor.try_tracked_build(), Ok((expected, correspondence)));
+        prop_assert_eq!(editor.finish(), Ok(expected));
     }
 
     /// The standalone edit surface preserves every ordered raw edit, including repeated entries,
@@ -584,8 +572,8 @@ proptest! {
         let mut molecule = before.clone();
         let mut tracked = before.clone();
         prop_assert_eq!(
-            before.edit().tracked_apply(batch.edits()).err(),
-            Some(batch.expected_error())
+            before.clone().edit().tracked_apply(batch.edits()).err(),
+            Some(MoleculeApplyError::Transaction(batch.expected_error()))
         );
         prop_assert_eq!(
             tracked.tracked_transact([batch.edits()]).unwrap_err(),
@@ -697,7 +685,7 @@ proptest! {
         case in constraint_compaction_case_strategy(),
     ) {
         let base = case.base();
-        let editor = base.edit().apply(case.edits()).unwrap();
+        let editor = base.clone().edit().apply(case.edits()).unwrap();
         let constraints = editor.constraints().iter().cloned().collect::<Vec<_>>();
         prop_assert_eq!(constraints.as_slice(), case.expected());
 
@@ -823,7 +811,7 @@ proptest! {
         let mut checked = base.clone();
         checked.transact([edits.clone()]).unwrap();
         let applied = base.edit().apply(edits).unwrap();
-        prop_assert_eq!(applied.build(), checked);
+        prop_assert_eq!(applied.finish().unwrap(), checked);
     }
 
     /// A transaction spanning consecutive batches has the composed batch correspondence and the
@@ -835,12 +823,12 @@ proptest! {
         let mut separate = base.clone();
         let first = separate.tracked_transact([first_edits.clone()]).unwrap();
         let first_result = separate.clone();
-        let (applied, applied_witness) = separate.edit().tracked_apply(second_edits.clone()).unwrap();
+        let (applied, applied_witness) = separate.clone().edit().tracked_apply(second_edits.clone()).unwrap();
         let second = separate.tracked_transact([second_edits.clone()]).unwrap();
         prop_assert_eq!(applied_witness, second.clone());
-        prop_assert_eq!(applied.build(), separate.clone());
+        prop_assert_eq!(applied.finish().unwrap(), separate.clone());
         prop_assert_eq!(
-            base.tracked_apply(first_edits.clone()).unwrap(),
+            base.clone().tracked_apply(first_edits.clone()).unwrap(),
             (first_result, first.clone())
         );
 
@@ -1011,7 +999,7 @@ fn test_molecule_apply_error(source: Molecule) {
     };
 
     assert_eq!(
-        source.apply(edits.clone()),
+        source.clone().apply(edits.clone()),
         Err(MoleculeApplyError::Transaction(expected.clone()))
     );
     let mut molecule = source.clone();
@@ -1020,12 +1008,12 @@ fn test_molecule_apply_error(source: Molecule) {
 }
 
 #[rstest]
-fn test_molecule_editor_try_build_error(source: Molecule) {
+fn test_molecule_editor_finish_error(source: Molecule) {
     let mut editor = source.edit();
     editor.add_bond(AtomId(0), AtomId(1), BondForm::default());
 
     assert_eq!(
-        editor.try_build(),
+        editor.finish(),
         Err(MoleculeIntegrityError::ParallelBonds {
             atoms: [AtomId(0), AtomId(1)],
         })

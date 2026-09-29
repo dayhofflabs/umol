@@ -251,6 +251,7 @@ fn benchmark_mutation(c: &mut Criterion) {
             BondForm::from_order(1),
         );
         molecule
+            .clone()
             .apply(edits.clone())
             .expect("benchmark edit batch succeeds");
         molecule
@@ -259,16 +260,16 @@ fn benchmark_mutation(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("editor_session/path", size), |b| {
             b.iter(|| {
-                let mut editor = molecule.edit();
+                let mut editor = molecule.clone().edit();
                 editor.remove_topology(&[AtomId((size - 1) as u32)], &[]);
                 let added = editor.add_atom(AtomForm::from_element(Element::O));
                 editor.add_bond(AtomId((size - 2) as u32), added, BondForm::from_order(1));
-                black_box(editor.tracked_build())
+                black_box(editor.finish().unwrap())
             })
         });
         group.bench_function(BenchmarkId::new("remove_topology/path", size), |b| {
             b.iter_batched(
-                || molecule.edit(),
+                || molecule.clone().edit(),
                 |mut editor| {
                     editor.remove_topology(black_box(&removed), &[]);
                     black_box(editor)
@@ -278,9 +279,9 @@ fn benchmark_mutation(c: &mut Criterion) {
         });
         group.bench_function(BenchmarkId::new("apply/path_three_edits", size), |b| {
             b.iter_batched(
-                || edits.clone(),
-                |edits| {
-                    black_box(&molecule)
+                || (molecule.clone(), edits.clone()),
+                |(molecule, edits)| {
+                    black_box(molecule)
                         .apply(edits)
                         .expect("benchmark edit batch succeeds")
                 },
@@ -292,9 +293,9 @@ fn benchmark_mutation(c: &mut Criterion) {
             BenchmarkId::new("tracked_apply/path_three_edits", size),
             |b| {
                 b.iter_batched(
-                    || edits.clone(),
-                    |edits| {
-                        black_box(&molecule)
+                    || (molecule.clone(), edits.clone()),
+                    |(molecule, edits)| {
+                        black_box(molecule)
                             .tracked_apply(edits)
                             .expect("benchmark edit batch succeeds")
                     },

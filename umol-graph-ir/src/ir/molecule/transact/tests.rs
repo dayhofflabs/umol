@@ -66,7 +66,7 @@ fn diatomic() -> MoleculeEditor {
 fn test_transaction_apply_add_atom(empty: MoleculeEditor) {
     let mut edits = Edits::new();
     edits.add_atom(AtomForm::from_element(Element::C));
-    let mut molecule = empty.build();
+    let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -97,7 +97,7 @@ fn test_transaction_apply_add_atoms(empty: MoleculeEditor) {
         AtomForm::from_element(Element::C),
         AtomForm::from_element(Element::N),
     ]);
-    let mut molecule = empty.build();
+    let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -133,7 +133,7 @@ fn test_transaction_apply_add_bond_via_handle(empty: MoleculeEditor) {
         AtomForm::from_element(Element::C),
     ]);
     edits.add_bond(atoms[0].clone(), atoms[1].clone(), BondForm::from_order(1));
-    let mut molecule = empty.build();
+    let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -157,13 +157,13 @@ fn test_transaction_apply_add_bond_via_handle(empty: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_rollback(one_atom: MoleculeEditor) {
-    let before = one_atom.clone().build();
+    let before = one_atom.clone().finish().unwrap();
     // Mid-batch failure (out-of-range id on edit 2) rolls back the
     // already-applied AddAtom on edit 1.
     let mut edits = Edits::new();
     edits.add_atom(AtomForm::from_element(Element::N));
     edits.remove_atom(AtomHandle::Id(AtomId(99)));
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -186,7 +186,7 @@ fn test_transaction_apply_rollback(one_atom: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_set_atom_field(one_atom: MoleculeEditor) {
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -228,7 +228,7 @@ fn test_transaction_apply_set_atom_field(one_atom: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_set_atom_field_error(one_atom: MoleculeEditor) {
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -282,8 +282,8 @@ fn test_transaction_apply_handle_error(
     #[case] edits: Edits,
     #[case] expected: MoleculeApplyError,
 ) {
-    let before = empty.clone().build();
-    let mut molecule = empty.build();
+    let before = empty.clone().finish().unwrap();
+    let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -340,8 +340,8 @@ fn test_transaction_apply_handle_removed_error(
     for _ in 0..initial_atom_count {
         editor.add_atom(AtomForm::from_element(Element::C));
     }
-    let before = editor.clone().build();
-    let mut molecule = editor.build();
+    let before = editor.clone().finish().unwrap();
+    let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -386,7 +386,7 @@ fn test_transaction_apply_handles_initial() {
             },
         },
     ]);
-    let mut molecule = editor.build();
+    let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -426,7 +426,7 @@ fn test_transaction_apply_handles_created() {
             new: NumForm::Lit(1),
         },
     });
-    let mut molecule = editor.build();
+    let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -471,7 +471,7 @@ fn test_transaction_apply_handles_reuse() {
             new: NumForm::Lit(-1),
         },
     });
-    let mut molecule = editor.build();
+    let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -505,7 +505,7 @@ fn test_transaction_apply_handles_reuse() {
 #[rstest]
 fn test_transaction_apply_handles_per_kind() {
     let editor = Molecule::default().edit();
-    let before = editor.clone().build();
+    let before = editor.clone().finish().unwrap();
     let mut edits = Edits::new();
     let atoms = edits.add_atoms([
         AtomForm::from_element(Element::C),
@@ -620,7 +620,7 @@ fn test_transaction_apply_handles_per_kind() {
             new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
         },
     });
-    let mut molecule = editor.build();
+    let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -699,7 +699,7 @@ fn test_transaction_apply_add_bonds_error(
     diatomic: MoleculeEditor,
     #[case] invalid_position: usize,
 ) {
-    let before = diatomic.clone().build();
+    let before = diatomic.clone().finish().unwrap();
     let mut bonds = vec![
         AddBond {
             endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
@@ -715,7 +715,7 @@ fn test_transaction_apply_add_bonds_error(
         },
     ];
     bonds[invalid_position].endpoints[1] = AtomHandle::Id(AtomId(9));
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -739,7 +739,7 @@ fn test_transaction_apply_add_bonds_error(
 
 #[rstest]
 fn test_transaction_apply_remove_topology(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -788,8 +788,8 @@ fn test_transaction_apply_constraint_identity(
     batched_overlays: MoleculeEditor,
     #[case] edit: Edit,
 ) {
-    let expected = batched_overlays.snapshot().unwrap();
-    let mut molecule = batched_overlays.build();
+    let expected = batched_overlays.probe().unwrap().clone();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -806,7 +806,7 @@ fn test_transaction_apply_constraint_identity(
 
 #[rstest]
 fn test_transaction_apply_add_atom_constraint(one_atom: MoleculeEditor) {
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -856,7 +856,7 @@ fn test_transaction_apply_modify_atom_field_canonical(
     // The modify's recorded `old` is equivalent to — but structurally distinct from — the
     // stored charge, so the old-state check passes (structural `!=` would raise `OldStateMismatch`).
     one_atom.atom_mut(AtomId(0)).attributes_mut().charge = current;
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -886,7 +886,7 @@ fn test_transaction_apply_modify_atom_field_canonical(
 
 #[rstest]
 fn test_transaction_apply_modify_atom_constraint_absent_error(one_atom: MoleculeEditor) {
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -922,7 +922,7 @@ fn test_transaction_apply_set_atom_constraint(
     #[case] new: Option<AtomConstraintForm>,
     #[case] expected: Option<NumForm>,
 ) {
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -959,7 +959,7 @@ fn test_transaction_apply_set_atom_constraint(
 
 #[rstest]
 fn test_transaction_apply_set_bond_constraint(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -987,7 +987,7 @@ fn test_transaction_apply_set_bond_constraint(diatomic: MoleculeEditor) {
 #[rstest]
 fn test_transaction_apply_add_molecule_constraint(empty: MoleculeEditor) {
     let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
-    let mut molecule = empty.build();
+    let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1008,7 +1008,7 @@ fn test_transaction_apply_add_molecule_constraint(empty: MoleculeEditor) {
 fn test_transaction_apply_remove_molecule_constraint(mut empty: MoleculeEditor) {
     let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
     empty.constraints_mut().push(c.clone());
-    let mut molecule = empty.build();
+    let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1029,7 +1029,7 @@ fn test_transaction_apply_remove_molecule_constraint(mut empty: MoleculeEditor) 
 fn test_transaction_apply_remove_molecule_constraint_absent_error(mut empty: MoleculeEditor) {
     let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
     empty.constraints_mut().push(c.clone());
-    let mut molecule = empty.build();
+    let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1083,10 +1083,10 @@ fn test_transaction_apply_molecule_constraint_initial(batched_overlays: Molecule
             StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
         ),
     ]);
-    let before = batched_overlays.clone().build();
+    let before = batched_overlays.clone().finish().unwrap();
     let mut edits = Edits::new();
     edits.add_molecule_constraint(constraint.clone().into());
-    let mut molecule = batched_overlays.build();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1103,7 +1103,7 @@ fn test_transaction_apply_molecule_constraint_initial(batched_overlays: Molecule
 
 #[rstest]
 fn test_transaction_apply_molecule_constraint_created(empty: MoleculeEditor) {
-    let before = empty.clone().build();
+    let before = empty.clone().finish().unwrap();
     let mut edits = Edits::new();
     let atoms = edits.add_atoms([
         AtomForm::from_element(Element::C),
@@ -1237,7 +1237,7 @@ fn test_transaction_apply_molecule_constraint_created(empty: MoleculeEditor) {
             parallel: BondId(0),
         }),
     ]);
-    let mut molecule = empty.build();
+    let mut molecule = empty.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1263,7 +1263,7 @@ fn test_transaction_apply_molecule_constraint_compaction(mut batched_overlays: M
         AromaticSystemConstraintForm::electron_count(4_i64),
     );
     batched_overlays.constraints_mut().push(removed.clone());
-    let before = batched_overlays.clone().build();
+    let before = batched_overlays.clone().finish().unwrap();
     let mut edits = Edits::from_iter([Edit::RemoveAromaticSystems {
         removes: vec![(
             AromaticSystemHandle::Id(AromaticSystemId(0)),
@@ -1273,7 +1273,7 @@ fn test_transaction_apply_molecule_constraint_compaction(mut batched_overlays: M
     }]);
     edits.add_molecule_constraint(added.into());
     edits.remove_molecule_constraint(removed.into());
-    let mut molecule = batched_overlays.build();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1330,8 +1330,8 @@ fn test_transaction_apply_molecule_constraint_error(
     for _ in 0..initial_atom_count {
         editor.add_atom(AtomForm::from_element(Element::C));
     }
-    let before = editor.clone().build();
-    let mut molecule = editor.build();
+    let before = editor.clone().finish().unwrap();
+    let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1346,10 +1346,10 @@ fn test_transaction_apply_molecule_constraint_error(
 
 #[rstest]
 fn test_transaction_apply_remove_topology_atom_error(one_atom: MoleculeEditor) {
-    let before = one_atom.clone().build();
+    let before = one_atom.clone().finish().unwrap();
     let mut edits = Edits::new();
     edits.remove_atom(AtomHandle::Id(AtomId(9)));
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1372,10 +1372,10 @@ fn test_transaction_apply_remove_topology_atom_error(one_atom: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_remove_topology_bond_error(diatomic: MoleculeEditor) {
-    let before = diatomic.clone().build();
+    let before = diatomic.clone().finish().unwrap();
     let mut edits = Edits::new();
     edits.remove_bond(BondHandle::Id(BondId(9)));
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1398,7 +1398,7 @@ fn test_transaction_apply_remove_topology_bond_error(diatomic: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_add_dative_bond_acceptor_error(one_atom: MoleculeEditor) {
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1426,7 +1426,7 @@ fn test_transaction_apply_add_dative_bond_acceptor_error(one_atom: MoleculeEdito
 
 #[rstest]
 fn test_transaction_apply_set_bond_field(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1452,7 +1452,7 @@ fn test_transaction_apply_set_bond_field(diatomic: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_set_bond_field_error(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1497,8 +1497,8 @@ fn tetrahedral_ligands() -> Vec<StereoLigand> {
 
 #[rstest]
 fn test_transaction_apply_add_stereo_atom(stereo_atom_skeleton: MoleculeEditor) {
-    let before = stereo_atom_skeleton.clone().build();
-    let mut molecule = stereo_atom_skeleton.build();
+    let before = stereo_atom_skeleton.clone().finish().unwrap();
+    let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1527,8 +1527,8 @@ fn test_transaction_apply_remove_stereo_atom(mut stereo_atom_skeleton: MoleculeE
         &tetrahedral_ligands(),
         StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
     );
-    let before = stereo_atom_skeleton.clone().build();
-    let mut molecule = stereo_atom_skeleton.build();
+    let before = stereo_atom_skeleton.clone().finish().unwrap();
+    let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1560,7 +1560,7 @@ fn test_transaction_apply_remove_stereo_atom_error(mut stereo_atom_skeleton: Mol
         &tetrahedral_ligands(),
         StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
     );
-    let mut molecule = stereo_atom_skeleton.build();
+    let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1597,8 +1597,8 @@ fn test_transaction_apply_topology_removal_restores_stereo_atom(
         &tetrahedral_ligands(),
         StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
     );
-    let before = stereo_atom_skeleton.clone().build();
-    let mut molecule = stereo_atom_skeleton.build();
+    let before = stereo_atom_skeleton.clone().finish().unwrap();
+    let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1632,8 +1632,8 @@ fn stereo_bond_skeleton() -> MoleculeEditor {
 
 #[rstest]
 fn test_transaction_apply_add_stereo_bond(stereo_bond_skeleton: MoleculeEditor) {
-    let before = stereo_bond_skeleton.clone().build();
-    let mut molecule = stereo_bond_skeleton.build();
+    let before = stereo_bond_skeleton.clone().finish().unwrap();
+    let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1676,8 +1676,8 @@ fn test_transaction_apply_remove_stereo_bond(mut stereo_bond_skeleton: MoleculeE
         ],
         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
     );
-    let before = stereo_bond_skeleton.clone().build();
-    let mut molecule = stereo_bond_skeleton.build();
+    let before = stereo_bond_skeleton.clone().finish().unwrap();
+    let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1723,7 +1723,7 @@ fn test_transaction_apply_remove_stereo_bond_error(mut stereo_bond_skeleton: Mol
         ],
         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
     );
-    let mut molecule = stereo_bond_skeleton.build();
+    let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1768,8 +1768,8 @@ fn test_transaction_apply_set_stereo_atom_field(mut stereo_atom_skeleton: Molecu
         &tetrahedral_ligands(),
         StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
     );
-    let before = stereo_atom_skeleton.clone().build();
-    let mut molecule = stereo_atom_skeleton.build();
+    let before = stereo_atom_skeleton.clone().finish().unwrap();
+    let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1811,7 +1811,7 @@ fn test_transaction_apply_set_stereo_atom_field_error(mut stereo_atom_skeleton: 
         &tetrahedral_ligands(),
         StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
     );
-    let mut molecule = stereo_atom_skeleton.build();
+    let mut molecule = stereo_atom_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1854,8 +1854,8 @@ fn test_transaction_apply_set_stereo_bond_field(mut stereo_bond_skeleton: Molecu
         ],
         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
     );
-    let before = stereo_bond_skeleton.clone().build();
-    let mut molecule = stereo_bond_skeleton.build();
+    let before = stereo_bond_skeleton.clone().finish().unwrap();
+    let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1902,7 +1902,7 @@ fn test_transaction_apply_set_stereo_bond_field_error(mut stereo_bond_skeleton: 
         ],
         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
     );
-    let mut molecule = stereo_bond_skeleton.build();
+    let mut molecule = stereo_bond_skeleton.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -1991,9 +1991,9 @@ fn batched_overlays() -> MoleculeEditor {
 
 #[rstest]
 fn test_transaction_apply_replace_dative_bond_donors(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
+    let before = batched_overlays.clone().finish().unwrap();
     let donors = vec![AtomId(2), AtomId(4)];
-    let mut molecule = batched_overlays.build();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2029,8 +2029,8 @@ fn test_transaction_apply_replace_dative_bond_donors(batched_overlays: MoleculeE
 
 #[rstest]
 fn test_transaction_apply_replace_dative_bond_acceptor(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
-    let mut molecule = batched_overlays.build();
+    let before = batched_overlays.clone().finish().unwrap();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2065,8 +2065,8 @@ fn test_transaction_apply_replace_dative_bond_acceptor(batched_overlays: Molecul
 
 #[rstest]
 fn test_transaction_apply_replace_aromatic_system_atoms(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
-    let mut molecule = batched_overlays.build();
+    let before = batched_overlays.clone().finish().unwrap();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2102,8 +2102,8 @@ fn test_transaction_apply_replace_aromatic_system_atoms(batched_overlays: Molecu
 
 #[rstest]
 fn test_transaction_apply_replace_multicenter_bond_atoms(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
-    let mut molecule = batched_overlays.build();
+    let before = batched_overlays.clone().finish().unwrap();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2139,8 +2139,8 @@ fn test_transaction_apply_replace_multicenter_bond_atoms(batched_overlays: Molec
 
 #[rstest]
 fn test_transaction_apply_replace_noncovalent_bond_atoms(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
-    let mut molecule = batched_overlays.build();
+    let before = batched_overlays.clone().finish().unwrap();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2175,8 +2175,8 @@ fn test_transaction_apply_replace_noncovalent_bond_atoms(batched_overlays: Molec
 
 #[rstest]
 fn test_transaction_apply_replace_stereo_atom_site(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
-    let mut molecule = batched_overlays.build();
+    let before = batched_overlays.clone().finish().unwrap();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2208,14 +2208,14 @@ fn test_transaction_apply_replace_stereo_atom_site(batched_overlays: MoleculeEdi
 
 #[rstest]
 fn test_transaction_apply_replace_stereo_atom_ligands(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
+    let before = batched_overlays.clone().finish().unwrap();
     let old = vec![
         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
         StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
     ];
     let new = vec![old[2], old[0], old[1]];
-    let mut molecule = batched_overlays.build();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2256,8 +2256,8 @@ fn test_transaction_apply_replace_stereo_atom_ligands(batched_overlays: Molecule
 
 #[rstest]
 fn test_transaction_apply_replace_stereo_bond_site(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
-    let mut molecule = batched_overlays.build();
+    let before = batched_overlays.clone().finish().unwrap();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2289,7 +2289,7 @@ fn test_transaction_apply_replace_stereo_bond_site(batched_overlays: MoleculeEdi
 
 #[rstest]
 fn test_transaction_apply_replace_stereo_bond_ligands(batched_overlays: MoleculeEditor) {
-    let before = batched_overlays.clone().build();
+    let before = batched_overlays.clone().finish().unwrap();
     let old = vec![
         StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
@@ -2297,7 +2297,7 @@ fn test_transaction_apply_replace_stereo_bond_ligands(batched_overlays: Molecule
         StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
     ];
     let new = vec![old[1], old[0], old[3], old[2]];
-    let mut molecule = batched_overlays.build();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2386,8 +2386,8 @@ fn test_transaction_apply_replace_old_state_error(
     batched_overlays: MoleculeEditor,
     #[case] edit: Edit,
 ) {
-    let before = batched_overlays.clone().build();
-    let mut molecule = batched_overlays.build();
+    let before = batched_overlays.clone().finish().unwrap();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2429,7 +2429,7 @@ fn test_transaction_apply_remove_overlays_error(
     #[case] kind: EntityKind,
     #[case] invalid_position: usize,
 ) {
-    let before = batched_overlays.clone().build();
+    let before = batched_overlays.clone().finish().unwrap();
     let edit = match kind {
         EntityKind::DativeBond => Edit::RemoveDativeBonds {
             removes: (0..3_u32)
@@ -2571,7 +2571,7 @@ fn test_transaction_apply_remove_overlays_error(
         },
         EntityKind::Atom | EntityKind::Bond => unreachable!(),
     };
-    let mut molecule = batched_overlays.build();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2604,7 +2604,7 @@ fn test_transaction_apply_duplicate_removal_error(
     batched_overlays: MoleculeEditor,
     #[case] kind: EntityKind,
 ) {
-    let before = batched_overlays.clone().build();
+    let before = batched_overlays.clone().finish().unwrap();
     let edit = match kind {
         EntityKind::Atom => Edit::RemoveTopology {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
@@ -2741,7 +2741,7 @@ fn test_transaction_apply_duplicate_removal_error(
             ],
         },
     };
-    let mut molecule = batched_overlays.build();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2768,7 +2768,7 @@ fn test_transaction_apply_handle_removed_error_cascade(
     batched_overlays: MoleculeEditor,
     #[case] kind: EntityKind,
 ) {
-    let before = batched_overlays.clone().build();
+    let before = batched_overlays.clone().finish().unwrap();
     let mut edits = Edits::from_iter([Edit::RemoveTopology {
         atoms: vec![AtomHandle::Id(AtomId(0))],
         bonds: Vec::new(),
@@ -2824,7 +2824,7 @@ fn test_transaction_apply_handle_removed_error_cascade(
         },
         EntityKind::Atom | EntityKind::Bond => unreachable!(),
     });
-    let mut molecule = batched_overlays.build();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2842,7 +2842,7 @@ fn test_transaction_apply_handle_removed_error_cascade(
 
 #[rstest]
 fn test_transaction_apply_set_dative_bond_field(diatomic_with_overlays: MoleculeEditor) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2872,7 +2872,7 @@ fn test_transaction_apply_set_dative_bond_field(diatomic_with_overlays: Molecule
 
 #[rstest]
 fn test_transaction_apply_set_aromatic_system_field(diatomic_with_overlays: MoleculeEditor) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2902,7 +2902,7 @@ fn test_transaction_apply_set_aromatic_system_field(diatomic_with_overlays: Mole
 
 #[rstest]
 fn test_transaction_apply_set_multicenter_bond_field(diatomic_with_overlays: MoleculeEditor) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2932,7 +2932,7 @@ fn test_transaction_apply_set_multicenter_bond_field(diatomic_with_overlays: Mol
 
 #[rstest]
 fn test_transaction_apply_set_noncovalent_bond_field(diatomic_with_overlays: MoleculeEditor) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2962,7 +2962,7 @@ fn test_transaction_apply_set_noncovalent_bond_field(diatomic_with_overlays: Mol
 
 #[rstest]
 fn test_transaction_apply_add_dative_bond(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -2987,7 +2987,7 @@ fn test_transaction_apply_add_dative_bond(diatomic: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_add_aromatic_system(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3011,7 +3011,7 @@ fn test_transaction_apply_add_aromatic_system(diatomic: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_add_multicenter_bond(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3035,7 +3035,7 @@ fn test_transaction_apply_add_multicenter_bond(diatomic: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_add_noncovalent_bond(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3059,8 +3059,8 @@ fn test_transaction_apply_add_noncovalent_bond(diatomic: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_remove_dative_bond(diatomic_with_overlays: MoleculeEditor) {
-    let before = diatomic_with_overlays.clone().build();
-    let mut molecule = diatomic_with_overlays.build();
+    let before = diatomic_with_overlays.clone().finish().unwrap();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3088,7 +3088,7 @@ fn test_transaction_apply_remove_dative_bond(diatomic_with_overlays: MoleculeEdi
 
 #[rstest]
 fn test_transaction_apply_remove_dative_bond_roles_error(diatomic_with_overlays: MoleculeEditor) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3119,8 +3119,8 @@ fn test_transaction_apply_remove_dative_bond_roles_error(diatomic_with_overlays:
 
 #[rstest]
 fn test_transaction_apply_remove_aromatic_system(diatomic_with_overlays: MoleculeEditor) {
-    let before = diatomic_with_overlays.clone().build();
-    let mut molecule = diatomic_with_overlays.build();
+    let before = diatomic_with_overlays.clone().finish().unwrap();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3154,7 +3154,7 @@ fn test_transaction_apply_remove_aromatic_systems() {
     b.add_aromatic_system(&[AtomId(0), AtomId(1)], AromaticSystemForm::default());
     b.add_aromatic_system(&[AtomId(2), AtomId(3)], AromaticSystemForm::default());
     b.add_aromatic_system(&[AtomId(4), AtomId(5)], AromaticSystemForm::default());
-    let mut molecule = b.build();
+    let mut molecule = b.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3211,7 +3211,7 @@ fn test_transaction_apply_remove_aromatic_system_rollback(
         &[AtomId(3), AtomId(4), AtomId(5)],
         AromaticSystemForm::default(),
     );
-    let mut molecule = b.build();
+    let mut molecule = b.finish().unwrap();
     molecule
         .transact([Edits::from_iter([Edit::AddMoleculeConstraint {
             constraint: Constraint::AromaticSystem(
@@ -3254,8 +3254,8 @@ fn test_transaction_apply_remove_aromatic_system_rollback(
 
 #[rstest]
 fn test_transaction_apply_remove_multicenter_bond(diatomic_with_overlays: MoleculeEditor) {
-    let before = diatomic_with_overlays.clone().build();
-    let mut molecule = diatomic_with_overlays.build();
+    let before = diatomic_with_overlays.clone().finish().unwrap();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3279,8 +3279,8 @@ fn test_transaction_apply_remove_multicenter_bond(diatomic_with_overlays: Molecu
 
 #[rstest]
 fn test_transaction_apply_remove_noncovalent_bond(diatomic_with_overlays: MoleculeEditor) {
-    let before = diatomic_with_overlays.clone().build();
-    let mut molecule = diatomic_with_overlays.build();
+    let before = diatomic_with_overlays.clone().finish().unwrap();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3306,7 +3306,7 @@ fn test_transaction_apply_remove_noncovalent_bond(diatomic_with_overlays: Molecu
 fn test_transaction_apply_remove_noncovalent_bond_form_mismatch_error(
     diatomic_with_overlays: MoleculeEditor,
 ) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3332,7 +3332,7 @@ fn test_transaction_apply_remove_noncovalent_bond_form_mismatch_error(
 
 #[rstest]
 fn test_transaction_apply_set_bond_constraint_value_bearing(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3367,7 +3367,7 @@ fn test_transaction_apply_set_bond_constraint_value_bearing(diatomic: MoleculeEd
 
 #[rstest]
 fn test_transaction_apply_add_bond_constraint(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3394,7 +3394,7 @@ fn test_transaction_apply_add_bond_constraint(diatomic: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_modify_bond_constraint_absent_error(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3418,7 +3418,7 @@ fn test_transaction_apply_modify_bond_constraint_absent_error(diatomic: Molecule
 
 #[rstest]
 fn test_transaction_apply_set_dative_bond_constraint(diatomic_with_overlays: MoleculeEditor) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3445,7 +3445,7 @@ fn test_transaction_apply_set_dative_bond_constraint(diatomic_with_overlays: Mol
 
 #[rstest]
 fn test_transaction_apply_set_aromatic_system_constraint(diatomic_with_overlays: MoleculeEditor) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3476,7 +3476,7 @@ fn test_transaction_apply_set_aromatic_system_constraint(diatomic_with_overlays:
 
 #[rstest]
 fn test_transaction_apply_set_multicenter_bond_constraint(diatomic_with_overlays: MoleculeEditor) {
-    let mut molecule = diatomic_with_overlays.build();
+    let mut molecule = diatomic_with_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3535,7 +3535,7 @@ fn triatomic_with_overlays() -> MoleculeEditor {
 
 #[rstest]
 fn test_transaction_rollback_batches(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let before = molecule.clone();
     Transaction::run(&mut molecule, |mut transaction| {
         transaction.apply(Edits::from_iter([Edit::ModifyAtomField {
@@ -3565,7 +3565,7 @@ fn test_transaction_rollback_batches(diatomic: MoleculeEditor) {
 
 #[rstest]
 fn test_transaction_apply_batches_error(diatomic: MoleculeEditor) {
-    let mut molecule = diatomic.build();
+    let mut molecule = diatomic.finish().unwrap();
     let before = molecule.clone();
     let result = Transaction::run(&mut molecule, |mut transaction| {
         transaction.apply(Edits::from_iter([Edit::ModifyAtomField {
@@ -3662,7 +3662,7 @@ fn test_transaction_rollback_entries(#[case] case: RollbackCase) {
         }
         RollbackCase::RemoveTopology | RollbackCase::RemoveOverlay => triatomic_with_overlays(),
     };
-    let before = editor.clone().build();
+    let before = editor.clone().finish().unwrap();
     let edits = match case {
         RollbackCase::RemoveTopology => Edits::from_iter([Edit::RemoveTopology {
             atoms: vec![AtomHandle::Id(AtomId(1))],
@@ -3719,7 +3719,7 @@ fn test_transaction_rollback_entries(#[case] case: RollbackCase) {
             bonds: Vec::new(),
         }]),
     };
-    let mut molecule = editor.build();
+    let mut molecule = editor.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3746,8 +3746,8 @@ fn test_transaction_rollback_topology(
         Constraint::Atom(AtomId(5), AtomConstraintForm::degree(1)),
         Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)),
     ]);
-    let before = batched_overlays.clone().build();
-    let mut molecule = batched_overlays.build();
+    let before = batched_overlays.clone().finish().unwrap();
+    let mut molecule = batched_overlays.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {
@@ -3780,7 +3780,7 @@ fn test_transaction_rollback_topology(
 
 #[rstest]
 fn test_transaction_rollback_empty(one_atom: MoleculeEditor) {
-    let mut molecule = one_atom.build();
+    let mut molecule = one_atom.finish().unwrap();
     let before = molecule.clone();
     Transaction::run(&mut molecule, |transaction| {
         transaction.rollback();
@@ -3797,8 +3797,8 @@ fn test_transaction_rollback_molecule_constraint_order(mut one_atom: MoleculeEdi
     one_atom.constraints_mut().push(repeated.clone());
     one_atom.constraints_mut().push(middle.clone());
     one_atom.constraints_mut().push(repeated.clone());
-    let before = one_atom.clone().build();
-    let mut molecule = one_atom.build();
+    let before = one_atom.clone().finish().unwrap();
+    let mut molecule = one_atom.finish().unwrap();
     let result = Transaction::run(
         &mut molecule,
         |mut transaction| -> Result<(), MoleculeApplyError> {

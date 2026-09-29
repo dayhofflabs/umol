@@ -649,7 +649,7 @@ proptest! {
         })?.expect("generated application is applicable");
         let recovered = reaction.apply_at_to_reaction(&host, &correspondence).unwrap().unwrap();
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
         prop_assert_eq!(
             Reaction::try_new(recovered.lhs().clone(), recovered.deltas().clone()),
             Ok(recovered),

@@ -786,18 +786,18 @@ the removed atom/bond id lists from graph ids, not the vectors of matched pairs.
 do not clone molecular payloads or require intermediate molecules. Ordinary `compose` remains
 borrowed and returns a separate correspondence.
 
-### Editor session correspondence
+### Editor batch correspondence
 
-`MoleculeEditor` accumulates an initial-to-current correspondence over all eight entity kinds.
-Tracking retains only id pairs and counts. Additions extend the right domains, removals compact
-them, and undo restoration applies inverse compaction without recreating discarded pairs.
-Attribute changes preserve pairings. A failed transaction whose rollback succeeds restores the
-pre-transaction session correspondence, alongside the molecular state.
+MoleculeEditor owns its molecule. Direct mutation and apply do not accumulate a
+correspondence. tracked_apply returns the current batch's input-to-result mapping
+over all eight entity kinds. Earlier direct changes and batches are outside that
+mapping. The returned editor remains transient; probe checks integrity before
+borrowing the molecule, and finish checks it before transferring ownership.
 
-`tracked_snapshot` returns the same integrity-checked molecule as `snapshot`, plus an independent
-copy of the session correspondence. `try_tracked_build` and `tracked_build` transfer the accumulated
-vectors into the result and share the ordinary checked/asserted publication boundary. Plain
-publication returns only the molecule; plain snapshots do not copy the correspondence.
+Discarding a batch correspondence gives the same editor state as plain apply.
+Correspondences from consecutive batches compose to the whole operation's mapping.
+Transaction::tracked_commit derives that whole-transaction mapping from its journal.
+A failed application returns no correspondence.
 
 ## Pushout results
 
@@ -864,8 +864,9 @@ and its row compaction. Molecule's crate-private `compact_<entity>` delegates in
 and return the row compaction. These mappings are required to update dependent constraints
 and handles, so these internal operations have no separate tracked counterpart.
 
-Molecule editor `remove` and the six bulk relation-removal methods return `()`; their
-`tracked_` companions return a full `MoleculeCompaction`, including unchanged-family counts.
+Molecule editor remove_topology and the six bulk relation-removal methods return ().
+Crate-private tracked counterparts supply the full MoleculeCompaction for extraction
+and constraint compaction, including unchanged-family counts.
 Molecule `extract` returns only the molecule; `tracked_extract` pairs it with the actual
 host-to-result compaction. Its sub-to-host input describes selection, not result numbering:
 extraction preserves host order. Both forms retain the same cascades and constraint transport.

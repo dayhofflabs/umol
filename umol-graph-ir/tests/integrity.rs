@@ -56,8 +56,8 @@ fn test_molecule_electron_attributes(
     assert_eq!(span.lhs(), molecule);
     assert_eq!(span.rhs(), molecule);
     let editor = molecule.clone().edit();
-    assert_eq!(editor.snapshot().unwrap(), molecule);
-    assert_eq!(editor.try_build().unwrap(), molecule);
+    assert_eq!(editor.probe().unwrap(), &molecule);
+    assert_eq!(editor.finish().unwrap(), molecule);
     assert_eq!(Molecule::from_edn(&molecule.to_edn()).unwrap(), molecule);
     let contributions = molecule
         .atoms()
@@ -192,7 +192,7 @@ fn test_molecule_stereo_attributes(#[case] degree: u32, #[case] form: StereoAtom
     assert_eq!(molecule.stereo_atom(StereoAtomId(0)).attributes(), &form);
     assert_eq!(span.lhs(), molecule);
     assert_eq!(span.rhs(), molecule);
-    assert_eq!(molecule.clone().edit().try_build().unwrap(), molecule);
+    assert_eq!(molecule.clone().edit().finish().unwrap(), molecule);
     let context = CanonicalizeContext {
         para_stereo: true,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,

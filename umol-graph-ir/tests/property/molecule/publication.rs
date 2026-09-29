@@ -23,7 +23,7 @@ proptest! {
     ) {
         let published = source.remap(&correspondence);
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 
     #[test]
@@ -33,7 +33,7 @@ proptest! {
         let correspondence = source.induced_subgraph(&atoms);
         let published = source.extract(&correspondence);
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 
     #[test]
@@ -42,7 +42,7 @@ proptest! {
     ) {
         let published = Molecule::combine_all(&sources);
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 
     #[test]
@@ -50,7 +50,7 @@ proptest! {
         source in molecule_with_constraints_strategy(),
     ) {
         for published in source.split() {
-            prop_assert_eq!(published.edit().try_build(), Ok(published));
+            prop_assert_eq!(published.clone().edit().finish(), Ok(published));
         }
     }
 
@@ -62,6 +62,6 @@ proptest! {
             TestCaseError::fail(format!("generated edit application failed: {error}"))
         })?;
 
-        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 }

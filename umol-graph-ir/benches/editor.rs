@@ -97,7 +97,7 @@ fn bench_editor(c: &mut Criterion) {
                                 .attributes_mut()
                                 .charge = NumForm::Lit(1);
                         }
-                        black_box(editor.try_build().unwrap())
+                        black_box(editor.finish().unwrap())
                     },
                     BatchSize::SmallInput,
                 );

@@ -952,7 +952,7 @@ mod tests {
         }
         multicenter_entries.multicenter[0].0 = atoms;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(multicenter_entries))
         );
     }
@@ -970,7 +970,7 @@ mod tests {
         editor
             .multicenter_bond_mut(MulticenterBondId(0))
             .replace_atoms(&atoms);
-        assert_eq!(editor.try_build(), Err(expected));
+        assert_eq!(editor.finish(), Err(expected));
     }
 
     #[rstest]
@@ -998,7 +998,7 @@ mod tests {
         multicenter_entries.multicenter[0].0 = atoms.to_vec();
         multicenter_entries.multicenter[0].1.electrons = electrons;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(multicenter_entries))
         );
     }
@@ -1024,7 +1024,7 @@ mod tests {
         );
         multicenter_entries.multicenter[0].0 = expected;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(multicenter_entries))
         );
     }
@@ -1070,7 +1070,7 @@ mod tests {
         );
         multicenter_entries.multicenter[0].0 = expected;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(multicenter_entries))
         );
     }
@@ -1115,7 +1115,7 @@ mod tests {
         );
         multicenter_entries.multicenter[0].0 = expected;
         assert_eq!(
-            editor.try_build(),
+            editor.finish(),
             Ok(Molecule::from_entries(multicenter_entries))
         );
     }
@@ -1148,7 +1148,7 @@ mod tests {
             view.insert_atom(AtomPosition(2), AtomId(1));
             view.remove_atom(AtomPosition(0));
         }
-        let molecule = editor.try_build().unwrap();
+        let molecule = editor.finish().unwrap();
         let incidence: Vec<Vec<_>> = molecule
             .atoms()
             .ids()

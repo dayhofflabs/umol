@@ -1233,7 +1233,7 @@ mod tests {
                 StereoBondForm::default(),
             );
         }
-        editor.build()
+        editor.finish().unwrap()
     }
 
     #[rstest]
@@ -1251,10 +1251,10 @@ mod tests {
             .map(AtomId)
             .collect::<Vec<_>>();
         let compaction = editor.tracked_remove_topology(&removed, &[]);
-        let result = editor.build();
-        let mut plain = source.edit();
+        let result = editor.finish().unwrap();
+        let mut plain = source.clone().edit();
         plain.remove_topology(&removed, &[]);
-        assert_eq!(plain.build(), result);
+        assert_eq!(plain.finish().unwrap(), result);
         let expected_compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::new(12, (removed_start..removed_start + 6).map(NodeId).collect())
@@ -1381,7 +1381,7 @@ mod tests {
             Vec::new()
         };
         let compaction = editor.tracked_remove_topology(&removed, &[]);
-        let result = editor.build();
+        let result = editor.finish().unwrap();
         assert_eq!(
             result,
             if remove_all {
