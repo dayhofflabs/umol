@@ -49,8 +49,9 @@ Python Edits consumption. S5d2 implements accessor counters and Storage names.
 S5d3 implements prepared-batch Python transactions; S5 is complete.
 S6a implements consuming edit/application and checked probe/finish publication.
 S6b1 migrates graph-ir callers and removes editor session correspondence. S6b2
-rewrites combine_from to append through Molecule methods. S6c1's transformation
-plans and borrowed execution are next; format and Python consumers follow.
+rewrites combine_from to append through Molecule methods. S6c1 implements the
+transformation plans and borrowed execution. S6c2's remaining caller migration is
+next; Python consumers follow.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -105,7 +106,8 @@ approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
 complete; S4b9 closes the strict lint gate. S5a–S5d3 are complete, including
 Python runtime verification. S6a–S6b2 implement the owning editor, migrate
-graph-ir callers, and rewire combine_from. S6c1 is next.
+graph-ir callers, and rewire combine_from. S6c1's transformation migration is
+complete; S6c2 is next.
 
 ## Editor and transaction API
 
@@ -6262,7 +6264,7 @@ temporary cloning adapters is not a way to close an earlier subitem.
 - **S6c — Chemistry and format caller migration** (group; breaking, green
   at S6d). [dep: S6a, S5c]
 
-- **S6c1 — Transformation plans and borrowed execution** (`umol-graph::ops`; breaking rewire, green at S6d). [dep: S6a, S5c]
+- **S6c1 — completed 2026-09-28 — Transformation plans and borrowed execution** (`umol-graph::ops`; breaking rewire, green at S6d). [dep: S6a, S5c]
 
   Migrate graph operation publication sites to `finish` or borrowed transactions
   without changing
@@ -6295,6 +6297,27 @@ temporary cloning adapters is not a way to close an earlier subitem.
 
   Verify each existing transformation and AromaticityPerceiver::add_systems,
   including unchanged-input and late-rejection cases.
+
+  **Implemented.** The three private plan_transform methods build Edits from
+  the existing chemistry plans. transform_into executes one transaction;
+  Kekulizer probes for its valence/spin checks and commits only on acceptance.
+  Its recovery candidate copy is removed. DelocalizeCharge retains Infallible
+  and asserts its execution contract. AromaticityPerceiver::add_systems batches
+  additions and bond assertions independently. Existing error types and public
+  signatures remain unchanged. Graph-operation test publication uses finish.
+
+  Planning relies on aromatic systems' disjoint membership guaranteed by
+  molecule integrity. It emits edits directly per system. The additional work
+  is Edit construction and undo recording for affected fields/entities;
+  DelocalizeCharge previously used raw attribute assignment. Final performance
+  comparisons remain in S9b.
+
+  **Verification.** 860 focused tests pass across transformations, aromatic
+  insertion, resolver/constraint consumers, and kekulization fixtures. These
+  include exact output, disjoint systems, unchanged input, and late valence/spin
+  rejection with receiver restoration. Graph library checking and focused strict
+  Clippy pass; nightly formatting and diff checks pass. The S6 workspace gate
+  remains at S6d; remaining boundary/property-fixture callers belong to S6c2.
 
 - **S6c2 — Remaining ingest, parse, and export callers** (`umol-graph`, `umol-io`; breaking, green at S6d). [dep: S6c1]
 
@@ -6469,7 +6492,7 @@ Within the revised S2:
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
   scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a–S6b2 are complete; S6c1 is next.
+  S6a–S6c1 are complete; S6c2 is next.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.

@@ -1610,7 +1610,7 @@ mod tests {
         let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s"]}"#);
         let mut editor = molecule.edit();
         editor.constraints_mut().push(constraint);
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
 
         assert_eq!(
             Resolver::with_config(
@@ -1634,7 +1634,7 @@ mod tests {
             AtomId(0),
             AtomConstraintForm::Valence(NumForm::Lit(3)),
         ));
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
         let before = molecule.clone();
 
         assert_eq!(
@@ -1688,7 +1688,7 @@ mod tests {
         editor
             .constraints_mut()
             .push(Constraint::Molecule(constraint));
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
 
         assert_eq!(
             Resolver::with_config(
@@ -1715,7 +1715,7 @@ mod tests {
                 atoms: None,
                 sum: NumForm::Lit(5),
             }));
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
         let before = molecule.clone();
 
         let outcome = Resolver::new(&chemistry_model).resolve(&mut molecule);
@@ -2223,7 +2223,7 @@ mod tests {
                 )),
             ),
         ]));
-        let mut molecule = editor.build();
+        let mut molecule = editor.finish().unwrap();
         let original = molecule.clone();
         let model = ChemistryModel::default();
         let resolver = Resolver::with_config(

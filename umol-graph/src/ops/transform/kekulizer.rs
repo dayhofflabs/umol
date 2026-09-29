@@ -20,8 +20,9 @@ use umol_graph_core::{
     BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm, NonBipartiteGraphError,
 };
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsForm,
-    Molecule, NumForm,
+    AromaticSystemHandle, AromaticSystemId, AtomConstraintKey, AtomHandle, AtomId, AtomUpdate,
+    BondConstraintKey, BondHandle, BondId, BondUpdate, Edit, Edits, ElectronCountsForm, Molecule,
+    MoleculeApplyError, NumForm, Transaction,
 };
 use umol_utils::solution::Solution;
 
@@ -251,71 +252,16 @@ impl Transformer for Kekulizer {
             return Ok(());
         }
 
-        // Plan the per-system matching against an immutable molecule snapshot, then
-        // apply the bond-order writes and structural cleanup in passes that
-        // require &mut.
-        let plans = self.plan_systems(molecule)?;
-        let mut candidate = molecule.clone();
-
-        // Pass 1: bond-order writes and Aromatic-constraint stripping.
-        for plan in &plans {
-            debug_assert!(plan.matched_bonds.iter().all(|&bond| {
-                candidate
-                    .bond(bond)
-                    .atom_ids()
-                    .iter()
-                    .all(|atom| !plan.exposed_atoms.contains(atom))
-            }));
-            for &bid in &plan.matched_bonds {
-                let mut view = candidate.bond_mut(bid);
-                let bond = view.attributes_mut();
-                bond.order = NumForm::Lit(2);
-                bond.constraints.remove(BondConstraintKey::Aromatic);
+        let edits = self.plan_transform(molecule)?;
+        Transaction::run(molecule, |mut transaction| {
+            transaction.apply(edits)?;
+            let result = validate_localized_candidate(transaction.probe()?);
+            if result.is_ok() {
+                transaction.commit()?;
             }
-            for &bid in &plan.unmatched_bonds {
-                let mut view = candidate.bond_mut(bid);
-                let bond = view.attributes_mut();
-                bond.order = NumForm::Lit(1);
-                bond.constraints.remove(BondConstraintKey::Aromatic);
-            }
-            for &aidx in &plan.atoms {
-                let mut view = candidate.atom_mut(aidx);
-                let atom = view.attributes_mut();
-                atom.constraints.remove(AtomConstraintKey::AromaticValence);
-            }
-            if let Some(system_charge) = plan.mobile_charge {
-                let exposed = plan.exposed_atoms[0];
-                let mut view = candidate.atom_mut(exposed);
-                let atom = view.attributes_mut();
-                let NumForm::Lit(local_charge) = atom.charge else {
-                    return Err(KekulizeError::UndeterminedExposedAtomCharge {
-                        system: plan.system_idx,
-                        atom: exposed,
-                    });
-                };
-                atom.charge = NumForm::Lit(local_charge + system_charge);
-                if system_charge == -1 {
-                    let NumForm::Lit(lone_pairs) = atom.lone_pairs else {
-                        return Err(KekulizeError::UndeterminedExposedAtomLonePairs {
-                            system: plan.system_idx,
-                            atom: exposed,
-                        });
-                    };
-                    atom.lone_pairs = NumForm::Lit(lone_pairs + 1);
-                }
-            }
-        }
-
-        // Pass 2: drop the aromatic system entries via the builder.
-        let to_remove: Vec<AromaticSystemId> = plans.iter().map(|p| p.system_idx).collect();
-        let mut builder = candidate.edit();
-        builder.remove_aromatic_systems(&to_remove);
-        candidate = builder.build();
-
-        validate_localized_candidate(&candidate)?;
-        *molecule = candidate;
-
-        Ok(())
+            Ok::<_, MoleculeApplyError>(result)
+        })
+        .expect("kekulization plan preserves molecule integrity")
     }
 
     fn generate_all<'a>(
@@ -361,6 +307,99 @@ struct SystemPlan {
 }
 
 impl Kekulizer {
+    fn plan_transform(&self, molecule: &Molecule) -> Result<Edits, KekulizeError> {
+        let plans = self.plan_systems(molecule)?;
+        let mut edits = Edits::new();
+        for plan in &plans {
+            debug_assert!(plan.matched_bonds.iter().all(|&bond| {
+                molecule
+                    .bond(bond)
+                    .atom_ids()
+                    .iter()
+                    .all(|atom| !plan.exposed_atoms.contains(atom))
+            }));
+            for (id, order) in plan
+                .matched_bonds
+                .iter()
+                .map(|&id| (id, 2))
+                .chain(plan.unmatched_bonds.iter().map(|&id| (id, 1)))
+            {
+                let bond = molecule.bond(id).attributes();
+                edits.update_bond(
+                    BondHandle::Id(id),
+                    bond,
+                    &BondUpdate {
+                        order: Some(NumForm::Lit(order)),
+                        ..Default::default()
+                    },
+                );
+                if let Some(old) = bond.constraints.get(BondConstraintKey::Aromatic) {
+                    edits.push(Edit::ModifyBondConstraint {
+                        id: BondHandle::Id(id),
+                        old: Some(old.clone()),
+                        new: None,
+                    });
+                }
+            }
+            for &id in &plan.atoms {
+                if let Some(old) = molecule
+                    .atom(id)
+                    .attributes()
+                    .constraints
+                    .get(AtomConstraintKey::AromaticValence)
+                {
+                    edits.push(Edit::ModifyAtomConstraint {
+                        id: AtomHandle::Id(id),
+                        old: Some(old.clone()),
+                        new: None,
+                    });
+                }
+            }
+            if let Some(system_charge) = plan.mobile_charge {
+                let exposed = plan.exposed_atoms[0];
+                let atom = molecule.atom(exposed).attributes();
+                let NumForm::Lit(local_charge) = atom.charge else {
+                    return Err(KekulizeError::UndeterminedExposedAtomCharge {
+                        system: plan.system_idx,
+                        atom: exposed,
+                    });
+                };
+                let mut update = AtomUpdate {
+                    charge: Some(NumForm::Lit(local_charge + system_charge)),
+                    ..Default::default()
+                };
+                if system_charge == -1 {
+                    let NumForm::Lit(lone_pairs) = atom.lone_pairs else {
+                        return Err(KekulizeError::UndeterminedExposedAtomLonePairs {
+                            system: plan.system_idx,
+                            atom: exposed,
+                        });
+                    };
+                    update.lone_pairs = Some(NumForm::Lit(lone_pairs + 1));
+                }
+                edits.update_atom(AtomHandle::Id(exposed), atom, &update);
+            }
+        }
+        if !plans.is_empty() {
+            edits.remove_aromatic_systems(
+                plans
+                    .into_iter()
+                    .map(|plan| {
+                        (
+                            AromaticSystemHandle::Id(plan.system_idx),
+                            plan.atoms.into_iter().map(AtomHandle::Id).collect(),
+                            molecule
+                                .aromatic_system(plan.system_idx)
+                                .attributes()
+                                .clone(),
+                        )
+                    })
+                    .collect(),
+            );
+        }
+        Ok(edits)
+    }
+
     /// Build the per-system matching plan against an immutable molecule.
     fn plan_systems(&self, molecule: &Molecule) -> Result<Vec<SystemPlan>, KekulizeError> {
         let mut plans = Vec::with_capacity(molecule.aromatic_systems().count());

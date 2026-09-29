@@ -4,8 +4,9 @@ use std::convert::Infallible;
 use std::iter;
 
 use umol_graph_ir::ir::{
-    AromaticSystemId, AromaticValenceForm, AtomConstraintForm, AtomId, ElectronCountsForm,
-    ElementForm, Molecule, NumForm,
+    AromaticSystemHandle, AromaticSystemId, AromaticSystemUpdate, AromaticValenceForm,
+    AtomConstraintForm, AtomHandle, AtomId, AtomUpdate, Edits, ElectronCountsForm, ElementForm,
+    Molecule, NumForm,
 };
 
 use crate::ops::transform::Transformer;
@@ -78,20 +79,40 @@ impl DelocalizationPlan {
             atoms,
         })
     }
+}
 
-    fn apply(self, molecule: &mut Molecule) {
-        for (atom_id, contribution) in self.atoms {
-            let mut view = molecule.atom_mut(atom_id);
-            let atom = view.attributes_mut();
-            atom.charge = NumForm::Lit(0);
-            atom.constraints.set(AtomConstraintForm::AromaticValence(
-                AromaticValenceForm::Aromatic(NumForm::Lit(contribution)),
-            ));
+impl DelocalizeCharge {
+    fn plan_transform(&self, molecule: &Molecule) -> Edits {
+        let mut edits = Edits::new();
+        for system in molecule.aromatic_systems().ids() {
+            let Some(plan) = DelocalizationPlan::derive(molecule, system) else {
+                continue;
+            };
+            for (id, contribution) in plan.atoms {
+                edits.update_atom(
+                    AtomHandle::Id(id),
+                    molecule.atom(id).attributes(),
+                    &AtomUpdate {
+                        charge: Some(NumForm::Lit(0)),
+                        constraints: AtomConstraintForm::AromaticValence(
+                            AromaticValenceForm::Aromatic(NumForm::Lit(contribution)),
+                        )
+                        .into(),
+                        ..Default::default()
+                    },
+                );
+            }
+            edits.update_aromatic_system(
+                AromaticSystemHandle::Id(plan.system),
+                molecule.aromatic_system(plan.system).attributes(),
+                &AromaticSystemUpdate {
+                    charge: Some(NumForm::Lit(plan.charge)),
+                    electrons: Some(ElectronCountsForm::Lit(plan.electrons)),
+                    ..Default::default()
+                },
+            );
         }
-        let mut view = molecule.aromatic_system_mut(self.system);
-        let system = view.attributes_mut();
-        system.charge = NumForm::Lit(self.charge);
-        system.electrons = ElectronCountsForm::Lit(self.electrons);
+        edits
     }
 }
 
@@ -99,13 +120,11 @@ impl Transformer for DelocalizeCharge {
     type Error = Infallible;
 
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error> {
-        let plans: Vec<DelocalizationPlan> = molecule
-            .aromatic_systems()
-            .ids()
-            .filter_map(|system| DelocalizationPlan::derive(molecule, system))
-            .collect();
-        for plan in plans {
-            plan.apply(molecule);
+        let edits = self.plan_transform(molecule);
+        if !edits.is_empty() {
+            molecule
+                .transact([edits])
+                .expect("charge delocalization plan preserves molecule integrity");
         }
         Ok(())
     }

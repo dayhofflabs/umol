@@ -756,7 +756,7 @@ mod tests {
     ) {
         let mut editor = molecule.edit();
         editor.constraints_mut().push(constraint);
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
 
         assert_eq!(
             ConstraintInvariantsValidator::new(CONFIG).validate(&molecule),
@@ -779,7 +779,7 @@ mod tests {
     ) {
         let mut editor = molecule.edit();
         editor.constraints_mut().push(constraint.clone());
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
 
         assert_eq!(
             ConstraintInvariantsValidator::new(CONFIG).validate(&molecule),
@@ -803,12 +803,12 @@ mod tests {
             .attributes_mut()
             .constraints
             .set(constraint.clone());
-        let inline = inline.build();
+        let inline = inline.finish().unwrap();
         let mut top_level = molecule.edit();
         top_level
             .constraints_mut()
             .push(Constraint::Atom(AtomId(0), constraint));
-        let top_level = top_level.build();
+        let top_level = top_level.finish().unwrap();
         let validator = ConstraintInvariantsValidator::new(CONFIG);
 
         assert_eq!(validator.validate(&inline), validator.validate(&top_level));

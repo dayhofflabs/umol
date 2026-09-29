@@ -25,9 +25,9 @@ pub use hueckel::HueckelAromaticity;
 use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AsLit, AtomId, BondConstraintForm,
-    BondId, BooleanForm, ElectronCountsForm, Molecule, MoleculeApplyError, NumForm, RingConfig,
-    RingId, RingModel, RingSet, RingSetKind,
+    AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AsLit, AtomHandle, AtomId,
+    BondConstraintForm, BondHandle, BondId, BondUpdate, BooleanForm, Edits, ElectronCountsForm,
+    Molecule, MoleculeApplyError, NumForm, RingConfig, RingId, RingModel, RingSet, RingSetKind,
 };
 use umol_utils::solution::Solution;
 
@@ -446,23 +446,24 @@ impl AromaticityPerceiver {
         if systems.is_empty() {
             return;
         }
-        let mut builder = molecule.edit();
-        let new_indices: Vec<AromaticSystemId> = systems
-            .into_iter()
-            .map(|(atoms, system_form)| builder.add_aromatic_system(&atoms, system_form))
-            .collect();
-        *molecule = builder.build();
-
-        let bond_ids: Vec<BondId> = new_indices
-            .iter()
-            .flat_map(|&id| molecule.aromatic_system(id).bond_ids().collect::<Vec<_>>())
-            .collect();
-        for bond_id in bond_ids {
-            let mut bond = molecule.bond_mut(bond_id);
-            bond.attributes_mut()
-                .constraints
-                .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
+        let mut edits = Edits::new();
+        for (atoms, attributes) in systems {
+            let bond_ids = molecule.bonds().induced_ids(&atoms);
+            edits.add_aromatic_system(atoms.into_iter().map(AtomHandle::Id).collect(), attributes);
+            for id in bond_ids {
+                edits.update_bond(
+                    BondHandle::Id(id),
+                    molecule.bond(id).attributes(),
+                    &BondUpdate {
+                        constraints: BondConstraintForm::aromatic(true).into(),
+                        ..Default::default()
+                    },
+                );
+            }
         }
+        molecule
+            .transact([edits])
+            .expect("perceived aromatic systems preserve molecule integrity");
     }
 
     fn ring_request(&self) -> RingModel {
@@ -1078,6 +1079,37 @@ mod tests {
             assert_eq!(molecule.atom(id).attributes().charge, NumForm::Lit(*q));
             assert_eq!(aromatic_valence_lit(&molecule, id), Some(*k));
         }
+    }
+
+    #[rstest]
+    #[case::disjoint_systems(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "2"] [4 5 "1"]]}"#),
+        vec![
+            (vec![AtomId(0), AtomId(1), AtomId(2)], AromaticSystemForm::from_electrons(vec![1, 1, 1])),
+            (vec![AtomId(3), AtomId(4), AtomId(5)], AromaticSystemForm::from_electrons(vec![1, 1, 1])),
+        ],
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "2#a"] [1 2 "1#a"] [2 3 "1"] [3 4 "2#a"] [4 5 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}
+                               {:atoms [3 4 5] :attrs "[1,1,1]"}]}"#),
+    )]
+    fn test_aromaticity_perceiver_add_systems_entries(
+        #[case] mut molecule: Molecule,
+        #[case] systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
+        #[case] expected: Molecule,
+    ) {
+        any_hueckel().add_systems(&mut molecule, systems);
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::empty(Molecule::new())]
+    #[case::populated(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#))]
+    fn test_aromaticity_perceiver_add_systems_identity(#[case] molecule: Molecule) {
+        let mut actual = molecule.clone();
+        any_hueckel().add_systems(&mut actual, Vec::new());
+        assert_eq!(actual, molecule);
     }
 
     #[rstest]

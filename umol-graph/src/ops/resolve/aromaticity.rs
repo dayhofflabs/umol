@@ -1717,7 +1717,7 @@ mod tests {
         *editor
             .aromatic_system_mut(AromaticSystemId(0))
             .attributes_mut() = form.parse().unwrap();
-        let mut molecule = editor.build();
+        let mut molecule = editor.finish().unwrap();
         let original = molecule.clone();
         assert_eq!(
             AromaticityResolver::new(&model).project(&mut molecule),
@@ -1755,7 +1755,7 @@ mod tests {
                 .constraints
                 .set(form);
         }
-        let mut molecule = editor.build();
+        let mut molecule = editor.finish().unwrap();
         let original = molecule.clone();
         assert_eq!(
             AromaticityResolver::new(&model).project(&mut molecule),

@@ -9,7 +9,10 @@
 
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{AtomId, ElementForm, Molecule, NumForm};
+use umol_graph_ir::ir::{
+    AtomHandle, AtomId, BondConstraintForm, BondHandle, BondUpdate, Edits, ElementForm, Molecule,
+    NumForm,
+};
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerceiver,
@@ -44,14 +47,11 @@ impl Aromatizer {
             config,
         }
     }
-}
 
-impl Transformer for Aromatizer {
-    type Error = AromatizeError;
-
-    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AromatizeError> {
+    fn plan_transform(&self, molecule: &Molecule) -> Result<Edits, AromatizeError> {
+        let mut edits = Edits::new();
         if molecule.aromatic_systems().count() > 0 {
-            return Ok(());
+            return Ok(edits);
         }
         let systems = self
             .perception
@@ -59,7 +59,34 @@ impl Transformer for Aromatizer {
                 electrons_from_kekule(molecule, atom)
             })?
             .into_decisive(AromatizeError::Underdetermined)?;
-        self.perception.add_systems(molecule, systems);
+        for (atoms, attributes) in systems {
+            let bond_ids = molecule.bonds().induced_ids(&atoms);
+            edits.add_aromatic_system(atoms.into_iter().map(AtomHandle::Id).collect(), attributes);
+            for id in bond_ids {
+                edits.update_bond(
+                    BondHandle::Id(id),
+                    molecule.bond(id).attributes(),
+                    &BondUpdate {
+                        constraints: BondConstraintForm::aromatic(true).into(),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+        Ok(edits)
+    }
+}
+
+impl Transformer for Aromatizer {
+    type Error = AromatizeError;
+
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AromatizeError> {
+        let edits = self.plan_transform(molecule)?;
+        if !edits.is_empty() {
+            molecule
+                .transact([edits])
+                .expect("aromatization plan preserves molecule integrity");
+        }
         Ok(())
     }
 
@@ -112,8 +139,7 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemId, AtomForm, AtomId, BondConstraintKey, BondForm, Molecule, MoleculeEntries,
-        RingConfig, UnpairedElectronsForm,
+        AtomForm, AtomId, BondForm, Molecule, MoleculeEntries, RingConfig, UnpairedElectronsForm,
     };
     use umol_graph_ir::mol_dsl_concrete;
 
@@ -170,25 +196,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatizer_kekule_benzene_adds_aromatic_system() {
-        let mut molecule = benzene_kekule();
+    #[case::benzene(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2#a"] [1 2 "1#a"] [2 3 "2#a"] [3 4 "1#a"] [4 5 "2#a"] [5 0 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+    )]
+    fn test_aromatizer_transform_into(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
         Aromatizer::new(&AromaticityModel::daylight())
             .transform_into(&mut molecule)
             .unwrap();
-        assert_eq!(molecule.aromatic_systems().count(), 1);
-        let view = molecule.aromatic_system(AromaticSystemId(0));
-        let atoms: Vec<AtomId> = view.atom_ids().collect();
-        assert_eq!(atoms.len(), 6);
-        let aromatic_bond_count = molecule
-            .bonds()
-            .iter()
-            .filter(|view| {
-                view.attributes()
-                    .constraints
-                    .contains(BondConstraintKey::Aromatic)
-            })
-            .count();
-        assert_eq!(aromatic_bond_count, 6);
+        assert_eq!(molecule, expected);
     }
 
     #[rstest]
