@@ -57,7 +57,8 @@ resolve/project and recovering resolve_into/project_into, with shared phase plan
 S7b makes resolver reports opt-in and skips report-only work on ordinary paths.
 S7c moves ingest, MOL parse, and export candidates through consuming resolution
 and projection; ingestion underdetermination has no report payload in Rust or Python.
-S7d is next: migrate Python resolver ownership and explicit report methods.
+S7d implements consuming and borrowed Python resolution; explicit report methods
+return (solution, report), and Solution has no report field. S8a is next.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -77,7 +78,7 @@ reopen S2i or block S2j.
 | Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
 | Molecule-level constraint mutation | Implemented; S2 complete | Molecule::constraints provides reads; the editor exposes &mut Constraints. Python molecule constraint entries and iteration are lazy and read-only. try_modify_constraints is removed. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
-| Python bindings | S5d and S6d complete | Molecule.transact and tracked_transact submit prepared Edits under a borrowed transaction. Molecule edit/apply/tracked_apply consume; editor finish publishes. Owners and views enforce consumption/invalidation. Resolver ownership and reporting changes remain in S7d. |
+| Python bindings | S5d, S6d, and S7d complete | Molecule.transact and tracked_transact submit prepared Edits under a borrowed transaction. Molecule edit/apply/tracked_apply consume; editor finish publishes. Resolution exposes consuming and borrowed methods, with reports returned separately on request. Owners and views enforce consumption/invalidation. |
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
 | Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
@@ -776,12 +777,31 @@ This restriction does not apply to entity-level constraint views or setters.
 | --- | --- | --- |
 | Molecule::edit(self), apply(self, Edits) | Move the molecule; later owner access raises ConsumedError. Owner-backed child access raises InvalidatedViewError. Failed application does not restore the owner. | Current Python Molecule stores a live value directly; edit/apply preserve it. Root access must become fallible before this can change. |
 | Editor::apply(self, Edits), finish(self) | Move the editor, including on failure; return the continuing editor or completed molecule on success. | Current editor already has consumed-state storage. Application clones Edits; change the wrapper to transfer the batch. |
-| Resolver::resolve_into(&mut M) | Mutate that Python molecule on Determined; return the outcome, with no second molecule or default report. Reporting must be requested explicitly. | Current Python resolve copies and returns a molecule and report inside Determined. Its name and result shape would change. |
-| Resolver::resolve(M), project(M, flags) | Consume the Python molecule under the same owner/view invalidation contract as edit/apply; no implicit recovery copy. | Use the same Molecule input-transfer change as edit/apply and the result signatures above. |
+| Resolver::resolve_into(&mut M) | Mutate that Python molecule on Determined; return the outcome, with no second molecule or default report. Reporting must be requested explicitly. | Molecule.resolve_into calls the borrowed Rust operation; resolve_into_with_report returns a separate report. |
+| Resolver::resolve(M) | Consume the Python molecule under the same owner/view invalidation contract as edit/apply; no implicit recovery copy. | Molecule.resolve uses take; resolve_with_report returns a separate report. |
 | Molecule::transact, tracked_transact | Submit prepared Edits, mutate the receiver on success, restore it on failure; tracked_transact returns the whole transaction's correspondence. | Bind the Rust conveniences over Transaction::run. No interactive Python Transaction is exposed. |
 
 These are specific migration obligations, not authorization for a blanket
 Option-based conversion of forms or entries. Doc 228 is unchanged.
+
+Python exposes these resolution methods on Molecule. All retain keyword-only
+chemistry_model=None and resolve_config=None:
+
+| Method | Result | Receiver |
+| --- | --- | --- |
+| resolve | Solution | Consumed on every execution outcome. |
+| resolve_with_report | (Solution, ResolveReport or None) | Consumed on every execution outcome. |
+| resolve_into | Solution | Mutated on Determined; restored on rejection or execution error. |
+| resolve_into_with_report | (Solution, ResolveReport or None) | Mutated on Determined; restored on rejection or execution error. |
+
+Solution has no report field. Its Python constructors are
+Determined(*, molecule=None), Underdetermined(), and
+Contradictory(*, contradiction). Consuming success carries the resulting Molecule;
+borrowed success has molecule=None. The report methods return a report for
+Determined and Underdetermined, and None for Contradictory. Execution failures
+raise RuntimeError with the Rust cause. Reports move into their Python wrappers.
+This separate tuple preserves one outcome vocabulary for all four operations.
+S7d migrates the existing resolution binding; projection remains unexposed in Python.
 
 Python does not expose editor probe. Remove snapshot and tracked_snapshot;
 finish returns the integrity-checked molecule. Rust retains probe for multi-phase
@@ -6544,10 +6564,31 @@ S7a–S7d form one public signature/result migration, returning green at S7d.
   Graph all-feature/all-target strict Clippy, warnings-denied rustdoc, Python 3.13
   extension rebuild, nightly formatting, and diff review pass. Scratch is empty.
 
-- **S7d** (`umol-py::resolve` and boundary adapters; breaking, red→green)
+- **S7d — completed 2026-09-29** (`umol-py::resolve` and boundary adapters; breaking, red→green)
   Mirror the consuming/borrowed names, explicit reporting, and payload-free
   ingestion underdetermination. Test Python ownership, result shapes, and error
   parity. [dep: S6d, S7a, S7b, S7c]
+
+  **Interfaces:** Molecule.resolve and resolve_into return Solution;
+  resolve_with_report and resolve_into_with_report return
+  (Solution, ResolveReport or None). All keep keyword-only chemistry_model=None
+  and resolve_config=None. Solution.Determined(*, molecule=None) retains a
+  Python molecule only for consuming success; Underdetermined() is payload-free;
+  Contradictory(*, contradiction) is unchanged. Solution has no report field.
+  The separate report is None only on Contradictory. No projection binding is added.
+
+  **Implementation and verification:** Each method delegates to its matching
+  Rust operation. Consuming calls use take; borrowed calls advance the accessor
+  counter immediately before execution. Neither clones the molecule. Reports
+  move through ResolveReport::from_rust. Error categories remain unchanged.
+  Tests cover all four methods' result shapes, owner/alias behavior, no-op and
+  rejection invalidation, rollback after earlier changes, argument failures,
+  consumed inputs, report contents, and output integrity. S7c's payload-free
+  ingestion errors remain covered. Python's projection surface is unchanged.
+
+  Validation: 1,647 Rust binding tests pass (2 ignored); 1,901 Python tests pass
+  (2 skipped) under Python 3.13. Strict Clippy, warnings-denied rustdoc, extension
+  rebuild, nightly formatting, and diff review pass. Scratch is empty.
 
 ### S8 — Transformations and remaining operations
 

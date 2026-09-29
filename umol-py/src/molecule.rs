@@ -398,18 +398,16 @@ impl Molecule {
         Ok(Self::from_rust(GraphIrMolecule::combine_all(molecules)))
     }
 
-    /// Resolve under a chemistry model, returning the three-valued solution.
+    /// Consume this molecule and resolve it under the chemistry model.
     ///
-    /// The receiver is never modified; `Determined` carries the resolved copy
-    /// together with the tie-break record, `Underdetermined` the surviving
-    /// per-atom candidate lists, and `Contradictory` the model's rejection.
-    /// `chemistry_model` defaults to `ChemistryModel.default()` — presets are
-    /// reader conventions, and a constructed molecule has no format.
-    /// Resolution fills what is open; validating committed structure under a
-    /// chemistry model is a separate operation.
+    /// Determined carries the resolved molecule. All other outcomes leave the input
+    /// consumed. Existing views are invalidated on every outcome. No report is built.
+    /// The default model is ChemistryModel.default(); resolution completes open fields.
+    ///
+    /// Raises RuntimeError for execution failures and ConsumedError for unavailable input.
     #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
     fn resolve(
-        &self,
+        &mut self,
         py: Python<'_>,
         chemistry_model: Option<ChemistryModel>,
         resolve_config: Option<ResolveConfig>,
@@ -418,21 +416,119 @@ impl Molecule {
             chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
-        let mut molecule = self.to_rust()?.clone();
         let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
-            .resolve_into_with_report(&mut molecule)
+            .resolve(self.take()?)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         Ok(match solution {
-            GraphSolution::Determined(report) => Solution::Determined {
-                molecule: Py::new(py, Self::from_rust(molecule))?,
-                report: ResolveReport::from_rust(&report),
+            GraphSolution::Determined(molecule) => Solution::Determined {
+                molecule: Some(Py::new(py, Self::from_rust(molecule))?),
             },
-            GraphSolution::Underdetermined(report) => Solution::Underdetermined {
-                report: ResolveReport::from_rust(&report),
-            },
+            GraphSolution::Underdetermined(()) => Solution::Underdetermined {},
             GraphSolution::Contradictory(contradiction) => Solution::Contradictory {
                 contradiction: ResolveContradiction::from_rust(contradiction),
             },
+        })
+    }
+
+    /// Consume this molecule and return (solution, report).
+    ///
+    /// Ownership and errors follow resolve. Determined carries the resolved molecule.
+    /// The report is present for Determined and Underdetermined, and None for Contradictory.
+    #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
+    fn resolve_with_report(
+        &mut self,
+        py: Python<'_>,
+        chemistry_model: Option<ChemistryModel>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<(Solution, Option<ResolveReport>)> {
+        let chemistry_model =
+            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
+            .resolve_with_report(self.take()?)
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(match solution {
+            GraphSolution::Determined((molecule, report)) => (
+                Solution::Determined {
+                    molecule: Some(Py::new(py, Self::from_rust(molecule))?),
+                },
+                Some(ResolveReport::from_rust(report)),
+            ),
+            GraphSolution::Underdetermined(report) => (
+                Solution::Underdetermined {},
+                Some(ResolveReport::from_rust(report)),
+            ),
+            GraphSolution::Contradictory(contradiction) => (
+                Solution::Contradictory {
+                    contradiction: ResolveContradiction::from_rust(contradiction),
+                },
+                None,
+            ),
+        })
+    }
+
+    /// Resolve in place, retaining changes only on Determined.
+    ///
+    /// Other outcomes restore the molecule under normalized equality. Existing views
+    /// are invalidated once execution starts, including on rejection or error.
+    /// Determined has molecule=None; no report is built. Defaults and errors follow resolve.
+    #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
+    fn resolve_into(
+        &mut self,
+        chemistry_model: Option<ChemistryModel>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<Solution> {
+        let chemistry_model =
+            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        self.advance_counter()?;
+        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
+            .resolve_into(self.to_rust_mut()?)
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(match solution {
+            GraphSolution::Determined(()) => Solution::Determined { molecule: None },
+            GraphSolution::Underdetermined(()) => Solution::Underdetermined {},
+            GraphSolution::Contradictory(contradiction) => Solution::Contradictory {
+                contradiction: ResolveContradiction::from_rust(contradiction),
+            },
+        })
+    }
+
+    /// Resolve in place and return (solution, report).
+    ///
+    /// Mutation, restoration, invalidation, and errors follow resolve_into.
+    /// The report is present for Determined and Underdetermined, and None for Contradictory.
+    #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
+    fn resolve_into_with_report(
+        &mut self,
+        chemistry_model: Option<ChemistryModel>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<(Solution, Option<ResolveReport>)> {
+        let chemistry_model =
+            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        self.advance_counter()?;
+        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
+            .resolve_into_with_report(self.to_rust_mut()?)
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(match solution {
+            GraphSolution::Determined(report) => (
+                Solution::Determined { molecule: None },
+                Some(ResolveReport::from_rust(report)),
+            ),
+            GraphSolution::Underdetermined(report) => (
+                Solution::Underdetermined {},
+                Some(ResolveReport::from_rust(report)),
+            ),
+            GraphSolution::Contradictory(contradiction) => (
+                Solution::Contradictory {
+                    contradiction: ResolveContradiction::from_rust(contradiction),
+                },
+                None,
+            ),
         })
     }
 
@@ -1886,16 +1982,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_resolve() {
+    fn test_molecule_resolve_with_report() {
         Python::attach(|py| {
-            let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
+            let mut molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
             let model = ChemistryModel::from_rust(&GraphChemistryModel {
                 valence: GraphValenceModel::smiles(),
                 ..GraphChemistryModel::default()
             });
 
-            let solution = molecule
-                .resolve(
+            let (solution, report) = molecule
+                .resolve_with_report(
                     py,
                     Some(model),
                     Some(ResolveConfig::from_rust(GraphResolveConfig {
@@ -1906,8 +2002,7 @@ mod tests {
                 .unwrap();
 
             let Solution::Determined {
-                molecule: resolved,
-                report,
+                molecule: Some(resolved),
             } = solution
             else {
                 panic!("expected Determined");
@@ -1916,18 +2011,18 @@ mod tests {
                 resolved.borrow(py).to_rust().unwrap(),
                 &mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#)
             );
-            assert_eq!(report.tie_breaks(), vec![0]);
-            assert_eq!(
-                molecule.to_rust().unwrap(),
-                &mol_dsl!(r#"{:atoms ["C#c0"]}"#)
-            );
+            assert_eq!(report.unwrap().tie_breaks(), vec![0]);
+            assert!(molecule
+                .to_rust()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
         });
     }
 
     #[rstest]
-    fn test_molecule_resolve_underdetermined() {
+    fn test_molecule_resolve_with_report_underdetermined() {
         Python::attach(|py| {
-            let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
+            let mut molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
             let model = ChemistryModel::from_rust(&GraphChemistryModel {
                 valence: GraphValenceModel::counts(Cow::Borrowed(
                     GraphValenceTable::default_table(),
@@ -1935,54 +2030,91 @@ mod tests {
                 ..GraphChemistryModel::default()
             });
 
-            let solution = molecule.resolve(py, Some(model), None).unwrap();
+            let (solution, report) = molecule.resolve_with_report(py, Some(model), None).unwrap();
 
-            let Solution::Underdetermined { report } = solution else {
+            let Solution::Underdetermined {} = solution else {
                 panic!("expected Underdetermined");
             };
-            assert_eq!(report.unresolved().get(0).unwrap().len(), 5);
             assert_eq!(
-                molecule.to_rust().unwrap(),
-                &mol_dsl!(r#"{:atoms ["C#c0"]}"#)
+                report
+                    .unwrap()
+                    .unresolved()
+                    .get(0)
+                    .unwrap()
+                    .iter()
+                    .map(|form| form.to_rust().to_string())
+                    .collect::<Vec<_>>(),
+                vec![
+                    "C#c0#h0#n2#u0#s#v0#a!",
+                    "C#c0#h#n#u#s2#v0#a!",
+                    "C#c0#h2#n#u0#s#v0#a!",
+                    "C#c0#h3#n0#u#s2#v0#a!",
+                    "C#c0#h4#n0#u0#s#v0#a!",
+                ]
             );
+            assert!(molecule
+                .to_rust()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
         });
     }
 
     #[rstest]
-    fn test_molecule_resolve_contradiction() {
+    fn test_molecule_resolve_with_report_contradiction() {
         Python::attach(|py| {
-            let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#));
+            let mut molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#));
             let model = ChemistryModel::from_rust(&GraphChemistryModel {
                 valence: GraphValenceModel::smiles(),
                 ..GraphChemistryModel::default()
             });
 
-            let solution = molecule.resolve(py, Some(model), None).unwrap();
+            let (solution, report) = molecule.resolve_with_report(py, Some(model), None).unwrap();
 
             let Solution::Contradictory { contradiction } = solution else {
                 panic!("expected Contradictory");
             };
             assert_eq!(contradiction.__str__(), "no matching valence state");
-            assert_eq!(
-                molecule.to_rust().unwrap(),
-                &mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#)
-            );
+            assert_eq!(report, None);
+            assert!(molecule
+                .to_rust()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
         });
     }
 
     #[rstest]
-    fn test_molecule_resolve_default_model() {
+    fn test_molecule_resolve_with_report_default_model() {
         Python::attach(|py| {
-            let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C"]}"#));
+            let mut molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C"]}"#));
 
-            let solution = molecule.resolve(py, None, None).unwrap();
+            let (solution, report) = molecule.resolve_with_report(py, None, None).unwrap();
 
-            let Solution::Underdetermined { report } = solution else {
+            let Solution::Underdetermined {} = solution else {
                 panic!("expected Underdetermined under the default model");
             };
             // The charge-open atom takes the registry's charge-less lookup: every
             // carbon row is a candidate.
-            assert_eq!(report.unresolved().get(0).unwrap().len(), 9);
+            assert_eq!(
+                report
+                    .unwrap()
+                    .unresolved()
+                    .get(0)
+                    .unwrap()
+                    .iter()
+                    .map(|form| form.to_rust().to_string())
+                    .collect::<Vec<_>>(),
+                vec![
+                    "C#c-#h3#n#u0#s#v0#d0#t0#a!#m!",
+                    "C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!",
+                    "C#c0#h3#n0#u#s2#v0#d0#t0#a!#m!",
+                    "C#c0#h2#n0#u2#s3#v0#d0#t0#a!#m!",
+                    "C#c0#h2#n#u0#s#v0#d0#t0#a!#m!",
+                    "C#c0#h#n#u#s2#v0#d0#t0#a!#m!",
+                    "C#c0#h#n0#u3#s4#v0#d0#t0#a!#m!",
+                    "C#c0#h0#n#u2#s3#v0#d0#t0#a!#m!",
+                    "C#c+#h3#n0#u0#s#v0#d0#t0#a!#m!",
+                ]
+            );
         });
     }
 

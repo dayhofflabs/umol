@@ -582,10 +582,14 @@ def _counts_strict_model():
     )
 
 
-def test_molecule_resolve():
+@pytest.mark.parametrize(
+    ("method", "consuming"),
+    [("resolve_with_report", True), ("resolve_into_with_report", False)],
+)
+def test_molecule_resolve_with_report(method, consuming):
     molecule = Molecule.parse('{:atoms ["C#c0"]}')
 
-    solution = molecule.resolve(
+    solution, report = getattr(molecule, method)(
         chemistry_model=_smiles_valence_model(),
         resolve_config=ResolveConfig(
             isotope=IsotopePolicy.Natural,
@@ -595,38 +599,62 @@ def test_molecule_resolve():
     )
 
     assert isinstance(solution, Solution.Determined)
-    assert solution.molecule == Molecule.parse(
-        '{:atoms ["C#i=#c0#h4#n0#u0#s"]}'
-    )
-    assert solution.report.tie_breaks == [0]
-    assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
+    expected = Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
+    if consuming:
+        assert solution.molecule == expected
+    else:
+        assert solution.molecule is None
+        assert molecule == expected
+    assert report.tie_breaks == [0]
+    if consuming:
+        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+            repr(molecule)
 
 
-def test_molecule_resolve_underdetermined():
+def test_molecule_resolve_with_report_underdetermined():
     molecule = Molecule.parse('{:atoms ["C#c0"]}')
 
-    solution = molecule.resolve(chemistry_model=_counts_strict_model())
+    solution, report = molecule.resolve_with_report(chemistry_model=_counts_strict_model())
 
     assert isinstance(solution, Solution.Underdetermined)
-    assert len(solution.report.unresolved.get(0)) == 5
-    assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
+    assert report.unresolved.get(0) == [
+        AtomForm.parse("C#c0#h0#n2#u0#s#v0#a!"),
+        AtomForm.parse("C#c0#h#n#u#s2#v0#a!"),
+        AtomForm.parse("C#c0#h2#n#u0#s#v0#a!"),
+        AtomForm.parse("C#c0#h3#n0#u#s2#v0#a!"),
+        AtomForm.parse("C#c0#h4#n0#u0#s#v0#a!"),
+    ]
+    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+        repr(molecule)
 
 
-def test_molecule_resolve_contradiction():
+def test_molecule_resolve_with_report_contradiction():
     molecule = Molecule.parse('{:atoms ["C#c0#h5"]}')
 
-    solution = molecule.resolve(chemistry_model=_smiles_valence_model())
+    solution, report = molecule.resolve_with_report(chemistry_model=_smiles_valence_model())
 
     assert isinstance(solution, Solution.Contradictory)
     assert str(solution.contradiction) == "no matching valence state"
-    assert molecule == Molecule.parse('{:atoms ["C#c0#h5"]}')
+    assert report is None
+    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+        repr(molecule)
 
 
-def test_molecule_resolve_default_model():
-    solution = Molecule.parse('{:atoms ["C"]}').resolve()
+def test_molecule_resolve_with_report_default_model():
+    solution, report = Molecule.parse('{:atoms ["C"]}').resolve_with_report()
 
     assert isinstance(solution, Solution.Underdetermined)
-    assert len(solution.report.unresolved.get(0)) == 9
+    assert report.unresolved.get(0) == [
+        AtomForm.parse("C#c-#h3#n#u0#s#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h3#n0#u#s2#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h2#n0#u2#s3#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h2#n#u0#s#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h#n#u#s2#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h#n0#u3#s4#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c0#h0#n#u2#s3#v0#d0#t0#a!#m!"),
+        AtomForm.parse("C#c+#h3#n0#u0#s#v0#d0#t0#a!#m!"),
+    ]
 
 
 
