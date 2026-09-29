@@ -1,7 +1,7 @@
 //! Conversion of graph models into external-format boundary values and text.
 //!
 //! [`Convey`] constructs a resolver from the supplied chemistry model and resolve configuration,
-//! projects a private GraphIR copy, and converts it to the output boundary. The boundary's renderer
+//! projects an owned GraphIR molecule, and converts it to the output boundary. The boundary's renderer
 //! then formats its table. [`export_smiles`] and [`export_reaction_smiles`] compose those operations
 //! with the same OpenSMILES, SMILES-valence, and Natural-isotope defaults as ingestion. Their
 //! `_with` variants take `(input, io_config, model, resolve_config)`, matching ingestion.
@@ -214,7 +214,7 @@ impl Convey for Smiles {
         _io_config: &SmilesIoConfig,
     ) -> Result<Self, ConveyError> {
         let resolver = Resolver::with_config(model, *resolve_config);
-        convey_molecule(input, &resolver, iter::empty()).map(Self::from_table_ir)
+        convey_molecule(input.clone(), &resolver, iter::empty()).map(Self::from_table_ir)
     }
 }
 
@@ -225,7 +225,7 @@ impl Convey for ReactionSmiles {
 
     /// Materialize and project both reaction sides, retaining H counts for atom-map labels.
     ///
-    /// Constructs one resolver for both sides and runs all projection stages on private copies.
+    /// Constructs one resolver and runs all projection stages on both materialized sides.
     /// Surviving atom pairs receive one-based labels in the materialized correspondence's order.
     /// Unmatched atoms remain unlabeled. The atom_mapping index is populated alongside the
     /// Atom.class labels.
@@ -257,7 +257,7 @@ impl Convey for ReactionSmiles {
         let labels = 1..=count;
         let resolver = Resolver::with_config(model, *resolve_config);
         let reactants = convey_molecule(
-            &span.lhs(),
+            span.lhs(),
             &resolver,
             pairs
                 .iter()
@@ -266,7 +266,7 @@ impl Convey for ReactionSmiles {
         )
         .map_err(ReactionConveyError::Reactants)?;
         let products = convey_molecule(
-            &span.rhs(),
+            span.rhs(),
             &resolver,
             pairs
                 .iter()
@@ -376,16 +376,15 @@ pub fn export_reaction_smiles_with(
 }
 
 fn convey_molecule(
-    input: &Molecule,
+    input: Molecule,
     resolver: &Resolver<'_>,
     labels: impl Iterator<Item = (AtomId, u32)>,
 ) -> Result<TableMolecule, ConveyError> {
-    let mut projected = input.clone();
-    match resolver.project_into(&mut projected, ProjectFlags::all())? {
-        Solution::Determined(()) => {}
+    let projected = match resolver.project(input, ProjectFlags::all())? {
+        Solution::Determined(molecule) => molecule,
         Solution::Underdetermined(()) => return Err(ConveyError::Underdetermined),
         Solution::Contradictory(error) => return Err(error.into()),
-    }
+    };
     let molecule = &projected;
     let mut table = TableMolecule::empty();
     table.atoms.reserve(molecule.atoms().count());

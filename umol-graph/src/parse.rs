@@ -47,10 +47,10 @@ pub fn parse_mol_bytes_with(
     resolve_config: &ResolveConfig,
 ) -> Result<Molecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
-    let mut molecule: Molecule = (&table_mol).try_into_ir(&())?;
-    match Resolver::with_config(model, *resolve_config).resolve_into_with_report(&mut molecule)? {
-        Solution::Determined(_) => Ok(molecule),
-        Solution::Underdetermined(report) => Err(Box::new(ResolveUnderdetermined { report })),
+    let molecule: Molecule = (&table_mol).try_into_ir(&())?;
+    match Resolver::with_config(model, *resolve_config).resolve(molecule)? {
+        Solution::Determined(molecule) => Ok(molecule),
+        Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),
         Solution::Contradictory(c) => Err(Box::new(c)),
     }
 }
@@ -71,7 +71,8 @@ mod tests {
         RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
     };
     use crate::ops::resolve::{
-        AromaticityResolveConfig, ResolveConfig, Resolver, StereoResolveConfig,
+        AromaticityResolveConfig, ResolveConfig, ResolveUnderdetermined, Resolver,
+        StereoResolveConfig,
     };
     use crate::ops::valence::ValenceTable;
     use crate::ops::validate::ConnectivityModel;
@@ -155,6 +156,27 @@ mod tests {
             parse_mol_bytes_with(METHANE_MOL.as_bytes(), &io_config, &model, &resolve_config)
                 .unwrap();
         assert_eq!(molecule.atom(AtomId(0)).attributes().to_string(), expected);
+        assert_eq!(molecule.clone().edit().finish(), Ok(molecule));
+    }
+
+    #[rstest]
+    #[case::counts(METHANE_MOL)]
+    fn test_parse_mol_bytes_with_underdetermined(#[case] input: &str) {
+        let model = ChemistryModel {
+            valence: ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+            ..ChemistryModel::default()
+        };
+        let error = parse_mol_bytes_with(
+            input.as_bytes(),
+            &CtfileIoConfig::basic(),
+            &model,
+            &ResolveConfig::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.as_any().downcast_ref::<ResolveUnderdetermined>(),
+            Some(&ResolveUnderdetermined)
+        );
     }
 
     #[rstest]
@@ -199,5 +221,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             expected
         );
+        assert_eq!(molecule.clone().edit().finish(), Ok(molecule));
     }
 }

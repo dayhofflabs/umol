@@ -565,20 +565,41 @@ def test_resolve_config_mutation(field, value):
         setattr(config, field, value)
 
 
-def test_underdetermined_error_report():
+@pytest.mark.parametrize(
+    ("source", "valence"),
+    [
+        ("C", ValenceModel.counts(ValenceTable.default())),
+        ("*", ValenceModel.smiles()),
+    ],
+)
+def test_molecule_from_smiles_underdetermined(source, valence):
+    default = ChemistryModel.default()
+    model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=valence,
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
     with pytest.raises(UnderdeterminedError) as excinfo:
-        Molecule.from_smiles(
-            "C",
-            chemistry_model=ChemistryModel(
-                connectivity=ChemistryModel.default().connectivity,
-                valence=ValenceModel.counts(ValenceTable.default()),
-                aromaticity=ChemistryModel.default().aromaticity,
-                stereo=ChemistryModel.default().stereo,
-            ),
-        )
+        Molecule.from_smiles(source, chemistry_model=model)
 
     assert str(excinfo.value) == "resolution underdetermined"
-    report = excinfo.value.report
+    assert not hasattr(excinfo.value, "report")
+
+
+def test_molecule_resolve_report():
+    source = Molecule.parse('{:atoms ["C#i=#c0#u0#s#v0#a!"]}')
+    default = ChemistryModel.default()
+    result = source.resolve(
+        chemistry_model=ChemistryModel(
+            connectivity=default.connectivity,
+            valence=ValenceModel.counts(ValenceTable.default()),
+            aromaticity=default.aromaticity,
+            stereo=default.stereo,
+        ),
+    )
+    assert isinstance(result, Solution.Underdetermined)
+    report = result.report
     assert isinstance(report, ResolveReport)
     assert report.tie_breaks == []
     completions = report.unresolved
@@ -608,11 +629,17 @@ def test_underdetermined_error_report():
     )
 
 
-def test_underdetermined_error_report_empty():
-    with pytest.raises(UnderdeterminedError) as excinfo:
-        Molecule.from_smiles("*")
-
-    report = excinfo.value.report
+def test_molecule_resolve_report_empty():
+    source = Molecule.parse('{:atoms ["C#c0#h4"]}')
+    result = source.resolve(
+        resolve_config=ResolveConfig(
+            isotope=IsotopePolicy.Strict,
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(),
+        )
+    )
+    assert isinstance(result, Solution.Underdetermined)
+    report = result.report
     assert report.unresolved.is_empty()
     assert len(report.unresolved) == 0
     assert report.unresolved.items() == []

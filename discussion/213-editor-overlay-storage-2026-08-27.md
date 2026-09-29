@@ -55,7 +55,9 @@ caller migration. S6d1–S6d3 complete Python Molecule consumption, fallible own
 access, and editor finish; the S6 workspace gate passes. S7a implements consuming
 resolve/project and recovering resolve_into/project_into, with shared phase plans.
 S7b makes resolver reports opt-in and skips report-only work on ordinary paths.
-S7c is next: migrate owned ingest/parse candidates and boundary diagnostics.
+S7c moves ingest, MOL parse, and export candidates through consuming resolution
+and projection; ingestion underdetermination has no report payload in Rust or Python.
+S7d is next: migrate Python resolver ownership and explicit report methods.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -360,16 +362,13 @@ do not clone unresolved alternatives or collect/sort tie-break records merely to
 discard them. All resolution entry points share the chemistry routines and retain
 the same phase order and acceptance conditions.
 
-Current [ingest](../umol-graph/src/ingest.rs) and
-[MOL parse](../umol-graph/src/parse.rs) place ResolveReport in their
-ResolveUnderdetermined errors. In the redesign, these boundaries use ordinary
-report-free consuming resolution. They return a molecule only when determined;
+[Ingest](../umol-graph/src/ingest.rs) and
+[MOL parse](../umol-graph/src/parse.rs) use ordinary report-free consuming
+resolution. They return a molecule only when determined;
 underdetermination drops the candidate and returns a payload-free
 ResolveUnderdetermined. Contradiction and execution failures retain their causes.
 Python ingestion likewise raises UnderdeterminedError without a report attribute.
 Explicit resolver reporting remains available to callers that request it.
-The current ingestion tests asserting report contents and the Python exception
-adapter must change with this contract.
 
 resolve_into, project_into, and transform_into update the caller's molecule on
 success and restore it on rejection. No recovery copy is required. Ingest, parse,
@@ -385,7 +384,7 @@ without a recovery journal.
 | Public standalone resolve_into(&mut M) | Plan first; apply an accepted plan in one transaction, then commit. | Keep each resolver's existing Solution policy; rejection preserves the original molecule. | One final integrity gate; undo retained until acceptance, then discarded; no recovery copy. |
 | Public project_into(&mut M, flags) | One transaction; plan each stage against the preceding stage's result. | Only complete Determined commits. | No outer candidate copy or nested stage journals. Probes before later planning and one commit gate. |
 | Ingest and MOL parse | Pass the freshly raised M to report-free consuming resolution. | Finish, then accept only a concrete M. Underdetermination becomes a payload-free boundary error; contradiction and execution errors retain their causes. Rejected owned state is dropped. | No recovery clone, journal, or report construction; three probes plus finish. Raise's construction check remains. |
-| Export/convey | Clone the retained source once; pass the candidate to consuming project; lower the result. | Return boundary representation; any failure drops the candidate. | One source-preserving candidate, with COW on changed tables. No further recovery copy or journal. |
+| Export/convey | Clone the retained molecule once; move materialized reaction sides directly into consuming project; lower the result. | Return boundary representation; any failure drops the candidate. | One source-preserving molecular candidate; reaction sides require no additional clone. No recovery copy or journal. |
 | Transformer::transform_into | One transaction around the operation's batch/checks. | Existing success/error contract; receiver restored on rejection. | Undo instead of recovery copies. DelocalizeCharge keeps Infallible as described below. |
 | Built-in transform(M) | Pass the input to the owning editor; finish after the operation. | Return the transformed molecule; failure drops the owned state. | No implicit candidate copy or recovery journal. |
 | transform_iter(&M) | Create source-preserving candidates on demand; owning editor and finish for each. | Independent outputs; retain the current empty iterator on failure. | Copies for independent candidates, no recovery journal or required iterator box. |
@@ -6510,8 +6509,8 @@ S7a–S7d form one public signature/result migration, returning green at S7d.
   **Implementation and verification:** All four composite resolution methods are
   implemented. Ordinary paths skip report construction, tie-break collection and
   sorting, and the aromatic comparison used only to identify tie-break uses.
-  Report methods preserve existing payloads and rejection order. Ingest, parse,
-  and Python callers explicitly request their existing reports until S7c/S7d.
+  Report methods preserve existing payloads and rejection order. Boundary and
+  Python caller migrations are recorded in S7c/S7d.
   The selector and its exhaustive reference use completion terminology consistently.
 
   Validation: 1,983 graph unit tests, 683 resolution conformance cases, and 14
@@ -6523,11 +6522,28 @@ S7a–S7d form one public signature/result migration, returning green at S7d.
   affected Python binding tests under Python 3.13, nightly formatting, and diff
   review pass. Scratch is empty.
 
-- **S7c** (`umol-graph::ingest`, `parse`, `export`, `umol-io` boundaries; breaking,
+- **S7c — completed 2026-09-29** (`umol-graph::ingest`, `parse`, `export`, `umol-io` boundaries; breaking,
   green at S7d) Pass owned ingest/parse candidates to report-free resolution; keep
   one intentional source copy for export projection. Remove report payloads from
   default underdetermination errors. Test boundary diagnostics and output
   integrity. [dep: S7a, S7b]
+
+  **Implementation and verification:** Ingest and MOL parse pass their raised
+  molecule to resolve. ResolveUnderdetermined is a unit error; Python ingestion
+  raises UnderdeterminedError without a report attribute. Existing report-accessor
+  assertions now exercise explicit resolution. convey_molecule takes Molecule by
+  value and calls project: Smiles::convey clones its borrowed input once;
+  ReactionSmiles::convey moves the materialized sides without another clone.
+  These routes keep raising and publication integrity checks and use no recovery
+  journal. umol-io's checked raising path needs no change.
+
+  Validation: 1,987 graph unit tests, 157 projection/export property cases,
+  34 Python exception-binding tests, and 63 selected Python boundary/report tests
+  pass. Cases cover payload-free errors on either reaction side, MOL
+  underdetermination, output integrity, source preservation, and roundtrips.
+  Graph all-feature/all-target strict Clippy, warnings-denied rustdoc, Python 3.13
+  extension rebuild, nightly formatting, and diff review pass. Scratch is empty.
+
 - **S7d** (`umol-py::resolve` and boundary adapters; breaking, red→green)
   Mirror the consuming/borrowed names, explicit reporting, and payload-free
   ingestion underdetermination. Test Python ownership, result shapes, and error

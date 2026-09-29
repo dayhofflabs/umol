@@ -257,12 +257,10 @@ impl UmolError for ProjectContradiction {
 
 /// Resolution left the molecule underdetermined (no contradiction, but not
 /// concrete). Surfaced as an error only at boundaries that require a
-/// determined result; carries the report for inspection.
+/// determined result.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Error)]
 #[error("resolution underdetermined")]
-pub struct ResolveUnderdetermined {
-    pub report: ResolveReport,
-}
+pub struct ResolveUnderdetermined;
 
 impl UmolError for ResolveUnderdetermined {
     fn as_any(&self) -> &dyn Any {
