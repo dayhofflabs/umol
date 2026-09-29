@@ -120,7 +120,7 @@ impl Molecule {
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<Self> {
-        self.to_rust()
+        self.to_rust()?
             .clone()
             .canonicalize(&canonicalize_context(stereo_model, config))
             .map(Self::from_rust)
@@ -138,7 +138,7 @@ impl Molecule {
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<(Self, MoleculeRemapping)> {
-        self.to_rust()
+        self.to_rust()?
             .clone()
             .tracked_canonicalize(&canonicalize_context(stereo_model, config))
             .map(|(canonical, remapping)| {
@@ -157,9 +157,11 @@ impl Molecule {
         other: &Self,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
-    ) -> bool {
-        self.to_rust()
-            .canonical_eq(other.to_rust(), &canonicalize_context(stereo_model, config))
+    ) -> PyResult<bool> {
+        Ok(self.to_rust()?.canonical_eq(
+            other.to_rust()?,
+            &canonicalize_context(stereo_model, config),
+        ))
     }
 }
 

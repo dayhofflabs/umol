@@ -17,6 +17,7 @@ from umol import (
     CommonSubgraphEnumerationAlgorithm,
     Correspondence,
     ContradictionError,
+    ConsumedError,
     Delta,
     Deltas,
     Element,
@@ -315,6 +316,28 @@ def test_reaction_components():
     assert reaction.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]
     )
+
+
+def test_reaction_lhs_consumption():
+    reaction = Reaction(lhs=Molecule.parse('{:atoms ["C"]}'))
+    lhs = reaction.lhs
+    expected = lhs.copy()
+    molecule = lhs.edit().finish()
+
+    assert reaction.lhs is lhs
+    assert molecule == expected
+    for access in (
+        lambda: repr(reaction),
+        lambda: reaction.render(),
+        lambda: reaction == reaction,
+        lambda: reaction.apply(Molecule()),
+        lambda: Reaction(lhs=lhs),
+    ):
+        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+            access()
+
+    reaction.lhs = molecule
+    assert reaction == Reaction(lhs=expected)
 
 
 def test_reaction_component_replacement():

@@ -512,7 +512,7 @@ impl AromaticSystemConstraintsView {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
                 let view = molecule
-                    .to_rust()
+                    .to_rust()?
                     .aromatic_systems()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
@@ -535,10 +535,10 @@ impl AromaticSystemConstraintsView {
             AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
-                if !molecule.to_rust().aromatic_systems().contains(*id) {
+                if !molecule.to_rust()?.aromatic_systems().contains(*id) {
                     return Err(PyIndexError::new_err("aromatic system id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().aromatic_system_mut(*id);
+                let mut view = molecule.to_rust_mut()?.aromatic_system_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 cs.set(constraint);
                 Ok(())
@@ -562,10 +562,10 @@ impl AromaticSystemConstraintsView {
             AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
-                if !molecule.to_rust().aromatic_systems().contains(*id) {
+                if !molecule.to_rust()?.aromatic_systems().contains(*id) {
                     return Err(PyIndexError::new_err("aromatic system id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().aromatic_system_mut(*id);
+                let mut view = molecule.to_rust_mut()?.aromatic_system_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
@@ -635,10 +635,10 @@ impl AromaticSystemConstraintsView {
             AromaticSystemConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AromaticSystemConstraintsView))?;
-                if !molecule.to_rust().aromatic_systems().contains(*id) {
+                if !molecule.to_rust()?.aromatic_systems().contains(*id) {
                     return Err(PyIndexError::new_err("aromatic system id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().aromatic_system_mut(*id);
+                let mut view = molecule.to_rust_mut()?.aromatic_system_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 resolved.apply(cs);
                 Ok(())

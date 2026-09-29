@@ -166,48 +166,42 @@ def replacement_case(request):
     )
 
 
-def test_molecule_editor_tracked_snapshot_and_build():
+def test_molecule_editor_finish():
     molecule = Molecule.parse('{:atoms ["N#h3"]}')
+    expected = molecule.copy()
     editor = molecule.edit()
 
-    snapshot, correspondence = editor.tracked_snapshot()
-
-    assert snapshot == editor.snapshot() == molecule
-    assert correspondence.atoms == Correspondence([(0, 0)], 1, 1)
-
-    plain = molecule.edit().build()
-    tracked, correspondence = molecule.edit().tracked_build()
-
-    assert tracked == plain
-    assert correspondence.atoms == Correspondence([(0, 0)], 1, 1)
+    assert editor.finish() == expected
+    with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+        str(molecule)
 
 
-@pytest.mark.parametrize("method", ["build", "tracked_build", "apply", "tracked_apply"])
+@pytest.mark.parametrize("method", ["finish", "apply", "tracked_apply"])
 def test_molecule_editor_consumed(method):
     molecule = Molecule.parse('{:atoms ["C"]}')
+    expected = molecule.copy()
     editor = molecule.edit()
     alias = editor
     if method in ("apply", "tracked_apply"):
         result = getattr(editor, method)(Edits())
         if method == "tracked_apply":
             result = result[0]
-        assert result.build() == molecule
+        assert result.finish() == expected
     else:
-        result = getattr(editor, method)()
-        assert (result[0] if method == "tracked_build" else result) == molecule
+        assert editor.finish() == expected
 
     with pytest.raises(ConsumedError, match="^MoleculeEditor has been consumed$") as error:
-        alias.snapshot()
+        alias.finish()
     assert type(error.value) is ConsumedError
 
 
 def test_molecule_editor_tracked_apply():
     molecule = Molecule.parse('{:atoms ["N#h3"]}')
-
+    copied = molecule.copy()
     plain = molecule.edit().apply(add_carbon_edits())
-    tracked, correspondence = molecule.edit().tracked_apply(add_carbon_edits())
+    tracked, correspondence = copied.edit().tracked_apply(add_carbon_edits())
 
-    assert tracked.build() == plain.build()
+    assert tracked.finish() == plain.finish()
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
 
 
@@ -486,18 +480,12 @@ def test_molecule_editor_remove_topology():
         [AtomForm(Element("C")), AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(1)), (1, 2, BondForm(1))],
     )
-    plain = molecule.edit()
-    tracked = molecule.edit()
+    editor = molecule.edit()
+    editor.remove_topology([1], [])
 
-    plain.remove_topology([1], [])
-    tracked.remove_topology([1], [])
-    result, correspondence = tracked.tracked_build()
-
-    assert result == plain.build() == Molecule.from_entries(
+    assert editor.finish() == Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
-    assert correspondence.atoms == Correspondence([(0, 0), (2, 1)], 3, 2)
-    assert correspondence.bonds == Correspondence([], 2, 0)
 
 
 @pytest.mark.parametrize(
@@ -512,15 +500,18 @@ def test_molecule_editor_remove_topology():
     ],
 )
 def test_molecule_editor_remove_entity_family(method, field):
-    plain = rich_molecule().edit()
-    tracked = rich_molecule().edit()
+    molecule = rich_molecule()
+    fields = (
+        "atoms", "bonds", "dative_bonds", "aromatic_systems", "multicenter_bonds",
+        "noncovalent_bonds", "stereo_atoms", "stereo_bonds",
+    )
+    expected = {name: [view.asdict() for view in getattr(molecule, name)] for name in fields}
+    expected[field] = []
+    editor = molecule.edit()
+    getattr(editor, method)([0])
+    result = editor.finish()
 
-    getattr(plain, method)([0])
-    getattr(tracked, method)([0])
-    result, correspondence = tracked.tracked_build()
-
-    assert result == plain.build()
-    assert getattr(correspondence, field) == Correspondence([], 1, 0)
+    assert {name: [view.asdict() for view in getattr(result, name)] for name in fields} == expected
 
 
 @pytest.mark.parametrize(
@@ -542,4 +533,4 @@ def test_molecule_editor_remove_error(method, arguments, message):
     with pytest.raises(IndexError, match=f"^{message}$"):
         getattr(editor, method)(*arguments)
 
-    assert editor.snapshot() == rich_molecule()
+    assert editor.finish() == rich_molecule()

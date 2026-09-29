@@ -358,7 +358,7 @@ def test_edits_consumption(receiver, method):
     if method == "tracked_apply":
         result = result[0]
     if receiver == "editor":
-        result = result.build()
+        result = result.finish()
 
     assert result == Molecule.parse('{:atoms ["C"]}')
     with pytest.raises(ConsumedError, match="^Edits has been consumed$"):

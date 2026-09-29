@@ -9,6 +9,8 @@ from umol import (
     AtomCompletions,
     AtomForm,
     ChemistryModel,
+    ConsumedError,
+    NumForm,
     IsotopePolicy,
     Molecule,
     ResolveConfig,
@@ -671,3 +673,33 @@ def test_molecule_resolve_isotope(isotope):
         assert result.report.unresolved.items() == []
         assert result.report.tie_breaks == []
     assert source == original
+
+
+def test_solution_molecule():
+    source = Molecule.from_smiles("C")
+    result = source.resolve()
+    molecule = result.molecule
+    copied = molecule.copy()
+    same = Solution.Determined(molecule=molecule, report=result.report)
+    independent = Solution.Determined(molecule=copied, report=result.report)
+
+    assert result.molecule is molecule
+    assert same.molecule is molecule
+    assert result == independent
+    molecule.atoms[0].charge = 1
+    assert result.molecule.atoms[0].charge == NumForm.Lit(1)
+    assert same == result
+    assert independent != result
+    assert independent.molecule == source
+
+    published = molecule.edit().finish()
+    assert published.atoms[0].charge == NumForm.Lit(1)
+    assert result.molecule is molecule
+    for access in (
+        lambda: molecule.atoms, lambda: same.molecule.atoms,
+        lambda: repr(result), lambda: result == independent,
+        lambda: independent == result,
+    ):
+        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+            access()
+    assert copied == source

@@ -5,9 +5,11 @@ from umol import (
     AtomForm,
     BondForm,
     DativeBondForm,
+    Edit,
     Edits,
     Element,
     InvalidatedViewError,
+    TransactionError,
     Molecule,
     MulticenterBondForm,
     NoncovalentBondForm,
@@ -74,7 +76,10 @@ def entity(request):
     return request.param
 
 
-@pytest.mark.parametrize("operation", ["combine_empty", "combine_nonempty", "transact", "tracked_transact"])
+@pytest.mark.parametrize("operation", [
+    "combine_empty", "combine_nonempty", "transact", "tracked_transact",
+    "edit", "apply", "tracked_apply", "apply_error",
+])
 def test_molecule_view_invalidation(molecule, entity, operation):
     name, field, form = entity
     collection = getattr(molecule, name)
@@ -90,6 +95,14 @@ def test_molecule_view_invalidation(molecule, entity, operation):
 
     if operation.startswith("combine"):
         molecule.combine_from(molecule if operation == "combine_nonempty" else Molecule())
+    elif operation == "edit":
+        molecule = molecule.edit().finish()
+    elif operation in ("apply", "tracked_apply"):
+        result = getattr(molecule, operation)(Edits())
+        molecule = result[0] if operation == "tracked_apply" else result
+    elif operation == "apply_error":
+        with pytest.raises(TransactionError, match="^atom handle 8 is out of range for 5 entries$"):
+            molecule.apply(Edits([Edit.RemoveTopology(atoms=[8], bonds=[])]))
     else:
         getattr(molecule, operation)([Edits()])
 
@@ -123,6 +136,10 @@ def test_molecule_view_invalidation(molecule, entity, operation):
     if not name.startswith("stereo_"):
         with pytest.raises(InvalidatedViewError):
             constraints.asdict()
+
+    assert copied == saved[field]
+    if operation == "apply_error":
+        return
 
     fresh = getattr(molecule, name)
     assert len(fresh) == count * (2 if operation == "combine_nonempty" else 1)
@@ -174,14 +191,17 @@ def test_molecule_combine_from_argument_error(molecule, entity):
     "atoms", "bonds", "dative_bonds", "aromatic_systems",
     "multicenter_bonds", "noncovalent_bonds", "stereo_atoms", "stereo_bonds",
 ])
-@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact"])
+@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact", "edit"])
 def test_molecule_view_empty_iterator(name, method):
     molecule = Molecule()
     collection = getattr(molecule, name)
     iterator = iter(collection)
     assert next(iterator, None) is None
 
-    getattr(molecule, method)(Molecule() if method == "combine_from" else [])
+    if method == "edit":
+        molecule = molecule.edit().finish()
+    else:
+        getattr(molecule, method)(Molecule() if method == "combine_from" else [])
 
     with pytest.raises(InvalidatedViewError):
         next(iterator, None)
@@ -191,7 +211,7 @@ def test_molecule_view_empty_iterator(name, method):
 
 
 @pytest.mark.parametrize("name", ["atoms", "bonds", "dative_bonds"])
-@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact"])
+@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact", "edit"])
 def test_molecule_view_ring_size_invalidation(molecule, name, method):
     view = getattr(molecule, name)[0]
     constraints = view.constraints
@@ -203,7 +223,10 @@ def test_molecule_view_ring_size_invalidation(molecule, name, method):
     assert sizes[6] == NumForm.Lit(1)
     assert view.constraints.ring_size_count[6] == NumForm.Lit(1)
 
-    getattr(molecule, method)(Molecule() if method == "combine_from" else [])
+    if method == "edit":
+        molecule = molecule.edit().finish()
+    else:
+        getattr(molecule, method)(Molecule() if method == "combine_from" else [])
 
     for access in (
         lambda: constraints.ring_size_count,

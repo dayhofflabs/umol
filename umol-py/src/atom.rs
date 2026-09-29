@@ -705,7 +705,7 @@ impl AtomView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         Ok(ElementForm::from_rust(
-            &self.atom(molecule.to_rust())?.element,
+            &self.atom(molecule.to_rust()?)?.element,
         ))
     }
 
@@ -715,7 +715,7 @@ impl AtomView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .atom_mut(self.id)
             .attributes_mut()
             .element = value;
@@ -727,7 +727,7 @@ impl AtomView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         Ok(IsotopeMassForm::from_rust(
-            &self.atom(molecule.to_rust())?.isotope_mass,
+            &self.atom(molecule.to_rust()?)?.isotope_mass,
         ))
     }
 
@@ -737,7 +737,7 @@ impl AtomView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .atom_mut(self.id)
             .attributes_mut()
             .isotope_mass = value;
@@ -748,7 +748,7 @@ impl AtomView {
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
-        NumForm::from_rust(py, &self.atom(molecule.to_rust())?.charge)
+        NumForm::from_rust(py, &self.atom(molecule.to_rust()?)?.charge)
     }
 
     #[setter]
@@ -757,7 +757,7 @@ impl AtomView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .atom_mut(self.id)
             .attributes_mut()
             .charge = value;
@@ -768,7 +768,7 @@ impl AtomView {
     fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
-        NumForm::from_rust(py, &self.atom(molecule.to_rust())?.implicit_hydrogens)
+        NumForm::from_rust(py, &self.atom(molecule.to_rust()?)?.implicit_hydrogens)
     }
 
     #[setter]
@@ -777,7 +777,7 @@ impl AtomView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .atom_mut(self.id)
             .attributes_mut()
             .implicit_hydrogens = value;
@@ -788,7 +788,7 @@ impl AtomView {
     fn lone_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
-        NumForm::from_rust(py, &self.atom(molecule.to_rust())?.lone_pairs)
+        NumForm::from_rust(py, &self.atom(molecule.to_rust()?)?.lone_pairs)
     }
 
     #[setter]
@@ -797,7 +797,7 @@ impl AtomView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .atom_mut(self.id)
             .attributes_mut()
             .lone_pairs = value;
@@ -808,7 +808,7 @@ impl AtomView {
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
-        UnpairedElectronsForm::from_rust(py, &self.atom(molecule.to_rust())?.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.atom(molecule.to_rust()?)?.unpaired_electrons)
     }
 
     #[setter]
@@ -821,7 +821,7 @@ impl AtomView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .atom_mut(self.id)
             .attributes_mut()
             .unpaired_electrons = value;
@@ -851,7 +851,7 @@ impl AtomView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .atom_mut(self.id)
             .attributes_mut()
             .constraints = value;
@@ -863,7 +863,7 @@ impl AtomView {
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
-        let atom = self.atom(molecule.to_rust())?;
+        let atom = self.atom(molecule.to_rust()?)?;
         let dict = PyDict::new(py);
         dict.set_item("element", ElementForm::from_rust(&atom.element))?;
         dict.set_item(
@@ -921,7 +921,7 @@ impl AtomViews {
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomViews))?;
-        Ok(molecule.to_rust().atoms().count())
+        Ok(molecule.to_rust()?.atoms().count())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -929,14 +929,14 @@ impl AtomViews {
         molecule.check_access(self.counter, stringify!(AtomViews))?;
         Ok(format!(
             "AtomViews(len={})",
-            molecule.to_rust().atoms().count()
+            molecule.to_rust()?.atoms().count()
         ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<AtomView> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomViews))?;
-        let id = resolve_atom_index(molecule.to_rust(), index)?;
+        let id = resolve_atom_index(molecule.to_rust()?, index)?;
         Ok(AtomView {
             owner: self.owner.clone_ref(py),
             counter: self.counter,
@@ -948,15 +948,15 @@ impl AtomViews {
     fn __setitem__(&self, py: Python<'_>, index: isize, atom: PyRef<'_, AtomForm>) -> PyResult<()> {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(AtomViews))?;
-        let id = resolve_atom_index(molecule.to_rust(), index)?;
-        *molecule.to_rust_mut().atom_mut(id).attributes_mut() = atom.to_rust().clone();
+        let id = resolve_atom_index(molecule.to_rust()?, index)?;
+        *molecule.to_rust_mut()?.atom_mut(id).attributes_mut() = atom.to_rust().clone();
         Ok(())
     }
 
     fn __iter__(&self, py: Python<'_>) -> PyResult<AtomViewIter> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomViews))?;
-        let ids = molecule.to_rust().atoms().ids().collect::<Vec<_>>();
+        let ids = molecule.to_rust()?.atoms().ids().collect::<Vec<_>>();
         Ok(AtomViewIter {
             owner: self.owner.clone_ref(py),
             counter: self.counter,

@@ -1179,7 +1179,7 @@ impl AtomConstraintsView {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
                 let view = molecule
-                    .to_rust()
+                    .to_rust()?
                     .atoms()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
@@ -1202,10 +1202,10 @@ impl AtomConstraintsView {
             AtomConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
-                if !molecule.to_rust().atoms().contains(*id) {
+                if !molecule.to_rust()?.atoms().contains(*id) {
                     return Err(PyIndexError::new_err("atom id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().atom_mut(*id);
+                let mut view = molecule.to_rust_mut()?.atom_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 cs.set(constraint);
                 Ok(())
@@ -1229,10 +1229,10 @@ impl AtomConstraintsView {
             AtomConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
-                if !molecule.to_rust().atoms().contains(*id) {
+                if !molecule.to_rust()?.atoms().contains(*id) {
                     return Err(PyIndexError::new_err("atom id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().atom_mut(*id);
+                let mut view = molecule.to_rust_mut()?.atom_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
@@ -1294,10 +1294,10 @@ impl AtomConstraintsView {
             AtomConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
-                if !molecule.to_rust().atoms().contains(*id) {
+                if !molecule.to_rust()?.atoms().contains(*id) {
                     return Err(PyIndexError::new_err("atom id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().atom_mut(*id);
+                let mut view = molecule.to_rust_mut()?.atom_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 resolved.apply(cs);
                 Ok(())
@@ -1685,7 +1685,7 @@ impl AtomRingSizeCounts {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(AtomRingSizeCounts))?;
                 let view = molecule
-                    .to_rust()
+                    .to_rust()?
                     .atoms()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
@@ -1707,7 +1707,7 @@ impl AtomRingSizeCounts {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(AtomRingSizeCounts))?;
                 f(&mut molecule
-                    .to_rust_mut()
+                    .to_rust_mut()?
                     .atom_mut(*id)
                     .attributes_mut()
                     .constraints);

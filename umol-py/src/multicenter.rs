@@ -352,7 +352,7 @@ impl MulticenterBondView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         let atom_ids: Vec<u32> = self
-            .multicenter_bond(molecule.to_rust())?
+            .multicenter_bond(molecule.to_rust()?)?
             .atom_ids()
             .map(|atom| atom.0)
             .collect();
@@ -372,7 +372,7 @@ impl MulticenterBondView {
         molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
         Ok(ElectronCountsForm::from_rust(
             &self
-                .multicenter_bond(molecule.to_rust())?
+                .multicenter_bond(molecule.to_rust()?)?
                 .attributes()
                 .electrons,
         ))
@@ -383,11 +383,11 @@ impl MulticenterBondView {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
-        if !molecule.to_rust().multicenter_bonds().contains(self.id) {
+        if !molecule.to_rust()?.multicenter_bonds().contains(self.id) {
             return Err(PyIndexError::new_err("multicenter bond id out of range"));
         }
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .multicenter_bond_mut(self.id)
             .attributes_mut()
             .electrons = value;
@@ -401,7 +401,7 @@ impl MulticenterBondView {
         NumForm::from_rust(
             py,
             &self
-                .multicenter_bond(molecule.to_rust())?
+                .multicenter_bond(molecule.to_rust()?)?
                 .attributes()
                 .charge,
         )
@@ -412,11 +412,11 @@ impl MulticenterBondView {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
-        if !molecule.to_rust().multicenter_bonds().contains(self.id) {
+        if !molecule.to_rust()?.multicenter_bonds().contains(self.id) {
             return Err(PyIndexError::new_err("multicenter bond id out of range"));
         }
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .multicenter_bond_mut(self.id)
             .attributes_mut()
             .charge = value;
@@ -430,7 +430,7 @@ impl MulticenterBondView {
         UnpairedElectronsForm::from_rust(
             py,
             &self
-                .multicenter_bond(molecule.to_rust())?
+                .multicenter_bond(molecule.to_rust()?)?
                 .attributes()
                 .unpaired_electrons,
         )
@@ -445,11 +445,11 @@ impl MulticenterBondView {
         let value = value.to_rust(py);
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
-        if !molecule.to_rust().multicenter_bonds().contains(self.id) {
+        if !molecule.to_rust()?.multicenter_bonds().contains(self.id) {
             return Err(PyIndexError::new_err("multicenter bond id out of range"));
         }
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .multicenter_bond_mut(self.id)
             .attributes_mut()
             .unpaired_electrons = value;
@@ -482,11 +482,11 @@ impl MulticenterBondView {
         let value = value.to_rust(py)?;
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
-        if !molecule.to_rust().multicenter_bonds().contains(self.id) {
+        if !molecule.to_rust()?.multicenter_bonds().contains(self.id) {
             return Err(PyIndexError::new_err("multicenter bond id out of range"));
         }
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .multicenter_bond_mut(self.id)
             .attributes_mut()
             .constraints = value;
@@ -498,7 +498,7 @@ impl MulticenterBondView {
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondView))?;
-        let bond = self.multicenter_bond(molecule.to_rust())?.attributes();
+        let bond = self.multicenter_bond(molecule.to_rust()?)?.attributes();
         let dict = PyDict::new(py);
         dict.set_item("electrons", ElectronCountsForm::from_rust(&bond.electrons))?;
         dict.set_item("charge", NumForm::from_rust(py, &bond.charge)?)?;
@@ -551,7 +551,7 @@ impl MulticenterBondViews {
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
-        Ok(molecule.to_rust().multicenter_bonds().count())
+        Ok(molecule.to_rust()?.multicenter_bonds().count())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -559,14 +559,14 @@ impl MulticenterBondViews {
         molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
         Ok(format!(
             "MulticenterBondViews(len={})",
-            molecule.to_rust().multicenter_bonds().count()
+            molecule.to_rust()?.multicenter_bonds().count()
         ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<MulticenterBondView> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
-        let id = resolve_multicenter_bond_index(molecule.to_rust(), index)?;
+        let id = resolve_multicenter_bond_index(molecule.to_rust()?, index)?;
         Ok(MulticenterBondView {
             owner: self.owner.clone_ref(py),
             counter: self.counter,
@@ -583,10 +583,10 @@ impl MulticenterBondViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
-        let id = resolve_multicenter_bond_index(molecule.to_rust(), index)?;
+        let id = resolve_multicenter_bond_index(molecule.to_rust()?, index)?;
         let bond = bond.to_rust().clone();
         *molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .multicenter_bond_mut(id)
             .attributes_mut() = bond;
         Ok(())
@@ -597,7 +597,7 @@ impl MulticenterBondViews {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
         Ok(molecule
-            .to_rust()
+            .to_rust()?
             .multicenter_bonds()
             .of_id(atoms.into_iter().map(GraphIrAtomId))
             .map(|id| MulticenterBondView {
@@ -612,7 +612,7 @@ impl MulticenterBondViews {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
         Ok(molecule
-            .to_rust()
+            .to_rust()?
             .multicenter_bonds()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| MulticenterBondView {
@@ -627,7 +627,7 @@ impl MulticenterBondViews {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(MulticenterBondViews))?;
         let ids = molecule
-            .to_rust()
+            .to_rust()?
             .multicenter_bonds()
             .ids()
             .collect::<Vec<_>>();

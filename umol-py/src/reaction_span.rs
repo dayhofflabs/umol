@@ -911,7 +911,7 @@ mod tests {
         );
 
         assert_eq!(
-            span.lhs().to_rust(),
+            span.lhs().to_rust().unwrap(),
             &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
                     GraphIrAtomForm::from_element(ChemElement::C),
@@ -936,7 +936,7 @@ mod tests {
         );
 
         assert_eq!(
-            span.rhs().to_rust(),
+            span.rhs().to_rust().unwrap(),
             &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
                     GraphIrAtomForm::from_element(ChemElement::C),

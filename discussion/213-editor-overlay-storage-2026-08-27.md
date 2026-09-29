@@ -51,7 +51,8 @@ S6a implements consuming edit/application and checked probe/finish publication.
 S6b1 migrates graph-ir callers and removes editor session correspondence. S6b2
 rewrites combine_from to append through Molecule methods. S6c1 implements the
 transformation plans and borrowed execution. S6c2 completes the remaining Rust
-caller migration. S6d1's Python Molecule ownership storage is next.
+caller migration. S6d1–S6d3 complete Python Molecule consumption, fallible owner
+access, and editor finish; the S6 workspace gate passes. S7a is next.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -71,7 +72,7 @@ reopen S2i or block S2j.
 | Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
 | Molecule-level constraint mutation | Implemented; S2 complete | Molecule::constraints provides reads; the editor exposes &mut Constraints. Python molecule constraint entries and iteration are lazy and read-only. try_modify_constraints is removed. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
-| Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation in progress | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. S5d implements Edits transfer, counters, and prepared transactions; Molecule transfer remains. The editor already supports consumption. |
+| Python bindings | S5d and S6d complete | Molecule.transact and tracked_transact submit prepared Edits under a borrowed transaction. Molecule edit/apply/tracked_apply consume; editor finish publishes. Owners and views enforce consumption/invalidation. Resolver ownership and reporting changes remain in S7d. |
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
 | Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
@@ -107,7 +108,7 @@ and S4b are complete. S4d's caller migration and comparison optimization are
 complete; S4b9 closes the strict lint gate. S5a–S5d3 are complete, including
 Python runtime verification. S6a–S6b2 implement the owning editor, migrate
 graph-ir callers, and rewire combine_from. S6c1–S6c2 complete the remaining Rust
-caller migration; S6d1 is next.
+caller migration. S6d1–S6d3 complete Python ownership and the S6 gate; S7a is next.
 
 ## Editor and transaction API
 
@@ -842,9 +843,9 @@ usable. S2l makes molecule constraint entries live read-only accessors; other
 existing owned return values retain their copying policy.
 
 Use one private u64 counter in the Python Molecule wrapper and a captured
-counter in each owner-backed accessor. Advancing it uses checked addition;
-overflow raises Python OverflowError before execution, never wraps to revive an
-old accessor. Check owner availability and counter under the same short
+counter in each owner-backed accessor. Advance it with ordinary addition under
+the data-type guide's lifecycle-counter size assumption. Check owner availability
+and counter under the same short
 PyO3 borrow used for access. Borrow the receiver exclusively and advance its
 counter after preparing Python inputs, then retain that borrow throughout
 Rust execution. No Python callback runs between invalidation and completion.
@@ -913,8 +914,8 @@ advance_counter(&mut self) -> PyResult<()>
 view_counter checks that the owner is available, then returns the counter.
 check_access returns InvalidatedViewError if the owner is consumed or
 the counter differs; the message names the accessor and Molecule. Otherwise it
-returns (). advance_counter checks owner availability, then assigns
-counter.checked_add(1), mapping overflow to OverflowError. S5d's checks have
+returns (). advance_counter checks owner availability, then increments
+counter. S5d's checks have
 no consumed branch until the separately scheduled S6d ownership migration.
 
 Every view getter/setter takes a try_borrow/try_borrow_mut of its owner, calls
@@ -6342,10 +6343,10 @@ temporary cloning adapters is not a way to close an earlier subitem.
   diff checks pass. No retired editor build/try_build/snapshot calls remain in
   umol-graph or umol-io. The workspace gate remains at S6d3.
 
-- **S6d — Python Molecule ownership migration** (group; breaking, closes
+- **S6d — completed 2026-09-28 — Python Molecule ownership migration** (group; breaking, closes
   S6 green at S6d3). [dep: S5d, S6a, S6b, S6c]
 
-- **S6d1 — Molecule Option storage and accessors** (`umol-py::molecule`; breaking, green at S6d3). [dep: S5d, S6a, S6b, S6c]
+- **S6d1 — completed 2026-09-28 — Molecule Option storage and accessors** (`umol-py::molecule`; breaking, green at S6d3). [dep: S5d, S6a, S6b, S6c]
 
   The final Python Molecule fields and counter methods are specified under
   Python accessor invalidation. Complete their ownership interface as follows:
@@ -6367,7 +6368,13 @@ temporary cloning adapters is not a way to close an earlier subitem.
   Test move-out, repeated take, explicit copies, and equality based on molecular
   values. Fields and accessor signatures are fixed by the tables above.
 
-- **S6d2 — Fallible owner access throughout bindings** (Molecule/view consumers in `umol-py`; breaking, green at S6d3). [dep: S6d1]
+  **Implemented.** Molecule stores Option<GraphIrMolecule>; all four accessors
+  have the specified signatures. Molecule.copy creates an independent owner
+  with counter zero. Fallible Python equality compares molecular values.
+  Clone and automatic by-value Python extraction are removed from the wrapper.
+  Counter arithmetic follows the data-type guide's ordinary-arithmetic rule.
+
+- **S6d2 — completed 2026-09-28 — Fallible owner access throughout bindings** (Molecule/view consumers in `umol-py`; breaking, green at S6d3). [dep: S6d1]
 
   Migrate every read/write of the wrapper through its fallible accessors,
   including getters, repr/equality, conversions, collections, entity attributes,
@@ -6375,7 +6382,21 @@ temporary cloning adapters is not a way to close an earlier subitem.
   Do not convert unrelated forms to Option or add automatic clones. Verify
   consumed roots and invalidated children across every entity collection.
 
-- **S6d3 — Consuming entry points and editor publication** (`umol-py::{molecule,transaction,edit}`; breaking, red→green). [dep: S6d2]
+  Solution.Determined stores its molecule as Py<Molecule>. Construction retains
+  the supplied Python object and its getter returns that same object; neither
+  copies molecular storage. Consuming it is visible through every alias,
+  including the Solution. Repr and molecular equality propagate ConsumedError.
+  This replaces the generated by-value constructor/getter's implicit copies.
+  Reaction.lhs already retains a Python owner; its access propagates the same
+  consumed-state error. Existing copying constructors and independently produced
+  operation results keep their current contracts.
+
+  **Implemented.** Root operations, all eight entity families, collections,
+  nested constraints, and Molecule conversions propagate fallible owner access.
+  Tests cover consumed roots, invalidated descendants and exhausted iterators,
+  independent copies, and shared molecules held by Solution and Reaction.
+
+- **S6d3 — completed 2026-09-28 — Consuming entry points and editor publication** (`umol-py::{molecule,transaction,edit}`; breaking, red→green). [dep: S6d2]
 
   Transfer Molecule inputs on consuming calls and reuse S5d's Edits
   transfer; raise `ConsumedError` for the owner and `InvalidatedViewError` for
@@ -6385,6 +6406,24 @@ temporary cloning adapters is not a way to close an earlier subitem.
   access throughout the binding consumers, not only mutation entry points;
   getters, repr/equality, conversions, collections, and nested setters must not
   bypass the consumed/invalidation checks.
+
+  **Implemented.** Molecule.edit/apply/tracked_apply transfer storage without
+  cloning. Editor apply/tracked_apply return another owning editor; finish
+  consumes it and checks integrity. The four Python snapshot/build methods
+  are removed; no Python probe is exposed. Transfers are sequential: an
+  unavailable Edits input leaves an already-transferred receiver consumed.
+  Python argument type errors occur before transfer. Existing error categories
+  are preserved. Tests explicitly copy inputs only when retaining them is part
+  of the tested workflow.
+
+  **Verification.** 20,510 workspace tests and six doctests pass (nine skipped
+  or ignored in total). The all-feature Python-binding suite passes 1,654 Rust
+  tests; the rebuilt Python 3.13 extension passes 1,864 pytest cases (two skipped).
+  Workspace all-target strict Clippy, all-feature graph-ir/graph/Python
+  warnings-denied rustdoc, nightly formatting, and full diff review pass.
+  The final test cleanup passes 74 focused Rust cases and all-feature Python
+  all-target strict Clippy. S6c records the feature-gated property/conformance
+  checks for its Rust changes. S7a is next; MSRV remains a final S9 gate.
 
 ### S7 — Resolution, projection, and boundaries
 
@@ -6507,7 +6546,7 @@ Within the revised S2:
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
   scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a–S6c2 are complete; S6d1 is next.
+  S6a–S6d3 are complete; S7a is next.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.

@@ -374,7 +374,7 @@ impl BondView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
         let view = molecule
-            .to_rust()
+            .to_rust()?
             .bonds()
             .get(self.id)
             .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
@@ -392,7 +392,7 @@ impl BondView {
     fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
-        NumForm::from_rust(py, &self.bond(molecule.to_rust())?.order)
+        NumForm::from_rust(py, &self.bond(molecule.to_rust()?)?.order)
     }
 
     #[setter]
@@ -401,7 +401,7 @@ impl BondView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .bond_mut(self.id)
             .attributes_mut()
             .order = value;
@@ -412,7 +412,7 @@ impl BondView {
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
-        NumForm::from_rust(py, &self.bond(molecule.to_rust())?.charge)
+        NumForm::from_rust(py, &self.bond(molecule.to_rust()?)?.charge)
     }
 
     #[setter]
@@ -421,7 +421,7 @@ impl BondView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .bond_mut(self.id)
             .attributes_mut()
             .charge = value;
@@ -432,7 +432,7 @@ impl BondView {
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
-        UnpairedElectronsForm::from_rust(py, &self.bond(molecule.to_rust())?.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.bond(molecule.to_rust()?)?.unpaired_electrons)
     }
 
     #[setter]
@@ -445,7 +445,7 @@ impl BondView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .bond_mut(self.id)
             .attributes_mut()
             .unpaired_electrons = value;
@@ -475,7 +475,7 @@ impl BondView {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
         molecule
-            .to_rust_mut()
+            .to_rust_mut()?
             .bond_mut(self.id)
             .attributes_mut()
             .constraints = value;
@@ -487,7 +487,7 @@ impl BondView {
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
-        let bond = self.bond(molecule.to_rust())?;
+        let bond = self.bond(molecule.to_rust()?)?;
         let dict = PyDict::new(py);
         dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
         dict.set_item("charge", NumForm::from_rust(py, &bond.charge)?)?;
@@ -536,7 +536,7 @@ impl BondViews {
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondViews))?;
-        Ok(molecule.to_rust().bonds().count())
+        Ok(molecule.to_rust()?.bonds().count())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -544,14 +544,14 @@ impl BondViews {
         molecule.check_access(self.counter, stringify!(BondViews))?;
         Ok(format!(
             "BondViews(len={})",
-            molecule.to_rust().bonds().count()
+            molecule.to_rust()?.bonds().count()
         ))
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<BondView> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondViews))?;
-        let id = resolve_bond_index(molecule.to_rust(), index)?;
+        let id = resolve_bond_index(molecule.to_rust()?, index)?;
         Ok(BondView {
             owner: self.owner.clone_ref(py),
             counter: self.counter,
@@ -563,8 +563,8 @@ impl BondViews {
     fn __setitem__(&self, py: Python<'_>, index: isize, bond: PyRef<'_, BondForm>) -> PyResult<()> {
         let mut molecule = self.owner.try_borrow_mut(py)?;
         molecule.check_access(self.counter, stringify!(BondViews))?;
-        let id = resolve_bond_index(molecule.to_rust(), index)?;
-        *molecule.to_rust_mut().bond_mut(id).attributes_mut() = bond.to_rust().clone();
+        let id = resolve_bond_index(molecule.to_rust()?, index)?;
+        *molecule.to_rust_mut()?.bond_mut(id).attributes_mut() = bond.to_rust().clone();
         Ok(())
     }
 
@@ -573,7 +573,7 @@ impl BondViews {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondViews))?;
         Ok(molecule
-            .to_rust()
+            .to_rust()?
             .bonds()
             .of_id(GraphIrAtomId(first), GraphIrAtomId(second))
             .map(|id| BondView {
@@ -586,7 +586,7 @@ impl BondViews {
     fn __iter__(&self, py: Python<'_>) -> PyResult<BondViewIter> {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondViews))?;
-        let ids = molecule.to_rust().bonds().ids().collect::<Vec<_>>();
+        let ids = molecule.to_rust()?.bonds().ids().collect::<Vec<_>>();
         Ok(BondViewIter {
             owner: self.owner.clone_ref(py),
             counter: self.counter,

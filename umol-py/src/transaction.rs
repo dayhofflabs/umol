@@ -9,10 +9,10 @@ use umol_graph_ir::ir::{
 
 use crate::correspondence::MoleculeCorrespondence;
 use crate::edit::Edits;
-use crate::error::{molecule_integrity_error, transaction_error, ConsumedError};
+use crate::error::{molecule_apply_error, molecule_integrity_error, ConsumedError};
 use crate::molecule::Molecule;
 
-/// A mutable molecule editor that can be inspected before it is finalized.
+/// An owning molecule editor, consumed by application or publication.
 #[pyclass]
 pub struct MoleculeEditor {
     inner: Option<GraphIrMoleculeEditor>,
@@ -28,53 +28,13 @@ impl MoleculeEditor {
 
 #[pymethods]
 impl MoleculeEditor {
-    /// Materialize the editor's current state without consuming it.
-    fn snapshot(&self) -> PyResult<Molecule> {
-        self.inner
-            .as_ref()
-            .ok_or_else(consumed_editor_error)?
-            .snapshot()
-            .map(Molecule::from_rust)
-            .map_err(molecule_integrity_error)
-    }
-
-    /// Materialize the current state and its initial-to-current correspondence.
-    fn tracked_snapshot(&self) -> PyResult<(Molecule, MoleculeCorrespondence)> {
-        self.inner
-            .as_ref()
-            .ok_or_else(consumed_editor_error)?
-            .tracked_snapshot()
-            .map(|(molecule, correspondence)| {
-                (
-                    Molecule::from_rust(molecule),
-                    MoleculeCorrespondence::from_rust(correspondence),
-                )
-            })
-            .map_err(molecule_integrity_error)
-    }
-
-    /// Finalize the editor and consume its mutable state.
-    fn build(&mut self) -> PyResult<Molecule> {
+    /// Consume the editor and publish its molecule after checking integrity.
+    fn finish(&mut self) -> PyResult<Molecule> {
         self.inner
             .take()
             .ok_or_else(consumed_editor_error)?
-            .try_build()
+            .finish()
             .map(Molecule::from_rust)
-            .map_err(molecule_integrity_error)
-    }
-
-    /// Finalize the editor and return its initial-to-result correspondence.
-    fn tracked_build(&mut self) -> PyResult<(Molecule, MoleculeCorrespondence)> {
-        self.inner
-            .take()
-            .ok_or_else(consumed_editor_error)?
-            .try_tracked_build()
-            .map(|(molecule, correspondence)| {
-                (
-                    Molecule::from_rust(molecule),
-                    MoleculeCorrespondence::from_rust(correspondence),
-                )
-            })
             .map_err(molecule_integrity_error)
     }
 
@@ -85,7 +45,7 @@ impl MoleculeEditor {
             .ok_or_else(consumed_editor_error)?
             .apply(edits.try_borrow_mut(py)?.take()?)
             .map(Self::from_rust)
-            .map_err(transaction_error)
+            .map_err(molecule_apply_error)
     }
 
     /// Apply the same consuming batch and return its input-to-result correspondence.
@@ -104,7 +64,7 @@ impl MoleculeEditor {
                     MoleculeCorrespondence::from_rust(correspondence),
                 )
             })
-            .map_err(transaction_error)
+            .map_err(molecule_apply_error)
     }
 
     /// Remove atoms and bonds, cascading dependent entities.
@@ -205,111 +165,45 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_snapshot() {
-        let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
-        let mut editor = MoleculeEditor {
-            inner: Some(initial.edit()),
-        };
-
-        let first = editor.snapshot().unwrap();
-        editor
-            .inner
-            .as_mut()
-            .unwrap()
-            .add_atom(GraphIrAtomForm::from_element(ChemElement::N));
-        let second = editor.snapshot().unwrap();
-
-        assert_eq!(first.to_rust(), &initial);
-        assert_eq!(second.to_rust(), &mol_dsl!(r#"{:atoms ["C" "N"]}"#));
-        assert_eq!(editor.snapshot().unwrap(), second);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_build() {
-        let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
-        let mut editor = MoleculeEditor {
-            inner: Some(initial.edit()),
-        };
-        let snapshot = editor.snapshot().unwrap();
-
-        let mut built = editor.build().unwrap();
-        *built
+    fn test_molecule_editor_finish(mut carbon_editor: MoleculeEditor) {
+        let mut molecule = carbon_editor.finish().unwrap();
+        assert_eq!(molecule.to_rust().unwrap(), &mol_dsl!(r#"{:atoms ["C"]}"#));
+        *molecule
             .to_rust_mut()
+            .unwrap()
             .atom_mut(GraphIrAtomId(0))
             .attributes_mut() = GraphIrAtomForm::from_element(ChemElement::N);
-        let snapshot_error = editor.snapshot().unwrap_err();
-        let build_error = editor.build().unwrap_err();
-
-        assert_eq!(snapshot.to_rust(), &initial);
-        assert_eq!(built.to_rust(), &mol_dsl!(r#"{:atoms ["N"]}"#));
+        assert_eq!(molecule.to_rust().unwrap(), &mol_dsl!(r#"{:atoms ["N"]}"#));
         Python::attach(|py| {
-            assert!(snapshot_error.is_instance_of::<ConsumedError>(py));
+            let error = carbon_editor.finish().unwrap_err();
+            assert!(error.is_instance_of::<ConsumedError>(py));
             assert_eq!(
-                snapshot_error
-                    .value(py)
-                    .str()
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap(),
-                "MoleculeEditor has been consumed"
-            );
-            assert!(build_error.is_instance_of::<ConsumedError>(py));
-            assert_eq!(
-                build_error
-                    .value(py)
-                    .str()
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap(),
-                "MoleculeEditor has been consumed"
+                error.to_string(),
+                "ConsumedError: MoleculeEditor has been consumed"
             );
         });
     }
 
     #[rstest]
-    fn test_molecule_editor_publication_error() {
+    fn test_molecule_editor_finish_error() {
         let molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
-        let mut snapshot_editor = MoleculeEditor {
-            inner: Some(molecule.clone().edit()),
-        };
-        snapshot_editor.inner.as_mut().unwrap().add_bond(
+        let mut editor = MoleculeEditor::from_rust(molecule.edit());
+        editor.inner.as_mut().unwrap().add_bond(
             GraphIrAtomId(0),
             GraphIrAtomId(1),
             GraphIrBondForm::from_order(1),
         );
-        let mut build_editor = MoleculeEditor {
-            inner: Some(molecule.edit()),
-        };
-        build_editor.inner.as_mut().unwrap().add_bond(
-            GraphIrAtomId(0),
-            GraphIrAtomId(1),
-            GraphIrBondForm::from_order(1),
-        );
-
-        let snapshot_error = snapshot_editor.snapshot().unwrap_err();
-        let build_error = build_editor.build().unwrap_err();
-
         Python::attach(|py| {
-            assert!(snapshot_error.is_instance_of::<InvalidStructureError>(py));
+            let error = editor.finish().unwrap_err();
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(
-                snapshot_error
-                    .value(py)
-                    .str()
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap(),
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
             );
-            assert!(build_error.is_instance_of::<InvalidStructureError>(py));
-            assert_eq!(
-                build_error
-                    .value(py)
-                    .str()
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap(),
-                "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
-            );
+            assert!(editor
+                .finish()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
         });
     }
 
@@ -328,7 +222,7 @@ mod tests {
             kind: GraphIrStereoKind::Octahedral, expected: 6, actual: 4
         }
     )]
-    fn test_molecule_editor_build_constraint_error(
+    fn test_molecule_editor_finish_constraint_error(
         #[case] constraint: GraphIrConstraint,
         #[case] expected: GraphIrMoleculeIntegrityError,
     ) {
@@ -346,7 +240,7 @@ mod tests {
             .unwrap()
             .constraints_mut()
             .push(constraint);
-        let error = editor.build().unwrap_err();
+        let error = editor.finish().unwrap_err();
         Python::attach(|py| {
             assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(

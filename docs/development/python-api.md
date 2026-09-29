@@ -157,6 +157,13 @@ overlays goes through `MoleculeEditor`. Ordinary attributes and entity-level con
 assigned through the molecule's entity views. Molecule-level constraints are read-only on the
 molecule; changing them requires editing and publication.
 
+Molecule.edit consumes its receiver. MoleculeEditor.apply and tracked_apply consume the editor
+and Edits and return a new editor; finish checks integrity and returns a Molecule. Molecule.apply
+and tracked_apply consume the receiver and Edits and publish a checked Molecule directly.
+Failure leaves consumed inputs unavailable. Molecule.copy explicitly retains an independent value.
+Molecule.transact and tracked_transact borrow the receiver and restore it on application or
+integrity failure; their prepared Edits inputs are consumed.
+
 ### Operation-issued iterator
 
 An operation-issued iterator captures one configured execution and cannot be constructed

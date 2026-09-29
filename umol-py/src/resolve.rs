@@ -1015,66 +1015,79 @@ mod tests {
     }
 
     #[rstest]
-    fn test_solution_repr() {
-        let molecule = Molecule::from_rust(r#"{:atoms ["C#h4"]}"#.parse().unwrap());
-        let report = ResolveReport::from_rust(&GraphResolveReport {
-            unresolved: GraphAtomCompletions::new(),
-            tie_breaks: Vec::new(),
-        });
-        let contradiction =
-            ResolveContradiction::from_rust(GraphResolveContradiction::Aromaticity(
-                GraphAromaticityContradiction::HmoInvalidInput(String::from("odd component")),
-            ));
-
-        assert_eq!(
-            Solution::Determined {
-                molecule: molecule.clone(),
+    fn test_solution_eq() {
+        Python::attach(|py| {
+            let report = ResolveReport::from_rust(&GraphResolveReport {
+                unresolved: GraphAtomCompletions::new(),
+                tie_breaks: Vec::new(),
+            });
+            let contradiction =
+                ResolveContradiction::from_rust(GraphResolveContradiction::Aromaticity(
+                    GraphAromaticityContradiction::HmoInvalidInput(String::from("odd component")),
+                ));
+            let underdetermined = Solution::Underdetermined {
                 report: report.clone(),
-            }
-            .__repr__(),
-            format!(
-                "Solution.Determined(molecule={}, report={})",
-                molecule.__repr__(),
-                report.__repr__(),
-            ),
-        );
-        assert_eq!(
-            Solution::Underdetermined {
-                report: report.clone(),
-            }
-            .__repr__(),
-            format!("Solution.Underdetermined(report={})", report.__repr__()),
-        );
-        assert_eq!(
-            Solution::Contradictory {
+            };
+            let contradictory = Solution::Contradictory {
                 contradiction: contradiction.clone(),
-            }
-            .__repr__(),
-            format!(
-                "Solution.Contradictory(contradiction={})",
-                contradiction.__repr__(),
-            ),
-        );
+            };
+
+            assert!(underdetermined
+                .__eq__(&Solution::Underdetermined { report }, py)
+                .unwrap());
+            assert!(contradictory
+                .__eq__(&Solution::Contradictory { contradiction }, py)
+                .unwrap());
+            assert!(!underdetermined.__eq__(&contradictory, py).unwrap());
+        });
     }
 
     #[rstest]
-    fn test_solution_eq() {
-        let report = || {
-            ResolveReport::from_rust(&GraphResolveReport {
+    fn test_solution_repr() {
+        Python::attach(|py| {
+            let molecule = Molecule::from_rust(r#"{:atoms ["C#h4"]}"#.parse().unwrap());
+            let report = ResolveReport::from_rust(&GraphResolveReport {
                 unresolved: GraphAtomCompletions::new(),
                 tie_breaks: Vec::new(),
-            })
-        };
-        let underdetermined = || Solution::Underdetermined { report: report() };
-        let contradictory = || Solution::Contradictory {
-            contradiction: ResolveContradiction::from_rust(GraphResolveContradiction::Aromaticity(
-                GraphAromaticityContradiction::HmoInvalidInput(String::from("odd component")),
-            )),
-        };
+            });
+            let contradiction =
+                ResolveContradiction::from_rust(GraphResolveContradiction::Aromaticity(
+                    GraphAromaticityContradiction::HmoInvalidInput(String::from("odd component")),
+                ));
 
-        assert_eq!(underdetermined(), underdetermined());
-        assert_eq!(contradictory(), contradictory());
-        assert_ne!(underdetermined(), contradictory());
+            assert_eq!(
+                Solution::Determined {
+                    molecule: Py::new(py, molecule).unwrap(),
+                    report: report.clone(),
+                }
+                .__repr__(py)
+                .unwrap(),
+                format!(
+                    "Solution.Determined(molecule={}, report={})",
+                    "Molecule(atoms=1, bonds=0)",
+                    report.__repr__(),
+                ),
+            );
+            assert_eq!(
+                Solution::Underdetermined {
+                    report: report.clone(),
+                }
+                .__repr__(py)
+                .unwrap(),
+                format!("Solution.Underdetermined(report={})", report.__repr__()),
+            );
+            assert_eq!(
+                Solution::Contradictory {
+                    contradiction: contradiction.clone(),
+                }
+                .__repr__(py)
+                .unwrap(),
+                format!(
+                    "Solution.Contradictory(contradiction={})",
+                    contradiction.__repr__(),
+                ),
+            );
+        });
     }
 }
 
@@ -1195,13 +1208,14 @@ impl ResolveContradiction {
 
 /// The resolution solution: determined, underdetermined, or
 /// contradictory, with the payload each arm carries.
-#[pyclass(eq, frozen, from_py_object)]
-#[derive(Clone, Debug, PartialEq)]
+#[pyclass(frozen)]
+#[derive(Debug)]
 pub enum Solution {
     /// Resolution committed: the resolved molecule and the tie-break record.
+    /// The molecule getter returns the same Python object on every access.
     #[pyo3(constructor = (*, molecule, report))]
     Determined {
-        molecule: Molecule,
+        molecule: Py<Molecule>,
         report: ResolveReport,
     },
     /// Nothing committed: the survivors' per-atom candidate lists.
@@ -1214,11 +1228,41 @@ pub enum Solution {
 
 #[pymethods]
 impl Solution {
-    pub(crate) fn __repr__(&self) -> String {
-        match self {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> PyResult<bool> {
+        Ok(match (self, other) {
+            (
+                Self::Determined {
+                    molecule: left,
+                    report: left_report,
+                },
+                Self::Determined {
+                    molecule: right,
+                    report: right_report,
+                },
+            ) => {
+                left.try_borrow(py)?.to_rust()? == right.try_borrow(py)?.to_rust()?
+                    && left_report == right_report
+            }
+            (Self::Underdetermined { report: left }, Self::Underdetermined { report: right }) => {
+                left == right
+            }
+            (
+                Self::Contradictory {
+                    contradiction: left,
+                },
+                Self::Contradictory {
+                    contradiction: right,
+                },
+            ) => left == right,
+            _ => false,
+        })
+    }
+
+    pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(match self {
             Self::Determined { molecule, report } => format!(
                 "Solution.Determined(molecule={}, report={})",
-                molecule.__repr__(),
+                molecule.try_borrow(py)?.__repr__()?,
                 report.__repr__(),
             ),
             Self::Underdetermined { report } => {
@@ -1228,6 +1272,6 @@ impl Solution {
                 "Solution.Contradictory(contradiction={})",
                 contradiction.__repr__(),
             ),
-        }
+        })
     }
 }

@@ -128,7 +128,7 @@ impl Molecule {
     ///
     /// Raises `RuntimeError` if layout or tetrahedral depiction fails.
     fn depict(&self) -> PyResult<Depiction> {
-        self.to_rust()
+        self.to_rust()?
             .depict()
             .map(Depiction::from_rust)
             .map_err(molecule_depiction_error)
@@ -139,7 +139,7 @@ impl Molecule {
     /// Raises `RuntimeError` if layout or tetrahedral depiction fails.
     fn depict_with(&self, config: DepictConfig) -> PyResult<Depiction> {
         let config = config.to_rust();
-        self.to_rust()
+        self.to_rust()?
             .depict_with(&config)
             .map(Depiction::from_rust)
             .map_err(molecule_depiction_error)
@@ -224,7 +224,7 @@ mod tests {
     #[rstest]
     fn test_depiction_render_svg() {
         let molecule = Molecule::from_rust(GraphIrMolecule::new());
-        let rust = molecule.to_rust().depict().unwrap();
+        let rust = molecule.to_rust().unwrap().depict().unwrap();
         let expected = rust.render_svg();
         let depiction = Depiction::from_rust(rust);
 
@@ -244,7 +244,7 @@ mod tests {
     #[rstest]
     fn test_molecule_depict() {
         let molecule = Molecule::from_rust(GraphIrMolecule::new());
-        let expected = molecule.to_rust().depict().unwrap().render_svg();
+        let expected = molecule.to_rust().unwrap().depict().unwrap().render_svg();
 
         let depiction = molecule.depict().unwrap();
 
@@ -263,6 +263,7 @@ mod tests {
         let config = DepictConfig::default();
         let expected = molecule
             .to_rust()
+            .unwrap()
             .depict_with(&config.to_rust())
             .unwrap()
             .render_svg();

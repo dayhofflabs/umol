@@ -139,7 +139,8 @@ def test_constraints_view_index_error(index):
         molecule.constraints[index]
 
 
-def test_constraints_view_invalidation():
+@pytest.mark.parametrize("operation", ["combine_from", "edit"])
+def test_constraints_view_invalidation(operation):
     first = Constraint.And([Constraint.Not(Constraint.Or([]))])
     molecule = Molecule.from_entries([], constraints=[first])
     collection = molecule.constraints
@@ -149,7 +150,10 @@ def test_constraints_view_invalidation():
     child = children[0]._0
     copied = entry.copy()
     delta = ConstraintDelta.Add(constraint=entry)
-    molecule.combine_from(Molecule())
+    if operation == "edit":
+        molecule = molecule.edit().finish()
+    else:
+        molecule.combine_from(Molecule())
 
     for access in (
         lambda: len(collection),

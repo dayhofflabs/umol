@@ -18,6 +18,7 @@ from umol import (
     CanonicalizeConfig,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
+    ConsumedError,
     Constraint,
     ContradictionError,
     Correspondence,
@@ -28,6 +29,7 @@ from umol import (
     ElementForm,
     ElementScope,
     Entity,
+    InvalidStructureError,
     MaximumIndependentSetAlgorithm,
     MetadataError,
     IsotopePolicy,
@@ -60,6 +62,7 @@ from umol import (
     StereoModel,
     StereoResolveConfig,
     TetrahedralConfiguration,
+    TransactionError,
     UnderdeterminedError,
     ValenceCandidateSource,
     ValenceEntry,
@@ -1364,14 +1367,107 @@ def test_molecule_correspondence_constructor():
     assert correspondence.bonds == empty
 
 
+@pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
+def test_molecule_consumption(method):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    alias = molecule
+    copied = molecule.copy()
+    if method == "edit":
+        result = molecule.edit().finish()
+    else:
+        result = getattr(molecule, method)(Edits())
+        if method == "tracked_apply":
+            result = result[0]
+    assert result == copied
+    result.atoms[0].charge = 1
+    assert copied == Molecule.parse('{:atoms ["C"]}')
+
+    for access in (
+        lambda: repr(alias), lambda: str(alias), lambda: alias.render(),
+        lambda: alias.copy(), lambda: alias == copied, lambda: copied == alias,
+        lambda: alias == alias, lambda: alias.edit(),
+        lambda: alias.apply(Edits()), lambda: alias.tracked_apply(Edits()),
+        lambda: alias.transact([]), lambda: alias.tracked_transact([]),
+        lambda: alias.combine(copied), lambda: copied.combine(alias),
+        lambda: Molecule.combine_all([copied, alias]),
+        lambda: alias.combine_from(copied), lambda: copied.combine_from(alias),
+        lambda: alias.split(), lambda: alias.tracked_split(),
+        lambda: alias.canonicalize(), lambda: alias.tracked_canonicalize(),
+        lambda: alias.canonical_eq(copied), lambda: copied.canonical_eq(alias),
+        lambda: alias.resolve(), lambda: alias.pattern_fingerprint(),
+        lambda: alias.substructure_matches(copied),
+        lambda: copied.substructure_matches(alias),
+        lambda: alias.constraints,
+    ):
+        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+            access()
+    for name in (
+        "atoms", "bonds", "dative_bonds", "aromatic_systems", "multicenter_bonds",
+        "noncovalent_bonds", "stereo_atoms", "stereo_bonds",
+    ):
+        with pytest.raises(ConsumedError, match="^Molecule has been consumed$"):
+            getattr(alias, name)
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+@pytest.mark.parametrize(("kind", "error", "message"), [
+    ("application", TransactionError, "atom handle 7"),
+    ("integrity", InvalidStructureError, "parallel bonds"),
+])
+def test_molecule_consumption_error(method, kind, error, message):
+    molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    copied = molecule.copy()
+    edits = Edits()
+    if kind == "application":
+        edits.remove_topology([7], [])
+    else:
+        edits.add_bond(0, 1, BondForm(1))
+    with pytest.raises(error, match=message):
+        getattr(molecule, method)(edits)
+    with pytest.raises(ConsumedError):
+        str(molecule)
+    with pytest.raises(ConsumedError):
+        len(edits)
+    assert copied == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_molecule_apply_argument_error(method):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    view = molecule.atoms[0]
+    with pytest.raises(TypeError):
+        getattr(molecule, method)(None)
+    assert view.id == 0
+    assert molecule == Molecule.parse('{:atoms ["C"]}')
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+@pytest.mark.parametrize("editor", [False, True])
+def test_molecule_apply_consumed_edits(method, editor):
+    edits = Edits()
+    Molecule().apply(edits)
+    receiver = Molecule.parse('{:atoms ["C"]}')
+    if editor:
+        receiver = receiver.edit()
+
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        getattr(receiver, method)(edits)
+    with pytest.raises(ConsumedError, match="has been consumed$"):
+        if editor:
+            receiver.finish()
+        else:
+            receiver.copy()
+
+
 def test_molecule_tracked_apply():
     molecule = Molecule.parse('{:atoms ["N#h3"]}')
     edits = Edits.parse('[{:atom {:add "C#h4"}}]')
 
     copied = Edits(list(edits))
+    original = molecule.copy()
     product, correspondence = molecule.tracked_apply(edits)
 
-    assert product == molecule.apply(copied)
+    assert product == original.apply(copied)
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
     assert correspondence.bonds == Correspondence([], 0, 0)
 

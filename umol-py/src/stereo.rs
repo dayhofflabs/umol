@@ -1399,7 +1399,7 @@ macro_rules! stereo_view {
             fn site_id(&self, py: Python<'_>) -> PyResult<u32> {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
-                Ok(self.view(molecule.to_rust())?.site_id().0)
+                Ok(self.view(molecule.to_rust()?)?.site_id().0)
             }
 
             /// The ligands in frame order (read-only topology).
@@ -1408,7 +1408,7 @@ macro_rules! stereo_view {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
                 Ok(self
-                    .view(molecule.to_rust())?
+                    .view(molecule.to_rust()?)?
                     .ligand_ids()
                     .iter()
                     .copied()
@@ -1421,7 +1421,9 @@ macro_rules! stereo_view {
             fn kind(&self, py: Python<'_>) -> PyResult<StereoKind> {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
-                Ok(StereoKind::from_rust(self.view(molecule.to_rust())?.kind()))
+                Ok(StereoKind::from_rust(
+                    self.view(molecule.to_rust()?)?.kind(),
+                ))
             }
 
             /// The coset (from the configuration).
@@ -1429,7 +1431,7 @@ macro_rules! stereo_view {
             fn coset(&self, py: Python<'_>) -> PyResult<StereoCoset> {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
-                StereoCoset::from_rust(py, self.view(molecule.to_rust())?.coset())
+                StereoCoset::from_rust(py, self.view(molecule.to_rust()?)?.coset())
             }
 
             /// The stereo configuration (geometry + coset).
@@ -1439,7 +1441,7 @@ macro_rules! stereo_view {
                 molecule.check_access(self.counter, stringify!($view))?;
                 StereoConfigurationForm::from_rust(
                     py,
-                    &self.view(molecule.to_rust())?.attributes().configuration,
+                    &self.view(molecule.to_rust()?)?.attributes().configuration,
                 )
             }
 
@@ -1452,11 +1454,11 @@ macro_rules! stereo_view {
                 let configuration = value.to_rust(py);
                 let mut molecule = self.owner.try_borrow_mut(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
-                if !molecule.to_rust().$namespace().contains(self.id) {
+                if !molecule.to_rust()?.$namespace().contains(self.id) {
                     return Err(PyIndexError::new_err($id_error));
                 }
                 molecule
-                    .to_rust_mut()
+                    .to_rust_mut()?
                     .$entity_mut(self.id)
                     .attributes_mut()
                     .configuration = configuration;
@@ -1485,11 +1487,11 @@ macro_rules! stereo_view {
                 let constraints = value.to_rust(py)?;
                 let mut molecule = self.owner.try_borrow_mut(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
-                if !molecule.to_rust().$namespace().contains(self.id) {
+                if !molecule.to_rust()?.$namespace().contains(self.id) {
                     return Err(PyIndexError::new_err($id_error));
                 }
                 molecule
-                    .to_rust_mut()
+                    .to_rust_mut()?
                     .$entity_mut(self.id)
                     .attributes_mut()
                     .constraints = constraints;
@@ -1501,7 +1503,7 @@ macro_rules! stereo_view {
             fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
-                let attributes = self.view(molecule.to_rust())?.attributes();
+                let attributes = self.view(molecule.to_rust()?)?.attributes();
                 let dict = PyDict::new(py);
                 dict.set_item(
                     "configuration",
@@ -1571,7 +1573,7 @@ macro_rules! stereo_views {
             fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($views))?;
-                Ok(molecule.to_rust().$namespace().count())
+                Ok(molecule.to_rust()?.$namespace().count())
             }
 
             fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -1580,14 +1582,14 @@ macro_rules! stereo_views {
                 Ok(format!(
                     "{}(len={})",
                     stringify!($views),
-                    molecule.to_rust().$namespace().count()
+                    molecule.to_rust()?.$namespace().count()
                 ))
             }
 
             fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<$view> {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($views))?;
-                let id = $resolve_index(molecule.to_rust(), index)?;
+                let id = $resolve_index(molecule.to_rust()?, index)?;
                 Ok($view {
                     owner: self.owner.clone_ref(py),
                     counter: self.counter,
@@ -1605,9 +1607,9 @@ macro_rules! stereo_views {
             ) -> PyResult<()> {
                 let mut molecule = self.owner.try_borrow_mut(py)?;
                 molecule.check_access(self.counter, stringify!($views))?;
-                let id = $resolve_index(molecule.to_rust(), index)?;
+                let id = $resolve_index(molecule.to_rust()?, index)?;
                 let attributes = value.to_rust().clone();
-                *molecule.to_rust_mut().$entity_mut(id).attributes_mut() = attributes;
+                *molecule.to_rust_mut()?.$entity_mut(id).attributes_mut() = attributes;
                 Ok(())
             }
 
@@ -1617,7 +1619,7 @@ macro_rules! stereo_views {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($views))?;
                 Ok(molecule
-                    .to_rust()
+                    .to_rust()?
                     .$namespace()
                     .at_id($site_id(site))
                     .map(|id| $view {
@@ -1639,7 +1641,7 @@ macro_rules! stereo_views {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($views))?;
                 Ok(molecule
-                    .to_rust()
+                    .to_rust()?
                     .$namespace()
                     .of_id($site_id(site), &ligands)
                     .map(|id| $view {
@@ -1652,7 +1654,7 @@ macro_rules! stereo_views {
             fn __iter__(&self, py: Python<'_>) -> PyResult<$iter> {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($views))?;
-                let ids = molecule.to_rust().$namespace().ids().collect::<Vec<_>>();
+                let ids = molecule.to_rust()?.$namespace().ids().collect::<Vec<_>>();
                 Ok($iter {
                     owner: self.owner.clone_ref(py),
                     counter: self.counter,

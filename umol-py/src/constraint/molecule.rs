@@ -165,7 +165,7 @@ impl Constraint {
                 let owner = owner.try_borrow(py)?;
                 owner.check_access(*counter, "Constraint")?;
                 let mut value = owner
-                    .to_rust()
+                    .to_rust()?
                     .constraints()
                     .as_slice()
                     .get(*position)
@@ -1087,7 +1087,7 @@ impl ConstraintsView {
             ConstraintsStorage::Molecule { owner, counter } => {
                 let owner = owner.try_borrow(py)?;
                 owner.check_access(*counter, "ConstraintsView")?;
-                f(owner.to_rust().constraints().as_slice())
+                f(owner.to_rust()?.constraints().as_slice())
             }
             ConstraintsStorage::Children(parent) => {
                 parent.try_borrow(py)?.read(py, |value| match value {
@@ -2149,7 +2149,7 @@ match node:
             let mut molecule = GraphIrMolecule::new();
             let mut editor = molecule.edit();
             editor.constraints_mut().push(from_view.clone());
-            molecule = editor.build();
+            molecule = editor.finish().unwrap();
             let view = Py::new(
                 py,
                 ConstraintsView::new(Py::new(py, Molecule::from_rust(molecule)).unwrap(), py)
@@ -2322,7 +2322,7 @@ match node:
             .constraints_mut()
             .push(GraphIrConstraint::Or(Vec::new()));
 
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -2339,7 +2339,7 @@ match node:
         let mut editor = GraphIrMolecule::new().edit();
         *editor.constraints_mut() = entries.into();
         Python::attach(|py| {
-            let owner = Py::new(py, Molecule::from_rust(editor.build())).unwrap();
+            let owner = Py::new(py, Molecule::from_rust(editor.finish().unwrap())).unwrap();
             let view = ConstraintsView::new(owner, py).unwrap();
             assert_eq!(view.__len__(py).unwrap(), expected);
         });
@@ -2366,7 +2366,7 @@ match node:
         editor.constraints_mut().push(GraphIrConstraint::Molecule(
             GraphIrMoleculeConstraint::Connected { atoms: None },
         ));
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -2393,7 +2393,7 @@ match node:
             .constraints_mut()
             .push(GraphIrConstraint::And(Vec::new()));
 
-        molecule = editor.build();
+        molecule = editor.finish().unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -2413,7 +2413,7 @@ match node:
         let mut editor = GraphIrMolecule::new().edit();
         editor.constraints_mut().push(first.clone());
         editor.constraints_mut().push(second.clone());
-        let molecule = editor.build();
+        let molecule = editor.finish().unwrap();
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
             let view = Py::new(py, ConstraintsView::new(owner, py).unwrap()).unwrap();

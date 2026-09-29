@@ -148,7 +148,7 @@ def test_molecule_editing_workflow():
     )
     assert parsed == edits
     assert parsed.render() == rendered
-    applied = molecule.apply(parsed)
+    applied = molecule.copy().apply(parsed)
     assert applied == expected
     assert molecule == original
 

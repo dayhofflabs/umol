@@ -522,7 +522,7 @@ impl MulticenterBondConstraintsView {
                 let molecule = owner.try_borrow(py)?;
                 molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
                 let view = molecule
-                    .to_rust()
+                    .to_rust()?
                     .multicenter_bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("multicenter bond id out of range"))?;
@@ -545,10 +545,10 @@ impl MulticenterBondConstraintsView {
             MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
-                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                if !molecule.to_rust()?.multicenter_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("multicenter bond id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let mut view = molecule.to_rust_mut()?.multicenter_bond_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 cs.set(constraint);
                 Ok(())
@@ -572,10 +572,10 @@ impl MulticenterBondConstraintsView {
             MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
-                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                if !molecule.to_rust()?.multicenter_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("multicenter bond id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let mut view = molecule.to_rust_mut()?.multicenter_bond_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 Ok(cs.remove(key))
             }
@@ -645,10 +645,10 @@ impl MulticenterBondConstraintsView {
             MulticenterBondConstraintsStorage::Molecule { owner, counter, id } => {
                 let mut molecule = owner.try_borrow_mut(py)?;
                 molecule.check_access(*counter, stringify!(MulticenterBondConstraintsView))?;
-                if !molecule.to_rust().multicenter_bonds().contains(*id) {
+                if !molecule.to_rust()?.multicenter_bonds().contains(*id) {
                     return Err(PyIndexError::new_err("multicenter bond id out of range"));
                 }
-                let mut view = molecule.to_rust_mut().multicenter_bond_mut(*id);
+                let mut view = molecule.to_rust_mut()?.multicenter_bond_mut(*id);
                 let cs = &mut view.attributes_mut().constraints;
                 resolved.apply(cs);
                 Ok(())
