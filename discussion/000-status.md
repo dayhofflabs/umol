@@ -67,9 +67,10 @@ the statuses recorded here remain authoritative.
   S4b4 wires addition execution and removes the addition-undo adapters. S4b5
   wires removal and constraint compaction; S4b6 wires field edits and replay
   through mutable views. S4b7 wires constraint execution and replaces boxed
-  inverse Edits with explicit Undo variants. S4b8's replay closure is in progress.
+  inverse Edits with explicit Undo variants. S4b8 completes replay and fixes
+  unrelated-history rollback with a local restoration count guard.
   S4d1–S4d6 add the six single-entity entries. S4d7 has migrated and optimized
-  comparisons; closeout awaits the S4b8 rollback panic and S4b9 unused methods.
+  comparisons; closeout awaits S4b9's unused methods and strict lint gate.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -287,7 +288,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Fix S4b8 unrelated-journal rollback panic, finish S4b9, then close the S4d7 gates. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-28 | Finish S4b9 and close S4d7's strict lint gate. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

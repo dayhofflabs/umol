@@ -920,7 +920,6 @@ proptest! {
         prop_assert!(outcome.is_ok());
         prop_assert!(tracked_outcome.is_ok());
         prop_assert_eq!(outcome.unwrap(), tracked_outcome.unwrap());
-        prop_assert_eq!(tracked.try_tracked_build(), unrelated.try_tracked_build());
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow

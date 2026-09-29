@@ -430,7 +430,7 @@ mod tests {
         StereoAtomId, StereoBondId,
     };
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::Molecule;
+    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
@@ -3497,6 +3497,42 @@ mod tests {
         let restored = batched_overlays.build();
         assert!(restored.normalized_eq(&before));
         assert_eq!(restored, before);
+    }
+
+    #[rstest]
+    #[case::empty(0)]
+    #[case::smaller(1)]
+    #[case::larger(4)]
+    fn test_transaction_rollback_unrelated(
+        #[case] atom_count: usize,
+        #[values(false, true)] tracked: bool,
+    ) {
+        let mut source = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); 2],
+            ..Default::default()
+        })
+        .edit();
+        let transaction = source
+            .transact(Edits::from_iter([
+                Edit::AddAtoms {
+                    atoms: vec![AtomForm::default()],
+                },
+                Edit::RemoveTopology {
+                    atoms: vec![AtomHandle::Id(AtomId(1))],
+                    bonds: vec![],
+                },
+            ]))
+            .unwrap();
+        let mut unrelated = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::default(); atom_count],
+            ..Default::default()
+        })
+        .edit();
+        if tracked {
+            let _ = transaction.tracked_rollback(&mut unrelated).unwrap();
+        } else {
+            assert_eq!(transaction.rollback(&mut unrelated), Ok(()));
+        }
     }
 
     #[rstest]

@@ -4405,9 +4405,9 @@ fn test_molecule_restore_topology_identity(#[case] mut molecule: Molecule) {
 }
 
 #[rstest]
-#[case::missing(8, vec![NodeId(1)], 6, vec![EdgeId(0)], vec![], vec![])]
-#[case::duplicate(8, vec![NodeId(1)], 6, vec![EdgeId(0)], vec![AtomId(1), AtomId(1)], vec![BondId(0), BondId(0)])]
-#[case::outside(8, vec![NodeId(1)], 6, vec![EdgeId(0)], vec![AtomId(u32::MAX)], vec![BondId(u32::MAX)])]
+#[case::missing(9, vec![NodeId(1)], 7, vec![EdgeId(0)], vec![], vec![])]
+#[case::duplicate(9, vec![NodeId(1)], 7, vec![EdgeId(0)], vec![AtomId(1), AtomId(1)], vec![BondId(0), BondId(0)])]
+#[case::outside(9, vec![NodeId(1)], 7, vec![EdgeId(0)], vec![AtomId(u32::MAX)], vec![BondId(u32::MAX)])]
 #[case::short(1, vec![NodeId(0)], 1, vec![EdgeId(0)], vec![AtomId(0)], vec![BondId(0)])]
 #[case::source_gaps(12, vec![NodeId(10)], 10, vec![EdgeId(8)], vec![AtomId(10)], vec![BondId(8)])]
 fn test_molecule_restore_topology_history(

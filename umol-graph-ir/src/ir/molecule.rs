@@ -1413,10 +1413,15 @@ impl Molecule {
     pub(crate) fn restore_topology(
         &mut self,
         compaction: &GraphCompaction,
-        atoms: Vec<RemovedAtom>,
-        bonds: Vec<RemovedBond>,
+        mut atoms: Vec<RemovedAtom>,
+        mut bonds: Vec<RemovedBond>,
     ) {
         if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
+            return;
+        }
+        if self.atoms.len() != compaction.nodes().result_count()
+            || self.bonds.len() != compaction.edges().result_count()
+        {
             return;
         }
         let endpoints: Vec<_> = bonds
@@ -1431,37 +1436,41 @@ impl Molecule {
         self.graph.restore(compaction, &endpoints);
 
         if !compaction.nodes().removed().is_empty() {
-            let mut attributes = vec![None; self.atoms.len() + atoms.len()];
-            for (index, atom) in Arc::make_mut(&mut self.atoms).drain(..).enumerate() {
-                if let Some(id) = compaction.try_uncompact_node(NodeId::from(index)) {
-                    if let Some(slot) = attributes.get_mut(id.index()) {
-                        *slot = Some(atom);
-                    }
-                }
+            atoms.sort_unstable_by_key(|entry| entry.id);
+            let storage = Arc::make_mut(&mut self.atoms);
+            let mut attributes = Vec::with_capacity(storage.len() + atoms.len());
+            let mut survivors = mem::take(storage).into_iter();
+            let mut removed = atoms.into_iter().peekable();
+            for index in 0..compaction.nodes().source_count() {
+                let Some(atom) = removed
+                    .next_if(|entry| entry.id.index() == index)
+                    .map(|entry| entry.attributes)
+                    .or_else(|| survivors.next())
+                else {
+                    break;
+                };
+                attributes.push(atom);
             }
-            for removed in atoms {
-                if let Some(slot) = attributes.get_mut(removed.id.index()) {
-                    *slot = Some(removed.attributes);
-                }
-            }
-            *Arc::make_mut(&mut self.atoms) = attributes.into_iter().flatten().collect();
+            *storage = attributes;
         }
 
         if !compaction.edges().removed().is_empty() {
-            let mut attributes = vec![None; self.bonds.len() + bonds.len()];
-            for (index, bond) in Arc::make_mut(&mut self.bonds).drain(..).enumerate() {
-                if let Some(id) = compaction.try_uncompact_edge(EdgeId::from(index)) {
-                    if let Some(slot) = attributes.get_mut(id.index()) {
-                        *slot = Some(bond);
-                    }
-                }
+            bonds.sort_unstable_by_key(|entry| entry.id);
+            let storage = Arc::make_mut(&mut self.bonds);
+            let mut attributes = Vec::with_capacity(storage.len() + bonds.len());
+            let mut survivors = mem::take(storage).into_iter();
+            let mut removed = bonds.into_iter().peekable();
+            for index in 0..compaction.edges().source_count() {
+                let Some(bond) = removed
+                    .next_if(|entry| entry.id.index() == index)
+                    .map(|entry| entry.attributes)
+                    .or_else(|| survivors.next())
+                else {
+                    break;
+                };
+                attributes.push(bond);
             }
-            for removed in bonds {
-                if let Some(slot) = attributes.get_mut(removed.id.index()) {
-                    *slot = Some(removed.attributes);
-                }
-            }
-            *Arc::make_mut(&mut self.bonds) = attributes.into_iter().flatten().collect();
+            *storage = attributes;
         }
     }
 

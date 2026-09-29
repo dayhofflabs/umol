@@ -23,9 +23,10 @@
 //! Native relation row restoration also measures retained capacity: setup removes rows from
 //! a fresh original set, while the ordinary setup clones the compacted set without its spare
 //! capacity. Removal stays outside timing for both native and reconstruction paths. Native
-//! restoration reuses payload and offset/fixed columns. Variable restoration repacks a flat
-//! participant buffer without per-survivor vectors; saved participants are copied into that
-//! buffer through the old buffer. All non-identity native relation operations rebuild incidence.
+//! fixed restoration reuses payload and participant columns. VarRelationSet and
+//! FixedVarBirelationSet merge saved and surviving rows directly into final columns.
+//! VarVarBirelationSet repacks through row ranges and reuses payload and offset columns.
+//! All non-identity native relation operations rebuild incidence.
 //!
 //! Combined fixtures undo graph removal and all five relation shapes in sequence. They include
 //! empty storage, loops, parallel edges, isolates, empty factors, full cascades, and two removals

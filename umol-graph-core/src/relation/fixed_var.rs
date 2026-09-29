@@ -1,6 +1,7 @@
 //! A fixed first factor and variable second factor: [FixedVarBirelationSet].
 
 use std::hash::{Hash, Hasher};
+use std::mem;
 
 use super::incidence::Incidence;
 use super::participant::{ParticipantPosition, RelationParticipant};
@@ -438,9 +439,9 @@ where
     ///
     /// Saved entries carry original relation ids and may arrive in any order. Their
     /// participants already use the desired reference space and are not translated.
-    /// Payloads move without cloning. Storage rebuilds the packed participant buffer
-    /// using row ranges, reuses the fixed, payload, and offset columns, then rebuilds
-    /// incidence.
+    /// Payloads move without cloning. Saved rows and surviving row ranges are merged
+    /// in original-id order into participant, offset, and payload columns.
+    /// Participants are copied directly into the final buffers, then incidence is rebuilt.
     /// Surviving rows are not materialized as individual participant vectors.
     ///
     /// The compaction and saved entries must come from the removal being undone.
@@ -458,7 +459,7 @@ where
     pub fn restore(
         &mut self,
         compaction: &Compaction<RelationId>,
-        removed: Vec<(RelationId, [L1; N1], Vec<L2>, D)>,
+        mut removed: Vec<(RelationId, [L1; N1], Vec<L2>, D)>,
     ) {
         if compaction.removed().is_empty() {
             return;
@@ -469,50 +470,43 @@ where
             .fold(self.participants_2.len(), |total, (_, _, row, _)| {
                 total + row.len()
             });
-        let mut rows = Vec::with_capacity(count);
-        let mut participants = Vec::with_capacity(participant_count);
-        self.participants_2
-            .reserve(participant_count - self.participants_2.len());
-        self.participants_1.reserve(removed.len());
-        self.f2_offsets.reserve(removed.len());
-        self.data.reserve(removed.len());
-        rows.resize_with(count, || None);
-        let mut removed_ids = compaction.removed().iter().peekable();
-        let mut original = 0;
-        for ((first, data), range) in self
-            .participants_1
-            .drain(..)
-            .zip(self.data.drain(..))
-            .zip(self.f2_offsets.windows(2))
+        removed.sort_unstable_by_key(|entry| entry.0);
+        let mut participants_1 = Vec::with_capacity(count);
+        let mut offsets = Vec::with_capacity(count + 1);
+        let mut participants_2 = Vec::with_capacity(participant_count);
+        let mut data = Vec::with_capacity(count);
+        offsets.push(0);
         {
-            while removed_ids.peek().is_some_and(|id| id.index() == original) {
-                removed_ids.next();
-                original += 1;
+            let mut survivors = self
+                .participants_1
+                .iter()
+                .copied()
+                .zip(mem::take(&mut self.data))
+                .zip(self.f2_offsets.windows(2));
+            let mut removed = removed.into_iter().peekable();
+            for index in 0..compaction.source_count() {
+                let (first, payload) = if let Some((_, first, row, payload)) =
+                    removed.next_if(|entry| entry.0.index() == index)
+                {
+                    participants_2.extend_from_slice(&row);
+                    (first, payload)
+                } else if let Some(((first, payload), range)) = survivors.next() {
+                    participants_2.extend_from_slice(
+                        &self.participants_2[range[0] as usize..range[1] as usize],
+                    );
+                    (first, payload)
+                } else {
+                    break;
+                };
+                participants_1.push(first);
+                offsets.push(participants_2.len() as u32);
+                data.push(payload);
             }
-            if original >= compaction.source_count() {
-                break;
-            }
-            if let Some(slot) = rows.get_mut(original) {
-                *slot = Some((first, range[0] as usize, range[1] as usize, data));
-            }
-            original += 1;
         }
-        for (id, first, row, data) in removed {
-            if let Some(slot) = rows.get_mut(id.index()) {
-                let start = self.participants_2.len();
-                self.participants_2.extend_from_slice(&row);
-                *slot = Some((first, start, self.participants_2.len(), data));
-            }
-        }
-        self.f2_offsets.clear();
-        self.f2_offsets.push(0);
-        for (first, start, end, data) in rows.into_iter().flatten() {
-            participants.extend_from_slice(&self.participants_2[start..end]);
-            self.f2_offsets.push(participants.len() as u32);
-            self.participants_1.push(first);
-            self.data.push(data);
-        }
-        self.participants_2 = participants;
+        self.participants_1 = participants_1;
+        self.f2_offsets = offsets;
+        self.participants_2 = participants_2;
+        self.data = data;
         self.incidence = Incidence::build(self.count(), |i, out| {
             out.extend(self.participants_1[i].iter().map(|p| p.refs()));
             out.extend(

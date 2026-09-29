@@ -36,11 +36,11 @@ index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch loops remain under the editor module; single-edit execution and
 handle state are in molecule::apply. Fields remain private and internal Molecule
-mutation methods use pub(crate). S4b1–S4b7 are complete; S4b8 is in progress.
+mutation methods use pub(crate). S4b1–S4b8 are complete.
 S4d1–S4d6 are complete: comparable single-entity entries live in their owning
 entity modules. S4d7 uses specialized framed_eq implementations in both Edit
-execution paths. Its closeout awaits S4b8's unrelated-journal rollback panic
-and S4b9's unused mutation methods before the S5 lifecycle switch.
+execution paths. Its closeout awaits S4b9's unused mutation methods before the
+S5 lifecycle switch.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -92,9 +92,9 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1–S4b7 are complete; S4b8 is in progress. S4d1–S4d6 are complete;
+and S4b1–S4b8 are complete. S4d1–S4d6 are complete;
 S4d7 caller migration and comparison optimization are implemented; its final
-gates remain open for the S4b8 rollback failure and S4b9 unused methods.
+lint gate remains open for S4b9's unused methods.
 
 ## Editor and transaction API
 
@@ -5339,7 +5339,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   validation `?` in infallible apply_undo, removed in S4b8. Tests remain unexecuted
   until that migration compiles.
 
-- **S4b8 — Undo replay and migration closure** (`ir::molecule::apply`, Rust consumers; breaking, red→green). [dep: S4b7]
+- **S4b8 — completed 2026-09-28** (`ir::molecule::apply`, Rust consumers; breaking, red→green). [dep: S4b7]
 
   Implement Molecule::apply_undo through the calls mapped in S3b and S4b4–S4b7.
   Remove the seven remove_added_* adapters, forward Edit recursion, old-value
@@ -5356,7 +5356,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   data and compactions, convert saved entries to the method argument tuples,
   and retain local guards for panic freedom on manipulated inputs. Storage
   restoration and constraint reconstruction belong to the called methods;
-  replay performs no compaction algorithm, correspondence update, offered-old
+  replay performs no compaction algorithm, correspondence update, old-value
   comparison, aggregate undo validation, or forward Edit dispatch.
 
   **Inventory verification.** Cover every table row with forward mutation and
@@ -5378,15 +5378,64 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   every mutation and capture path for accessor-only Molecule access; passing
   behavior tests alone does not establish this boundary.
 
-  **Open verification failure — 2026-09-28.** S4d7's affected public property
-  run found a panic in test_transaction_rollback_unrelated. A journal that adds
-  an atom and then removes topology is replayed on a smaller, unrelated molecule.
-  restore_topology can restore the graph's source count while retaining fewer
-  atom attributes; the following RemoveAddedTopology replay calls remove_topology
-  and panics in Compaction::compact_vec. Matching-history replay passes. The
-  unrelated-history case requires panic freedom, without correctness guarantees.
-  Close this in S4b8 before the final S4d7 gate; the comparison migration does not
-  change those replay or topology methods.
+  **Implementation and verification.** All 41 Undo variants call Molecule
+  mutation methods or mutable views. Replay has no forward Edit dispatch,
+  remove_added_* adapters, aggregate validation, or old-value comparison.
+  The detached Transaction lifecycle remains until S5.
+
+  restore_topology returns before mutation when the attribute counts differ
+  from the compaction's survivor counts. This prevents unrelated-history
+  restoration from creating a length mismatch that makes a later removal or
+  field undo panic. Saved entries are sorted by original id and merged with
+  surviving attributes directly into the final vectors. Each affected kind
+  allocates one final attribute vector; there is no Option vector or default
+  filling. Forms move, with the existing Arc::make_mut copying only when the
+  attribute storage is shared.
+
+  All 1,198 molecule unit cases and 52 affected public Edit/frame/reframe
+  properties pass. Six regression cases replay an addition/removal journal on
+  empty, smaller, and larger unrelated molecules, through both rollback paths.
+  Matching restoration covers reversed saved entries, changed survivor values,
+  and shared storage. Malformed-entry tests exercise the merge as well as count
+  mismatches. The unrelated-history property checks rollback panic freedom; its
+  subsequent try_tracked_build comparison was removed because manipulated
+  history has no usable-result guarantee. Matching-history correctness checks
+  remain. Nightly formatting and diff review pass. S4b9 retains the unused-method
+  cleanup and strict lint gate.
+
+  **Overlay restoration.** VarRelationSet and FixedVarBirelationSet restore by
+  sorting saved rows and merging them with surviving row ranges into final
+  columns. This covers aromatic systems, multicenter bonds, dative bonds, stereo
+  atoms, and stereo bonds. It removes the Option row buffers and the intermediate
+  copy of saved participants through the old packed buffer. Payloads move without
+  a Clone bound. Input buffers are released before incidence rebuilding. The
+  trade-off is allocating final payload/offset/fixed columns rather than reusing
+  their retained capacity. Noncovalent restoration retains its in-place reordering.
+
+  Native before/after comparison: existing restore benchmark, sparse width-four
+  rows, usize payloads, reversed saved entries; 0.1 s warm-up, 0.2 s measurement,
+  10 samples. Times in microseconds; each cell is before → after. Retained cases
+  preserve column capacity from removal; single removes the middle row.
+
+  | Storage / rows | Single | Single, retained | Interleaved | Interleaved, retained |
+  | --- | ---: | ---: | ---: | ---: |
+  | Var / 64 | 2.02 → 1.92 | 1.82 → 1.98 | 2.34 → 2.10 | 2.12 → 2.15 |
+  | Var / 1024 | 21.82 → 20.59 | 20.54 → 20.28 | 25.78 → 27.93 | 25.10 → 24.18 |
+  | FixedVar / 64 | 3.58 → 3.42 | 3.32 → 3.43 | 3.88 → 3.70 | 3.64 → 3.72 |
+  | FixedVar / 1024 | 38.18 → 37.57 | 37.14 → 37.12 | 42.99 → 41.76 | 42.54 → 42.03 |
+
+  Retain the direct merge for its simpler storage construction and removal of
+  intermediate copies. It is not uniformly faster: the 64-row retained Var
+  single-removal case costs about 0.15 µs more (8%). The 1024-row ordinary Var
+  interleaved estimate has a wide interval and no detected timing difference.
+  No additional precision study is needed for this change. Allocation effects
+  above come from code inspection; peak memory was not measured.
+
+  Verification: 221 graph-core restoration unit cases, 38 restoration properties,
+  1,198 molecule unit cases, and 21 public Edit properties pass. Graph-core strict
+  all-target Clippy and private-item rustdoc pass. Existing tests cover unsorted
+  entries, empty factors, non-Clone payloads, incidence, and manipulated history;
+  their assertions and generators are unchanged.
 
 - **S4b9 — Remove temporary entity-set dead-code expectations**
   (`ir::{aromatic,dative,multicenter,noncovalent,stereo}`; cleanup, green).
@@ -5705,13 +5754,13 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   **Verification.** All 2,177 entry and molecule unit cases pass, including 764
   new definition-comparison cases and 24 removal-incidence cases. The affected
-  public Edit/frame/reframe property run passed 51 of 52 properties. The failing
-  test_transaction_rollback_unrelated exposes the S4b8 replay issue recorded
-  there; it was reproduced with a backtrace. Strict Clippy stops on six unused
+  public Edit/frame/reframe property run passes all 52 properties after S4b8's
+  replay correction. Strict Clippy stops on six unused
   Molecule compact_<overlay> methods and extend_constraints, pending S4b9.
   Private-item rustdoc with warnings denied passes. Nightly formatting and full
-  diff review pass. S4d7 remains open until the rollback and lint gates pass;
-  no test was weakened and no lint suppression was added.
+  diff review pass. S4d7 remains open until the lint gate passes; no lint
+  suppression was added. S4b8 records the unrelated-history property's corrected
+  scope.
 
 ### S5 — Borrowed transaction API
 
@@ -6215,12 +6264,12 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b7 are complete; S4b8 is in progress.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b8 are complete.
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is
-  incorporated in S5a1. S4d1–S4d6 are complete. After S4b9, S4d7 migrates
-  their comparison callers and closes S4 before the S5 lifecycle switch.
+  incorporated in S5a1. S4d1–S4d6 are complete. S4d7's comparison migration is
+  implemented; S4b9 clears its remaining lint gate before the S5 lifecycle switch.
 - S5a1–S5a2 introduce the guard and public lifecycle together; S5d1–S5d3
   complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

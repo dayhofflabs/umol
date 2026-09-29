@@ -1,6 +1,7 @@
 //! Variable-arity relation storage with flat participants and row offsets: [VarRelationSet].
 
 use std::hash::{Hash, Hasher};
+use std::mem;
 
 use super::incidence::Incidence;
 use super::participant::{ParticipantPosition, RelationParticipant};
@@ -373,8 +374,9 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
     ///
     /// Saved entries carry original relation ids and may arrive in any order. Their
     /// participants already use the desired reference space and are not translated.
-    /// Payloads move without cloning. Storage rebuilds the packed participant buffer
-    /// using row ranges and reuses the payload and offset columns, then rebuilds incidence.
+    /// Payloads move without cloning. Saved rows and surviving row ranges are merged
+    /// in original-id order into packed participant, offset, and payload columns.
+    /// Participants are copied directly into the final buffer, then incidence is rebuilt.
     /// Surviving rows are not materialized as individual participant vectors.
     ///
     /// The compaction and saved entries must come from the removal being undone.
@@ -392,7 +394,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
     pub fn restore(
         &mut self,
         compaction: &Compaction<RelationId>,
-        removed: Vec<(RelationId, Vec<P>, D)>,
+        mut removed: Vec<(RelationId, Vec<P>, D)>,
     ) {
         if compaction.removed().is_empty() {
             return;
@@ -403,43 +405,37 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
             .fold(self.participants.len(), |total, (_, row, _)| {
                 total + row.len()
             });
-        let mut rows = Vec::with_capacity(count);
+        removed.sort_unstable_by_key(|entry| entry.0);
+        let mut offsets = Vec::with_capacity(count + 1);
         let mut participants = Vec::with_capacity(participant_count);
-        self.participants
-            .reserve(participant_count - self.participants.len());
-        self.offsets.reserve(removed.len());
-        self.data.reserve(removed.len());
-        rows.resize_with(count, || None);
-        let mut removed_ids = compaction.removed().iter().peekable();
-        let mut original = 0;
-        for (data, range) in self.data.drain(..).zip(self.offsets.windows(2)) {
-            while removed_ids.peek().is_some_and(|id| id.index() == original) {
-                removed_ids.next();
-                original += 1;
-            }
-            if original >= compaction.source_count() {
-                break;
-            }
-            if let Some(slot) = rows.get_mut(original) {
-                *slot = Some((range[0] as usize, range[1] as usize, data));
-            }
-            original += 1;
-        }
-        for (id, row, data) in removed {
-            if let Some(slot) = rows.get_mut(id.index()) {
-                let start = self.participants.len();
-                self.participants.extend_from_slice(&row);
-                *slot = Some((start, self.participants.len(), data));
+        let mut data = Vec::with_capacity(count);
+        offsets.push(0);
+        {
+            let mut survivors = mem::take(&mut self.data)
+                .into_iter()
+                .zip(self.offsets.windows(2));
+            let mut removed = removed.into_iter().peekable();
+            for index in 0..compaction.source_count() {
+                let payload = if let Some((_, row, payload)) =
+                    removed.next_if(|entry| entry.0.index() == index)
+                {
+                    participants.extend_from_slice(&row);
+                    payload
+                } else if let Some((payload, range)) = survivors.next() {
+                    participants.extend_from_slice(
+                        &self.participants[range[0] as usize..range[1] as usize],
+                    );
+                    payload
+                } else {
+                    break;
+                };
+                offsets.push(participants.len() as u32);
+                data.push(payload);
             }
         }
-        self.offsets.clear();
-        self.offsets.push(0);
-        for (start, end, data) in rows.into_iter().flatten() {
-            participants.extend_from_slice(&self.participants[start..end]);
-            self.offsets.push(participants.len() as u32);
-            self.data.push(data);
-        }
+        self.offsets = offsets;
         self.participants = participants;
+        self.data = data;
         self.incidence = Incidence::build(self.count(), |i, out| {
             out.extend(
                 self.participants(RelationId::from(i))
