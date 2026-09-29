@@ -7,7 +7,7 @@ use umol_graph_ir::ir::Entity;
 
 use crate::depict::{
     ArrowItem, AtomItem, AtomLabel, BondItem, Bounds, DashedContourItem, Depiction, DepictionItem,
-    DepictionReference, TextItem, WedgeItem, WedgeKind,
+    DepictionReference, SvgConfig, TextItem, WedgeItem, WedgeKind,
 };
 
 const VIEW_MARGIN: f64 = 0.5;
@@ -19,9 +19,9 @@ const WEDGE_HASH_COUNT: usize = 8;
 const DASHED_CONTOUR_WIDTH: f64 = 0.04;
 const DASHED_CONTOUR_PATTERN: &str = "0.12 0.1";
 const TEXT_SIZE: f64 = 0.45;
-const MAPPING_INDEX_TEXT_SIZE: f64 = TEXT_SIZE * 0.85;
+pub(crate) const MAPPING_INDEX_TEXT_SIZE: f64 = TEXT_SIZE * 0.85;
 const SCRIPT_TEXT_SIZE: f64 = 0.315;
-const ATOM_LABEL_MASK_ID: &str = "umol-atom-label-mask";
+pub(crate) const ATOM_LABEL_MASK_ID: &str = "umol-atom-label-mask";
 const ATOM_LABEL_CHARACTER_ADVANCE: f64 = 0.36;
 const ATOM_LABEL_SCRIPT_CHARACTER_ADVANCE: f64 = 0.252;
 const ATOM_LABEL_HORIZONTAL_CLEARANCE: f64 = 0.08;
@@ -33,19 +33,20 @@ const ATOM_LABEL_SUBSCRIPT_DROP: f64 = 0.1125;
 const ARROW_HEAD_LENGTH: f64 = 0.24;
 const ARROW_HEAD_HALF_WIDTH: f64 = 0.11;
 
-/// Renders a [`Depiction`] as a complete SVG document fragment.
+/// Renders a [`Depiction`] as a complete SVG document fragment with `config`.
 ///
 /// Depiction item order is preserved among item groups. When atom labels are present, one leading
-/// definition masks molecular strokes beneath continuous conservative label rectangles without
-/// painting a page-background color. Coordinates are converted from the depiction's y-up
-/// convention to SVG's y-down convention. The view box covers both depiction anchors and estimated
-/// atom-label extents, then adds half a nominal bond length on each side; an empty depiction uses a
-/// centered one-by-one view box. Structured
+/// definition, identified by the configured mask id, masks molecular strokes beneath continuous
+/// conservative label rectangles without painting a page-background color. Mapping-index text uses
+/// the configured size; all other text uses fixed sizes. Coordinates are converted from the
+/// depiction's y-up convention to SVG's y-down convention. The view box covers both depiction
+/// anchors and estimated atom-label extents, then adds half a nominal bond length on each side; an
+/// empty depiction uses a centered one-by-one view box. Structured
 /// references are encoded in the `data-umol-references` attribute as ordered, space-separated path
 /// tokens: molecular entity references use `molecule`, `reaction-lhs`, or `reaction-rhs` followed
 /// by entity kind and id; `correspondence-pair` and `delta` references use their kind followed by
 /// their zero-based position.
-pub(crate) fn render(depiction: &Depiction) -> String {
+pub(crate) fn render(depiction: &Depiction, config: &SvgConfig) -> String {
     let mut output = String::new();
     let view_box = SvgViewBox::from_depiction(depiction);
 
@@ -64,13 +65,14 @@ pub(crate) fn render(depiction: &Depiction) -> String {
         .iter()
         .any(|item| matches!(item, DepictionItem::Atom(_)));
     if has_atom_mask {
-        render_atom_mask(&mut output, depiction, view_box);
+        render_atom_mask(&mut output, depiction, view_box, &config.mask_id);
     }
 
     for item in depiction.items() {
         render_item(
             &mut output,
             item,
+            config,
             has_atom_mask && item_uses_atom_mask(item),
         );
     }
@@ -200,9 +202,16 @@ fn character_count(text: &str) -> f64 {
     text.chars().count() as f64
 }
 
-fn render_atom_mask(output: &mut String, depiction: &Depiction, view_box: SvgViewBox) {
+fn render_atom_mask(
+    output: &mut String,
+    depiction: &Depiction,
+    view_box: SvgViewBox,
+    mask_id: &str,
+) {
+    output.push_str(r#"<defs><mask id=""#);
+    write_escaped_text(output, mask_id);
     output.push_str(
-        r#"<defs><mask id="umol-atom-label-mask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" mask-type="luminance" x=""#,
+        r#"" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" mask-type="luminance" x=""#,
     );
     write_number(output, view_box.x);
     output.push_str(r#"" y=""#);
@@ -237,14 +246,15 @@ fn render_atom_mask(output: &mut String, depiction: &Depiction, view_box: SvgVie
     output.push_str("</mask></defs>\n");
 }
 
-fn render_item(output: &mut String, item: &DepictionItem, atom_mask: bool) {
+fn render_item(output: &mut String, item: &DepictionItem, config: &SvgConfig, atom_mask: bool) {
     output.push_str("<g data-umol-item=\"");
     output.push_str(item_kind(item));
     output.push('"');
     write_references(output, item.references());
     if atom_mask {
-        write!(output, r##" mask="url(#{ATOM_LABEL_MASK_ID})""##)
-            .expect("writing to a String cannot fail");
+        output.push_str(r##" mask="url(#"##);
+        write_escaped_text(output, &config.mask_id);
+        output.push_str(r#")""#);
     }
     output.push('>');
 
@@ -253,7 +263,7 @@ fn render_item(output: &mut String, item: &DepictionItem, atom_mask: bool) {
         DepictionItem::Bond(bond) => render_bond(output, bond),
         DepictionItem::Wedge(wedge) => render_wedge(output, wedge),
         DepictionItem::DashedContour(contour) => render_dashed_contour(output, contour),
-        DepictionItem::Text(text) => render_text(output, text),
+        DepictionItem::Text(text) => render_text(output, text, config.mapping_index_text_size),
         DepictionItem::Arrow(arrow) => render_arrow(output, arrow),
     }
 
@@ -423,13 +433,13 @@ fn render_dashed_contour(output: &mut String, contour: &DashedContourItem) {
     .expect("writing to a String cannot fail");
 }
 
-fn render_text(output: &mut String, text: &TextItem) {
+fn render_text(output: &mut String, text: &TextItem, mapping_index_text_size: f64) {
     let text_size = if text
         .references
         .iter()
         .any(|reference| matches!(reference, DepictionReference::CorrespondencePair(_)))
     {
-        MAPPING_INDEX_TEXT_SIZE
+        mapping_index_text_size
     } else {
         TEXT_SIZE
     };
@@ -609,7 +619,7 @@ mod tests {
             MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0), Point2D::new(2.0, 0.0)]).unwrap();
         let depiction = depict(&molecule, &layout).unwrap();
 
-        let svg = render(&depiction);
+        let svg = render(&depiction, &SvgConfig::default());
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();
         let mask = root
@@ -740,7 +750,7 @@ mod tests {
         });
         let mut output = String::new();
 
-        render_item(&mut output, &item, true);
+        render_item(&mut output, &item, &SvgConfig::default(), true);
 
         assert_eq!(
             output,
@@ -776,7 +786,7 @@ mod tests {
         });
         let mut output = String::new();
 
-        render_item(&mut output, &item, true);
+        render_item(&mut output, &item, &SvgConfig::default(), true);
 
         assert_eq!(output, expected);
     }
@@ -801,7 +811,7 @@ mod tests {
         };
         let mut output = String::new();
 
-        render_text(&mut output, &text);
+        render_text(&mut output, &text, MAPPING_INDEX_TEXT_SIZE);
 
         assert_eq!(output, expected);
     }
@@ -833,7 +843,7 @@ mod tests {
         let depiction = depict(&molecule, &layout).unwrap();
 
         assert_eq!(
-            render(&depiction),
+            render(&depiction, &SvgConfig::default()),
             r#"<svg xmlns="http://www.w3.org/2000/svg" class="umol-depiction" viewBox="-0.5 -0.5 1 1">
 </svg>"#
         );
@@ -847,7 +857,7 @@ mod tests {
                 .unwrap();
         let depiction = depict(&molecule, &layout).unwrap();
 
-        let svg = render(&depiction);
+        let svg = render(&depiction, &SvgConfig::default());
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();
         let children = root
@@ -909,7 +919,7 @@ mod tests {
         let lhs = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
         let depiction = Reaction::new(lhs, Deltas::new()).depict().unwrap();
 
-        let svg = render(&depiction);
+        let svg = render(&depiction, &SvgConfig::default());
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();
         let mask_boxes = root
@@ -946,5 +956,44 @@ mod tests {
             ]
         );
         assert_eq!(arrow.attribute("mask"), None);
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_render_reaction_with_config() {
+        let lhs = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
+        let depiction = Reaction::new(lhs, Deltas::new()).depict().unwrap();
+        let config = SvgConfig {
+            mapping_index_text_size: 0.25,
+            mask_id: "lhs-\"mask\"".to_owned(),
+        };
+
+        let svg = render(&depiction, &config);
+        let document = Document::parse(&svg).unwrap();
+        let root = document.root_element();
+        let mask = root
+            .descendants()
+            .find(|node| node.has_tag_name("mask"))
+            .unwrap();
+        let masked_groups = root
+            .children()
+            .filter_map(|node| node.attribute("mask"))
+            .collect::<Vec<_>>();
+        let text_sizes = |class: &str| {
+            root.descendants()
+                .filter(|node| node.has_tag_name("text") && node.attribute("class") == Some(class))
+                .map(|node| node.attribute("font-size"))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            render(&depiction, &SvgConfig::default()),
+            depiction.render_svg()
+        );
+        assert!(svg.contains(r#"<mask id="lhs-&quot;mask&quot;""#));
+        assert_eq!(mask.attribute("id"), Some("lhs-\"mask\""));
+        assert_eq!(masked_groups, ["url(#lhs-\"mask\")"; 2]);
+        assert_eq!(text_sizes("umol-text"), [Some("0.25"); 4]);
+        assert_eq!(text_sizes("umol-atom"), [Some("0.45"); 2]);
     }
 }

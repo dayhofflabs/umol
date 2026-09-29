@@ -239,6 +239,7 @@ if hasattr(_native_module, "Depiction"):
     MoleculeLayout = _native_module.MoleculeLayout
     ReactionLayout = _native_module.ReactionLayout
     DepictConfig = _native_module.DepictConfig
+    SvgConfig = _native_module.SvgConfig
     Depiction = _native_module.Depiction
 
 try:
@@ -484,6 +485,7 @@ if hasattr(_native_module, "Depiction"):
             "MoleculeLayout",
             "ReactionLayout",
             "DepictConfig",
+            "SvgConfig",
             "Depiction",
         ]
     )

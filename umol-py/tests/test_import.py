@@ -245,6 +245,7 @@ if hasattr(native, "Depiction"):
             "MoleculeLayout",
             "ReactionLayout",
             "DepictConfig",
+            "SvgConfig",
             "Depiction",
         }
     )
