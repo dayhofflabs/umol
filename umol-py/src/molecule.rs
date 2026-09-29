@@ -314,6 +314,54 @@ impl Molecule {
             .map_err(molecule_apply_error)
     }
 
+    /// Consume prepared batches in order and apply them in one transaction.
+    ///
+    /// The input iterable is collected before any batch is consumed.
+    /// Each batch has its own handle namespace. Once execution starts, existing views are
+    /// invalidated, including on failure. Application and integrity failures restore the molecule.
+    /// If a batch cannot be consumed, earlier batches remain consumed and the molecule is unchanged.
+    fn transact(slf: Py<Self>, py: Python<'_>, batches: &Bound<'_, PyAny>) -> PyResult<()> {
+        let batches = batches
+            .try_iter()?
+            .map(|item| -> PyResult<Py<Edits>> { Ok(item?.cast_into::<Edits>()?.unbind()) })
+            .collect::<PyResult<Vec<_>>>()?;
+        let batches = batches
+            .into_iter()
+            .map(|edits| edits.try_borrow_mut(py)?.take())
+            .collect::<PyResult<Vec<_>>>()?;
+        let mut molecule = slf.try_borrow_mut(py)?;
+        molecule.advance_counter()?;
+        molecule
+            .to_rust_mut()
+            .transact(batches)
+            .map_err(molecule_apply_error)
+    }
+
+    /// Apply prepared batches and return the transaction-entry to result correspondence.
+    ///
+    /// Batches are consumed and existing views are invalidated as in transact.
+    fn tracked_transact(
+        slf: Py<Self>,
+        py: Python<'_>,
+        batches: &Bound<'_, PyAny>,
+    ) -> PyResult<MoleculeCorrespondence> {
+        let batches = batches
+            .try_iter()?
+            .map(|item| -> PyResult<Py<Edits>> { Ok(item?.cast_into::<Edits>()?.unbind()) })
+            .collect::<PyResult<Vec<_>>>()?;
+        let batches = batches
+            .into_iter()
+            .map(|edits| edits.try_borrow_mut(py)?.take())
+            .collect::<PyResult<Vec<_>>>()?;
+        let mut molecule = slf.try_borrow_mut(py)?;
+        molecule.advance_counter()?;
+        molecule
+            .to_rust_mut()
+            .tracked_transact(batches)
+            .map(MoleculeCorrespondence::from_rust)
+            .map_err(molecule_apply_error)
+    }
+
     /// Combine by disjoint concatenation. For each entity kind, this molecule's ids remain
     /// the prefix and other follows in its original order.
     fn combine(&self, other: &Self) -> Self {
@@ -669,6 +717,7 @@ impl Molecule {
 mod tests {
     use std::borrow::Cow;
 
+    use pyo3::exceptions::PyRuntimeError;
     use pyo3::types::{PyBytes, PyList};
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
@@ -708,7 +757,8 @@ mod tests {
     use super::*;
     use crate::atom::AtomForm as PyAtomForm;
     use crate::error::{
-        InvalidStructureError, MetadataError, ParseError, TransactionError, UnderdeterminedError,
+        ConsumedError, InvalidStructureError, MetadataError, ParseError, TransactionError,
+        UnderdeterminedError,
     };
     use crate::fingerprint::config::{
         EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
@@ -1135,6 +1185,84 @@ mod tests {
                 "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
             );
             assert_eq!(molecule.to_rust(), &initial);
+        });
+    }
+
+    #[rstest]
+    #[case::untracked(false)]
+    #[case::tracked(true)]
+    fn test_molecule_transact_borrow_error(#[case] tracked: bool) {
+        Python::attach(|py| {
+            let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
+            let molecule = Py::new(py, Molecule::from_rust(initial.clone())).unwrap();
+            let edits = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let borrowed = molecule.borrow(py);
+            let batches = PyList::new(py, [edits.clone_ref(py)]).unwrap();
+
+            let result = if tracked {
+                Molecule::tracked_transact(molecule.clone_ref(py), py, batches.as_any()).map(drop)
+            } else {
+                Molecule::transact(molecule.clone_ref(py), py, batches.as_any())
+            };
+
+            let error = result.unwrap_err();
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "Already borrowed"
+            );
+            assert_eq!(borrowed.to_rust(), &initial);
+            assert_eq!(borrowed.view_counter().unwrap(), 0);
+            assert!(edits
+                .borrow(py)
+                .to_rust()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
+        });
+    }
+
+    #[rstest]
+    #[case::untracked(false)]
+    #[case::tracked(true)]
+    fn test_molecule_transact_batch_borrow_error(#[case] tracked: bool) {
+        Python::attach(|py| {
+            let initial = mol_dsl!(r#"{:atoms ["C"]}"#);
+            let molecule = Py::new(py, Molecule::from_rust(initial.clone())).unwrap();
+            let first = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let second = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let third = Py::new(py, Edits::from_rust(GraphIrEdits::new())).unwrap();
+            let borrowed = second.borrow(py);
+            let batches = PyList::new(
+                py,
+                [
+                    first.clone_ref(py),
+                    second.clone_ref(py),
+                    third.clone_ref(py),
+                ],
+            )
+            .unwrap();
+
+            let result = if tracked {
+                Molecule::tracked_transact(molecule.clone_ref(py), py, batches.as_any()).map(drop)
+            } else {
+                Molecule::transact(molecule.clone_ref(py), py, batches.as_any())
+            };
+
+            let error = result.unwrap_err();
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "Already borrowed"
+            );
+            assert_eq!(molecule.borrow(py).to_rust(), &initial);
+            assert_eq!(molecule.borrow(py).view_counter().unwrap(), 0);
+            assert!(first
+                .borrow(py)
+                .to_rust()
+                .unwrap_err()
+                .is_instance_of::<ConsumedError>(py));
+            assert_eq!(borrowed.to_rust().unwrap(), &GraphIrEdits::new());
+            assert_eq!(third.borrow(py).to_rust().unwrap(), &GraphIrEdits::new());
         });
     }
 

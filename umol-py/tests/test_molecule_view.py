@@ -5,6 +5,7 @@ from umol import (
     AtomForm,
     BondForm,
     DativeBondForm,
+    Edits,
     Element,
     InvalidatedViewError,
     Molecule,
@@ -73,8 +74,8 @@ def entity(request):
     return request.param
 
 
-@pytest.mark.parametrize("append", [False, True], ids=["empty", "nonempty"])
-def test_molecule_combine_from_view_invalidation(molecule, entity, append):
+@pytest.mark.parametrize("operation", ["combine_empty", "combine_nonempty", "transact", "tracked_transact"])
+def test_molecule_view_invalidation(molecule, entity, operation):
     name, field, form = entity
     collection = getattr(molecule, name)
     view = collection[0]
@@ -87,7 +88,10 @@ def test_molecule_combine_from_view_invalidation(molecule, entity, append):
     saved = view.asdict()
     count = len(collection)
 
-    molecule.combine_from(molecule if append else Molecule())
+    if operation.startswith("combine"):
+        molecule.combine_from(molecule if operation == "combine_nonempty" else Molecule())
+    else:
+        getattr(molecule, operation)([Edits()])
 
     for access in (
         lambda: view.id,
@@ -101,7 +105,6 @@ def test_molecule_combine_from_view_invalidation(molecule, entity, append):
         lambda: len(constraints),
         lambda: repr(constraints),
         lambda: iter(constraints),
-        lambda: constraints.asdict(),
         lambda: constraints.update([]),
         lambda: setattr(form, "constraints", constraints),
         lambda: len(collection),
@@ -117,8 +120,12 @@ def test_molecule_combine_from_view_invalidation(molecule, entity, append):
         with pytest.raises(InvalidatedViewError, match="was invalidated by Molecule mutation"):
             access()
 
+    if not name.startswith("stereo_"):
+        with pytest.raises(InvalidatedViewError):
+            constraints.asdict()
+
     fresh = getattr(molecule, name)
-    assert len(fresh) == count * (2 if append else 1)
+    assert len(fresh) == count * (2 if operation == "combine_nonempty" else 1)
     assert fresh[0].id == 0
     assert fresh[0].asdict() == saved
     assert copied == saved[field]
@@ -138,7 +145,7 @@ def test_molecule_view_setters(molecule, entity):
     assert getattr(view, field) == expected
     assert getattr(getattr(molecule, name)[0], field) == expected
     assert next(iterator).id == 0
-    assert constraints.asdict() == view.constraints.asdict()
+    assert list(constraints) == list(view.constraints)
 
     with pytest.raises(TypeError):
         setattr(view, field, object())
@@ -146,7 +153,7 @@ def test_molecule_view_setters(molecule, entity):
 
     collection[0] = form
     assert view.asdict() == form.asdict()
-    assert constraints.asdict() == view.constraints.asdict()
+    assert list(constraints) == list(view.constraints)
     view.constraints = constraints
     assert view.asdict() == form.asdict()
 
@@ -167,13 +174,14 @@ def test_molecule_combine_from_argument_error(molecule, entity):
     "atoms", "bonds", "dative_bonds", "aromatic_systems",
     "multicenter_bonds", "noncovalent_bonds", "stereo_atoms", "stereo_bonds",
 ])
-def test_molecule_combine_from_empty_iterator(name):
+@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact"])
+def test_molecule_view_empty_iterator(name, method):
     molecule = Molecule()
     collection = getattr(molecule, name)
     iterator = iter(collection)
     assert next(iterator, None) is None
 
-    molecule.combine_from(Molecule())
+    getattr(molecule, method)(Molecule() if method == "combine_from" else [])
 
     with pytest.raises(InvalidatedViewError):
         next(iterator, None)
@@ -183,7 +191,8 @@ def test_molecule_combine_from_empty_iterator(name):
 
 
 @pytest.mark.parametrize("name", ["atoms", "bonds", "dative_bonds"])
-def test_molecule_combine_from_ring_size_invalidation(molecule, name):
+@pytest.mark.parametrize("method", ["combine_from", "transact", "tracked_transact"])
+def test_molecule_view_ring_size_invalidation(molecule, name, method):
     view = getattr(molecule, name)[0]
     constraints = view.constraints
     sizes = constraints.ring_size_count
@@ -194,7 +203,7 @@ def test_molecule_combine_from_ring_size_invalidation(molecule, name):
     assert sizes[6] == NumForm.Lit(1)
     assert view.constraints.ring_size_count[6] == NumForm.Lit(1)
 
-    molecule.combine_from(Molecule())
+    getattr(molecule, method)(Molecule() if method == "combine_from" else [])
 
     for access in (
         lambda: constraints.ring_size_count,

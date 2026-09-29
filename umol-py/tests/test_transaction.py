@@ -3,6 +3,7 @@ import pytest
 from umol import (
     AromaticSystemForm,
     AtomForm,
+    AtomFieldChange,
     BondForm,
     ConsumedError,
     Correspondence,
@@ -10,10 +11,13 @@ from umol import (
     Edit,
     Edits,
     Element,
+    InvalidatedViewError,
+    InvalidStructureError,
     Molecule,
     MulticenterBondForm,
     NoncovalentBondForm,
     NoncovalentBondKind,
+    NumForm,
     StereoAtomForm,
     StereoBondForm,
     StereoConfigurationForm,
@@ -207,39 +211,207 @@ def test_molecule_editor_tracked_apply():
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
 
 
-def test_molecule_editor_tracked_transact_and_rollback():
-    molecule = Molecule.parse('{:atoms ["N#h3"]}')
-    plain_editor = molecule.edit()
-    tracked_editor = molecule.edit()
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+@pytest.mark.parametrize("container", [list, tuple, iter], ids=["list", "tuple", "iterator"])
+def test_molecule_transact(method, container):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    batches = []
+    for element in ("N", "O"):
+        edits = Edits()
+        atom = edits.add_atom(AtomForm.parse(element))
+        edits.add_bond(0, atom, BondForm(1))
+        batches.append(edits)
+    aliases = list(batches)
+    iterator = iter(batches[0])
+    saved_edit = next(iterator)
 
-    plain_transaction = plain_editor.transact(add_carbon_edits())
-    tracked_transaction, forward = tracked_editor.tracked_transact(add_carbon_edits())
+    result = getattr(molecule, method)(container(batches))
 
-    assert tracked_editor.snapshot() == plain_editor.snapshot()
-    assert forward.atoms == Correspondence([(0, 0)], 1, 2)
+    assert molecule == Molecule.parse(
+        '{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [0 2 "1"]]}'
+    )
+    if method == "tracked_transact":
+        assert result.atoms == Correspondence([(0, 0)], 1, 3)
+        assert result.bonds == Correspondence([], 0, 2)
+    else:
+        assert result is None
+    for batch in aliases:
+        with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+            len(batch)
+    with pytest.raises(InvalidatedViewError, match="Edits has been consumed"):
+        next(iterator)
+    assert saved_edit == Edit.AddAtoms(atoms=[AtomForm.parse("N")])
 
-    plain_transaction.rollback(plain_editor)
-    reverse = tracked_transaction.tracked_rollback(tracked_editor)
 
-    assert tracked_editor.snapshot() == plain_editor.snapshot() == molecule
-    assert reverse.atoms == Correspondence([(0, 0)], 2, 1)
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+@pytest.mark.parametrize("failure", ["consumed", "alias"])
+def test_molecule_transact_consumption_error(method, failure):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    view = molecule.atoms[0]
+    first = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("N")])])
+    untouched = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("O")])])
+    iterator = iter(first)
+    if failure == "consumed":
+        second = Edits()
+        Molecule().transact([second])
+    else:
+        second = first
+
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        getattr(molecule, method)([first, second, untouched])
+
+    assert molecule == Molecule.parse('{:atoms ["C"]}')
+    assert view.id == 0
+    assert list(untouched) == [Edit.AddAtoms(atoms=[AtomForm.parse("O")])]
+    for batch in (first, second):
+        with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+            len(batch)
+    with pytest.raises(InvalidatedViewError, match="Edits has been consumed"):
+        next(iterator)
 
 
-@pytest.mark.parametrize("method", ["rollback", "tracked_rollback"])
-def test_transaction_consumed(method):
-    molecule = Molecule.parse('{:atoms ["N"]}')
-    editor = molecule.edit()
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+def test_molecule_transact_argument_error(method):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    view = molecule.atoms[0]
+    edit = Edit.AddAtoms(atoms=[AtomForm.parse("N")])
+    first = Edits([edit])
+
+    with pytest.raises(TypeError):
+        getattr(molecule, method)(iter([first, None]))
+
+    assert list(first) == [edit]
+    assert view.id == 0
+    assert molecule == Molecule.parse('{:atoms ["C"]}')
+
+
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+@pytest.mark.parametrize("fail", [False, True], ids=["complete", "iteration_error"])
+def test_molecule_transact_generator(method, fail):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    view = molecule.atoms[0]
+    edit = Edit.AddAtoms(atoms=[AtomForm.parse("N")])
+    first = Edits([edit])
+
+    def batches():
+        yield first
+        assert list(first) == [edit]
+        assert view.id == 0
+        if fail:
+            raise ValueError("batch preparation failed")
+        yield Edits([Edit.AddAtoms(atoms=[AtomForm.parse("O")])])
+
+    if fail:
+        with pytest.raises(ValueError, match="^batch preparation failed$"):
+            getattr(molecule, method)(batches())
+        assert list(first) == [edit]
+        assert view.id == 0
+        assert molecule == Molecule.parse('{:atoms ["C"]}')
+    else:
+        getattr(molecule, method)(batches())
+        assert molecule == Molecule.parse('{:atoms ["C" "N" "O"]}')
+        with pytest.raises(ConsumedError):
+            len(first)
+        with pytest.raises(InvalidatedViewError):
+            view.id
+
+
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+def test_molecule_transact_fields(method):
+    molecule = Molecule.from_entries([AtomForm(Element("C"), charge=0)])
+    view = molecule.atoms[0]
+    constraints = view.constraints
+    bonds = molecule.bonds
+    first = Edits([Edit.ModifyAtomField(
+        id=0, change=AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(1)),
+    )])
+    second = Edits([Edit.ModifyAtomField(
+        id=0, change=AtomFieldChange.Charge(old=NumForm.Lit(1), new=NumForm.Lit(2)),
+    )])
+
+    result = getattr(molecule, method)([first, second])
+
+    assert molecule == Molecule.from_entries([AtomForm(Element("C"), charge=2)])
+    assert molecule.atoms[0].charge == NumForm.Lit(2)
+    if method == "tracked_transact":
+        assert result.atoms == Correspondence([(0, 0)], 1, 1)
+    for access in (lambda: view.id, lambda: len(constraints), lambda: len(bonds)):
+        with pytest.raises(InvalidatedViewError):
+            access()
+
+
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+def test_molecule_transact_error(method):
+    molecule = Molecule.parse('{:atoms ["C"]}')
+    view = molecule.atoms[0]
+    first = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("N")])])
+    second = Edits([Edit.ModifyAtomField(
+        id=7, change=AtomFieldChange.Charge(old=NumForm.Lit(0), new=NumForm.Lit(1)),
+    )])
+    third = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("O")])])
+
+    with pytest.raises(TransactionError, match="^atom handle 7 is out of range for 2 entries$"):
+        getattr(molecule, method)([first, second, third])
+
+    assert molecule == Molecule.parse('{:atoms ["C"]}')
+    assert molecule.atoms[0].id == 0
+    with pytest.raises(InvalidatedViewError):
+        view.id
+    for edits in (first, second, third):
+        with pytest.raises(ConsumedError):
+            len(edits)
+
+
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+def test_molecule_transact_integrity(method):
+    molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    first = Edits()
+    first.add_bond(0, 1, BondForm(2))
+    second = Edits([Edit.RemoveTopology(atoms=[], bonds=[0])])
+
+    result = getattr(molecule, method)([first, second])
+
+    assert molecule == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "2"]]}')
+    if method == "tracked_transact":
+        assert result.atoms == Correspondence([(0, 0), (1, 1)], 2, 2)
+        assert result.bonds == Correspondence([], 1, 1)
+
+
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+def test_molecule_transact_integrity_error(method):
+    molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    view = molecule.bonds[0]
     edits = Edits()
-    edits.add_atom(AtomForm.parse("C"))
-    transaction = editor.transact(edits)
-    alias = transaction
+    edits.add_bond(0, 1, BondForm(1))
 
-    getattr(transaction, method)(editor)
+    with pytest.raises(
+        InvalidStructureError,
+        match=r"^bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$",
+    ):
+        getattr(molecule, method)([edits])
 
-    assert editor.snapshot() == molecule
-    with pytest.raises(ConsumedError, match="^Transaction has been consumed$") as error:
-        getattr(alias, method)(editor)
-    assert type(error.value) is ConsumedError
+    assert molecule == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    assert molecule.bonds[0].id == 0
+    with pytest.raises(InvalidatedViewError):
+        view.id
+    with pytest.raises(ConsumedError):
+        len(edits)
+
+
+def test_molecule_tracked_transact_compaction():
+    molecule = Molecule.parse('{:atoms ["C" "N" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}')
+    first = Edits([Edit.RemoveTopology(atoms=[0], bonds=[])])
+    second = Edits()
+    atom = second.add_atom(AtomForm.parse("F"))
+    second.add_bond(1, atom, BondForm(1))
+
+    correspondence = molecule.tracked_transact([first, second])
+
+    assert molecule == Molecule.parse(
+        '{:atoms ["N" "O" "F"] :bonds [[0 1 "1"] [1 2 "1"]]}'
+    )
+    assert correspondence.atoms == Correspondence([(1, 0), (2, 1)], 3, 3)
+    assert correspondence.bonds == Correspondence([(1, 0)], 2, 2)
 
 
 def test_molecule_apply_replace(replacement_case):
@@ -248,20 +420,33 @@ def test_molecule_apply_replace(replacement_case):
     assert original.apply(Edits([edit])) == expected
 
 
-def test_molecule_editor_transact_replace(replacement_case):
-    original, expected, edit = replacement_case
-    editor = original.edit()
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+def test_molecule_transact_replace(replacement_case, method):
+    molecule, expected, edit = replacement_case
 
-    transaction = editor.transact(Edits([edit]))
+    getattr(molecule, method)([Edits([edit])])
 
-    assert editor.snapshot() == expected
-    transaction.rollback(editor)
-    assert editor.build() == original
+    assert molecule == expected
 
 
-def test_molecule_editor_transact_replace_new_handles():
-    original = Molecule.parse('{:atoms ["C" "N"]}')
-    editor = original.edit()
+@pytest.mark.parametrize("method", ["transact", "tracked_transact"])
+def test_molecule_transact_replace_error(replacement_case, method):
+    molecule, _, edit = replacement_case
+    original = Molecule.parse(str(molecule))
+    first = Edits([edit])
+    second = Edits([edit])
+
+    with pytest.raises(
+        TransactionError, match="^precondition failed: old state does not match current$",
+    ):
+        getattr(molecule, method)([first, second])
+
+    assert molecule == original
+
+
+@pytest.mark.parametrize("rollback", [False, True], ids=["commit", "rollback"])
+def test_molecule_transact_replace_new_handles(rollback):
+    molecule = Molecule.parse('{:atoms ["C" "N"]}')
     edits = Edits()
     atom = edits.add_atom(AtomForm.parse("O"))
     dative = edits.add_dative_bond([0], 1, DativeBondForm(1))
@@ -272,15 +457,18 @@ def test_molecule_editor_transact_replace_new_handles():
         dative_bonds=[([2], 0, DativeBondForm(1))],
     )
 
-    transaction = editor.transact(edits)
+    if rollback:
+        with pytest.raises(
+            TransactionError, match="^atom handle 7 is out of range for 3 entries$",
+        ):
+            molecule.transact([edits, Edits([Edit.RemoveTopology(atoms=[7], bonds=[])])])
+        assert molecule == Molecule.parse('{:atoms ["C" "N"]}')
+    else:
+        molecule.transact([edits])
+        assert molecule == expected
 
-    assert editor.snapshot() == expected
-    transaction.rollback(editor)
-    assert editor.build() == original
 
-
-@pytest.mark.parametrize("method", ["apply", "transact"])
-def test_molecule_editor_replace_error(replacement_case, method):
+def test_molecule_editor_apply_replace_error(replacement_case):
     original, _, edit = replacement_case
     editor = original.edit()
     mismatch = type(edit)(id=edit.id, old=edit.new, new=edit.old)
@@ -290,9 +478,7 @@ def test_molecule_editor_replace_error(replacement_case, method):
         TransactionError,
         match="^precondition failed: old state does not match current$",
     ):
-        getattr(editor, method)(edits)
-    if method == "transact":
-        assert editor.build() == original
+        editor.apply(edits)
 
 
 def test_molecule_editor_remove_topology():

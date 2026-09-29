@@ -222,7 +222,6 @@ PUBLIC_EXPORTS = frozenset(
     Topicity
     TopicityForm
     TopicityRelationForm
-    Transaction
     TransactionError
     UnpairedElectrons
     UnpairedElectronsForm
@@ -365,6 +364,8 @@ def test_deferred_member(owner, name):
         (umol.Molecule.edit, "(self, /)"),
         (umol.Molecule.apply, "(self, /, edits)"),
         (umol.Molecule.tracked_apply, "(self, /, edits)"),
+        (umol.Molecule.transact, "(self, /, batches)"),
+        (umol.Molecule.tracked_transact, "(self, /, batches)"),
         (umol.Molecule.combine, "(self, /, other)"),
         (umol.Molecule.combine_from, "(self, /, other)"),
         (umol.Molecule.combine_all, "(molecules)"),
@@ -400,8 +401,6 @@ def test_deferred_member(owner, name):
         (umol.MoleculeEditor.tracked_build, "(self, /)"),
         (umol.MoleculeEditor.apply, "(self, /, edits)"),
         (umol.MoleculeEditor.tracked_apply, "(self, /, edits)"),
-        (umol.MoleculeEditor.transact, "(self, /, edits)"),
-        (umol.MoleculeEditor.tracked_transact, "(self, /, edits)"),
         (umol.MoleculeEditor.remove_topology, "(self, /, atoms, bonds)"),
         (umol.MoleculeEditor.remove_dative_bonds, "(self, /, ids)"),
         (umol.MoleculeEditor.remove_aromatic_systems, "(self, /, ids)"),
@@ -446,8 +445,6 @@ def test_deferred_member(owner, name):
             umol.ReactionSpan.canonical_eq,
             "(self, /, other, *, stereo_model=None, config=None)",
         ),
-        (umol.Transaction.rollback, "(self, /, editor)"),
-        (umol.Transaction.tracked_rollback, "(self, /, editor)"),
     ],
 )
 def test_public_operation_signature(operation, expected):

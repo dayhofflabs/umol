@@ -152,18 +152,6 @@ def test_molecule_editing_workflow():
     assert applied == expected
     assert molecule == original
 
-    editor = molecule.edit()
-    transaction = editor.transact(edits)
-
-    assert editor.snapshot() == expected
-    assert molecule == original
-
-    transaction.rollback(editor)
-
-    assert editor.snapshot() == original
-    assert editor.build() == original
-    assert molecule == original
-
     failing = Edits()
     failing.add_atom(AtomForm.parse("O"))
     failing.append(
@@ -178,9 +166,15 @@ def test_molecule_editing_workflow():
 
     with pytest.raises(
         TransactionError,
-        match="^atom handle 7 is out of range for 1 entries$",
+        match="^atom handle 7 is out of range for 2 entries$",
     ):
-        molecule.apply(failing)
+        molecule.transact([edits, failing])
+
+    assert molecule == original
+
+    molecule.transact([Edits.parse(rendered)])
+
+    assert molecule == expected
 
     conflicting = Edits()
     conflicting.add_bond(0, 1, BondForm(1))
@@ -189,10 +183,9 @@ def test_molecule_editing_workflow():
         InvalidStructureError,
         match=r"^bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$",
     ):
-        expected.apply(conflicting)
+        molecule.transact([conflicting])
 
-    assert molecule == original
-    assert expected == applied
+    assert molecule == expected == applied
 
 
 def test_fingerprint_workflow():

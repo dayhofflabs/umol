@@ -73,7 +73,7 @@ create_exception!(
     umol,
     TransactionError,
     PyException,
-    "Raised when transactional molecule editing or rollback fails."
+    "Raised when an edit batch cannot be applied or a transaction has been aborted."
 );
 
 create_exception!(
@@ -87,7 +87,7 @@ create_exception!(
     umol,
     InvalidatedViewError,
     PyRuntimeError,
-    "Raised when a view or iterator accesses storage made unavailable by owner consumption."
+    "Raised when a view or iterator is invalidated by owner mutation or consumption."
 );
 
 /// Map an `umol_graph_ir` parse error onto the catchable `umol.ParseError`.
@@ -120,7 +120,7 @@ pub(crate) fn reaction_integrity_error(error: GraphIrReactionIntegrityError) -> 
     PyValueError::new_err(error.to_string())
 }
 
-/// Map immutable molecule-application failures onto the existing Python exception taxonomy.
+/// Map molecule-application failures onto the existing Python exception taxonomy.
 pub(crate) fn molecule_apply_error(error: GraphIrMoleculeApplyError) -> PyErr {
     match error {
         GraphIrMoleculeApplyError::Transaction(error) => transaction_error(error),
@@ -313,18 +313,7 @@ mod tests {
         ),
         "malformed edit: AddDativeBond requires at least one participant atom"
     )]
-    #[case::rollback_failed(
-        GraphIrTransactionError::RollbackFailed {
-            apply: Box::new(GraphIrTransactionError::MissingEntry),
-            rollback: Box::new(GraphIrTransactionError::RollbackStateMismatch),
-        },
-        "rollback failed after apply error: apply=missing constraint entry on remove; \
-         rollback=rollback journal does not match editor state",
-    )]
-    #[case::rollback_state_mismatch(
-        GraphIrTransactionError::RollbackStateMismatch,
-        "rollback journal does not match editor state"
-    )]
+    #[case::aborted(GraphIrTransactionError::Aborted, "transaction has been aborted")]
     fn test_transaction_error(
         #[case] input: GraphIrTransactionError,
         #[case] expected_message: &str,
