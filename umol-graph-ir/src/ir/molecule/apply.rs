@@ -1,17 +1,18 @@
 //! Single-edit execution and undo replay on molecule storage.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::hash::Hash;
 
 use umol_graph_core::{Compaction, GraphCompaction};
-use umol_perm::{DynPermutation, Permutation};
+use umol_perm::{ClassKey, Permutation, MAX_DEGREE};
 
 use super::{Molecule, TransactionError};
-use crate::ir::aromatic::AromaticSystemForm;
+use crate::ir::aromatic::AromaticSystemEntry;
 use crate::ir::compact::MoleculeCompaction;
 use crate::ir::constraint::Constraint;
 use crate::ir::correspondence::MoleculeCorrespondence;
-use crate::ir::dative::DativeBondForm;
+use crate::ir::dative::DativeBondEntry;
 use crate::ir::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
@@ -29,10 +30,10 @@ use crate::ir::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-use crate::ir::multicenter::MulticenterBondForm;
-use crate::ir::noncovalent::NoncovalentBondForm;
-use crate::ir::stereo::{StereoAtomForm, StereoBondForm};
-use crate::ir::traits::{FrameTransport, Normalize};
+use crate::ir::multicenter::MulticenterBondEntry;
+use crate::ir::noncovalent::NoncovalentBondEntry;
+use crate::ir::stereo::{StereoAtomEntry, StereoBondEntry};
+use crate::ir::traits::{Normalize, Reframe};
 
 #[derive(Default)]
 struct HandleTable<I> {
@@ -584,7 +585,13 @@ impl Molecule {
                         .map(|r| state.atom(r))
                         .collect::<Result<_, _>>()?;
                     let acceptor = state.atom(acceptor)?;
-                    if !self.dative_bond_equiv(id, acceptor, &donors, &attributes) {
+                    let set = self.raw_dative_bonds();
+                    let old = DativeBondEntry {
+                        donors: Cow::Borrowed(&donors),
+                        acceptor,
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if !set.is_coincident(id, acceptor, &donors) || !set.entry(id).framed_eq(&old) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -666,7 +673,12 @@ impl Molecule {
                         .iter()
                         .map(|r| state.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    if !self.aromatic_system_equiv(id, &saved_atoms, &attributes) {
+                    let set = self.raw_aromatic_systems();
+                    let old = AromaticSystemEntry {
+                        atoms: Cow::Borrowed(&saved_atoms),
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if !set.is_coincident(id, &saved_atoms) || !set.entry(id).framed_eq(&old) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -749,7 +761,12 @@ impl Molecule {
                         .iter()
                         .map(|r| state.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    if !self.multicenter_bond_equiv(id, &saved_atoms, &attributes) {
+                    let set = self.raw_multicenter_bonds();
+                    let old = MulticenterBondEntry {
+                        atoms: Cow::Borrowed(&saved_atoms),
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if !set.is_coincident(id, &saved_atoms) || !set.entry(id).framed_eq(&old) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -828,7 +845,14 @@ impl Molecule {
                     let id = state.noncovalent_bond(id)?;
                     let saved_atoms =
                         [state.atom(atoms[0].clone())?, state.atom(atoms[1].clone())?];
-                    if !self.noncovalent_bond_equiv(id, saved_atoms, &attributes) {
+                    let set = self.raw_noncovalent_bonds();
+                    let old = NoncovalentBondEntry {
+                        atoms: saved_atoms,
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if !set.is_coincident(id, saved_atoms[0], saved_atoms[1])
+                        || !set.entry(id).framed_eq(&old)
+                    {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -893,7 +917,17 @@ impl Molecule {
                     let id = state.stereo_atom(id)?;
                     let site = state.atom(site)?;
                     let ligands = state.stereo_ligands(ligands)?;
-                    if !self.stereo_atom_equiv(id, site, &ligands, &attributes) {
+                    let set = self.raw_stereo_atoms();
+                    let old = StereoAtomEntry {
+                        site,
+                        ligands: Cow::Borrowed(&ligands),
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if set.site(id) != site
+                        || ligands.len() > MAX_DEGREE
+                        || Permutation::between(&ligands, set.ligands(id)).is_none()
+                        || !set.entry(id).framed_eq(&old)
+                    {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -969,7 +1003,18 @@ impl Molecule {
                     let id = state.stereo_bond(id)?;
                     let site = state.bond(site)?;
                     let ligands = state.stereo_ligands(ligands)?;
-                    if !self.stereo_bond_equiv(id, site, &ligands, &attributes) {
+                    let set = self.raw_stereo_bonds();
+                    let old = StereoBondEntry {
+                        site,
+                        ligands: Cow::Borrowed(&ligands),
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if set.site(id) != site
+                        || ligands.len() != 4
+                        || !Permutation::between(&ligands, set.ligands(id))
+                            .is_some_and(|action| ClassKey::CisTrans.space().allows(action))
+                        || !set.entry(id).framed_eq(&old)
+                    {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -1453,7 +1498,13 @@ impl Molecule {
                         .map(|r| state.atom(r))
                         .collect::<Result<_, _>>()?;
                     let acceptor = state.atom(acceptor)?;
-                    if !self.dative_bond_equiv(id, acceptor, &donors, &attributes) {
+                    let set = self.raw_dative_bonds();
+                    let old = DativeBondEntry {
+                        donors: Cow::Borrowed(&donors),
+                        acceptor,
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if !set.is_coincident(id, acceptor, &donors) || !set.entry(id).framed_eq(&old) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     let view = self.dative_bond(id);
@@ -1557,7 +1608,12 @@ impl Molecule {
                         .iter()
                         .map(|r| state.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    if !self.aromatic_system_equiv(id, &saved_atoms, &attributes) {
+                    let set = self.raw_aromatic_systems();
+                    let old = AromaticSystemEntry {
+                        atoms: Cow::Borrowed(&saved_atoms),
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if !set.is_coincident(id, &saved_atoms) || !set.entry(id).framed_eq(&old) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     let view = self.aromatic_system(id);
@@ -1661,7 +1717,12 @@ impl Molecule {
                         .iter()
                         .map(|r| state.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    if !self.multicenter_bond_equiv(id, &saved_atoms, &attributes) {
+                    let set = self.raw_multicenter_bonds();
+                    let old = MulticenterBondEntry {
+                        atoms: Cow::Borrowed(&saved_atoms),
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if !set.is_coincident(id, &saved_atoms) || !set.entry(id).framed_eq(&old) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     let view = self.multicenter_bond(id);
@@ -1761,7 +1822,14 @@ impl Molecule {
                     let id = state.noncovalent_bond(id)?;
                     let saved_atoms =
                         [state.atom(atoms[0].clone())?, state.atom(atoms[1].clone())?];
-                    if !self.noncovalent_bond_equiv(id, saved_atoms, &attributes) {
+                    let set = self.raw_noncovalent_bonds();
+                    let old = NoncovalentBondEntry {
+                        atoms: saved_atoms,
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if !set.is_coincident(id, saved_atoms[0], saved_atoms[1])
+                        || !set.entry(id).framed_eq(&old)
+                    {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     let view = self.noncovalent_bond(id);
@@ -1847,7 +1915,17 @@ impl Molecule {
                     let id = state.stereo_atom(id)?;
                     let site = state.atom(site)?;
                     let ligands = state.stereo_ligands(ligands)?;
-                    if !self.stereo_atom_equiv(id, site, &ligands, &attributes) {
+                    let set = self.raw_stereo_atoms();
+                    let old = StereoAtomEntry {
+                        site,
+                        ligands: Cow::Borrowed(&ligands),
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if set.site(id) != site
+                        || ligands.len() > MAX_DEGREE
+                        || Permutation::between(&ligands, set.ligands(id)).is_none()
+                        || !set.entry(id).framed_eq(&old)
+                    {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     let view = self.stereo_atom(id);
@@ -1946,7 +2024,18 @@ impl Molecule {
                     let id = state.stereo_bond(id)?;
                     let site = state.bond(site)?;
                     let ligands = state.stereo_ligands(ligands)?;
-                    if !self.stereo_bond_equiv(id, site, &ligands, &attributes) {
+                    let set = self.raw_stereo_bonds();
+                    let old = StereoBondEntry {
+                        site,
+                        ligands: Cow::Borrowed(&ligands),
+                        attributes: Cow::Borrowed(&attributes),
+                    };
+                    if set.site(id) != site
+                        || ligands.len() != 4
+                        || !Permutation::between(&ligands, set.ligands(id))
+                            .is_some_and(|action| ClassKey::CisTrans.space().allows(action))
+                        || !set.entry(id).framed_eq(&old)
+                    {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     let view = self.stereo_bond(id);
@@ -2782,99 +2871,6 @@ impl Molecule {
         }
     }
 
-    /// Compare an acceptor, unordered donors, and attributes in the stored donor frame.
-    fn dative_bond_equiv(
-        &self,
-        id: DativeBondId,
-        acceptor: AtomId,
-        donors: &[AtomId],
-        attributes: &DativeBondForm,
-    ) -> bool {
-        let set = self.raw_dative_bonds();
-        let stored: Vec<AtomId> = set.donors(id).collect();
-        set.is_coincident(id, acceptor, donors)
-            && DynPermutation::between(donors, &stored)
-                .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.normalized_eq(set.attributes(id)))
-    }
-
-    /// `true` iff aromatic system `id` structurally equals `(atoms, attributes)`.
-    fn aromatic_system_equiv(
-        &self,
-        id: AromaticSystemId,
-        atoms: &[AtomId],
-        attributes: &AromaticSystemForm,
-    ) -> bool {
-        let set = self.raw_aromatic_systems();
-        let stored: Vec<AtomId> = set.atoms(id).collect();
-        set.is_coincident(id, atoms)
-            && DynPermutation::between(atoms, &stored)
-                .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.normalized_eq(set.attributes(id)))
-    }
-
-    /// `true` iff multicenter bond `id` structurally equals `(atoms, attributes)`.
-    fn multicenter_bond_equiv(
-        &self,
-        id: MulticenterBondId,
-        atoms: &[AtomId],
-        attributes: &MulticenterBondForm,
-    ) -> bool {
-        let set = self.raw_multicenter_bonds();
-        let stored: Vec<AtomId> = set.atoms(id).collect();
-        set.is_coincident(id, atoms)
-            && DynPermutation::between(atoms, &stored)
-                .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.normalized_eq(set.attributes(id)))
-    }
-
-    /// Compare an unordered atom pair and its attributes in the stored frame.
-    fn noncovalent_bond_equiv(
-        &self,
-        id: NoncovalentBondId,
-        atoms: [AtomId; 2],
-        attributes: &NoncovalentBondForm,
-    ) -> bool {
-        let set = self.raw_noncovalent_bonds();
-        let stored = set.atoms(id);
-        set.is_coincident(id, atoms[0], atoms[1])
-            && DynPermutation::between(&atoms, &stored)
-                .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.normalized_eq(set.attributes(id)))
-    }
-
-    /// `true` iff stereo atom `id` structurally equals `(site, ligands, attributes)`.
-    fn stereo_atom_equiv(
-        &self,
-        id: StereoAtomId,
-        site: AtomId,
-        ligands: &[StereoLigand],
-        attributes: &StereoAtomForm,
-    ) -> bool {
-        let set = self.raw_stereo_atoms();
-        let stored = set.ligands(id);
-        set.site(id) == site
-            && Permutation::between(ligands, stored)
-                .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.normalized_eq(set.attributes(id)))
-    }
-
-    /// `true` iff stereo bond `id` structurally equals `(site, ligands, attributes)`.
-    fn stereo_bond_equiv(
-        &self,
-        id: StereoBondId,
-        site: BondId,
-        ligands: &[StereoLigand],
-        attributes: &StereoBondForm,
-    ) -> bool {
-        let set = self.raw_stereo_bonds();
-        let stored = set.ligands(id);
-        set.site(id) == site
-            && Permutation::between(ligands, stored)
-                .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.normalized_eq(set.attributes(id)))
-    }
-
     fn capture_removed_topology(
         &self,
         atoms: &[AtomId],
@@ -3043,6 +3039,7 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
+    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::{AtomForm, ElementForm, IsotopeMassForm};
     use crate::ir::bond::BondForm;
     use crate::ir::constraint::{
@@ -3053,13 +3050,20 @@ mod tests {
         StereoAtomConstraintForm, StereoAtomConstraintKey, StereoBondConstraintForm,
         StereoBondConstraintKey, StereogenicityForm,
     };
+    use crate::ir::dative::DativeBondForm;
     use crate::ir::edit::{EntityHandle, ModifiedConstraint};
     use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::molecule::MoleculeEntries;
-    use crate::ir::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
+    use crate::ir::multicenter::MulticenterBondForm;
+    use crate::ir::noncovalent::{
+        NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
+    };
     use crate::ir::num::NumForm;
     use crate::ir::spin::UnpairedElectronsForm;
-    use crate::ir::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity};
+    use crate::ir::stereo::{
+        StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
+        Stereogenicity,
+    };
 
     #[rstest]
     #[case::first(3, 0, Ok(AtomId(0)))]
@@ -4002,6 +4006,145 @@ mod tests {
             );
             molecule.apply_undo(undo);
             assert_eq!(molecule, initial);
+        }
+    }
+
+    #[rstest]
+    #[case::dative_bond(EntityKind::DativeBond)]
+    #[case::aromatic_system(EntityKind::AromaticSystem)]
+    #[case::multicenter_bond(EntityKind::MulticenterBond)]
+    #[case::noncovalent_bond(EntityKind::NoncovalentBond)]
+    #[case::stereo_atom(EntityKind::StereoAtom)]
+    #[case::stereo_bond(EntityKind::StereoBond)]
+    fn test_molecule_apply_edit_remove_incidence(
+        mut removal_entries: MoleculeEntries,
+        #[case] kind: EntityKind,
+        #[values(false, true)] mismatched: bool,
+        #[values(false, true)] journaled: bool,
+    ) {
+        removal_entries.dative[0].2.order = NumForm::lit_set([]);
+        removal_entries.aromatic[0].1.charge = NumForm::lit_set([]);
+        removal_entries.multicenter[0].1.charge = NumForm::lit_set([]);
+        removal_entries.stereo_atoms[0].2.constraints.set(
+            StereoAtomConstraintForm::Stereogenicity(
+                StereogenicityForm::LitSet(Default::default()),
+            ),
+        );
+        removal_entries.stereo_bonds[0].2.constraints.set(
+            StereoBondConstraintForm::Stereogenicity(
+                StereogenicityForm::LitSet(Default::default()),
+            ),
+        );
+        let initial = Molecule::from_entries(removal_entries.clone());
+        let edit = match kind {
+            EntityKind::DativeBond => {
+                let (donors, acceptor, attributes) = removal_entries.dative.remove(0);
+                Edit::RemoveDativeBonds {
+                    removes: vec![(
+                        DativeBondHandle::Id(DativeBondId(0)),
+                        donors.into_iter().map(AtomHandle::Id).collect(),
+                        AtomHandle::Id(if mismatched { AtomId(3) } else { acceptor }),
+                        attributes,
+                    )],
+                }
+            }
+            EntityKind::AromaticSystem => {
+                let (mut atoms, mut attributes) = removal_entries.aromatic.remove(0);
+                atoms.reverse();
+                attributes.electrons = ElectronCountsForm::from(vec![2, 1]);
+                if mismatched {
+                    atoms[0] = AtomId(2);
+                }
+                Edit::RemoveAromaticSystems {
+                    removes: vec![(
+                        AromaticSystemHandle::Id(AromaticSystemId(0)),
+                        atoms.into_iter().map(AtomHandle::Id).collect(),
+                        attributes,
+                    )],
+                }
+            }
+            EntityKind::MulticenterBond => {
+                let (mut atoms, mut attributes) = removal_entries.multicenter.remove(0);
+                atoms.reverse();
+                attributes.electrons = ElectronCountsForm::from(vec![2, 1]);
+                if mismatched {
+                    atoms[0] = AtomId(2);
+                }
+                Edit::RemoveMulticenterBonds {
+                    removes: vec![(
+                        MulticenterBondHandle::Id(MulticenterBondId(0)),
+                        atoms.into_iter().map(AtomHandle::Id).collect(),
+                        attributes,
+                    )],
+                }
+            }
+            EntityKind::NoncovalentBond => {
+                let (mut atoms, attributes) = removal_entries.noncovalent.remove(0);
+                atoms.reverse();
+                if mismatched {
+                    atoms[0] = AtomId(2);
+                }
+                Edit::RemoveNoncovalentBonds {
+                    removes: vec![(
+                        NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                        atoms.map(AtomHandle::Id),
+                        attributes,
+                    )],
+                }
+            }
+            EntityKind::StereoAtom => {
+                let (site, mut ligands, attributes) = removal_entries.stereo_atoms.remove(0);
+                ligands.reverse();
+                Edit::RemoveStereoAtoms {
+                    removes: vec![(
+                        StereoAtomHandle::Id(StereoAtomId(0)),
+                        AtomHandle::Id(if mismatched { AtomId(2) } else { site }),
+                        ligands
+                            .into_iter()
+                            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                            .collect(),
+                        attributes,
+                    )],
+                }
+            }
+            EntityKind::StereoBond => {
+                let (site, mut ligands, attributes) = removal_entries.stereo_bonds.remove(0);
+                if mismatched {
+                    ligands.swap(1, 2);
+                } else {
+                    ligands.rotate_left(2);
+                }
+                Edit::RemoveStereoBonds {
+                    removes: vec![(
+                        StereoBondHandle::Id(StereoBondId(0)),
+                        BondHandle::Id(site),
+                        ligands
+                            .into_iter()
+                            .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                            .collect(),
+                        attributes,
+                    )],
+                }
+            }
+            EntityKind::Atom | EntityKind::Bond => unreachable!(),
+        };
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let result = if journaled {
+            molecule.apply_edit_with_undo(edit, &mut state)
+        } else {
+            molecule.apply_edit(edit, &mut state).map(|()| None)
+        };
+        if mismatched {
+            assert_eq!(result, Err(TransactionError::OldStateMismatch));
+            assert_eq!(molecule, initial);
+        } else {
+            let undo = result.unwrap();
+            assert_eq!(molecule, Molecule::from_entries(removal_entries));
+            if journaled {
+                molecule.apply_undo(undo.unwrap());
+                assert_eq!(molecule, initial);
+            }
         }
     }
 

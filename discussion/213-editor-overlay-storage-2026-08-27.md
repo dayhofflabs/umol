@@ -38,8 +38,9 @@ Editor batch loops remain under the editor module; single-edit execution and
 handle state are in molecule::apply. Fields remain private and internal Molecule
 mutation methods use pub(crate). S4b1–S4b7 are complete; S4b8 is in progress.
 S4d1–S4d6 are complete: comparable single-entity entries live in their owning
-entity modules. S4d7 replaces the six Molecule comparison methods after S4b9
-and before the S5 lifecycle switch.
+entity modules. S4d7 uses specialized framed_eq implementations in both Edit
+execution paths. Its closeout awaits S4b8's unrelated-journal rollback panic
+and S4b9's unused mutation methods before the S5 lifecycle switch.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -92,7 +93,8 @@ complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b1–S4b7 are complete; S4b8 is in progress. S4d1–S4d6 are complete;
-S4d7 comparison migration follows S4b9.
+S4d7 caller migration and comparison optimization are implemented; its final
+gates remain open for the S4b8 rollback failure and S4b9 unused methods.
 
 ## Editor and transaction API
 
@@ -5376,6 +5378,16 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   every mutation and capture path for accessor-only Molecule access; passing
   behavior tests alone does not establish this boundary.
 
+  **Open verification failure — 2026-09-28.** S4d7's affected public property
+  run found a panic in test_transaction_rollback_unrelated. A journal that adds
+  an atom and then removes topology is replayed on a smaller, unrelated molecule.
+  restore_topology can restore the graph's source count while retaining fewer
+  atom attributes; the following RemoveAddedTopology replay calls remove_topology
+  and panics in Compaction::compact_vec. Matching-history replay passes. The
+  unrelated-history case requires panic freedom, without correctness guarantees.
+  Close this in S4b8 before the final S4d7 gate; the comparison migration does not
+  change those replay or topology methods.
+
 - **S4b9 — Remove temporary entity-set dead-code expectations**
   (`ir::{aromatic,dative,multicenter,noncovalent,stereo}`; cleanup, green).
   [dep: S4b8]
@@ -5412,7 +5424,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   **Common interface and contract.** Types, fields, and entry getters use
   pub(crate), retaining the agreed crate-internal comparison surface. Construct
-  offered entries with struct literals; add no constructor family, re-export,
+  old entries with struct literals; add no constructor family, re-export,
   Python type, storage mutation, or view change. Derive Clone, Debug, PartialEq,
   and Eq; equality compares values independently of Cow's borrowed/owned state.
   These are open entry values, not checked molecule constructors. Entry access
@@ -5425,9 +5437,10 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   both that frame and its attributes, and returns None on incompatibility.
   Distinguished acceptors/sites remain fixed. Reframe uses the existing per-kind
   representative-action functions and normalize/transport/normalize semantics.
-  Use the existing trait's framed_eq implementation, including its treatment of
-  two intrinsically contradictory values. Do not rename the current boolean
-  comparison bodies to framed_eq without implementing that contract.
+  Specialize framed_eq to transport one entry's attributes into the other's frame
+  for comparison. Preserve the trait's equality contract, including two failed
+  reframings comparing equal; use the definition when direct alignment does not
+  establish equality. Keep the structural-equality shortcut.
 
   Cow permits an entry to borrow input and own a transformed result. The getter
   borrows attributes without cloning them. Dative, aromatic, and multicenter
@@ -5577,7 +5590,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 
   representative_action retains Reframe's admissible-frame precondition. The
   fallible reframe path uses the existing Option-returning action derivation;
-  comparison must not turn an oversized offered frame into an assertion panic.
+  comparison must not turn an oversized supplied frame into an assertion panic.
   This adds no coset checks to normalization and no new error type.
 
   **Verification — 2026-09-28.** The 21 entry/getter cases pass, including
@@ -5623,16 +5636,17 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   [dep: S4b9, S4d1, S4d2, S4d3, S4d4, S4d5, S4d6]
 
   In apply_edit and apply_edit_with_undo, obtain the stored entry from the owning
-  set, construct the offered entry from the already-resolved ids and attributes,
+  set, construct the old entry from the already-resolved ids and attributes,
   and use framed_eq. Remove all six Molecule *_equiv methods and their imports;
   S4d1–S4d6 have transferred their tests to the entity modules. Retain no
   delegating comparison wrappers. This does not change Edit/Undo payloads or
   mutation sequencing.
 
-  Preserve removal's separate structured-incidence precondition through the
-  existing set is_coincident methods. Stereo-bond incidence additionally requires
-  that the derived ligand permutation belongs to the existing endpoint-block
-  group. This matters when both forms are contradictory: the trait equates two
+  Preserve removal's separate structured-incidence precondition. Ordinary
+  overlays use the existing set is_coincident methods. Stereo entries use site
+  equality and Permutation::between on complete ligand values; stereo bonds also
+  require that permutation to belong to the existing endpoint-block group.
+  This matters when both forms are contradictory: the trait equates two
   contradictions, but removal must still refer to the supplied atoms/site/ligands.
   Keep these preconditions in the Edit branches before writes; do not modify
   framed_eq's contract or introduce another comparison method to conceal them.
@@ -5645,6 +5659,59 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   establish that comparison became cheaper. Update the frame-carrier description
   in the data-type guide, then run affected-crate checks, strict Clippy, rustdoc,
   nightly formatting, and full diff review. Workspace/Python/MSRV gates remain S9b.
+
+  **Implemented; gates pending — 2026-09-28.** Both Edit execution paths
+  construct old entries and call framed_eq after the incidence check. The six
+  Molecule comparison methods are removed. Each entry specializes framed_eq:
+  structural equality returns immediately; otherwise it transports one form
+  into the other's frame and compares normalized attributes. If this does not
+  establish equality, it compares the two reframing results, preserving the
+  trait's treatment of contradictions. No comparison wrapper or public API is
+  added. Matching-history undo still restores the actual stored frame.
+
+  The default framed_eq implementation doubled reordered stereo removal time by
+  reframing both complete entries. The specialization removes that work. Stereo
+  incidence uses the derived permutation directly, avoiding the four temporary
+  vectors used by the general relation-set coincidence query.
+
+  Same S4d1 fixtures and Criterion settings (0.2 s warm-up, 0.5 s measurement,
+  20 samples; saved baseline s4d-before). Central estimates, rounded to ns:
+
+  | Removed entity | Baseline stored | Current stored | Baseline reordered | Current reordered |
+  | --- | ---: | ---: | ---: | ---: |
+  | Dative bond | 739 | 718 | 717 | 746 |
+  | Aromatic system | 794 | 711 | 783 | 818 |
+  | Multicenter bond | 772 | 708 | 771 | 834 |
+  | Noncovalent bond | 595 | 560 | 605 | 611 |
+  | Stereo atom | 961 | 651 | 967 | 1,014 |
+  | Stereo bond | 952 | 699 | 995 | 1,053 |
+
+  Retain the specialization: it removes the large regression while keeping the
+  comparison in the owning entity type. Stored-frame removals improve; reordered
+  removals retain a small cost (about 1–8% in these central estimates). This is
+  not a claim that the migration improves every path. No further timing study
+  is needed for this decision.
+
+  Allocation accounting from the implementations, not allocator instrumentation:
+  entry retrieval allocates one atom-id vector for dative/aromatic/multicenter
+  entries and none for noncovalent/stereo entries. Successful alignment creates
+  no transported frame vectors and transports only one attribute form. Dynamic
+  alignment allocates its image and used-position vectors; bounded stereo
+  alignment allocates one image vector. Stereo removal derives alignment once
+  for incidence and, when structural equality does not apply, once for framed_eq.
+  This second derivation is one additional small allocation over the baseline.
+  Attribute allocations depend on the form; the general definition remains the
+  fallback when the direct comparison does not establish equality.
+
+  **Verification.** All 2,177 entry and molecule unit cases pass, including 764
+  new definition-comparison cases and 24 removal-incidence cases. The affected
+  public Edit/frame/reframe property run passed 51 of 52 properties. The failing
+  test_transaction_rollback_unrelated exposes the S4b8 replay issue recorded
+  there; it was reproduced with a backtrace. Strict Clippy stops on six unused
+  Molecule compact_<overlay> methods and extend_constraints, pending S4b9.
+  Private-item rustdoc with warnings denied passes. Nightly formatting and full
+  diff review pass. S4d7 remains open until the rollback and lint gates pass;
+  no test was weakened and no lint suppression was added.
 
 ### S5 — Borrowed transaction API
 

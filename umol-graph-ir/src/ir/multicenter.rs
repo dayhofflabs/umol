@@ -62,6 +62,19 @@ impl Reframe for MulticenterBondEntry<'_> {
             .ok_or(Contradiction)?
             .normalize()
     }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
+        if DynPermutation::between(&other.atoms, &self.atoms)
+            .and_then(|action| other.attributes.as_ref().clone().reframe_by(&action))
+            .is_some_and(|attributes| self.attributes.normalized_eq(&attributes))
+        {
+            return true;
+        }
+        self.clone().reframe() == other.clone().reframe()
+    }
 }
 
 /// The molecule's multicenter bonds.
@@ -909,6 +922,10 @@ mod tests {
         assert_eq!(left.normalized_eq(&right), normalized);
         assert_eq!(left.framed_eq(&right), framed);
         assert_eq!(right.framed_eq(&left), framed);
+        assert_eq!(
+            left.framed_eq(&right),
+            left == right || left.reframe() == right.reframe()
+        );
     }
 
     #[rstest]
@@ -930,6 +947,36 @@ mod tests {
             attributes: Cow::Borrowed(&attributes),
         };
         assert_eq!(left.framed_eq(&right), expected);
+    }
+
+    #[rstest]
+    #[case::reordered(vec![AtomId(2), AtomId(0), AtomId(1)], vec![1, 2, 3], vec![3, 1, 2])]
+    #[case::misaligned(vec![AtomId(2), AtomId(0), AtomId(1)], vec![1, 2, 3], vec![1, 2, 3])]
+    #[case::membership(vec![AtomId(2), AtomId(0), AtomId(3)], vec![1, 2, 3], vec![3, 1, 2])]
+    #[case::one_count_mismatch(vec![AtomId(2), AtomId(0), AtomId(1)], vec![1, 2, 3], vec![3, 1])]
+    #[case::both_count_mismatches(vec![AtomId(2), AtomId(0), AtomId(1)], vec![1, 2], vec![3, 1])]
+    fn test_multicenter_bond_entry_framed_eq_definition(
+        #[case] atoms: Vec<AtomId>,
+        #[case] left_counts: Vec<i64>,
+        #[case] right_counts: Vec<i64>,
+        #[values(NumForm::Lit(0), NumForm::lit_set([]))] left_charge: NumForm,
+        #[values(NumForm::lit_set([0]), NumForm::lit_set([]))] right_charge: NumForm,
+    ) {
+        let left = MulticenterBondEntry {
+            atoms: Cow::Borrowed(&[AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Owned(
+                MulticenterBondForm::from_electrons(left_counts).with_charge(left_charge),
+            ),
+        };
+        let right = MulticenterBondEntry {
+            atoms: Cow::Owned(atoms),
+            attributes: Cow::Owned(
+                MulticenterBondForm::from_electrons(right_counts).with_charge(right_charge),
+            ),
+        };
+        let expected = left == right || left.clone().reframe() == right.clone().reframe();
+        assert_eq!(left.framed_eq(&right), expected);
+        assert_eq!(right.framed_eq(&left), expected);
     }
 
     #[rstest]

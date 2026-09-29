@@ -61,6 +61,20 @@ impl Reframe for DativeBondEntry<'_> {
             .ok_or(Contradiction)?
             .normalize()
     }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
+        if self.acceptor == other.acceptor
+            && DynPermutation::between(&other.donors, &self.donors)
+                .and_then(|action| other.attributes.as_ref().clone().reframe_by(&action))
+                .is_some_and(|attributes| self.attributes.normalized_eq(&attributes))
+        {
+            return true;
+        }
+        self.clone().reframe() == other.clone().reframe()
+    }
 }
 
 /// The molecule's dative bonds.
@@ -904,6 +918,35 @@ mod tests {
         assert_eq!(left.normalized_eq(&right), normalized);
         assert_eq!(left.framed_eq(&right), framed);
         assert_eq!(right.framed_eq(&left), framed);
+        assert_eq!(
+            left.framed_eq(&right),
+            left == right || left.reframe() == right.reframe()
+        );
+    }
+
+    #[rstest]
+    #[case::reordered(vec![AtomId(2), AtomId(1)])]
+    #[case::membership(vec![AtomId(2), AtomId(3)])]
+    #[case::length(vec![AtomId(1)])]
+    fn test_dative_bond_entry_framed_eq_definition(
+        #[case] donors: Vec<AtomId>,
+        #[values(AtomId(0), AtomId(3))] acceptor: AtomId,
+        #[values(NumForm::Lit(1), NumForm::lit_set([]))] left_order: NumForm,
+        #[values(NumForm::lit_set([1]), NumForm::lit_set([]))] right_order: NumForm,
+    ) {
+        let left = DativeBondEntry {
+            donors: Cow::Borrowed(&[AtomId(1), AtomId(2)]),
+            acceptor: AtomId(0),
+            attributes: Cow::Owned(DativeBondForm::new(left_order)),
+        };
+        let right = DativeBondEntry {
+            donors: Cow::Owned(donors),
+            acceptor,
+            attributes: Cow::Owned(DativeBondForm::new(right_order)),
+        };
+        let expected = left == right || left.clone().reframe() == right.clone().reframe();
+        assert_eq!(left.framed_eq(&right), expected);
+        assert_eq!(right.framed_eq(&left), expected);
     }
 
     #[rstest]

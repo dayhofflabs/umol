@@ -18,7 +18,7 @@ use umol_graph_core::{
     GraphRemapping, NodeId, ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
-use umol_perm::{ClassKey, Permutation};
+use umol_perm::{ClassKey, Permutation, MAX_DEGREE};
 
 use super::constraint::{
     FluxionalityForm, LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation,
@@ -81,6 +81,21 @@ impl Reframe for StereoAtomEntry<'_> {
             .reframe_by(&action)
             .ok_or(Contradiction)?
             .normalize()
+    }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
+        if self.site == other.site
+            && other.ligands.len() <= MAX_DEGREE
+            && Permutation::between(&other.ligands, &self.ligands)
+                .and_then(|action| other.attributes.as_ref().clone().reframe_by(&action))
+                .is_some_and(|attributes| self.attributes.normalized_eq(&attributes))
+        {
+            return true;
+        }
+        self.clone().reframe() == other.clone().reframe()
     }
 }
 
@@ -520,6 +535,21 @@ impl Reframe for StereoBondEntry<'_> {
             .reframe_by(&action)
             .ok_or(Contradiction)?
             .normalize()
+    }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
+        if self.site == other.site
+            && other.ligands.len() == 4
+            && Permutation::between(&other.ligands, &self.ligands)
+                .and_then(|action| other.attributes.as_ref().clone().reframe_by(&action))
+                .is_some_and(|attributes| self.attributes.normalized_eq(&attributes))
+        {
+            return true;
+        }
+        self.clone().reframe() == other.clone().reframe()
     }
 }
 
@@ -2612,6 +2642,64 @@ mod tests {
         assert_eq!(left.normalized_eq(&right), normalized);
         assert_eq!(left.framed_eq(&right), framed);
         assert_eq!(right.framed_eq(&left), framed);
+        assert_eq!(
+            left.framed_eq(&right),
+            left == right || left.reframe() == right.reframe()
+        );
+    }
+
+    #[rstest]
+    #[case::stored(vec![1, 2, 3, 4], vec![1, 2, 3, 4])]
+    #[case::transposed(vec![1, 2, 3, 4], vec![2, 1, 3, 4])]
+    #[case::middle_transposed(vec![1, 2, 3, 4], vec![1, 3, 2, 4])]
+    #[case::membership(vec![1, 2, 3, 4], vec![1, 2, 3, 5])]
+    #[case::kind_degree(vec![1, 2, 3], vec![2, 1, 3])]
+    #[case::oversized_frame(vec![1, 2, 3, 4, 5, 6, 7], vec![2, 1, 3, 4, 5, 6, 7])]
+    #[case::duplicate_ligands(vec![1, 1, 3, 4], vec![1, 3, 1, 4])]
+    fn test_stereo_atom_entry_framed_eq_definition(
+        #[case] left_ids: Vec<u32>,
+        #[case] right_ids: Vec<u32>,
+        #[values(AtomId(0), AtomId(5))] site: AtomId,
+        #[values(
+            StereoCoset::Undetermined,
+            StereoCoset::Lit(0),
+            StereoCoset::Lit(1),
+            StereoCoset::Lit(2),
+            StereoCoset::LitSet(BTreeSet::new())
+        )]
+        left_coset: StereoCoset,
+        #[values(
+            StereoCoset::Undetermined,
+            StereoCoset::Lit(0),
+            StereoCoset::Lit(1),
+            StereoCoset::Lit(2),
+            StereoCoset::LitSet(BTreeSet::new())
+        )]
+        right_coset: StereoCoset,
+    ) {
+        let left = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Owned(
+                left_ids
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+            ),
+            attributes: Cow::Owned(StereoAtomForm::new(StereoKind::Tetrahedral, left_coset)),
+        };
+        let right = StereoAtomEntry {
+            site,
+            ligands: Cow::Owned(
+                right_ids
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+            ),
+            attributes: Cow::Owned(StereoAtomForm::new(StereoKind::Tetrahedral, right_coset)),
+        };
+        let expected = left == right || left.clone().reframe() == right.clone().reframe();
+        assert_eq!(left.framed_eq(&right), expected);
+        assert_eq!(right.framed_eq(&left), expected);
     }
 
     #[rstest]
@@ -3555,6 +3643,10 @@ mod tests {
         assert_eq!(left.normalized_eq(&right), normalized);
         assert_eq!(left.framed_eq(&right), framed);
         assert_eq!(right.framed_eq(&left), framed);
+        assert_eq!(
+            left.framed_eq(&right),
+            left == right || left.reframe() == right.reframe()
+        );
     }
 
     #[rstest]
@@ -3584,6 +3676,60 @@ mod tests {
             ),
             attributes: Cow::Borrowed(&attributes),
         };
+        assert_eq!(left.framed_eq(&right), expected);
+        assert_eq!(right.framed_eq(&left), expected);
+    }
+
+    #[rstest]
+    #[case::stored(vec![1, 2, 3, 4], vec![1, 2, 3, 4])]
+    #[case::within_endpoint(vec![1, 2, 3, 4], vec![2, 1, 3, 4])]
+    #[case::across_endpoints(vec![1, 2, 3, 4], vec![1, 3, 2, 4])]
+    #[case::membership(vec![1, 2, 3, 4], vec![1, 2, 3, 5])]
+    #[case::kind_degree(vec![1, 2, 3], vec![2, 1, 3])]
+    #[case::oversized_frame(vec![1, 2, 3, 4, 5, 6, 7], vec![2, 1, 3, 4, 5, 6, 7])]
+    #[case::duplicate_ligands(vec![1, 1, 3, 4], vec![1, 3, 1, 4])]
+    fn test_stereo_bond_entry_framed_eq_definition(
+        #[case] left_ids: Vec<u32>,
+        #[case] right_ids: Vec<u32>,
+        #[values(BondId(0), BondId(5))] site: BondId,
+        #[values(
+            StereoCoset::Undetermined,
+            StereoCoset::Lit(0),
+            StereoCoset::Lit(1),
+            StereoCoset::Lit(2),
+            StereoCoset::LitSet(BTreeSet::new())
+        )]
+        left_coset: StereoCoset,
+        #[values(
+            StereoCoset::Undetermined,
+            StereoCoset::Lit(0),
+            StereoCoset::Lit(1),
+            StereoCoset::Lit(2),
+            StereoCoset::LitSet(BTreeSet::new())
+        )]
+        right_coset: StereoCoset,
+    ) {
+        let left = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Owned(
+                left_ids
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+            ),
+            attributes: Cow::Owned(StereoBondForm::new(StereoKind::CisTrans, left_coset)),
+        };
+        let right = StereoBondEntry {
+            site,
+            ligands: Cow::Owned(
+                right_ids
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+            ),
+            attributes: Cow::Owned(StereoBondForm::new(StereoKind::CisTrans, right_coset)),
+        };
+        let expected = left == right || left.clone().reframe() == right.clone().reframe();
         assert_eq!(left.framed_eq(&right), expected);
         assert_eq!(right.framed_eq(&left), expected);
     }

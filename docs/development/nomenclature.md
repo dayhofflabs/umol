@@ -1465,7 +1465,7 @@ participant-frame action between two supplied frames, then applies it through
 Integrity prohibits repeated complete participant values, so equal structured incidence determines
 one action. `FrameTransport` is the transport-only operation for forms, form spans, delta payloads,
 and constraints that can consume an action but do not select a frame. `Reframe` extends `Normalize`
-for a frame-owning aggregate, derives its representative action, and selects the frame. A reaction
+for a frame-owning value, derives its representative action, and selects the frame. A reaction
 removal may carry another explicit local ordering of its source incidence: reaction transport
 conjugates the owning action by the derived local-to-owner alignment, preserving the relation
 between the removal frame and its owner. Normalization instead aligns the removal directly with the

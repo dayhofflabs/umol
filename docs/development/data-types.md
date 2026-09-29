@@ -957,12 +957,29 @@ to select one. `Reframe` is implemented only by a frame-owning carrier. It exten
 derives a representative action, and therefore represents the second prefix in the
 normalize–reframe–canonicalize pipeline.
 
+Each owning entity set has a crate-private `entry(id)` getter returning its complete
+single-entity value: `DativeBondEntry`, `AromaticSystemEntry`, `MulticenterBondEntry`,
+`NoncovalentBondEntry`, `StereoAtomEntry`, or `StereoBondEntry`. These open values
+carry the atom/site/ligand ids and attributes, without the entity's own storage id.
+They implement `Normalize`, `FrameTransport`, and `Reframe`; normalization changes
+attributes alone, while reframing transports the complete value into its selected
+frame. Attributes and variable frames use `Cow` so inputs can be borrowed and
+transformed results owned. An unavailable entry id panics like the set's other
+direct getters.
+
+Edit removal checks structured incidence separately, then compares the stored entry
+with the edit's old entry using `framed_eq`. Two contradictory values compare equal
+under that trait, so this comparison alone does not establish the incidence
+required for removal. Stereo-bond incidence includes the endpoint-block restriction.
+
 The associated action is complete for its receiver:
 
 | Carrier | `FrameTransport::Action` |
 | --- | --- |
 | One ordinary overlay form or form span | one `DynPermutation` |
 | One stereo form or form span | one bounded `Permutation` |
+| One ordinary overlay entry | one `DynPermutation` |
+| One stereo entry | one bounded `Permutation`, restricted to the endpoint-block group for stereo bonds |
 | One entity-kind aggregate or `*Spans` peer | one typed local action per entity id |
 | `Molecule` or `ReactionSpan` | one six-component `OverlaysFrameAction` |
 | `Reaction` | one `OverlaysFrameAction` covering every lhs and `Add`-owned overlay id |

@@ -62,6 +62,19 @@ impl Reframe for NoncovalentBondEntry<'_> {
             .ok_or(Contradiction)?
             .normalize()
     }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
+        if DynPermutation::between(&other.atoms, &self.atoms)
+            .and_then(|action| other.attributes.as_ref().clone().reframe_by(&action))
+            .is_some_and(|attributes| self.attributes.normalized_eq(&attributes))
+        {
+            return true;
+        }
+        self.clone().reframe() == other.clone().reframe()
+    }
 }
 
 /// The molecule's noncovalent bonds.
@@ -902,6 +915,10 @@ mod tests {
         assert_eq!(left.normalized_eq(&right), normalized);
         assert_eq!(left.framed_eq(&right), framed);
         assert_eq!(right.framed_eq(&left), framed);
+        assert_eq!(
+            left.framed_eq(&right),
+            left == right || left.reframe() == right.reframe()
+        );
     }
 
     #[rstest]
