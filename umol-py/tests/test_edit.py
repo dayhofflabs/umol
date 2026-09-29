@@ -14,6 +14,7 @@ from umol import (
     BondUpdate,
     Constraint,
     ConstraintEdit,
+    ConsumedError,
     DativeBondForm,
     DativeBondFieldChange,
     DativeBondUpdate,
@@ -21,6 +22,7 @@ from umol import (
     Edits,
     ElectronCountsForm,
     Entity,
+    InvalidatedViewError,
     Molecule,
     MoleculeDefaults,
     MoleculeConstraint,
@@ -45,6 +47,7 @@ from umol import (
     StereoCoset,
     StereoKind,
     StereoLigandKind,
+    TransactionError,
     NumForm,
 )
 
@@ -336,6 +339,159 @@ def test_edits_iter_owner():
 
     assert list(second) == expected
     assert list(first) == expected[1:]
+
+
+@pytest.mark.parametrize("receiver", ["molecule", "editor"])
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_edits_consumption(receiver, method):
+    atom = AtomForm.parse("C")
+    edit = Edit.AddAtoms(atoms=[atom])
+    edits = Edits([edit])
+    alias = edits
+    copied = Edits(list(edits))
+    indexed = edits[0]
+    yielded = next(iter(edits))
+    molecule = Molecule()
+    target = molecule if receiver == "molecule" else molecule.edit()
+
+    result = getattr(target, method)(edits)
+    if method == "tracked_apply":
+        result = result[0]
+    if receiver == "editor":
+        result = result.build()
+
+    assert result == Molecule.parse('{:atoms ["C"]}')
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        len(alias)
+    assert copied == Edits([edit])
+    assert indexed == yielded == edit
+    assert indexed.atoms == yielded.atoms == [atom]
+    assert repr(copied) == f"Edits([{edit!r}])"
+    with pytest.raises(TypeError):
+        hash(copied)
+
+
+@pytest.mark.parametrize("receiver", ["molecule", "editor"])
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+def test_edits_consumption_error(receiver, method):
+    edits = Edits([
+        Edit.AddAtoms(atoms=[AtomForm.parse("N")]),
+        Edit.ModifyAtomField(
+            id=0,
+            change=AtomFieldChange.Charge(old=NumForm.Lit(1), new=NumForm.Lit(2)),
+        ),
+    ])
+    molecule = Molecule.parse('{:atoms ["C#c0"]}')
+    target = molecule if receiver == "molecule" else molecule.edit()
+
+    with pytest.raises(TransactionError, match="^precondition failed: old state does not match current$"):
+        getattr(target, method)(edits)
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        edits.render()
+
+
+@pytest.mark.parametrize(
+    ("method", "args"),
+    [
+        ("__len__", ()),
+        ("__repr__", ()),
+        ("__getitem__", (0,)),
+        ("__getitem__", (-1,)),
+        ("__iter__", ()),
+        ("render", ()),
+        ("append", (Edit.AddAtoms(atoms=[]),)),
+        ("add_atom", (AtomForm.parse("C"),)),
+        ("add_atoms", ([],)),
+        ("add_bond", (0, 1, BondForm(1))),
+        ("add_bonds", ([],)),
+        ("add_dative_bond", ([0], 1, DativeBondForm(1))),
+        ("add_dative_bonds", ([],)),
+        ("add_aromatic_system", ([0, 1], AromaticSystemForm([1, 1]))),
+        ("add_aromatic_systems", ([],)),
+        ("add_multicenter_bond", ([0, 1], MulticenterBondForm([1, 1]))),
+        ("add_multicenter_bonds", ([],)),
+        ("add_noncovalent_bond", ((0, 1), NoncovalentBondForm(NoncovalentBondKind.Ionic))),
+        ("add_noncovalent_bonds", ([],)),
+        ("add_stereo_atom", (0, [], StereoAtomForm.parse("Th0"))),
+        ("add_stereo_atoms", ([],)),
+        ("add_stereo_bond", (0, [], StereoBondForm.parse("Ct0"))),
+        ("add_stereo_bonds", ([],)),
+        ("remove_topology", ([], [])),
+        ("remove_dative_bonds", ([],)),
+        ("remove_aromatic_systems", ([],)),
+        ("remove_multicenter_bonds", ([],)),
+        ("remove_noncovalent_bonds", ([],)),
+        ("remove_stereo_atoms", ([],)),
+        ("remove_stereo_bonds", ([],)),
+        ("add_molecule_constraint", (ConstraintEdit(Constraint.Molecule(MoleculeConstraint.Connected(None))),)),
+        ("remove_molecule_constraint", (ConstraintEdit(Constraint.Molecule(MoleculeConstraint.Connected(None))),)),
+        ("update_atom", (0, AtomForm.parse("C"), AtomUpdate())),
+        ("update_bond", (0, BondForm(1), BondUpdate())),
+        ("update_dative_bond", (0, DativeBondForm(1), DativeBondUpdate())),
+        ("update_aromatic_system", (0, AromaticSystemForm([1, 1]), AromaticSystemUpdate())),
+        ("update_multicenter_bond", (0, MulticenterBondForm([1, 1]), MulticenterBondUpdate())),
+        ("update_noncovalent_bond", (0, NoncovalentBondForm(NoncovalentBondKind.Ionic), NoncovalentBondUpdate())),
+        ("update_stereo_atom", (0, StereoAtomForm.parse("Th0"), StereoAtomUpdate())),
+        ("update_stereo_bond", (0, StereoBondForm.parse("Ct0"), StereoBondUpdate())),
+    ],
+)
+def test_edits_consumed(method, args):
+    edits = Edits()
+    Molecule().apply(edits)
+
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        getattr(edits, method)(*args)
+
+
+@pytest.mark.parametrize("lhs_consumed", [False, True])
+@pytest.mark.parametrize("rhs_consumed", [False, True])
+def test_edits_equality(lhs_consumed, rhs_consumed):
+    lhs = Edits()
+    rhs = Edits()
+    if lhs_consumed:
+        Molecule().apply(lhs)
+    if rhs_consumed:
+        Molecule().apply(rhs)
+
+    if lhs_consumed or rhs_consumed:
+        with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+            lhs == rhs
+        with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+            lhs != rhs
+    else:
+        assert lhs == rhs
+        assert not lhs != rhs
+
+
+def test_edits_equality_alias():
+    edits = Edits()
+    alias = edits
+    Molecule().apply(edits)
+
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        edits == alias
+
+
+@pytest.mark.parametrize(
+    ("count", "consumed"),
+    [(0, 0), (2, 0), (2, 1), (2, 2)],
+    ids=["empty", "live", "partial", "exhausted"],
+)
+def test_edit_iter_consumed(count, consumed):
+    edits = Edits([Edit.AddAtoms(atoms=[AtomForm.parse("C")])] * count)
+    iterator = iter(edits)
+    for _ in range(consumed):
+        next(iterator)
+    if count == consumed:
+        with pytest.raises(StopIteration):
+            next(iterator)
+    Molecule().apply(edits)
+
+    with pytest.raises(
+        InvalidatedViewError,
+        match="^Edit iterator is invalid because Edits has been consumed$",
+    ):
+        next(iterator)
 
 
 def test_edits_append():

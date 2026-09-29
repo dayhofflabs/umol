@@ -41,7 +41,7 @@ use crate::delta::{
     StereoBondFieldChange,
 };
 use crate::entity::Readonly;
-use crate::error::parse_error;
+use crate::error::{parse_error, ConsumedError, InvalidatedViewError};
 use crate::metadata::Entity;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
@@ -1584,20 +1584,31 @@ impl EditIter {
     }
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<Py<Edit>>> {
+        let owner = self.owner.try_borrow(py)?;
+        let edits = owner.value.as_ref().ok_or_else(|| {
+            InvalidatedViewError::new_err(
+                "Edit iterator is invalid because Edits has been consumed",
+            )
+        })?;
         if self.position == self.end {
             return Ok(None);
         }
-        let owner = self.owner.try_borrow(py)?;
-        let entry = into_py_variant(py, Edit::from_rust(py, &owner.0.as_slice()[self.position])?)?;
+        let entry = into_py_variant(py, Edit::from_rust(py, &edits.as_slice()[self.position])?)?;
         self.position += 1;
         Ok(Some(entry))
     }
 }
 
 /// An ordered, append-only batch of host-specific molecule edits.
-#[pyclass(eq)]
-#[derive(Debug, PartialEq)]
-pub struct Edits(GraphIrEdits);
+///
+/// Passing the batch to an operation that consumes Edits moves its contents.
+/// Subsequent access raises ConsumedError; its iterators raise InvalidatedViewError.
+/// Entries already returned by indexing or iteration are independent values.
+#[pyclass]
+#[derive(Debug)]
+pub struct Edits {
+    value: Option<GraphIrEdits>,
+}
 
 #[pymethods]
 impl Edits {
@@ -1623,28 +1634,46 @@ impl Edits {
     }
 
     #[pyo3(signature = (*, defaults=None))]
-    fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
+    fn render(&self, defaults: Option<MoleculeDefaults>) -> PyResult<String> {
+        let edits = self.to_rust()?;
         let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
-        GraphIrEditsDsl::from_ir(&self.0, defaults.to_rust()).to_string()
+        Ok(GraphIrEditsDsl::from_ir(edits, defaults.to_rust()).to_string())
+    }
+
+    fn __eq__(&self, other: &Self) -> PyResult<bool> {
+        Ok(self.to_rust()? == other.to_rust()?)
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let edits = self.to_rust()?;
+        let mut parts = Vec::with_capacity(edits.len());
+        for entry in edits.iter() {
+            let value = into_py_variant(py, Edit::from_rust(py, entry)?)?;
+            parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
+        }
+        Ok(format!("Edits([{}])", parts.join(", ")))
     }
 
     /// Append one detached raw edit and account for every entity it creates.
-    fn append(&mut self, py: Python<'_>, edit: Py<Edit>) {
-        self.0.push(edit.bind(py).borrow().to_rust(py));
+    fn append(&mut self, py: Python<'_>, edit: Py<Edit>) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.push(edit.bind(py).borrow().to_rust(py));
+        Ok(())
     }
 
-    fn __len__(&self) -> usize {
-        self.0.len()
+    fn __len__(&self) -> PyResult<usize> {
+        Ok(self.to_rust()?.len())
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Edit> {
-        let index = resolve_edit_index(self.0.len(), index)?;
-        Edit::from_rust(py, &self.0.as_slice()[index])
+        let edits = self.to_rust()?;
+        let index = resolve_edit_index(edits.len(), index)?;
+        Edit::from_rust(py, &edits.as_slice()[index])
     }
 
     /// Lazily copy entries present now; later appends are excluded.
     fn __iter__(slf: Py<Self>, py: Python<'_>) -> PyResult<EditIter> {
-        let end = slf.try_borrow(py)?.0.len();
+        let end = slf.try_borrow(py)?.to_rust()?.len();
         Ok(EditIter {
             owner: slf,
             position: 0,
@@ -1652,15 +1681,16 @@ impl Edits {
         })
     }
 
-    fn add_atom(&mut self, py: Python<'_>, attributes: Py<AtomForm>) -> New {
-        New::from_rust(GraphIrEntityHandle::Atom(
-            self.0
-                .add_atom(attributes.bind(py).borrow().to_rust().clone()),
-        ))
+    fn add_atom(&mut self, py: Python<'_>, attributes: Py<AtomForm>) -> PyResult<New> {
+        let edits = self.to_rust_mut()?;
+        Ok(New::from_rust(GraphIrEntityHandle::Atom(
+            edits.add_atom(attributes.bind(py).borrow().to_rust().clone()),
+        )))
     }
 
-    fn add_atoms(&mut self, py: Python<'_>, atoms: Vec<Py<AtomForm>>) -> Vec<New> {
-        self.0
+    fn add_atoms(&mut self, py: Python<'_>, atoms: Vec<Py<AtomForm>>) -> PyResult<Vec<New>> {
+        let edits = self.to_rust_mut()?;
+        Ok(edits
             .add_atoms(
                 atoms
                     .into_iter()
@@ -1668,7 +1698,7 @@ impl Edits {
             )
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::Atom(handle)))
-            .collect()
+            .collect())
     }
 
     fn add_bond(
@@ -1677,16 +1707,18 @@ impl Edits {
         first: HandleLike,
         second: HandleLike,
         attributes: Py<BondForm>,
-    ) -> New {
-        New::from_rust(GraphIrEntityHandle::Bond(self.0.add_bond(
+    ) -> PyResult<New> {
+        let edits = self.to_rust_mut()?;
+        Ok(New::from_rust(GraphIrEntityHandle::Bond(edits.add_bond(
             first.to_atom_handle(),
             second.to_atom_handle(),
             attributes.bind(py).borrow().to_rust().clone(),
-        )))
+        ))))
     }
 
-    fn add_bonds(&mut self, py: Python<'_>, bonds: Vec<BondAddition>) -> Vec<New> {
-        self.0
+    fn add_bonds(&mut self, py: Python<'_>, bonds: Vec<BondAddition>) -> PyResult<Vec<New>> {
+        let edits = self.to_rust_mut()?;
+        Ok(edits
             .add_bonds(
                 bonds
                     .into_iter()
@@ -1697,7 +1729,7 @@ impl Edits {
             )
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::Bond(handle)))
-            .collect()
+            .collect())
     }
 
     fn add_dative_bond(
@@ -1706,16 +1738,24 @@ impl Edits {
         donors: Vec<HandleLike>,
         acceptor: HandleLike,
         attributes: Py<DativeBondForm>,
-    ) -> New {
-        New::from_rust(GraphIrEntityHandle::DativeBond(self.0.add_dative_bond(
-            donors.iter().map(HandleLike::to_atom_handle).collect(),
-            acceptor.to_atom_handle(),
-            attributes.bind(py).borrow().to_rust().clone(),
+    ) -> PyResult<New> {
+        let edits = self.to_rust_mut()?;
+        Ok(New::from_rust(GraphIrEntityHandle::DativeBond(
+            edits.add_dative_bond(
+                donors.iter().map(HandleLike::to_atom_handle).collect(),
+                acceptor.to_atom_handle(),
+                attributes.bind(py).borrow().to_rust().clone(),
+            ),
         )))
     }
 
-    fn add_dative_bonds(&mut self, py: Python<'_>, bonds: Vec<DativeBondAddition>) -> Vec<New> {
-        self.0
+    fn add_dative_bonds(
+        &mut self,
+        py: Python<'_>,
+        bonds: Vec<DativeBondAddition>,
+    ) -> PyResult<Vec<New>> {
+        let edits = self.to_rust_mut()?;
+        Ok(edits
             .add_dative_bonds(bonds.into_iter().map(|(donors, acceptor, attributes)| {
                 (
                     donors.iter().map(HandleLike::to_atom_handle).collect(),
@@ -1725,7 +1765,7 @@ impl Edits {
             }))
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::DativeBond(handle)))
-            .collect()
+            .collect())
     }
 
     fn add_aromatic_system(
@@ -1733,21 +1773,23 @@ impl Edits {
         py: Python<'_>,
         atoms: Vec<HandleLike>,
         attributes: Py<AromaticSystemForm>,
-    ) -> New {
-        New::from_rust(GraphIrEntityHandle::AromaticSystem(
-            self.0.add_aromatic_system(
+    ) -> PyResult<New> {
+        let edits = self.to_rust_mut()?;
+        Ok(New::from_rust(GraphIrEntityHandle::AromaticSystem(
+            edits.add_aromatic_system(
                 atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 attributes.bind(py).borrow().to_rust().clone(),
             ),
-        ))
+        )))
     }
 
     fn add_aromatic_systems(
         &mut self,
         py: Python<'_>,
         systems: Vec<AromaticSystemAddition>,
-    ) -> Vec<New> {
-        self.0
+    ) -> PyResult<Vec<New>> {
+        let edits = self.to_rust_mut()?;
+        Ok(edits
             .add_aromatic_systems(systems.into_iter().map(|(atoms, attributes)| {
                 (
                     atoms.iter().map(HandleLike::to_atom_handle).collect(),
@@ -1756,7 +1798,7 @@ impl Edits {
             }))
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::AromaticSystem(handle)))
-            .collect()
+            .collect())
     }
 
     fn add_multicenter_bond(
@@ -1764,21 +1806,23 @@ impl Edits {
         py: Python<'_>,
         atoms: Vec<HandleLike>,
         attributes: Py<MulticenterBondForm>,
-    ) -> New {
-        New::from_rust(GraphIrEntityHandle::MulticenterBond(
-            self.0.add_multicenter_bond(
+    ) -> PyResult<New> {
+        let edits = self.to_rust_mut()?;
+        Ok(New::from_rust(GraphIrEntityHandle::MulticenterBond(
+            edits.add_multicenter_bond(
                 atoms.iter().map(HandleLike::to_atom_handle).collect(),
                 attributes.bind(py).borrow().to_rust().clone(),
             ),
-        ))
+        )))
     }
 
     fn add_multicenter_bonds(
         &mut self,
         py: Python<'_>,
         bonds: Vec<MulticenterBondAddition>,
-    ) -> Vec<New> {
-        self.0
+    ) -> PyResult<Vec<New>> {
+        let edits = self.to_rust_mut()?;
+        Ok(edits
             .add_multicenter_bonds(bonds.into_iter().map(|(atoms, attributes)| {
                 (
                     atoms.iter().map(HandleLike::to_atom_handle).collect(),
@@ -1787,7 +1831,7 @@ impl Edits {
             }))
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::MulticenterBond(handle)))
-            .collect()
+            .collect())
     }
 
     fn add_noncovalent_bond(
@@ -1795,21 +1839,23 @@ impl Edits {
         py: Python<'_>,
         atoms: (HandleLike, HandleLike),
         attributes: Py<NoncovalentBondForm>,
-    ) -> New {
-        New::from_rust(GraphIrEntityHandle::NoncovalentBond(
-            self.0.add_noncovalent_bond(
+    ) -> PyResult<New> {
+        let edits = self.to_rust_mut()?;
+        Ok(New::from_rust(GraphIrEntityHandle::NoncovalentBond(
+            edits.add_noncovalent_bond(
                 [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
                 attributes.bind(py).borrow().to_rust().clone(),
             ),
-        ))
+        )))
     }
 
     fn add_noncovalent_bonds(
         &mut self,
         py: Python<'_>,
         bonds: Vec<NoncovalentBondAddition>,
-    ) -> Vec<New> {
-        self.0
+    ) -> PyResult<Vec<New>> {
+        let edits = self.to_rust_mut()?;
+        Ok(edits
             .add_noncovalent_bonds(bonds.into_iter().map(|(atoms, attributes)| {
                 (
                     [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
@@ -1818,7 +1864,7 @@ impl Edits {
             }))
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::NoncovalentBond(handle)))
-            .collect()
+            .collect())
     }
 
     fn add_stereo_atom(
@@ -1827,9 +1873,10 @@ impl Edits {
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
         attributes: Py<StereoAtomForm>,
-    ) -> New {
-        New::from_rust(GraphIrEntityHandle::StereoAtom(
-            self.0.add_stereo_atom(
+    ) -> PyResult<New> {
+        let edits = self.to_rust_mut()?;
+        Ok(New::from_rust(GraphIrEntityHandle::StereoAtom(
+            edits.add_stereo_atom(
                 site.to_atom_handle(),
                 ligands
                     .iter()
@@ -1837,11 +1884,16 @@ impl Edits {
                     .collect(),
                 attributes.bind(py).borrow().to_rust().clone(),
             ),
-        ))
+        )))
     }
 
-    fn add_stereo_atoms(&mut self, py: Python<'_>, atoms: Vec<StereoAtomAddition>) -> Vec<New> {
-        self.0
+    fn add_stereo_atoms(
+        &mut self,
+        py: Python<'_>,
+        atoms: Vec<StereoAtomAddition>,
+    ) -> PyResult<Vec<New>> {
+        let edits = self.to_rust_mut()?;
+        Ok(edits
             .add_stereo_atoms(atoms.into_iter().map(|(site, ligands, attributes)| {
                 (
                     site.to_atom_handle(),
@@ -1854,7 +1906,7 @@ impl Edits {
             }))
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::StereoAtom(handle)))
-            .collect()
+            .collect())
     }
 
     fn add_stereo_bond(
@@ -1863,9 +1915,10 @@ impl Edits {
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
         attributes: Py<StereoBondForm>,
-    ) -> New {
-        New::from_rust(GraphIrEntityHandle::StereoBond(
-            self.0.add_stereo_bond(
+    ) -> PyResult<New> {
+        let edits = self.to_rust_mut()?;
+        Ok(New::from_rust(GraphIrEntityHandle::StereoBond(
+            edits.add_stereo_bond(
                 site.to_bond_handle(),
                 ligands
                     .iter()
@@ -1873,11 +1926,16 @@ impl Edits {
                     .collect(),
                 attributes.bind(py).borrow().to_rust().clone(),
             ),
-        ))
+        )))
     }
 
-    fn add_stereo_bonds(&mut self, py: Python<'_>, bonds: Vec<StereoBondAddition>) -> Vec<New> {
-        self.0
+    fn add_stereo_bonds(
+        &mut self,
+        py: Python<'_>,
+        bonds: Vec<StereoBondAddition>,
+    ) -> PyResult<Vec<New>> {
+        let edits = self.to_rust_mut()?;
+        Ok(edits
             .add_stereo_bonds(bonds.into_iter().map(|(site, ligands, attributes)| {
                 (
                     site.to_bond_handle(),
@@ -1890,18 +1948,25 @@ impl Edits {
             }))
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::StereoBond(handle)))
-            .collect()
+            .collect())
     }
 
-    fn remove_topology(&mut self, atoms: Vec<HandleLike>, bonds: Vec<HandleLike>) {
-        self.0.remove_topology(
+    fn remove_topology(&mut self, atoms: Vec<HandleLike>, bonds: Vec<HandleLike>) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_topology(
             atoms.iter().map(HandleLike::to_atom_handle).collect(),
             bonds.iter().map(HandleLike::to_bond_handle).collect(),
         );
+        Ok(())
     }
 
-    fn remove_dative_bonds(&mut self, py: Python<'_>, removes: Vec<DativeBondRemoval>) {
-        self.0.remove_dative_bonds(
+    fn remove_dative_bonds(
+        &mut self,
+        py: Python<'_>,
+        removes: Vec<DativeBondRemoval>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_dative_bonds(
             removes
                 .into_iter()
                 .map(|(id, donors, acceptor, attributes)| {
@@ -1914,10 +1979,16 @@ impl Edits {
                 })
                 .collect(),
         );
+        Ok(())
     }
 
-    fn remove_aromatic_systems(&mut self, py: Python<'_>, removes: Vec<AromaticSystemRemoval>) {
-        self.0.remove_aromatic_systems(
+    fn remove_aromatic_systems(
+        &mut self,
+        py: Python<'_>,
+        removes: Vec<AromaticSystemRemoval>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_aromatic_systems(
             removes
                 .into_iter()
                 .map(|(id, atoms, attributes)| {
@@ -1929,10 +2000,16 @@ impl Edits {
                 })
                 .collect(),
         );
+        Ok(())
     }
 
-    fn remove_multicenter_bonds(&mut self, py: Python<'_>, removes: Vec<MulticenterBondRemoval>) {
-        self.0.remove_multicenter_bonds(
+    fn remove_multicenter_bonds(
+        &mut self,
+        py: Python<'_>,
+        removes: Vec<MulticenterBondRemoval>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_multicenter_bonds(
             removes
                 .into_iter()
                 .map(|(id, atoms, attributes)| {
@@ -1944,10 +2021,16 @@ impl Edits {
                 })
                 .collect(),
         );
+        Ok(())
     }
 
-    fn remove_noncovalent_bonds(&mut self, py: Python<'_>, removes: Vec<NoncovalentBondRemoval>) {
-        self.0.remove_noncovalent_bonds(
+    fn remove_noncovalent_bonds(
+        &mut self,
+        py: Python<'_>,
+        removes: Vec<NoncovalentBondRemoval>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_noncovalent_bonds(
             removes
                 .into_iter()
                 .map(|(id, atoms, attributes)| {
@@ -1959,10 +2042,16 @@ impl Edits {
                 })
                 .collect(),
         );
+        Ok(())
     }
 
-    fn remove_stereo_atoms(&mut self, py: Python<'_>, removes: Vec<StereoAtomRemoval>) {
-        self.0.remove_stereo_atoms(
+    fn remove_stereo_atoms(
+        &mut self,
+        py: Python<'_>,
+        removes: Vec<StereoAtomRemoval>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_stereo_atoms(
             removes
                 .into_iter()
                 .map(|(id, site, ligands, attributes)| {
@@ -1978,10 +2067,16 @@ impl Edits {
                 })
                 .collect(),
         );
+        Ok(())
     }
 
-    fn remove_stereo_bonds(&mut self, py: Python<'_>, removes: Vec<StereoBondRemoval>) {
-        self.0.remove_stereo_bonds(
+    fn remove_stereo_bonds(
+        &mut self,
+        py: Python<'_>,
+        removes: Vec<StereoBondRemoval>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_stereo_bonds(
             removes
                 .into_iter()
                 .map(|(id, site, ligands, attributes)| {
@@ -1997,16 +2092,27 @@ impl Edits {
                 })
                 .collect(),
         );
+        Ok(())
     }
 
-    fn add_molecule_constraint(&mut self, py: Python<'_>, constraint: Py<ConstraintEdit>) {
-        self.0
-            .add_molecule_constraint(constraint.bind(py).borrow().to_rust().clone());
+    fn add_molecule_constraint(
+        &mut self,
+        py: Python<'_>,
+        constraint: Py<ConstraintEdit>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.add_molecule_constraint(constraint.bind(py).borrow().to_rust().clone());
+        Ok(())
     }
 
-    fn remove_molecule_constraint(&mut self, py: Python<'_>, constraint: Py<ConstraintEdit>) {
-        self.0
-            .remove_molecule_constraint(constraint.bind(py).borrow().to_rust().clone());
+    fn remove_molecule_constraint(
+        &mut self,
+        py: Python<'_>,
+        constraint: Py<ConstraintEdit>,
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
+        edits.remove_molecule_constraint(constraint.bind(py).borrow().to_rust().clone());
+        Ok(())
     }
 
     fn update_atom(
@@ -2015,11 +2121,12 @@ impl Edits {
         id: HandleLike,
         current: Py<AtomForm>,
         update: Py<AtomUpdate>,
-    ) {
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
         let current = current.bind(py).borrow();
         let update = update.bind(py).borrow();
-        self.0
-            .update_atom(id.to_atom_handle(), current.to_rust(), update.to_rust());
+        edits.update_atom(id.to_atom_handle(), current.to_rust(), update.to_rust());
+        Ok(())
     }
 
     fn update_bond(
@@ -2028,11 +2135,12 @@ impl Edits {
         id: HandleLike,
         current: Py<BondForm>,
         update: Py<BondUpdate>,
-    ) {
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
         let current = current.bind(py).borrow();
         let update = update.bind(py).borrow();
-        self.0
-            .update_bond(id.to_bond_handle(), current.to_rust(), update.to_rust());
+        edits.update_bond(id.to_bond_handle(), current.to_rust(), update.to_rust());
+        Ok(())
     }
 
     fn update_dative_bond(
@@ -2041,14 +2149,16 @@ impl Edits {
         id: HandleLike,
         current: Py<DativeBondForm>,
         update: Py<DativeBondUpdate>,
-    ) {
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
         let current = current.bind(py).borrow();
         let update = update.bind(py).borrow();
-        self.0.update_dative_bond(
+        edits.update_dative_bond(
             id.to_dative_bond_handle(),
             current.to_rust(),
             update.to_rust(),
         );
+        Ok(())
     }
 
     fn update_aromatic_system(
@@ -2057,14 +2167,16 @@ impl Edits {
         id: HandleLike,
         current: Py<AromaticSystemForm>,
         update: Py<AromaticSystemUpdate>,
-    ) {
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
         let current = current.bind(py).borrow();
         let update = update.bind(py).borrow();
-        self.0.update_aromatic_system(
+        edits.update_aromatic_system(
             id.to_aromatic_system_handle(),
             current.to_rust(),
             update.to_rust(),
         );
+        Ok(())
     }
 
     fn update_multicenter_bond(
@@ -2073,14 +2185,16 @@ impl Edits {
         id: HandleLike,
         current: Py<MulticenterBondForm>,
         update: Py<MulticenterBondUpdate>,
-    ) {
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
         let current = current.bind(py).borrow();
         let update = update.bind(py).borrow();
-        self.0.update_multicenter_bond(
+        edits.update_multicenter_bond(
             id.to_multicenter_bond_handle(),
             current.to_rust(),
             update.to_rust(),
         );
+        Ok(())
     }
 
     fn update_noncovalent_bond(
@@ -2089,14 +2203,16 @@ impl Edits {
         id: HandleLike,
         current: Py<NoncovalentBondForm>,
         update: Py<NoncovalentBondUpdate>,
-    ) {
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
         let current = current.bind(py).borrow();
         let update = update.bind(py).borrow();
-        self.0.update_noncovalent_bond(
+        edits.update_noncovalent_bond(
             id.to_noncovalent_bond_handle(),
             current.to_rust(),
             update.to_rust(),
         );
+        Ok(())
     }
 
     fn update_stereo_atom(
@@ -2105,14 +2221,16 @@ impl Edits {
         id: HandleLike,
         current: Py<StereoAtomForm>,
         update: Py<StereoAtomUpdate>,
-    ) {
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
         let current = current.bind(py).borrow();
         let update = update.bind(py).borrow();
-        self.0.update_stereo_atom(
+        edits.update_stereo_atom(
             id.to_stereo_atom_handle(),
             current.to_rust(),
             update.to_rust(),
         );
+        Ok(())
     }
 
     fn update_stereo_bond(
@@ -2121,24 +2239,40 @@ impl Edits {
         id: HandleLike,
         current: Py<StereoBondForm>,
         update: Py<StereoBondUpdate>,
-    ) {
+    ) -> PyResult<()> {
+        let edits = self.to_rust_mut()?;
         let current = current.bind(py).borrow();
         let update = update.bind(py).borrow();
-        self.0.update_stereo_bond(
+        edits.update_stereo_bond(
             id.to_stereo_bond_handle(),
             current.to_rust(),
             update.to_rust(),
         );
+        Ok(())
     }
 }
 
 impl Edits {
     pub(crate) fn from_rust(edits: GraphIrEdits) -> Self {
-        Self(edits)
+        Self { value: Some(edits) }
     }
 
-    pub(crate) fn to_rust(&self) -> &GraphIrEdits {
-        &self.0
+    pub(crate) fn to_rust(&self) -> PyResult<&GraphIrEdits> {
+        self.value
+            .as_ref()
+            .ok_or_else(|| ConsumedError::new_err("Edits has been consumed"))
+    }
+
+    pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrEdits> {
+        self.value
+            .as_mut()
+            .ok_or_else(|| ConsumedError::new_err("Edits has been consumed"))
+    }
+
+    pub(crate) fn take(&mut self) -> PyResult<GraphIrEdits> {
+        self.value
+            .take()
+            .ok_or_else(|| ConsumedError::new_err("Edits has been consumed"))
     }
 }
 
@@ -2487,6 +2621,64 @@ mod tests {
                 assert_eq!(rust, expected);
                 assert!(edit.__eq__(&rebuilt, py));
             }
+        });
+    }
+
+    #[rstest]
+    #[case::empty(GraphIrEdits::new())]
+    #[case::atom(GraphIrEdits::from_iter([GraphIrEdit::AddAtoms {
+        atoms: vec![GraphIrAtomForm::default()],
+    }]))]
+    fn test_edits_take(#[case] expected: GraphIrEdits) {
+        Python::attach(|py| {
+            let mut edits = Edits::from_rust(expected.clone());
+            assert_eq!(edits.to_rust().unwrap(), &expected);
+            assert_eq!(edits.take().unwrap(), expected);
+            for error in [
+                edits.to_rust().unwrap_err(),
+                edits.to_rust_mut().unwrap_err(),
+                edits.take().unwrap_err(),
+            ] {
+                assert!(error.is_instance_of::<ConsumedError>(py));
+                assert_eq!(
+                    error.value(py).str().unwrap().extract::<String>().unwrap(),
+                    "Edits has been consumed"
+                );
+            }
+        });
+    }
+
+    #[rstest]
+    #[case::live(1, 0)]
+    #[case::exhausted(1, 1)]
+    #[case::empty(0, 0)]
+    fn test_edit_iter_next_consumed(#[case] count: usize, #[case] consumed: usize) {
+        Python::attach(|py| {
+            let expected = GraphIrEdit::AddAtoms {
+                atoms: vec![GraphIrAtomForm::default()],
+            };
+            let owner = Py::new(
+                py,
+                Edits::from_rust(GraphIrEdits::from_iter(vec![expected.clone(); count])),
+            )
+            .unwrap();
+            let mut iter = Edits::__iter__(owner.clone_ref(py), py).unwrap();
+            for _ in 0..consumed {
+                assert_eq!(
+                    iter.__next__(py).unwrap().unwrap().borrow(py).to_rust(py),
+                    expected
+                );
+            }
+            if consumed == count {
+                assert!(iter.__next__(py).unwrap().is_none());
+            }
+            assert_eq!(owner.borrow_mut(py).take().unwrap().len(), count);
+            let error = iter.__next__(py).unwrap_err();
+            assert!(error.is_instance_of::<InvalidatedViewError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "Edit iterator is invalid because Edits has been consumed"
+            );
         });
     }
 

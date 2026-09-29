@@ -140,7 +140,6 @@ def test_molecule_editing_workflow():
 
     rendered = edits.render()
     parsed = Edits.parse(rendered)
-    applied = molecule.apply(parsed)
 
     assert rendered == (
         '[{:atom {:modify [0 {:expect "#h3" :update "#h2"}]}} '
@@ -149,11 +148,12 @@ def test_molecule_editing_workflow():
     )
     assert parsed == edits
     assert parsed.render() == rendered
+    applied = molecule.apply(parsed)
     assert applied == expected
     assert molecule == original
 
     editor = molecule.edit()
-    transaction = editor.transact(parsed)
+    transaction = editor.transact(edits)
 
     assert editor.snapshot() == expected
     assert molecule == original

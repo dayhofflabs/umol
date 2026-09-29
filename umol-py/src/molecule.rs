@@ -292,7 +292,7 @@ impl Molecule {
     /// the modified draft cannot be published as a molecule.
     fn apply(&self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
         self.value
-            .apply(edits.bind(py).borrow().to_rust().clone())
+            .apply(edits.try_borrow_mut(py)?.take()?)
             .map(Self::from_rust)
             .map_err(molecule_apply_error)
     }
@@ -304,7 +304,7 @@ impl Molecule {
         edits: Py<Edits>,
     ) -> PyResult<(Self, MoleculeCorrespondence)> {
         self.value
-            .tracked_apply(edits.bind(py).borrow().to_rust().clone())
+            .tracked_apply(edits.try_borrow_mut(py)?.take()?)
             .map(|(molecule, correspondence)| {
                 (
                     Self::from_rust(molecule),

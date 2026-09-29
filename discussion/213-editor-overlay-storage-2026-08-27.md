@@ -44,8 +44,9 @@ S5a is implemented: scoped transactions provide immediate batch application,
 checked probes and commit, rollback, and optional correspondence. Molecule's
 prepared-batch conveniences use the same lifecycle. S5b's graph-ir caller and
 test migration is complete; graph-ir passes its checks. S5c's borrowed graph
-operations use scoped transactions and pass the graph checks. S5d's Python
-callers remain before the stage gate.
+operations use scoped transactions and pass the graph checks. S5d1 implements
+Python Edits consumption. S5d2's accessors and S5d3's transaction bindings remain
+before the stage gate.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -65,7 +66,7 @@ reopen S2i or block S2j.
 | Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
 | Molecule-level constraint mutation | Implemented; S2 complete | Molecule::constraints provides reads; the editor exposes &mut Constraints. Python molecule constraint entries and iteration are lazy and read-only. try_modify_constraints is removed. |
 | Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
-| Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation remains | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Molecule and Edits input-transfer changes remain; the editor already supports consumption. |
+| Python bindings | Prepared-batch transactions, consumption, and accessor invalidation settled; implementation in progress | Molecule.transact and tracked_transact submit prepared Edits; Rust applies and commits within one borrowed transaction. No interactive Python Transaction or scoped TLS dependency. Edits transfer is implemented in S5d1; Molecule transfer remains. The editor already supports consumption. |
 | Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
 | Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
@@ -98,7 +99,8 @@ complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
-complete; S4b9 closes the strict lint gate. S5a–S5c are complete; S5d1 is next.
+complete; S4b9 closes the strict lint gate. S5a–S5c and S5d1 are complete;
+S5d2 is next. Python runtime verification remains at S5d3.
 
 ## Editor and transaction API
 
@@ -5988,14 +5990,14 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   Verification passes: 1,968 graph library tests, 168 property tests with
   PROPTEST_CASES=256, 683 resolution-conformance cases, all-target strict Clippy
   with both features, warnings-denied rustdoc, nightly formatting, and diff review.
-  S5d1 is next; the workspace gate remains S5d3.
+  The workspace gate remains S5d3.
 
 - **S5d — Python prepared transactions and ownership** (group; breaking,
   closes S5 green at S5d3). [dep: S5a, S5b, S5c]
 
   Execute S5d1–S5d3 in order. No interactive Python transaction handle is added.
 
-- **S5d1 — Edits consumption and iterator access** (`umol-py::edit` and its consumers; breaking, green at S5d3). [dep: S5a, S5b, S5c]
+- **S5d1 — completed 2026-09-28: Edits consumption and iterator access** (`umol-py::edit` and its consumers; breaking, green at S5d3). [dep: S5a, S5b, S5c]
 
   **Edits ownership interface.** Replace the current tuple wrapper with:
 
@@ -6033,6 +6035,22 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   Edits boundaries, including editor apply. Do not preserve an implicit batch
   clone until S6. Test direct aliases, copying by explicit user action where
   already supported, exhausted/live iterators, equality, and consumed access.
+
+  **Implemented.** Edits uses the Option storage and four access/transfer methods
+  above. Existing Molecule/editor batch consumers take their Edits input.
+  All 34 construction mutators check access, as do reads, rendering, equality,
+  and iterator creation. Repr uses the same entry-list format as Deltas.
+  EditIter checks owner availability before exhaustion; yielded entries retain
+  their independent-copy semantics. Tests explicitly copy a batch when reusing it.
+
+  Added Rust transfer/iterator tests and Python cases for aliases, successful
+  and failed consumption, explicit copies, all mutators, equality, and live,
+  partial, empty, and exhausted iterators. Nightly formatting, Python syntax
+  checks, and diff review pass. Python 3.13 all-target Cargo checking reports
+  the same six errors as before this subitem: the detached Transaction lifetime,
+  removed editor transact methods, and retired rollback-error variants.
+  Runtime tests cannot run until S5d3 removes those bindings and rebuilds the
+  extension. S5d2 is next.
 
 - **S5d2 — Molecule accessor counters and Storage names** (`umol-py::molecule`, entity/constraint/collection views; breaking, green at S5d3). [dep: S5d1]
 
@@ -6345,7 +6363,7 @@ Within the revised S2:
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
-  scoped run. S5a–S5c are complete; S5d1 is next. S5's build
+  scoped run. S5a–S5c and S5d1 are complete; S5d2 is next. S5's build
   and test gate remains S5d3.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

@@ -1368,9 +1368,10 @@ def test_molecule_tracked_apply():
     molecule = Molecule.parse('{:atoms ["N#h3"]}')
     edits = Edits.parse('[{:atom {:add "C#h4"}}]')
 
+    copied = Edits(list(edits))
     product, correspondence = molecule.tracked_apply(edits)
 
-    assert product == molecule.apply(edits)
+    assert product == molecule.apply(copied)
     assert correspondence.atoms == Correspondence([(0, 0)], 1, 2)
     assert correspondence.bonds == Correspondence([], 0, 0)
 
