@@ -39,7 +39,7 @@ proptest! {
     #[test]
     fn test_aromatizer_integrity_preservation(source in kekule_molecule_strategy()) {
         let published = Aromatizer::new(&AromaticityModel::daylight())
-            .transform(&source)
+            .transform(source)
             .map_err(|error| TestCaseError::fail(format!("aromatization failed: {error}")))?;
 
         prop_assert_eq!(published.clone().edit().finish(), Ok(published));
@@ -48,7 +48,7 @@ proptest! {
     #[test]
     fn test_delocalize_charge_integrity_preservation(source in aromatic_molecule_strategy()) {
         let published = DelocalizeCharge
-            .transform(&source)
+            .transform(source)
             .expect("delocalized-charge transformation is infallible");
 
         prop_assert_eq!(published.clone().edit().finish(), Ok(published));
@@ -66,7 +66,7 @@ proptest! {
         };
         let node_order = source.atoms().ids().collect::<Vec<AtomId>>();
         let published = Kekulizer::new(KekulizeConfig::new(algorithm), node_order)
-            .transform(&source)
+            .transform(source)
             .map_err(|error| TestCaseError::fail(format!("kekulization failed: {error}")))?;
 
         prop_assert_eq!(published.clone().edit().finish(), Ok(published));

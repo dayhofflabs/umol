@@ -129,15 +129,11 @@ impl Transformer for DelocalizeCharge {
         Ok(())
     }
 
-    fn generate_all<'a>(
-        &'a self,
-        molecule: &'a Molecule,
-    ) -> Box<dyn Iterator<Item = Molecule> + 'a> {
-        let transformed = match self.transform(molecule) {
+    fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a {
+        iter::once_with(move || match self.transform(molecule.clone()) {
             Ok(transformed) => transformed,
             Err(never) => match never {},
-        };
-        Box::new(iter::once(transformed))
+        })
     }
 }
 
@@ -205,7 +201,7 @@ mod tests {
         }"#)
     )]
     fn test_delocalize_charge_transform(#[case] input: Molecule, #[case] expected: Molecule) {
-        assert_eq!(DelocalizeCharge.transform(&input), Ok(expected));
+        assert_eq!(DelocalizeCharge.transform(input), Ok(expected));
     }
 
     #[rstest]
@@ -229,7 +225,7 @@ mod tests {
         :aromatic-systems [{:atoms [0 1 2] :attrs "*"}]
     }"#))]
     fn test_delocalize_charge_transform_identity(#[case] input: Molecule) {
-        assert_eq!(DelocalizeCharge.transform(&input), Ok(input));
+        assert_eq!(DelocalizeCharge.transform(input.clone()), Ok(input));
     }
 
     #[rstest]
@@ -245,10 +241,19 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]#c+"}]
         }"#)
     )]
-    fn test_delocalize_charge_generate_all(#[case] input: Molecule, #[case] expected: Molecule) {
+    fn test_delocalize_charge_transform_iter(#[case] input: Molecule, #[case] expected: Molecule) {
+        let original = input.clone();
+        let mut results = DelocalizeCharge.transform_iter(&input);
+        let mut first = results.next().unwrap();
+        assert_eq!(first, expected);
+        assert_eq!(results.next(), None);
+        assert_eq!(results.next(), None);
+
+        first.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(-1);
+        assert_eq!(input, original);
         assert_eq!(
-            DelocalizeCharge.generate_all(&input).collect::<Vec<_>>(),
-            vec![expected]
+            DelocalizeCharge.transform_iter(&input).next(),
+            Some(expected)
         );
     }
 }

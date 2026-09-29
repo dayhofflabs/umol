@@ -7,6 +7,8 @@
 //! If the input molecule already carries one or more aromatic systems, this is a
 //! no-op: re-aromatizing requires kekulizing first.
 
+use std::iter;
+
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
@@ -90,11 +92,8 @@ impl Transformer for Aromatizer {
         Ok(())
     }
 
-    fn generate_all<'a>(
-        &'a self,
-        molecule: &'a Molecule,
-    ) -> Box<dyn Iterator<Item = Molecule> + 'a> {
-        Box::new(self.transform(molecule).ok().into_iter())
+    fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a {
+        iter::once_with(move || self.transform(molecule.clone()).ok()).flatten()
     }
 }
 
@@ -177,7 +176,7 @@ mod tests {
             }"#
         );
         let expected = Aromatizer::new(&AromaticityModel::daylight())
-            .transform(&molecule)
+            .transform(molecule.clone())
             .unwrap();
         let configured = Aromatizer::with_config(
             &AromaticityModel::daylight(),
@@ -190,9 +189,24 @@ mod tests {
                 maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
             },
         )
-        .transform(&molecule);
+        .transform(molecule);
 
         assert_eq!(configured, Ok(expected));
+    }
+
+    #[rstest]
+    #[case::benzene(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2#a"] [1 2 "1#a"] [2 3 "2#a"] [3 4 "1#a"] [4 5 "2#a"] [5 0 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+    )]
+    fn test_aromatizer_transform(#[case] molecule: Molecule, #[case] expected: Molecule) {
+        assert_eq!(
+            Aromatizer::new(&AromaticityModel::daylight()).transform(molecule),
+            Ok(expected)
+        );
     }
 
     #[rstest]
@@ -227,21 +241,20 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatizer_transform() {
-        let molecule = benzene_kekule();
-        let aromatized = Aromatizer::new(&AromaticityModel::daylight())
-            .transform(&molecule)
-            .unwrap();
-        assert_eq!(molecule.aromatic_systems().count(), 0);
-        assert_eq!(aromatized.aromatic_systems().count(), 1);
-    }
-
-    #[rstest]
-    fn test_aromatizer_generate_all_yields_one() {
-        let molecule = benzene_kekule();
+    #[case::benzene(
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"] [3 4 "1"] [4 5 "2"] [5 0 "1"]]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "2#a"] [1 2 "1#a"] [2 3 "2#a"] [3 4 "1#a"] [4 5 "2#a"] [5 0 "1#a"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+    )]
+    fn test_aromatizer_transform_iter(#[case] molecule: Molecule, #[case] expected: Molecule) {
+        let original = molecule.clone();
         let transformer = Aromatizer::new(&AromaticityModel::daylight());
-        let results: Vec<Molecule> = transformer.generate_all(&molecule).collect();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].aromatic_systems().count(), 1);
+        let mut results = transformer.transform_iter(&molecule);
+        assert_eq!(results.next(), Some(expected));
+        assert_eq!(results.next(), None);
+        assert_eq!(results.next(), None);
+        assert_eq!(molecule, original);
     }
 }

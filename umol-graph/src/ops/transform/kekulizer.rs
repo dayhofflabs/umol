@@ -14,6 +14,7 @@
 //! TODO: Expand to charged systems.
 
 use std::collections::HashSet;
+use std::iter;
 
 use thiserror::Error;
 use umol_graph_core::{
@@ -264,11 +265,8 @@ impl Transformer for Kekulizer {
         .expect("kekulization plan preserves molecule integrity")
     }
 
-    fn generate_all<'a>(
-        &'a self,
-        molecule: &'a Molecule,
-    ) -> Box<dyn Iterator<Item = Molecule> + 'a> {
-        Box::new(self.transform(molecule).ok().into_iter())
+    fn transform_iter<'a>(&'a self, molecule: &'a Molecule) -> impl Iterator<Item = Molecule> + 'a {
+        iter::once_with(move || self.transform(molecule.clone()).ok()).flatten()
     }
 }
 
@@ -833,6 +831,53 @@ mod tests {
 
         assert_eq!(result, Err(expected));
         assert_eq!(actual, input);
+    }
+
+    #[rstest]
+    #[case::benzene(
+        mol_dsl_concrete!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#)
+    )]
+    fn test_kekulizer_transform_iter(#[case] input: Molecule, #[case] expected: Molecule) {
+        let original = input.clone();
+        let transformer = Kekulizer::new(KekulizeConfig::default(), input.atoms().ids().collect());
+        let mut results = transformer.transform_iter(&input);
+        assert_eq!(results.next(), Some(expected));
+        assert_eq!(results.next(), None);
+        assert_eq!(results.next(), None);
+        assert_eq!(input, original);
+    }
+
+    #[rstest]
+    #[case::no_matching(
+        mol_dsl_concrete!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]}"#),
+        KekulizeError::NoMatching(AromaticSystemId(0))
+    )]
+    #[case::spin_invariant(
+        mol_dsl_concrete!(r#"{:atoms ["N#h0#n0#a#u2#s2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
+        KekulizeError::PostLocalizationSpinInvariant(
+            SpinInvariantsContradiction::MoleculeAtom {
+                atom: AtomId(0),
+                error: SpinStateError::Incompatible {
+                    unpaired_electrons: 2,
+                    multiplicity: SpinMultiplicity::DOUBLET,
+                },
+            },
+        )
+    )]
+    fn test_kekulizer_transform_iter_error(
+        #[case] input: Molecule,
+        #[case] expected: KekulizeError,
+    ) {
+        let original = input.clone();
+        let transformer = Kekulizer::new(KekulizeConfig::default(), input.atoms().ids().collect());
+        {
+            let mut results = transformer.transform_iter(&input);
+            assert_eq!(results.next(), None);
+            assert_eq!(results.next(), None);
+        }
+        assert_eq!(input, original);
+        assert_eq!(transformer.transform(input), Err(expected));
     }
 
     #[rstest]

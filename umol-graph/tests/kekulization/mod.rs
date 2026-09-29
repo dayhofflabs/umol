@@ -335,8 +335,8 @@ fn test_kekulization_fixture_output(
     let node_order: Vec<AtomId> = input.atoms().iter().map(|atom| atom.id()).collect();
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
 
-    let first = kekulizer.transform(&input).unwrap();
-    let second = kekulizer.transform(&input).unwrap();
+    let first = kekulizer.transform(input.clone()).unwrap();
+    let second = kekulizer.transform(input.clone()).unwrap();
     let double_bonds: Vec<BondId> = first
         .bonds()
         .iter()
@@ -460,8 +460,8 @@ fn test_kekulization_fixture_output_cage(#[case] source: &str) {
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
 
-    let first = kekulizer.transform(&input).unwrap();
-    let second = kekulizer.transform(&input).unwrap();
+    let first = kekulizer.transform(input.clone()).unwrap();
+    let second = kekulizer.transform(input.clone()).unwrap();
     let double_bonds: Vec<BondId> = first
         .bonds()
         .iter()

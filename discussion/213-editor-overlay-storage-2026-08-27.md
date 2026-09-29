@@ -58,7 +58,9 @@ S7b makes resolver reports opt-in and skips report-only work on ordinary paths.
 S7c moves ingest, MOL parse, and export candidates through consuming resolution
 and projection; ingestion underdetermination has no report payload in Rust or Python.
 S7d implements consuming and borrowed Python resolution; explicit report methods
-return (solution, report), and Solution has no report field. S8a is next.
+return (solution, report), and Solution has no report field. S8a implements the
+Transformer trait and caller migration; S8b supplies the three consuming
+implementations and restores compilation.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -334,12 +336,10 @@ pub trait Transformer {
 }
 ```
 
-Current transform borrows and clones its input before calling transform_into.
-The consuming interface instead uses the owning editor. transform_iter retains the
+The consuming interface uses the owning editor. transform_iter retains the
 borrowed input and creates candidates on demand, preserving the current empty
-iterator on failure. All three current generate_all implementations eagerly
-transform before returning a boxed zero-or-one-element iterator. Defer that work
-until iteration; removing Box alone does not make it lazy.
+iterator on failure. Each built-in transform_iter defers its candidate copy and
+transformation inside once_with; it yields zero or one result without boxing.
 
 Use impl Iterator: each implementation can return its own concrete iterator
 without a required heap allocation or virtual next call. This makes Transformer
@@ -6595,11 +6595,28 @@ S7a–S7d form one public signature/result migration, returning green at S7d.
 S8a and S8b are one trait/implementation change, returning green at S8b. No
 temporary clone-based default transform implementation is introduced between them.
 
-- **S8a** (`umol-graph::ops::transform`; breaking, green at S8b) Change Transformer
+- **S8a — completed 2026-09-29** (`umol-graph::ops::transform`; breaking, green at S8b) Change Transformer
   to consuming `transform`, recovering `transform_into`, and lazy
   `transform_iter` returning `impl Iterator`; migrate all trait callers. Test
   failure ownership, independent iterator outputs, and deferred execution.
   [dep: S5c, S6d]
+
+  **Implementation:** transform now requires an owned Molecule and has no default
+  implementation. transform_into retains its borrowed recovery contract.
+  transform_iter replaces generate_all and returns impl Iterator; all three
+  implementations defer copying and execution through once_with. Trait callers
+  move their inputs, with explicit copies only for tests retaining an input or
+  comparing repeated runs. There are no Python bindings or dyn Transformer callers
+  to migrate. Tests compare complete iterator outputs, terminal exhaustion,
+  source preservation, independent output mutation, and early/late rejection.
+  Publication properties retain their integrity assertions.
+
+  **Verification:** Nightly formatting and diff review pass. Graph all-target,
+  all-feature checking reports only the three missing transform implementations
+  assigned to S8b (E0046). Runtime tests and lint/rustdoc gates await S8b.
+  Deferred execution is explicit in the iterator closures: neither the copy nor
+  transformation occurs outside once_with. Scratch is empty.
+
 - **S8b** (`umol-graph::ops::transform::{aromatizer,delocalize_charge,kekulizer}`;
   breaking, red→green) Reuse S6c's planning and borrowed execution for the new
   consuming route;
