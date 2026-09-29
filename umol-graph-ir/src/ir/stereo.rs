@@ -32,6 +32,58 @@ use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
 use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
 
+/// A stereo atom's site, ligand frame, and attributes.
+///
+/// Normalization preserves ligand order. Reframing sorts complete ligand values
+/// and transports the configuration and ligand-position constraints.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StereoAtomEntry<'a> {
+    pub(crate) site: AtomId,
+    pub(crate) ligands: Cow<'a, [StereoLigand]>,
+    pub(crate) attributes: Cow<'a, StereoAtomForm>,
+}
+
+impl Normalize for StereoAtomEntry<'_> {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        self.attributes = match self.attributes {
+            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
+        };
+        Ok(self)
+    }
+}
+
+impl FrameTransport for StereoAtomEntry<'_> {
+    type Action = Permutation;
+
+    fn reframe_by(mut self, action: &Self::Action) -> Option<Self> {
+        if action.degree() != self.ligands.len() {
+            return None;
+        }
+        self.attributes = Cow::Owned(self.attributes.into_owned().reframe_by(action)?);
+        self.ligands = Cow::Owned(action.act(&self.ligands));
+        Some(self)
+    }
+}
+
+impl Reframe for StereoAtomEntry<'_> {
+    /// # Panics
+    ///
+    /// Panics if the ligand frame exceeds the supported permutation degree.
+    fn representative_action(&self) -> Self::Action {
+        stereo_atom_representative_action(&self.ligands)
+            .expect("stereo atom ligand frame has a supported degree")
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        let action = stereo_atom_representative_action(&self.ligands).ok_or(Contradiction)?;
+        self.normalize()?
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()
+    }
+}
+
 /// The molecule's stereo atoms. The ligands bear the frame the configuration is read against; the
 /// site is an atom.
 ///
@@ -75,6 +127,19 @@ impl StereoAtoms {
 
     pub fn attributes(&self, id: StereoAtomId) -> &StereoAtomForm {
         self.0.data(RelationId::from(id))
+    }
+
+    /// The complete stereo atom value, borrowing its ligands and attributes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is not a stereo atom in this set.
+    pub(crate) fn entry(&self, id: StereoAtomId) -> StereoAtomEntry<'_> {
+        StereoAtomEntry {
+            site: self.site(id),
+            ligands: Cow::Borrowed(self.ligands(id)),
+            attributes: Cow::Borrowed(self.attributes(id)),
+        }
     }
 
     pub(crate) fn attributes_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
@@ -405,6 +470,59 @@ pub(crate) fn reframe_stereo_atoms_with(
     Ok(stereo_atoms)
 }
 
+/// A stereo bond's site, ligand frame, and attributes.
+///
+/// Normalization preserves ligand order. Reframing sorts ligands within each
+/// endpoint block and orders the blocks, transporting the configuration and
+/// ligand-position constraints.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StereoBondEntry<'a> {
+    pub(crate) site: BondId,
+    pub(crate) ligands: Cow<'a, [StereoLigand]>,
+    pub(crate) attributes: Cow<'a, StereoBondForm>,
+}
+
+impl Normalize for StereoBondEntry<'_> {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        self.attributes = match self.attributes {
+            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
+        };
+        Ok(self)
+    }
+}
+
+impl FrameTransport for StereoBondEntry<'_> {
+    type Action = Permutation;
+
+    fn reframe_by(mut self, action: &Self::Action) -> Option<Self> {
+        if action.degree() != self.ligands.len() {
+            return None;
+        }
+        self.attributes = Cow::Owned(self.attributes.into_owned().reframe_by(action)?);
+        self.ligands = Cow::Owned(action.act(&self.ligands));
+        Some(self)
+    }
+}
+
+impl Reframe for StereoBondEntry<'_> {
+    /// # Panics
+    ///
+    /// Panics if the ligand frame does not contain two blocks of two ligands.
+    fn representative_action(&self) -> Self::Action {
+        stereo_bond_representative_action(&self.ligands)
+            .expect("stereo bond ligand frame has two endpoint blocks")
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        let action = stereo_bond_representative_action(&self.ligands).ok_or(Contradiction)?;
+        self.normalize()?
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()
+    }
+}
+
 /// The molecule's stereo bonds. The ligands bear the frame the configuration is read against; the
 /// site is a bond.
 ///
@@ -448,6 +566,19 @@ impl StereoBonds {
 
     pub fn attributes(&self, id: StereoBondId) -> &StereoBondForm {
         self.0.data(RelationId::from(id))
+    }
+
+    /// The complete stereo bond value, borrowing its ligands and attributes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is not a stereo bond in this set.
+    pub(crate) fn entry(&self, id: StereoBondId) -> StereoBondEntry<'_> {
+        StereoBondEntry {
+            site: self.site(id),
+            ligands: Cow::Borrowed(self.ligands(id)),
+            attributes: Cow::Borrowed(self.attributes(id)),
+        }
     }
 
     pub(crate) fn attributes_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
@@ -2251,6 +2382,7 @@ pub(crate) fn coset_apply_permutation(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    use std::ptr;
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -2262,6 +2394,273 @@ mod tests {
     use super::super::id::{AtomId, StereoLigandPosition};
     use super::super::ligand::StereoLigandKind;
     use super::*;
+
+    #[rstest]
+    #[case::singleton(StereoCoset::lit_set([1]), Ok(StereoCoset::Lit(1)))]
+    #[case::contradiction(StereoCoset::lit_set([]), Err(Contradiction))]
+    fn test_stereo_atom_entry_normalize(
+        #[case] coset: StereoCoset,
+        #[case] expected: Result<StereoCoset, Contradiction>,
+        #[values(false, true)] owned: bool,
+    ) {
+        let ligands = [2, 1, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
+        let entry = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: if owned {
+                Cow::Owned(ligands.to_vec())
+            } else {
+                Cow::Borrowed(&ligands)
+            },
+            attributes: if owned {
+                Cow::Owned(attributes.clone())
+            } else {
+                Cow::Borrowed(&attributes)
+            },
+        };
+        assert_eq!(
+            entry,
+            StereoAtomEntry {
+                site: AtomId(0),
+                ligands: Cow::Borrowed(&ligands),
+                attributes: Cow::Borrowed(&attributes)
+            }
+        );
+        let expected = expected.map(|coset| StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Owned(StereoAtomForm::new(StereoKind::Tetrahedral, coset)),
+        });
+        let normalized = entry.normalize();
+        assert_eq!(normalized, expected);
+        if let Ok(normalized) = normalized {
+            assert_eq!(normalized.clone().normalize(), Ok(normalized));
+        }
+    }
+
+    #[rstest]
+    #[case::literal(StereoCoset::Lit(0))]
+    #[case::uninterpreted_index(StereoCoset::Lit(2))]
+    fn test_stereo_atom_entry_normalize_identity(#[case] coset: StereoCoset) {
+        let ligands = [2, 1, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let entry = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Owned(StereoAtomForm::new(StereoKind::Tetrahedral, coset)),
+        };
+        assert_eq!(entry.clone().normalize(), Ok(entry));
+    }
+
+    #[rstest]
+    #[case::swap([1, 0, 2, 3], 1, [1, 2])]
+    #[case::cycle([1, 2, 0, 3], 0, [1, 2])]
+    fn test_stereo_atom_entry_reframe_by(
+        #[case] image: [usize; 4],
+        #[case] coset: u32,
+        #[case] pair: [u32; 2],
+    ) {
+        let ligands = [
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+        ];
+        let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+                relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+            }),
+        );
+        let entry = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = Permutation::from_image(&image);
+        let expected = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Owned(image.map(|i| ligands[i]).to_vec()),
+            attributes: Cow::Owned(
+                StereoAtomForm::new(StereoKind::Tetrahedral, coset).with_constraint(
+                    StereoAtomConstraintForm::Topicity(TopicityForm {
+                        pair: StereoLigandPair::new(
+                            StereoLigandPosition(pair[0]),
+                            StereoLigandPosition(pair[1]),
+                        ),
+                        relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+                    }),
+                ),
+            ),
+        };
+        assert_eq!(
+            entry.clone().reframe_by(&Permutation::identity(4)),
+            Some(entry.clone())
+        );
+        let transformed = entry.clone().reframe_by(&action).unwrap();
+        assert_eq!(transformed, expected);
+        assert!(entry.framed_eq(&transformed));
+        assert_eq!(
+            transformed.reframe_by(&action.inverse()),
+            Some(entry.clone())
+        );
+        let second = Permutation::from_image(&[1, 0, 2, 3]);
+        assert_eq!(
+            entry
+                .clone()
+                .reframe_by(&action)
+                .unwrap()
+                .reframe_by(&second),
+            entry.reframe_by(&action.compose(second))
+        );
+    }
+
+    #[rstest]
+    #[case::short(3)]
+    #[case::long(5)]
+    fn test_stereo_atom_entry_reframe_by_error(#[case] degree: usize) {
+        let ligands = [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let entry = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Owned(StereoAtomForm::default()),
+        };
+        assert_eq!(entry.reframe_by(&Permutation::identity(degree)), None);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_entry_reframe() {
+        let ligands = [2, 1, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([0]));
+        let entry = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let expected = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Owned(
+                [1, 2, 3, 4]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+            ),
+            attributes: Cow::Owned(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32)),
+        };
+        let action = Permutation::from_image(&[1, 0, 2, 3]);
+        assert_eq!(entry.representative_action(), action);
+        assert_eq!(entry.clone().reframe(), Ok(expected.clone()));
+        assert_eq!(entry.tracked_reframe(), Ok((expected.clone(), action)));
+        assert_eq!(expected.clone().reframe(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::kind_degree(3, StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32))]
+    #[case::oversized_frame(7, StereoAtomForm::default())]
+    fn test_stereo_atom_entry_reframe_error(
+        #[case] length: u32,
+        #[case] attributes: StereoAtomForm,
+    ) {
+        let malformed = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Owned(
+                (1..=length)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+            ),
+            attributes: Cow::Owned(attributes),
+        };
+        let valid = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Owned(
+                [1, 2, 3, 4]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+            ),
+            attributes: Cow::Owned(StereoAtomForm::default()),
+        };
+        assert!(!valid.framed_eq(&malformed));
+        assert_eq!(malformed.reframe(), Err(Contradiction));
+    }
+
+    #[rstest]
+    #[case::stored(AtomId(0), [1, 2, 3, 4], 0, true, true)]
+    #[case::other_coset(AtomId(0), [1, 2, 3, 4], 1, false, false)]
+    #[case::transposed_same_coset(AtomId(0), [2, 1, 3, 4], 0, false, false)]
+    #[case::transposed_other_coset(AtomId(0), [2, 1, 3, 4], 1, false, true)]
+    #[case::membership(AtomId(0), [1, 2, 3, 5], 0, false, false)]
+    #[case::site(AtomId(5), [1, 2, 3, 4], 0, false, false)]
+    fn test_stereo_atom_entry_framed_eq(
+        #[case] site: AtomId,
+        #[case] ids: [u32; 4],
+        #[case] coset: u32,
+        #[case] normalized: bool,
+        #[case] framed: bool,
+    ) {
+        let ligands = [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let left = StereoAtomEntry {
+            site: AtomId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Owned(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32)),
+        };
+        let right = StereoAtomEntry {
+            site,
+            ligands: Cow::Owned(
+                ids.map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+            ),
+            attributes: Cow::Owned(StereoAtomForm::new(StereoKind::Tetrahedral, coset)),
+        };
+        assert_eq!(left.normalized_eq(&right), normalized);
+        assert_eq!(left.framed_eq(&right), framed);
+        assert_eq!(right.framed_eq(&left), framed);
+    }
+
+    #[rstest]
+    fn test_stereo_atoms_entry(stereo_atoms: StereoAtoms) {
+        let before = stereo_atoms.clone();
+        let entry = stereo_atoms.entry(StereoAtomId(0));
+        assert_eq!(entry.site, AtomId(2));
+        assert_eq!(
+            entry.ligands.as_ref(),
+            &[
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+            ]
+        );
+        assert_eq!(
+            entry.attributes.as_ref(),
+            &StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+                    relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+                }),
+            )
+        );
+        assert!(
+            matches!(entry.ligands, Cow::Borrowed(ligands) if ptr::eq(ligands, stereo_atoms.ligands(StereoAtomId(0))))
+        );
+        assert!(
+            matches!(entry.attributes, Cow::Borrowed(attributes) if ptr::eq(attributes, stereo_atoms.attributes(StereoAtomId(0))))
+        );
+        let reframed = entry.reframe().unwrap();
+        assert_eq!(
+            reframed.ligands.as_ref(),
+            &[
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ]
+        );
+        assert_eq!(stereo_atoms, before);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_stereo_atoms_entry_error() {
+        StereoAtoms::default().entry(StereoAtomId(0));
+    }
 
     #[fixture]
     fn stereo_atoms() -> StereoAtoms {
@@ -2927,6 +3326,314 @@ mod tests {
             Correspondence::empty(),
             Correspondence::empty(),
         ));
+    }
+
+    #[rstest]
+    #[case::singleton(StereoCoset::lit_set([1]), Ok(StereoCoset::Lit(1)))]
+    #[case::contradiction(StereoCoset::lit_set([]), Err(Contradiction))]
+    fn test_stereo_bond_entry_normalize(
+        #[case] coset: StereoCoset,
+        #[case] expected: Result<StereoCoset, Contradiction>,
+        #[values(false, true)] owned: bool,
+    ) {
+        let ligands = [2, 1, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let attributes = StereoBondForm::new(StereoKind::CisTrans, coset);
+        let entry = StereoBondEntry {
+            site: BondId(0),
+            ligands: if owned {
+                Cow::Owned(ligands.to_vec())
+            } else {
+                Cow::Borrowed(&ligands)
+            },
+            attributes: if owned {
+                Cow::Owned(attributes.clone())
+            } else {
+                Cow::Borrowed(&attributes)
+            },
+        };
+        assert_eq!(
+            entry,
+            StereoBondEntry {
+                site: BondId(0),
+                ligands: Cow::Borrowed(&ligands),
+                attributes: Cow::Borrowed(&attributes)
+            }
+        );
+        let expected = expected.map(|coset| StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Owned(StereoBondForm::new(StereoKind::CisTrans, coset)),
+        });
+        let normalized = entry.normalize();
+        assert_eq!(normalized, expected);
+        if let Ok(normalized) = normalized {
+            assert_eq!(normalized.clone().normalize(), Ok(normalized));
+        }
+    }
+
+    #[rstest]
+    #[case::literal(StereoCoset::Lit(0))]
+    #[case::uninterpreted_index(StereoCoset::Lit(2))]
+    fn test_stereo_bond_entry_normalize_identity(#[case] coset: StereoCoset) {
+        let ligands = [2, 1, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let entry = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Owned(StereoBondForm::new(StereoKind::CisTrans, coset)),
+        };
+        assert_eq!(entry.clone().normalize(), Ok(entry));
+    }
+
+    #[rstest]
+    #[case::swap([1, 0, 2, 3], 1, [1, 2])]
+    #[case::block_swap([2, 3, 0, 1], 0, [0, 2])]
+    fn test_stereo_bond_entry_reframe_by(
+        #[case] image: [usize; 4],
+        #[case] coset: u32,
+        #[case] pair: [u32; 2],
+    ) {
+        let ligands = [
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+        ];
+        let attributes = StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(
+            StereoBondConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+                relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+            }),
+        );
+        let entry = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = Permutation::from_image(&image);
+        let expected = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Owned(image.map(|i| ligands[i]).to_vec()),
+            attributes: Cow::Owned(
+                StereoBondForm::new(StereoKind::CisTrans, coset).with_constraint(
+                    StereoBondConstraintForm::Topicity(TopicityForm {
+                        pair: StereoLigandPair::new(
+                            StereoLigandPosition(pair[0]),
+                            StereoLigandPosition(pair[1]),
+                        ),
+                        relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+                    }),
+                ),
+            ),
+        };
+        assert_eq!(
+            entry.clone().reframe_by(&Permutation::identity(4)),
+            Some(entry.clone())
+        );
+        let transformed = entry.clone().reframe_by(&action).unwrap();
+        assert_eq!(transformed, expected);
+        assert!(entry.framed_eq(&transformed));
+        assert_eq!(
+            transformed.reframe_by(&action.inverse()),
+            Some(entry.clone())
+        );
+        let second = Permutation::from_image(&[1, 0, 2, 3]);
+        assert_eq!(
+            entry
+                .clone()
+                .reframe_by(&action)
+                .unwrap()
+                .reframe_by(&second),
+            entry.reframe_by(&action.compose(second))
+        );
+    }
+
+    #[rstest]
+    #[case::short(Permutation::identity(3))]
+    #[case::long(Permutation::identity(5))]
+    #[case::across_blocks(Permutation::from_image(&[0, 2, 1, 3]))]
+    fn test_stereo_bond_entry_reframe_by_error(
+        #[case] action: Permutation,
+        #[values(false, true)] determined: bool,
+    ) {
+        let ligands = [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let entry = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Owned(if determined {
+                StereoBondForm::new(StereoKind::CisTrans, 0_u32)
+            } else {
+                StereoBondForm::default()
+            }),
+        };
+        assert_eq!(entry.reframe_by(&action), None);
+    }
+
+    #[rstest]
+    fn test_stereo_bond_entry_reframe() {
+        let ligands = [2, 1, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let attributes = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([0]));
+        let entry = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let expected = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Owned(
+                [1, 2, 3, 4]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+            ),
+            attributes: Cow::Owned(StereoBondForm::new(StereoKind::CisTrans, 1_u32)),
+        };
+        let action = Permutation::from_image(&[1, 0, 2, 3]);
+        assert_eq!(entry.representative_action(), action);
+        assert_eq!(entry.clone().reframe(), Ok(expected.clone()));
+        assert_eq!(entry.tracked_reframe(), Ok((expected.clone(), action)));
+        assert_eq!(expected.clone().reframe(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::kind_degree(3, StereoBondForm::new(StereoKind::CisTrans, 0_u32))]
+    #[case::oversized_frame(7, StereoBondForm::default())]
+    fn test_stereo_bond_entry_reframe_error(
+        #[case] length: u32,
+        #[case] attributes: StereoBondForm,
+    ) {
+        let malformed = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Owned(
+                (1..=length)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+            ),
+            attributes: Cow::Owned(attributes),
+        };
+        let valid = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Owned(
+                [1, 2, 3, 4]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+            ),
+            attributes: Cow::Owned(StereoBondForm::default()),
+        };
+        assert!(!valid.framed_eq(&malformed));
+        assert_eq!(malformed.reframe(), Err(Contradiction));
+    }
+
+    #[rstest]
+    #[case::stored(BondId(0), [1, 2, 3, 4], 0, true, true)]
+    #[case::other_coset(BondId(0), [1, 2, 3, 4], 1, false, false)]
+    #[case::transposed_same_coset(BondId(0), [2, 1, 3, 4], 0, false, false)]
+    #[case::transposed_other_coset(BondId(0), [2, 1, 3, 4], 1, false, true)]
+    #[case::block_swap(BondId(0), [3, 4, 1, 2], 0, false, true)]
+    #[case::across_blocks(BondId(0), [1, 3, 2, 4], 0, false, false)]
+    #[case::membership(BondId(0), [1, 2, 3, 5], 0, false, false)]
+    #[case::site(BondId(5), [1, 2, 3, 4], 0, false, false)]
+    fn test_stereo_bond_entry_framed_eq(
+        #[case] site: BondId,
+        #[case] ids: [u32; 4],
+        #[case] coset: u32,
+        #[case] normalized: bool,
+        #[case] framed: bool,
+    ) {
+        let ligands = [1, 2, 3, 4].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let left = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Owned(StereoBondForm::new(StereoKind::CisTrans, 0_u32)),
+        };
+        let right = StereoBondEntry {
+            site,
+            ligands: Cow::Owned(
+                ids.map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+            ),
+            attributes: Cow::Owned(StereoBondForm::new(StereoKind::CisTrans, coset)),
+        };
+        assert_eq!(left.normalized_eq(&right), normalized);
+        assert_eq!(left.framed_eq(&right), framed);
+        assert_eq!(right.framed_eq(&left), framed);
+    }
+
+    #[rstest]
+    #[case::stored(BondId(0), [2, 3, 4, 5], true)]
+    #[case::within_endpoint(BondId(0), [3, 2, 4, 5], true)]
+    #[case::endpoint_block_swap(BondId(0), [4, 5, 2, 3], true)]
+    #[case::across_endpoints(BondId(0), [2, 4, 3, 5], false)]
+    #[case::different_ligand(BondId(0), [2, 3, 4, 6], false)]
+    #[case::different_site(BondId(1), [2, 3, 4, 5], false)]
+    fn test_stereo_bond_entry_framed_eq_undetermined(
+        #[case] site: BondId,
+        #[case] ids: [u32; 4],
+        #[case] expected: bool,
+    ) {
+        let ligands = [2, 3, 4, 5].map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom));
+        let attributes = StereoBondForm::default();
+        let left = StereoBondEntry {
+            site: BondId(0),
+            ligands: Cow::Borrowed(&ligands),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let right = StereoBondEntry {
+            site,
+            ligands: Cow::Owned(
+                ids.map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .to_vec(),
+            ),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        assert_eq!(left.framed_eq(&right), expected);
+        assert_eq!(right.framed_eq(&left), expected);
+    }
+
+    #[rstest]
+    fn test_stereo_bonds_entry(stereo_bonds: StereoBonds) {
+        let before = stereo_bonds.clone();
+        let entry = stereo_bonds.entry(StereoBondId(0));
+        assert_eq!(entry.site, BondId(2));
+        assert_eq!(
+            entry.ligands.as_ref(),
+            &[
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+            ]
+        );
+        assert_eq!(
+            entry.attributes.as_ref(),
+            &StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(
+                StereoBondConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+                    relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+                }),
+            )
+        );
+        assert!(
+            matches!(entry.ligands, Cow::Borrowed(ligands) if ptr::eq(ligands, stereo_bonds.ligands(StereoBondId(0))))
+        );
+        assert!(
+            matches!(entry.attributes, Cow::Borrowed(attributes) if ptr::eq(attributes, stereo_bonds.attributes(StereoBondId(0))))
+        );
+        let reframed = entry.reframe().unwrap();
+        assert_eq!(
+            reframed.ligands.as_ref(),
+            &[
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+            ]
+        );
+        assert_eq!(stereo_bonds, before);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_stereo_bonds_entry_error() {
+        StereoBonds::default().entry(StereoBondId(0));
     }
 
     #[fixture]

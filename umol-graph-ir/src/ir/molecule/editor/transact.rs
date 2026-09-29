@@ -10,9 +10,10 @@
 use std::mem;
 
 use thiserror::Error;
-use umol_graph_core::Correspondence;
+use umol_graph_core::{Compaction, Correspondence, GraphCompaction};
 
 use super::MoleculeEditor;
+use crate::ir::compact::MoleculeCompaction;
 use crate::ir::correspondence::MoleculeCorrespondence;
 use crate::ir::edit::{Edits, Undo};
 use crate::ir::entity::EntityKind;
@@ -53,11 +54,6 @@ pub enum TransactionError {
     },
 
     /// The rollback journal cannot be structurally applied to the supplied editor state.
-    ///
-    /// A transaction guarantees restoration under Molecule::normalized_eq when rolled back
-    /// against its post-transaction state or the end of its appended consecutive chain.
-    /// Other states are rejected when a required receiver or reconstruction entry is absent;
-    /// structurally compatible but unrelated states are outside that guarantee.
     #[error("rollback journal does not match editor state")]
     RollbackStateMismatch,
 }
@@ -67,8 +63,7 @@ pub enum TransactionError {
 /// Detachment permits journals for consecutive transactions to be appended and rolled back as a
 /// unit. Restoration under Molecule::normalized_eq is guaranteed for the post-transaction editor
 /// state or the end of the consecutively appended chain. Manipulated history does not panic but
-/// has no specified result. Invalid undo targets or compactions may return
-/// [`TransactionError::RollbackStateMismatch`].
+/// has no specified result.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Transaction {
     undo: Vec<Undo>,
@@ -84,18 +79,16 @@ impl Transaction {
         self.undo.extend(later.undo);
     }
 
-    /// Reverse the journal against its exact post-transaction editor state.
+    /// Reverse the journal against its post-transaction editor state.
     ///
     /// Restores the pre-transaction state under Molecule::normalized_eq when the editor is the
     /// state produced by this transaction or its appended consecutive chain. Manipulated history
     /// does not panic but has no specified result.
     ///
-    /// # Errors
-    ///
-    /// Returns [`TransactionError::RollbackStateMismatch`] for an incompatible undo target,
-    /// field value, or compaction.
+    /// Returns `Ok(())` after replay.
     pub fn rollback(self, editor: &mut MoleculeEditor) -> Result<(), TransactionError> {
-        rollback_journal(editor, self.undo)
+        rollback_journal(editor, self.undo);
+        Ok(())
     }
 
     /// Roll back and return the correspondence from the rollback input to the restored state.
@@ -103,9 +96,8 @@ impl Transaction {
     /// The returned witness covers this rollback, not the editor's entire session. No intermediate
     /// molecule is published. Restored entities without a rollback-input partner remain unmatched.
     ///
-    /// # Errors
-    ///
-    /// Returns the same error and leaves the same editor state as [`Self::rollback`].
+    /// Returns `Ok(correspondence)` after replay. Manipulated history does not panic
+    /// but has no specified result.
     ///
     /// # Semantic properties
     ///
@@ -142,7 +134,6 @@ impl MoleculeEditor {
     /// transaction. On any apply failure, reverse-replays the already-created
     /// undo journal.
     pub fn transact(&mut self, edits: Edits) -> Result<Transaction, TransactionError> {
-        let correspondence = self.correspondence.clone();
         let mut journal: Vec<Undo> = Vec::with_capacity(edits.len());
         let mut state = ApplicationState::new(&self.molecule);
         for edit in edits {
@@ -150,17 +141,14 @@ impl MoleculeEditor {
                 Ok(Some(undo)) => journal.push(undo),
                 Ok(None) => {}
                 Err(apply) => {
-                    if let Err(rollback) = rollback_journal(self, journal) {
-                        return Err(TransactionError::RollbackFailed {
-                            apply: Box::new(apply),
-                            rollback: Box::new(rollback),
-                        });
+                    for undo in journal.into_iter().rev() {
+                        self.molecule.apply_undo(undo);
                     }
-                    self.correspondence = correspondence;
                     return Err(apply);
                 }
             }
         }
+        state.update_correspondence(&mut self.correspondence);
         Ok(Transaction { undo: journal })
     }
 
@@ -222,6 +210,7 @@ impl MoleculeEditor {
         for edit in edits {
             self.molecule.apply_edit(edit, &mut state)?;
         }
+        state.update_correspondence(&mut self.correspondence);
         Ok(self)
     }
 
@@ -263,14 +252,149 @@ impl MoleculeEditor {
     }
 }
 
-fn rollback_journal(
-    editor: &mut MoleculeEditor,
-    journal: Vec<Undo>,
-) -> Result<(), TransactionError> {
+fn rollback_journal(editor: &mut MoleculeEditor, journal: Vec<Undo>) {
     for undo in journal.into_iter().rev() {
+        let mut atoms = Compaction::identity(editor.atom_count());
+        let mut bonds = Compaction::identity(editor.bond_count());
+        let mut dative_bonds = Compaction::identity(editor.dative_bond_count());
+        let mut aromatic_systems = Compaction::identity(editor.aromatic_system_count());
+        let mut multicenter_bonds = Compaction::identity(editor.multicenter_bond_count());
+        let mut noncovalent_bonds = Compaction::identity(editor.noncovalent_bond_count());
+        let mut stereo_atoms = Compaction::identity(editor.stereo_atom_count());
+        let mut stereo_bonds = Compaction::identity(editor.stereo_bond_count());
+        match &undo {
+            Undo::RemoveAddedTopology {
+                atoms: added_atoms,
+                bonds: added_bonds,
+            } => {
+                atoms = Compaction::new(
+                    editor.atom_count(),
+                    added_atoms
+                        .iter()
+                        .filter(|entry| entry.id.index() < editor.atom_count())
+                        .map(|entry| entry.id.into())
+                        .collect(),
+                )
+                .expect("removed atom ids are in range");
+                bonds = Compaction::new(
+                    editor.bond_count(),
+                    added_bonds
+                        .iter()
+                        .filter(|entry| entry.id.index() < editor.bond_count())
+                        .map(|entry| entry.id.into())
+                        .collect(),
+                )
+                .expect("removed bond ids are in range");
+            }
+            Undo::RemoveAddedDativeBond(added) => {
+                if added.id.index() < editor.dative_bond_count() {
+                    dative_bonds = Compaction::new(editor.dative_bond_count(), vec![added.id])
+                        .expect("removed id is in range");
+                }
+            }
+            Undo::RemoveAddedAromaticSystem(added) => {
+                if added.id.index() < editor.aromatic_system_count() {
+                    aromatic_systems =
+                        Compaction::new(editor.aromatic_system_count(), vec![added.id])
+                            .expect("removed id is in range");
+                }
+            }
+            Undo::RemoveAddedMulticenterBond(added) => {
+                if added.id.index() < editor.multicenter_bond_count() {
+                    multicenter_bonds =
+                        Compaction::new(editor.multicenter_bond_count(), vec![added.id])
+                            .expect("removed id is in range");
+                }
+            }
+            Undo::RemoveAddedNoncovalentBond(added) => {
+                if added.id.index() < editor.noncovalent_bond_count() {
+                    noncovalent_bonds =
+                        Compaction::new(editor.noncovalent_bond_count(), vec![added.id])
+                            .expect("removed id is in range");
+                }
+            }
+            Undo::RemoveAddedStereoAtom(added) => {
+                if added.id.index() < editor.stereo_atom_count() {
+                    stereo_atoms = Compaction::new(editor.stereo_atom_count(), vec![added.id])
+                        .expect("removed id is in range");
+                }
+            }
+            Undo::RemoveAddedStereoBond(added) => {
+                if added.id.index() < editor.stereo_bond_count() {
+                    stereo_bonds = Compaction::new(editor.stereo_bond_count(), vec![added.id])
+                        .expect("removed id is in range");
+                }
+            }
+            Undo::RestoreRemovedTopology {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedDativeBonds {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedAromaticSystems {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedMulticenterBonds {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedNoncovalentBonds {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedStereoAtoms {
+                undo_compaction, ..
+            }
+            | Undo::RestoreRemovedStereoBonds {
+                undo_compaction, ..
+            } => {
+                let _ = editor
+                    .correspondence
+                    .uncompact_right(undo_compaction.forward());
+                editor.molecule.apply_undo(undo);
+                continue;
+            }
+            Undo::RestoreDativeBondDonors { .. }
+            | Undo::RestoreDativeBondAcceptor { .. }
+            | Undo::RestoreAromaticSystemAtoms { .. }
+            | Undo::RestoreMulticenterBondAtoms { .. }
+            | Undo::RestoreNoncovalentBondAtoms { .. }
+            | Undo::RestoreStereoAtomSite { .. }
+            | Undo::RestoreStereoAtomLigands { .. }
+            | Undo::RestoreStereoBondSite { .. }
+            | Undo::RestoreStereoBondLigands { .. }
+            | Undo::ModifyAtomField { .. }
+            | Undo::ModifyBondField { .. }
+            | Undo::ModifyDativeBondField { .. }
+            | Undo::ModifyAromaticSystemField { .. }
+            | Undo::ModifyMulticenterBondField { .. }
+            | Undo::ModifyNoncovalentBondField { .. }
+            | Undo::ModifyStereoAtomField { .. }
+            | Undo::ModifyStereoBondField { .. }
+            | Undo::RestoreAtomConstraint { .. }
+            | Undo::RestoreBondConstraint { .. }
+            | Undo::RestoreDativeBondConstraint { .. }
+            | Undo::RestoreAromaticSystemConstraint { .. }
+            | Undo::RestoreMulticenterBondConstraint { .. }
+            | Undo::RestoreNoncovalentBondConstraint { .. }
+            | Undo::RestoreStereoAtomConstraint { .. }
+            | Undo::RestoreStereoBondConstraint { .. }
+            | Undo::RemoveAddedMoleculeConstraint { .. }
+            | Undo::RestoreMoleculeConstraints(_) => {
+                editor.molecule.apply_undo(undo);
+                continue;
+            }
+        }
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(atoms, bonds),
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+        );
+        let _ = editor.correspondence.compact_right(&compaction);
         editor.molecule.apply_undo(undo);
     }
-    Ok(())
 }
 #[cfg(test)]
 mod tests {
@@ -2199,16 +2323,11 @@ mod tests {
     #[case::stereo_bond_ligands(Undo::RestoreStereoBondLigands {
         id: StereoBondId(9), ligands: vec![],
     })]
-    fn test_transaction_rollback_restore_target_error(
+    fn test_transaction_rollback_restore_target_manipulated(
         mut batched_overlays: MoleculeEditor,
         #[case] undo: Undo,
     ) {
-        let before = batched_overlays.clone().build();
-        assert_eq!(
-            (Transaction { undo: vec![undo] }).rollback(&mut batched_overlays),
-            Err(TransactionError::RollbackStateMismatch),
-        );
-        assert_eq!(batched_overlays.build(), before);
+        let _ = (Transaction { undo: vec![undo] }).rollback(&mut batched_overlays);
     }
 
     #[rstest]
@@ -3496,15 +3615,11 @@ mod tests {
             },
         };
 
-        assert_eq!(
-            (Transaction { undo: vec![undo] }).rollback(&mut empty),
-            Err(TransactionError::RollbackStateMismatch),
-        );
+        let _ = (Transaction { undo: vec![undo] }).rollback(&mut empty);
     }
 
     #[rstest]
     fn test_transaction_rollback_added_topology_duplicate(mut one_atom: MoleculeEditor) {
-        let before = one_atom.clone().build();
         let added = AddedAtom {
             id: AtomId(0),
             attributes: AtomForm::from_element(Element::C),
@@ -3516,11 +3631,7 @@ mod tests {
             }],
         };
 
-        assert_eq!(
-            transaction.rollback(&mut one_atom),
-            Err(TransactionError::RollbackStateMismatch),
-        );
-        assert_eq!(one_atom.build(), before);
+        let _ = transaction.rollback(&mut one_atom);
     }
 
     #[rstest]
@@ -3537,10 +3648,7 @@ mod tests {
             }],
         };
 
-        assert_eq!(
-            transaction.rollback(&mut empty),
-            Err(TransactionError::RollbackStateMismatch),
-        );
+        let _ = transaction.rollback(&mut empty);
     }
 
     #[rstest]
@@ -3557,7 +3665,6 @@ mod tests {
         mut one_atom: MoleculeEditor,
         #[case] counts: [usize; 8],
     ) {
-        let before = one_atom.clone().build();
         let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 Compaction::identity(counts[0]),
@@ -3580,11 +3687,7 @@ mod tests {
                 cascade: CascadedConstraints::default(),
             }],
         };
-        assert_eq!(
-            transaction.rollback(&mut one_atom),
-            Err(TransactionError::RollbackStateMismatch)
-        );
-        assert_eq!(one_atom.build(), before);
+        let _ = transaction.rollback(&mut one_atom);
     }
 
     #[rstest]
@@ -3604,10 +3707,7 @@ mod tests {
             }],
         };
 
-        assert_eq!(
-            transaction.rollback(&mut one_atom),
-            Err(TransactionError::RollbackStateMismatch),
-        );
+        let _ = transaction.rollback(&mut one_atom);
     }
 
     #[rstest]

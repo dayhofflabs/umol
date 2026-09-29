@@ -1,5 +1,6 @@
 //! Noncovalent bond form.
 
+use std::array;
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -16,6 +17,52 @@ use super::error::{Contradiction, NoJoinError};
 use super::frame::NoncovalentBondsFrameAction;
 use super::id::{AtomId, NoncovalentBondId};
 use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
+
+/// A noncovalent bond's atom pair and attributes.
+///
+/// Normalization preserves atom order. Reframing sorts the pair.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NoncovalentBondEntry<'a> {
+    pub(crate) atoms: [AtomId; 2],
+    pub(crate) attributes: Cow<'a, NoncovalentBondForm>,
+}
+
+impl Normalize for NoncovalentBondEntry<'_> {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        self.attributes = match self.attributes {
+            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
+        };
+        Ok(self)
+    }
+}
+
+impl FrameTransport for NoncovalentBondEntry<'_> {
+    type Action = DynPermutation;
+
+    fn reframe_by(mut self, action: &Self::Action) -> Option<Self> {
+        if action.degree() != self.atoms.len() {
+            return None;
+        }
+        self.atoms = array::from_fn(|i| self.atoms[action.image()[i]]);
+        self.attributes = Cow::Owned(self.attributes.into_owned().reframe_by(action)?);
+        Some(self)
+    }
+}
+
+impl Reframe for NoncovalentBondEntry<'_> {
+    fn representative_action(&self) -> Self::Action {
+        noncovalent_bond_representative_action(self.atoms)
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        let action = self.representative_action();
+        self.normalize()?
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()
+    }
+}
 
 /// The molecule's noncovalent bonds.
 ///
@@ -55,6 +102,18 @@ impl NoncovalentBonds {
 
     pub fn attributes(&self, id: NoncovalentBondId) -> &NoncovalentBondForm {
         self.0.data(RelationId::from(id))
+    }
+
+    /// The complete bond value, copying its atom pair and borrowing its attributes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is not a bond in this set.
+    pub(crate) fn entry(&self, id: NoncovalentBondId) -> NoncovalentBondEntry<'_> {
+        NoncovalentBondEntry {
+            atoms: self.atoms(id),
+            attributes: Cow::Borrowed(self.attributes(id)),
+        }
     }
 
     pub(crate) fn attributes_mut(&mut self, id: NoncovalentBondId) -> &mut NoncovalentBondForm {
@@ -707,7 +766,7 @@ pub enum NoncovalentBondKind {
 
 #[cfg(test)]
 mod tests {
-    use std::iter;
+    use std::{iter, ptr};
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -715,6 +774,167 @@ mod tests {
 
     use super::*;
     use crate::ir::boolean::BooleanForm;
+
+    #[rstest]
+    fn test_noncovalent_bond_entry_normalize_identity(#[values(false, true)] owned: bool) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraint(NoncovalentBondConstraintForm::Intramolecular(
+                BooleanForm::Lit(true),
+            ));
+        let entry = NoncovalentBondEntry {
+            atoms: [AtomId(2), AtomId(0)],
+            attributes: if owned {
+                Cow::Owned(attributes.clone())
+            } else {
+                Cow::Borrowed(&attributes)
+            },
+        };
+        let expected = NoncovalentBondEntry {
+            atoms: [AtomId(2), AtomId(0)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        assert_eq!(entry.clone(), expected);
+        assert_eq!(entry.normalize(), Ok(expected.clone()));
+        assert_eq!(
+            expected.clone().normalize().unwrap().normalize(),
+            Ok(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::swap(vec![1, 0], [AtomId(0), AtomId(2)])]
+    fn test_noncovalent_bond_entry_reframe_by(
+        #[case] image: Vec<usize>,
+        #[case] atoms: [AtomId; 2],
+    ) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraint(NoncovalentBondConstraintForm::Intramolecular(
+                BooleanForm::Lit(true),
+            ));
+        let entry = NoncovalentBondEntry {
+            atoms: [AtomId(2), AtomId(0)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = DynPermutation::try_from(image).unwrap();
+        assert_eq!(
+            entry.clone().reframe_by(&DynPermutation::identity(2)),
+            Some(entry.clone())
+        );
+        let transformed = entry.clone().reframe_by(&action).unwrap();
+        assert_eq!(
+            transformed,
+            NoncovalentBondEntry {
+                atoms,
+                attributes: Cow::Borrowed(&attributes)
+            }
+        );
+        assert_eq!(
+            transformed.reframe_by(&action.inverse()),
+            Some(entry.clone())
+        );
+        let second = DynPermutation::try_from(vec![1, 0]).unwrap();
+        assert_eq!(
+            entry
+                .clone()
+                .reframe_by(&action)
+                .unwrap()
+                .reframe_by(&second),
+            entry.reframe_by(&action.compose(&second).unwrap()),
+        );
+    }
+
+    #[rstest]
+    #[case::short(1)]
+    #[case::long(3)]
+    fn test_noncovalent_bond_entry_reframe_by_error(#[case] degree: usize) {
+        let entry = NoncovalentBondEntry {
+            atoms: [AtomId(0), AtomId(1)],
+            attributes: Cow::Owned(NoncovalentBondForm::default()),
+        };
+        assert_eq!(entry.reframe_by(&DynPermutation::identity(degree)), None);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_entry_reframe() {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let entry = NoncovalentBondEntry {
+            atoms: [AtomId(2), AtomId(0)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let expected = NoncovalentBondEntry {
+            atoms: [AtomId(0), AtomId(2)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = DynPermutation::try_from(vec![1, 0]).unwrap();
+        assert_eq!(entry.representative_action(), action);
+        assert_eq!(entry.clone().reframe(), Ok(expected.clone()));
+        assert_eq!(entry.tracked_reframe(), Ok((expected.clone(), action)));
+        assert_eq!(expected.clone().reframe(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::stored([AtomId(0), AtomId(1)], NoncovalentBondKind::HydrogenBond, true, true, true)]
+    #[case::reversed([AtomId(1), AtomId(0)], NoncovalentBondKind::HydrogenBond, true, false, true)]
+    #[case::different_pair([AtomId(0), AtomId(2)], NoncovalentBondKind::HydrogenBond, true, false, false)]
+    #[case::kind([AtomId(0), AtomId(1)], NoncovalentBondKind::Ionic, true, false, false)]
+    #[case::constraint([AtomId(0), AtomId(1)], NoncovalentBondKind::HydrogenBond, false, false, false)]
+    fn test_noncovalent_bond_entry_framed_eq(
+        #[case] atoms: [AtomId; 2],
+        #[case] kind: NoncovalentBondKind,
+        #[case] intramolecular: bool,
+        #[case] normalized: bool,
+        #[case] framed: bool,
+    ) {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraint(NoncovalentBondConstraintForm::Intramolecular(
+                BooleanForm::Lit(true),
+            ));
+        let left = NoncovalentBondEntry {
+            atoms: [AtomId(0), AtomId(1)],
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let right = NoncovalentBondEntry {
+            atoms,
+            attributes: Cow::Owned(NoncovalentBondForm::from_kind(kind).with_constraint(
+                NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(intramolecular)),
+            )),
+        };
+        assert_eq!(left.normalized_eq(&right), normalized);
+        assert_eq!(left.framed_eq(&right), framed);
+        assert_eq!(right.framed_eq(&left), framed);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_entry() {
+        let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let bonds = NoncovalentBonds::new(vec![([AtomId(2), AtomId(0)], attributes.clone())]);
+        let before = bonds.clone();
+        let entry = bonds.entry(NoncovalentBondId(0));
+        assert_eq!(
+            entry,
+            NoncovalentBondEntry {
+                atoms: [AtomId(2), AtomId(0)],
+                attributes: Cow::Borrowed(&attributes)
+            }
+        );
+        assert!(
+            matches!(entry.attributes, Cow::Borrowed(attributes) if ptr::eq(attributes, bonds.attributes(NoncovalentBondId(0))))
+        );
+        assert_eq!(
+            entry.reframe(),
+            Ok(NoncovalentBondEntry {
+                atoms: [AtomId(0), AtomId(2)],
+                attributes: Cow::Borrowed(&attributes)
+            })
+        );
+        assert_eq!(bonds, before);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_noncovalent_bonds_entry_error() {
+        NoncovalentBonds::default().entry(NoncovalentBondId(0));
+    }
 
     #[rstest]
     #[case::ordered([AtomId(4), AtomId(1)])]

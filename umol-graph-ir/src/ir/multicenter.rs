@@ -1,5 +1,6 @@
 //! Multicenter bonds: the molecule's collection and one bond's attribute form.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use umol_graph_core::{
@@ -18,6 +19,50 @@ use super::id::{AtomId, MulticenterBondId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+
+/// A multicenter bond's atom frame and attributes.
+///
+/// Normalization preserves atom order. Reframing sorts atoms and transports
+/// their electron contributions into that frame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct MulticenterBondEntry<'a> {
+    pub(crate) atoms: Cow<'a, [AtomId]>,
+    pub(crate) attributes: Cow<'a, MulticenterBondForm>,
+}
+
+impl Normalize for MulticenterBondEntry<'_> {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        self.attributes = match self.attributes {
+            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
+        };
+        Ok(self)
+    }
+}
+
+impl FrameTransport for MulticenterBondEntry<'_> {
+    type Action = DynPermutation;
+
+    fn reframe_by(mut self, action: &Self::Action) -> Option<Self> {
+        self.atoms = Cow::Owned(action.act(&self.atoms)?);
+        self.attributes = Cow::Owned(self.attributes.into_owned().reframe_by(action)?);
+        Some(self)
+    }
+}
+
+impl Reframe for MulticenterBondEntry<'_> {
+    fn representative_action(&self) -> Self::Action {
+        multicenter_bond_representative_action(self.atoms.to_vec())
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        let action = self.representative_action();
+        self.normalize()?
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()
+    }
+}
 
 /// The molecule's multicenter bonds.
 ///
@@ -62,6 +107,18 @@ impl MulticenterBonds {
 
     pub fn attributes(&self, id: MulticenterBondId) -> &MulticenterBondForm {
         self.0.data(RelationId::from(id))
+    }
+
+    /// The complete bond value, borrowing its attributes and collecting atom ids.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is not a bond in this set.
+    pub(crate) fn entry(&self, id: MulticenterBondId) -> MulticenterBondEntry<'_> {
+        MulticenterBondEntry {
+            atoms: Cow::Owned(self.atoms(id).collect()),
+            attributes: Cow::Borrowed(self.attributes(id)),
+        }
     }
 
     pub(crate) fn attributes_mut(&mut self, id: MulticenterBondId) -> &mut MulticenterBondForm {
@@ -705,6 +762,8 @@ impl FrameTransport for MulticenterBondForm {
 
 #[cfg(test)]
 mod tests {
+    use std::ptr;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::{Correspondence, EdgeId};
@@ -712,6 +771,202 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    #[rstest]
+    #[case::singleton(NumForm::lit_set([1]), Ok(NumForm::Lit(1)))]
+    #[case::contradiction(NumForm::lit_set([]), Err(Contradiction))]
+    fn test_multicenter_bond_entry_normalize(
+        #[case] charge: NumForm,
+        #[case] expected: Result<NumForm, Contradiction>,
+        #[values(false, true)] owned: bool,
+    ) {
+        let atoms = [AtomId(2), AtomId(0), AtomId(1)];
+        let attributes = MulticenterBondForm::from_electrons(vec![3, 1, 2]).with_charge(charge);
+        let entry = MulticenterBondEntry {
+            atoms: if owned {
+                Cow::Owned(atoms.to_vec())
+            } else {
+                Cow::Borrowed(&atoms)
+            },
+            attributes: if owned {
+                Cow::Owned(attributes.clone())
+            } else {
+                Cow::Borrowed(&attributes)
+            },
+        };
+        let expected = expected.map(|charge| MulticenterBondEntry {
+            atoms: Cow::Borrowed(&atoms),
+            attributes: Cow::Owned(
+                MulticenterBondForm::from_electrons(vec![3, 1, 2]).with_charge(charge),
+            ),
+        });
+        let normalized = entry.normalize();
+        assert_eq!(normalized, expected);
+        if let Ok(normalized) = normalized {
+            assert_eq!(normalized.clone().normalize(), Ok(normalized));
+        }
+    }
+
+    #[rstest]
+    #[case::swap(vec![1, 0, 2])]
+    #[case::cycle(vec![1, 2, 0])]
+    #[case::reverse(vec![2, 1, 0])]
+    fn test_multicenter_bond_entry_reframe_by(#[case] image: Vec<usize>) {
+        let atoms = [AtomId(2), AtomId(0), AtomId(1)];
+        let counts = [3, 1, 2];
+        let attributes = MulticenterBondForm::from_electrons(counts.to_vec()).with_charge(1);
+        let entry = MulticenterBondEntry {
+            atoms: Cow::Borrowed(&atoms),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = DynPermutation::try_from(image.clone()).unwrap();
+        let expected = MulticenterBondEntry {
+            atoms: Cow::Owned(image.iter().map(|&i| atoms[i]).collect()),
+            attributes: Cow::Owned(
+                MulticenterBondForm::from_electrons(image.iter().map(|&i| counts[i]).collect())
+                    .with_charge(1),
+            ),
+        };
+        assert_eq!(
+            entry.clone().reframe_by(&DynPermutation::identity(3)),
+            Some(entry.clone())
+        );
+        let transformed = entry.clone().reframe_by(&action).unwrap();
+        assert_eq!(transformed, expected);
+        assert_eq!(
+            transformed.reframe_by(&action.inverse()),
+            Some(entry.clone())
+        );
+        let second = DynPermutation::try_from(vec![1, 0, 2]).unwrap();
+        assert_eq!(
+            entry
+                .clone()
+                .reframe_by(&action)
+                .unwrap()
+                .reframe_by(&second),
+            entry.reframe_by(&action.compose(&second).unwrap()),
+        );
+    }
+
+    #[rstest]
+    #[case::short_action(vec![1, 2, 3], 2)]
+    #[case::long_action(vec![1, 2, 3], 4)]
+    #[case::short_counts(vec![1, 2], 3)]
+    #[case::long_counts(vec![1, 2, 3, 4], 3)]
+    fn test_multicenter_bond_entry_reframe_by_error(
+        #[case] counts: Vec<i64>,
+        #[case] degree: usize,
+    ) {
+        let entry = MulticenterBondEntry {
+            atoms: Cow::Borrowed(&[AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Owned(MulticenterBondForm::from_electrons(counts)),
+        };
+        assert_eq!(entry.reframe_by(&DynPermutation::identity(degree)), None);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_entry_reframe() {
+        let attributes =
+            MulticenterBondForm::from_electrons(vec![3, 1, 2]).with_charge(NumForm::lit_set([1]));
+        let entry = MulticenterBondEntry {
+            atoms: Cow::Borrowed(&[AtomId(2), AtomId(0), AtomId(1)]),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let expected = MulticenterBondEntry {
+            atoms: Cow::Owned(vec![AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Owned(
+                MulticenterBondForm::from_electrons(vec![1, 2, 3]).with_charge(1),
+            ),
+        };
+        let action = DynPermutation::try_from(vec![1, 2, 0]).unwrap();
+        assert_eq!(entry.representative_action(), action);
+        assert_eq!(entry.clone().reframe(), Ok(expected.clone()));
+        assert_eq!(entry.tracked_reframe(), Ok((expected.clone(), action)));
+        assert_eq!(expected.clone().reframe(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::stored(vec![AtomId(0), AtomId(1), AtomId(2)], vec![1, 2, 3], true, true)]
+    #[case::reordered(vec![AtomId(2), AtomId(0), AtomId(1)], vec![3, 1, 2], false, true)]
+    #[case::misaligned(vec![AtomId(2), AtomId(0), AtomId(1)], vec![1, 2, 3], false, false)]
+    #[case::counts(vec![AtomId(0), AtomId(1), AtomId(2)], vec![1, 2, 4], false, false)]
+    #[case::membership(vec![AtomId(0), AtomId(1), AtomId(3)], vec![1, 2, 3], false, false)]
+    #[case::length(vec![AtomId(0), AtomId(1)], vec![1, 2], false, false)]
+    fn test_multicenter_bond_entry_framed_eq(
+        #[case] atoms: Vec<AtomId>,
+        #[case] counts: Vec<i64>,
+        #[case] normalized: bool,
+        #[case] framed: bool,
+    ) {
+        let left = MulticenterBondEntry {
+            atoms: Cow::Borrowed(&[AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Owned(MulticenterBondForm::from_electrons(vec![1, 2, 3])),
+        };
+        let right = MulticenterBondEntry {
+            atoms: Cow::Owned(atoms),
+            attributes: Cow::Owned(MulticenterBondForm::from_electrons(counts)),
+        };
+        assert_eq!(left.normalized_eq(&right), normalized);
+        assert_eq!(left.framed_eq(&right), framed);
+        assert_eq!(right.framed_eq(&left), framed);
+    }
+
+    #[rstest]
+    #[case::stored(vec![AtomId(0), AtomId(1), AtomId(2)], true)]
+    #[case::reordered(vec![AtomId(2), AtomId(0), AtomId(1)], true)]
+    #[case::membership(vec![AtomId(0), AtomId(1), AtomId(3)], false)]
+    #[case::length(vec![AtomId(0), AtomId(1)], false)]
+    fn test_multicenter_bond_entry_framed_eq_undetermined(
+        #[case] atoms: Vec<AtomId>,
+        #[case] expected: bool,
+    ) {
+        let attributes = MulticenterBondForm::default();
+        let left = MulticenterBondEntry {
+            atoms: Cow::Borrowed(&[AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let right = MulticenterBondEntry {
+            atoms: Cow::Owned(atoms),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        assert_eq!(left.framed_eq(&right), expected);
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_entry() {
+        let bonds = MulticenterBonds::new(vec![(
+            vec![AtomId(2), AtomId(1)],
+            MulticenterBondForm::from_electrons(vec![2, 1]),
+        )]);
+        let before = bonds.clone();
+        let entry = bonds.entry(MulticenterBondId(0));
+        assert_eq!(
+            entry,
+            MulticenterBondEntry {
+                atoms: Cow::Borrowed(&[AtomId(2), AtomId(1)]),
+                attributes: Cow::Owned(MulticenterBondForm::from_electrons(vec![2, 1])),
+            }
+        );
+        assert!(matches!(entry.atoms, Cow::Owned(_)));
+        assert!(
+            matches!(entry.attributes, Cow::Borrowed(attributes) if ptr::eq(attributes, bonds.attributes(MulticenterBondId(0))))
+        );
+        let reframed = entry.reframe().unwrap();
+        assert_eq!(
+            reframed,
+            MulticenterBondEntry {
+                atoms: Cow::Borrowed(&[AtomId(1), AtomId(2)]),
+                attributes: Cow::Owned(MulticenterBondForm::from_electrons(vec![1, 2])),
+            }
+        );
+        assert_eq!(bonds, before);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_multicenter_bonds_entry_error() {
+        MulticenterBonds::default().entry(MulticenterBondId(0));
+    }
 
     #[rstest]
     fn test_multicenter_bonds_add() {

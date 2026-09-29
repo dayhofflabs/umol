@@ -1,5 +1,6 @@
 //! Aromatic systems: the molecule's collection and one system's attribute form.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use umol_graph_core::{
@@ -18,6 +19,50 @@ use super::id::{AromaticSystemId, AtomId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+
+/// An aromatic system's atom frame and attributes.
+///
+/// Normalization preserves atom order. Reframing sorts atoms and transports
+/// their electron contributions into that frame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AromaticSystemEntry<'a> {
+    pub(crate) atoms: Cow<'a, [AtomId]>,
+    pub(crate) attributes: Cow<'a, AromaticSystemForm>,
+}
+
+impl Normalize for AromaticSystemEntry<'_> {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        self.attributes = match self.attributes {
+            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
+        };
+        Ok(self)
+    }
+}
+
+impl FrameTransport for AromaticSystemEntry<'_> {
+    type Action = DynPermutation;
+
+    fn reframe_by(mut self, action: &Self::Action) -> Option<Self> {
+        self.atoms = Cow::Owned(action.act(&self.atoms)?);
+        self.attributes = Cow::Owned(self.attributes.into_owned().reframe_by(action)?);
+        Some(self)
+    }
+}
+
+impl Reframe for AromaticSystemEntry<'_> {
+    fn representative_action(&self) -> Self::Action {
+        aromatic_system_representative_action(self.atoms.to_vec())
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        let action = self.representative_action();
+        self.normalize()?
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()
+    }
+}
 
 /// The molecule's aromatic systems.
 ///
@@ -62,6 +107,18 @@ impl AromaticSystems {
 
     pub fn attributes(&self, id: AromaticSystemId) -> &AromaticSystemForm {
         self.0.data(RelationId::from(id))
+    }
+
+    /// The complete system value, borrowing its attributes and collecting atom ids.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is not a system in this set.
+    pub(crate) fn entry(&self, id: AromaticSystemId) -> AromaticSystemEntry<'_> {
+        AromaticSystemEntry {
+            atoms: Cow::Owned(self.atoms(id).collect()),
+            attributes: Cow::Borrowed(self.attributes(id)),
+        }
     }
 
     pub(crate) fn attributes_mut(&mut self, id: AromaticSystemId) -> &mut AromaticSystemForm {
@@ -706,6 +763,8 @@ impl FrameTransport for AromaticSystemForm {
 
 #[cfg(test)]
 mod tests {
+    use std::ptr;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::{Correspondence, EdgeId};
@@ -713,6 +772,202 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    #[rstest]
+    #[case::singleton(NumForm::lit_set([1]), Ok(NumForm::Lit(1)))]
+    #[case::contradiction(NumForm::lit_set([]), Err(Contradiction))]
+    fn test_aromatic_system_entry_normalize(
+        #[case] charge: NumForm,
+        #[case] expected: Result<NumForm, Contradiction>,
+        #[values(false, true)] owned: bool,
+    ) {
+        let atoms = [AtomId(2), AtomId(0), AtomId(1)];
+        let attributes = AromaticSystemForm::from_electrons(vec![3, 1, 2]).with_charge(charge);
+        let entry = AromaticSystemEntry {
+            atoms: if owned {
+                Cow::Owned(atoms.to_vec())
+            } else {
+                Cow::Borrowed(&atoms)
+            },
+            attributes: if owned {
+                Cow::Owned(attributes.clone())
+            } else {
+                Cow::Borrowed(&attributes)
+            },
+        };
+        let expected = expected.map(|charge| AromaticSystemEntry {
+            atoms: Cow::Borrowed(&atoms),
+            attributes: Cow::Owned(
+                AromaticSystemForm::from_electrons(vec![3, 1, 2]).with_charge(charge),
+            ),
+        });
+        let normalized = entry.normalize();
+        assert_eq!(normalized, expected);
+        if let Ok(normalized) = normalized {
+            assert_eq!(normalized.clone().normalize(), Ok(normalized));
+        }
+    }
+
+    #[rstest]
+    #[case::swap(vec![1, 0, 2])]
+    #[case::cycle(vec![1, 2, 0])]
+    #[case::reverse(vec![2, 1, 0])]
+    fn test_aromatic_system_entry_reframe_by(#[case] image: Vec<usize>) {
+        let atoms = [AtomId(2), AtomId(0), AtomId(1)];
+        let counts = [3, 1, 2];
+        let attributes = AromaticSystemForm::from_electrons(counts.to_vec()).with_charge(1);
+        let entry = AromaticSystemEntry {
+            atoms: Cow::Borrowed(&atoms),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = DynPermutation::try_from(image.clone()).unwrap();
+        let expected = AromaticSystemEntry {
+            atoms: Cow::Owned(image.iter().map(|&i| atoms[i]).collect()),
+            attributes: Cow::Owned(
+                AromaticSystemForm::from_electrons(image.iter().map(|&i| counts[i]).collect())
+                    .with_charge(1),
+            ),
+        };
+        assert_eq!(
+            entry.clone().reframe_by(&DynPermutation::identity(3)),
+            Some(entry.clone())
+        );
+        let transformed = entry.clone().reframe_by(&action).unwrap();
+        assert_eq!(transformed, expected);
+        assert_eq!(
+            transformed.reframe_by(&action.inverse()),
+            Some(entry.clone())
+        );
+        let second = DynPermutation::try_from(vec![1, 0, 2]).unwrap();
+        assert_eq!(
+            entry
+                .clone()
+                .reframe_by(&action)
+                .unwrap()
+                .reframe_by(&second),
+            entry.reframe_by(&action.compose(&second).unwrap()),
+        );
+    }
+
+    #[rstest]
+    #[case::short_action(vec![1, 2, 3], 2)]
+    #[case::long_action(vec![1, 2, 3], 4)]
+    #[case::short_counts(vec![1, 2], 3)]
+    #[case::long_counts(vec![1, 2, 3, 4], 3)]
+    fn test_aromatic_system_entry_reframe_by_error(
+        #[case] counts: Vec<i64>,
+        #[case] degree: usize,
+    ) {
+        let entry = AromaticSystemEntry {
+            atoms: Cow::Borrowed(&[AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Owned(AromaticSystemForm::from_electrons(counts)),
+        };
+        assert_eq!(entry.reframe_by(&DynPermutation::identity(degree)), None);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_entry_reframe() {
+        let attributes =
+            AromaticSystemForm::from_electrons(vec![3, 1, 2]).with_charge(NumForm::lit_set([1]));
+        let entry = AromaticSystemEntry {
+            atoms: Cow::Borrowed(&[AtomId(2), AtomId(0), AtomId(1)]),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let expected = AromaticSystemEntry {
+            atoms: Cow::Owned(vec![AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Owned(
+                AromaticSystemForm::from_electrons(vec![1, 2, 3]).with_charge(1),
+            ),
+        };
+        let action = DynPermutation::try_from(vec![1, 2, 0]).unwrap();
+        assert_eq!(entry.representative_action(), action);
+        assert_eq!(entry.clone().reframe(), Ok(expected.clone()));
+        assert_eq!(entry.tracked_reframe(), Ok((expected.clone(), action)));
+        assert_eq!(expected.clone().reframe(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::stored(vec![AtomId(0), AtomId(1), AtomId(2)], vec![1, 2, 3], true, true)]
+    #[case::reordered(vec![AtomId(2), AtomId(0), AtomId(1)], vec![3, 1, 2], false, true)]
+    #[case::misaligned(vec![AtomId(2), AtomId(0), AtomId(1)], vec![1, 2, 3], false, false)]
+    #[case::counts(vec![AtomId(0), AtomId(1), AtomId(2)], vec![1, 2, 4], false, false)]
+    #[case::membership(vec![AtomId(0), AtomId(1), AtomId(3)], vec![1, 2, 3], false, false)]
+    #[case::length(vec![AtomId(0), AtomId(1)], vec![1, 2], false, false)]
+    fn test_aromatic_system_entry_framed_eq(
+        #[case] atoms: Vec<AtomId>,
+        #[case] counts: Vec<i64>,
+        #[case] normalized: bool,
+        #[case] framed: bool,
+    ) {
+        let left = AromaticSystemEntry {
+            atoms: Cow::Borrowed(&[AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Owned(AromaticSystemForm::from_electrons(vec![1, 2, 3])),
+        };
+        let right = AromaticSystemEntry {
+            atoms: Cow::Owned(atoms),
+            attributes: Cow::Owned(AromaticSystemForm::from_electrons(counts)),
+        };
+        assert_eq!(left.normalized_eq(&right), normalized);
+        assert_eq!(left.framed_eq(&right), framed);
+        assert_eq!(right.framed_eq(&left), framed);
+    }
+
+    #[rstest]
+    #[case::stored(vec![AtomId(0), AtomId(1), AtomId(2)], true)]
+    #[case::reordered(vec![AtomId(2), AtomId(0), AtomId(1)], true)]
+    #[case::membership(vec![AtomId(0), AtomId(1), AtomId(3)], false)]
+    #[case::length(vec![AtomId(0), AtomId(1)], false)]
+    fn test_aromatic_system_entry_framed_eq_undetermined(
+        #[case] atoms: Vec<AtomId>,
+        #[case] expected: bool,
+    ) {
+        let attributes = AromaticSystemForm::default();
+        let left = AromaticSystemEntry {
+            atoms: Cow::Borrowed(&[AtomId(0), AtomId(1), AtomId(2)]),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let right = AromaticSystemEntry {
+            atoms: Cow::Owned(atoms),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        assert_eq!(left.framed_eq(&right), expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_entry() {
+        let systems = AromaticSystems::new(vec![(
+            vec![AtomId(2), AtomId(1)],
+            AromaticSystemForm::from_electrons(vec![2, 1]),
+        )]);
+        let before = systems.clone();
+        let entry = systems.entry(AromaticSystemId(0));
+        assert_eq!(
+            entry,
+            AromaticSystemEntry {
+                atoms: Cow::Borrowed(&[AtomId(2), AtomId(1)]),
+                attributes: Cow::Owned(AromaticSystemForm::from_electrons(vec![2, 1])),
+            }
+        );
+        assert!(matches!(entry.atoms, Cow::Owned(_)));
+        assert!(
+            matches!(entry.attributes, Cow::Borrowed(attributes) if ptr::eq(attributes, systems.attributes(AromaticSystemId(0))))
+        );
+        let reframed = entry.reframe().unwrap();
+        assert_eq!(
+            reframed,
+            AromaticSystemEntry {
+                atoms: Cow::Borrowed(&[AtomId(1), AtomId(2)]),
+                attributes: Cow::Owned(AromaticSystemForm::from_electrons(vec![1, 2])),
+            }
+        );
+        assert_eq!(systems, before);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_aromatic_systems_entry_error() {
+        AromaticSystems::default().entry(AromaticSystemId(0));
+    }
 
     #[rstest]
     fn test_aromatic_systems_add() {

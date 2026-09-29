@@ -8,8 +8,9 @@ use umol_perm::{DynPermutation, Permutation};
 
 use super::{Molecule, TransactionError};
 use crate::ir::aromatic::AromaticSystemForm;
-use crate::ir::compact::{MoleculeCompaction, UndoCompaction};
+use crate::ir::compact::MoleculeCompaction;
 use crate::ir::constraint::Constraint;
+use crate::ir::correspondence::MoleculeCorrespondence;
 use crate::ir::dative::DativeBondForm;
 use crate::ir::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
@@ -67,19 +68,13 @@ impl<I: Copy + From<usize>> HandleTable<I> {
         Self::resolve(&self.created, kind, index)
     }
 
-    fn resolve(
-        entries: &[Option<I>],
-        kind: EntityKind,
-        index: usize,
-    ) -> Result<I, TransactionError> {
-        entries
-            .get(index)
-            .ok_or(TransactionError::HandleOutOfRange {
-                kind,
-                index,
-                count: entries.len(),
-            })?
-            .ok_or(TransactionError::HandleRemoved { kind, index })
+    fn removed(&self) -> Vec<I> {
+        self.initial
+            .iter()
+            .flat_map(|initial| initial.iter().enumerate())
+            .filter(|(_, current)| current.is_none())
+            .map(|(index, _)| I::from(index))
+            .collect()
     }
 
     fn push(&mut self, id: I) {
@@ -108,6 +103,21 @@ impl<I: Copy + From<usize>> HandleTable<I> {
                 *id = compact(current);
             }
         }
+    }
+
+    fn resolve(
+        entries: &[Option<I>],
+        kind: EntityKind,
+        index: usize,
+    ) -> Result<I, TransactionError> {
+        entries
+            .get(index)
+            .ok_or(TransactionError::HandleOutOfRange {
+                kind,
+                index,
+                count: entries.len(),
+            })?
+            .ok_or(TransactionError::HandleRemoved { kind, index })
     }
 }
 
@@ -261,6 +271,135 @@ impl ApplicationState {
         self.stereo_bonds.push(id);
     }
 
+    fn compact(&mut self, compaction: &MoleculeCompaction) {
+        self.atoms.compact(|id| compaction.compact_atom(id));
+        self.bonds.compact(|id| compaction.compact_bond(id));
+        self.dative_bonds
+            .compact(|id| compaction.compact_dative_bond(id));
+        self.aromatic_systems
+            .compact(|id| compaction.compact_aromatic_system(id));
+        self.multicenter_bonds
+            .compact(|id| compaction.compact_multicenter_bond(id));
+        self.noncovalent_bonds
+            .compact(|id| compaction.compact_noncovalent_bond(id));
+        self.stereo_atoms
+            .compact(|id| compaction.compact_stereo_atom(id));
+        self.stereo_bonds
+            .compact(|id| compaction.compact_stereo_bond(id));
+    }
+
+    /// Update an input correspondence with this batch's removals and surviving additions.
+    pub(crate) fn update_correspondence(&self, correspondence: &mut MoleculeCorrespondence) {
+        if self.atoms.initial.is_some()
+            || self.bonds.initial.is_some()
+            || self.dative_bonds.initial.is_some()
+            || self.aromatic_systems.initial.is_some()
+            || self.multicenter_bonds.initial.is_some()
+            || self.noncovalent_bonds.initial.is_some()
+            || self.stereo_atoms.initial.is_some()
+            || self.stereo_bonds.initial.is_some()
+        {
+            let compaction = MoleculeCompaction::new(
+                GraphCompaction::new(
+                    Compaction::new(
+                        self.atoms.initial_count,
+                        self.atoms.removed().into_iter().map(Into::into).collect(),
+                    )
+                    .expect("removed handles belong to the batch input"),
+                    Compaction::new(
+                        self.bonds.initial_count,
+                        self.bonds.removed().into_iter().map(Into::into).collect(),
+                    )
+                    .expect("removed handles belong to the batch input"),
+                ),
+                Compaction::new(self.dative_bonds.initial_count, self.dative_bonds.removed())
+                    .expect("removed handles belong to the batch input"),
+                Compaction::new(
+                    self.aromatic_systems.initial_count,
+                    self.aromatic_systems.removed(),
+                )
+                .expect("removed handles belong to the batch input"),
+                Compaction::new(
+                    self.multicenter_bonds.initial_count,
+                    self.multicenter_bonds.removed(),
+                )
+                .expect("removed handles belong to the batch input"),
+                Compaction::new(
+                    self.noncovalent_bonds.initial_count,
+                    self.noncovalent_bonds.removed(),
+                )
+                .expect("removed handles belong to the batch input"),
+                Compaction::new(self.stereo_atoms.initial_count, self.stereo_atoms.removed())
+                    .expect("removed handles belong to the batch input"),
+                Compaction::new(self.stereo_bonds.initial_count, self.stereo_bonds.removed())
+                    .expect("removed handles belong to the batch input"),
+            );
+            correspondence
+                .compact_right(&compaction)
+                .expect("correspondence ends in the batch input id spaces");
+        }
+        for (kind, count) in [
+            (
+                EntityKind::Atom,
+                self.atoms.created.iter().filter(|id| id.is_some()).count(),
+            ),
+            (
+                EntityKind::Bond,
+                self.bonds.created.iter().filter(|id| id.is_some()).count(),
+            ),
+            (
+                EntityKind::DativeBond,
+                self.dative_bonds
+                    .created
+                    .iter()
+                    .filter(|id| id.is_some())
+                    .count(),
+            ),
+            (
+                EntityKind::AromaticSystem,
+                self.aromatic_systems
+                    .created
+                    .iter()
+                    .filter(|id| id.is_some())
+                    .count(),
+            ),
+            (
+                EntityKind::MulticenterBond,
+                self.multicenter_bonds
+                    .created
+                    .iter()
+                    .filter(|id| id.is_some())
+                    .count(),
+            ),
+            (
+                EntityKind::NoncovalentBond,
+                self.noncovalent_bonds
+                    .created
+                    .iter()
+                    .filter(|id| id.is_some())
+                    .count(),
+            ),
+            (
+                EntityKind::StereoAtom,
+                self.stereo_atoms
+                    .created
+                    .iter()
+                    .filter(|id| id.is_some())
+                    .count(),
+            ),
+            (
+                EntityKind::StereoBond,
+                self.stereo_bonds
+                    .created
+                    .iter()
+                    .filter(|id| id.is_some())
+                    .count(),
+            ),
+        ] {
+            correspondence.extend_right(kind, count);
+        }
+    }
+
     fn stereo_ligands(
         &self,
         ligands: Vec<(AtomHandle, StereoLigandKind)>,
@@ -282,23 +421,6 @@ impl ApplicationState {
             |handle| self.stereo_atom(handle),
             |handle| self.stereo_bond(handle),
         )
-    }
-
-    fn compact(&mut self, compaction: &MoleculeCompaction) {
-        self.atoms.compact(|id| compaction.compact_atom(id));
-        self.bonds.compact(|id| compaction.compact_bond(id));
-        self.dative_bonds
-            .compact(|id| compaction.compact_dative_bond(id));
-        self.aromatic_systems
-            .compact(|id| compaction.compact_aromatic_system(id));
-        self.multicenter_bonds
-            .compact(|id| compaction.compact_multicenter_bond(id));
-        self.noncovalent_bonds
-            .compact(|id| compaction.compact_noncovalent_bond(id));
-        self.stereo_atoms
-            .compact(|id| compaction.compact_stereo_atom(id));
-        self.stereo_bonds
-            .compact(|id| compaction.compact_stereo_bond(id));
     }
 }
 
@@ -2161,7 +2283,6 @@ impl Molecule {
     }
 
     pub(crate) fn apply_undo(&mut self, undo: Undo) {
-        self.validate_undo(&undo)?;
         match undo {
             Undo::RemoveAddedTopology { atoms, bonds } => {
                 let atoms = atoms
@@ -2262,10 +2383,14 @@ impl Molecule {
                 self.restore_constraints(&cascade);
             }
             Undo::RestoreDativeBondDonors { id, donors } => {
-                self.dative_bond_view_mut(id).replace_donors(&donors);
+                if id.index() < self.dative_bonds().count() {
+                    self.dative_bond_view_mut(id).replace_donors(&donors);
+                }
             }
             Undo::RestoreDativeBondAcceptor { id, acceptor } => {
-                self.dative_bond_view_mut(id).replace_acceptor(acceptor);
+                if id.index() < self.dative_bonds().count() {
+                    self.dative_bond_view_mut(id).replace_acceptor(acceptor);
+                }
             }
             Undo::RemoveAddedAromaticSystem(added) => {
                 if added.id.index() < self.aromatic_systems().count() {
@@ -2287,7 +2412,9 @@ impl Molecule {
                 self.restore_constraints(&cascade);
             }
             Undo::RestoreAromaticSystemAtoms { id, atoms } => {
-                self.aromatic_system_view_mut(id).replace_atoms(&atoms);
+                if id.index() < self.aromatic_systems().count() {
+                    self.aromatic_system_view_mut(id).replace_atoms(&atoms);
+                }
             }
             Undo::RemoveAddedMulticenterBond(added) => {
                 if added.id.index() < self.multicenter_bonds().count() {
@@ -2309,7 +2436,9 @@ impl Molecule {
                 self.restore_constraints(&cascade);
             }
             Undo::RestoreMulticenterBondAtoms { id, atoms } => {
-                self.multicenter_bond_view_mut(id).replace_atoms(&atoms);
+                if id.index() < self.multicenter_bonds().count() {
+                    self.multicenter_bond_view_mut(id).replace_atoms(&atoms);
+                }
             }
             Undo::RemoveAddedNoncovalentBond(added) => {
                 if added.id.index() < self.noncovalent_bonds().count() {
@@ -2331,7 +2460,9 @@ impl Molecule {
                 self.restore_constraints(&cascade);
             }
             Undo::RestoreNoncovalentBondAtoms { id, atoms } => {
-                self.noncovalent_bond_view_mut(id).replace_atoms(atoms);
+                if id.index() < self.noncovalent_bonds().count() {
+                    self.noncovalent_bond_view_mut(id).replace_atoms(atoms);
+                }
             }
             Undo::RemoveAddedStereoAtom(added) => {
                 if added.id.index() < self.stereo_atoms().count() {
@@ -2353,10 +2484,14 @@ impl Molecule {
                 self.restore_constraints(&cascade);
             }
             Undo::RestoreStereoAtomSite { id, site } => {
-                self.stereo_atom_view_mut(id).replace_site(site);
+                if id.index() < self.stereo_atoms().count() {
+                    self.stereo_atom_view_mut(id).replace_site(site);
+                }
             }
             Undo::RestoreStereoAtomLigands { id, ligands } => {
-                self.stereo_atom_view_mut(id).replace_ligands(&ligands);
+                if id.index() < self.stereo_atoms().count() {
+                    self.stereo_atom_view_mut(id).replace_ligands(&ligands);
+                }
             }
             Undo::RemoveAddedStereoBond(added) => {
                 if added.id.index() < self.stereo_bonds().count() {
@@ -2378,10 +2513,14 @@ impl Molecule {
                 self.restore_constraints(&cascade);
             }
             Undo::RestoreStereoBondSite { id, site } => {
-                self.stereo_bond_view_mut(id).replace_site(site);
+                if id.index() < self.stereo_bonds().count() {
+                    self.stereo_bond_view_mut(id).replace_site(site);
+                }
             }
             Undo::RestoreStereoBondLigands { id, ligands } => {
-                self.stereo_bond_view_mut(id).replace_ligands(&ligands);
+                if id.index() < self.stereo_bonds().count() {
+                    self.stereo_bond_view_mut(id).replace_ligands(&ligands);
+                }
             }
             Undo::ModifyAtomField { id, change } => {
                 if id.index() < self.atoms().count() {
@@ -2884,257 +3023,6 @@ impl Molecule {
             },
         )
     }
-
-    fn validate_undo(&self, undo: &Undo) -> Result<(), TransactionError> {
-        let compaction = match undo {
-            Undo::RestoreRemovedTopology {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedDativeBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedAromaticSystems {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedMulticenterBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedNoncovalentBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedStereoAtoms {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedStereoBonds {
-                undo_compaction, ..
-            } => Some(undo_compaction.forward()),
-            _ => None,
-        };
-        if let Some(compaction) = compaction {
-            let counts_match = [
-                (
-                    self.atoms().count(),
-                    compaction.graph().nodes().result_count(),
-                ),
-                (
-                    self.bonds().count(),
-                    compaction.graph().edges().result_count(),
-                ),
-                (
-                    self.dative_bonds().count(),
-                    compaction.dative_bonds().result_count(),
-                ),
-                (
-                    self.aromatic_systems().count(),
-                    compaction.aromatic_systems().result_count(),
-                ),
-                (
-                    self.multicenter_bonds().count(),
-                    compaction.multicenter_bonds().result_count(),
-                ),
-                (
-                    self.noncovalent_bonds().count(),
-                    compaction.noncovalent_bonds().result_count(),
-                ),
-                (
-                    self.stereo_atoms().count(),
-                    compaction.stereo_atoms().result_count(),
-                ),
-                (
-                    self.stereo_bonds().count(),
-                    compaction.stereo_bonds().result_count(),
-                ),
-            ]
-            .into_iter()
-            .all(|(actual, expected)| actual == expected);
-            if !counts_match {
-                return Err(rollback_mismatch());
-            }
-        }
-        let fits = match undo {
-            Undo::RemoveAddedTopology { atoms, bonds } => {
-                ids_fit(
-                    atoms.iter().map(|entry| entry.id.index()),
-                    self.atoms().count(),
-                ) && ids_fit(
-                    bonds.iter().map(|entry| entry.id.index()),
-                    self.bonds().count(),
-                )
-            }
-            Undo::RestoreRemovedTopology {
-                atoms,
-                bonds,
-                overlays,
-                compaction,
-                undo_compaction,
-                cascade: _,
-            } => {
-                let atom_count = self.atoms().count() + atoms.len();
-                let bond_count = self.bonds().count() + bonds.len();
-                undo_compaction.forward() == compaction
-                    && reconstruction_fits(
-                        self.atoms().count(),
-                        atoms.iter().map(|entry| entry.id.index()),
-                        |id| undo_compaction.uncompact_atom(AtomId::from(id)).index(),
-                    )
-                    && reconstruction_fits(
-                        self.bonds().count(),
-                        bonds.iter().map(|entry| entry.id.index()),
-                        |id| undo_compaction.uncompact_bond(BondId::from(id)).index(),
-                    )
-                    && bonds
-                        .iter()
-                        .all(|entry| entry.endpoints.iter().all(|id| id.index() < atom_count))
-                    && removed_overlays_fit(self, overlays, undo_compaction, atom_count, bond_count)
-            }
-            Undo::RemoveAddedDativeBond(entry) => entry.id.index() < self.dative_bonds().count(),
-            Undo::RestoreRemovedDativeBonds {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.dative_bonds().count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_dative_bond(DativeBondId::from(id))
-                            .index()
-                    },
-                ) && removed_dative_bonds_fit(removed, self.atoms().count())
-            }
-            Undo::RestoreDativeBondDonors { id, .. }
-            | Undo::RestoreDativeBondAcceptor { id, .. } => {
-                id.index() < self.dative_bonds().count()
-            }
-            Undo::RemoveAddedAromaticSystem(entry) => {
-                entry.id.index() < self.aromatic_systems().count()
-            }
-            Undo::RestoreRemovedAromaticSystems {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.aromatic_systems().count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_aromatic_system(AromaticSystemId::from(id))
-                            .index()
-                    },
-                ) && removed_aromatic_systems_fit(removed, self.atoms().count())
-            }
-            Undo::RestoreAromaticSystemAtoms { id, .. } => {
-                id.index() < self.aromatic_systems().count()
-            }
-            Undo::RemoveAddedMulticenterBond(entry) => {
-                entry.id.index() < self.multicenter_bonds().count()
-            }
-            Undo::RestoreRemovedMulticenterBonds {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.multicenter_bonds().count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_multicenter_bond(MulticenterBondId::from(id))
-                            .index()
-                    },
-                ) && removed_multicenter_bonds_fit(removed, self.atoms().count())
-            }
-            Undo::RestoreMulticenterBondAtoms { id, .. } => {
-                id.index() < self.multicenter_bonds().count()
-            }
-            Undo::RemoveAddedNoncovalentBond(entry) => {
-                entry.id.index() < self.noncovalent_bonds().count()
-            }
-            Undo::RestoreRemovedNoncovalentBonds {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.noncovalent_bonds().count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_noncovalent_bond(NoncovalentBondId::from(id))
-                            .index()
-                    },
-                ) && removed_noncovalent_bonds_fit(removed, self.atoms().count())
-            }
-            Undo::RestoreNoncovalentBondAtoms { id, .. } => {
-                id.index() < self.noncovalent_bonds().count()
-            }
-            Undo::RemoveAddedStereoAtom(entry) => entry.id.index() < self.stereo_atoms().count(),
-            Undo::RestoreRemovedStereoAtoms {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.stereo_atoms().count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_stereo_atom(StereoAtomId::from(id))
-                            .index()
-                    },
-                ) && removed_stereo_atoms_fit(removed, self.atoms().count())
-            }
-            Undo::RestoreStereoAtomSite { id, .. } | Undo::RestoreStereoAtomLigands { id, .. } => {
-                id.index() < self.stereo_atoms().count()
-            }
-            Undo::RemoveAddedStereoBond(entry) => entry.id.index() < self.stereo_bonds().count(),
-            Undo::RestoreRemovedStereoBonds {
-                removed,
-                undo_compaction,
-                cascade: _,
-            } => {
-                reconstruction_fits(
-                    self.stereo_bonds().count(),
-                    removed.iter().map(|entry| entry.id.index()),
-                    |id| {
-                        undo_compaction
-                            .uncompact_stereo_bond(StereoBondId::from(id))
-                            .index()
-                    },
-                ) && removed_stereo_bonds_fit(removed, self.atoms().count(), self.bonds().count())
-            }
-            Undo::RestoreStereoBondSite { id, .. } | Undo::RestoreStereoBondLigands { id, .. } => {
-                id.index() < self.stereo_bonds().count()
-            }
-            Undo::ModifyAtomField { id, .. } => id.index() < self.atoms().count(),
-            Undo::ModifyBondField { id, .. } => id.index() < self.bonds().count(),
-            Undo::ModifyDativeBondField { id, .. } => id.index() < self.dative_bonds().count(),
-            Undo::ModifyAromaticSystemField { id, .. } => {
-                id.index() < self.aromatic_systems().count()
-            }
-            Undo::ModifyMulticenterBondField { id, .. } => {
-                id.index() < self.multicenter_bonds().count()
-            }
-            Undo::ModifyNoncovalentBondField { id, .. } => {
-                id.index() < self.noncovalent_bonds().count()
-            }
-            Undo::ModifyStereoAtomField { id, .. } => id.index() < self.stereo_atoms().count(),
-            Undo::ModifyStereoBondField { id, .. } => id.index() < self.stereo_bonds().count(),
-            Undo::RestoreAtomConstraint { .. }
-            | Undo::RestoreBondConstraint { .. }
-            | Undo::RestoreDativeBondConstraint { .. }
-            | Undo::RestoreAromaticSystemConstraint { .. }
-            | Undo::RestoreMulticenterBondConstraint { .. }
-            | Undo::RestoreNoncovalentBondConstraint { .. }
-            | Undo::RestoreStereoAtomConstraint { .. }
-            | Undo::RestoreStereoBondConstraint { .. }
-            | Undo::RemoveAddedMoleculeConstraint { .. }
-            | Undo::RestoreMoleculeConstraints(_) => true,
-        };
-        fits.then_some(()).ok_or_else(rollback_mismatch)
-    }
 }
 
 fn ensure_unique<I>(ids: &[I], kind: EntityKind) -> Result<(), TransactionError>
@@ -3147,159 +3035,6 @@ where
     } else {
         Err(TransactionError::DuplicateRemoval { kind })
     }
-}
-
-fn ids_fit(ids: impl IntoIterator<Item = usize>, count: usize) -> bool {
-    let mut seen = HashSet::new();
-    ids.into_iter().all(|id| id < count && seen.insert(id))
-}
-
-fn reconstruction_fits(
-    current_count: usize,
-    removed: impl IntoIterator<Item = usize>,
-    mut uncompact: impl FnMut(usize) -> usize,
-) -> bool {
-    let removed: Vec<_> = removed.into_iter().collect();
-    let restored_count = current_count + removed.len();
-    let mut occupied = vec![false; restored_count];
-    for id in removed {
-        if id >= restored_count || occupied[id] {
-            return false;
-        }
-        occupied[id] = true;
-    }
-    for id in 0..current_count {
-        let restored = uncompact(id);
-        if restored >= restored_count || occupied[restored] {
-            return false;
-        }
-        occupied[restored] = true;
-    }
-    occupied.into_iter().all(|is_occupied| is_occupied)
-}
-
-fn removed_dative_bonds_fit(removed: &[RemovedDativeBond], atom_count: usize) -> bool {
-    removed.iter().all(|entry| {
-        entry.acceptor.index() < atom_count && entry.donors.iter().all(|id| id.index() < atom_count)
-    })
-}
-
-fn removed_aromatic_systems_fit(removed: &[RemovedAromaticSystem], atom_count: usize) -> bool {
-    removed
-        .iter()
-        .all(|entry| entry.atoms.iter().all(|id| id.index() < atom_count))
-}
-
-fn removed_multicenter_bonds_fit(removed: &[RemovedMulticenterBond], atom_count: usize) -> bool {
-    removed
-        .iter()
-        .all(|entry| entry.atoms.iter().all(|id| id.index() < atom_count))
-}
-
-fn removed_noncovalent_bonds_fit(removed: &[RemovedNoncovalentBond], atom_count: usize) -> bool {
-    removed
-        .iter()
-        .all(|entry| entry.atoms.iter().all(|id| id.index() < atom_count))
-}
-
-fn removed_stereo_atoms_fit(removed: &[RemovedStereoAtom], atom_count: usize) -> bool {
-    removed.iter().all(|entry| {
-        entry.site.index() < atom_count
-            && entry
-                .ligands
-                .iter()
-                .all(|ligand| ligand.atom_id.index() < atom_count)
-    })
-}
-
-fn removed_stereo_bonds_fit(
-    removed: &[RemovedStereoBond],
-    atom_count: usize,
-    bond_count: usize,
-) -> bool {
-    removed.iter().all(|entry| {
-        entry.site.index() < bond_count
-            && entry
-                .ligands
-                .iter()
-                .all(|ligand| ligand.atom_id.index() < atom_count)
-    })
-}
-
-fn removed_overlays_fit(
-    molecule: &Molecule,
-    removed: &RemovedOverlays,
-    undo_compaction: &UndoCompaction,
-    atom_count: usize,
-    bond_count: usize,
-) -> bool {
-    reconstruction_fits(
-        molecule.dative_bonds().count(),
-        removed.dative_bonds.iter().map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_dative_bond(DativeBondId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        molecule.aromatic_systems().count(),
-        removed
-            .aromatic_systems
-            .iter()
-            .map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_aromatic_system(AromaticSystemId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        molecule.multicenter_bonds().count(),
-        removed
-            .multicenter_bonds
-            .iter()
-            .map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_multicenter_bond(MulticenterBondId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        molecule.noncovalent_bonds().count(),
-        removed
-            .noncovalent_bonds
-            .iter()
-            .map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_noncovalent_bond(NoncovalentBondId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        molecule.stereo_atoms().count(),
-        removed.stereo_atoms.iter().map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_stereo_atom(StereoAtomId::from(id))
-                .index()
-        },
-    ) && reconstruction_fits(
-        molecule.stereo_bonds().count(),
-        removed.stereo_bonds.iter().map(|entry| entry.id.index()),
-        |id| {
-            undo_compaction
-                .uncompact_stereo_bond(StereoBondId::from(id))
-                .index()
-        },
-    ) && removed_dative_bonds_fit(&removed.dative_bonds, atom_count)
-        && removed_aromatic_systems_fit(&removed.aromatic_systems, atom_count)
-        && removed_multicenter_bonds_fit(&removed.multicenter_bonds, atom_count)
-        && removed_noncovalent_bonds_fit(&removed.noncovalent_bonds, atom_count)
-        && removed_stereo_atoms_fit(&removed.stereo_atoms, atom_count)
-        && removed_stereo_bonds_fit(&removed.stereo_bonds, atom_count, bond_count)
-}
-
-fn rollback_mismatch() -> TransactionError {
-    TransactionError::RollbackStateMismatch
 }
 
 #[cfg(test)]
@@ -3318,7 +3053,7 @@ mod tests {
         StereoAtomConstraintForm, StereoAtomConstraintKey, StereoBondConstraintForm,
         StereoBondConstraintKey, StereogenicityForm,
     };
-    use crate::ir::edit::ModifiedConstraint;
+    use crate::ir::edit::{EntityHandle, ModifiedConstraint};
     use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::molecule::MoleculeEntries;
     use crate::ir::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
@@ -5589,6 +5324,92 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_apply_undo_additions(removal_entries: MoleculeEntries) {
+        let initial = Molecule::from_entries(removal_entries);
+        let mut molecule = initial.clone();
+        let mut state = ApplicationState::new(&molecule);
+        let mut journal = Vec::new();
+        for edit in [
+            Edit::AddAtoms {
+                atoms: vec![AtomForm::from_element(Element::F)],
+            },
+            Edit::AddBonds {
+                bonds: vec![AddBond {
+                    endpoints: [AtomHandle::Id(AtomId(3)), AtomHandle::New(0)],
+                    attributes: BondForm::from_order(1),
+                }],
+            },
+            Edit::AddDativeBond {
+                donors: vec![AtomHandle::New(0)],
+                acceptor: AtomHandle::Id(AtomId(3)),
+                attributes: DativeBondForm::from_order(1),
+            },
+            Edit::AddAromaticSystem {
+                atoms: vec![AtomHandle::Id(AtomId(3)), AtomHandle::New(0)],
+                attributes: AromaticSystemForm::from_electrons(vec![1, 2]),
+            },
+            Edit::AddMulticenterBond {
+                atoms: vec![AtomHandle::Id(AtomId(3)), AtomHandle::New(0)],
+                attributes: MulticenterBondForm::from_electrons(vec![1, 2]),
+            },
+            Edit::AddNoncovalentBond {
+                atoms: [AtomHandle::Id(AtomId(2)), AtomHandle::New(0)],
+                attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            },
+            Edit::AddStereoAtom {
+                site: AtomHandle::New(0),
+                ligands: vec![(AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom)],
+                attributes: StereoAtomForm::default(),
+            },
+            Edit::AddStereoBond {
+                site: BondHandle::New(0),
+                ligands: vec![
+                    (
+                        AtomHandle::Id(AtomId(3)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::LonePair),
+                    (AtomHandle::New(0), StereoLigandKind::ImplicitHydrogen),
+                    (AtomHandle::New(0), StereoLigandKind::LonePair),
+                ],
+                attributes: StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+            },
+            Edit::AddMoleculeConstraint {
+                constraint: ConstraintEdit::new(
+                    Constraint::Atom(AtomId(4), AtomConstraintForm::degree(1)),
+                    |_| Some(EntityHandle::Atom(AtomHandle::New(0))),
+                )
+                .unwrap(),
+            },
+        ] {
+            journal.push(
+                molecule
+                    .apply_edit_with_undo(edit, &mut state)
+                    .unwrap()
+                    .unwrap(),
+            );
+        }
+        let before_removal = molecule.clone();
+        let removed = molecule
+            .apply_edit_with_undo(
+                Edit::RemoveTopology {
+                    atoms: vec![AtomHandle::Id(AtomId(0))],
+                    bonds: Vec::new(),
+                },
+                &mut state,
+            )
+            .unwrap()
+            .unwrap();
+
+        molecule.apply_undo(removed);
+        assert_eq!(molecule, before_removal);
+        for undo in journal.into_iter().rev() {
+            molecule.apply_undo(undo);
+        }
+        assert_eq!(molecule, initial);
+    }
+
+    #[rstest]
     fn test_molecule_apply_undo_added_topology() {
         let initial = MoleculeEntries {
             atoms: vec![
@@ -5713,268 +5534,5 @@ mod tests {
     #[case::molecule(Undo::RemoveAddedMoleculeConstraint { position: 0 })]
     fn test_molecule_apply_undo_constraint_manipulated(#[case] undo: Undo) {
         Molecule::default().apply_undo(undo);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored_frame(AtomId(0), vec![AtomId(1), AtomId(2)], true)]
-    #[case::reordered_donors(AtomId(0), vec![AtomId(2), AtomId(1)], true)]
-    #[case::different_acceptor(AtomId(1), vec![AtomId(1), AtomId(2)], false)]
-    #[case::different_donors(AtomId(0), vec![AtomId(1), AtomId(3)], false)]
-    fn test_molecule_dative_bond_equiv(
-        #[case] acceptor: AtomId,
-        #[case] donors: Vec<AtomId>,
-        #[case] expected: bool,
-    ) {
-        let mut molecule = Molecule::default();
-        for _ in 0..4 {
-            molecule.add_atom(AtomForm::from_element(Element::C));
-        }
-        molecule.add_dative_bond(
-            &[AtomId(1), AtomId(2)],
-            AtomId(0),
-            DativeBondForm::from_order(1),
-        );
-        let offered = DativeBondForm::from_order(1);
-
-        assert_eq!(molecule.dative_bond_equiv(DativeBondId(0), acceptor, &donors, &offered), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored_frame(vec![AtomId(0), AtomId(1), AtomId(2)], vec![10, 20, 30], true)]
-    #[case::reordered_frame_carrying_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![30, 10, 20], true)]
-    #[case::reordered_frame_keeping_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![10, 20, 30], false)]
-    #[case::different_counts(vec![AtomId(0), AtomId(1), AtomId(2)], vec![10, 20, 99], false)]
-    #[case::multiset_differs(vec![AtomId(0), AtomId(1), AtomId(3)], vec![10, 20, 30], false)]
-    #[case::wrong_arity(vec![AtomId(0), AtomId(1)], vec![10, 20], false)]
-    fn test_molecule_aromatic_system_equiv(
-        #[case] atoms: Vec<AtomId>,
-        #[case] electrons: Vec<i64>,
-        #[case] expected: bool,
-    ) {
-        let mut molecule = Molecule::default();
-        for _ in 0..4 {
-            molecule.add_atom(AtomForm::from_element(Element::C));
-        }
-        molecule.add_aromatic_system(
-            &[AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemForm::from_electrons(vec![10, 20, 30]),
-        );
-        let offered = AromaticSystemForm::from_electrons(electrons);
-
-        assert_eq!(molecule.aromatic_system_equiv(AromaticSystemId(0), &atoms, &offered), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored_atoms(vec![AtomId(0), AtomId(1), AtomId(2)], true)]
-    #[case::reordered_atoms(vec![AtomId(2), AtomId(0), AtomId(1)], true)]
-    #[case::different_atoms(vec![AtomId(0), AtomId(1), AtomId(3)], false)]
-    #[case::wrong_arity(vec![AtomId(0), AtomId(1)], false)]
-    fn test_molecule_aromatic_system_equiv_undetermined_electrons(
-        #[case] atoms: Vec<AtomId>,
-        #[case] expected: bool,
-    ) {
-        let mut molecule = Molecule::default();
-        for _ in 0..4 {
-            molecule.add_atom(AtomForm::from_element(Element::C));
-        }
-        molecule.add_aromatic_system(
-            &[AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemForm::default(),
-        );
-
-        assert_eq!(
-            molecule.aromatic_system_equiv(
-                AromaticSystemId(0),
-                &atoms,
-                &AromaticSystemForm::default(),
-            ),
-            expected,
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored_frame(vec![AtomId(0), AtomId(1), AtomId(2)], vec![10, 20, 30], true)]
-    #[case::reordered_frame_carrying_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![30, 10, 20], true)]
-    #[case::reordered_frame_keeping_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![10, 20, 30], false)]
-    #[case::multiset_differs(vec![AtomId(0), AtomId(1), AtomId(3)], vec![10, 20, 30], false)]
-    fn test_molecule_multicenter_bond_equiv(
-        #[case] atoms: Vec<AtomId>,
-        #[case] electrons: Vec<i64>,
-        #[case] expected: bool,
-    ) {
-        let mut molecule = Molecule::default();
-        for _ in 0..4 {
-            molecule.add_atom(AtomForm::from_element(Element::C));
-        }
-        molecule.add_multicenter_bond(
-            &[AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondForm::from_electrons(vec![10, 20, 30]),
-        );
-        let offered = MulticenterBondForm::from_electrons(electrons);
-
-        assert_eq!(molecule.multicenter_bond_equiv(MulticenterBondId(0), &atoms, &offered), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored_atoms(vec![AtomId(0), AtomId(1), AtomId(2)], true)]
-    #[case::different_atoms(vec![AtomId(0), AtomId(1), AtomId(3)], false)]
-    fn test_molecule_multicenter_bond_equiv_undetermined_electrons(
-        #[case] atoms: Vec<AtomId>,
-        #[case] expected: bool,
-    ) {
-        let mut molecule = Molecule::default();
-        for _ in 0..4 {
-            molecule.add_atom(AtomForm::from_element(Element::C));
-        }
-        molecule.add_multicenter_bond(
-            &[AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondForm::default(),
-        );
-
-        assert_eq!(
-            molecule.multicenter_bond_equiv(
-                MulticenterBondId(0),
-                &atoms,
-                &MulticenterBondForm::default(),
-            ),
-            expected,
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored_frame([AtomId(0), AtomId(1)], true)]
-    #[case::reversed_frame([AtomId(1), AtomId(0)], true)]
-    #[case::different_pair([AtomId(0), AtomId(2)], false)]
-    fn test_molecule_noncovalent_bond_equiv(
-        #[case] atoms: [AtomId; 2],
-        #[case] expected: bool,
-    ) {
-        let mut molecule = Molecule::default();
-        for _ in 0..3 {
-            molecule.add_atom(AtomForm::from_element(Element::C));
-        }
-        molecule.add_noncovalent_bond(
-            [AtomId(0), AtomId(1)],
-            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        );
-        let offered = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
-
-        assert_eq!(molecule.noncovalent_bond_equiv(NoncovalentBondId(0), atoms, &offered), expected);
-    }
-
-    #[fixture]
-    fn stereo_molecule() -> Molecule {
-        let mut b = Molecule::default();
-        b.add_atom(AtomForm::from_element(Element::C));
-        for element in [Element::F, Element::Cl, Element::Br, Element::I] {
-            b.add_atom(AtomForm::from_element(element));
-        }
-        for ligand in 1..=4 {
-            b.add_bond(AtomId(0), AtomId(ligand), BondForm::from_order(1));
-        }
-        b.add_stereo_atom(
-            AtomId(0),
-            &(1..=4)
-                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-                .collect::<Vec<_>>(),
-            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-        );
-        b
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored_frame([1, 2, 3, 4], 0, true)]
-    #[case::stored_frame_other_coset([1, 2, 3, 4], 1, false)]
-    #[case::transposed_frame_same_coset([2, 1, 3, 4], 0, false)]
-    #[case::transposed_frame_other_coset([2, 1, 3, 4], 1, true)]
-    #[case::multiset_differs([1, 2, 3, 5], 0, false)]
-    fn test_molecule_stereo_atom_equiv(
-        stereo_molecule: Molecule,
-        #[case] ligands: [u32; 4],
-        #[case] coset: u32,
-        #[case] expected: bool,
-    ) {
-        let offered: Vec<StereoLigand> = ligands
-            .into_iter()
-            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-            .collect();
-        let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
-
-        assert_eq!(
-            stereo_molecule.stereo_atom_equiv(StereoAtomId(0), AtomId(0), &offered, &attributes),
-            expected,
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_stereo_atom_equiv_reordered_frame(stereo_molecule: Molecule) {
-        let stored: Vec<StereoLigand> = (1..=4)
-            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-            .collect();
-        let configuration = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
-
-        assert!(
-            stereo_molecule.stereo_atom_equiv(StereoAtomId(0), AtomId(0), &stored, &configuration),
-            "the stored frame with its own configuration is equivalent to itself",
-        );
-
-        let transposed = Permutation::from_image(&[1, 0, 2, 3]);
-        assert!(
-            !stereo_molecule.stereo_atom_equiv(
-                StereoAtomId(0),
-                AtomId(0),
-                &transposed.act(&stored),
-                &configuration,
-            ),
-            "coset 0 against a transposed frame is the opposite arrangement, not the stored one",
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stored(BondId(0), vec![2, 3, 4, 5], true)]
-    #[case::within_endpoint(BondId(0), vec![3, 2, 4, 5], true)]
-    #[case::endpoint_block_swap(BondId(0), vec![4, 5, 2, 3], true)]
-    #[case::across_endpoints(BondId(0), vec![2, 4, 3, 5], false)]
-    #[case::different_ligand(BondId(0), vec![2, 3, 4, 6], false)]
-    #[case::different_site(BondId(1), vec![2, 3, 4, 5], false)]
-    fn test_molecule_stereo_bond_equiv(
-        #[case] site: BondId,
-        #[case] ligand_ids: Vec<u32>,
-        #[case] expected: bool,
-    ) {
-        let mut molecule = Molecule::default();
-        for _ in 0..7 {
-            molecule.add_atom(AtomForm::from_element(Element::C));
-        }
-        for (first, second) in [(0, 1), (0, 2), (0, 3), (1, 4), (1, 5)] {
-            molecule.add_bond(AtomId(first), AtomId(second), BondForm::from_order(1));
-        }
-        molecule.add_stereo_bond(
-            BondId(0),
-            &[2, 3, 4, 5].map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom)),
-            StereoBondForm::default(),
-        );
-        let ligands = ligand_ids
-            .into_iter()
-            .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            molecule.stereo_bond_equiv(
-                StereoBondId(0),
-                site,
-                &ligands,
-                &StereoBondForm::default(),
-            ),
-            expected,
-        );
     }
 }

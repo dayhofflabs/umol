@@ -36,8 +36,10 @@ index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
 S4a is complete: undo restoration calls Molecule and constraint storage methods.
 Editor batch loops remain under the editor module; single-edit execution and
 handle state are in molecule::apply. Fields remain private and internal Molecule
-mutation methods use pub(crate). S4b1–S4b7 are complete; S4b8 is next. The
-S4b3–S4b8 migration is currently non-compiling.
+mutation methods use pub(crate). S4b1–S4b7 are complete; S4b8 is in progress.
+S4d1–S4d6 are complete: comparable single-entity entries live in their owning
+entity modules. S4d7 replaces the six Molecule comparison methods after S4b9
+and before the S5 lifecycle switch.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -89,7 +91,8 @@ checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
 complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b1–S4b7 are complete; S4b8 is next. The build returns green at S4b8.
+and S4b1–S4b7 are complete; S4b8 is in progress. S4d1–S4d6 are complete;
+S4d7 comparison migration follows S4b9.
 
 ## Editor and transaction API
 
@@ -5393,16 +5396,266 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   which owns it. No unused recovery machinery or temporary public API is added
   at the S4 green boundary.
 
+- **S4d — Single-entity entries and comparison** (group; additive types,
+  then caller migration; green). [dep: S1a, S1b, S1c]
+
+  S4d1–S4d6 are additive to the owning sets and can precede S4b closeout.
+  S4d7 retains S4b9 as a prerequisite.
+
+  Each owning entity set gains entry(id), returning a complete entity value
+  with its atom/site/ligand ids and attributes. The set's own entity id selects
+  the entry and is absent from the returned value. The six entry types live in
+  their respective entity modules, with Normalize, FrameTransport, and Reframe
+  implementations. Comparison uses the actual normalized_eq and framed_eq trait
+  methods. The six Molecule *_equiv methods disappear; no molecule comparison
+  submodule or renamed comparison-wrapper family is introduced.
+
+  **Common interface and contract.** Types, fields, and entry getters use
+  pub(crate), retaining the agreed crate-internal comparison surface. Construct
+  offered entries with struct literals; add no constructor family, re-export,
+  Python type, storage mutation, or view change. Derive Clone, Debug, PartialEq,
+  and Eq; equality compares values independently of Cow's borrowed/owned state.
+  These are open entry values, not checked molecule constructors. Entry access
+  panics on an unavailable entity id, consistently with the existing set getters.
+
+  Normalize changes only attributes and retains the supplied frame. It delegates
+  attribute contradictions to the existing Normalize implementation; it adds no
+  electron-count length, coset-range, or molecule-reference validation.
+  FrameTransport checks action degree against the entry's actual frame, transports
+  both that frame and its attributes, and returns None on incompatibility.
+  Distinguished acceptors/sites remain fixed. Reframe uses the existing per-kind
+  representative-action functions and normalize/transport/normalize semantics.
+  Use the existing trait's framed_eq implementation, including its treatment of
+  two intrinsically contradictory values. Do not rename the current boolean
+  comparison bodies to framed_eq without implementing that contract.
+
+  Cow permits an entry to borrow input and own a transformed result. The getter
+  borrows attributes without cloning them. Dative, aromatic, and multicenter
+  atom lists currently require NodeId-to-AtomId collection; record that allocation
+  rather than changing graph-core storage or adding unsafe slice conversions.
+  Noncovalent atom pairs are copied; stereo ligand slices remain borrowed.
+  Transformation leaves the source set untouched.
+
+  Place each entry definition and its trait implementations immediately before
+  its owning set's definition. Place entry(id) with that set's immutable getters.
+  Keep each entry's tests together, before its owning set's tests, with no imports
+  between test modules. Each subitem covers exact getter contents, unavailable-id
+  panic, borrowed/owned equality, source preservation, normalization idempotence,
+  frame-action identity/inverse/composition, and reframing idempotence using valid
+  frames. Existing public property suites remain outside src; do not widen these
+  interfaces solely to expose them to property tests.
+
+- **S4d1 — completed 2026-09-28** (`ir::dative`; additive, green). [dep: S1b]
+
+  ```rust
+  pub(crate) struct DativeBondEntry<'a> {
+      pub(crate) donors: Cow<'a, [AtomId]>,
+      pub(crate) acceptor: AtomId,
+      pub(crate) attributes: Cow<'a, DativeBondForm>,
+  }
+  // On DativeBonds:
+  pub(crate) fn entry(&self, id: DativeBondId) -> DativeBondEntry<'_>;
+  ```
+
+  FrameTransport::Action is DynPermutation on donors; the acceptor is fixed.
+  Reuse dative_bond_representative_action. Test reordered donors, changed donor
+  membership, different acceptors, and normalized attribute equality. Transfer
+  the corresponding Molecule comparison cases to entry-level tests while keeping
+  the old callers until S4d7.
+
+  Before implementing entry comparisons, extend benches/editor.rs with focused
+  overlay-removal cases through the public Edits API, covering all six kinds in
+  stored and reordered frames. Use normal fixture/setup functions and capture
+  the current comparison cost for S4d7. Keep this bounded to the replacement of
+  these comparisons; do not start another general editor benchmark study.
+
+  **Verification — 2026-09-28.** The 18 entry/getter cases pass, including
+  ownership, frame transport, reframing, and the transferred comparison cases.
+
+  **Removal baseline — 2026-09-28.** benches/editor.rs now covers all six
+  kinds in stored and reordered frames. Each fixture has five atoms, four
+  localized bonds, and one of each overlay. Molecule construction and Edit
+  preparation are outside timing; the timed operation is editor.apply of one
+  removal, without publication. Criterion used 20 samples, 0.2 s warm-up and
+  0.5 s measurement per case:
+
+  | Removed entity | Stored frame, ns | Reordered frame, ns |
+  | --- | ---: | ---: |
+  | Dative bond | 739 | 717 |
+  | Aromatic system | 794 | 783 |
+  | Multicenter bond | 772 | 771 |
+  | Noncovalent bond | 595 | 605 |
+  | Stereo atom | 961 | 967 |
+  | Stereo bond | 952 | 995 |
+
+  Command: `cargo bench -p umol-graph-ir --bench editor --
+  molecule_editor/removal --warm-up-time 0.2 --measurement-time 0.5
+  --sample-size 20 --save-baseline s4d-before`.
+  These are whole-removal estimates before caller migration, not isolated
+  comparison timings. They let S4d7 assess the cost of using entries in the
+  actual caller. S4d1–S4d6 do not change that caller, so no second timing run
+  is needed at this boundary.
+
+- **S4d2 — completed 2026-09-28** (`ir::aromatic`; additive, green). [dep: S1a]
+
+  ```rust
+  pub(crate) struct AromaticSystemEntry<'a> {
+      pub(crate) atoms: Cow<'a, [AtomId]>,
+      pub(crate) attributes: Cow<'a, AromaticSystemForm>,
+  }
+  // On AromaticSystems:
+  pub(crate) fn entry(&self, id: AromaticSystemId) -> AromaticSystemEntry<'_>;
+  ```
+
+  FrameTransport::Action is DynPermutation on atoms. Reuse
+  aromatic_system_representative_action; electron contributions move with their
+  atoms through the existing form transport. Test equivalent reordered
+  atom/count pairs, reordered atoms with unchanged counts, different atom sets,
+  and undetermined contributions. Transfer the existing aromatic comparison
+  cases. Preserve the established first-use behavior for mismatched count lengths.
+
+  **Verification — 2026-09-28.** The 24 entry/getter cases pass, including
+  ownership, frame transport, reframing, and the transferred comparison cases.
+
+- **S4d3 — completed 2026-09-28** (`ir::multicenter`; additive, green). [dep: S1a]
+
+  ```rust
+  pub(crate) struct MulticenterBondEntry<'a> {
+      pub(crate) atoms: Cow<'a, [AtomId]>,
+      pub(crate) attributes: Cow<'a, MulticenterBondForm>,
+  }
+  // On MulticenterBonds:
+  pub(crate) fn entry(&self, id: MulticenterBondId) -> MulticenterBondEntry<'_>;
+  ```
+
+  FrameTransport::Action is DynPermutation on atoms. Reuse
+  multicenter_bond_representative_action and the existing form transport.
+  Transfer the multicenter comparison cases and cover atom/count alignment,
+  undetermined contributions, changed membership, and incompatible action degree.
+  This has the same count-length contract as S4d2, without sharing entity storage
+  through a new generic entry family.
+
+  **Verification — 2026-09-28.** The 24 entry/getter cases pass, including
+  ownership, frame transport, reframing, and the transferred comparison cases.
+
+- **S4d4 — completed 2026-09-28** (`ir::noncovalent`; additive, green). [dep: S1b]
+
+  ```rust
+  pub(crate) struct NoncovalentBondEntry<'a> {
+      pub(crate) atoms: [AtomId; 2],
+      pub(crate) attributes: Cow<'a, NoncovalentBondForm>,
+  }
+  // On NoncovalentBonds:
+  pub(crate) fn entry(&self, id: NoncovalentBondId) -> NoncovalentBondEntry<'_>;
+  ```
+
+  FrameTransport::Action is a degree-two DynPermutation. Reuse
+  noncovalent_bond_representative_action and transport the full form. Transfer
+  the stored/reversed/different-pair cases; include changed kind and inline
+  constraints. Getter construction allocates neither an atom vector nor a form.
+
+  **Verification — 2026-09-28.** The 13 entry/getter cases pass, including
+  ownership, frame transport, reframing, and the transferred comparison cases.
+
+- **S4d5 — completed 2026-09-28** (`ir::stereo`; additive, green). [dep: S1c]
+
+  ```rust
+  pub(crate) struct StereoAtomEntry<'a> {
+      pub(crate) site: AtomId,
+      pub(crate) ligands: Cow<'a, [StereoLigand]>,
+      pub(crate) attributes: Cow<'a, StereoAtomForm>,
+  }
+  // On StereoAtoms:
+  pub(crate) fn entry(&self, id: StereoAtomId) -> StereoAtomEntry<'_>;
+  ```
+
+  FrameTransport::Action is Permutation on complete StereoLigand values; the site
+  is fixed. Reuse stereo_atom_representative_action and the full form transport,
+  including configuration and inline constraints. Transfer the stereo-atom frame
+  comparison cases and cover changed site, virtual ligands, and frame-relative
+  constraints. Entry access borrows both ligands and attributes.
+
+  representative_action retains Reframe's admissible-frame precondition. The
+  fallible reframe path uses the existing Option-returning action derivation;
+  comparison must not turn an oversized offered frame into an assertion panic.
+  This adds no coset checks to normalization and no new error type.
+
+  **Verification — 2026-09-28.** The 21 entry/getter cases pass, including
+  ownership, frame transport, reframing, and the transferred comparison cases.
+
+- **S4d6 — completed 2026-09-28** (`ir::stereo`; additive, green). [dep: S1c]
+
+  ```rust
+  pub(crate) struct StereoBondEntry<'a> {
+      pub(crate) site: BondId,
+      pub(crate) ligands: Cow<'a, [StereoLigand]>,
+      pub(crate) attributes: Cow<'a, StereoBondForm>,
+  }
+  // On StereoBonds:
+  pub(crate) fn entry(&self, id: StereoBondId) -> StereoBondEntry<'_>;
+  ```
+
+  FrameTransport::Action is Permutation restricted to the existing stereo-bond
+  endpoint-block group; the site bond is fixed. Reuse
+  stereo_bond_representative_action and the full form transport. Transfer the
+  within-block, complete-block-swap, across-block, changed-ligand, and changed-site
+  comparison cases. Include determined and undetermined configurations and
+  frame-relative constraints. Getter ownership and malformed-frame handling
+  follow S4d5; no copy is needed to obtain the ligand slice.
+
+  **Verification — 2026-09-28.** The 33 entry/getter cases pass, including
+  ownership, frame transport, reframing, and the transferred comparison cases.
+
+  **Combined S4d1–S4d6 checks.** All 133 new entry/getter cases pass;
+  the combined `cargo test -p umol-graph-ir --lib entry` run passes 229 cases.
+  The five affected entity-module suites passed during implementation.
+  Private-item rustdoc with warnings denied, nightly formatting, and diff checks
+  pass. Clippy over library, tests, and benches reports only dead_code: the new
+  entries/getters await S4d7, and seven existing Molecule methods await their
+  planned callers. No lint suppression was added; the strict gate remains S4d7.
+  All six types, fields, and entry getters are pub(crate), as specified.
+  Dative/aromatic/multicenter getters allocate their atom-id vectors;
+  noncovalent/stereo getters borrow attributes without allocation, and stereo
+  getters also borrow ligand slices.
+
+- **S4d7 — Migrate entity comparison callers** (`ir::molecule::apply`,
+  entity tests, `benches/editor.rs`; rewire, green).
+  [dep: S4b9, S4d1, S4d2, S4d3, S4d4, S4d5, S4d6]
+
+  In apply_edit and apply_edit_with_undo, obtain the stored entry from the owning
+  set, construct the offered entry from the already-resolved ids and attributes,
+  and use framed_eq. Remove all six Molecule *_equiv methods and their imports;
+  S4d1–S4d6 have transferred their tests to the entity modules. Retain no
+  delegating comparison wrappers. This does not change Edit/Undo payloads or
+  mutation sequencing.
+
+  Preserve removal's separate structured-incidence precondition through the
+  existing set is_coincident methods. Stereo-bond incidence additionally requires
+  that the derived ligand permutation belongs to the existing endpoint-block
+  group. This matters when both forms are contradictory: the trait equates two
+  contradictions, but removal must still refer to the supplied atoms/site/ligands.
+  Keep these preconditions in the Edit branches before writes; do not modify
+  framed_eq's contract or introduce another comparison method to conceal them.
+
+  Run the existing removal/old-state and matching-history rollback cases in both
+  execution paths, plus cases with contradictory attributes and mismatched
+  structured incidence. Run the affected public Edit/reframe properties. Compare
+  the same removal benchmarks captured in S4d1 and record the time/allocation
+  consequences of entry construction and reframing; the wrapper alone does not
+  establish that comparison became cheaper. Update the frame-carrier description
+  in the data-type guide, then run affected-crate checks, strict Clippy, rustdoc,
+  nightly formatting, and full diff review. Workspace/Python/MSRV gates remain S9b.
+
 ### S5 — Borrowed transaction API
 
 S5a removes APIs used by S5b–S5d; those migrations are required before the stage
 returns green. S5d's Python invalidation and sequential input-consumption contracts are recorded above.
 
 - **S5a — Scoped Rust transaction lifecycle** (group; breaking, green at
-  S5d3). [dep: S4b]
+  S5d3). [dep: S4b, S4d7]
 
 - **S5a1 — Guard, borrowed handle, and scoped run**
-  (`ir::molecule::transact`; breaking, green at S5d3). [dep: S4b]
+  (`ir::molecule::transact`; breaking, green at S5d3). [dep: S4b, S4d7]
 
   ```rust
   struct TransactionGuard<'a> {
@@ -5895,12 +6148,12 @@ Within the revised S2:
 - S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
   extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
   correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b7 are complete; S4b8 is next.
-  The build returns green at S4b8.
+  S3k1–S3k4's index-overflow cleanup, S4a, and S4b1–S4b7 are complete; S4b8 is in progress.
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a closes at S4a2; S4b is green at S4b8 and closes after S4b9. S4c is
-  incorporated in S5a1.
+  incorporated in S5a1. S4d1–S4d6 are complete. After S4b9, S4d7 migrates
+  their comparison callers and closes S4 before the S5 lifecycle switch.
 - S5a1–S5a2 introduce the guard and public lifecycle together; S5d1–S5d3
   complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

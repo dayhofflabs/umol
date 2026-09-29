@@ -1,5 +1,6 @@
 //! Dative bond form.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use umol_graph_core::{
@@ -16,6 +17,51 @@ use super::frame::DativeBondsFrameAction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+
+/// A dative bond's donor frame, acceptor, and attributes.
+///
+/// Normalization preserves the donor order. Reframing sorts donors and transports
+/// attributes into that frame; the acceptor remains fixed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DativeBondEntry<'a> {
+    pub(crate) donors: Cow<'a, [AtomId]>,
+    pub(crate) acceptor: AtomId,
+    pub(crate) attributes: Cow<'a, DativeBondForm>,
+}
+
+impl Normalize for DativeBondEntry<'_> {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        self.attributes = match self.attributes {
+            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
+        };
+        Ok(self)
+    }
+}
+
+impl FrameTransport for DativeBondEntry<'_> {
+    type Action = DynPermutation;
+
+    fn reframe_by(mut self, action: &Self::Action) -> Option<Self> {
+        self.donors = Cow::Owned(action.act(&self.donors)?);
+        self.attributes = Cow::Owned(self.attributes.into_owned().reframe_by(action)?);
+        Some(self)
+    }
+}
+
+impl Reframe for DativeBondEntry<'_> {
+    fn representative_action(&self) -> Self::Action {
+        dative_bond_representative_action(self.donors.to_vec())
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        let action = self.representative_action();
+        self.normalize()?
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()
+    }
+}
 
 /// The molecule's dative bonds.
 ///
@@ -69,6 +115,19 @@ impl DativeBonds {
 
     pub fn attributes(&self, id: DativeBondId) -> &DativeBondForm {
         self.0.data(RelationId::from(id))
+    }
+
+    /// The complete bond value, borrowing its attributes and collecting donor ids.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` is not a bond in this set.
+    pub(crate) fn entry(&self, id: DativeBondId) -> DativeBondEntry<'_> {
+        DativeBondEntry {
+            donors: Cow::Owned(self.donors(id).collect()),
+            acceptor: self.acceptor(id),
+            attributes: Cow::Borrowed(self.attributes(id)),
+        }
     }
 
     pub(crate) fn attributes_mut(&mut self, id: DativeBondId) -> &mut DativeBondForm {
@@ -690,6 +749,8 @@ impl From<&str> for DativeBondForm {
 
 #[cfg(test)]
 mod tests {
+    use std::ptr;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::{Correspondence, EdgeId};
@@ -699,6 +760,183 @@ mod tests {
     use crate::ir::constraint::RingScope;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::{Lattice, Normalize};
+
+    #[rstest]
+    #[case::singleton(NumForm::lit_set([1]), Ok(NumForm::Lit(1)))]
+    #[case::contradiction(NumForm::lit_set([]), Err(Contradiction))]
+    fn test_dative_bond_entry_normalize(
+        #[case] order: NumForm,
+        #[case] expected: Result<NumForm, Contradiction>,
+        #[values(false, true)] owned: bool,
+    ) {
+        let donors = [AtomId(3), AtomId(1), AtomId(2)];
+        let attributes = DativeBondForm::new(order);
+        let entry = DativeBondEntry {
+            donors: if owned {
+                Cow::Owned(donors.to_vec())
+            } else {
+                Cow::Borrowed(&donors)
+            },
+            acceptor: AtomId(0),
+            attributes: if owned {
+                Cow::Owned(attributes.clone())
+            } else {
+                Cow::Borrowed(&attributes)
+            },
+        };
+        let expected = expected.map(|order| DativeBondEntry {
+            donors: Cow::Borrowed(&donors),
+            acceptor: AtomId(0),
+            attributes: Cow::Owned(DativeBondForm::new(order)),
+        });
+        let normalized = entry.normalize();
+        assert_eq!(normalized, expected);
+        if let Ok(normalized) = normalized {
+            assert_eq!(normalized.clone().normalize(), Ok(normalized));
+        }
+    }
+
+    #[rstest]
+    #[case::swap(vec![1, 0, 2])]
+    #[case::cycle(vec![1, 2, 0])]
+    #[case::reverse(vec![2, 1, 0])]
+    fn test_dative_bond_entry_reframe_by(#[case] image: Vec<usize>) {
+        let donors = [AtomId(3), AtomId(1), AtomId(2)];
+        let attributes = DativeBondForm::from_order(1)
+            .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)));
+        let entry = DativeBondEntry {
+            donors: Cow::Borrowed(&donors),
+            acceptor: AtomId(0),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let action = DynPermutation::try_from(image.clone()).unwrap();
+        let expected = DativeBondEntry {
+            donors: Cow::Owned(image.iter().map(|&i| donors[i]).collect()),
+            acceptor: AtomId(0),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        assert_eq!(
+            entry.clone().reframe_by(&DynPermutation::identity(3)),
+            Some(entry.clone())
+        );
+        let transformed = entry.clone().reframe_by(&action).unwrap();
+        assert_eq!(transformed, expected);
+        assert_eq!(
+            transformed.reframe_by(&action.inverse()),
+            Some(entry.clone())
+        );
+        let second = DynPermutation::try_from(vec![1, 0, 2]).unwrap();
+        assert_eq!(
+            entry
+                .clone()
+                .reframe_by(&action)
+                .unwrap()
+                .reframe_by(&second),
+            entry.reframe_by(&action.compose(&second).unwrap()),
+        );
+    }
+
+    #[rstest]
+    #[case::short(1)]
+    #[case::long(3)]
+    fn test_dative_bond_entry_reframe_by_error(#[case] degree: usize) {
+        let entry = DativeBondEntry {
+            donors: Cow::Borrowed(&[AtomId(1), AtomId(2)]),
+            acceptor: AtomId(0),
+            attributes: Cow::Owned(DativeBondForm::default()),
+        };
+        assert_eq!(entry.reframe_by(&DynPermutation::identity(degree)), None);
+    }
+
+    #[rstest]
+    fn test_dative_bond_entry_reframe() {
+        let donors = [AtomId(3), AtomId(1), AtomId(2)];
+        let attributes = DativeBondForm::new(NumForm::lit_set([1]));
+        let entry = DativeBondEntry {
+            donors: Cow::Borrowed(&donors),
+            acceptor: AtomId(0),
+            attributes: Cow::Borrowed(&attributes),
+        };
+        let expected = DativeBondEntry {
+            donors: Cow::Owned(vec![AtomId(1), AtomId(2), AtomId(3)]),
+            acceptor: AtomId(0),
+            attributes: Cow::Owned(DativeBondForm::from_order(1)),
+        };
+        assert_eq!(
+            entry.representative_action(),
+            DynPermutation::try_from(vec![1, 2, 0]).unwrap()
+        );
+        assert_eq!(entry.clone().reframe(), Ok(expected.clone()));
+        assert_eq!(
+            entry.tracked_reframe(),
+            Ok((
+                expected.clone(),
+                DynPermutation::try_from(vec![1, 2, 0]).unwrap()
+            ))
+        );
+        assert_eq!(expected.clone().reframe(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::stored(AtomId(0), vec![AtomId(1), AtomId(2)], NumForm::Lit(1), true, true)]
+    #[case::reordered(AtomId(0), vec![AtomId(2), AtomId(1)], NumForm::Lit(1), false, true)]
+    #[case::acceptor(AtomId(1), vec![AtomId(1), AtomId(2)], NumForm::Lit(1), false, false)]
+    #[case::donors(AtomId(0), vec![AtomId(1), AtomId(3)], NumForm::Lit(1), false, false)]
+    #[case::normalized(AtomId(0), vec![AtomId(1), AtomId(2)], NumForm::lit_set([1]), true, true)]
+    #[case::attributes(AtomId(0), vec![AtomId(1), AtomId(2)], NumForm::Lit(2), false, false)]
+    fn test_dative_bond_entry_framed_eq(
+        #[case] acceptor: AtomId,
+        #[case] donors: Vec<AtomId>,
+        #[case] order: NumForm,
+        #[case] normalized: bool,
+        #[case] framed: bool,
+    ) {
+        let left = DativeBondEntry {
+            donors: Cow::Borrowed(&[AtomId(1), AtomId(2)]),
+            acceptor: AtomId(0),
+            attributes: Cow::Owned(DativeBondForm::from_order(1)),
+        };
+        let right = DativeBondEntry {
+            donors: Cow::Owned(donors),
+            acceptor,
+            attributes: Cow::Owned(DativeBondForm::new(order)),
+        };
+        assert_eq!(left.normalized_eq(&right), normalized);
+        assert_eq!(left.framed_eq(&right), framed);
+        assert_eq!(right.framed_eq(&left), framed);
+    }
+
+    #[rstest]
+    fn test_dative_bonds_entry() {
+        let bonds = DativeBonds::new(vec![(
+            vec![AtomId(2), AtomId(1)],
+            AtomId(0),
+            DativeBondForm::from_order(1),
+        )]);
+        let before = bonds.clone();
+        let entry = bonds.entry(DativeBondId(0));
+        assert_eq!(
+            entry,
+            DativeBondEntry {
+                donors: Cow::Borrowed(&[AtomId(2), AtomId(1)]),
+                acceptor: AtomId(0),
+                attributes: Cow::Owned(DativeBondForm::from_order(1)),
+            }
+        );
+        assert!(matches!(entry.donors, Cow::Owned(_)));
+        assert!(
+            matches!(entry.attributes, Cow::Borrowed(attributes) if ptr::eq(attributes, bonds.attributes(DativeBondId(0))))
+        );
+        let reframed = entry.reframe().unwrap();
+        assert_eq!(reframed.donors.as_ref(), &[AtomId(1), AtomId(2)]);
+        assert_eq!(bonds, before);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_dative_bonds_entry_error() {
+        DativeBonds::default().entry(DativeBondId(0));
+    }
 
     #[rstest]
     #[case::repeated(vec![AtomId(4), AtomId(1), AtomId(4)], AtomId(4))]
