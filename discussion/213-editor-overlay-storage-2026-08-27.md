@@ -40,7 +40,9 @@ mutation methods use pub(crate). S4b is complete: S4b9 consolidates the entity-s
 implementations and names their mapping-returning compaction methods compact.
 S4d is complete: comparable single-entity entries live in their owning entity
 modules, and both Edit execution paths use specialized framed_eq implementations.
-The next subitem is S5a1's borrowed transaction lifecycle.
+S5a1's guard, borrowed handle, and scoped run are implemented. S5a2 supplies the
+handle's application and completion methods next; S5's caller migration remains
+necessary before the build and tests return green.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -93,7 +95,7 @@ complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
-complete; S4b9 closes the strict lint gate. S5a1 is next.
+complete; S4b9 closes the strict lint gate. S5a1 is implemented; S5a2 is next.
 
 ## Editor and transaction API
 
@@ -5781,7 +5783,7 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
 - **S5a — Scoped Rust transaction lifecycle** (group; breaking, green at
   S5d3). [dep: S4b, S4d7]
 
-- **S5a1 — Guard, borrowed handle, and scoped run**
+- **S5a1 — completed 2026-09-28** — Guard, borrowed handle, and scoped run
   (`ir::molecule::transact`; breaking, green at S5d3). [dep: S4b, S4d7]
 
   ```rust
@@ -5844,6 +5846,17 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   ignored apply errors (including explicit rollback afterward), explicit
   rollback, and integrity rejection. These are
   the integration cases for this scoped API.
+
+  **Implementation and verification.** The guard, borrowed handle, and run live
+  in molecule::transact. TransactionError moves there and gains Aborted. The
+  detached journal and editor transaction entry points are removed; editor
+  apply/tracked_apply retain their implementations. Ten unit cases cover guard
+  acceptance and restoration, callback errors/unwinding, forgotten handles, and
+  terminal status handling. These exercise the guard directly; S5a2 adds public
+  handle-method coverage. The tests have not run: `cargo check -p umol-graph-ir
+  --lib` stops at the old editor transact call in reaction.rs, whose migration is
+  S5b. No diagnostic was reported in the new transaction module. Nightly
+  formatting and full diff review pass; the stage gate remains S5d3.
 
 - **S5a2 — Batch application, completion, and Molecule conveniences**
   (`ir::molecule::transact`, `ir::error`; breaking, green at S5d3). [dep: S5a1]
@@ -6278,8 +6291,8 @@ Within the revised S2:
   S3k1–S3k4's index-overflow cleanup, S4a, S4b, and S4d are complete.
   S4b uses the additions and the component
   removal/restoration interfaces.
-- S4a, S4b, and S4d are complete. S4c is incorporated in S5a1, the next
-  subitem for the S5 lifecycle switch.
+- S4a, S4b, and S4d are complete. S4c is incorporated in the implemented S5a1
+  guard and scoped run. S5a2 is next; S5's build and test gate remains S5d3.
 - S5a1–S5a2 introduce the guard and public lifecycle together; S5d1–S5d3
   complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

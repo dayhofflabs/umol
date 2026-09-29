@@ -1,194 +1,16 @@
-//! Editor batch application and detached transaction journals.
-//!
-//! `transact(edits)` applies each `Edit` in order, records realized `Undo`
-//! entries, and either returns a rollback-capable `Transaction` or reverse-
-//! replays the journal before surfacing a `TransactionError`.
-//! `apply(edits)` consumes the editor and returns its modified state without
-//! constructing an undo journal. A failed application drops the consumed
-//! editor, so partially applied state cannot escape.
+//! Journal-free batch application for the molecule editor.
 
 use std::mem;
 
-use thiserror::Error;
-use umol_graph_core::{Compaction, Correspondence, GraphCompaction};
+use umol_graph_core::Correspondence;
 
 use super::MoleculeEditor;
-use crate::ir::compact::MoleculeCompaction;
 use crate::ir::correspondence::MoleculeCorrespondence;
-use crate::ir::edit::{Edits, Undo};
-use crate::ir::entity::EntityKind;
+use crate::ir::edit::Edits;
 use crate::ir::molecule::apply::ApplicationState;
-
-#[derive(Debug, Error, PartialEq, Eq, Clone)]
-pub enum TransactionError {
-    #[error("{kind} handle {index} is out of range for {count} entries")]
-    HandleOutOfRange {
-        kind: EntityKind,
-        index: usize,
-        count: usize,
-    },
-
-    #[error("{kind} handle {index} refers to a removed entity")]
-    HandleRemoved { kind: EntityKind, index: usize },
-
-    #[error("duplicate {kind} in removal batch")]
-    DuplicateRemoval { kind: EntityKind },
-
-    /// `Set*Field` or `Set*Constraint`: current state does not match the
-    /// edit's `old` payload.
-    #[error("precondition failed: old state does not match current")]
-    OldStateMismatch,
-
-    /// `Remove*Constraint` with a value that's not present.
-    #[error("missing constraint entry on remove")]
-    MissingEntry,
-
-    /// Edit shape is structurally invalid.
-    #[error("malformed edit: {0}")]
-    MalformedEdit(&'static str),
-
-    #[error("rollback failed after apply error: apply={apply}; rollback={rollback}")]
-    RollbackFailed {
-        apply: Box<TransactionError>,
-        rollback: Box<TransactionError>,
-    },
-
-    /// The rollback journal cannot be structurally applied to the supplied editor state.
-    #[error("rollback journal does not match editor state")]
-    RollbackStateMismatch,
-}
-
-/// Detached journal of the realized undos for one successfully applied edit batch.
-///
-/// Detachment permits journals for consecutive transactions to be appended and rolled back as a
-/// unit. Restoration under Molecule::normalized_eq is guaranteed for the post-transaction editor
-/// state or the end of the consecutively appended chain. Manipulated history does not panic but
-/// has no specified result.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Transaction {
-    undo: Vec<Undo>,
-}
-
-impl Transaction {
-    pub fn undos(&self) -> &[Undo] {
-        &self.undo
-    }
-
-    /// Append the rollback journal for a transaction applied after this one.
-    pub fn append(&mut self, later: Self) {
-        self.undo.extend(later.undo);
-    }
-
-    /// Reverse the journal against its post-transaction editor state.
-    ///
-    /// Restores the pre-transaction state under Molecule::normalized_eq when the editor is the
-    /// state produced by this transaction or its appended consecutive chain. Manipulated history
-    /// does not panic but has no specified result.
-    ///
-    /// Returns `Ok(())` after replay.
-    pub fn rollback(self, editor: &mut MoleculeEditor) -> Result<(), TransactionError> {
-        rollback_journal(editor, self.undo);
-        Ok(())
-    }
-
-    /// Roll back and return the correspondence from the rollback input to the restored state.
-    ///
-    /// The returned witness covers this rollback, not the editor's entire session. No intermediate
-    /// molecule is published. Restored entities without a rollback-input partner remain unmatched.
-    ///
-    /// Returns `Ok(correspondence)` after replay. Manipulated history does not panic
-    /// but has no specified result.
-    ///
-    /// # Semantic properties
-    ///
-    /// On the transaction's exact post-state, the witness is the inverse of its forward
-    /// correspondence. For appended transactions it is the inverse of their composed witness.
-    pub fn tracked_rollback(
-        self,
-        editor: &mut MoleculeEditor,
-    ) -> Result<MoleculeCorrespondence, TransactionError> {
-        let identity = MoleculeCorrespondence::new(
-            Correspondence::identity(editor.atom_count()),
-            Correspondence::identity(editor.bond_count()),
-            Correspondence::identity(editor.dative_bond_count()),
-            Correspondence::identity(editor.aromatic_system_count()),
-            Correspondence::identity(editor.multicenter_bond_count()),
-            Correspondence::identity(editor.noncovalent_bond_count()),
-            Correspondence::identity(editor.stereo_atom_count()),
-            Correspondence::identity(editor.stereo_bond_count()),
-        );
-        let session = mem::replace(&mut editor.correspondence, identity);
-        let result = self.rollback(editor);
-        let correspondence =
-            mem::replace(&mut editor.correspondence, MoleculeCorrespondence::empty());
-        editor.correspondence = session
-            .compose(&correspondence)
-            .expect("rollback correspondence starts in the current editor id spaces");
-        result?;
-        Ok(correspondence)
-    }
-}
+use crate::ir::molecule::TransactionError;
 
 impl MoleculeEditor {
-    /// Apply an ordered [`Edits`] batch atomically. On success, returns a rollback
-    /// transaction. On any apply failure, reverse-replays the already-created
-    /// undo journal.
-    pub fn transact(&mut self, edits: Edits) -> Result<Transaction, TransactionError> {
-        let mut journal: Vec<Undo> = Vec::with_capacity(edits.len());
-        let mut state = ApplicationState::new(&self.molecule);
-        for edit in edits {
-            match self.molecule.apply_edit_with_undo(edit, &mut state) {
-                Ok(Some(undo)) => journal.push(undo),
-                Ok(None) => {}
-                Err(apply) => {
-                    for undo in journal.into_iter().rev() {
-                        self.molecule.apply_undo(undo);
-                    }
-                    return Err(apply);
-                }
-            }
-        }
-        state.update_correspondence(&mut self.correspondence);
-        Ok(Transaction { undo: journal })
-    }
-
-    /// Apply a batch atomically, returning its transaction and input-to-result correspondence.
-    ///
-    /// The witness starts at this batch's input, independently of the editor's session origin.
-    /// The transaction retains its ordinary undo journal. No molecule is published.
-    ///
-    /// # Errors
-    ///
-    /// Returns the same error and leaves the same editor state as [`Self::transact`].
-    ///
-    /// # Semantic properties
-    ///
-    /// Discarding the witness gives the same transaction and editor state as the plain operation.
-    /// Composing the previous session correspondence with this witness gives the new session.
-    pub fn tracked_transact(
-        &mut self,
-        edits: Edits,
-    ) -> Result<(Transaction, MoleculeCorrespondence), TransactionError> {
-        let identity = MoleculeCorrespondence::new(
-            Correspondence::identity(self.atom_count()),
-            Correspondence::identity(self.bond_count()),
-            Correspondence::identity(self.dative_bond_count()),
-            Correspondence::identity(self.aromatic_system_count()),
-            Correspondence::identity(self.multicenter_bond_count()),
-            Correspondence::identity(self.noncovalent_bond_count()),
-            Correspondence::identity(self.stereo_atom_count()),
-            Correspondence::identity(self.stereo_bond_count()),
-        );
-        let session = mem::replace(&mut self.correspondence, identity);
-        let result = self.transact(edits);
-        let correspondence =
-            mem::replace(&mut self.correspondence, MoleculeCorrespondence::empty());
-        self.correspondence = session
-            .compose(&correspondence)
-            .expect("batch correspondence starts in the current editor id spaces");
-        Ok((result?, correspondence))
-    }
-
     /// Apply an ordered [`Edits`] batch without constructing an undo journal.
     ///
     /// The editor is consumed so that a failed batch cannot expose partially applied state. On
@@ -202,9 +24,8 @@ impl MoleculeEditor {
     ///
     /// # Semantic properties
     ///
-    /// For every edit batch accepted by [`Self::transact`] from the same initial editor,
-    /// successfully building the returned editor produces the same molecule as building the
-    /// post-transaction editor. On failure, no intermediate editor state is returned.
+    /// Applying the same batch with or without undo recording produces the same molecule on
+    /// successful publication. On failure, no intermediate editor state is returned.
     pub fn apply(mut self, edits: Edits) -> Result<Self, TransactionError> {
         let mut state = ApplicationState::new(&self.molecule);
         for edit in edits {
@@ -252,150 +73,6 @@ impl MoleculeEditor {
     }
 }
 
-fn rollback_journal(editor: &mut MoleculeEditor, journal: Vec<Undo>) {
-    for undo in journal.into_iter().rev() {
-        let mut atoms = Compaction::identity(editor.atom_count());
-        let mut bonds = Compaction::identity(editor.bond_count());
-        let mut dative_bonds = Compaction::identity(editor.dative_bond_count());
-        let mut aromatic_systems = Compaction::identity(editor.aromatic_system_count());
-        let mut multicenter_bonds = Compaction::identity(editor.multicenter_bond_count());
-        let mut noncovalent_bonds = Compaction::identity(editor.noncovalent_bond_count());
-        let mut stereo_atoms = Compaction::identity(editor.stereo_atom_count());
-        let mut stereo_bonds = Compaction::identity(editor.stereo_bond_count());
-        match &undo {
-            Undo::RemoveAddedTopology {
-                atoms: added_atoms,
-                bonds: added_bonds,
-            } => {
-                atoms = Compaction::new(
-                    editor.atom_count(),
-                    added_atoms
-                        .iter()
-                        .filter(|entry| entry.id.index() < editor.atom_count())
-                        .map(|entry| entry.id.into())
-                        .collect(),
-                )
-                .expect("removed atom ids are in range");
-                bonds = Compaction::new(
-                    editor.bond_count(),
-                    added_bonds
-                        .iter()
-                        .filter(|entry| entry.id.index() < editor.bond_count())
-                        .map(|entry| entry.id.into())
-                        .collect(),
-                )
-                .expect("removed bond ids are in range");
-            }
-            Undo::RemoveAddedDativeBond(added) => {
-                if added.id.index() < editor.dative_bond_count() {
-                    dative_bonds = Compaction::new(editor.dative_bond_count(), vec![added.id])
-                        .expect("removed id is in range");
-                }
-            }
-            Undo::RemoveAddedAromaticSystem(added) => {
-                if added.id.index() < editor.aromatic_system_count() {
-                    aromatic_systems =
-                        Compaction::new(editor.aromatic_system_count(), vec![added.id])
-                            .expect("removed id is in range");
-                }
-            }
-            Undo::RemoveAddedMulticenterBond(added) => {
-                if added.id.index() < editor.multicenter_bond_count() {
-                    multicenter_bonds =
-                        Compaction::new(editor.multicenter_bond_count(), vec![added.id])
-                            .expect("removed id is in range");
-                }
-            }
-            Undo::RemoveAddedNoncovalentBond(added) => {
-                if added.id.index() < editor.noncovalent_bond_count() {
-                    noncovalent_bonds =
-                        Compaction::new(editor.noncovalent_bond_count(), vec![added.id])
-                            .expect("removed id is in range");
-                }
-            }
-            Undo::RemoveAddedStereoAtom(added) => {
-                if added.id.index() < editor.stereo_atom_count() {
-                    stereo_atoms = Compaction::new(editor.stereo_atom_count(), vec![added.id])
-                        .expect("removed id is in range");
-                }
-            }
-            Undo::RemoveAddedStereoBond(added) => {
-                if added.id.index() < editor.stereo_bond_count() {
-                    stereo_bonds = Compaction::new(editor.stereo_bond_count(), vec![added.id])
-                        .expect("removed id is in range");
-                }
-            }
-            Undo::RestoreRemovedTopology {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedDativeBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedAromaticSystems {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedMulticenterBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedNoncovalentBonds {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedStereoAtoms {
-                undo_compaction, ..
-            }
-            | Undo::RestoreRemovedStereoBonds {
-                undo_compaction, ..
-            } => {
-                let _ = editor
-                    .correspondence
-                    .uncompact_right(undo_compaction.forward());
-                editor.molecule.apply_undo(undo);
-                continue;
-            }
-            Undo::RestoreDativeBondDonors { .. }
-            | Undo::RestoreDativeBondAcceptor { .. }
-            | Undo::RestoreAromaticSystemAtoms { .. }
-            | Undo::RestoreMulticenterBondAtoms { .. }
-            | Undo::RestoreNoncovalentBondAtoms { .. }
-            | Undo::RestoreStereoAtomSite { .. }
-            | Undo::RestoreStereoAtomLigands { .. }
-            | Undo::RestoreStereoBondSite { .. }
-            | Undo::RestoreStereoBondLigands { .. }
-            | Undo::ModifyAtomField { .. }
-            | Undo::ModifyBondField { .. }
-            | Undo::ModifyDativeBondField { .. }
-            | Undo::ModifyAromaticSystemField { .. }
-            | Undo::ModifyMulticenterBondField { .. }
-            | Undo::ModifyNoncovalentBondField { .. }
-            | Undo::ModifyStereoAtomField { .. }
-            | Undo::ModifyStereoBondField { .. }
-            | Undo::RestoreAtomConstraint { .. }
-            | Undo::RestoreBondConstraint { .. }
-            | Undo::RestoreDativeBondConstraint { .. }
-            | Undo::RestoreAromaticSystemConstraint { .. }
-            | Undo::RestoreMulticenterBondConstraint { .. }
-            | Undo::RestoreNoncovalentBondConstraint { .. }
-            | Undo::RestoreStereoAtomConstraint { .. }
-            | Undo::RestoreStereoBondConstraint { .. }
-            | Undo::RemoveAddedMoleculeConstraint { .. }
-            | Undo::RestoreMoleculeConstraints(_) => {
-                editor.molecule.apply_undo(undo);
-                continue;
-            }
-        }
-        let compaction = MoleculeCompaction::new(
-            GraphCompaction::new(atoms, bonds),
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            stereo_atoms,
-            stereo_bonds,
-        );
-        let _ = editor.correspondence.compact_right(&compaction);
-        editor.molecule.apply_undo(undo);
-    }
-}
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -422,15 +99,15 @@ mod tests {
         DativeBondFieldChange, DativeBondHandle, Edit, EntityHandle, MulticenterBondFieldChange,
         MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle,
         RemovedAromaticSystem, RemovedAtom, RemovedConstraint, RemovedOverlays,
-        StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange, StereoBondHandle,
+        StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange, StereoBondHandle, Undo,
     };
-    use crate::ir::entity::Entity;
+    use crate::ir::entity::{Entity, EntityKind};
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId, StereoBondId,
     };
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::{Molecule, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries, Transaction};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,

@@ -8,7 +8,6 @@
 use std::mem;
 use std::sync::Arc;
 
-pub use transact::{Transaction, TransactionError};
 use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCompaction};
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};

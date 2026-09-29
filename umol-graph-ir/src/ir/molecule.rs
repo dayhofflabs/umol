@@ -6,11 +6,12 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 pub use build::MoleculeBuilder;
-pub use editor::{MoleculeEditor, Transaction, TransactionError};
+pub use editor::MoleculeEditor;
 pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
+pub use transact::{Transaction, TransactionError};
 use umol_graph_core::{
     Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, NodeId,
     UnionFind,
@@ -62,6 +63,7 @@ pub(crate) mod integrity;
 mod pushout;
 mod remap;
 pub mod spec;
+mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
