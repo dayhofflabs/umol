@@ -32,56 +32,10 @@ the statuses recorded here remain authoritative.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
   first OIDC-authenticated release, CI runtime, published Rust and Python
   documentation, and the eventual arXiv link.
-- [213 - Molecule and reaction mutation](213-editor-overlay-storage-2026-08-27.md)
-  has a settled execution API, consumer mappings, ownership experiments, and a
-  staged implementation plan; S0a–S0b and S1a–S1c are complete. S1d and S0c are
-  reverted. S2 is complete: consumer checks, entity views, caller migration,
-  and callback removal. S2i1 removed the checked molecule constraint view;
-  S2l migrated Python callers and S2m removed the Rust callbacks.
-  The earlier S2b implementation is reverted; the proposed join migration is
-  withdrawn and S2f is cancelled. Revised S2b is complete: NoJoinError names the
-  Rust unit error and Python join exception. S2c's bounded coset-operation fixes
-  and S2d's role-only incidence/count-aware consumers are complete. S2g's
-  frame-consumer checks, S2h's aggregate-integrity changes, and S2i1 are complete.
-  S2i2–S2i5 are complete, including separate mutable molecule/editor view types.
-  All eight entity-view families have aligned id/attribute accessors. S2j's local
-  getters and editor structural mutations are complete. S2k1's in-place DSL
-  conversion, S2k2's Rust caller migration, and S2l's Python assignment/read-only
-  molecule constraint access are implemented. S2m closes the stage with strict
-  lint and rustdoc, property/conformance suites, and Python tests passing.
-  S3a1 adds the structural Edit/Undo payloads and dative factors. S3a2 removes
-  discarded stereo constraint updates during Edit construction. S3a3 adds
-  per-entity Edit DSL `replace-*` operations. S3b wires replacement edits and
-  undo through editor views and migrates dative journals. Replacement Deltas are
-  withdrawn; S3c/S3d remove their support while retaining the approved reaction
-  naming, semantics, and dative-factor migration. Focused graph-ir tests,
-  properties, Clippy, and rustdoc pass. S3e completes the Python Edit migration;
-  binding/Python suites and workspace all-target checking pass. S3f's graph-core
-  bulk additions, S3g's relation-set bulk additions, and S3h's typed-overlay extend
-  methods are implemented and verified. S3i's Molecule/editor bulk additions are
-  complete, as are S3j's mutable correspondence methods and caller migration.
-  S4a1's Molecule restoration methods and S3k's index-arithmetic cleanup are
-  complete. S4a2's constraint storage and undo restoration wiring and S4b1's
-  Molecule mutation delegates are complete. S4b2 completes the editor direct-mutation
-  surface. S4b3 moves single-entry execution and lazy handle state to Molecule.
-  S4b4 wires addition execution and removes the addition-undo adapters. S4b5
-  wires removal and constraint compaction; S4b6 wires field edits and replay
-  through mutable views. S4b7 wires constraint execution and replaces boxed
-  inverse Edits with explicit Undo variants. S4b8 completes replay and fixes
-  unrelated-history rollback with a local restoration count guard.
-  S4b9 consolidates the entity-set implementations and names their mapping-returning
-  methods compact. S4d completes single-entity entries and comparison migration;
-  strict lint and rustdoc pass. S5a's scoped transaction lifecycle and prepared-
-  batch Molecule methods and S5b's graph-ir caller migration are complete.
-  Graph-ir checks pass. S5c's graph-operation migration, S5d1's Edits consumption,
-  and S5d2's accessor counters and Storage names are implemented. S5d3 completes
-  prepared-batch Python transactions and the workspace stage gate. S6a implements
-  the owning editor interfaces; S6b1 migrates graph-ir callers and removes editor
-  session correspondence. S6b2 rewrites combine_from through Molecule methods.
-  S6c1 implements transformation plans and borrowed execution. S6c2 completes
-  the remaining Rust caller migration. S6d1–S6d3 complete Python Molecule
-  consumption and editor publication; the S6 workspace gate passes. S7a implements
-  consuming and borrowed resolution/projection; S7b makes reports opt-in. S7c is next.
+- [166 — Molecule operations](166-molecule-ops-2026-07-27.md) resumes after
+  completion of [213](213-editor-overlay-storage-2026-08-27.md): implement hydrogen
+  folding/unfolding, correct lift_constraints, and address the recorded naming work. The mutation
+  and restoration prerequisites are implemented and verified.
 - [227 — Repository structure and hygiene at scale](227-repository-structure-hygiene-2026-09-10.md)
   records the structural program: test relocation, mechanical checks, the crate split, and the
   tiered change gate; doc 117 §5 records the participant algebra it depends on.
@@ -252,7 +206,7 @@ the statuses recorded here remain authoritative.
 | [163-release-preparation-2026-07-26.md](163-release-preparation-2026-07-26.md)                                   | In Progress   | 2026-08-16   | 0.6.0 collateral, metadata, CI, and resumable crates.io publication are prepared; registry credentials, CI runtime tuning, and release execution remain. |
 | [164-dsl-edn-worklist-2026-07-27.md](164-dsl-edn-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated DSL, EDN, specification, and parsing-infrastructure work.                                     |
 | [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
-| [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | In Progress   | 2026-09-25   | Continue molecule/reaction mutation design and editor delegation in doc 213, then return here for operation work and hydrogen folder/unfolder. Stereo resolver/validator naming review and DelocalizeCharge → ChargeDelocalizer are also recorded here. |
+| [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md) | In Progress | 2026-09-29 | Mutation infrastructure is complete in 213; return to hydrogen folding/unfolding, the deferred lift_constraints correction, and recorded operation naming work. |
 | [167-graph-alg-execution-2026-07-27.md](167-graph-alg-execution-2026-07-27.md)                                   | Completed     | 2026-07-27   |                                                                                                            |
 | [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-08-29   | Crate boundaries, visibility, re-exports, errors, and diagnostics; includes `Normalize` error typing and one private-link rustdoc correction. |
 | [169-dsl-metadata-context-2026-07-27.md](169-dsl-metadata-context-2026-07-27.md)                                 | Completed     | 2026-07-28   |                                                                                                            |
@@ -299,7 +253,7 @@ the statuses recorded here remain authoritative.
 | [210-relaton-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                              | Superseded    | 2026-08-26   |                                                                                                            |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Completed     | 2026-09-04   |                                                                                                            |
-| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | In Progress | 2026-09-29 | Continue S9b: compare final benchmarks with S0 and run the final workspace gates. |
+| [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md) | Completed | 2026-09-29 | |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Completed     | 2026-08-31   |                                                                                                            |

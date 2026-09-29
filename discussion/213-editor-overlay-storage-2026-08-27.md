@@ -1,6 +1,6 @@
 # 213 — Molecule and reaction mutation
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-27
 Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [166](166-molecule-ops-2026-07-27.md),
@@ -13,111 +13,85 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
-## Design status — 2026-09-29
+## Completion — 2026-09-29
 
-This document owns the molecule/reaction mutation redesign. S0a–S0b, S1a–S1c,
-S2a, the revised S2b, S2c, S2d, S2g, S2h, and S2i1 are implemented. The previous S2b mutable-view
-attempt was reverted. S2i2–S2i4 are complete; the migration compiles and its
-verification passes. S2i5 is complete: mutable molecule/editor views are separate
-types. All eight entity-view families expose private ids and attribute borrows
-through matching accessors. Stereo views use the owning sets for site and ligand
-access; their ligand frames are borrowed. S2j is complete for all eight entity
-families: matching local getters and editor-only structural mutation are implemented.
-S2k1's in-place DSL conversion, S2k2's Rust callback caller migration, and S2l's
-Python assignment and read-only molecule constraint access are implemented.
-S2m removes the remaining mutation callbacks and closes S2; S2f is cancelled.
-S3a1–S3b are implemented. Replacement Deltas are withdrawn; the nine replacement
-Edits and their Undo variants remain. S3c/S3d record the selective removal and
-retained reaction integration; both are verified. S3e completes the Python Edit
-migration. S3f's graph-core bulk additions, S3g's relation-set bulk additions,
-and S3h's typed-overlay extend methods are implemented. S3i's Molecule/editor bulk
-additions and S3j's mutable correspondence methods are implemented. S3k's
-index-arithmetic cleanup is complete across graph-core, graph-ir, and graph.
-S4a is complete: undo restoration calls Molecule and constraint storage methods.
-Editor batch loops remain under the editor module; single-edit execution and
-handle state are in molecule::apply. Fields remain private and internal Molecule
-mutation methods use pub(crate). S4b is complete: S4b9 consolidates the entity-set
-implementations and names their mapping-returning compaction methods compact.
-S4d is complete: comparable single-entity entries live in their owning entity
-modules, and both Edit execution paths use specialized framed_eq implementations.
-S5a is implemented: scoped transactions provide immediate batch application,
-checked probes and commit, rollback, and optional correspondence. Molecule's
-prepared-batch conveniences use the same lifecycle. S5b's graph-ir caller and
-test migration is complete; graph-ir passes its checks. S5c's borrowed graph
-operations use scoped transactions and pass the graph checks. S5d1 implements
-Python Edits consumption. S5d2 implements accessor counters and Storage names.
-S5d3 implements prepared-batch Python transactions; S5 is complete.
-S6a implements consuming edit/application and checked probe/finish publication.
-S6b1 migrates graph-ir callers and removes editor session correspondence. S6b2
-rewrites combine_from to append through Molecule methods. S6c1 implements the
-transformation plans and borrowed execution. S6c2 completes the remaining Rust
-caller migration. S6d1–S6d3 complete Python Molecule consumption, fallible owner
-access, and editor finish; the S6 workspace gate passes. S7a implements consuming
-resolve/project and recovering resolve_into/project_into, with shared phase plans.
-S7b makes resolver reports opt-in and skips report-only work on ordinary paths.
-S7c moves ingest, MOL parse, and export candidates through consuming resolution
-and projection; ingestion underdetermination has no report payload in Rust or Python.
-S7d implements consuming and borrowed Python resolution; explicit report methods
-return (solution, report), and Solution has no report field. S8a implements the
-Transformer trait and caller migration; S8b supplies the three consuming
-implementations and completes S8's verification. S9a reconciles the living guides
-and public documentation with the implemented lifecycle; S9b is next.
-Graph-core mutation and restoration are complete in
-[166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
-that integration, return to 166 for the operation changes and hydrogen folding.
-Doc 228 is unchanged by this review and its withdrawn ownership migration is not
-an implementation dependency.
-
-[232](232-view-accessors-2026-09-26.md) separately reviews id names, collection
-return shapes, accessor allocations, and graph algorithms in views. It does not
-reopen S2i or block S2j.
+The agreed S0–S9 implementation is complete. Final workspace, feature-suite,
+Python, lint, rustdoc, formatting, and Rust 1.87 gates pass. S9b records the
+paired S0/final benchmarks, including the dense resolver's recovery cost and
+retained journal memory. No temporary experiment files are required.
 
 | Area | Status | Concrete position |
 | --- | --- | --- |
-| Storage delegation, participant methods, Edit/Undo variants, local getters | Settled design; S1a–S1c complete | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
-| Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
+| Storage delegation, participant methods, Edit/Undo variants, local getters | Implemented | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
+| Editing and recovery | Implemented | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
 | resolve/project/transform consumers | S7 and S8 complete | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
 | Molecule attribute methods | Implemented; S2 complete | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Mutation callbacks are removed. |
 | Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
 | Molecule-level constraint mutation | Implemented; S2 complete | Molecule::constraints provides reads; the editor exposes &mut Constraints. Python molecule constraint entries and iteration are lazy and read-only. try_modify_constraints is removed. |
-| Transaction correspondence | Settled design | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
+| Transaction correspondence | Implemented | tracked_commit returns the whole transaction's correspondence. Omit Transaction::tracked_apply unless a concrete need for intermediate tracking arises. |
 | Python bindings | S5d, S6d, and S7d complete | Molecule.transact and tracked_transact submit prepared Edits under a borrowed transaction. Molecule edit/apply/tracked_apply consume; editor finish publishes. Resolution exposes consuming and borrowed methods, with reports returned separately on request. Owners and views enforce consumption/invalidation. |
-| Edits and multiple batches | Settled | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
-| Mutation errors | Settled design | Retain application/integrity categories and chemistry outcomes; add Aborted and remove obsolete rollback failures. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
+| Edits and multiple batches | Implemented | Edits accumulates one sequence. Multiple batches execute through separate Transaction::apply calls under one commit/rollback boundary. No independent-batch composition API on Edits. |
+| Mutation errors | Implemented | Application/integrity categories and chemistry outcomes remain distinct; Aborted replaces continued use after application failure. ResolveError::Apply and ProjectError::Apply carry MoleculeApplyError. |
 
-The staged implementation plan below sequences these contracts and integration
-obligations. S0a–S0b record the baseline and additive Solution type; S1a–S1c add
-typed-set mutation for all six overlay kinds. The interrupted S1d changes were
-reverted. The S0c attempt is also reverted: removing Molecule mutation removed
-useful editing APIs without an adequate replacement, particularly in Python.
-The revised access model retains Molecule mutable views. S2 sequences the
-replacement APIs, caller migration, and callback removal. The previous S2b
-implementation, field interfaces, added errors, and checked entity-constraint
-API were reverted.
-The [bounded study](#fieldframe-agreement-first-use-study--2026-09-24) records
-the consumer changes enabling unchecked attribute assignment. The revised design
-keeps molecule/editor views separate for both immutable and mutable access.
-S2i5 removed the mutable-view const parameter without changing typed editor storage
-or attribute assignment. S2j implements the local-getter inventory and editor-only
-structural mutations below for all eight entity families.
-The lift_constraints defect and its undetermined-stereo policy are a separate
-focused correction, recorded under
-[other operations](#other-moleculereaction-operations).
+The staged plan retains the reverted and cancelled subitems and their replacements;
+none remains an outstanding implementation task. Graph-core storage work from
+[166](166-molecule-ops-2026-07-27.md) is integrated. Return there for molecular
+operations, including hydrogen folding/unfolding, the deferred lift_constraints
+correction, and the recorded naming work.
+[231](231-view-arguments-2026-09-25.md) and
+[232](232-view-accessors-2026-09-26.md) own the separate view reviews. Doc 228's
+broader Python review remains separate; it is not a dependency of this closeout.
 
-Replacement verbs and payloads in the Edit DSL are approved in S3.
-Python consumption, counter-based accessor invalidation, and storage names are
-approved below. S2b is complete: Rust's unit error is NoJoinError and Python
-join raises NoJoinError. S2c's bounded coset-operation fixes and S2d's role-only
-incidence/count-aware consumers are complete. S2f is cancelled. S2g's frame-consumer
-checks, S2h's aggregate-integrity changes, and S2i1–S2i5 are complete. S2j is
-complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
-and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
-approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
-and S4b are complete. S4d's caller migration and comparison optimization are
-complete; S4b9 closes the strict lint gate. S5a–S5d3 are complete, including
-Python runtime verification. S6a–S6b2 implement the owning editor, migrate
-graph-ir callers, and rewire combine_from. S6c1–S6c2 complete the remaining Rust
-caller migration. S6d1–S6d3 complete Python ownership and the S6 gate; S7a is next.
+## Addendum — Recovery strategy handoff, 2026-09-29
+
+The implementation is complete, but the performance rationale for journal-based
+recovery needs reassessment. The argument that journals grow with changes while
+cloning grows with the molecule remains relevant to sparse edits; it does not
+establish that journals are preferable for resolution, which changes many fields.
+
+The [S9b same-revision comparison](#s9--contract-and-performance-closeout) uses
+the same current resolver for consuming resolution without recovery, cloning
+followed by consuming resolution, and journal-based resolution. On the tested
+8- and 88-atom inputs, the journal takes 14–23% longer than clone-based recovery.
+For the uniquely owned 88-atom input, the three routes take approximately
+363 / 366 / 419 µs and peak at 216 / 233 / 852 KiB of extra heap, respectively.
+Clone-based recovery therefore costs little over the destructive route in this
+fixture and substantially less than the current journal. Molecule::clone shares
+storage; these measurements include the subsequent copies of mutated buffers.
+They are not measurements of an eager deep copy.
+
+Three questions must remain distinct in the handoff:
+
+1. **Size of each Undo.** The enum occupies 752 bytes per entry even for a small
+   field change. Vec capacity adds further cost: the dense resolver retains
+   584 entries in capacity 1,024, occupying 770,048 bytes before nested payloads
+   and the Vec header. Some representation and capacity overhead may be
+   reducible. That alone does not establish that an optimized journal would
+   outperform cloning.
+2. **Number of Undo entries.** The 8-atom fixture records 46 entries; the
+   88-atom fixture records 584. Even the small fixture is not a sparse-edit
+   workload. Smaller entries would still leave this recording and replay work.
+   Whether fewer entries can preserve the required edit and rollback semantics
+   is unresolved; no coalescing or change of edit granularity is approved.
+3. **Choice of recovery mechanism.** Optimizing Undo is not the only possible
+   response. Clone-based recovery already performs better on these resolution
+   fixtures and preserves the borrowed original on rejection. The follow-up
+   must consider whether journaling is appropriate for the operation at all,
+   rather than assume its representation is the only problem. This finding
+   does not settle the choice for operations with few edits or other consumers.
+
+Recovery semantics are separate from the mechanism: a borrowed recovering
+operation must preserve the original on failure and must not publish an invalid
+intermediate molecule. The no-recovery route has a different contract and serves
+as the cost comparison, not a substitute for those guarantees. Both the S0 and
+final borrowed resolvers preserve the original on failure; the final journal
+does not add a guarantee absent from S0.
+
+The measurements cover successful resolution; failure and rollback times were
+not measured. S9b retains the fixtures, revision, method, and allocation results
+needed for the handoff; scratch files are not required. No revised recovery
+strategy or API change is selected here. Reassessing that choice does not reopen
+the completed implementation subitems.
 
 ## Editor and transaction API
 
@@ -511,9 +485,10 @@ result. split builds fresh components; combine/combine_all build fresh aggregate
 None needs recovery of a rejected local candidate. combine_from must migrate
 from its move-out/editor route without an initial recovery clone; append/count
 checkpoints for internal panics are not required. inline_constraints already plans meets before
-writes and needs no journal merely for centralization. lift_constraints has a
-reproduced drain-before-panic defect; move its admission before writes and settle
-its undetermined-stereo policy as a focused operation correction.
+writes and needs no journal merely for centralization. The reproduced
+lift_constraints drain-before-panic defect and its undetermined-stereo policy
+remain a focused operation correction in [166](166-molecule-ops-2026-07-27.md#next-steps-after-relation-storage--updated-2026-09-29),
+excluded from this implementation plan.
 
 Normalize, reframe, remap, and canonicalize retain their established contracts.
 Reaction/ReactionSpan definition editing continues through existing parts/entries
@@ -1443,7 +1418,7 @@ remove_topology, tracked_remove_topology, and restore_topology. The other
 internal Molecule mutations delegate one operation to one owning component.
 Editor and transaction execution use these private methods whether they own or
 borrow the molecule. Delegation does not combine overlay, topology, and
-constraint changes, resolve Edit handles, check offered old values, or record
+constraint changes, resolve Edit handles, check old values, or record
 undo. Their composition remains explicit in edit execution.
 All editor and transaction writes, including undo, go through Molecule mutation
 methods or mutable views obtained from Molecule. Molecule owns view construction;
@@ -1688,7 +1663,7 @@ handles and check all preconditions before writing, then use the shared mutation
 surface. Remove the sixteen apply_modify_*_field / apply_modify_*_constraint
 helpers from the edit interpreter; do not move or recreate them on Molecule.
 Field changes use ordinary assignment through attributes_mut after checking the
-offered old value. Entity-level constraints use the stored constraint collection.
+old value. Entity-level constraints use the stored constraint collection.
 Journaled execution additionally retains the inverse change. This follows the
 existing separation between edit checks and mutation for additions/removals;
 no new per-field mutation methods are required.
@@ -1715,20 +1690,20 @@ transformations already use storage participant permutation. Undo of additions
 uses only the private untracked removal primitives; undo of removals needs the
 restoration capability below.
 
-Existing offered-old comparisons align participants and transport payloads into
+Old-value comparisons align participants and transport payloads into
 the stored frame. Preserve the direction to[i] = from[action[i]]; ordinary
 unordered factors use DynPermutation and stereo uses bounded Permutation.
 Stereo-bond alignment may reorder within endpoint blocks or exchange whole
-blocks, but cannot move one ligand between blocks. Their internal placement is
-not part of the settled public API; no public comparator or generic trait is
-proposed.
+blocks, but cannot move one ligand between blocks. The owning entity modules
+provide entry values with specialized framed_eq implementations; Edit execution
+uses those comparisons without a separate family of molecule-level helpers.
 
-### Removal rollback: current implementation
+### Removal rollback
 
-The current editor saves removed entries, compactions, and cascaded constraints,
-then reconstructs graph/relation rows during undo. validate_undo precedes those
-reconstruction methods. The changes below replace this reconstruction and checker
-with storage restoration and local access guards; they are not yet implemented.
+Transactions retain removed entries, compactions, and cascaded constraints.
+Molecule::apply_undo delegates restoration through Molecule methods to graph,
+relation, and constraint storage. Attribute restoration and saved-data access
+use local guards; there is no aggregate validate_undo pass.
 
 ### Restoration and local guards
 
@@ -1745,9 +1720,8 @@ An accepted equivalent old value may be retained in Undo; capturing its original
 encoding is not required. Participant sequence comparison and graph-core storage
 restoration retain their exact contracts.
 
-This changes the current structural-rejection contract. Remove
-RollbackStateMismatch and the Result used solely to report rollback mismatches.
-RollbackFailed is likewise unnecessary once internal undo follows this contract.
+Rollback has no RollbackStateMismatch or RollbackFailed variant and no Result
+used solely to report mismatched history.
 Forward edit errors and old-state checks remain: forward edits are independently
 supplied requests, whereas undo restores changes already recorded by the operation.
 
@@ -1787,12 +1761,11 @@ They do not treat every allocation or existing Arc detachment as an editor copy.
 | Borrowed transaction | Undo entries plus removal/cascade metadata across all phases. | Batch realization, mutation, checked probes, final gate; discard journal on acceptance. | Reverse the whole operation. |
 | Independent product | One output candidate, required because source survives success. | Owning direct/batch route plus COW from source sharing. | Drop candidate; source was never changed. |
 
-Batch realization is not free. Currently each ApplicationState allocates initial
-handle vectors for all entity kinds, and every editor allocates full session
-correspondence. The design removes unconditional session correspondence. Keep
-initial batch handles as identity-by-count until a removal requires translation;
-keep created-handle vectors only for actual creations. At the first affected
-compaction, materialize the required mapping for that entity kind and update it.
+Batch realization is not free. ApplicationState keeps initial batch handles
+as identity-by-count until a removal requires translation; created-handle vectors
+contain only actual creations. At the first affected compaction it materializes
+the required mapping for that entity kind. Editors do not allocate unconditional
+session correspondence.
 Thus field-only batches need no receiver-sized handle vector; removal can still
 require receiver-sized work. This preserves handle semantics without pretending
 that compaction and incidence maintenance are proportional only to removed rows.
@@ -1802,8 +1775,9 @@ atoms the copied atom/bond tables requested about 16.5/7.6 KiB, while an isolate
 Undo entry occupied 752 bytes. They do not establish that the journal is always
 smaller. At the current enum size, 88 separate field records already require
 66,176 bytes for entries alone, before nested payloads and compactions. That is an
-arithmetic illustration, not a measured full resolver workload. Dense resolution
-and kekulization must not be described as necessarily cheaper than copying.
+arithmetic illustration. S9b measures 584 entries and 770,904 retained bytes for
+its dense resolver fixture. Dense resolution and kekulization must not be
+described as necessarily cheaper than copying.
 
 Retain the existing Undo representation except for the planned structural
 replacement variants and replacement of ApplyEdit with nine explicit constraint
@@ -1832,7 +1806,7 @@ rollback-mismatch/error protocol as already settled above. Undo remains public;
 the transaction's journal, status, and scope guard are private and cannot be
 substituted by the caller. There is no partial-edit recovery record.
 
-Field execution accepts normalized equality with the offered old value. Reversing
+Field execution accepts normalized equality with the old value. Reversing
 that accepted change is consistent with rollback modulo normalized_eq: restoring
 a literal in place of an equivalent singleton literal set is permitted. Retain
 this comparison and undo behavior; no extra capture of the original encoding is
@@ -3028,7 +3002,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   rustdoc for graph-ir/graph with warnings denied, nightly formatting, and
   git diff --check. Malformed aggregate tests remain in S2h.
 
-- **S2h — Attribute agreement leaves aggregate integrity**
+- **S2h — completed — Attribute agreement leaves aggregate integrity**
   (`ir::{molecule::integrity,stereo::integrity,reaction::integrity,reaction_span}`,
   constructor/publication callers, electron-use/getter documentation, consumer
   regression tests, and guides; breaking accepted-input change, red→green).
@@ -3129,14 +3103,14 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   against a rebuilt Python 3.13 extension. Strict Clippy and rustdoc passed for
   graph-ir/graph/io; nightly formatting and git diff --check passed.
 
-- **S2i — Uniform mutable attribute access and typed editor storage**
+- **S2i — completed — Uniform mutable attribute access and typed editor storage**
   (`ir::{view,molecule,molecule::editor}`, ir exports; group; S2i1–S2i5 complete).
   [dep: S1a, S1b, S1c, S2h]
 
   S2i1–S2i5 are complete. S2i5 separates the mutable view types; S2j adds getters
   and structural methods.
 
-- **S2i1 — Retire the public checked constraint view**
+- **S2i1 — completed — Retire the public checked constraint view**
   (`ir::{molecule,view}`, graph-IR callers/tests; breaking, red→green).
   [dep: S2a, S2h]
 
@@ -3170,7 +3144,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   at 128 cases. Strict Clippy, rustdoc with warnings denied, nightly formatting,
   and git diff --check passed.
 
-- **S2i2 — Shared mutable-view types and Molecule access** (`ir::{view,molecule}`, exports; breaking, green at S2i4). [dep: S1a, S1b, S1c, S2i1]
+- **S2i2 — completed — Shared mutable-view types and Molecule access** (`ir::{view,molecule}`, exports; breaking, green at S2i4). [dep: S1a, S1b, S1c, S2i1]
 
   **Implemented record; type sharing is superseded by S2i5.** The signatures
   below describe the completed implementation, not the target view design.
@@ -3284,7 +3258,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   Removed the separate mutable editor-view types. Added 16 attribute/constraint
   cases across both specializations and eight invalid-id cases.
 
-- **S2i3 — Editor storage and view delegation** (`ir::molecule::editor`; breaking, green at S2i4). [dep: S2i2]
+- **S2i3 — completed — Editor storage and view delegation** (`ir::molecule::editor`; breaking, green at S2i4). [dep: S2i2]
 
   Store the editor's draft in its Molecule field, using the six existing typed
   overlay sets rather than *Store wrappers. This private storage restructuring
@@ -3314,7 +3288,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   The wrapper-materialization tests are removed with their types; existing
   publication/error and frame-equivalence tests remain.
 
-- **S2i4 — Slice additions and caller migration** (editor callers across Rust/Python; breaking, red→green). [dep: S2i3]
+- **S2i4 — completed — Slice additions and caller migration** (editor callers across Rust/Python; breaking, red→green). [dep: S2i3]
 
   Direct editor additions use slices for variable-length atom/donor/ligand
   lists, consistently with the typed sets and the replacement methods in S2j.
@@ -3384,7 +3358,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   - Graph-IR rustdoc with warnings denied and doc-tests pass. Nightly formatting,
     full diff review, and git diff --check pass.
 
-- **S2i5 — Separate molecule and editor mutable views**
+- **S2i5 — completed — Separate molecule and editor mutable views**
   (`ir::{view,molecule,molecule::editor}`, exports and explicit view-type callers;
   breaking, red→green). [dep: S2i4]
 
@@ -3689,7 +3663,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   structural publication rejection. No test should expect publication failure
   solely for an electron-length or coset-index disagreement.
 
-- **S2k — Rust callback caller migration** (`dsl::molecule`,
+- **S2k — completed — Rust callback caller migration** (`dsl::molecule`,
   `umol-graph::ops::transform::delocalize_charge`, remaining Rust callers;
   breaking rewire, red→green). [dep: S2i, S2j]
 
@@ -3783,7 +3757,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   blocked by those methods pending S2m. Nightly formatting and diff checks pass;
   full diff reviewed. Python callers and the transformer rename are unchanged.
 
-- **S2l — Python assignment for every entity kind**
+- **S2l — completed — Python assignment for every entity kind**
   (`umol-py::{atom,bond,dative,aromatic,multicenter,noncovalent,stereo,molecule,constraint}`;
   binding rewire, red→green). [dep: S2a, S2i, S2j]
 
@@ -3852,7 +3826,7 @@ cancelled. S2c's bounded operation fixes and S2g's frame-consumer policy are app
   the four unused Rust callback methods still block warnings-denied lint until
   S2m removes them. Nightly formatting and diff checks pass; full diff reviewed.
 
-- **S2m — Remove callback mutation and close the stage**
+- **S2m — completed — Remove callback mutation and close the stage**
   (`ir::molecule`, remaining Rust/Python callers, public documentation;
   breaking removal, red→green). [dep: S2a, S2k, S2l]
 
@@ -3937,10 +3911,10 @@ Retain the Edit DSL's existing handle resolution. Single-position replacement,
 insertion, and removal need no additional Edit variants or DSL operations.
 The reaction DSL retains its addition, removal, and modification vocabulary.
 
-- **S3a — implemented** (`ir::edit`, `dsl::edit`; group; breaking, green at S3e)
+- **S3a — completed** (`ir::edit`, `dsl::edit`; group; breaking, green at S3e)
   [dep: S2i]
 
-- **S3a1 — Structural Edit/Undo variants and dative factors** (`ir::edit`; breaking, green at S3e). [dep: S2i]
+- **S3a1 — completed — Structural Edit/Undo variants and dative factors** (`ir::edit`; breaking, green at S3e). [dep: S2i]
 
   **Semantics.** Add batch representations of structural replacement, which
   Edit currently cannot express. Each edit replaces one complete named component;
@@ -4034,7 +4008,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   or lack the new Undo arms. S3b, S3d, and S3e migrate those consumers before
   the S3 green gate.
 
-- **S3a2 — Stereo update construction** (`ir::{edit,stereo}`; additive cleanup, within the S3 migration). [dep: S3a1]
+- **S3a2 — completed — Stereo update construction** (`ir::{edit,stereo}`; additive cleanup, within the S3 migration). [dep: S3a1]
 
   **Stereo update construction cleanup** (`ir::{edit,stereo}`). In both
   Edits::update_stereo_atom and update_stereo_bond, replace
@@ -4059,7 +4033,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   retain their complete-form behavior. Formatting and diff checks pass. The
   S3a1 consumer errors still prevent compilation until the S3 migrations.
 
-- **S3a3 — Edit DSL `replace-*` operations** (`dsl::edit`; breaking, green at S3e). [dep: S3a1, S3a2]
+- **S3a3 — completed — Edit DSL `replace-*` operations** (`dsl::edit`; breaking, green at S3e). [dep: S3a1, S3a2]
 
   Extend the existing EditInput grammar and EditsDsl parse/render/conversion
   paths with :replace-atoms, :replace-donors, :replace-acceptor, :replace-site,
@@ -4089,7 +4063,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   checks pass. Tests cannot run yet because the
   planned S3 consumer migration still leaves the crate uncompilable.
 
-- **S3b** (`ir::molecule::transact`; breaking, green at S3e) Realize those edits
+- **S3b — completed** (`ir::molecule::transact`; breaking, green at S3e) Realize those edits
   through the structural methods on *EditorViewMut, obtained
   from Molecule's crate-private access introduced in S2i. Undo uses those same methods
   with the saved components. Do not reach into typed sets from edit execution
@@ -4231,7 +4205,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Edit/Undo and Edit DSL source files are unchanged by this removal. Workspace
   and Python verification is recorded under S3e.
 
-- **S3e — implemented** (`umol-py::edit`; breaking, red→green)
+- **S3e — completed** (`umol-py::edit`; breaking, red→green)
   Expose the nine replacement Edit variants with the Rust payloads and failure
   behavior; migrate exhaustive matches and add parity cases.
   Migrate existing dative Edit variants and Edits addition/removal methods to
@@ -4256,7 +4230,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   lint and documentation. Nightly formatting and full diff review pass.
   Full-workspace tests and Rust 1.87 remain at S9b.
 
-- **S3f — implemented** (`umol-graph-core::graph`; additive, green) Implement Graph::extend_nodes,
+- **S3f — completed** (`umol-graph-core::graph`; additive, green) Implement Graph::extend_nodes,
   extend_edges, and extend with the exact interfaces under Storage delegation. Return
   owned, allocation-free exact-size id iterators; mutation is eager and the
   iterators borrow neither receiver nor inputs. Preserve existing ids and append
@@ -4324,7 +4298,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   Nightly formatting and full diff review pass.
   Full-workspace tests and Rust 1.87 remain at S9b.
 
-- **S3g — implemented** (`umol-graph-core::relation::{fixed,var,fixed_fixed,fixed_var,var_var}`;
+- **S3g — completed** (`umol-graph-core::relation::{fixed,var,fixed_fixed,fixed_var,var_var}`;
   additive, green) Add public extend to all five sets, retaining individual add.
   The precise batch argument for each set is in the relation-extend table under
   Storage delegation: an owned Vec of its factor/payload tuples, with variable
@@ -4789,7 +4763,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   denied, warnings-denied rustdoc, nightly formatting, and diff checks/review
   pass. Workspace/Python rebuilds and Rust 1.87 remain at S9b.
 
-- **S4b — Molecule delegation and Edit/Undo execution** (group; breaking,
+- **S4b — completed — Molecule delegation and Edit/Undo execution** (group; breaking,
   green at S4b8; cleanup at S4b9). [dep: S4a, S3i]
 
   Execute S4b1–S4b9 in order. The complete editor inventory is in S4b2;
@@ -5240,7 +5214,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 - **S4b6 — completed 2026-09-28** (`ir::molecule::apply`; rewire, green at S4b8). [dep: S4b5]
 
   **Attribute changes.** Resolve the target, read the selected field through
-  its view, and require normalized_eq with the offered old value before writing.
+  its view, and require normalized_eq with the old value before writing.
   A mismatch is OldStateMismatch. Assign new through the access below. Capture
   the resolved id and inverse FieldChange in the corresponding Undo::Modify*Field
   variant. Replay assigns the inverse change's new value through the same view,
@@ -5267,7 +5241,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   **Implemented — attribute execution.** The eight field wrappers are removed.
   Both Edit executors select and assign fields directly through the listed
   mutable views. Journaled execution clones only the new field value and moves
-  the offered old value into the inverse change. Field replay assigns the saved
+  the old value into the inverse change. Field replay assigns the saved
   value without comparing old state, with local target bounds guards.
 
   Fifty-four cases cover every FieldChange member in both execution paths,
@@ -5318,7 +5292,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   ```
 
   Record the resolved id, the key derived from old or new, and the accepted old
-  optional constraint. Retaining an equivalent offered old value follows the
+  optional constraint. Retaining an equivalent old value follows the
   settled normalized_eq restoration contract. Replay uses the listed mutable
   view: Some(saved) calls constraints.set(saved); None calls
   constraints.remove(key). Guard target access without checking an expected
@@ -5355,7 +5329,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   restoration, and the no-op journal case.
 
   **Implemented — constraint execution.** Both Edit executors check keys and
-  offered old values inline, then call set/remove through entity mutable views.
+  old values inline, then call set/remove through entity mutable views.
   The eight constraint wrappers and Undo::ApplyEdit are removed. Eight explicit
   constraint undos retain the resolved id, key, and accepted old optional value;
   replay restores through the same views with local target guards. Molecule
@@ -5508,7 +5482,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
   which owns it. No unused recovery machinery or temporary public API is added
   at the S4 green boundary.
 
-- **S4d — Single-entity entries and comparison** (group; additive types,
+- **S4d — completed — Single-entity entries and comparison** (group; additive types,
   then caller migration; green). [dep: S1a, S1b, S1c]
 
   S4d1–S4d6 are additive to the owning sets and can precede S4b closeout.
@@ -5816,7 +5790,7 @@ The reaction DSL retains its addition, removal, and modification vocabulary.
 S5a removes APIs used by S5b–S5d; those migrations are required before the stage
 returns green. S5d's Python invalidation and sequential input-consumption contracts are recorded above.
 
-- **S5a — Scoped Rust transaction lifecycle** (group; breaking, green at
+- **S5a — completed — Scoped Rust transaction lifecycle** (group; breaking, green at
   S5d3). [dep: S4b, S4d7]
 
 - **S5a1 — completed 2026-09-28** — Guard, borrowed handle, and scoped run
@@ -6024,7 +5998,7 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   with both features, warnings-denied rustdoc, nightly formatting, and diff review.
   The workspace gate remains S5d3.
 
-- **S5d — Python prepared transactions and ownership** (group; breaking,
+- **S5d — completed — Python prepared transactions and ownership** (group; breaking,
   closes S5 green at S5d3). [dep: S5a, S5b, S5c]
 
   Execute S5d1–S5d3 in order. No interactive Python transaction handle is added.
@@ -6213,7 +6187,7 @@ temporary cloning adapters is not a way to close an earlier subitem.
   S6b1/S6b2. The added tests cannot execute until the graph-ir callers compile;
   no compatibility adapters were added. The workspace returns green at S6d.
 
-- **S6b — Graph-IR ownership migration** (group; breaking, green at S6d).
+- **S6b — completed — Graph-IR ownership migration** (group; breaking, green at S6d).
   [dep: S6a]
 
 - **S6b1 — completed 2026-09-28 — Graph-IR callers and correspondence** (`umol-graph-ir` reaction/molecule callers; breaking, green at S6d). [dep: S6a]
@@ -6285,7 +6259,7 @@ temporary cloning adapters is not a way to close an earlier subitem.
   library/test Clippy with proptest, nightly formatting, and diff checks pass.
   The S6 workspace gate remains at S6d.
 
-- **S6c — Chemistry and format caller migration** (group; breaking, green
+- **S6c — completed — Chemistry and format caller migration** (group; breaking, green
   at S6d). [dep: S6a, S5c]
 
 - **S6c1 — completed 2026-09-28 — Transformation plans and borrowed execution** (`umol-graph::ops`; breaking rewire, green at S6d). [dep: S6a, S5c]
@@ -6667,7 +6641,7 @@ temporary clone-based default transform implementation is introduced between the
   nightly formatting, diff checks, and full diff review pass. Scratch is empty.
   S9b retains the final performance and workspace gates.
 
-- **S9b** (workspace gates and benchmarks; additive) Compare the final direct,
+- **S9b — completed 2026-09-29** (workspace gates and benchmarks; additive) Compare the final direct,
   apply, and transaction paths with S0, including dense resolver journal size
   and the source-preserving export path. Compare the existing reaction-application
   benchmark cases against the S0 revision using the same fixtures, toolchain,
@@ -6678,42 +6652,228 @@ temporary clone-based default transform implementation is introduced between the
   closeout. Record results and update the discussion status only after the full
   scope passes. [dep: S6b, S9a]
 
-**Execution order:** completed S0a–S0b → completed S1a–S1c → S2 → S3 →
-S4 → S5 → S6 → S7/S8 → S9. S2a is implemented; its API is removed in S2i1.
-Within the revised S2:
+  **Completed — 2026-09-29.** All final gates pass. No production code changed
+  in S9b. The cumulative diff was checked against the approved storage delegation,
+  Edit/Undo vocabulary, owning-editor and borrowed-transaction boundaries,
+  integrity publication, consumer migration, and Python ownership contracts.
+  Test migration retains the public recovery, correspondence, publication, and
+  consuming/borrowed agreement laws; private undo tests cover manipulated history.
 
-- S2b, S2c, and S2d are complete; S2f is cancelled.
-  S2c → S2d establishes coset-operation and count-use behavior. S2e is folded
-  into S2h; it is not an executable prerequisite.
-- S2g depends on S2c; its interfaces and failure behavior are approved.
-- S2h removes aggregate attribute checks only after S2c/S2d/S2g
-  consumer changes are complete, then tests the newly admissible inputs through
-  public construction and those consumers before closing the subitem.
-- S2i1–S2i5 are complete, including separate mutable molecule/editor view types
-  with typed storage and unrestricted attributes. S2j is complete: matching local
-  getters and editor structural operations compile and pass their focused gates
-  without depending on S2k/S2l.
-- S2k and S2l migrate Rust and Python callers; both precede removal in S2m.
-- S3a depends on S2i; S3b requires S2j. S3c/S3d remove replacement Deltas and
-  retain reaction integration; S3e closes the Python Edit migration.
-- S3f and S3g supply graph-core bulk additions; S3g → S3h supplies typed-set
-  extend, then S3f/S3h → S3i supplies Molecule/editor bulk additions. S3j changes
-  correspondence mutation to mutable borrowing and migrates its callers.
-  S3k1–S3k4's index-overflow cleanup, S4a, S4b, and S4d are complete.
-  S4b uses the additions and the component
-  removal/restoration interfaces.
-- S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
-  scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a–S6d3, S7, S8, and S9a are complete; S9b is next.
-- S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
-- S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
-  chemistry and format callers. S6d1–S6d3 close the Python owning migration.
+  **Measurement.** S0 (`3c54cff68`, with its retained drivers from `150542096`)
+  and final (`5eed65392`) were built in isolated source copies with Rust 1.96.0
+  on aarch64-apple-darwin, the same lockfile and release/bench configuration.
+  Timings ran sequentially without concurrent builds: Criterion mean estimates,
+  10 samples, 0.1 s warmup, 0.2 s measurement, in microseconds. Setup and edit
+  construction are excluded. These short runs establish fixture-level tradeoffs,
+  not a workload-wide speedup or significance for small differences.
 
-S0c/S1d remain reverted, and the former S0d/S0e work is represented by S2i/S2j.
-Former S8c is included in S6b. The DSL payloads and Python consumption,
-invalidation, and storage interfaces remain approved. No code or source API
-change is authorized merely by writing a proposed interface in this plan.
-No speculative optimization stage is required.
+  **Editor paths.** The S0 fixtures and operations are unchanged; final direct
+  publication uses finish. Each cell is S0 → final.
+
+  | Fixture / input | Direct, µs | Apply, µs | Transact, µs |
+  | --- | ---: | ---: | ---: |
+  | sparse8 / unique | 0.392 → 0.055 | 0.468 → 0.109 | 0.598 → 0.186 |
+  | sparse8 / shared | 0.333 → 0.235 | 0.419 → 0.277 | 0.560 → 0.336 |
+  | dense80 / unique | 3.159 → 0.739 | 3.030 → 0.890 | 3.419 → 1.268 |
+  | dense80 / shared | 2.573 → 2.280 | 2.834 → 2.374 | 3.293 → 2.763 |
+
+  Allocation cells below are calls / requested bytes, again S0 → final. The
+  independent untimed System-allocator probe counts alloc, alloc_zeroed, and
+  realloc requests. Bytes are allocation traffic, not peak live memory or RSS.
+
+  | Fixture / input | Direct allocations | Apply allocations | Transact allocations |
+  | --- | ---: | ---: | ---: |
+  | sparse8 / unique | 4 / 1,696 → 0 / 0 | 6 / 1,816 → 0 / 0 | 9 / 2,688 → 1 / 3,008 |
+  | sparse8 / shared | 4 / 1,696 → 2 / 1,576 | 6 / 1,816 → 2 / 1,576 | 9 / 2,688 → 3 / 4,584 |
+  | dense80 / unique | 7 / 17,208 → 1 / 408 | 11 / 18,608 → 1 / 408 | 16 / 26,024 → 3 / 9,432 |
+  | dense80 / shared | 7 / 17,208 → 3 / 15,808 | 11 / 18,608 → 3 / 15,808 | 16 / 26,024 → 5 / 24,832 |
+
+  Unique field-only application no longer constructs receiver-sized handle or
+  correspondence arrays or detaches storage from an editor-created copy. Sparse
+  direct/apply allocate nothing; the dense direct/apply allocation is the
+  integrity check's workspace. Shared inputs still pay copy-on-write detachment.
+  Undo entry size remains 752 bytes. For one edit, Vec growth reserves
+  four entries: retained journal bytes rise from 776 to 3,032 despite the lower
+  total runtime. Eight edits retain 6,040 bytes in both revisions. The current
+  growth policy also requests the intermediate four-entry buffer before growing
+  to eight. This is visible journal overhead, not a whole-molecule copy.
+
+  **Resolution and projection.** Each cell is S0 borrowed → final borrowed →
+  final consuming. S0 resolution constructed its default report; final ordinary
+  resolution omits report-only work. Both borrowed implementations preserve the
+  input on failure. S0's edit(&self) cloned/shared storage and mutated independent
+  candidates, installing the final candidate only on Determined. The final
+  borrowed route instead records undo while mutating the receiver. The consuming
+  path drops its input on failure. These are whole-path comparisons; their
+  differences must not be attributed solely to journaling or integrity checks.
+  Cloning once and running the final consuming resolver was not timed here.
+
+  | Fixture / input | Resolve, µs | Project, µs |
+  | --- | ---: | ---: |
+  | sparse8 / unique | 12.509 → 12.389 → 9.986 | 1.408 → 1.039 → 0.668 |
+  | sparse8 / shared | 12.224 → 14.666 → 10.419 | 1.279 → 1.206 → 0.811 |
+  | dense88 / unique | 363.487 → 387.454 → 336.530 | 84.089 → 56.355 → 36.217 |
+  | dense88 / shared | 351.260 → 442.169 → 345.308 | 76.262 → 59.498 → 37.961 |
+
+  | Fixture / input | Resolve allocations | Project allocations |
+  | --- | ---: | ---: |
+  | sparse8 / unique | 83 / 39,808 → 57 / 127,848 → 52 / 34,600 | 11 / 11,024 → 4 / 12,096 → 2 / 3,072 |
+  | sparse8 / shared | 83 / 39,808 → 61 / 130,080 → 56 / 36,832 | 11 / 11,024 → 6 / 13,672 → 4 / 4,648 |
+  | dense88 / unique | 6,053 / 1,304,656 → 6,055 / 2,779,504 → 6,029 / 1,241,752 | 620 / 438,396 → 303 / 552,936 → 258 / 166,024 |
+  | dense88 / shared | 6,053 / 1,304,656 → 6,119 / 2,806,416 → 6,093 / 1,268,664 | 620 / 438,396 → 393 / 590,588 → 348 / 203,676 |
+
+  Final successful journals retain the following peaks for both input ownership
+  cases. The probe counts allocations released when the accepted journal is
+  dropped, plus its 24-byte Vec header: buffer capacity and nested payloads are
+  included, allocator metadata and temporary growth buffers are excluded.
+  Entries accumulate until commit in these fixtures, so commit retention is the
+  peak retained journal, distinct from allocation traffic above.
+
+  | Fixture / operation | Entries | Capacity | Retained bytes |
+  | --- | ---: | ---: | ---: |
+  | sparse8 / resolve | 46 | 64 | 48,152 |
+  | sparse8 / project | 8 | 8 | 6,040 |
+  | dense88 / resolve | 584 | 1,024 | 770,904 |
+  | dense88 / project | 195 | 256 | 197,432 |
+
+  Dense journal-based resolution is 7–26% slower than S0's copy-on-write
+  resolution in this run and requests about 2.8 MB instead of 1.3 MB.
+  Its 770,904-byte journal comprises 770,048 bytes
+  of entry capacity, 832 bytes of nested payloads, and the Vec header; only
+  439,168 bytes of that capacity hold live entries. Recovery has a material cost
+  on this many-edit workload. It does not invalidate operation-sized journaling
+  for sparse changes, but it rules out claiming that journals are always smaller
+  or faster than copying. No automatic clone fallback or journal redesign is
+  introduced. Owning resolution avoids this journal; ingest uses that route.
+  Projection improves on both routes, with much lower allocation traffic on the
+  consuming route. All 20 editor/borrowed-result serializations agree across
+  revisions; final consuming and borrowed results were also compared directly.
+
+  **Source-preserving export.** Smiles::convey uses the same resolved inputs,
+  SMILES valence model, Natural isotope policy, and default SMILES configuration.
+  It includes the output-candidate copy, projection, and TableIR conversion;
+  text rendering is excluded. The probe verifies that the source is unchanged.
+
+  | Fixture | Time, µs, S0 → final | Allocations, S0 → final |
+  | --- | ---: | ---: |
+  | sparse8 | 2.144 → 1.597 | 14 / 12,142 → 7 / 5,766 |
+  | dense88 | 77.824 → 44.282 | 643 / 452,226 → 371 / 217,506 |
+
+  The output copy remains necessary because the source survives success. Using
+  consuming projection on that candidate removes recovery work: dense convey is
+  about 43% faster here and requests 52% fewer bytes.
+
+  **Reaction application.** The existing six-atom aromatic fixture, rotated
+  stored atom order, electron-field delta, explicit correspondence, and matching
+  configuration are identical across revisions. All-match cases produce one
+  product. Each cell is S0 → final.
+
+  | Operation | Time, µs | Allocation calls / bytes |
+  | --- | ---: | ---: |
+  | apply_at | 3.835 → 3.301 | 78 / 9,346 → 60 / 7,850 |
+  | tracked_apply_at | 3.868 → 3.281 | 78 / 9,346 → 60 / 7,850 |
+  | apply_at_to_reaction | 16.268 → 15.094 | 326 / 44,552 → 308 / 43,056 |
+  | apply_at_to_reaction_span | 13.445 → 12.495 | 270 / 35,978 → 252 / 34,482 |
+  | apply/all_matches | 5.001 → 4.490 | 103 / 12,122 → 85 / 10,626 |
+  | tracked_apply/all_matches | 5.019 → 4.500 | 103 / 13,402 → 85 / 11,906 |
+  | apply_to_reaction/all_matches | 17.470 → 16.647 | 351 / 47,424 → 333 / 45,928 |
+  | apply_to_reaction_span/all_matches | 14.839 → 13.862 | 295 / 39,506 → 277 / 38,010 |
+
+  All eight cases save 18 allocation calls and 1,496 requested bytes, with
+  roughly 5–15% lower runtime in this run. Product construction still preserves
+  the host; it uses owning application without a recovery journal. This fixture
+  supports retaining that path, not a claim about arbitrary reaction matching.
+
+  **Same-revision recovery comparison — 2026-09-29.** This additional comparison
+  isolates the three recovery routes on current code (`5eed65392`), rather than
+  comparing the old and new resolver implementations above. All routes use the
+  same SMILES counts model, Natural isotope policy, and report-free resolver.
+  Every fixture resolves to the same molecule in all three routes.
+
+  - No recovery: consume the input with Resolver::resolve.
+  - Clone: keep the original, pass Molecule::clone to Resolver::resolve, and
+    install the result only on Determined. Cloning and installation are timed.
+    This is the existing whole-Molecule Clone operation, including copy-on-write
+    detachments during mutation, not an artificially eager deep copy.
+  - Journal: call Resolver::resolve_into, including journal construction and
+    successful disposal. Neither recovering route changes the input on rejection.
+
+  Rust 1.96.0 release builds on aarch64-apple-darwin; Criterion mean estimates
+  from 20 samples, 0.2 s warmup, 1 s measurement. Input preparation and final
+  result destruction are outside timing in all three cases. Unique inputs are
+  raised independently; shared inputs retain another owner of their initial
+  storage. The allocator probe is compiled separately, so it adds no timing
+  overhead. Measurements cover successful resolution, not failure/rollback time.
+
+  | Fixture / input | No recovery, µs | Clone, µs | Journal, µs |
+  | --- | ---: | ---: | ---: |
+  | sparse8 / unique | 10.423 | 11.067 | 13.018 |
+  | sparse8 / shared | 10.791 | 10.850 | 13.332 |
+  | dense88 / unique | 362.673 | 366.465 | 418.982 |
+  | dense88 / shared | 362.572 | 360.534 | 418.940 |
+
+  Allocation traffic sums requested alloc/alloc_zeroed/realloc bytes. Peak extra
+  Rust heap is the maximum live allocated bytes above the prepared-input baseline;
+  it includes planning, output, and recovery allocations. It excludes the input
+  already present at entry, stack storage, allocator metadata, and allocator-
+  internal realloc transients. It is not the journal-only retention measured above.
+
+  | Fixture / input | Route | Allocation calls | Requested bytes | Peak extra heap, bytes |
+  | --- | --- | ---: | ---: | ---: |
+  | sparse8 / unique | No recovery | 52 | 34,600 | 10,536 |
+  | sparse8 / unique | Clone | 56 | 36,832 | 12,112 |
+  | sparse8 / unique | Journal | 57 | 127,848 | 54,568 |
+  | sparse8 / shared | No recovery | 56 | 36,832 | 12,112 |
+  | sparse8 / shared | Clone | 56 | 36,832 | 12,112 |
+  | sparse8 / shared | Journal | 61 | 130,080 | 56,800 |
+  | dense88 / unique | No recovery | 6,029 | 1,241,752 | 221,532 |
+  | dense88 / unique | Clone | 6,093 | 1,268,664 | 238,656 |
+  | dense88 / unique | Journal | 6,055 | 2,779,504 | 872,064 |
+  | dense88 / shared | No recovery | 6,093 | 1,268,664 | 238,656 |
+  | dense88 / shared | Clone | 6,093 | 1,268,664 | 238,656 |
+  | dense88 / shared | Journal | 6,119 | 2,806,416 | 898,976 |
+
+  On these resolution workloads, clone-based recovery is cheaper than the current
+  journal implementation. The journal takes 14–23% longer than cloning. Cloning
+  adds about 6% over no recovery for unique octane; other timing differences between those two
+  routes are small or within the confidence intervals. Dense unique resolution
+  needs about 233 KiB of peak extra heap with cloning, versus 216 KiB without
+  recovery and 852 KiB with the journal. Allocations agree exactly with S9b for
+  the current journal and no-recovery paths.
+
+  Resolution changes many fields: the sparse and dense fixtures record 46 and
+  584 undo entries respectively, each occupying 752 bytes before nested payloads.
+  Whole-Molecule cloning shares storage and copies mutated buffers, while this
+  journal stores a large enum value for each field edit. The sparse-edit journal
+  advantage does not establish an advantage for full resolution. These results
+  support that distinction; they do not change the implemented recovery strategy.
+  On failure, clone recovery drops its candidate, journal recovery reverses
+  completed edits, and the no-recovery route drops the input. Those failure costs
+  were not timed. Temporary code, results, and build artifacts were removed.
+
+  **Final gates.** All commands used the Python 3.13.15 virtual environment
+  where PyO3 was involved. No production correction was needed.
+
+  | Gate | Result |
+  | --- | --- |
+  | Pinned nightly formatting | cargo +nightly-2026-06-04 fmt --all -- --check passed |
+  | Workspace tests and feature suites | PROPTEST_CASES=256 cargo test --locked --workspace --all-features --no-fail-fast: 35,689 passed, 10 ignored, including doctests and property/conformance suites |
+  | Strict lint | cargo clippy --locked --workspace --all-targets --all-features -- -D warnings passed |
+  | Rustdoc | RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --all-features --no-deps passed |
+  | MSRV | cargo +1.87.0 check --locked --workspace --all-targets --all-features passed |
+  | Rebuilt Python extension | maturin develop; pytest -q umol-py/tests: 1,901 passed, 2 skipped |
+  | Scope and whitespace | Cumulative implementation review and final git diff --check passed |
+
+  Maturin's default uv cache was inaccessible in the sandbox; rebuilding with a
+  temporary local UV_CACHE_DIR succeeded. No source change was required. Probe
+  code, source copies, logs, and outputs were removed after recording these
+  results; scratch is empty. Doc 166 owns the remaining molecular operation work.
+
+**Execution complete:** S0–S9. S0c/S1d remain reverted; S2a's temporary API
+was removed in S2i1. S2e is included in S2h, S2f is cancelled, S4c is included
+in S5a, and former S8c is included in S6b. Their records do not imply remaining
+work. Subitem outcomes above preserve the implementation and verification details.
+
 Immutable-view simplification, graph-core bond
 endpoint rewiring, intermediate transaction tracking, an interactive Python
 transaction, Undo compression, and the hydrogen operations in 166 remain outside
