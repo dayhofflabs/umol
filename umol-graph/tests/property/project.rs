@@ -33,7 +33,7 @@ use umol_graph::ops::resolve::valence::ValenceResolver;
 use umol_graph::ops::resolve::{
     IsotopePolicy, ProjectError, ProjectFlags, ResolveConfig, Resolver,
 };
-use umol_graph::ops::valence::{AtomTypeRegistry, ResolveReport, ValenceEntry, ValenceTable};
+use umol_graph::ops::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
@@ -596,7 +596,7 @@ proptest! {
         let raised = source.clone();
         let result = Resolver::with_config(&model, config).resolve_into(&mut source).unwrap();
         if state == 3 {
-            prop_assert_eq!(result, Solution::Underdetermined(ResolveReport::default()));
+            prop_assert_eq!(result, Solution::Underdetermined(()));
             prop_assert_eq!(source, raised);
         } else {
             prop_assert!(matches!(result, Solution::Determined(_)), "{result:?}");

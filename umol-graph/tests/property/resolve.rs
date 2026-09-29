@@ -1,4 +1,4 @@
-//! Forward atom completion and search-independence of aromatic assignment selection.
+//! Forward atom completion and search-independence of aromatic completion selection.
 //!
 //! Completion checks resolve against independent atom states for carbon/radical/isotope
 //! chains and mixed-element chains with charges, lone pairs, and localized bonds. The
@@ -6,9 +6,9 @@
 //! produce the expected complete molecule.
 //!
 //! Semantic property: for carriers whose components stay within the
-//! assignment bound, `AromaticityResolver::select` returns the outcome of a
-//! selection that enumerates every assignment of every component
-//! exhaustively — the pruned search never removes a valid assignment.
+//! enumeration bound, both aromatic selectors return the outcome of a
+//! selection that enumerates every completion combination of every component
+//! exhaustively — the pruned search never removes a valid completion combination.
 //!
 //! Operational domain: `strategies::select_scenario` — one- and two-ring
 //! Hückel skeletons, all ring atoms in the carrier with literal
@@ -16,10 +16,11 @@
 //! constraint, both failure policies and both tie-breaks on each axis.
 //!
 //! Validation method: comparison with the definition-level selection below,
-//! which enumerates assignments flat with no pruning. Perception
+//! which enumerates completion combinations flat with no pruning. Perception
 //! (`find_systems`) and the value-key comparison (`compare_by_key`) are
 //! shared with production — the property targets the search and selection
-//! stages, not the perception rule.
+//! stages, not the perception rule. The explicit report method also matches the
+//! reference tie-break list; ordinary selection leaves that list empty.
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
@@ -34,7 +35,6 @@ use umol_graph::ops::resolve::{
     AromaticityFailurePolicy, AromaticityResolver, ResolveState, Resolver,
 };
 use umol_graph::ops::valence::compare::compare_by_key;
-use umol_graph::ops::valence::ResolveReport;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValenceForm, AtomForm, AtomId, BondForm, ElectronCountsForm,
     ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel,
@@ -70,8 +70,8 @@ fn compare_restrictions(
     Ordering::Equal
 }
 
-/// Definition-level selection: flat assignment enumeration per component with
-/// no pruning and no assignment bound, followed by the documented validity
+/// Definition-level selection: enumerates completion combinations per component
+/// without pruning or an enumeration bound, then applies the documented validity
 /// and selection stages. Scoped to the generated domain: no stored systems,
 /// no atom-level assertions, every ring atom in the carrier.
 fn exhaustive_select(
@@ -130,7 +130,7 @@ fn exhaustive_select(
     }
     components.sort();
 
-    type Assignment = (
+    type CompletionCombination = (
         Vec<(AtomId, AtomForm)>,
         Vec<(Vec<AtomId>, AromaticSystemForm)>,
     );
@@ -158,12 +158,12 @@ fn exhaustive_select(
             })
             .collect();
 
-        let mut assignments: Vec<Assignment> = Vec::new();
-        let mut assignment_indices = vec![0usize; component_flexible.len()];
+        let mut combinations: Vec<CompletionCombination> = Vec::new();
+        let mut completion_indices = vec![0usize; component_flexible.len()];
         loop {
             let choice: BTreeMap<AtomId, usize> = component_flexible
                 .iter()
-                .zip(&assignment_indices)
+                .zip(&completion_indices)
                 .map(|(&(atom, _), &index)| (atom, index))
                 .collect();
             let outcome =
@@ -207,9 +207,9 @@ fn exhaustive_select(
                     )
                 })
                 .collect();
-            let assignment = (restriction, partition);
-            if !assignments.contains(&assignment) {
-                assignments.push(assignment);
+            let combination = (restriction, partition);
+            if !combinations.contains(&combination) {
+                combinations.push(combination);
             }
 
             let mut position = component_flexible.len();
@@ -218,18 +218,18 @@ fn exhaustive_select(
                     break;
                 }
                 position -= 1;
-                assignment_indices[position] += 1;
-                if assignment_indices[position] < component_flexible[position].1.len() {
+                completion_indices[position] += 1;
+                if completion_indices[position] < component_flexible[position].1.len() {
                     break;
                 }
-                assignment_indices[position] = 0;
+                completion_indices[position] = 0;
             }
-            if component_flexible.is_empty() || assignment_indices.iter().all(|&index| index == 0) {
+            if component_flexible.is_empty() || completion_indices.iter().all(|&index| index == 0) {
                 break;
             }
         }
 
-        let mut valid = assignments;
+        let mut valid = combinations;
         if config.aromatic_valence_failure == AromaticityFailurePolicy::Error {
             valid.retain(|(_, partition)| {
                 aromatic_only
@@ -372,12 +372,12 @@ fn exhaustive_select(
 
 proptest! {
     #[test]
-    fn test_aromaticity_resolver_select_search_independence(
+    fn test_aromaticity_resolver_select_with_report_search_independence(
         scenario in select_scenario()
     ) {
         let resolver = AromaticityResolver::with_config(&scenario.model, scenario.config);
         let actual = resolver
-            .select(
+            .select_with_report(
                 &scenario.molecule,
                 ResolveState {
                     completions: scenario.completions.clone(),
@@ -386,7 +386,20 @@ proptest! {
                 scenario.tie_break,
             )
             .expect("Hückel perception is infallible");
-        prop_assert_eq!(actual, exhaustive_select(&scenario));
+        let expected = exhaustive_select(&scenario);
+        prop_assert_eq!(actual, expected.clone());
+        let without_report = resolver.select(
+            &scenario.molecule,
+            ResolveState {
+                completions: scenario.completions.clone(),
+                ..ResolveState::default()
+            },
+            scenario.tie_break,
+        ).expect("Hückel perception is infallible");
+        prop_assert_eq!(without_report, expected.map(|mut state| {
+            state.tie_breaks.clear();
+            state
+        }));
     }
 }
 
@@ -432,7 +445,7 @@ proptest! {
         }, ..Default::default()};
         let resolver = Resolver::new(&model);
         prop_assert_eq!(resolver.resolve(input.clone()), Ok(Solution::Determined(original.clone())));
-        prop_assert_eq!(resolver.resolve_into(&mut input), Ok(Solution::Determined(ResolveReport::default())));
+        prop_assert_eq!(resolver.resolve_into(&mut input), Ok(Solution::Determined(())));
         prop_assert_eq!(input, original);
     }
 
@@ -486,7 +499,7 @@ proptest! {
                 };
                 let resolver = Resolver::new(&model);
                 let mut molecule = input.clone();
-                prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(ResolveReport::default())));
+                prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
                 prop_assert_eq!(&molecule, &source);
             }
         }

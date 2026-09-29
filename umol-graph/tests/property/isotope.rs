@@ -9,7 +9,6 @@ use proptest::prelude::*;
 use umol_chem::element::Element;
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{IsotopePolicy, IsotopeResolver, ResolveConfig, Resolver};
-use umol_graph::ops::valence::ResolveReport;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondForm, ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm,
     UnpairedElectronsForm,
@@ -60,10 +59,10 @@ proptest! {
                     let mut molecule = source.clone();
                     let result = resolver.resolve_into(&mut molecule).unwrap();
                     if isotope == IsotopePolicy::Strict && omitted {
-                        prop_assert_eq!(&result, &Solution::Underdetermined(ResolveReport::default()));
+                        prop_assert_eq!(&result, &Solution::Underdetermined(()));
                         prop_assert_eq!(&molecule, &source);
                     } else {
-                        prop_assert_eq!(&result, &Solution::Determined(ResolveReport::default()));
+                        prop_assert_eq!(&result, &Solution::Determined(()));
                         prop_assert_eq!(&molecule, &expected);
                     }
                     let once = molecule.clone();

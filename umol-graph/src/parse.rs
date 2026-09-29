@@ -48,7 +48,7 @@ pub fn parse_mol_bytes_with(
 ) -> Result<Molecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
     let mut molecule: Molecule = (&table_mol).try_into_ir(&())?;
-    match Resolver::with_config(model, *resolve_config).resolve_into(&mut molecule)? {
+    match Resolver::with_config(model, *resolve_config).resolve_into_with_report(&mut molecule)? {
         Solution::Determined(_) => Ok(molecule),
         Solution::Underdetermined(report) => Err(Box::new(ResolveUnderdetermined { report })),
         Solution::Contradictory(c) => Err(Box::new(c)),

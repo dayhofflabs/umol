@@ -131,7 +131,7 @@ fn interpret_molecule(
     resolve_config: &ResolveConfig,
 ) -> Result<Molecule, MoleculeInterpretationError> {
     let mut molecule: Molecule = molecule.try_into_ir(&())?;
-    match Resolver::with_config(model, *resolve_config).resolve_into(&mut molecule)? {
+    match Resolver::with_config(model, *resolve_config).resolve_into_with_report(&mut molecule)? {
         Solution::Determined(_) => Ok(molecule),
         Solution::Underdetermined(report) => Err(ResolveUnderdetermined { report }.into()),
         Solution::Contradictory(error) => Err(error.into()),

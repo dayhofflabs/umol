@@ -23,10 +23,8 @@ use crate::ops::model::{AromaticityModel, AromaticityTieBreak, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
 use crate::ops::valence::compare::compare_by_key;
 
-/// Per-component enumeration bound for assignments over aromatic-flexible
-/// atoms; an exceeding component leaves the molecule underdetermined rather
-/// than being sampled.
-const MAX_ASSIGNMENTS: usize = 4096;
+/// Maximum number of completion combinations per candidate-ring component.
+const MAX_COMPLETION_COMBINATIONS: usize = 4096;
 
 /// How aromaticity resolution handles an independently invalid constraint or entity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -460,54 +458,135 @@ impl AromaticityResolver {
         Ok(edits)
     }
 
-    /// Selection among assignments per candidate-ring component, mutating
-    /// nothing: an assignment is one completion choice per flexible atom of
-    /// the component together with the systems perception finds under that
-    /// narrowing; its restriction covers system members only. Contribution
-    /// sourcing is uniform — an atom's carrier entry if present, else its
-    /// stored input assertion (with the overlay-derived fallback). An
-    /// assignment is valid iff every stored aromatic system touching the
-    /// component reappears with the same member set, and — under the `Error`
-    /// failure policy — no component atom whose every disjunct requires
-    /// aromaticity is left unclaimed. Under the model's `MinElectronCount`
-    /// tie-break, the structural order runs on the valid assignments first —
-    /// claimed-atom count descending, then electron total ascending, then
-    /// member-set lists lexicographic — and the chosen systems' members are
-    /// recorded as tie-break uses when this order decided; under the model's
-    /// `Strict` it never runs. A unique
-    /// surviving restriction is accepted; several fall to `tie_break`
-    /// member-wise. When the key leaves a tie, or when survivors restrict
-    /// different atoms, the members stay plural and nothing is accepted.
-    /// Survivors identical in restriction take the lexicographically smallest
-    /// partition. The
-    /// winner's systems are accepted as a whole — never mixed across
-    /// assignments, so accepted systems are disjoint. Returns the narrowed
-    /// carrier, the accepted systems, and the atoms selected by the key.
+    /// Selects completions and aromatic systems for each candidate-ring component.
     ///
-    /// More than `MAX_ASSIGNMENTS` assignments in one candidate-ring
-    /// component, a non-literal
-    /// stored `#a` outside the carrier, or an undetermined perception yields
-    /// `Underdetermined` with the carrier unchanged. A carrier atom whose
-    /// every disjunct requires aromaticity but which no accepted or tied
-    /// system claims is `Contradictory`. Selection returns the carrier unchanged without running
-    /// perception when the molecule has no positive aromatic atom or bond assertion and no stored
-    /// aromatic system. Vacuous and explicitly non-aromatic assertions do not require aromaticity
-    /// selection.
+    /// Each combination chooses one completion per flexible atom and the systems
+    /// perceived from those contributions. Atoms outside the candidate sets use
+    /// their stored or overlay-derived contributions. Accepted systems remain
+    /// disjoint: selection takes a whole combination's systems together.
+    ///
+    /// A combination must reproduce stored systems touching the component. Under
+    /// the Error failure policy, it must also cover every atom whose completions
+    /// all require aromaticity. MinElectronCount first prefers more covered atoms,
+    /// then fewer electrons, then lexicographically ordered member sets. Surviving
+    /// combinations with different completions for the same atoms compare by
+    /// tie_break; equal completions use the lexicographically smallest partition.
+    /// Ties and combinations restricting different atoms leave those atoms plural.
+    ///
+    /// More than MAX_COMPLETION_COMBINATIONS combinations in a component, a
+    /// nonliteral stored contribution outside the candidate sets, or undetermined
+    /// perception yields Underdetermined. An uncovered atom requiring aromaticity
+    /// yields Contradictory under the Error failure policy. If no positive aromatic
+    /// assertion or stored aromatic system requires selection, returns state unchanged.
+    /// Leaves state.tie_breaks unchanged; use [`Self::select_with_report`] to include
+    /// this selection's tie-break uses.
+    ///
+    /// # Errors
+    ///
+    /// Returns errors from aromaticity perception, including missing model parameters.
     ///
     /// # Semantic properties
     ///
-    /// The outcome is search-independent: for carriers whose components stay
-    /// within `MAX_ASSIGNMENTS`, the result (compared by `==` on the
-    /// returned solution) equals that of a selection enumerating every
-    /// assignment of every component exhaustively — the pruned search never
-    /// removes a valid assignment. Cross-checked in the `property` test
-    /// target against a definition-level flat enumeration over generated
-    /// one- and two-ring Hückel scenarios under every policy combination.
+    /// Within the enumeration bound, completions, accepted systems, and outcome equal
+    /// exhaustive selection: pruning removes no valid combination. Cross-checked in
+    /// the property test target against flat enumeration over generated one- and
+    /// two-ring Hückel scenarios under every policy combination.
     pub fn select(
         &self,
         molecule: &Molecule,
         state: ResolveState,
         tie_break: ValenceTieBreak,
+    ) -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError> {
+        self.select_completions(molecule, state, tie_break, false)
+    }
+
+    /// Selects completions and aromatic systems, including tie-break uses in the state.
+    ///
+    /// Uses the same selection and failure policies as [`Self::select`]. Adds atoms
+    /// selected by the valence key and members of systems selected by the structural
+    /// tie-break to state.tie_breaks, sorting and deduplicating the result. If aromatic
+    /// selection is unnecessary or underdetermined, keeps the existing tie-break list.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same aromaticity perception errors as select.
+    ///
+    /// # Semantic properties
+    ///
+    /// Completions, accepted systems, contradictions, and errors agree with select.
+    /// Within the enumeration bound, the full solution equals exhaustive selection,
+    /// including tie-break uses, as checked by the property test target.
+    pub fn select_with_report(
+        &self,
+        molecule: &Molecule,
+        state: ResolveState,
+        tie_break: ValenceTieBreak,
+    ) -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError> {
+        self.select_completions(molecule, state, tie_break, true)
+    }
+
+    pub(crate) fn plan_system(
+        &self,
+        molecule: &Molecule,
+        atoms: Vec<AtomId>,
+        system: AromaticSystemForm,
+    ) -> Edits {
+        let mut atom_updates = Vec::new();
+        if self.config.reset_aromatic_valence {
+            for &atom_id in &atoms {
+                let mut update = AtomUpdate::default();
+                update.constraints.set(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Undetermined,
+                ));
+                atom_updates.push((atom_id, update));
+            }
+        }
+
+        let mut edits = Edits::new();
+        edits.add_aromatic_system(atoms.iter().copied().map(AtomHandle::Id).collect(), system);
+        for (atom_id, update) in atom_updates {
+            edits.update_atom(
+                AtomHandle::Id(atom_id),
+                molecule.atom(atom_id).attributes(),
+                &update,
+            );
+        }
+
+        let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
+        let mut bond_ids = BTreeSet::new();
+        for &atom_id in &atoms {
+            for neighbor in molecule.atom(atom_id).neighbors() {
+                if members.contains(&neighbor.atom_id()) {
+                    bond_ids.insert(neighbor.bond_id());
+                }
+            }
+        }
+        for bond_id in bond_ids {
+            if matches!(
+                molecule.bond(bond_id).attributes().constraints.aromatic(),
+                BooleanForm::Lit(_)
+            ) {
+                continue;
+            }
+            let mut update = BondUpdate::default();
+            update
+                .constraints
+                .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
+            edits.update_bond(
+                BondHandle::Id(bond_id),
+                molecule.bond(bond_id).attributes(),
+                &update,
+            );
+        }
+        edits
+    }
+
+    fn select_completions(
+        &self,
+        molecule: &Molecule,
+        state: ResolveState,
+        tie_break: ValenceTieBreak,
+        report: bool,
     ) -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError> {
         let requires_aromaticity = molecule.aromatic_systems().count() != 0
             || molecule.atoms().iter().any(|atom| {
@@ -573,7 +652,7 @@ impl AromaticityResolver {
             .collect();
 
         // The rule's acceptance couples atoms only within a candidate-ring
-        // component: enumeration and the assignment bound are per component.
+        // component: enumeration and the combination bound are per component.
         // A flexible atom outside every component has no candidate ring and
         // falls through to the finalization tie-break.
         let rings = self
@@ -588,11 +667,11 @@ impl AromaticityResolver {
                 .iter()
                 .filter(|(atom, _)| component.contains(atom))
                 .collect();
-            let assignment_count: usize = component_flexible
+            let combination_count: usize = component_flexible
                 .iter()
                 .map(|(_, contributions)| contributions.len())
                 .product();
-            if assignment_count > MAX_ASSIGNMENTS {
+            if combination_count > MAX_COMPLETION_COMBINATIONS {
                 return Ok(Solution::Underdetermined(ResolveState {
                     completions,
                     systems,
@@ -601,12 +680,12 @@ impl AromaticityResolver {
             }
         }
 
-        // An assignment per index choice: the partition (the perceived
+        // A completion combination per index choice: the partition (the perceived
         // systems inside the component, sorted by member list) and the
         // restriction (the chosen forms of flexible member atoms, ascending).
-        // Validity and selection act on whole assignments, never mixing
+        // Validity and selection act on whole completion combinations, never mixing
         // systems across them, so accepted systems are disjoint.
-        type Assignment = (
+        type CompletionCombination = (
             Vec<(AtomId, AtomForm)>,
             Vec<(Vec<AtomId>, AromaticSystemForm)>,
         );
@@ -694,7 +773,7 @@ impl AromaticityResolver {
                 .filter(|members| members.iter().all(|atom| component.contains(atom)))
                 .collect();
 
-            // A candidate is settled-rejected under a partial assignment when
+            // A candidate is settled-rejected under a partial combination when
             // no completion can make the rule accept it: a member fixed to a
             // non-contribution, or a reachable total range the rule refuses.
             let settled_rejected = |members: &[AtomId], path: &[usize]| -> bool {
@@ -730,7 +809,7 @@ impl AromaticityResolver {
                 }
                 !self.perception.accepts_range(&ranges)
             };
-            // A partial assignment is certainly invalid when some
+            // A partial combination is certainly invalid when some
             // aromatic-only atom has every claim candidate settled-rejected.
             let certainly_invalid = |path: &[usize]| -> bool {
                 aromatic_only.iter().any(|&atom| {
@@ -745,8 +824,8 @@ impl AromaticityResolver {
 
             // Depth-first search over the flexible atoms; a subtree is cut
             // only when every completion below it is certainly invalid, so
-            // the valid-assignment set equals the flat enumeration's.
-            let mut assignments: Vec<Assignment> = Vec::new();
+            // the valid combinations equal the flat enumeration's.
+            let mut combinations: Vec<CompletionCombination> = Vec::new();
             let mut path: Vec<usize> = Vec::new();
             let mut next = 0usize;
             loop {
@@ -801,9 +880,9 @@ impl AromaticityResolver {
                             )
                         })
                         .collect();
-                    let assignment = (restriction, partition);
-                    if !assignments.contains(&assignment) {
-                        assignments.push(assignment);
+                    let combination = (restriction, partition);
+                    if !combinations.contains(&combination) {
+                        combinations.push(combination);
                     }
                     match path.pop() {
                         Some(index) => next = index + 1,
@@ -828,9 +907,9 @@ impl AromaticityResolver {
             }
 
             // Validity under the `Error` failure policy first — the search
-            // prunes by the same criterion: an assignment may not leave an
+            // prunes by the same criterion: a combination may not leave an
             // aromatic-only component atom unclaimed.
-            let mut valid = assignments;
+            let mut valid = combinations;
             if prune_enabled {
                 valid.retain(|(_, partition)| {
                     aromatic_only
@@ -843,7 +922,7 @@ impl AromaticityResolver {
             }
             // Validity: every stored system touching the component must
             // reappear with the same member set; when no carrier-valid
-            // assignment reproduces one, the failure policy decides between
+            // combination reproduces one, the failure policy decides between
             // contradiction and an inert component.
             for (system, members) in stored_systems
                 .iter()
@@ -903,9 +982,10 @@ impl AromaticityResolver {
                     .map(|(_, partition)| structure(partition))
                     .min()
                     .expect("non-empty survivors");
-                structural_decided = valid
-                    .iter()
-                    .any(|(_, partition)| structure(partition) != best);
+                structural_decided = report
+                    && valid
+                        .iter()
+                        .any(|(_, partition)| structure(partition) != best);
                 valid.retain(|(_, partition)| structure(partition) == best);
             }
 
@@ -970,7 +1050,7 @@ impl AromaticityResolver {
                 }
             }
             for (atom, form) in winner_restriction {
-                if by_key && completions.get(*atom).is_some_and(|entry| entry.len() > 1) {
+                if report && by_key && completions.get(*atom).is_some_and(|entry| entry.len() > 1) {
                     tie_break_uses.insert(*atom);
                 }
                 completions.insert(*atom, smallvec![form.clone()]);
@@ -999,74 +1079,20 @@ impl AromaticityResolver {
         }
 
         systems.extend(accepted);
-        tie_breaks.extend(tie_break_uses);
-        tie_breaks.sort_unstable();
-        tie_breaks.dedup();
+        if report {
+            tie_breaks.extend(tie_break_uses);
+            tie_breaks.sort_unstable();
+            tie_breaks.dedup();
+        }
         Ok(Solution::Determined(ResolveState {
             completions,
             systems,
             tie_breaks,
         }))
     }
-
-    pub(crate) fn plan_system(
-        &self,
-        molecule: &Molecule,
-        atoms: Vec<AtomId>,
-        system: AromaticSystemForm,
-    ) -> Edits {
-        let mut atom_updates = Vec::new();
-        if self.config.reset_aromatic_valence {
-            for &atom_id in &atoms {
-                let mut update = AtomUpdate::default();
-                update.constraints.set(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Undetermined,
-                ));
-                atom_updates.push((atom_id, update));
-            }
-        }
-
-        let mut edits = Edits::new();
-        edits.add_aromatic_system(atoms.iter().copied().map(AtomHandle::Id).collect(), system);
-        for (atom_id, update) in atom_updates {
-            edits.update_atom(
-                AtomHandle::Id(atom_id),
-                molecule.atom(atom_id).attributes(),
-                &update,
-            );
-        }
-
-        let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
-        let mut bond_ids = BTreeSet::new();
-        for &atom_id in &atoms {
-            for neighbor in molecule.atom(atom_id).neighbors() {
-                if members.contains(&neighbor.atom_id()) {
-                    bond_ids.insert(neighbor.bond_id());
-                }
-            }
-        }
-        for bond_id in bond_ids {
-            if matches!(
-                molecule.bond(bond_id).attributes().constraints.aromatic(),
-                BooleanForm::Lit(_)
-            ) {
-                continue;
-            }
-            let mut update = BondUpdate::default();
-            update
-                .constraints
-                .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
-            edits.update_bond(
-                BondHandle::Id(bond_id),
-                molecule.bond(bond_id).attributes(),
-                &update,
-            );
-        }
-        edits
-    }
 }
 
-/// Member-wise lexicographic comparison of two assignment restrictions for
+/// Member-wise lexicographic comparison of two restrictions for
 /// the same system, in ascending member order, each member compared by the
 /// tie-break key over its candidate forms.
 /// The contribution of an atom outside the carrier: a literal stored
@@ -1087,7 +1113,7 @@ fn stored_contribution(molecule: &Molecule, atom: AtomId) -> Option<u8> {
 /// Connected components of the aromatic-candidate graph: the perception's
 /// rings whose members are all aromatic-capable, connected over shared
 /// atoms. The aromaticity rule's acceptance couples atoms only within a
-/// component, so enumeration, validity, selection, and the assignment bound
+/// component, so enumeration, validity, selection, and the combination bound
 /// are all per component.
 fn candidate_components<F>(rings: &RingSet, capable: F) -> Vec<BTreeSet<AtomId>>
 where
@@ -2045,7 +2071,7 @@ mod tests {
         ValenceTieBreak::Strict,
         Solution::Underdetermined(ResolveState::default())
     )]
-    fn test_aromaticity_resolver_select(
+    fn test_aromaticity_resolver_select_with_report(
         aromaticity_model: AromaticityModel,
         #[case] molecule: Molecule,
         #[case] completions: AtomCompletions,
@@ -2053,7 +2079,7 @@ mod tests {
         #[case] expected: SelectOutcome,
     ) {
         assert_eq!(
-            AromaticityResolver::new(&aromaticity_model).select(
+            AromaticityResolver::new(&aromaticity_model).select_with_report(
                 &molecule,
                 ResolveState {
                     completions,
@@ -2108,7 +2134,7 @@ mod tests {
         ]),
         ValenceTieBreak::Strict
     )]
-    fn test_aromaticity_resolver_select_identity(
+    fn test_aromaticity_resolver_select_with_report_identity(
         aromaticity_model: AromaticityModel,
         #[case] molecule: Molecule,
         #[case] completions: AtomCompletions,
@@ -2119,7 +2145,7 @@ mod tests {
             ..ResolveState::default()
         };
         assert_eq!(
-            AromaticityResolver::new(&aromaticity_model).select(
+            AromaticityResolver::new(&aromaticity_model).select_with_report(
                 &molecule,
                 state.clone(),
                 tie_break
@@ -2129,7 +2155,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_select_min_electron_count() {
+    fn test_aromaticity_resolver_select_with_report_min_electron_count() {
         // Two totals pass the rule on the same members (all-pyridinic 6,
         // all-pyrrolic 10); the electron component picks the smaller and
         // records the members, with no value key consulted.
@@ -2145,7 +2171,7 @@ mod tests {
                 :bonds [[0 1 "1#a+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#
         );
         assert_eq!(
-            AromaticityResolver::new(&model).select(
+            AromaticityResolver::new(&model).select_with_report(
                 &molecule,
                 ResolveState {
                     completions: AtomCompletions::from_iter([
@@ -2205,8 +2231,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_select_tolerated_carrier() {
-        // Keep policy admits the no-system assignment alongside the full
+    fn test_aromaticity_resolver_select_with_report_tolerated_carrier() {
+        // Keep policy admits the combination without a system alongside the full
         // ring; `MinElectronCount` realizes the full ring and records its members.
         let model = AromaticityModel {
             scope: ElementScope::Any,
@@ -2227,7 +2253,7 @@ mod tests {
                     ..AromaticityResolveConfig::default()
                 },
             )
-            .select(
+            .select_with_report(
                 &molecule,
                 ResolveState {
                     completions: AtomCompletions::from_iter([
@@ -2267,7 +2293,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_select_tolerated_carrier_identity(
+    fn test_aromaticity_resolver_select_with_report_tolerated_carrier_identity(
         aromaticity_model: AromaticityModel,
     ) {
         // The same survivors under the model's `Strict`: structurally
@@ -2300,13 +2326,15 @@ mod tests {
                     ..AromaticityResolveConfig::default()
                 },
             )
-            .select(&molecule, state.clone(), ValenceTieBreak::Strict),
+            .select_with_report(&molecule, state.clone(), ValenceTieBreak::Strict),
             Ok(Solution::Determined(state))
         );
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_select_stored_conflict(aromaticity_model: AromaticityModel) {
+    fn test_aromaticity_resolver_select_with_report_stored_conflict(
+        aromaticity_model: AromaticityModel,
+    ) {
         // No completion of the flexible atom reproduces the stored system:
         // `#a2` breaks the count, `#a!` removes the candidate ring.
         let molecule = mol_dsl!(
@@ -2317,7 +2345,7 @@ mod tests {
         }"#
         );
         assert_eq!(
-            AromaticityResolver::new(&aromaticity_model).select(
+            AromaticityResolver::new(&aromaticity_model).select_with_report(
                 &molecule,
                 ResolveState {
                     completions: AtomCompletions::from_iter([(
@@ -2342,7 +2370,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_select_stored_conflict_identity(
+    fn test_aromaticity_resolver_select_with_report_stored_conflict_identity(
         aromaticity_model: AromaticityModel,
     ) {
         // Same conflict under `Keep`: the component is inert and the state
@@ -2372,7 +2400,7 @@ mod tests {
                     ..AromaticityResolveConfig::default()
                 },
             )
-            .select(&molecule, state.clone(), ValenceTieBreak::Strict),
+            .select_with_report(&molecule, state.clone(), ValenceTieBreak::Strict),
             Ok(Solution::Determined(state))
         );
     }

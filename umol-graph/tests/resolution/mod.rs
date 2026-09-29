@@ -1,7 +1,9 @@
 //! Resolution conformance suite.
 //!
 //! Runs each `.edn` test input through the atom-typing and counts resolver
-//! configurations, producing insta EDN snapshots.
+//! configurations, producing insta EDN snapshots. The four resolution methods must
+//! agree on outcomes, reports, and determined molecules; borrowed rejection preserves
+//! the input.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -67,16 +69,42 @@ fn resolve_test(
     chemistry: &ChemistryModel,
     defaults: &MoleculeDefaults,
 ) -> ResolveResult {
-    let mut molecule = raise(input, defaults);
-    match Resolver::with_config(
+    let source = raise(input, defaults);
+    let resolver = Resolver::with_config(
         chemistry,
         ResolveConfig {
             isotope: IsotopePolicy::Natural,
             ..Default::default()
         },
-    )
-    .resolve_into(&mut molecule)
-    {
+    );
+    let mut molecule = source.clone();
+    let result = resolver.resolve_into_with_report(&mut molecule);
+    let mut without_report = source.clone();
+    assert_eq!(
+        resolver.resolve_into(&mut without_report),
+        result.clone().map(|solution| solution.map(|_| ()))
+    );
+    assert_eq!(without_report, molecule);
+    if !matches!(&result, Ok(Solution::Determined(_))) {
+        assert_eq!(molecule, source);
+    }
+    assert_eq!(
+        resolver.resolve(source.clone()),
+        result.clone().map(|solution| match solution {
+            Solution::Determined(_) => Solution::Determined(molecule.clone()),
+            Solution::Underdetermined(_) => Solution::Underdetermined(()),
+            Solution::Contradictory(contradiction) => Solution::Contradictory(contradiction),
+        })
+    );
+    assert_eq!(
+        resolver.resolve_with_report(source),
+        result.clone().map(|solution| match solution {
+            Solution::Determined(report) => Solution::Determined((molecule.clone(), report)),
+            Solution::Underdetermined(report) => Solution::Underdetermined(report),
+            Solution::Contradictory(contradiction) => Solution::Contradictory(contradiction),
+        })
+    );
+    match result {
         Ok(Solution::Determined(report)) => ResolveResult {
             success: true,
             output: Some(lower(&molecule)),

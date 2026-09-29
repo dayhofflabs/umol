@@ -54,7 +54,8 @@ transformation plans and borrowed execution. S6c2 completes the remaining Rust
 caller migration. S6d1–S6d3 complete Python Molecule consumption, fallible owner
 access, and editor finish; the S6 workspace gate passes. S7a implements consuming
 resolve/project and recovering resolve_into/project_into, with shared phase plans.
-S7b is next: separate opt-in reporting from the composite resolver's borrowed path.
+S7b makes resolver reports opt-in and skips report-only work on ordinary paths.
+S7c is next: migrate owned ingest/parse candidates and boundary diagnostics.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -6459,7 +6460,7 @@ S7a–S7d form one public signature/result migration, returning green at S7d.
   Isotope/aromaticity/stereo also expose project/project_into with the same
   ownership and result shapes, substituting their corresponding ProjectError
   types for E. Their existing contradiction types remain C. No standalone
-  report API is added. Valence admission/projection retain their existing
+  resolve_with_report API is added. Valence admission/projection retain their existing
   signatures and immutable/no-op behavior; there is no invented valence edit
   path. An underdetermined consuming operation returns (), dropping its input;
   borrowed underdetermination preserves the receiver as already specified.
@@ -6484,7 +6485,7 @@ S7a–S7d form one public signature/result migration, returning green at S7d.
   rustdoc pass; the Python caller compiles under Python 3.13. Nightly formatting and
   diff review pass. Timing comparisons remain in S9b; scratch is empty.
 
-- **S7b** (`umol-graph::ops::resolve`; breaking, green at S7d) Make reports opt-in
+- **S7b — completed 2026-09-29** (`umol-graph::ops::resolve`; breaking, green at S7d) Make reports opt-in
   with `resolve_with_report` and `resolve_into_with_report`; avoid default
   report-only collection while retaining resolution candidates. Test equal
   outcomes and final molecules with and without reports, including
@@ -6495,6 +6496,33 @@ S7a–S7d form one public signature/result migration, returning green at S7d.
   report.unresolved. Call to_report only in the explicit reporting methods.
   Preserve the current report payloads and rejection order. Sharing chemistry
   methods does not require a reporting-mode type or generic execution adapter.
+
+  AromaticityResolver exposes select and select_with_report with identical
+  arguments (&Molecule, ResolveState, ValenceTieBreak) and return type
+  Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError>.
+  Ordinary resolution calls select; explicit report methods call select_with_report.
+  Both selectors call private select_completions with the same arguments plus
+  report: bool. The public methods take no switch. select leaves the supplied
+  state's tie_breaks unchanged; select_with_report adds the selected tie-break uses.
+  Resolver's private select_atom_completions(&mut ResolveState, report: bool)
+  follows the same choice for atom selection. No visibility widening is needed.
+
+  **Implementation and verification:** All four composite resolution methods are
+  implemented. Ordinary paths skip report construction, tie-break collection and
+  sorting, and the aromatic comparison used only to identify tie-break uses.
+  Report methods preserve existing payloads and rejection order. Ingest, parse,
+  and Python callers explicitly request their existing reports until S7c/S7d.
+  The selector and its exhaustive reference use completion terminology consistently.
+
+  Validation: 1,983 graph unit tests, 683 resolution conformance cases, and 14
+  relevant properties pass. Conformance compares all four methods' outcomes and
+  molecules against the existing report snapshots. Exact cases cover selected
+  completions, plural candidates, early/late underdetermination, and execution
+  errors. Both aromatic selectors are checked against exhaustive selection.
+  Graph all-feature/all-target strict Clippy, warnings-denied rustdoc, four
+  affected Python binding tests under Python 3.13, nightly formatting, and diff
+  review pass. Scratch is empty.
+
 - **S7c** (`umol-graph::ingest`, `parse`, `export`, `umol-io` boundaries; breaking,
   green at S7d) Pass owned ingest/parse candidates to report-free resolution; keep
   one intentional source copy for export projection. Remove report payloads from
