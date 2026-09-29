@@ -657,7 +657,7 @@ proptest! {
     }
 
     /// Applying a reaction at the identity occurrence of its own `lhs` reproduces the span's
-    /// `right()` — the `transact`-apply path agrees with the span projection.
+    /// `right()` — reaction application agrees with the span projection.
     #[test]
     fn test_reaction_apply_reproduces_right(reaction in reaction_strategy()) {
         let span = reaction

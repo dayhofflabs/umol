@@ -112,11 +112,9 @@ fn bench_editor(c: &mut Criterion) {
             group.bench_function(id("transact"), |b| {
                 b.iter_batched(
                     || (input(), changes(edits)),
-                    |(molecule, changes)| {
-                        let mut editor = molecule.edit();
-                        let journal = editor.transact(changes).unwrap();
-                        black_box(journal.undos().len());
-                        black_box(editor.try_build().unwrap())
+                    |(mut molecule, changes)| {
+                        molecule.transact([changes]).unwrap();
+                        black_box(molecule)
                     },
                     BatchSize::SmallInput,
                 );

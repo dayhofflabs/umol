@@ -3122,11 +3122,11 @@ mod tests {
             atoms: vec![current.clone()],
             ..Default::default()
         });
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut applied_edits = Edits::new();
         applied_edits.update_atom(AtomHandle::Id(AtomId(0)), &current, &update);
-        editor
-            .transact(applied_edits)
+        let editor = editor
+            .apply(applied_edits)
             .expect("atom update edits should apply");
 
         assert_eq!(editor.atom(AtomId(0)).attributes(), &expected);
@@ -3214,11 +3214,11 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), current.clone())],
             ..Default::default()
         });
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut applied_edits = Edits::new();
         applied_edits.update_bond(BondHandle::Id(BondId(0)), &current, &update);
-        editor
-            .transact(applied_edits)
+        let editor = editor
+            .apply(applied_edits)
             .expect("bond update edits should apply");
 
         assert_eq!(editor.bond(BondId(0)).attributes(), &expected);
@@ -3284,15 +3284,15 @@ mod tests {
             dative: vec![(vec![AtomId(0)], AtomId(1), current.clone())],
             ..Default::default()
         });
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut applied_edits = Edits::new();
         applied_edits.update_dative_bond(
             DativeBondHandle::Id(DativeBondId(0)),
             &current,
             &update,
         );
-        editor
-            .transact(applied_edits)
+        let editor = editor
+            .apply(applied_edits)
             .expect("dative-bond update edits should apply");
 
         assert_eq!(
@@ -3374,15 +3374,15 @@ mod tests {
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], current.clone())],
             ..Default::default()
         });
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut applied_edits = Edits::new();
         applied_edits.update_aromatic_system(
             AromaticSystemHandle::Id(AromaticSystemId(0)),
             &current,
             &update,
         );
-        editor
-            .transact(applied_edits)
+        let editor = editor
+            .apply(applied_edits)
             .expect("aromatic-system update edits should apply");
 
         assert_eq!(
@@ -3464,15 +3464,15 @@ mod tests {
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], current.clone())],
             ..Default::default()
         });
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut applied_edits = Edits::new();
         applied_edits.update_multicenter_bond(
             MulticenterBondHandle::Id(MulticenterBondId(0)),
             &current,
             &update,
         );
-        editor
-            .transact(applied_edits)
+        let editor = editor
+            .apply(applied_edits)
             .expect("multicenter-bond update edits should apply");
 
         assert_eq!(
@@ -3540,15 +3540,15 @@ mod tests {
             noncovalent: vec![([AtomId(0), AtomId(1)], current.clone())],
             ..Default::default()
         });
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut applied_edits = Edits::new();
         applied_edits.update_noncovalent_bond(
             NoncovalentBondHandle::Id(NoncovalentBondId(0)),
             &current,
             &update,
         );
-        editor
-            .transact(applied_edits)
+        let editor = editor
+            .apply(applied_edits)
             .expect("noncovalent-bond update edits should apply");
 
         assert_eq!(
@@ -3626,15 +3626,15 @@ mod tests {
             )],
             ..Default::default()
         });
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut applied_edits = Edits::new();
         applied_edits.update_stereo_atom(
             StereoAtomHandle::Id(StereoAtomId(0)),
             &current,
             &update,
         );
-        editor
-            .transact(applied_edits)
+        let editor = editor
+            .apply(applied_edits)
             .expect("stereo-atom update edits should apply");
 
         assert_eq!(
@@ -3759,15 +3759,15 @@ mod tests {
             )],
             ..Default::default()
         });
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut applied_edits = Edits::new();
         applied_edits.update_stereo_bond(
             StereoBondHandle::Id(StereoBondId(0)),
             &current,
             &update,
         );
-        editor
-            .transact(applied_edits)
+        let editor = editor
+            .apply(applied_edits)
             .expect("stereo-bond update edits should apply");
 
         assert_eq!(

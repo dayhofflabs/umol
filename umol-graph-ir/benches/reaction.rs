@@ -306,12 +306,12 @@ fn benchmark_mutation(c: &mut Criterion) {
             BenchmarkId::new("tracked_transact/path_three_edits", size),
             |b| {
                 b.iter_batched(
-                    || (molecule.edit(), edits.clone()),
-                    |(mut editor, edits)| {
-                        let result = editor
-                            .tracked_transact(edits)
+                    || (molecule.clone(), edits.clone()),
+                    |(mut molecule, edits)| {
+                        let result = molecule
+                            .tracked_transact([edits])
                             .expect("benchmark edit batch succeeds");
-                        black_box((editor, result))
+                        black_box((molecule, result))
                     },
                     BatchSize::SmallInput,
                 )

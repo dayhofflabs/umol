@@ -455,7 +455,10 @@ enum TransactionStatus {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests;
+
+#[cfg(test)]
+mod lifecycle_tests {
     use std::mem::ManuallyDrop;
     use std::panic::{catch_unwind, AssertUnwindSafe};
 

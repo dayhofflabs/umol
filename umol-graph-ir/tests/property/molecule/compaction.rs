@@ -7,10 +7,11 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
+use umol_graph_core::{Compaction, GraphCompaction};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomForm, AtomHandle, AtomId, BondHandle, BondId, DativeBondId, Edits,
-    EntityKind, MoleculeCorrespondence, MulticenterBondId, NoncovalentBondId, StereoAtomId,
-    StereoBondId, Undo,
+    EntityKind, MoleculeCompaction, MoleculeCorrespondence, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 
 use crate::strategies::{molecule_dense_renumbering_strategy, molecule_with_removals_strategy};
@@ -37,20 +38,30 @@ proptest! {
             molecule.stereo_atoms().count(),
             molecule.stereo_bonds().count(),
         );
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut edits = Edits::new();
         edits.remove_topology(
             atoms.iter().copied().map(AtomHandle::Id).collect(),
             bonds.iter().copied().map(BondHandle::Id).collect(),
         );
-        let transaction = editor.transact(edits).unwrap();
-        let [Undo::RestoreRemovedTopology { compaction, .. }] = transaction.undos() else {
-            unreachable!("one topology removal records its compaction");
-        };
+        let (editor, correspondence) = editor.tracked_apply(edits).unwrap();
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                Compaction::new(counts.0, correspondence.atoms().left_unmatched().into_iter().map(Into::into).collect()).unwrap(),
+                Compaction::new(counts.1, correspondence.bonds().left_unmatched().into_iter().map(Into::into).collect()).unwrap(),
+            ),
+            Compaction::new(counts.2, correspondence.dative_bonds().left_unmatched()).unwrap(),
+            Compaction::new(counts.3, correspondence.aromatic_systems().left_unmatched()).unwrap(),
+            Compaction::new(counts.4, correspondence.multicenter_bonds().left_unmatched()).unwrap(),
+            Compaction::new(counts.5, correspondence.noncovalent_bonds().left_unmatched()).unwrap(),
+            Compaction::new(counts.6, correspondence.stereo_atoms().left_unmatched()).unwrap(),
+            Compaction::new(counts.7, correspondence.stereo_bonds().left_unmatched()).unwrap(),
+        );
+        prop_assert_eq!(correspondence, MoleculeCorrespondence::from(&compaction));
         let mut plain = molecule.edit();
         plain.remove_topology(&atoms, &bonds);
         let publication = editor.try_tracked_build();
-        let expected = plain.try_build().map(|molecule| (molecule, MoleculeCorrespondence::from(compaction)));
+        let expected = plain.try_build().map(|molecule| (molecule, MoleculeCorrespondence::from(&compaction)));
         prop_assert_eq!(publication, expected);
         let undo = compaction.undo_compaction();
 
@@ -107,18 +118,18 @@ proptest! {
     fn test_molecule_editor_tracked_build_composition(
         (molecule, atoms, bonds) in molecule_with_removals_strategy(),
     ) {
-        let mut editor = molecule.edit();
+        let editor = molecule.edit();
         let mut first = Edits::new();
         first.remove_topology(
             atoms.into_iter().map(AtomHandle::Id).collect(),
             bonds.into_iter().map(BondHandle::Id).collect(),
         );
-        let (_, mut expected) = editor.tracked_transact(first).unwrap();
+        let (mut editor, mut expected) = editor.tracked_apply(first).unwrap();
         editor.add_atom(AtomForm::from_element(Element::F));
         expected.extend_right(EntityKind::Atom, 1);
         let mut second = Edits::new();
         second.remove_atom(AtomHandle::Id(AtomId(0)));
-        let (_, second) = editor.tracked_transact(second).unwrap();
+        let (editor, second) = editor.tracked_apply(second).unwrap();
         let expected = expected.compose(&second).unwrap();
         let plain = editor.clone().try_build();
         prop_assert_eq!(editor.try_tracked_build(), plain.map(|molecule| (molecule, expected)));
@@ -135,10 +146,10 @@ proptest! {
             .collect::<Vec<_>>();
         let remapping = MoleculeCorrespondence::from(&remapping);
 
-        let mut removal_editor = remapped.edit();
+        let removal_editor = remapped.edit();
         let mut edits = Edits::new();
         edits.remove_topology(removed.into_iter().map(AtomHandle::Id).collect(), vec![]);
-        let (_, compaction) = removal_editor.tracked_transact(edits).unwrap();
+        let (removal_editor, compaction) = removal_editor.tracked_apply(edits).unwrap();
         let compacted = removal_editor.build();
 
         let mut addition_editor = compacted.edit();

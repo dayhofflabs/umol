@@ -60,7 +60,7 @@ use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::{
     AromaticSystems, DativeBonds, Molecule, MoleculeApplyError, MoleculeEntries,
     MoleculeIntegrityError, MulticenterBonds, NoncovalentBonds, StereoAtoms, StereoBonds,
-    TransactionError,
+    Transaction, TransactionError,
 };
 use crate::ir::{
     AromaticSystemEditorViewMut, AromaticSystemViewMut, AtomEditorViewMut, AtomViewMut,
@@ -5042,25 +5042,13 @@ fn test_molecule_extract(#[from(rich_molecule)] molecule: Molecule) {
 }
 
 #[rstest]
-fn test_transaction_tracked_rollback_manipulated() {
-    let source = mol_dsl!(r#"{:atoms ["C"]}"#);
-    let mut editor = source.edit();
-    let mut edits = Edits::new();
-    edits.add_atom(AtomForm::from_element(Element::N));
-    let (transaction, _) = editor.tracked_transact(edits).unwrap();
-    editor.remove_topology(&[AtomId(1)], &[]);
-    let mut plain = editor.clone();
-    let _ = transaction.clone().rollback(&mut plain);
-    let _ = transaction.tracked_rollback(&mut editor);
-}
-
-#[rstest]
-fn test_molecule_editor_tracked_transact(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+fn test_molecule_tracked_transact(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
     let source = Molecule::from_entries(entries);
     let mut editor = source.edit();
     editor.add_atom(AtomForm::from_element(Element::F));
-    let before = editor.tracked_snapshot().unwrap();
-    let mut plain = editor.clone();
+    let before = editor.build();
+    let mut molecule = before.clone();
+    let mut plain = before.clone();
     let mut edits = Edits::new();
     edits.remove_topology(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
@@ -5080,33 +5068,34 @@ fn test_molecule_editor_tracked_transact(#[from(equiv_molecule_entries)] entries
         Correspondence::new(vec![], 1, 0).unwrap(),
         Correspondence::new(vec![], 1, 0).unwrap(),
     );
-    let transaction = plain.transact(edits.clone()).unwrap();
-    let (tracked_transaction, witness) = editor.tracked_transact(edits).unwrap();
-    assert_eq!(tracked_transaction, transaction);
+    plain.transact([edits.clone()]).unwrap();
+    let witness = molecule.tracked_transact([edits.clone()]).unwrap();
     assert_eq!(witness, expected_witness);
-    assert_eq!(editor.snapshot(), Ok(expected));
-    assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
-    assert_eq!(
-        editor.tracked_snapshot().unwrap().1,
-        before.1.compose(&witness).unwrap()
-    );
+    assert_eq!(molecule, expected);
+    assert_eq!(molecule, plain);
 
-    let reverse = tracked_transaction.tracked_rollback(&mut editor).unwrap();
-    transaction.rollback(&mut plain).unwrap();
-    assert_eq!(reverse, witness.reverse());
-    assert_eq!(editor.snapshot(), Ok(before.0));
-    assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
+    let mut restored = before.clone();
+    Transaction::run(
+        &mut restored,
+        |mut transaction| -> Result<(), MoleculeApplyError> {
+            transaction.apply(edits)?;
+            assert_eq!(transaction.probe()?, &expected);
+            transaction.rollback();
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(restored, before);
 }
 
 #[rstest]
-fn test_molecule_editor_tracked_transact_error(
-    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
-) {
+fn test_molecule_tracked_transact_error(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
     let source = Molecule::from_entries(entries);
     let mut editor = source.edit();
     editor.add_atom(AtomForm::from_element(Element::F));
-    let before = editor.tracked_snapshot().unwrap();
-    let mut plain = editor.clone();
+    let before = editor.build();
+    let mut molecule = before.clone();
+    let mut plain = before.clone();
     let mut edits = Edits::new();
     edits.remove_topology(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
@@ -5119,13 +5108,16 @@ fn test_molecule_editor_tracked_transact_error(
         count: 5,
     };
     assert_eq!(
-        editor.clone().tracked_apply(edits.clone()).err(),
+        before.edit().tracked_apply(edits.clone()).err(),
         Some(expected.clone())
     );
-    assert_eq!(plain.transact(edits.clone()), Err(expected.clone()));
-    assert_eq!(editor.tracked_transact(edits), Err(expected));
-    assert_eq!(plain.tracked_snapshot(), Ok(before.clone()));
-    assert_eq!(editor.tracked_snapshot(), Ok(before));
+    assert_eq!(
+        plain.transact([edits.clone()]),
+        Err(expected.clone().into())
+    );
+    assert_eq!(molecule.tracked_transact([edits]), Err(expected.into()));
+    assert_eq!(plain, before);
+    assert_eq!(molecule, before);
 }
 
 #[rstest]
@@ -5175,8 +5167,6 @@ fn test_molecule_editor_tracked_apply_transient() {
     let mut plain = editor.clone();
     let (editor, applied) = editor.tracked_apply(Edits::new()).unwrap();
     let mut editor = editor;
-    let (transaction, transacted) = editor.tracked_transact(Edits::new()).unwrap();
-    let rolled_back = transaction.tracked_rollback(&mut editor).unwrap();
     let expected = MoleculeCorrespondence::new(
         Correspondence::identity(2),
         Correspondence::identity(2),
@@ -5188,8 +5178,6 @@ fn test_molecule_editor_tracked_apply_transient() {
         Correspondence::empty(),
     );
     assert_eq!(applied, expected);
-    assert_eq!(transacted, expected);
-    assert_eq!(rolled_back, expected);
     assert_eq!(
         editor.snapshot(),
         Err(MoleculeIntegrityError::ParallelBonds {
@@ -5377,63 +5365,32 @@ fn test_molecule_editor_tracked_build_error() {
 }
 
 #[rstest]
-fn test_molecule_editor_tracked_build_restoration(
-    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
-) {
+fn test_transaction_rollback_topology(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
     let source = Molecule::from_entries(entries);
-    let mut editor = source.edit();
+    let mut molecule = source.clone();
     let mut edits = Edits::new();
     edits.remove_topology(
         (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
         vec![],
     );
-    let transaction = editor.transact(edits).unwrap();
-    transaction.rollback(&mut editor).unwrap();
-    let witness = MoleculeCorrespondence::new(
-        Correspondence::new(vec![], 4, 4).unwrap(),
-        Correspondence::new(vec![], 3, 3).unwrap(),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-    );
-    assert_eq!(editor.tracked_build(), (source, witness));
+    Transaction::run(
+        &mut molecule,
+        |mut transaction| -> Result<(), MoleculeApplyError> {
+            transaction.apply(edits)?;
+            transaction.rollback();
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(molecule, source);
 }
 
 #[rstest]
-fn test_molecule_editor_tracked_snapshot_transaction_error(
-    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
-) {
-    let source = Molecule::from_entries(entries);
-    let mut editor = source.edit();
-    editor.add_atom(AtomForm::from_element(Element::F));
-    let before = editor.tracked_snapshot().unwrap();
-    let mut edits = Edits::new();
-    edits.remove_topology(
-        (0..4).map(|idx| AtomHandle::Id(AtomId(idx))).collect(),
-        vec![],
-    );
-    edits.remove_atom(AtomHandle::Id(AtomId(5)));
-    let result = editor.transact(edits);
-    assert_eq!(
-        result,
-        Err(TransactionError::HandleOutOfRange {
-            kind: EntityKind::Atom,
-            index: 5,
-            count: 5
-        })
-    );
-    assert_eq!(editor.tracked_snapshot(), Ok(before));
-}
-
-#[rstest]
-fn test_molecule_editor_tracked_build_dative_bonds_restoration(
+fn test_transaction_rollback_dative_bonds(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
     let source = Molecule::from_entries(entries.clone());
-    let mut editor = source.edit();
+    let mut molecule = source.clone();
     let mut edits = Edits::new();
     let (donors, acceptor, data) = &entries.dative[0];
     edits.remove_dative_bonds(vec![(
@@ -5442,27 +5399,24 @@ fn test_molecule_editor_tracked_build_dative_bonds_restoration(
         AtomHandle::Id(*acceptor),
         data.clone(),
     )]);
-    let transaction = editor.transact(edits).unwrap();
-    transaction.rollback(&mut editor).unwrap();
-    let expected = MoleculeCorrespondence::new(
-        Correspondence::identity(4),
-        Correspondence::identity(3),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-    );
-    assert_eq!(editor.tracked_build(), (source, expected));
+    Transaction::run(
+        &mut molecule,
+        |mut transaction| -> Result<(), MoleculeApplyError> {
+            transaction.apply(edits)?;
+            transaction.rollback();
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(molecule, source);
 }
 
 #[rstest]
-fn test_molecule_editor_tracked_build_aromatic_systems_restoration(
+fn test_transaction_rollback_aromatic_systems(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
     let source = Molecule::from_entries(entries.clone());
-    let mut editor = source.edit();
+    let mut molecule = source.clone();
     let mut edits = Edits::new();
     let (atoms, data) = &entries.aromatic[0];
     edits.remove_aromatic_systems(vec![(
@@ -5470,27 +5424,24 @@ fn test_molecule_editor_tracked_build_aromatic_systems_restoration(
         atoms.iter().copied().map(AtomHandle::Id).collect(),
         data.clone(),
     )]);
-    let transaction = editor.transact(edits).unwrap();
-    transaction.rollback(&mut editor).unwrap();
-    let expected = MoleculeCorrespondence::new(
-        Correspondence::identity(4),
-        Correspondence::identity(3),
-        Correspondence::identity(1),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-    );
-    assert_eq!(editor.tracked_build(), (source, expected));
+    Transaction::run(
+        &mut molecule,
+        |mut transaction| -> Result<(), MoleculeApplyError> {
+            transaction.apply(edits)?;
+            transaction.rollback();
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(molecule, source);
 }
 
 #[rstest]
-fn test_molecule_editor_tracked_build_multicenter_bonds_restoration(
+fn test_transaction_rollback_multicenter_bonds(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
     let source = Molecule::from_entries(entries.clone());
-    let mut editor = source.edit();
+    let mut molecule = source.clone();
     let mut edits = Edits::new();
     let (atoms, data) = &entries.multicenter[0];
     edits.remove_multicenter_bonds(vec![(
@@ -5498,27 +5449,24 @@ fn test_molecule_editor_tracked_build_multicenter_bonds_restoration(
         atoms.iter().copied().map(AtomHandle::Id).collect(),
         data.clone(),
     )]);
-    let transaction = editor.transact(edits).unwrap();
-    transaction.rollback(&mut editor).unwrap();
-    let expected = MoleculeCorrespondence::new(
-        Correspondence::identity(4),
-        Correspondence::identity(3),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-    );
-    assert_eq!(editor.tracked_build(), (source, expected));
+    Transaction::run(
+        &mut molecule,
+        |mut transaction| -> Result<(), MoleculeApplyError> {
+            transaction.apply(edits)?;
+            transaction.rollback();
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(molecule, source);
 }
 
 #[rstest]
-fn test_molecule_editor_tracked_build_noncovalent_bonds_restoration(
+fn test_transaction_rollback_noncovalent_bonds(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
     let source = Molecule::from_entries(entries.clone());
-    let mut editor = source.edit();
+    let mut molecule = source.clone();
     let mut edits = Edits::new();
     let (atoms, data) = &entries.noncovalent[0];
     edits.remove_noncovalent_bonds(vec![(
@@ -5526,27 +5474,24 @@ fn test_molecule_editor_tracked_build_noncovalent_bonds_restoration(
         atoms.map(AtomHandle::Id),
         data.clone(),
     )]);
-    let transaction = editor.transact(edits).unwrap();
-    transaction.rollback(&mut editor).unwrap();
-    let expected = MoleculeCorrespondence::new(
-        Correspondence::identity(4),
-        Correspondence::identity(3),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-    );
-    assert_eq!(editor.tracked_build(), (source, expected));
+    Transaction::run(
+        &mut molecule,
+        |mut transaction| -> Result<(), MoleculeApplyError> {
+            transaction.apply(edits)?;
+            transaction.rollback();
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(molecule, source);
 }
 
 #[rstest]
-fn test_molecule_editor_tracked_build_stereo_atoms_restoration(
+fn test_transaction_rollback_stereo_atoms(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
     let source = Molecule::from_entries(entries.clone());
-    let mut editor = source.edit();
+    let mut molecule = source.clone();
     let mut edits = Edits::new();
     let (site, ligands, data) = &entries.stereo_atoms[0];
     edits.remove_stereo_atoms(vec![(
@@ -5558,27 +5503,24 @@ fn test_molecule_editor_tracked_build_stereo_atoms_restoration(
             .collect(),
         data.clone(),
     )]);
-    let transaction = editor.transact(edits).unwrap();
-    transaction.rollback(&mut editor).unwrap();
-    let expected = MoleculeCorrespondence::new(
-        Correspondence::identity(4),
-        Correspondence::identity(3),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-        Correspondence::identity(1),
-    );
-    assert_eq!(editor.tracked_build(), (source, expected));
+    Transaction::run(
+        &mut molecule,
+        |mut transaction| -> Result<(), MoleculeApplyError> {
+            transaction.apply(edits)?;
+            transaction.rollback();
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(molecule, source);
 }
 
 #[rstest]
-fn test_molecule_editor_tracked_build_stereo_bonds_restoration(
+fn test_transaction_rollback_stereo_bonds(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
     let source = Molecule::from_entries(entries.clone());
-    let mut editor = source.edit();
+    let mut molecule = source.clone();
     let mut edits = Edits::new();
     let (site, ligands, data) = &entries.stereo_bonds[0];
     edits.remove_stereo_bonds(vec![(
@@ -5590,19 +5532,16 @@ fn test_molecule_editor_tracked_build_stereo_bonds_restoration(
             .collect(),
         data.clone(),
     )]);
-    let transaction = editor.transact(edits).unwrap();
-    transaction.rollback(&mut editor).unwrap();
-    let expected = MoleculeCorrespondence::new(
-        Correspondence::identity(4),
-        Correspondence::identity(3),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::identity(1),
-        Correspondence::new(vec![], 1, 1).unwrap(),
-    );
-    assert_eq!(editor.tracked_build(), (source, expected));
+    Transaction::run(
+        &mut molecule,
+        |mut transaction| -> Result<(), MoleculeApplyError> {
+            transaction.apply(edits)?;
+            transaction.rollback();
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(molecule, source);
 }
 
 #[rstest]

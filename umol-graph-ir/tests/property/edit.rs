@@ -1,5 +1,3 @@
-use std::panic::{catch_unwind, AssertUnwindSafe};
-
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_graph_core::Correspondence;
@@ -346,39 +344,34 @@ proptest! {
     /// subsets. A later creation uses the next creation ordinal even when compaction reuses a
     /// concrete id; the expected molecule is obtained by filtering the original label sequences.
     #[test]
-    fn test_molecule_editor_transact_handle_identity(
+    fn test_molecule_transact_handle_identity(
         trace in stable_atom_handle_trace_strategy(false),
     ) {
         let expected = trace.expected();
-        let mut editor = trace.base().edit();
-
-        editor
-            .transact(trace.edits())
-            .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
-
-        prop_assert_eq!(editor.build(), expected);
+        let mut molecule = trace.base();
+        molecule.transact([trace.edits()]).unwrap();
+        prop_assert_eq!(molecule, expected);
     }
 
     /// Removing either an initial-host or created target leaves a tombstone in its own handle table.
     /// Failure after additional compaction and creation rolls the complete transaction back.
     #[test]
-    fn test_molecule_editor_transact_handle_error(
+    fn test_molecule_transact_handle_error(
         trace in stable_atom_handle_trace_strategy(true),
     ) {
-        let mut editor = trace.base().edit();
-        let before = editor.clone().build();
-
+        let mut molecule = trace.base();
+        let before = molecule.clone();
         prop_assert_eq!(
-            editor.transact(trace.edits()).unwrap_err(),
-            trace.expected_removed_error(),
+            molecule.transact([trace.edits()]).unwrap_err(),
+            MoleculeApplyError::Transaction(trace.expected_removed_error())
         );
-        prop_assert_eq!(editor.build(), before);
+        prop_assert_eq!(molecule, before);
     }
 
     /// A shuffled subset of entity creations can use `New(0)` independently for every kind; later
     /// field edits resolve each handle in its same-kind namespace regardless of creation order.
     #[test]
-    fn test_molecule_editor_transact_handle_namespaces(
+    fn test_molecule_editor_apply_handle_namespaces(
         kinds in transaction_entity_kind_order_strategy(),
     ) {
         let base = Molecule::from_entries(MoleculeEntries {
@@ -529,10 +522,7 @@ proptest! {
             });
         }
 
-        let mut editor = base.edit();
-        editor
-            .transact(edits)
-            .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
+        let editor = base.edit().apply(edits).unwrap();
 
         if kinds.contains(&EntityKind::Atom) {
             prop_assert_eq!(&editor.atom(AtomId(4)).attributes().charge, &NumForm::Lit(1));
@@ -585,29 +575,28 @@ proptest! {
     }
 
     /// Every batched operation resolves all entries before mutation: an invalid handle at any
-    /// generated position leaves the complete editor equal to its pre-transaction state.
+    /// generated position leaves the molecule equal to its transaction-entry state.
     #[test]
-    fn test_molecule_editor_transact_batch_error(
+    fn test_molecule_transact_batch_error(
         batch in invalid_transaction_batch_strategy(),
     ) {
-        let mut editor = batch.base().edit();
-        let before = editor.clone().build();
-        let mut tracked = editor.clone();
-        let session = tracked.tracked_snapshot().unwrap();
+        let before = batch.base();
+        let mut molecule = before.clone();
+        let mut tracked = before.clone();
         prop_assert_eq!(
-            editor.clone().tracked_apply(batch.edits()).err(),
-            Some(batch.expected_error()),
+            before.edit().tracked_apply(batch.edits()).err(),
+            Some(batch.expected_error())
         );
         prop_assert_eq!(
-            tracked.tracked_transact(batch.edits()).unwrap_err(),
-            batch.expected_error(),
+            tracked.tracked_transact([batch.edits()]).unwrap_err(),
+            MoleculeApplyError::Transaction(batch.expected_error())
         );
-        prop_assert_eq!(tracked.tracked_snapshot(), Ok(session));
+        prop_assert_eq!(tracked, before.clone());
         prop_assert_eq!(
-            editor.transact(batch.edits()).unwrap_err(),
-            batch.expected_error(),
+            molecule.transact([batch.edits()]).unwrap_err(),
+            MoleculeApplyError::Transaction(batch.expected_error())
         );
-        prop_assert_eq!(editor.build(), before);
+        prop_assert_eq!(molecule, before);
     }
 
     /// `lift_constraints` followed by `inline_constraints` is idempotent:
@@ -656,25 +645,26 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_editor_transact_rollback(
+    fn test_transaction_rollback(
         (base, edits) in transaction_edits_strategy(),
     ) {
-        let mut builder = base.edit();
-        let before = builder.clone().build();
-        let tx = builder
-            .transact(edits)
-            .map_err(|e| TestCaseError::fail(format!("transact failed: {e}")))?;
-
-        tx.rollback(&mut builder)
-            .map_err(|e| TestCaseError::fail(format!("rollback failed: {e}")))?;
-
-        prop_assert_eq!(builder.build(), before);
+        let mut molecule = base.clone();
+        Transaction::run(
+            &mut molecule,
+            |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(edits)?;
+                transaction.rollback();
+                Ok(())
+            },
+        )
+        .unwrap();
+        prop_assert_eq!(molecule, base);
     }
 
     /// A valid prefix followed by a rejected edit reports the primary failure and restores the
-    /// exact initial state; rollback of the valid prefix must not replace it with `RollbackFailed`.
+    /// initial state without replacing the primary error.
     #[test]
-    fn test_molecule_editor_transact_error(
+    fn test_molecule_transact_error(
         (base, prefix) in transaction_edits_strategy(),
     ) {
         let atom_count = base.atoms().count();
@@ -693,39 +683,39 @@ proptest! {
             index: atom_count,
             count: atom_count,
         };
-        let mut editor = base.clone().edit();
+        let mut molecule = base.clone();
 
-        let error = editor.transact(edits).unwrap_err();
-        let rollback_failed = matches!(error, TransactionError::RollbackFailed { .. });
-
-        prop_assert!(!rollback_failed);
-        prop_assert_eq!(error, expected);
-        prop_assert_eq!(editor.build(), base);
+        let error = molecule.transact([edits]).unwrap_err();
+        prop_assert_eq!(error, MoleculeApplyError::Transaction(expected));
+        prop_assert_eq!(molecule, base);
     }
 
     /// Removing the first entity of any kind drops constraints on that entity, compacts every
     /// surviving reference, and preserves the exact order and multiplicity of duplicate entries.
     #[test]
-    fn test_molecule_editor_transact_constraint_compaction(
+    fn test_transaction_apply_constraint_compaction(
         case in constraint_compaction_case_strategy(),
     ) {
         let base = case.base();
-        let mut editor = base.clone().edit();
-        let transaction = editor
-            .transact(case.edits())
-            .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
+        let editor = base.edit().apply(case.edits()).unwrap();
         let constraints = editor.constraints().iter().cloned().collect::<Vec<_>>();
-
         prop_assert_eq!(constraints.as_slice(), case.expected());
 
-        transaction
-            .rollback(&mut editor)
-            .map_err(|error| TestCaseError::fail(format!("rollback failed: {error}")))?;
-        prop_assert_eq!(editor.build(), base);
+        let mut molecule = base.clone();
+        Transaction::run(
+            &mut molecule,
+            |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(case.edits())?;
+                transaction.rollback();
+                Ok(())
+            },
+        )
+        .unwrap();
+        prop_assert_eq!(molecule, base);
     }
 
     #[test]
-    fn test_molecule_editor_transact_rollback_unpaired_electrons(
+    fn test_transaction_rollback_unpaired_electrons(
         atom_components in partial_unpaired_electrons_update_strategy(),
         bond_components in partial_unpaired_electrons_update_strategy(),
         aromatic_components in partial_unpaired_electrons_update_strategy(),
@@ -733,10 +723,10 @@ proptest! {
     ) {
         let atom = AtomForm::from_element(Element::C).with_unpaired_electrons((2_u8, 3_u8));
         let bond = BondForm::from_order(1).with_unpaired_electrons((2_u8, 3_u8));
-        let aromatic = AromaticSystemForm::from_electrons(vec![1, 1, 1])
-            .with_unpaired_electrons((2_u8, 3_u8));
-        let multicenter = MulticenterBondForm::from_electrons(vec![1, 1, 1])
-            .with_unpaired_electrons((2_u8, 3_u8));
+        let aromatic =
+            AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8));
+        let multicenter =
+            MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_unpaired_electrons((2_u8, 3_u8));
         let atom_update = AtomUpdate {
             unpaired_electrons: atom_components,
             ..Default::default()
@@ -754,26 +744,36 @@ proptest! {
             ..Default::default()
         };
         let base = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![atom.clone(), AtomForm::from_element(Element::N), AtomForm::from_element(Element::O)],
+            atoms: vec![
+                atom.clone(),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
             bonds: vec![(AtomId(0), AtomId(1), bond.clone())],
             aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], aromatic.clone())],
             multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], multicenter.clone())],
             ..Default::default()
         });
         let expected = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![atom.update(&atom_update), AtomForm::from_element(Element::N), AtomForm::from_element(Element::O)],
+            atoms: vec![
+                atom.update(&atom_update),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
             bonds: vec![(AtomId(0), AtomId(1), bond.update(&bond_update))],
-            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], aromatic.update(&aromatic_update))],
-            multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], multicenter.update(&multicenter_update))],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                aromatic.update(&aromatic_update),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                multicenter.update(&multicenter_update),
+            )],
             ..Default::default()
         });
         let mut edits = Edits::new();
         edits.update_atom(AtomHandle::Id(AtomId(0)), &atom, &atom_update);
-        edits.update_bond(
-            BondHandle::Id(BondId(0)),
-            &bond,
-            &bond_update,
-        );
+        edits.update_bond(BondHandle::Id(BondId(0)), &bond, &bond_update);
         edits.update_aromatic_system(
             AromaticSystemHandle::Id(AromaticSystemId(0)),
             &aromatic,
@@ -785,141 +785,89 @@ proptest! {
             &multicenter_update,
         );
 
-        let mut editor = base.clone().edit();
-        let transaction = editor
-            .transact(edits)
-            .map_err(|error| TestCaseError::fail(format!("transact failed: {error}")))?;
-        prop_assert_eq!(editor.clone().build(), expected);
-
-        transaction
-            .rollback(&mut editor)
-            .map_err(|error| TestCaseError::fail(format!("rollback failed: {error}")))?;
-        prop_assert_eq!(editor.build(), base);
+        let mut molecule = base.clone();
+        let applied = Transaction::run(
+            &mut molecule,
+            |mut transaction| -> Result<_, MoleculeApplyError> {
+                transaction.apply(edits)?;
+                let applied = transaction.probe()?.clone();
+                transaction.rollback();
+                Ok(applied)
+            },
+        )
+        .unwrap();
+        prop_assert_eq!(applied, expected);
+        prop_assert_eq!(molecule, base);
     }
 
     #[test]
-    fn test_transaction_append(
+    fn test_transaction_rollback_batches(
         (base, first_edits, second_edits) in consecutive_transaction_strategy(),
     ) {
-        let mut editor = base.clone().edit();
-        let first = editor
-            .transact(first_edits)
-            .map_err(|error| TestCaseError::fail(format!("first transact failed: {error}")))?;
-        let second = editor
-            .transact(second_edits)
-            .map_err(|error| TestCaseError::fail(format!("second transact failed: {error}")))?;
-        let expected_undos = first
-            .undos()
-            .iter()
-            .chain(second.undos())
-            .cloned()
-            .collect::<Vec<_>>();
-
-        let mut combined = first.clone();
-        combined.append(second);
-        prop_assert_eq!(combined.undos(), expected_undos.as_slice());
-
-        let mut empty_then_first = Transaction::default();
-        empty_then_first.append(first.clone());
-        prop_assert_eq!(&empty_then_first, &first);
-        let mut first_then_empty = first;
-        first_then_empty.append(Transaction::default());
-        prop_assert_eq!(first_then_empty, empty_then_first);
-
-        combined
-            .rollback(&mut editor)
-            .map_err(|e| TestCaseError::fail(format!("combined rollback failed: {e}")))?;
-        prop_assert_eq!(editor.build(), base);
+        let mut molecule = base.clone();
+        Transaction::run(
+            &mut molecule,
+            |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(first_edits)?;
+                transaction.apply(second_edits)?;
+                transaction.rollback();
+                Ok(())
+            },
+        )
+        .unwrap();
+        prop_assert_eq!(molecule, base);
     }
 
     #[test]
     fn test_molecule_editor_apply((base, edits) in transaction_edits_strategy()) {
-        let mut checked = base.edit();
-        checked
-            .transact(edits.clone())
-            .map_err(|e| TestCaseError::fail(format!("checked transact failed: {e}")))?;
-
-        let applied = base
-            .edit()
-            .apply(edits)
-            .map_err(|e| TestCaseError::fail(format!("apply failed: {e}")))?;
-
-        prop_assert_eq!(applied.build(), checked.build());
+        let mut checked = base.clone();
+        checked.transact([edits.clone()]).unwrap();
+        let applied = base.edit().apply(edits).unwrap();
+        prop_assert_eq!(applied.build(), checked);
     }
 
-    /// Consecutive batches agree across plain and tracked paths; rollback reverses the composed
-    /// operation witness. The session also includes edits made before either batch.
+    /// A transaction spanning consecutive batches has the composed batch correspondence and the
+    /// same result as separate commits. Rolling both batches back restores the initial molecule.
     #[test]
-    fn test_transaction_tracked_rollback(
+    fn test_molecule_tracked_transact_composition(
         (base, first_edits, second_edits) in consecutive_transaction_strategy(),
     ) {
-        let mut source = base.edit();
-        let added = source.add_atom(AtomForm::from_element(Element::F));
-        let source = source.build();
-        let mut editor = source.edit();
-        editor.remove_topology(&[added], &[]);
-        let before = editor.tracked_snapshot().unwrap();
-        let mut plain = editor.clone();
-        let plain_first = plain.transact(first_edits.clone()).unwrap();
-        let (mut first, first_witness) = editor.tracked_transact(first_edits.clone()).unwrap();
-        prop_assert_eq!(&first, &plain_first);
-        prop_assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
-
-        let first_result = editor.snapshot().unwrap();
-        let (applied, applied_witness) = editor.clone().tracked_apply(second_edits.clone()).unwrap();
-        let plain_second = plain.transact(second_edits.clone()).unwrap();
-        let (second, second_witness) = editor.tracked_transact(second_edits).unwrap();
-        prop_assert_eq!(&second, &plain_second);
-        prop_assert_eq!(applied_witness, second_witness.clone());
-        prop_assert_eq!(applied.tracked_snapshot(), editor.tracked_snapshot());
-        prop_assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
-        let composed = first_witness.compose(&second_witness).unwrap();
+        let mut separate = base.clone();
+        let first = separate.tracked_transact([first_edits.clone()]).unwrap();
+        let first_result = separate.clone();
+        let (applied, applied_witness) = separate.edit().tracked_apply(second_edits.clone()).unwrap();
+        let second = separate.tracked_transact([second_edits.clone()]).unwrap();
+        prop_assert_eq!(applied_witness, second.clone());
+        prop_assert_eq!(applied.build(), separate.clone());
         prop_assert_eq!(
-            editor.tracked_snapshot().unwrap().1,
-            before.1.compose(&composed).unwrap(),
-        );
-        prop_assert_eq!(
-            before.0.tracked_apply(first_edits).unwrap(),
-            (first_result, first_witness.clone())
+            base.tracked_apply(first_edits.clone()).unwrap(),
+            (first_result, first.clone())
         );
 
-        first.append(second);
-        let mut plain_transaction = plain_first;
-        plain_transaction.append(plain_second);
-        let reverse = first.tracked_rollback(&mut editor).unwrap();
-        plain_transaction.rollback(&mut plain).unwrap();
-        prop_assert_eq!(reverse, composed.reverse());
-        prop_assert_eq!(editor.snapshot(), Ok(before.0));
-        prop_assert_eq!(editor.tracked_snapshot(), plain.tracked_snapshot());
-    }
+        let mut together = base.clone();
+        let composed = together
+            .tracked_transact([first_edits.clone(), second_edits.clone()])
+            .unwrap();
+        prop_assert_eq!(composed, first.compose(&second).unwrap());
+        prop_assert_eq!(together, separate.clone());
+        let mut plain = base.clone();
+        plain
+            .transact([first_edits.clone(), second_edits.clone()])
+            .unwrap();
+        prop_assert_eq!(plain, separate);
 
-    /// A valid journal applied to an independently generated valid post-transaction state may
-    /// succeed or return an error, but every undo path must return normally rather than panic.
-    #[test]
-    fn test_transaction_rollback_unrelated(
-        (journal_base, journal_edits) in transaction_edits_strategy(),
-        (editor_base, editor_edits) in transaction_edits_strategy(),
-    ) {
-        let mut journal_editor = journal_base.edit();
-        let transaction = journal_editor
-            .transact(journal_edits)
-            .map_err(|error| TestCaseError::fail(format!("journal transact failed: {error}")))?;
-        let mut unrelated = editor_base.edit();
-        unrelated
-            .transact(editor_edits)
-            .map_err(|error| TestCaseError::fail(format!("editor transact failed: {error}")))?;
-
-        let mut tracked = unrelated.clone();
-        let outcome = catch_unwind(AssertUnwindSafe(|| {
-            transaction.clone().rollback(&mut unrelated)
-        }));
-        let tracked_outcome = catch_unwind(AssertUnwindSafe(|| {
-            transaction.tracked_rollback(&mut tracked).map(|_| ())
-        }));
-
-        prop_assert!(outcome.is_ok());
-        prop_assert!(tracked_outcome.is_ok());
-        prop_assert_eq!(outcome.unwrap(), tracked_outcome.unwrap());
+        let mut restored = base.clone();
+        Transaction::run(
+            &mut restored,
+            |mut transaction| -> Result<(), MoleculeApplyError> {
+                transaction.apply(first_edits)?;
+                transaction.apply(second_edits)?;
+                transaction.rollback();
+                Ok(())
+            },
+        )
+        .unwrap();
+        prop_assert_eq!(restored, base);
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow
@@ -1066,9 +1014,9 @@ fn test_molecule_apply_error(source: Molecule) {
         source.apply(edits.clone()),
         Err(MoleculeApplyError::Transaction(expected.clone()))
     );
-    let mut editor = source.edit();
-    assert_eq!(editor.transact(edits), Err(expected));
-    assert_eq!(editor.try_build(), Ok(source));
+    let mut molecule = source.clone();
+    assert_eq!(molecule.transact([edits]), Err(expected.into()));
+    assert_eq!(molecule, source);
 }
 
 #[rstest]

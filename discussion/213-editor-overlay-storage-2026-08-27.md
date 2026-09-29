@@ -42,9 +42,9 @@ S4d is complete: comparable single-entity entries live in their owning entity
 modules, and both Edit execution paths use specialized framed_eq implementations.
 S5a is implemented: scoped transactions provide immediate batch application,
 checked probes and commit, rollback, and optional correspondence. Molecule's
-prepared-batch conveniences use the same lifecycle. S5b's graph-ir caller
-migration is next; S5's caller migration remains necessary before the build and
-tests return green.
+prepared-batch conveniences use the same lifecycle. S5b's graph-ir caller and
+test migration is complete; graph-ir passes its checks. S5c's graph operations
+and S5d's Python callers remain before the stage gate.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -97,7 +97,7 @@ complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
-complete; S4b9 closes the strict lint gate. S5a is implemented; S5b is next.
+complete; S4b9 closes the strict lint gate. S5a–S5b are complete; S5c is next.
 
 ## Editor and transaction API
 
@@ -5887,16 +5887,33 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   The 32 public-API unit cases cover callback return/error/unwind, forgotten
   handles, abort latching, separate batch namespaces, probe repair, constructor-
   equivalent integrity rejection, explicit rollback, and correspondence across
-  topology and all six overlay kinds. They have not run. Library and test
-  compilation still fail at legacy editor transaction callers, including
-  reaction.rs:2128; no diagnostic targets the new transaction implementation or
-  its tests. S5b migrates the graph-ir callers and existing suites. Nightly
-  formatting and full diff review pass; the stage gate remains S5d3.
+  topology and all six overlay kinds. All pass with the S5b caller migration.
+  The workspace stage gate remains S5d3.
 
-- **S5b** (`umol-graph-ir` reaction and molecule callers; breaking, green at S5d)
+- **S5b — completed 2026-09-28** (`umol-graph-ir` reaction and molecule callers; breaking, green at S5d)
   Migrate uses of detached journals. Preserve reaction `Ok(None)` versus error
   classification and host-to-product correspondence.
   Test failed applications and product integrity. [dep: S5a]
+
+  **Implementation and verification.** Reaction application uses editor.apply on
+  its product candidate, retaining the existing integrity-error classification
+  and host-to-product correspondence. Transaction callers and benchmarks use the
+  scoped API. Batch/rollback unit cases live under molecule::transact; manipulated
+  Undo cases call Molecule::apply_undo internally. All 135 cases from the former
+  editor transaction module are retained.
+
+  Public properties cover batch namespaces, rollback, and correspondence
+  composition. The detached-journal concatenation and unrelated-receiver
+  properties are retired with that public interface; multi-batch rollback and
+  internal no-panic Undo cases cover the retained contracts. Constraint-compaction
+  properties read transient constraints through the editor and separately verify
+  transaction rollback, without requiring transient stereo incidence to pass probe.
+
+  Graph-ir verification passes: 8,775 library tests (3 ignored); 44 selected
+  edit, molecule-compaction, and reaction-application property-suite tests with
+  PROPTEST_CASES=256; doctests (1 passed, 3 ignored); benchmark compilation;
+  all-target strict Clippy with proptest; warnings-denied rustdoc; nightly
+  formatting and diff review. S5c is next; the workspace gate remains S5d3.
 - **S5c** (`umol-graph::ops`; breaking, green at S5d) Migrate existing borrowed
   resolve/project execution to scoped transactions, sharing the planned
   batches and using checked probes between phases. Keep their present public
@@ -6306,7 +6323,7 @@ Within the revised S2:
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
-  scoped run. S5a's public lifecycle is implemented; S5b is next. S5's build
+  scoped run. S5a–S5b are complete; S5c is next. S5's build
   and test gate remains S5d3.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

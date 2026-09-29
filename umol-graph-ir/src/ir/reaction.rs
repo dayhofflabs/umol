@@ -2124,9 +2124,8 @@ impl Reaction {
             edits.remove_topology(remove_atoms, remove_bonds);
         }
 
-        let mut builder = host.edit();
-        builder.transact(edits)?;
-        let product = match builder.try_build() {
+        let editor = host.edit().apply(edits)?;
+        let product = match editor.try_build() {
             Ok(product) => product,
             Err(
                 MoleculeIntegrityError::DuplicateAtom { .. }

@@ -3034,6 +3034,9 @@ where
 }
 
 #[cfg(test)]
+mod undo_tests;
+
+#[cfg(test)]
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
