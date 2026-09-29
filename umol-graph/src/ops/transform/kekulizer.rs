@@ -248,6 +248,23 @@ impl Kekulizer {
 impl Transformer for Kekulizer {
     type Error = KekulizeError;
 
+    fn transform(&self, molecule: Molecule) -> Result<Molecule, KekulizeError> {
+        if molecule.aromatic_systems().count() == 0 {
+            return Ok(molecule);
+        }
+
+        let edits = self.plan_transform(&molecule)?;
+        let editor = molecule
+            .edit()
+            .apply(edits)
+            .expect("kekulization plan applies to its input");
+        let molecule = editor
+            .finish()
+            .expect("kekulization plan preserves molecule integrity");
+        validate_localized_candidate(&molecule)?;
+        Ok(molecule)
+    }
+
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), KekulizeError> {
         if molecule.aromatic_systems().count() == 0 {
             return Ok(());
@@ -740,20 +757,20 @@ mod tests {
         #[case] node_order: Vec<AtomId>,
         #[case] expected: Molecule,
     ) {
+        let transformer = Kekulizer::new(KekulizeConfig::default(), node_order);
+        assert_eq!(transformer.transform(input.clone()), Ok(expected.clone()));
         let mut molecule = input;
-        Kekulizer::new(KekulizeConfig::default(), node_order)
-            .transform_into(&mut molecule)
-            .unwrap();
+        transformer.transform_into(&mut molecule).unwrap();
         assert_eq!(molecule, expected);
     }
 
     #[rstest]
     #[case::kekule_benzene( mol_dsl_concrete!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#))]
     fn test_kekulizer_transform_into_identity(#[case] input: Molecule) {
+        let transformer = Kekulizer::new(KekulizeConfig::default(), (0..6).map(AtomId).collect());
+        assert_eq!(transformer.transform(input.clone()), Ok(input.clone()));
         let mut molecule = input.clone();
-        Kekulizer::new(KekulizeConfig::default(), (0..6).map(AtomId).collect())
-            .transform_into(&mut molecule)
-            .unwrap();
+        transformer.transform_into(&mut molecule).unwrap();
         assert_eq!(molecule, input);
     }
 
@@ -799,9 +816,10 @@ mod tests {
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizeError,
     ) {
+        let transformer = Kekulizer::new(KekulizeConfig::default(), node_order);
+        assert_eq!(transformer.transform(input.clone()), Err(expected.clone()));
         let mut molecule = input.clone();
-        let result =
-            Kekulizer::new(KekulizeConfig::default(), node_order).transform_into(&mut molecule);
+        let result = transformer.transform_into(&mut molecule);
         assert_eq!(result, Err(expected));
         assert_eq!(molecule, input);
     }
@@ -822,12 +840,13 @@ mod tests {
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizeError,
     ) {
-        let mut actual = input.clone();
-        let result = Kekulizer::new(
+        let transformer = Kekulizer::new(
             KekulizeConfig::new(MaximumMatchingAlgorithm::HopcroftKarp),
             node_order,
-        )
-        .transform_into(&mut actual);
+        );
+        assert_eq!(transformer.transform(input.clone()), Err(expected.clone()));
+        let mut actual = input.clone();
+        let result = transformer.transform_into(&mut actual);
 
         assert_eq!(result, Err(expected));
         assert_eq!(actual, input);

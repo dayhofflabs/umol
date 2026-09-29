@@ -1,4 +1,7 @@
 //! Representation-integrity preservation by chemistry-layer publishers.
+//!
+//! Resolved SMILES fixtures also check equality between consuming and borrowed
+//! transformations; publication is checked through the editor's integrity gate.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -38,19 +41,28 @@ proptest! {
 
     #[test]
     fn test_aromatizer_integrity_preservation(source in kekule_molecule_strategy()) {
-        let published = Aromatizer::new(&AromaticityModel::daylight())
+        let transformer = Aromatizer::new(&AromaticityModel::daylight());
+        let mut borrowed = source.clone();
+        let published = transformer
             .transform(source)
             .map_err(|error| TestCaseError::fail(format!("aromatization failed: {error}")))?;
+        transformer.transform_into(&mut borrowed)
+            .map_err(|error| TestCaseError::fail(format!("aromatization failed: {error}")))?;
 
+        prop_assert_eq!(&borrowed, &published);
         prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 
     #[test]
     fn test_delocalize_charge_integrity_preservation(source in aromatic_molecule_strategy()) {
+        let mut borrowed = source.clone();
         let published = DelocalizeCharge
             .transform(source)
             .expect("delocalized-charge transformation is infallible");
+        DelocalizeCharge.transform_into(&mut borrowed)
+            .expect("delocalized-charge transformation is infallible");
 
+        prop_assert_eq!(&borrowed, &published);
         prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 
@@ -65,10 +77,15 @@ proptest! {
             MaximumMatchingAlgorithm::Edmonds
         };
         let node_order = source.atoms().ids().collect::<Vec<AtomId>>();
-        let published = Kekulizer::new(KekulizeConfig::new(algorithm), node_order)
+        let transformer = Kekulizer::new(KekulizeConfig::new(algorithm), node_order);
+        let mut borrowed = source.clone();
+        let published = transformer
             .transform(source)
             .map_err(|error| TestCaseError::fail(format!("kekulization failed: {error}")))?;
+        transformer.transform_into(&mut borrowed)
+            .map_err(|error| TestCaseError::fail(format!("kekulization failed: {error}")))?;
 
+        prop_assert_eq!(&borrowed, &published);
         prop_assert_eq!(published.clone().edit().finish(), Ok(published));
     }
 

@@ -60,7 +60,7 @@ and projection; ingestion underdetermination has no report payload in Rust or Py
 S7d implements consuming and borrowed Python resolution; explicit report methods
 return (solution, report), and Solution has no report field. S8a implements the
 Transformer trait and caller migration; S8b supplies the three consuming
-implementations and restores compilation.
+implementations and completes S8's verification. S9a is next.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -75,7 +75,7 @@ reopen S2i or block S2j.
 | --- | --- | --- |
 | Storage delegation, participant methods, Edit/Undo variants, local getters | Settled design; S1a–S1c complete | Use the existing typed entity sets and graph-core mutation/restoration; contracts below. |
 | Editing and recovery | Settled design | Owning, destructive editor; separate borrowed, scoped transaction. Editor and Transaction probe check integrity and return an immutable Molecule borrow; no probe callback. |
-| resolve/project/transform consumers | Settled design; integration work remains | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
+| resolve/project/transform consumers | S7 and S8 complete | resolve/project consume destructively; resolve_into/project_into mutate borrowed inputs with recovery. Consuming resolution uses Solution<Molecule, C, ()>; reporting is explicit. Ingest uses report-free resolution. Transformer signatures follow the same ownership naming. |
 | Molecule attribute methods | Implemented; S2 complete | Mutable borrows expose every entity attribute and entity-level constraint in Molecule and MoleculeEditor. Rust and Python retain simple assignment, including aromatic/multicenter/stereo. Mutation callbacks are removed. |
 | Entity-view structures and API | S2i5 and S2j complete | Molecule uses *View / *ViewMut; editor uses *EditorView / *EditorViewMut. Corresponding molecule/editor methods have identical signatures and semantics. All attributes remain freely mutable; structural mutation is editor-only. |
 | Molecule-level constraint mutation | Implemented; S2 complete | Molecule::constraints provides reads; the editor exposes &mut Constraints. Python molecule constraint entries and iteration are lazy and read-only. try_modify_constraints is removed. |
@@ -492,7 +492,7 @@ input or preserves the borrowed receiver, respectively.
 | --- | --- |
 | Aromatizer | Perceive/select before writes. Derive covered bond ids from input topology and planned systems; put additions and bond assertions in one batch. One commit/finish gate replaces editor/build followed by direct writes. |
 | DelocalizeCharge | Plan all changes first; batch atom charges/assertions and same-length system electron vectors/charge. Its producer establishes shape preservation; retain Infallible and assert that producer contract. One gate replaces per-system candidate copies/checks. Journaling is extra work over raw assignments. |
-| Kekulizer | Plan matchings and unchanged-field admission first; batch field changes and system removal; probe for current valence/spin checks; commit/finish. Keep present diagnostics. The known late spin failure also fails on the input; it does not prove conformant kekulization inherently fallible. |
+| Kekulizer | Plan matchings and unchanged-field admission first; batch field changes and system removal. Borrowed execution checks valence/spin through probe before commit. Consuming execution finishes once, then checks valence/spin on the published candidate before returning it. Keep present diagnostics. The known late spin failure also fails on the input; it does not prove conformant kekulization inherently fallible. |
 | HydrogenFolder/HydrogenUnfolder | Use the ordinary Transformer surface; the topology, reference, and stereo rewrite remains owned by graph IR as specified in 166. Reuse participant replacement Edits. Fold replaces ligands before deleting H; unfold adds atom/bond handles before replacing virtual ligands/counts. Eligibility is planning; incidence/frame integrity is completion. |
 
 Single-batch transformations share their plan producer between the two ownership
@@ -6611,18 +6611,35 @@ temporary clone-based default transform implementation is introduced between the
   source preservation, independent output mutation, and early/late rejection.
   Publication properties retain their integrity assertions.
 
-  **Verification:** Nightly formatting and diff review pass. Graph all-target,
-  all-feature checking reports only the three missing transform implementations
-  assigned to S8b (E0046). Runtime tests and lint/rustdoc gates await S8b.
+  **Verification:** S8b completes compilation, runtime tests, strict Clippy, and
+  warnings-denied rustdoc for the combined trait/implementation change.
   Deferred execution is explicit in the iterator closures: neither the copy nor
   transformation occurs outside once_with. Scratch is empty.
 
-- **S8b** (`umol-graph::ops::transform::{aromatizer,delocalize_charge,kekulizer}`;
+- **S8b — completed 2026-09-29** (`umol-graph::ops::transform::{aromatizer,delocalize_charge,kekulizer}`;
   breaking, red→green) Reuse S6c's planning and borrowed execution for the new
   consuming route;
   use one publication gate and retain existing chemistry errors, including
   DelocalizeCharge's `Infallible` contract. Test each operation's success,
   rejection, and checked output. [dep: S8a]
+
+  **Implementation:** All three transform methods move their input into the
+  owning editor and apply their existing plan without a recovery copy or journal.
+  finish supplies one integrity gate. Kekulizer then runs the shared valence/spin
+  checks on that candidate and drops it on rejection; its unchanged-input path
+  returns the original molecule. Borrowed transaction execution and existing
+  errors remain unchanged, including DelocalizeCharge's Infallible contract.
+
+  **Verification:** 58 transformation unit tests and 26 kekulization fixtures
+  pass. Four publication properties pass with PROPTEST_CASES=256. The three
+  transformer properties compare consuming and borrowed results and check
+  publication integrity. Exact cases
+  cover unchanged input, independent iterator outputs, Clar rejection, matching
+  rejection, and late spin rejection with borrowed recovery. Graph all-target,
+  all-feature strict Clippy, warnings-denied rustdoc, nightly formatting, and
+  full diff review pass. Scratch is empty. S9a is next; final workspace and
+  benchmark gates remain in S9b.
+
 - **S8c — moved to S6b.** combine_from caller migration is required during the
   owning editor change, not a later independent optimization.
 
@@ -6670,7 +6687,7 @@ Within the revised S2:
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
   scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a–S6d3 are complete; S7a is next.
+  S6a–S6d3, S7, and S8 are complete; S9a is next.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.

@@ -119,6 +119,17 @@ impl DelocalizeCharge {
 impl Transformer for DelocalizeCharge {
     type Error = Infallible;
 
+    fn transform(&self, molecule: Molecule) -> Result<Molecule, Self::Error> {
+        let edits = self.plan_transform(&molecule);
+        let editor = molecule
+            .edit()
+            .apply(edits)
+            .expect("charge delocalization plan applies to its input");
+        Ok(editor
+            .finish()
+            .expect("charge delocalization plan preserves molecule integrity"))
+    }
+
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), Self::Error> {
         let edits = self.plan_transform(molecule);
         if !edits.is_empty() {
@@ -201,6 +212,9 @@ mod tests {
         }"#)
     )]
     fn test_delocalize_charge_transform(#[case] input: Molecule, #[case] expected: Molecule) {
+        let mut borrowed = input.clone();
+        assert_eq!(DelocalizeCharge.transform_into(&mut borrowed), Ok(()));
+        assert_eq!(borrowed, expected);
         assert_eq!(DelocalizeCharge.transform(input), Ok(expected));
     }
 
@@ -225,6 +239,9 @@ mod tests {
         :aromatic-systems [{:atoms [0 1 2] :attrs "*"}]
     }"#))]
     fn test_delocalize_charge_transform_identity(#[case] input: Molecule) {
+        let mut borrowed = input.clone();
+        assert_eq!(DelocalizeCharge.transform_into(&mut borrowed), Ok(()));
+        assert_eq!(borrowed, input);
         assert_eq!(DelocalizeCharge.transform(input.clone()), Ok(input));
     }
 

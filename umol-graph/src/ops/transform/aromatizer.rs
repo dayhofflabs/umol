@@ -82,6 +82,17 @@ impl Aromatizer {
 impl Transformer for Aromatizer {
     type Error = AromatizeError;
 
+    fn transform(&self, molecule: Molecule) -> Result<Molecule, AromatizeError> {
+        let edits = self.plan_transform(&molecule)?;
+        let editor = molecule
+            .edit()
+            .apply(edits)
+            .expect("aromatization plan applies to its input");
+        Ok(editor
+            .finish()
+            .expect("aromatization plan preserves molecule integrity"))
+    }
+
     fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AromatizeError> {
         let edits = self.plan_transform(molecule)?;
         if !edits.is_empty() {
@@ -143,6 +154,7 @@ mod tests {
     use umol_graph_ir::mol_dsl_concrete;
 
     use super::*;
+    use crate::ops::model::AromaticityRule;
 
     fn kekule_carbon() -> AtomForm {
         let mut atom = AtomForm::from_element(Element::C);
@@ -207,6 +219,49 @@ mod tests {
             Aromatizer::new(&AromaticityModel::daylight()).transform(molecule),
             Ok(expected)
         );
+    }
+
+    #[rstest]
+    #[case::acyclic(mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#))]
+    #[case::already_aromatic(mol_dsl_concrete!(r#"{
+        :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+        :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
+                [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+    }"#))]
+    fn test_aromatizer_transform_identity(#[case] molecule: Molecule) {
+        assert_eq!(
+            Aromatizer::new(&AromaticityModel::daylight()).transform(molecule.clone()),
+            Ok(molecule)
+        );
+    }
+
+    #[rstest]
+    #[case::clar_heterocycle(
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#h0#n" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 :double] [1 2 :single] [2 3 :double]
+                    [3 4 :single] [4 5 :double] [5 0 :single]]
+        }"#),
+        AromaticityModel { rule: AromaticityRule::Clar, ..AromaticityModel::daylight() },
+        AromatizeError::Contradiction(AromaticityContradiction::ClarNonBenzenoid(
+            "Clar model requires benzenoid input but non-carbon aromatic atoms are present".into()
+        ))
+    )]
+    fn test_aromatizer_transform_error(
+        #[case] molecule: Molecule,
+        #[case] model: AromaticityModel,
+        #[case] expected: AromatizeError,
+    ) {
+        let transformer = Aromatizer::new(&model);
+        let mut borrowed = molecule.clone();
+        assert_eq!(
+            transformer.transform_into(&mut borrowed),
+            Err(expected.clone())
+        );
+        assert_eq!(borrowed, molecule);
+        assert_eq!(transformer.transform_iter(&molecule).next(), None);
+        assert_eq!(transformer.transform(molecule), Err(expected));
     }
 
     #[rstest]
