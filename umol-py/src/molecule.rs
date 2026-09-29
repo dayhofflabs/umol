@@ -292,7 +292,8 @@ impl Molecule {
     ///
     /// Raises `TransactionError` when the edits cannot be applied and `InvalidStructureError` when
     /// the modified draft cannot be published as a molecule.
-    /// Failure leaves the molecule consumed.
+    /// The molecule is consumed before the batch contents are transferred. Failure leaves it
+    /// consumed, including when the batch was already consumed.
     fn apply(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
         self.take()?
             .apply(edits.try_borrow_mut(py)?.take()?)
@@ -300,7 +301,8 @@ impl Molecule {
             .map_err(molecule_apply_error)
     }
 
-    /// Apply the same checked edit batch and return the source-to-result correspondence.
+    /// Consume this molecule and the batch as in apply, also returning the source-to-result
+    /// correspondence.
     fn tracked_apply(
         &mut self,
         py: Python<'_>,

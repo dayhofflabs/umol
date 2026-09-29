@@ -1,6 +1,4 @@
-//! Construction builder — build a fresh `Molecule` with a bare-verb-adds convention:
-//! every method *adds/declares* (there is no lookup — that is `MoleculeEditor`). Wraps a
-//! `MoleculeEditor` and lowers each call onto it.
+//! Programmatic molecule construction with [`MoleculeBuilder`].
 
 use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::AtomForm;
@@ -17,14 +15,11 @@ use super::super::noncovalent::NoncovalentBondForm;
 use super::super::stereo::{StereoAtomForm, StereoBondForm};
 use super::{Molecule, MoleculeEditor};
 
-/// Build a molecule from scratch. `atom` adds an atom and hands back its handle; the
-/// per-kind verbs (`single`/`double`/`triple`, `dative`) add bonds between handles;
-/// `build` finalizes. Contrast `MoleculeEditor`, which *mutates an existing* molecule
-/// (`add_*` plus `atom(id)`/`bond(id)` lookups).
+/// Build a molecule from scratch. Atom and bond additions return entity ids.
+/// [`Self::build`] consumes the builder and asserts molecule integrity.
 pub struct MoleculeBuilder {
     editor: MoleculeEditor,
-    /// Whether each added atom is grounded — its unspecified fields filled with their
-    /// ground defaults (neutral, singlet, …). Applied per atom via `AtomForm::into_concrete`.
+    /// Whether each added atom receives concrete defaults through AtomForm::into_concrete.
     concrete: bool,
 }
 
@@ -37,10 +32,8 @@ impl MoleculeBuilder {
         }
     }
 
-    /// A fresh builder that completes each atom — unspecified fields take their ground
-    /// defaults (neutral, singlet, …), reusing `AtomForm::into_concrete`. The in-code
-    /// analogue of the `mol_dsl_concrete!` path. (Partial defaults — e.g. neutral but spin
-    /// open — will be the L2 `+`-spec's `charge(0)`/`spin(…)` terms.)
+    /// A fresh builder that fills unspecified atom fields with concrete defaults
+    /// through [`AtomForm::into_concrete`].
     pub fn concrete() -> Self {
         Self {
             editor: Molecule::new().edit(),
@@ -48,7 +41,7 @@ impl MoleculeBuilder {
         }
     }
 
-    /// Add an atom, returning its handle. Accepts an element (`C`), an `AtomForm`, or a
+    /// Add an atom, returning its id. Accepts an element (`C`), an `AtomForm`, or a
     /// compact atom-string (`"C#h3"`) via `Into<AtomForm>`.
     pub fn atom(&mut self, spec: impl Into<AtomForm>) -> AtomId {
         let atom = spec.into();

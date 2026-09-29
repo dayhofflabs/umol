@@ -60,7 +60,8 @@ and projection; ingestion underdetermination has no report payload in Rust or Py
 S7d implements consuming and borrowed Python resolution; explicit report methods
 return (solution, report), and Solution has no report field. S8a implements the
 Transformer trait and caller migration; S8b supplies the three consuming
-implementations and completes S8's verification. S9a is next.
+implementations and completes S8's verification. S9a reconciles the living guides
+and public documentation with the implemented lifecycle; S9b is next.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -6637,7 +6638,7 @@ temporary clone-based default transform implementation is introduced between the
   cover unchanged input, independent iterator outputs, Clar rejection, matching
   rejection, and late spin rejection with borrowed recovery. Graph all-target,
   all-feature strict Clippy, warnings-denied rustdoc, nightly formatting, and
-  full diff review pass. Scratch is empty. S9a is next; final workspace and
+  full diff review pass. Scratch is empty. Final workspace and
   benchmark gates remain in S9b.
 
 - **S8c — moved to S6b.** combine_from caller migration is required during the
@@ -6645,11 +6646,27 @@ temporary clone-based default transform implementation is introduced between the
 
 ### S9 — Contract and performance closeout
 
-- **S9a** (`docs/development`, public rustdoc, examples; additive) Reconcile
+- **S9a — completed 2026-09-29** (`docs/development`, public rustdoc, examples; additive) Reconcile
   the living data-type, nomenclature, integrity, and Python API guides with the
   implemented lifecycle; remove stale snapshot/detached-journal descriptions.
   Document precise failure, ownership, and integrity boundaries without citing
   discussion records from source. Check links and examples. [dep: S5a, S6d, S7d, S8b]
+
+  **Implementation:** The four living guides describe owning editor application,
+  checked probe/finish, scoped transaction acceptance and rollback, per-batch
+  handle namespaces, optional correspondence, and consuming/borrowed chemistry
+  operations. Python documents transfer order, accessor counters, independent
+  Edit/Delta values, prepared transactions, and separate optional reports.
+  Removed editor snapshot/build descriptions and corrected builder, reaction
+  application, and resolver rustdoc. Executable code and interfaces are unchanged.
+
+  **Verification:** All-feature rustdoc with warnings denied passes for graph-ir,
+  graph, and Python. Graph-ir/graph doctests pass (3 passed, 4 ignored). The
+  Python 3.13 extension rebuild passes; README reaction and Python guide examples
+  execute, and updated Python docstrings are present. Local guide/README links,
+  nightly formatting, diff checks, and full diff review pass. Scratch is empty.
+  S9b retains the final performance and workspace gates.
+
 - **S9b** (workspace gates and benchmarks; additive) Compare the final direct,
   apply, and transaction paths with S0, including dense resolver journal size
   and the source-preserving export path. Compare the existing reaction-application
@@ -6687,7 +6704,7 @@ Within the revised S2:
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
   scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a–S6d3, S7, and S8 are complete; S9a is next.
+  S6a–S6d3, S7, S8, and S9a are complete; S9b is next.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.

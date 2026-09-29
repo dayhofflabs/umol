@@ -786,6 +786,38 @@ the removed atom/bond id lists from graph ids, not the vectors of matched pairs.
 do not clone molecular payloads or require intermediate molecules. Ordinary `compose` remains
 borrowed and returns a separate correspondence.
 
+### Molecule mutation and publication
+
+Molecule entity views expose mutable attributes and entity-level constraints. Structural changes
+use MoleculeEditor or Transaction. Molecule::edit moves the molecule into an editor without cloning.
+Direct editor mutations and edit batches can be interleaved; neither records undo.
+
+| Operation | Successful result | Failure |
+| --- | --- | --- |
+| MoleculeEditor::apply | Consumes the editor and Edits; returns the transient editor after checking each edit's preconditions | Drops the editor and its molecule |
+| MoleculeEditor::probe | Checks integrity and lends `&Molecule` | Retains the editor for further changes |
+| MoleculeEditor::finish | Consumes the editor, checks integrity, returns Molecule | Drops the editor and its molecule |
+| Molecule::apply | Consumes Molecule and Edits; applies edits and finishes | Drops the molecule |
+| Transaction::apply | Consumes Edits and immediately applies it to the borrowed molecule, recording undo | Restores transaction-entry state and aborts the transaction |
+| Transaction::probe | Checks integrity and lends `&Molecule` | Leaves the transaction active |
+| Transaction::commit | Consumes the handle, checks integrity, requests acceptance by Transaction::run | Restores transaction-entry state and aborts the transaction |
+
+Molecule::transact accepts prepared batches, applies each, and commits once. Transaction::run
+also supports planning later batches from probe results. Commit succeeds only as a request:
+the callback must return Ok to retain changes. The restoration contract and cancellation behavior
+are specified [above](#provenance-and-contextual-validity).
+
+MoleculeApplyError::Transaction carries edit-precondition or aborted-transaction failures;
+MoleculeApplyError::Integrity carries publication failures. The editor's apply returns only the
+former; molecule apply and transaction commit can return the latter. Probe and finish return
+MoleculeIntegrityError directly. Integrity is the same representation contract as construction,
+not a chemistry or model-conformance check.
+
+Each batch uses its own handle namespace. Id handles name entities at batch entry; New handles
+name creations within that batch, separately for each entity kind. Appending an edit to Edits
+continues that sequence; submitting another batch starts a new one. Handles are not translated
+between independently prepared batches.
+
 ### Editor batch correspondence
 
 MoleculeEditor owns its molecule. Direct mutation and apply do not accumulate a
@@ -798,6 +830,27 @@ Discarding a batch correspondence gives the same editor state as plain apply.
 Correspondences from consecutive batches compose to the whole operation's mapping.
 Transaction::tracked_commit derives that whole-transaction mapping from its journal.
 A failed application returns no correspondence.
+
+These correspondences track entity ids. Replacing an entity's atoms, ligands, or site preserves
+that entity's pairing; the correspondence does not map positions within those lists.
+
+### Resolution, projection, and transformations
+
+Resolver::resolve and project consume a molecule and execute through one editor, without a recovery
+copy or journal. Only a determined result returns a molecule; underdetermination, contradiction,
+and execution errors drop it. Resolver::resolve_into and project_into borrow mutably and use a
+transaction: only a determined result retains changes. Every other outcome restores the molecule
+under the transaction's equivalence. Intermediate probe and final finish/commit check integrity.
+
+Resolver::resolve_with_report and resolve_into_with_report collect the report explicitly. They
+return it with determined or underdetermined outcomes; contradictions carry only their diagnostic.
+The ordinary resolution methods do not construct a report. Ingestion consumes its newly raised
+molecule and treats underdetermination as an error without a report.
+
+Transformer::transform consumes its molecule and executes changes through the editor. Its borrowed
+transform_into counterpart uses a transaction and restores on error. transform_iter borrows the
+source and lazily clones and transforms it; each yielded molecule is independent. Rejected
+candidates are omitted. Callers choose the route according to ownership and recovery requirements.
 
 ## Pushout results
 
@@ -1034,7 +1087,7 @@ Reaction integrity reports that case as `IncidenceMismatch`.
 
 Reaction application derives the unique action from each mapped rule frame to the host frame and
 transports every frame-relative field and constraint delta before matching. After the pattern
-`old` value matches, lowering records the realized host value as the transaction's `old`; it does
+`old` value matches, lowering records the realized host value as the edit's `old`; it does
 not retain the rule pattern as if it were the concrete value being replaced.
 
 Applying a remapping to an independently supplied graph or relation set introduces a contextual

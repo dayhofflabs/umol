@@ -995,7 +995,7 @@ impl Reaction {
     /// localized bond the rule does not also delete. Created atoms/bonds are appended, preserved entities are
     /// mutated in place, deleted entities are removed (the host renumbers). Molecule-level constraints
     /// are added/removed with their entity refs re-anchored through the match (lhs → host, created →
-    /// appended); transact's renumbering compacts them on removal. The supplied correspondence must
+    /// appended); removals compact their entity ids. The supplied correspondence must
     /// be total on the pattern and agree with the mapped topology, overlay incidence, and stereo
     /// sites; incompatible stereo ligand frames are reported separately.
     /// Returns `Ok(None)` when this match is inapplicable because of dangling incidence or a
@@ -1011,7 +1011,7 @@ impl Reaction {
     /// Every matched overlay delta is transported from its normalized rule-owner frame into the
     /// host's stored participant frame before lowering. A rule-side `old` value is a pattern: it
     /// must match the transported host value, and the concrete host value becomes the realized
-    /// transaction pre-state. Added overlays retain their rule-owned frame because they have no
+    /// edit's old value. Added overlays retain their rule-owned frame because they have no
     /// host counterpart.
     pub fn apply_at(
         &self,
@@ -1736,7 +1736,7 @@ impl Reaction {
         // `RemoveTopology`. Removes are collected per kind and emitted as one batched edit each,
         // so each overlay id space is compacted once against the pre-removal state (a sequence of
         // single-id removes would stale the not-yet-processed ids). Dative `atoms` is
-        // `[donors…, acceptor]` (acceptor last, per transact).
+        // `[donors…, acceptor]`.
         let mut overlay_adds = Edits::new();
         let mut new_dative_handles = HashMap::new();
         let mut new_aromatic_handles = HashMap::new();
@@ -1965,7 +1965,7 @@ impl Reaction {
             overlay_removes.remove_stereo_bonds(remove_stereo_bond);
         }
 
-        // Molecule-level constraints retain stable handles until transaction application. Preserved
+        // Molecule-level constraints retain stable handles until edit application. Preserved
         // LHS entities map to host `Id` handles and every created entity maps to the `New` handle
         // issued by its scheduled addition. Constraints precede all removals so each removal's
         // compaction updates surviving references and drops references to deleted entities.

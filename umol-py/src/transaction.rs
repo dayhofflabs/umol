@@ -38,7 +38,10 @@ impl MoleculeEditor {
             .map_err(molecule_integrity_error)
     }
 
-    /// Consume this editor and apply a checked edit batch without constructing a rollback journal.
+    /// Consume this editor and apply an edit batch, checking each edit's preconditions.
+    ///
+    /// Returns a transient editor without checking molecule integrity or recording undo.
+    /// The editor is consumed before the batch contents are transferred; failure leaves it consumed.
     fn apply(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
         self.inner
             .take()
@@ -48,7 +51,8 @@ impl MoleculeEditor {
             .map_err(molecule_apply_error)
     }
 
-    /// Apply the same consuming batch and return its input-to-result correspondence.
+    /// Consume the editor and batch as in apply, also returning the batch's input-to-result
+    /// correspondence.
     fn tracked_apply(
         &mut self,
         py: Python<'_>,

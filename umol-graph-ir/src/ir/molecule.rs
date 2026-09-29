@@ -104,9 +104,8 @@ impl Molecule {
         Self::default()
     }
 
-    /// Start an empty `MoleculeEditor` for fluent / programmatic
-    /// construction. Use [`Molecule::edit`] to start from an existing
-    /// molecule.
+    /// Start an empty [`MoleculeBuilder`] for programmatic construction.
+    /// Use [`Self::edit`] to start from an existing molecule.
     pub fn builder() -> MoleculeBuilder {
         MoleculeBuilder::new()
     }
@@ -443,7 +442,7 @@ impl Molecule {
 
     /// Materialize an induced-subgraph correspondence `sub` (over `self` as host) as a standalone
     /// molecule: drop every host atom/bond absent from `sub`. Host order preserved, gaps compacted;
-    /// overlay drops cascade through the builder.
+    /// removals cascade to dependent overlays and molecule-level constraints.
     pub fn extract(&self, sub: &MoleculeCorrespondence) -> Molecule {
         self.tracked_extract(sub).0
     }

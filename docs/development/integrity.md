@@ -46,13 +46,21 @@ aggregate:
 
 | Aggregate | Open input | Crate-private authoritative check | Checked publication | Asserted publication |
 | --- | --- | --- | --- | --- |
-| `Molecule` | `MoleculeEntries`; transient `MoleculeEditor` state | `Molecule::check_integrity` | `Molecule::try_from_entries`, `MoleculeEditor::snapshot`, `MoleculeEditor::try_build` | `Molecule::from_entries`, `MoleculeEditor::build`, and trusted internal publishers |
+| `Molecule` | `MoleculeEntries`; transient editor or transaction state | `Molecule::check_integrity` | Molecule::try_from_entries, MoleculeEditor::probe/finish, Transaction::probe/commit/tracked_commit | Molecule::from_entries, MoleculeBuilder::build, and trusted internal publishers |
 | `Reaction` | a closed lhs `Molecule` plus independently assembled `Deltas` | `Reaction::check_integrity` | `Reaction::try_new` | `Reaction::new` and trusted internal publishers |
 | `ReactionSpan` | `ReactionSpanEntries` | `ReactionSpan::check_integrity` | `ReactionSpan::try_from_entries` | `ReactionSpan::from_entries` and trusted internal publishers |
 
-A checked route returns the aggregate's typed `*IntegrityError`. Its asserted sibling runs the same
-check and panics when its producer contract is broken. Boundary adapters translate the checked
-error into their own parse, conversion, or binding error; they do not reproduce the checks.
+A checked route reports the aggregate's typed `*IntegrityError`, directly or within its operation
+error. Its asserted sibling runs the same check and panics when its producer contract is broken.
+Boundary adapters translate the checked error into their own parse, conversion, or binding error;
+they do not reproduce the checks.
+
+MoleculeEditor::apply checks each edit's preconditions and returns a transient editor. Its probe
+checks integrity before lending a molecule; failure retains the editor. Its finish checks integrity
+before returning the owned molecule; failure drops the editor. Molecule::apply and tracked_apply
+include finish. Transaction::apply also permits intermediate states that violate integrity;
+commit checks integrity and restores transaction-entry state on failure. Molecule::transact and
+tracked_transact include commit. A failed transaction probe leaves the transaction active.
 
 Once published, an operation accepting only a closed aggregate relies on the contract. Do not call
 `check_integrity` defensively in every method. A trusted transformation must preserve the complete
@@ -63,7 +71,7 @@ throughout its operations.
 Entity attributes and entity-level constraints do not establish frame agreement. Constructors
 preserve supplied electron counts, configurations, and constraints without padding, truncation,
 normalization, or repair. Length, coset, kind/site, action-degree, and local constraint-position
-checks belong to the operations that need them. Top-level constraints retain their integrity checks.
+checks belong to the operations that need them. Molecule-level constraints retain their integrity checks.
 
 ## `Molecule` integrity inventory
 
@@ -172,12 +180,10 @@ checked eagerly:
 - canonical form, canonical equality, resolution, perception, or source-format interpretation.
 
 An equivalent `Modified` reaction-span entry is not an integrity failure. Checked and asserted span
-construction preserve that raw tag. The current internal reaction-span normalization path collapses
-it to `Unchanged`, canonicalization invokes that path, and `ReactionSpan::superimpose` may emit the
-standardized form directly under its separate deriving contract. Doc 214 will expose the same
-normal-form behavior through the public normalization and reframing pipeline. A semantically invalid
-but representation-coherent value remains representable until the named operation that needs the
-stronger property is invoked.
+construction preserve that raw tag. ReactionSpan::normalize collapses it to `Unchanged`;
+canonicalization invokes normalization, and ReactionSpan::superimpose may emit that form directly.
+A semantically invalid but representation-coherent value remains representable until the named
+operation that needs the stronger property is invoked.
 
 ## Maintenance rule
 

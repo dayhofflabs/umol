@@ -1,9 +1,8 @@
-//! Structural editing for `Molecule`. The molecule itself only allows attribute
-//! mutation; structural change (add atoms/bonds/relations, remove anything)
-//! goes through `MoleculeEditor`.
+//! Owning structural and attribute editing for [`Molecule`].
 //!
-//! The editor owns a molecule draft. Mutable access uses its copy-on-write storage;
-//! publication checks molecule integrity.
+//! Direct mutation and edit batches change transient state without recording undo.
+//! [`MoleculeEditor::probe`] lends a molecule after checking integrity;
+//! [`MoleculeEditor::finish`] checks integrity and transfers ownership.
 
 use std::sync::Arc;
 

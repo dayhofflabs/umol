@@ -1,8 +1,9 @@
 //! Composite resolver: chains the per-entity resolvers (isotope, valence,
 //! aromaticity, stereo, bonds, multicenter bonds) on a single `Molecule`.
 //!
-//! `Determined` requires every entity (atoms, bonds, dative bonds, aromatic
-//! systems, multicenter bonds, noncovalent bonds) to be ground.
+//! A determined result satisfies [`Molecule::is_concrete`]. Consuming operations
+//! use an editor; borrowed operations use a transaction and retain changes only
+//! on a determined result.
 
 pub mod aromaticity;
 pub mod bonds;

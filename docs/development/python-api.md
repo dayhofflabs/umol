@@ -91,11 +91,12 @@ Read-only access rejects mutation; mutable access updates backing storage. Expli
 produces an independent owned value. Consumption invalidates dependent accessors as specified
 above. The location and its behavior under structural mutation must be defined for the owning type.
 
-For the Edit/Delta nested-access pattern, structural replacement invalidates all existing child
-accessors, including container accessors and their descendants. Fresh accessors expose the new
-state. Ordinary mutation within an existing value remains visible through valid accessors.
-Replacement does not preserve selected children, retarget them to replacement values, or copy
-their former contents. Independent explicit copies remain usable.
+For molecule access, each view retains the owner and its accessor counter. Consuming the owner,
+or starting transact, tracked_transact, resolve_into, resolve_into_with_report, or combine_from,
+invalidates all existing views and iterators, including nested accessors. The counter advances
+immediately before execution, including for a no-op or a call that rolls back. No list of views is
+maintained. Ordinary attribute and entity-constraint assignments leave accessors valid and their
+changes visible. Fresh accessors read the current molecule; independent copies remain usable.
 
 This is a reusable pattern, not a requirement to give every type an owned-or-accessor representation.
 Owned-only values and accessor-only views remain appropriate. Where one Python class legitimately
@@ -104,12 +105,13 @@ ordinary Rust `Cow` and must not clone automatically on mutation. Public role di
 settled per type. Introduce shared implementation machinery only when concrete uses support it;
 this pattern does not authorize a universal wrapper framework or a blanket binding rewrite.
 
-For Edit/Delta entries, owned values and read-only accessors use the same Python variant classes
-and field names. This preserves one variant-inspection and pattern-matching interface instead of
-duplicating the variant hierarchy. A read-only `readonly` property reports mutation permissions;
-it is not a general ownership indicator. Accessors obtained from batches are read-only, including
-nested access. `copy()` returns an independent owned entry of the same variant. The backing-storage
-distinction remains internal; mutation never silently detaches an accessor by copying.
+Edit and Delta are immutable owned values. Indexing Edits or Deltas returns an independent entry;
+iteration copies one entry per step and excludes entries appended after iterator creation.
+Entity forms retained within an entry are read-only, including nested constraints; their readonly
+property reports that restriction, and copy() returns an ordinary writable form. These copies
+isolate immutable mutation data from later changes to the supplied mutable forms without requiring
+consumed state on every form. Consuming Edits invalidates its iterators; already returned entries
+remain usable.
 
 ### Immutable owned value
 
@@ -147,22 +149,46 @@ write through to the molecule, while the form has its own ownership and mutation
 
 ### Editor
 
-An editor represents a staged or transactional mutation lifecycle. It is appropriate when users
-begin with an owned value, perform several related structural changes, and then finalize or commit
-a new value. The `*Editor` suffix communicates that lifecycle and is preferable to presenting the
-editor as a generally mutable form of the original type.
+An editor owns transient working state. It permits direct changes and edit batches before finish
+checks integrity and returns a molecule. It provides no rollback.
 
-For molecules, the editor is the structural mutation boundary: adding or removing topology and
-overlays goes through `MoleculeEditor`. Ordinary attributes and entity-level constraints are
-assigned through the molecule's entity views. Molecule-level constraints are read-only on the
-molecule; changing them requires editing and publication.
+Structural changes use MoleculeEditor or prepared transaction batches. Ordinary attributes and
+entity-level constraints are assigned through the molecule's entity views. Molecule-level
+constraints are read-only on the molecule; changing them requires editing and publication.
 
-Molecule.edit consumes its receiver. MoleculeEditor.apply and tracked_apply consume the editor
-and Edits and return a new editor; finish checks integrity and returns a Molecule. Molecule.apply
-and tracked_apply consume the receiver and Edits and publish a checked Molecule directly.
-Failure leaves consumed inputs unavailable. Molecule.copy explicitly retains an independent value.
-Molecule.transact and tracked_transact borrow the receiver and restore it on application or
-integrity failure; their prepared Edits inputs are consumed.
+Molecule.edit consumes its receiver. MoleculeEditor.apply consumes the editor and Edits and returns
+a new transient editor; tracked_apply also returns the batch correspondence. Molecule.apply and
+tracked_apply include finish and return a checked Molecule, with the correspondence in the tracked
+case. Both owning types are consumed before the Edits contents are transferred. An unavailable
+batch therefore still leaves the receiver consumed. Molecule.copy explicitly retains an
+independent value.
+
+Molecule.transact and tracked_transact accept an iterable of Edits and borrow the receiver.
+They restore it on application or integrity failure; tracked_transact returns the whole
+transaction's correspondence. Python exposes these prepared-batch operations without a scoped
+Transaction handle or editor probe. This avoids retaining Rust borrows across Python calls.
+
+The iterable is fully extracted before any batch is consumed. Batches are then consumed in order,
+before molecule execution. If a later batch cannot be transferred, earlier batches remain consumed
+and the molecule and its views remain unchanged. Thus `[edits, edits]` consumes the first occurrence
+and fails on the second. Once execution starts, rollback restores the molecule, not its old views
+or consumed Edits. Edit failures raise TransactionError; publication failures raise
+InvalidStructureError.
+
+### Resolution
+
+Molecule.resolve consumes its receiver and returns Solution. Only Determined contains a molecule;
+Underdetermined is payload-free and Contradictory contains its diagnostic. Execution errors raise
+RuntimeError. Every outcome leaves the original Python object consumed.
+
+Molecule.resolve_into mutates the receiver only on Determined, whose molecule field is None.
+Underdetermined, Contradictory, and execution errors restore the receiver under Rust's transaction
+contract. Existing views are invalidated when execution starts, even if the molecule is restored.
+
+Molecule.resolve_with_report and resolve_into_with_report return `(solution, report)`. The report
+is present on Determined and Underdetermined, and None on Contradictory. Solution itself has no
+report field. Returning a separate report preserves one Python Solution variant hierarchy for
+the Rust methods' different payload types. Ordinary resolution does not construct a report.
 
 ### Operation-issued iterator
 
@@ -230,8 +256,9 @@ otherwise cover observably incompatible aliasing or lifecycle behavior.
 An immutable entry type may belong to a mutable container; container mutation does not imply entry
 mutation. Python collection idioms must preserve the owning Rust container's reference semantics.
 A spelling such as `append` may delegate to Rust `push`; it does not authorize batch concatenation.
-Entries in an `Edits` sequence share one handle namespace. Combining independent batches requires
-a separately designed Rust operation on `Edits`; raw list extension cannot establish that contract.
+Entries in an Edits sequence share one handle namespace. Independent batches are supplied
+separately to transact or tracked_transact, each with its own namespace; raw list extension
+cannot establish that contract.
 Any supported bulk operation on `Deltas` likewise belongs to its Rust container. Do not implement
 collection composition in the bindings merely because Python lists support `extend`.
 
@@ -268,11 +295,11 @@ Construction of an immutable owner must not retain a mutable Python alias that c
 owner. Convert mutable inputs to the owner's immutable representation at the construction boundary.
 This is an ownership rule, not semantic validation; validation follows the data-type contracts.
 
-Entity forms are ordinarily writable owned objects. Access through a read-only entry is read-only,
+Entity forms are ordinarily writable owned objects. Forms retained in Edit or Delta are read-only,
 including nested fields and constraints. Such access rejects mutation with `TypeError`.
 `copy`, `normalize`, `meet`, and `join` produce ordinary
-writable forms. `Deltas` provides append-only container mutation; its entry accessors do not permit
-mutation of stored entries.
+writable forms. Edits and Deltas provide append-only container mutation; retrieved entries do not
+permit mutation of stored entries.
 
 Use `*Like` argument adapters for accepted alternate input representations. A `*Like` type is an
 argument boundary and is not exposed as the stored or returned type.

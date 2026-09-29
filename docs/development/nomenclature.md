@@ -683,18 +683,19 @@ acceptor.
 ### Edit and undo
 
 An **`Edit`** is caller-facing mutation data: the symbolic vocabulary handed to
-`MoleculeEditor::apply` or `MoleculeEditor::transact`. An **`Undo`** is realized rollback data
+MoleculeEditor::apply or Transaction::apply. An **`Undo`** is realized rollback data
 produced by the transaction path. The two are not two views of one thing — an edit says what was
 asked for, an undo says what actually has to be reversed.
 
 The symbolic references (`AtomHandle`, `BondHandle`, …) appear only inside `Edit`. `Id(_)` names an
-existing entity, `New(n)` names the entity created by the nth edit earlier in the same batch, which
-is why a handle is meaningless outside its batch.
+entity at batch entry; `New(n)` names the nth entity created in that batch's entity-kind namespace.
+One edit may create several entities. Edits::push appends to the current namespace; separate apply
+calls start separate namespaces. Independent batches are submitted separately to a transaction.
 
 **Not:** *delta*, which is the reaction-side change encoding, nor `*Update`, which is a field-level
-change to one entity. Edits are molecule-level application data; only `transact` realizes undos.
-**In code:** `Edit`, `Undo`, `UndoCompaction`, `MoleculeEditor::apply`,
-`MoleculeEditor::transact`.
+change to one entity. Edits are molecule-level application data; the transaction records undos.
+**In code:** `Edit`, `Edits`, `Undo`, `UndoCompaction`; MoleculeEditor::apply,
+Transaction::apply, Molecule::transact.
 
 ### Electron counts
 
@@ -1620,9 +1621,9 @@ relevant-cycle enumeration algorithm is operational configuration.
 
 ### Solution
 
-**`Solution<T, C>`** is the three-valued outcome of an engine pass: `Determined`, `Underdetermined`,
-or `Contradictory(C)` with a typed diagnostic payload. Setup and parameter failures travel separately
-in `Result` and never collapse into it, so every umol engine returns `Result<Solution<_, _>, _>`.
+**`Solution<T, C, U = T>`** is the three-valued outcome of an engine pass: `Determined(T)`,
+`Underdetermined(U)`, or `Contradictory(C)`. The two-parameter form uses T for both
+non-contradictory outcomes. Setup and parameter failures travel separately in Result.
 
 An operation must decide which outcomes it treats as success, and the two reasonable answers differ
 precisely on `Underdetermined`: a validator accepts it (only `Contradictory` fails), a transformer
@@ -1633,17 +1634,6 @@ the two, but with 4 and 1 call sites they are conveniences rather than establish
 **Not:** `Result`. `Solution` carries the semantic verdict; `Result` carries operational success.
 Both appear in one signature and mean different things.
 **In code:** `Solution`, `umol_utils::solution`.
-
-### Snapshot
-
-A **snapshot** is a non-consuming materialization of transient working state whose ordinary
-finalization would consume the working object. Taking a snapshot preserves that object so subsequent
-operations can continue from the same transient state. The implementation may clone, but the name
-describes the lifecycle operation rather than the copying mechanism.
-
-**Not:** ordinary finalization, which consumes the working object; transaction rollback, which
-replays a realized undo journal; a general synonym for `clone`.
-**In code:** planned `MoleculeEditor::snapshot`.
 
 ### Split
 
@@ -1730,7 +1720,7 @@ the returned mappings retain their categorical direction; the prefix does not im
 **Not:** a transaction, which records undo actions; a result-delivery prefix; a general marker for
 any method returning more than one value.
 **In code:** `tracked_remove`, `tracked_apply`, `tracked_split`, `tracked_pushout`,
-`tracked_commit`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`, `try_tracked_build`.
+`tracked_commit`, `tracked_canonicalize`, `tracked_reframe`; `try_tracked_remove`.
 
 ### Transaction
 
@@ -1755,6 +1745,10 @@ Molecule::transact, Molecule::tracked_transact.
 A **transformation** explicitly rewrites one valid representation into another. Kekulization,
 aromatization, and charge delocalization are transformations because they alter determined
 representation rather than fill undetermined state.
+
+Transformer::transform consumes its molecule and returns the result; failure drops the input.
+Transformer::transform_into mutably borrows the molecule and restores it on failure.
+Transformer::transform_iter borrows its source and lazily produces independent transformed copies.
 
 **Not:** a resolver policy; not resolution.
 **In code:** `umol-graph/src/ops/transform`.

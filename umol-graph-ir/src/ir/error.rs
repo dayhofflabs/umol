@@ -34,7 +34,7 @@ pub enum ApplyError {
     /// The reaction's deltas are inconsistent (normalization failed).
     #[error("inconsistent reaction deltas")]
     Inconsistent,
-    /// The lowered edit transaction failed against the host.
+    /// The lowered edits could not be applied to the host.
     #[error("apply transaction failed: {0}")]
     Transaction(#[from] TransactionError),
     /// The supplied or matcher-produced correspondence does not map an entity consistently into
