@@ -1,11 +1,9 @@
 //! Graph-IR projection for the CoordGen molecule-layout backend.
 
 use umol_coordgen_sys::{generate_coordinates, Bond, CisTransBond, CoordgenError, SideRelation};
-use umol_graph_ir::ir::{
-    AsLit, AtomId, Molecule, StereoBondView, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandKind,
-};
+use umol_graph_ir::ir::{AsLit, CisTransConfiguration, Molecule, StereoBondView};
 
+use super::stereo::cis_trans_site;
 use super::{MoleculeLayout, Point2D};
 
 // CoordGen's fixed working scale is defined by BONDLENGTH in sketcherMinimizerMaths.h.
@@ -58,70 +56,16 @@ pub(crate) fn layout(molecule: &Molecule) -> Result<MoleculeLayout, CoordgenErro
 }
 
 fn cis_trans_bond(molecule: &Molecule, stereo: StereoBondView<'_>) -> Option<CisTransBond> {
-    if stereo.attributes.configuration.kind() != Some(StereoKind::CisTrans) {
-        return None;
-    }
-    let ligands = stereo
-        .ligands()
-        .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
-        .collect::<Vec<_>>();
-    let [first_0, first_1, second_0, second_1] = ligands.as_slice() else {
-        return None;
-    };
-    let [site_0, site_1] = stereo.site().atom_ids();
-    let (first_pair, second_pair) = if [first_0, first_1]
-        .into_iter()
-        .all(|ligand| ligand_matches_endpoint(molecule, *ligand, site_0, site_1))
-    {
-        ([*first_0, *first_1], [*second_0, *second_1])
-    } else {
-        ([*second_0, *second_1], [*first_0, *first_1])
-    };
-    let (first_ligand, first_other) = select_actual_ligand(first_pair)?;
-    let (second_ligand, second_other) = select_actual_ligand(second_pair)?;
-    let requested = [first_ligand, first_other, second_ligand, second_other];
-    let StereoCoset::Lit(coset) = stereo.coset_for(requested)? else {
-        return None;
-    };
-    let relation = match coset {
-        0 => SideRelation::SameSide,
-        1 => SideRelation::OppositeSide,
-        _ => return None,
-    };
-
+    let site = cis_trans_site(molecule, stereo)?;
     Some(CisTransBond {
-        bond: stereo.site_id().index(),
-        first_ligand: first_ligand.atom_id.index(),
-        second_ligand: second_ligand.atom_id.index(),
-        relation,
+        bond: site.bond.index(),
+        first_ligand: site.ligands[0].index(),
+        second_ligand: site.ligands[1].index(),
+        relation: match site.configuration {
+            CisTransConfiguration::Z => SideRelation::SameSide,
+            CisTransConfiguration::E => SideRelation::OppositeSide,
+        },
     })
-}
-
-fn ligand_matches_endpoint(
-    molecule: &Molecule,
-    ligand: StereoLigand,
-    endpoint: AtomId,
-    other_endpoint: AtomId,
-) -> bool {
-    match ligand.kind {
-        StereoLigandKind::Atom => {
-            ligand.atom_id != other_endpoint
-                && molecule
-                    .neighbors(endpoint)
-                    .any(|neighbor| neighbor.atom_id() == ligand.atom_id)
-        }
-        StereoLigandKind::ImplicitHydrogen | StereoLigandKind::LonePair => {
-            ligand.atom_id == endpoint
-        }
-    }
-}
-
-fn select_actual_ligand(pair: [StereoLigand; 2]) -> Option<(StereoLigand, StereoLigand)> {
-    match pair {
-        [first, second] if first.kind == StereoLigandKind::Atom => Some((first, second)),
-        [first, second] if second.kind == StereoLigandKind::Atom => Some((second, first)),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
@@ -129,7 +73,8 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AtomForm, BondForm, BondId, MoleculeEntries, StereoBondForm, StereoTerm,
+        AtomForm, AtomId, BondForm, BondId, MoleculeEntries, StereoBondForm, StereoCoset,
+        StereoKind, StereoLigand, StereoLigandKind, StereoTerm,
     };
 
     use super::*;
