@@ -3,7 +3,7 @@
 //! This module is available with the `depiction` feature. [`Depict`] is implemented for graph-IR
 //! molecules and reactions: `depict` uses [`DepictConfig::default`], while `depict_with` accepts an
 //! explicit configuration. Both operations return an opaque [`Depiction`], whose
-//! [`Depiction::render_svg`] method produces SVG text.
+//! [`Depiction::render_svg`] and [`Depiction::render_svg_with`] methods produce SVG text.
 
 pub(crate) mod molecule;
 mod reaction;
@@ -89,14 +89,42 @@ impl Depiction {
         self.bounds.as_ref()
     }
 
-    /// Renders this depiction as a complete SVG document.
+    /// Renders this depiction as a complete SVG document with [`SvgConfig::default`].
     ///
     /// Item order is preserved. Coordinates are converted from the depiction's y-up convention to
     /// SVG's y-down convention. Molecular strokes are masked beneath estimated atom-label bounds,
     /// and structured source references are encoded in `data-umol-references` attributes. The
     /// returned text can be written directly to an SVG file.
     pub fn render_svg(&self) -> String {
-        svg::render(self)
+        self.render_svg_with(&SvgConfig::default())
+    }
+
+    /// Renders this depiction as a complete SVG document with `config`.
+    pub fn render_svg_with(&self, config: &SvgConfig) -> String {
+        svg::render(self, config)
+    }
+}
+
+/// Rendering configuration for [`Depiction::render_svg_with`].
+///
+/// Rendering configuration selects properties of the emitted SVG text; the depiction's geometry
+/// is fixed before rendering. The default renders exactly as [`Depiction::render_svg`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct SvgConfig {
+    /// Font size of mapping-index text, the correspondence-pair numbers drawn beside reaction
+    /// atoms, in bond-length units. Defaults to 85% of the atom-label size.
+    pub mapping_index_text_size: f64,
+    /// Identifier of the atom-label mask definition that masked strokes reference. Depictions
+    /// inlined in one document need distinct identifiers.
+    pub mask_id: String,
+}
+
+impl Default for SvgConfig {
+    fn default() -> Self {
+        Self {
+            mapping_index_text_size: svg::MAPPING_INDEX_TEXT_SIZE,
+            mask_id: svg::ATOM_LABEL_MASK_ID.to_owned(),
+        }
     }
 }
 
@@ -533,7 +561,8 @@ mod tests {
 
         let svg = depiction.render_svg();
 
-        assert_eq!(svg, render(&depiction));
+        assert_eq!(svg, render(&depiction, &SvgConfig::default()));
+        assert_eq!(svg, depiction.render_svg_with(&SvgConfig::default()));
 
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();

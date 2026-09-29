@@ -19,6 +19,7 @@ from umol import (  # noqa: E402
     MoleculeLayoutAlgorithm,
     NumForm,
     Reaction,
+    SvgConfig,
 )
 
 
@@ -28,6 +29,50 @@ def test_depict_config_new():
     assert config == DepictConfig.default()
     assert config.layout_algorithm == MoleculeLayoutAlgorithm.CoordGen()
     assert repr(config) == "DepictConfig.default()"
+
+
+def test_svg_config_new():
+    config = SvgConfig()
+
+    assert config == SvgConfig.default()
+    assert config.mapping_index_text_size == 0.3825
+    assert config.mask_id == "umol-atom-label-mask"
+    assert repr(config) == "SvgConfig.default()"
+
+
+def test_svg_config_new_custom():
+    config = SvgConfig(mapping_index_text_size=0.25, mask_id="lhs-mask")
+
+    assert config != SvgConfig.default()
+    assert config.mapping_index_text_size == 0.25
+    assert config.mask_id == "lhs-mask"
+    assert repr(config) == 'SvgConfig(mapping_index_text_size=0.25, mask_id="lhs-mask")'
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        pytest.param(
+            {"mapping_index_text_size": 0.0},
+            "mapping_index_text_size must be a finite positive number, got 0",
+            id="zero",
+        ),
+        pytest.param(
+            {"mapping_index_text_size": float("nan")},
+            "mapping_index_text_size must be a finite positive number, got NaN",
+            id="nan",
+        ),
+        pytest.param({"mask_id": ""}, "mask_id must not be empty", id="empty-mask-id"),
+    ],
+)
+def test_svg_config_new_error(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        SvgConfig(**kwargs)
+
+
+def test_svg_config_keyword_only_error():
+    with pytest.raises(TypeError):
+        SvgConfig(0.25)
 
 
 def test_depiction_constructor_error():
@@ -167,6 +212,44 @@ def test_reaction_depict_with():
         reaction.depict_with(DepictConfig()).render_svg()
         == reaction.depict().render_svg()
     )
+
+
+def test_depiction_render_svg_with():
+    depiction = Reaction.parse(
+        """{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"]]}
+             :deltas []}"""
+    ).depict()
+    config = SvgConfig(mapping_index_text_size=0.25, mask_id="lhs-mask")
+
+    text = depiction.render_svg_with(config)
+    root = ET.fromstring(text)
+    groups = list(root.findall("{http://www.w3.org/2000/svg}g"))
+    mask = root.find("{http://www.w3.org/2000/svg}defs/{http://www.w3.org/2000/svg}mask")
+    mapping_sizes = [
+        list(group)[0].attrib["font-size"]
+        for group in groups
+        if "correspondence-pair/" in group.attrib.get("data-umol-references", "")
+    ]
+    atom_sizes = [
+        list(group)[0].attrib["font-size"]
+        for group in groups
+        if group.attrib.get("data-umol-item") == "atom"
+    ]
+    masks = [group.attrib["mask"] for group in groups if "mask" in group.attrib]
+
+    assert depiction.render_svg_with(SvgConfig()) == depiction.render_svg()
+    assert text != depiction.render_svg()
+    assert mask.attrib["id"] == "lhs-mask"
+    assert masks == ["url(#lhs-mask)", "url(#lhs-mask)"]
+    assert mapping_sizes == ["0.25"] * 4
+    assert atom_sizes == ["0.45"] * 2
+
+
+def test_depiction_render_svg_with_config_error():
+    depiction = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "2"]]}').depict()
+
+    with pytest.raises(TypeError):
+        depiction.render_svg_with(DepictConfig())
 
 
 def test_reaction_depict_with_error():

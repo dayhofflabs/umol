@@ -237,6 +237,7 @@ from .elements import E
 if hasattr(_native_module, "Depiction"):
     MoleculeLayoutAlgorithm = _native_module.MoleculeLayoutAlgorithm
     DepictConfig = _native_module.DepictConfig
+    SvgConfig = _native_module.SvgConfig
     Depiction = _native_module.Depiction
 
 try:
@@ -476,4 +477,4 @@ __all__ = [
 ]
 
 if hasattr(_native_module, "Depiction"):
-    __all__.extend(["MoleculeLayoutAlgorithm", "DepictConfig", "Depiction"])
+    __all__.extend(["MoleculeLayoutAlgorithm", "DepictConfig", "SvgConfig", "Depiction"])
