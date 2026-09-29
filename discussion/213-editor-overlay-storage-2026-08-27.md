@@ -48,8 +48,9 @@ operations use scoped transactions and pass the graph checks. S5d1 implements
 Python Edits consumption. S5d2 implements accessor counters and Storage names.
 S5d3 implements prepared-batch Python transactions; S5 is complete.
 S6a implements consuming edit/application and checked probe/finish publication.
-S6b1 migrates graph-ir callers and removes editor session correspondence. S6b2's
-combine_from rewrite is next; the remaining Rust and Python consumers follow.
+S6b1 migrates graph-ir callers and removes editor session correspondence. S6b2
+rewrites combine_from to append through Molecule methods. S6c1's transformation
+plans and borrowed execution are next; format and Python consumers follow.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -103,8 +104,8 @@ and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
 complete; S4b9 closes the strict lint gate. S5a–S5d3 are complete, including
-Python runtime verification. S6a and S6b1 implement the owning editor and migrate
-graph-ir callers. S6b2 is next.
+Python runtime verification. S6a–S6b2 implement the owning editor, migrate
+graph-ir callers, and rewire combine_from. S6c1 is next.
 
 ## Editor and transaction API
 
@@ -6223,7 +6224,7 @@ temporary cloning adapters is not a way to close an earlier subitem.
   Strict graph-ir all-target Clippy with proptest, rustdoc, nightly formatting,
   and diff checks pass. No workspace or MSRV gate was run for this subitem.
 
-- **S6b2 — Disjoint append on a borrowed molecule** (`ir::molecule`; breaking rewire, green at S6d). [dep: S6b1, S4b1]
+- **S6b2 — completed 2026-09-28 — Disjoint append on a borrowed molecule** (`ir::molecule`; breaking rewire, green at S6d). [dep: S6b1, S4b1]
 
   Migrate combine_from's current mem::take/from_parts
   route here because the owning editor change affects it now, not in S8.
@@ -6245,6 +6246,18 @@ temporary cloning adapters is not a way to close an earlier subitem.
 
   Verify original-id prefixes, every overlay factor, inline/top-level constraints,
   empty operands, shared source storage, and the unchanged other molecule.
+
+  **Implemented.** combine_from calls Molecule's add methods for all eight
+  entity kinds and extend_constraints for mapped constraints. It retains the
+  existing offset correspondences and checks integrity directly after appending.
+  The receiver stays in place throughout; no recovery copy or journal is added.
+
+  **Verification.** All 13 focused unit cases pass, covering exact appended
+  entries, every entity kind's constraint references, inline constraints, empty
+  operands, shared storage with an unchanged source, and unique attribute-storage
+  reuse. Four combination properties pass with 256 cases each. Strict graph-ir
+  library/test Clippy with proptest, nightly formatting, and diff checks pass.
+  The S6 workspace gate remains at S6d.
 
 - **S6c — Chemistry and format caller migration** (group; breaking, green
   at S6d). [dep: S6a, S5c]
@@ -6456,7 +6469,7 @@ Within the revised S2:
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
   scoped run. S5a–S5d3 are complete; S5's build and test gate passes.
-  S6a and S6b1 are complete; S6b2 is next.
+  S6a–S6b2 are complete; S6c1 is next.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate
   chemistry and format callers. S6d1–S6d3 close the Python owning migration.

@@ -1785,44 +1785,19 @@ impl Molecule {
         let stereo_bond_offset = self.stereo_bonds().count();
         let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-        let Molecule {
-            graph,
-            atoms,
-            bonds,
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            stereo_atoms,
-            stereo_bonds,
-            constraints,
-        } = mem::take(self);
-        let mut editor = MoleculeEditor::from_parts(
-            graph,
-            atoms,
-            bonds,
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            stereo_atoms,
-            stereo_bonds,
-            constraints,
-        );
-
         for atom in other.atoms().iter() {
-            editor.add_atom(atom.attributes().clone());
+            self.add_atom(atom.attributes().clone());
         }
         for bond in other.bonds().iter() {
             let [first, second] = bond.atom_ids();
-            editor.add_bond(
+            self.add_bond(
                 shift_atom(first),
                 shift_atom(second),
                 bond.attributes().clone(),
             );
         }
         for bond in other.dative_bonds().iter() {
-            editor.add_dative_bond(
+            self.add_dative_bond(
                 &bond
                     .donors()
                     .map(|donor| shift_atom(donor.id()))
@@ -1832,20 +1807,20 @@ impl Molecule {
             );
         }
         for system in other.aromatic_systems().iter() {
-            editor.add_aromatic_system(
+            self.add_aromatic_system(
                 &system.atom_ids().map(shift_atom).collect::<Vec<_>>(),
                 system.attributes().clone(),
             );
         }
         for bond in other.multicenter_bonds().iter() {
-            editor.add_multicenter_bond(
+            self.add_multicenter_bond(
                 &bond.atom_ids().map(shift_atom).collect::<Vec<_>>(),
                 bond.attributes().clone(),
             );
         }
         for bond in other.noncovalent_bonds().iter() {
             let [first, second] = bond.atom_ids();
-            editor.add_noncovalent_bond(
+            self.add_noncovalent_bond(
                 [shift_atom(first), shift_atom(second)],
                 bond.attributes().clone(),
             );
@@ -1871,7 +1846,7 @@ impl Molecule {
                 .iter()
                 .map(|ligand| ligand.map(&participant_correspondence))
                 .collect();
-            editor.add_stereo_atom(site, &ligands, other.stereo_atoms.attributes(id).clone());
+            self.add_stereo_atom(site, &ligands, other.stereo_atoms.attributes(id).clone());
         }
         for id in other.stereo_bonds.ids() {
             let site = BondId(other.stereo_bonds.site(id).0 + bond_offset as u32);
@@ -1881,7 +1856,7 @@ impl Molecule {
                 .iter()
                 .map(|ligand| ligand.map(&participant_correspondence))
                 .collect();
-            editor.add_stereo_bond(site, &ligands, other.stereo_bonds.attributes(id).clone());
+            self.add_stereo_bond(site, &ligands, other.stereo_bonds.attributes(id).clone());
         }
 
         let correspondence = MoleculeCorrespondence::new(
@@ -1926,13 +1901,14 @@ impl Molecule {
                 stereo_bond_offset + other.stereo_bonds().count(),
             ),
         );
-        for constraint in other.constraints.iter() {
-            editor
-                .constraints_mut()
-                .push(constraint.clone().map(&correspondence));
-        }
-        *self = editor
-            .finish()
+        self.extend_constraints(
+            other
+                .constraints
+                .iter()
+                .map(|constraint| constraint.clone().map(&correspondence))
+                .collect(),
+        );
+        self.check_integrity()
             .expect("disjoint combination preserves molecule integrity");
     }
 

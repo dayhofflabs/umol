@@ -54,7 +54,7 @@ use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{
     StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm,
-    Topicity,
+    Stereogenicity, Topicity,
 };
 use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::{
@@ -7386,6 +7386,193 @@ fn test_molecule_combine_from() {
 
     assert_eq!(left.atoms().count(), 3);
     assert_eq!(left.bond(BondId(0)).atom_ids(), [AtomId(1), AtomId(2)]);
+}
+
+#[rstest]
+#[case::atom(
+    Constraint::Atom(AtomId(2), AtomConstraintForm::valence(3)),
+    Constraint::Atom(AtomId(6), AtomConstraintForm::valence(3))
+)]
+#[case::bond(
+    Constraint::Bond(BondId(1), BondConstraintForm::aromatic(false)),
+    Constraint::Bond(BondId(4), BondConstraintForm::aromatic(false))
+)]
+#[case::dative_bond(
+    Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(false)),
+    Constraint::DativeBond(DativeBondId(1), DativeBondConstraintForm::aromatic(false))
+)]
+#[case::aromatic_system(
+    Constraint::AromaticSystem(
+        AromaticSystemId(0),
+        AromaticSystemConstraintForm::electron_count(3)
+    ),
+    Constraint::AromaticSystem(
+        AromaticSystemId(1),
+        AromaticSystemConstraintForm::electron_count(3)
+    )
+)]
+#[case::multicenter_bond(
+    Constraint::MulticenterBond(
+        MulticenterBondId(0),
+        MulticenterBondConstraintForm::electron_count(3)
+    ),
+    Constraint::MulticenterBond(
+        MulticenterBondId(1),
+        MulticenterBondConstraintForm::electron_count(3)
+    )
+)]
+#[case::noncovalent_bond(
+    Constraint::NoncovalentBond(
+        NoncovalentBondId(0),
+        NoncovalentBondConstraintForm::intramolecular(true)
+    ),
+    Constraint::NoncovalentBond(
+        NoncovalentBondId(1),
+        NoncovalentBondConstraintForm::intramolecular(true)
+    )
+)]
+#[case::stereo_atom(
+    Constraint::StereoAtom(
+        StereoAtomId(0),
+        StereoKind::Tetrahedral,
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        ))
+    ),
+    Constraint::StereoAtom(
+        StereoAtomId(1),
+        StereoKind::Tetrahedral,
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        ))
+    )
+)]
+#[case::stereo_bond(
+    Constraint::StereoBond(
+        StereoBondId(0),
+        StereoKind::CisTrans,
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        ))
+    ),
+    Constraint::StereoBond(
+        StereoBondId(1),
+        StereoKind::CisTrans,
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic
+        ))
+    )
+)]
+fn test_molecule_combine_from_entries(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] constraint: Constraint,
+    #[case] shifted_constraint: Constraint,
+) {
+    entries.atoms[0]
+        .constraints
+        .set(AtomConstraintForm::valence(4));
+    entries.bonds[0]
+        .2
+        .constraints
+        .set(BondConstraintForm::aromatic(false));
+    entries.dative[0]
+        .2
+        .constraints
+        .set(DativeBondConstraintForm::aromatic(false));
+    entries.aromatic[0]
+        .1
+        .constraints
+        .set(AromaticSystemConstraintForm::electron_count(3));
+    entries.multicenter[0]
+        .1
+        .constraints
+        .set(MulticenterBondConstraintForm::electron_count(3));
+    entries.noncovalent[0]
+        .1
+        .constraints
+        .set(NoncovalentBondConstraintForm::intramolecular(true));
+    entries.stereo_atoms[0]
+        .2
+        .constraints
+        .set(StereoAtomConstraintForm::Stereogenicity(
+            StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+        ));
+    entries.stereo_bonds[0]
+        .2
+        .constraints
+        .set(StereoBondConstraintForm::Stereogenicity(
+            StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+        ));
+    entries.constraints.push(constraint);
+    let source = Molecule::from_entries(entries.clone());
+    let mut combined = source.clone();
+    let mut expected = entries.clone();
+    expected.atoms.extend(entries.atoms.clone());
+    expected.bonds.extend([
+        (AtomId(4), AtomId(5), entries.bonds[0].2.clone()),
+        (AtomId(5), AtomId(6), entries.bonds[1].2.clone()),
+        (AtomId(6), AtomId(7), entries.bonds[2].2.clone()),
+    ]);
+    expected.dative.push((
+        vec![AtomId(5), AtomId(6)],
+        AtomId(7),
+        entries.dative[0].2.clone(),
+    ));
+    expected.aromatic.push((
+        vec![AtomId(4), AtomId(5), AtomId(6)],
+        entries.aromatic[0].1.clone(),
+    ));
+    expected.multicenter.push((
+        vec![AtomId(4), AtomId(5), AtomId(6)],
+        entries.multicenter[0].1.clone(),
+    ));
+    expected
+        .noncovalent
+        .push(([AtomId(4), AtomId(7)], entries.noncovalent[0].1.clone()));
+    expected.stereo_atoms.push((
+        AtomId(5),
+        vec![
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(6), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(5), StereoLigandKind::LonePair),
+        ],
+        entries.stereo_atoms[0].2.clone(),
+    ));
+    expected.stereo_bonds.push((
+        BondId(4),
+        vec![
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(5), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(6), StereoLigandKind::ImplicitHydrogen),
+        ],
+        entries.stereo_bonds[0].2.clone(),
+    ));
+    expected.constraints.extend(vec![
+        Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomId(4), AtomId(6)]),
+        }),
+        shifted_constraint,
+    ]);
+
+    combined.combine_from(&source);
+
+    assert_eq!(combined, Molecule::from_entries(expected));
+    assert_eq!(source, Molecule::from_entries(entries));
+}
+
+#[rstest]
+#[case::empty(Molecule::new())]
+#[case::populated(Molecule::from_entries(equiv_molecule_entries()))]
+fn test_molecule_combine_from_identity(#[case] source: Molecule) {
+    let mut combined = source.clone();
+    combined.combine_from(&Molecule::new());
+    assert_eq!(combined, source);
+
+    let mut combined = Molecule::new();
+    combined.combine_from(&source);
+    assert_eq!(combined, source);
 }
 
 #[rstest]
