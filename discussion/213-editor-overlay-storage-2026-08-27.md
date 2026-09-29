@@ -43,8 +43,9 @@ modules, and both Edit execution paths use specialized framed_eq implementations
 S5a is implemented: scoped transactions provide immediate batch application,
 checked probes and commit, rollback, and optional correspondence. Molecule's
 prepared-batch conveniences use the same lifecycle. S5b's graph-ir caller and
-test migration is complete; graph-ir passes its checks. S5c's graph operations
-and S5d's Python callers remain before the stage gate.
+test migration is complete; graph-ir passes its checks. S5c's borrowed graph
+operations use scoped transactions and pass the graph checks. S5d's Python
+callers remain before the stage gate.
 Graph-core mutation and restoration are complete in
 [166](166-molecule-ops-2026-07-27.md); editor integration remains here. After
 that integration, return to 166 for the operation changes and hydrogen folding.
@@ -97,7 +98,7 @@ complete. S2k1, S2k2, S2l, and S2m are implemented; S2 is complete. S3a1–S3a3
 and S3b are implemented. S3c/S3d remove replacement Deltas while retaining the
 approved reaction names, semantics, and dative-factor migration. S3e–S3k, S4a,
 and S4b are complete. S4d's caller migration and comparison optimization are
-complete; S4b9 closes the strict lint gate. S5a–S5b are complete; S5c is next.
+complete; S4b9 closes the strict lint gate. S5a–S5c are complete; S5d1 is next.
 
 ## Editor and transaction API
 
@@ -5913,8 +5914,9 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   edit, molecule-compaction, and reaction-application property-suite tests with
   PROPTEST_CASES=256; doctests (1 passed, 3 ignored); benchmark compilation;
   all-target strict Clippy with proptest; warnings-denied rustdoc; nightly
-  formatting and diff review. S5c is next; the workspace gate remains S5d3.
-- **S5c** (`umol-graph::ops`; breaking, green at S5d) Migrate existing borrowed
+  formatting and diff review. The workspace gate remains S5d3.
+
+- **S5c — completed 2026-09-28** (`umol-graph::ops`; breaking, green at S5d) Migrate existing borrowed
   resolve/project execution to scoped transactions, sharing the planned
   batches and using checked probes between phases. Keep their present public
   resolve/project signatures in this stage. Extract these three approved
@@ -5971,6 +5973,23 @@ returns green. S5d's Python invalidation and sequential input-consumption contra
   S7 changes ownership names and reporting, not this prerequisite.
   Test late rejection restores the entry molecule and preserves chemistry
   diagnostics. [dep: S5a]
+
+  **Implemented.** Composite resolve and project each use one Transaction::run,
+  checked intermediate probes, and one commit on a determined result. Other
+  outcomes restore the entry molecule. Standalone phases use Molecule::transact;
+  projection planning uses the three methods above. Resolver and projector
+  execution no longer copies whole molecules. Valence projection remains a no-op.
+  The private constitution methods and all specified error payloads are wired.
+  Python has no matches on the changed chemistry-error variants to migrate;
+  its transaction lifecycle migration remains S5d.
+
+  Added projection-planner cases and extended late projection rejection coverage
+  to include restoration of removed overlays and their molecule constraints.
+  Verification passes: 1,968 graph library tests, 168 property tests with
+  PROPTEST_CASES=256, 683 resolution-conformance cases, all-target strict Clippy
+  with both features, warnings-denied rustdoc, nightly formatting, and diff review.
+  S5d1 is next; the workspace gate remains S5d3.
+
 - **S5d — Python prepared transactions and ownership** (group; breaking,
   closes S5 green at S5d3). [dep: S5a, S5b, S5c]
 
@@ -6292,7 +6311,10 @@ temporary clone-based default transform implementation is introduced between the
   discussion records from source. Check links and examples. [dep: S5a, S6d, S7d, S8b]
 - **S9b** (workspace gates and benchmarks; additive) Compare the final direct,
   apply, and transaction paths with S0, including dense resolver journal size
-  and the source-preserving export path. Review the complete diff against 213,
+  and the source-preserving export path. Compare the existing reaction-application
+  benchmark cases against the S0 revision using the same fixtures, toolchain,
+  and configuration; record the timing and allocation changes. S5b compiled
+  these benchmarks but did not measure them. Review the complete diff against 213,
   run formatting, workspace tests, strict Clippy and rustdoc, explicit feature
   suites, Python 3.13 build/tests, and the pinned Rust 1.87 gate once at final
   closeout. Record results and update the discussion status only after the full
@@ -6323,7 +6345,7 @@ Within the revised S2:
   S4b uses the additions and the component
   removal/restoration interfaces.
 - S4a, S4b, and S4d are complete. S4c is incorporated in S5a's guard and
-  scoped run. S5a–S5b are complete; S5c is next. S5's build
+  scoped run. S5a–S5c are complete; S5d1 is next. S5's build
   and test gate remains S5d3.
 - S5d1–S5d3 complete Python ownership, counters, and prepared transactions.
 - S6b1/S6b2 separate caller migration from combine_from; S6c1/S6c2 separate

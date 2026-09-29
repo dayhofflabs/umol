@@ -4,7 +4,7 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    BondHandle, BondUpdate, Edits, Lattice, Molecule, NumForm, TransactionError,
+    BondHandle, BondUpdate, Edits, Lattice, Molecule, MoleculeApplyError, NumForm,
     UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
@@ -18,7 +18,7 @@ pub enum BondsContradiction {}
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum BondsError {
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Apply(#[from] MoleculeApplyError),
 }
 
 impl BondsResolver {
@@ -55,9 +55,7 @@ impl BondsResolver {
         molecule: &mut Molecule,
     ) -> Result<Solution<(), BondsContradiction>, BondsError> {
         let edits = self.plan(molecule);
-        let mut editor = molecule.edit();
-        editor.transact(edits)?;
-        *molecule = editor.build();
+        molecule.transact([edits])?;
         Ok(Solution::Determined(()))
     }
 }
@@ -65,7 +63,7 @@ impl BondsResolver {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{BondFieldChange, BondId, Edit, Edits};
+    use umol_graph_ir::ir::{BondFieldChange, BondId, Edit, Edits, TransactionError};
     use umol_graph_ir::mol_dsl;
 
     use super::*;
@@ -132,11 +130,12 @@ mod tests {
         let edits = BondsResolver::new().plan(&molecule);
         molecule.bond_mut(BondId(1)).attributes_mut().charge = NumForm::Lit(9);
         let expected = molecule.clone();
-        let mut editor = molecule.edit();
         assert_eq!(
-            editor.transact(edits),
-            Err(TransactionError::OldStateMismatch)
+            molecule.transact([edits]),
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch
+            ))
         );
-        assert_eq!(editor.build(), expected);
+        assert_eq!(molecule, expected);
     }
 }

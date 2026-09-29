@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AtomHandle, AtomId, AtomUpdate, Edits, IsotopeMassForm, Lattice, Molecule, TransactionError,
+    AtomHandle, AtomId, AtomUpdate, Edits, IsotopeMassForm, Lattice, Molecule, MoleculeApplyError,
 };
 use umol_utils::solution::Solution;
 
@@ -44,7 +44,7 @@ pub enum IsotopeContradiction {}
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum IsotopeError {
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Apply(#[from] MoleculeApplyError),
 }
 
 /// Failures projecting a resolved isotope description.
@@ -53,7 +53,7 @@ pub enum IsotopeProjectError {
     #[error("atom {atom:?} has a non-ground isotope")]
     NonGroundIsotope { atom: AtomId },
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Apply(#[from] MoleculeApplyError),
 }
 
 impl IsotopeResolver {
@@ -100,7 +100,7 @@ impl IsotopeResolver {
     ///
     /// # Errors
     ///
-    /// Returns IsotopeError::Transaction if applying the planned edits fails.
+    /// Returns IsotopeError::Apply if edit application or the final integrity check fails.
     pub fn resolve(
         &self,
         molecule: &mut Molecule,
@@ -111,9 +111,7 @@ impl IsotopeResolver {
             Solution::Contradictory(contradiction) => match contradiction {},
         };
         if !edits.is_empty() {
-            let mut editor = molecule.edit();
-            editor.transact(edits)?;
-            *molecule = editor.build();
+            molecule.transact([edits])?;
         }
         Ok(Solution::Determined(()))
     }
@@ -127,12 +125,28 @@ impl IsotopeResolver {
     /// # Errors
     ///
     /// Returns IsotopeProjectError::NonGroundIsotope for the first atom whose
-    /// isotope is Undetermined, a set, or a variable, or Transaction if applying
-    /// the planned edits fails. Every error preserves the caller's molecule.
+    /// isotope is Undetermined, a set, or a variable, or Apply if edit application
+    /// or the final integrity check fails. Every error preserves the caller's molecule.
     pub fn project(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), IsotopeContradiction>, IsotopeProjectError> {
+        let edits = self.plan_project(molecule)?;
+        if !edits.is_empty() {
+            molecule.transact([edits])?;
+        }
+        Ok(Solution::Determined(()))
+    }
+
+    /// Plans isotope default elision under this policy without mutating the molecule.
+    ///
+    /// Applying the returned edits to the same molecule produces the result of
+    /// [IsotopeResolver::project]. The molecule remains unchanged while planning.
+    ///
+    /// # Errors
+    ///
+    /// Returns IsotopeProjectError::NonGroundIsotope for the first non-ground isotope.
+    pub fn plan_project(&self, molecule: &Molecule) -> Result<Edits, IsotopeProjectError> {
         let mut edits = Edits::new();
         for atom in molecule.atoms().iter() {
             if !atom.attributes().isotope_mass.is_ground() {
@@ -151,19 +165,14 @@ impl IsotopeResolver {
                 );
             }
         }
-        if !edits.is_empty() {
-            let mut editor = molecule.edit();
-            editor.transact(edits)?;
-            *molecule = editor.build();
-        }
-        Ok(Solution::Determined(()))
+        Ok(edits)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{AtomFieldChange, AtomForm, Edit, MoleculeEntries};
+    use umol_graph_ir::ir::{AtomFieldChange, AtomForm, Edit, MoleculeEntries, TransactionError};
     use umol_graph_ir::mol_dsl;
 
     use super::*;
@@ -259,12 +268,13 @@ mod tests {
         };
         molecule.atom_mut(AtomId(1)).attributes_mut().isotope_mass = IsotopeMassForm::Lit(18);
         let expected = molecule.clone();
-        let mut editor = molecule.edit();
         assert_eq!(
-            editor.transact(edits),
-            Err(TransactionError::OldStateMismatch)
+            molecule.transact([edits]),
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch
+            ))
         );
-        assert_eq!(editor.build(), expected);
+        assert_eq!(molecule, expected);
     }
 
     #[rstest]
@@ -385,5 +395,34 @@ mod tests {
             Err(IsotopeProjectError::NonGroundIsotope { atom: AtomId(1) }),
         );
         assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::natural(IsotopePolicy::Natural, Edits::from_iter([
+        Edit::ModifyAtomField {
+            id: AtomHandle::Id(AtomId(0)),
+            change: AtomFieldChange::IsotopeMass {
+                old: IsotopeMassForm::Natural,
+                new: IsotopeMassForm::Undetermined,
+            },
+        },
+    ]))]
+    #[case::strict(IsotopePolicy::Strict, Edits::new())]
+    fn test_isotope_resolver_plan_project(#[case] policy: IsotopePolicy, #[case] expected: Edits) {
+        let molecule = mol_dsl!(r#"{:atoms ["C#i=" "O#i18"]}"#);
+        assert_eq!(
+            IsotopeResolver::new(policy).plan_project(&molecule),
+            Ok(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::undetermined(mol_dsl!(r#"{:atoms ["C#i=" "O"]}"#))]
+    #[case::set(mol_dsl!(r#"{:atoms ["C#i=" "O#i{16,18}"]}"#))]
+    fn test_isotope_resolver_plan_project_error(#[case] molecule: Molecule) {
+        assert_eq!(
+            IsotopeResolver::new(IsotopePolicy::Natural).plan_project(&molecule),
+            Err(IsotopeProjectError::NonGroundIsotope { atom: AtomId(1) }),
+        );
     }
 }

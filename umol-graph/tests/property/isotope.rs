@@ -134,9 +134,9 @@ proptest! {
             let result = resolver.resolve(&mut resolved).unwrap();
             match resolver.plan(&source) {
                 Solution::Determined(edits) => {
-                    let mut editor = source.edit();
-                    editor.transact(edits).unwrap();
-                    prop_assert_eq!(&resolved, &editor.build());
+                    let mut expected = source.clone();
+                    expected.transact([edits]).unwrap();
+                    prop_assert_eq!(&resolved, &expected);
                     prop_assert_eq!(&result, &Solution::Determined(()));
                 }
                 Solution::Underdetermined(_) => {

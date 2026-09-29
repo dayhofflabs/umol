@@ -38,14 +38,14 @@ use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomHandle, AtomId, AtomUpdate, BondConstraintForm,
     BondConstraintKey, BondHandle, BondId, BondUpdate, BooleanForm, CisTransStereoForm, Constraint,
     ConstraintEdit, DativeBondConstraintForm, DativeBondConstraintKey, DativeBondHandle,
-    DativeBondId, DativeBondUpdate, Edits, Entity, Lattice, Molecule,
+    DativeBondId, DativeBondUpdate, Edits, Entity, Lattice, Molecule, MoleculeApplyError,
     MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondHandle,
     MulticenterBondId, MulticenterBondUpdate, NoncovalentBondConstraintForm,
     NoncovalentBondConstraintKey, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondUpdate,
     Normalize, NumForm, RingModel, RingSetKind, StereoAtomConstraintForm, StereoAtomConstraintKey,
     StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
     StereoBondConstraintKey, StereoBondHandle, StereoBondId, StereoBondUpdate, StereoKind,
-    TetrahedralStereoForm, TransactionError, UnpairedElectronsForm,
+    TetrahedralStereoForm, Transaction, UnpairedElectronsForm,
 };
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
@@ -165,7 +165,7 @@ pub enum DischargeContradiction {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ResolveError {
     #[error("isotope commit failed: {0}")]
-    Isotope(TransactionError),
+    Isotope(MoleculeApplyError),
     #[error(transparent)]
     Valence(#[from] ValenceError),
     #[error(transparent)]
@@ -177,13 +177,15 @@ pub enum ResolveError {
     #[error(transparent)]
     MulticenterBonds(#[from] MulticenterBondsError),
     #[error("constitution commit failed: {0}")]
-    Commit(TransactionError),
+    Commit(MoleculeApplyError),
     #[error("placement commit failed: {0}")]
-    Placement(TransactionError),
+    Placement(MoleculeApplyError),
     #[error("discharge evaluation failed: {0}")]
     DischargeEvaluation(#[from] ConstraintInvariantsError),
     #[error("discharge commit failed: {0}")]
-    Discharge(TransactionError),
+    Discharge(MoleculeApplyError),
+    #[error(transparent)]
+    Apply(#[from] MoleculeApplyError),
 }
 
 impl UmolError for ResolveError {
@@ -227,6 +229,8 @@ pub enum ProjectError {
     Valence(#[from] ValenceProjectError),
     #[error(transparent)]
     Isotope(#[from] IsotopeProjectError),
+    #[error(transparent)]
+    Apply(#[from] MoleculeApplyError),
 }
 
 impl UmolError for ProjectError {
@@ -277,7 +281,12 @@ impl<'a> Resolver<'a> {
     /// Resolves isotope composition before valence and aromaticity, then stereo and bonds.
     ///
     /// An unresolved isotope does not stop later phases. Only a completely determined
-    /// result replaces the caller's molecule; every other outcome preserves it exactly.
+    /// result retains the changes; every other outcome preserves the caller's molecule.
+    ///
+    /// # Errors
+    ///
+    /// Returns the owning phase's chemistry or edit-application error. Apply reports
+    /// an integrity failure at an intermediate probe or the final commit.
     pub fn resolve(
         &self,
         molecule: &mut Molecule,
@@ -290,188 +299,130 @@ impl<'a> Resolver<'a> {
                 return Ok(Solution::Contradictory(contradiction.into()));
             }
         };
-        let editor = molecule
-            .edit()
-            .apply(placement)
-            .map_err(ResolveError::Placement)?;
         // Placement changes assertions only, so the isotope fields still match this plan.
         let isotope_edits = match self.isotope.plan(molecule) {
             Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
             Solution::Contradictory(contradiction) => match contradiction {},
         };
-        let editor = editor.apply(isotope_edits).map_err(ResolveError::Isotope)?;
-        let placed = editor.build();
-        let editor = placed.edit();
+        Transaction::run(molecule, |mut transaction| {
+            transaction
+                .apply(placement)
+                .map_err(ResolveError::Placement)?;
+            transaction
+                .apply(isotope_edits)
+                .map_err(ResolveError::Isotope)?;
+            let placed = transaction.probe().map_err(MoleculeApplyError::from)?;
 
-        let state = match self.valence.admit(&placed).map_err(ResolveError::Valence)? {
-            Solution::Determined(state) => state,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(ResolveReport::default()));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::from(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        let outcome = self
-            .aromaticity
-            .select(&placed, state, self.tie_break)
-            .map_err(ResolveError::Aromaticity)?;
-        let mut state = match outcome {
-            Solution::Determined(state) => state,
-            Solution::Underdetermined(state) => {
-                let report = state.to_report();
+            let state = match self.valence.admit(placed).map_err(ResolveError::Valence)? {
+                Solution::Determined(state) => state,
+                Solution::Underdetermined(_) => {
+                    return Ok(Solution::Underdetermined(ResolveReport::default()));
+                }
+                Solution::Contradictory(contradiction) => {
+                    let contradiction = ResolveContradiction::from(contradiction);
+                    return Ok(Solution::Contradictory(contradiction));
+                }
+            };
+            let outcome = self
+                .aromaticity
+                .select(placed, state, self.tie_break)
+                .map_err(ResolveError::Aromaticity)?;
+            let mut state = match outcome {
+                Solution::Determined(state) => state,
+                Solution::Underdetermined(state) => {
+                    let report = state.to_report();
+                    return Ok(Solution::Underdetermined(report));
+                }
+                Solution::Contradictory(contradiction) => {
+                    let contradiction = ResolveContradiction::from(contradiction);
+                    return Ok(Solution::Contradictory(contradiction));
+                }
+            };
+
+            self.select_atom_completions(&mut state);
+
+            let report = state.to_report();
+            if !report.unresolved.is_empty() {
                 return Ok(Solution::Underdetermined(report));
             }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::from(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
 
-        // Finalization: the tie-break on plural atoms outside any candidate
-        // system; a tie surviving the key stays plural.
-        let key = self.tie_break.key();
-        if !key.is_empty() {
-            let plural: Vec<AtomId> = state
-                .completions
-                .iter()
-                .filter_map(|(atom, disjuncts)| (disjuncts.len() > 1).then_some(atom))
-                .collect();
-            for atom in plural {
-                let disjuncts = state.completions.get(atom).expect("plural atom").to_vec();
-                let best = disjuncts
-                    .iter()
-                    .max_by(|a, b| compare_by_key(key, a, b))
-                    .expect("non-empty entry")
-                    .clone();
-                let unique = disjuncts
-                    .iter()
-                    .filter(|form| compare_by_key(key, form, &best).is_eq())
-                    .count()
-                    == 1;
-                if unique {
-                    state.completions.insert(atom, smallvec::smallvec![best]);
-                    state.tie_breaks.push(atom);
+            let edits = self.plan_constitution(placed, &state);
+            transaction.apply(edits).map_err(ResolveError::Commit)?;
+            let working = transaction.probe().map_err(MoleculeApplyError::from)?;
+
+            let outcome = self.stereo.plan(working).map_err(ResolveError::Stereo)?;
+            let edits = match outcome {
+                Solution::Determined(edits) => edits,
+                Solution::Underdetermined(_) => {
+                    return Ok(Solution::Underdetermined(ResolveReport {
+                        unresolved: AtomCompletions::new(),
+                        tie_breaks: state.tie_breaks.clone(),
+                    }));
                 }
-            }
-            state.tie_breaks.sort_unstable();
-            state.tie_breaks.dedup();
-        }
+                Solution::Contradictory(contradiction) => {
+                    let contradiction = ResolveContradiction::Stereo(contradiction);
+                    return Ok(Solution::Contradictory(contradiction));
+                }
+            };
+            // Plan stereo and bond defaults from the same post-constitution molecule.
+            let bond_edits = self.bonds.plan(working);
+            let multicenter_outcome = self.multicenter_bonds.plan(working);
+            transaction
+                .apply(edits)
+                .map_err(|error| ResolveError::Stereo(StereoError::Apply(error)))?;
+            transaction
+                .apply(bond_edits)
+                .map_err(|error| ResolveError::Bonds(BondsError::Apply(error)))?;
 
-        let report = state.to_report();
-        if !report.unresolved.is_empty() {
-            return Ok(Solution::Underdetermined(report));
-        }
+            let edits = match multicenter_outcome {
+                Solution::Determined(edits) => edits,
+                Solution::Underdetermined(_) => {
+                    return Ok(Solution::Underdetermined(ResolveReport {
+                        unresolved: AtomCompletions::new(),
+                        tie_breaks: state.tie_breaks.clone(),
+                    }));
+                }
+                Solution::Contradictory(contradiction) => {
+                    let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
+                    return Ok(Solution::Contradictory(contradiction));
+                }
+            };
+            transaction.apply(edits).map_err(|error| {
+                ResolveError::MulticenterBonds(MulticenterBondsError::Apply(error))
+            })?;
 
-        // The single commit of the constitution round.
-        let mut edits = Edits::new();
-        for (atom, disjuncts) in state.completions.iter() {
-            let current = placed.atom(atom).attributes();
-            // The constraint channel holds assertions only: the commit
-            // narrows fields; candidate constraints stay solver state.
-            let mut selected = disjuncts[0].clone();
-            selected.constraints = current.constraints.clone();
-            let update = current.difference_to(&selected);
-            edits.update_atom(AtomHandle::Id(atom), current, &update);
-        }
-        let existing: BTreeSet<Vec<AtomId>> = placed
-            .aromatic_systems()
-            .iter()
-            .map(|system| {
-                let mut atoms: Vec<AtomId> = system.atom_ids().collect();
-                atoms.sort_unstable();
-                atoms
-            })
-            .collect();
-        for (atoms, system) in &state.systems {
-            let mut key = atoms.clone();
-            key.sort_unstable();
-            if existing.contains(&key) {
-                continue;
-            }
-            for edit in self
-                .aromaticity
-                .plan_system(&placed, atoms.clone(), system.clone())
+            // Closing discharge pass: remove determined-redundant assertions,
+            // evaluate the remaining molecule-scope list.
+            let working = transaction.probe().map_err(MoleculeApplyError::from)?;
+            let outcome = self
+                .plan_discharge(working)
+                .map_err(ResolveError::DischargeEvaluation)?;
+            let edits = match outcome {
+                Ok(edits) => edits,
+                Err(contradiction) => {
+                    let contradiction = ResolveContradiction::Discharge(contradiction);
+                    return Ok(Solution::Contradictory(contradiction));
+                }
+            };
+            transaction.apply(edits).map_err(ResolveError::Discharge)?;
+
+            if transaction
+                .probe()
+                .map_err(MoleculeApplyError::from)?
+                .is_concrete()
             {
-                edits.push(edit);
-            }
-        }
-        let editor = editor.apply(edits).map_err(ResolveError::Commit)?;
-        let working = editor.build();
-        let editor = working.edit();
-
-        let outcome = self.stereo.plan(&working).map_err(ResolveError::Stereo)?;
-        let edits = match outcome {
-            Solution::Determined(edits) => edits,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(ResolveReport {
+                transaction.commit()?;
+                Ok(Solution::Determined(ResolveReport {
                     unresolved: AtomCompletions::new(),
-                    tie_breaks: state.tie_breaks.clone(),
-                }));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::Stereo(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        // These plans read independent domains of the same post-constitution snapshot. Apply
-        // them in phase order without publishing between them.
-        let bond_edits = self.bonds.plan(&working);
-        let multicenter_outcome = self.multicenter_bonds.plan(&working);
-        let editor = editor
-            .apply(edits)
-            .map_err(|error| ResolveError::Stereo(StereoError::Transaction(error)))?;
-        let editor = editor
-            .apply(bond_edits)
-            .map_err(|error| ResolveError::Bonds(BondsError::Transaction(error)))?;
-
-        let edits = match multicenter_outcome {
-            Solution::Determined(edits) => edits,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(ResolveReport {
+                    tie_breaks: state.tie_breaks,
+                }))
+            } else {
+                Ok(Solution::Underdetermined(ResolveReport {
                     unresolved: AtomCompletions::new(),
-                    tie_breaks: state.tie_breaks.clone(),
-                }));
+                    tie_breaks: state.tie_breaks,
+                }))
             }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        let editor = editor.apply(edits).map_err(|error| {
-            ResolveError::MulticenterBonds(MulticenterBondsError::Transaction(error))
-        })?;
-
-        // Closing discharge pass: remove determined-redundant assertions,
-        // evaluate the remaining molecule-scope list.
-        let working = editor.build();
-        let editor = working.edit();
-        let outcome = self
-            .plan_discharge(&working)
-            .map_err(ResolveError::DischargeEvaluation)?;
-        let edits = match outcome {
-            Ok(edits) => edits,
-            Err(contradiction) => {
-                let contradiction = ResolveContradiction::Discharge(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        let editor = editor.apply(edits).map_err(ResolveError::Discharge)?;
-
-        let resolved = editor.build();
-        if resolved.is_concrete() {
-            *molecule = resolved;
-            Ok(Solution::Determined(ResolveReport {
-                unresolved: AtomCompletions::new(),
-                tie_breaks: state.tie_breaks,
-            }))
-        } else {
-            Ok(Solution::Underdetermined(ResolveReport {
-                unresolved: AtomCompletions::new(),
-                tie_breaks: state.tie_breaks,
-            }))
-        }
+        })
     }
 
     /// Projects selected stages within graph IR atomically.
@@ -486,7 +437,7 @@ impl<'a> Resolver<'a> {
     ///
     /// # Semantic properties
     ///
-    /// Only Determined publishes the candidate. Errors, contradictions, and underdetermination
+    /// Only Determined retains the changes. Errors, contradictions, and underdetermination
     /// leave the caller's molecule unchanged. Projection does not invoke resolution or recovery
     /// comparisons. Implicit-H counts, atom electron fields, and localized charge are preserved.
     /// For inputs meeting the bond charge/spin requirements, the result agrees with executing
@@ -497,6 +448,7 @@ impl<'a> Resolver<'a> {
     /// Localized and multicenter bonds require concrete zero charge and closed-shell singlet
     /// spin. Returns the owning phase's error for unprojectable stereo, aromatic-system fields,
     /// or isotopes. No charge/spin localization or unsupported-structure removal is implicit.
+    /// Apply reports an integrity failure at an intermediate probe or the final commit.
     pub fn project(
         &self,
         molecule: &mut Molecule,
@@ -540,43 +492,97 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        let mut candidate = molecule.clone();
-        if flags.contains(ProjectFlags::STEREO) {
-            match self.stereo.project(&mut candidate)? {
-                Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Solution::Contradictory(contradiction.into()))
+        Transaction::run(molecule, |mut transaction| {
+            if flags.contains(ProjectFlags::STEREO) {
+                let molecule = transaction.probe().map_err(MoleculeApplyError::from)?;
+                let edits = self.stereo.plan_project(molecule)?;
+                transaction
+                    .apply(edits)
+                    .map_err(StereoProjectError::Apply)?;
+            }
+            if flags.contains(ProjectFlags::AROMATICITY) {
+                let molecule = transaction.probe().map_err(MoleculeApplyError::from)?;
+                let edits = self.aromaticity.plan_project(molecule)?;
+                transaction
+                    .apply(edits)
+                    .map_err(AromaticityProjectError::Apply)?;
+            }
+            // Valence projection preserves all fields and requires no edits.
+            if flags.contains(ProjectFlags::ISOTOPE) {
+                let molecule = transaction.probe().map_err(MoleculeApplyError::from)?;
+                let edits = self.isotope.plan_project(molecule)?;
+                transaction
+                    .apply(edits)
+                    .map_err(IsotopeProjectError::Apply)?;
+            }
+            transaction.commit()?;
+            Ok(Solution::Determined(()))
+        })
+    }
+
+    fn select_atom_completions(&self, state: &mut ResolveState) {
+        let key = self.tie_break.key();
+        if !key.is_empty() {
+            let plural: Vec<AtomId> = state
+                .completions
+                .iter()
+                .filter_map(|(atom, disjuncts)| (disjuncts.len() > 1).then_some(atom))
+                .collect();
+            for atom in plural {
+                let disjuncts = state.completions.get(atom).expect("plural atom").to_vec();
+                let best = disjuncts
+                    .iter()
+                    .max_by(|a, b| compare_by_key(key, a, b))
+                    .expect("non-empty entry")
+                    .clone();
+                let unique = disjuncts
+                    .iter()
+                    .filter(|form| compare_by_key(key, form, &best).is_eq())
+                    .count()
+                    == 1;
+                if unique {
+                    state.completions.insert(atom, smallvec::smallvec![best]);
+                    state.tie_breaks.push(atom);
                 }
             }
+            state.tie_breaks.sort_unstable();
+            state.tie_breaks.dedup();
         }
-        if flags.contains(ProjectFlags::AROMATICITY) {
-            match self.aromaticity.project(&mut candidate)? {
-                Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Solution::Contradictory(contradiction.into()))
-                }
+    }
+
+    fn plan_constitution(&self, molecule: &Molecule, state: &ResolveState) -> Edits {
+        let mut edits = Edits::new();
+        for (atom, disjuncts) in state.completions.iter() {
+            let current = molecule.atom(atom).attributes();
+            // Preserve stored assertions when selecting field values.
+            let mut selected = disjuncts[0].clone();
+            selected.constraints = current.constraints.clone();
+            let update = current.difference_to(&selected);
+            edits.update_atom(AtomHandle::Id(atom), current, &update);
+        }
+        let existing: BTreeSet<Vec<AtomId>> = molecule
+            .aromatic_systems()
+            .iter()
+            .map(|system| {
+                let mut atoms: Vec<AtomId> = system.atom_ids().collect();
+                atoms.sort_unstable();
+                atoms
+            })
+            .collect();
+        for (atoms, system) in &state.systems {
+            let mut key = atoms.clone();
+            key.sort_unstable();
+            if existing.contains(&key) {
+                continue;
+            }
+            for edit in self
+                .aromaticity
+                .plan_system(molecule, atoms.clone(), system.clone())
+            {
+                edits.push(edit);
             }
         }
-        if flags.contains(ProjectFlags::VALENCE) {
-            match self.valence.project(&mut candidate, self.tie_break)? {
-                Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Solution::Contradictory(contradiction.into()))
-                }
-            }
-        }
-        if flags.contains(ProjectFlags::ISOTOPE) {
-            match self.isotope.project(&mut candidate)? {
-                Solution::Determined(()) => {}
-                Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
-                Solution::Contradictory(contradiction) => match contradiction {},
-            }
-        }
-        *molecule = candidate;
-        Ok(Solution::Determined(()))
+        edits
     }
 
     /// Plan the closing discharge pass: a stored assertion whose ground
@@ -1186,7 +1192,7 @@ mod tests {
     use umol_graph_ir::ir::{
         AtomConstraintForm, AtomForm, AtomId, IsotopeMassForm, MoleculeConstraint, MoleculeEntries,
         MulticenterValenceForm, NumForm, StereoConfigurationForm, StereoCoset, StereoLigand,
-        StereoLigandKind,
+        StereoLigandKind, Stereogenicity, StereogenicityForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -2204,6 +2210,19 @@ mod tests {
             .attributes_mut()
             .unpaired_electrons = spin;
         editor.atom_mut(AtomId(0)).attributes_mut().isotope_mass = isotope;
+        editor.constraints_mut().push(Constraint::And(vec![
+            Constraint::AromaticSystem(
+                AromaticSystemId(0),
+                AromaticSystemConstraintForm::electron_count(6_i64),
+            ),
+            Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+            ),
+        ]));
         let mut molecule = editor.build();
         let original = molecule.clone();
         let model = ChemistryModel::default();

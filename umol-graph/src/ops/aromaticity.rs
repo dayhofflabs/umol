@@ -26,8 +26,8 @@ use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AsLit, AtomId, BondConstraintForm,
-    BondId, BooleanForm, ElectronCountsForm, Molecule, NumForm, RingConfig, RingId, RingModel,
-    RingSet, RingSetKind, TransactionError,
+    BondId, BooleanForm, ElectronCountsForm, Molecule, MoleculeApplyError, NumForm, RingConfig,
+    RingId, RingModel, RingSet, RingSetKind,
 };
 use umol_utils::solution::Solution;
 
@@ -51,7 +51,7 @@ pub enum AromaticityError {
     #[error("hmo: missing parameters: {0}")]
     HmoMissingParameters(String),
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Apply(#[from] MoleculeApplyError),
 }
 
 /// Algorithms used by aromaticity perception independently of the chemistry

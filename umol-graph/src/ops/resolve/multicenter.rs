@@ -3,8 +3,8 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AtomConstraintKey, Edits, Lattice, Molecule, MulticenterBondHandle, MulticenterBondUpdate,
-    NumForm, TransactionError, UnpairedElectronsForm,
+    AtomConstraintKey, Edits, Lattice, Molecule, MoleculeApplyError, MulticenterBondHandle,
+    MulticenterBondUpdate, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -24,7 +24,7 @@ pub enum MulticenterBondsContradiction {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum MulticenterBondsError {
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Apply(#[from] MoleculeApplyError),
 }
 
 impl MulticenterBondsResolver {
@@ -87,9 +87,7 @@ impl MulticenterBondsResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = molecule.edit();
-        editor.transact(edits)?;
-        *molecule = editor.build();
+        molecule.transact([edits])?;
         Ok(Solution::Determined(()))
     }
 }
@@ -99,7 +97,7 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AtomConstraintForm, AtomId, Edit, Edits, MulticenterBondFieldChange, MulticenterBondId,
-        MulticenterValenceForm,
+        MulticenterValenceForm, TransactionError,
     };
     use umol_graph_ir::mol_dsl;
 
@@ -222,11 +220,12 @@ mod tests {
             .attributes_mut()
             .charge = NumForm::Lit(9);
         let expected = molecule.clone();
-        let mut editor = molecule.edit();
         assert_eq!(
-            editor.transact(edits),
-            Err(TransactionError::OldStateMismatch)
+            molecule.transact([edits]),
+            Err(MoleculeApplyError::Transaction(
+                TransactionError::OldStateMismatch
+            ))
         );
-        assert_eq!(editor.build(), expected);
+        assert_eq!(molecule, expected);
     }
 }

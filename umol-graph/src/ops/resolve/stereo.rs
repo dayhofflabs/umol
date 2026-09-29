@@ -7,9 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle, BondId,
-    BondUpdate, CisTransStereoForm, Edits, Lattice, Molecule, StereoAtomHandle, StereoAtomId,
-    StereoBondHandle, StereoBondId, StereoCoset, StereoKind, TetrahedralStereoForm,
-    TransactionError,
+    BondUpdate, CisTransStereoForm, Edits, Lattice, Molecule, MoleculeApplyError, StereoAtomHandle,
+    StereoAtomId, StereoBondHandle, StereoBondId, StereoCoset, StereoKind, TetrahedralStereoForm,
 };
 use umol_utils::solution::Solution;
 
@@ -74,7 +73,7 @@ pub enum StereoContradiction {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StereoError {
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Apply(#[from] MoleculeApplyError),
 }
 
 /// Failures to express stereo entities as fixed-frame atom and bond assertions.
@@ -93,7 +92,7 @@ pub enum StereoProjectError {
     #[error("bond {bond:?} has an assertion incompatible with its stereo configuration")]
     BondAssertion { bond: BondId },
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Apply(#[from] MoleculeApplyError),
 }
 
 impl StereoResolver {
@@ -391,9 +390,7 @@ impl StereoResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = molecule.edit();
-        editor.transact(edits)?;
-        *molecule = editor.build();
+        molecule.transact([edits])?;
         Ok(Solution::Determined(()))
     }
 
@@ -404,8 +401,8 @@ impl StereoResolver {
     /// Transports open configurations without choosing a configuration, combining them with
     /// existing assertions by meet. It does not invoke whole-molecule perception.
     /// Resolver failure, mismatch, and constraint-reset policies
-    /// do not discard information during projection. Entity removal uses the editor's ordinary
-    /// constraint-compaction semantics.
+    /// do not discard information during projection. Entity removal compacts
+    /// constraints that refer to the removed entities.
     ///
     /// # Semantic properties
     ///
@@ -417,13 +414,30 @@ impl StereoResolver {
     ///
     /// Rejects unsupported or undetermined kinds, unavailable model reference frames, ligand
     /// frames that cannot transport to those references, and conflicting existing assertions.
-    /// Transaction reports a failure applying the accumulated assertion and removal edits.
+    /// Apply reports an edit-application or final integrity-check failure.
     pub fn project(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), StereoContradiction>, StereoProjectError> {
+        let edits = self.plan_project(molecule)?;
+        if !edits.is_empty() {
+            molecule.transact([edits])?;
+        }
+        Ok(Solution::Determined(()))
+    }
+
+    /// Plans fixed-frame stereo assertions and removal of the stereo entities.
+    ///
+    /// Applying the returned edits to the same molecule produces the result of
+    /// [StereoResolver::project]. The molecule remains unchanged while planning.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unsupported kinds, unavailable reference frames, incompatible ligand frames,
+    /// and conflicting assertions.
+    pub fn plan_project(&self, molecule: &Molecule) -> Result<Edits, StereoProjectError> {
         if !molecule.has_stereo_atoms() && !molecule.has_stereo_bonds() {
-            return Ok(Solution::Determined(()));
+            return Ok(Edits::new());
         }
         let mut edits = Edits::new();
         for stereo in molecule.stereo_atoms().iter() {
@@ -518,10 +532,7 @@ impl StereoResolver {
                     .collect(),
             );
         }
-        let mut editor = molecule.edit();
-        editor.transact(edits)?;
-        *molecule = editor.build();
-        Ok(Solution::Determined(()))
+        Ok(edits)
     }
 }
 
@@ -1507,5 +1518,45 @@ mod tests {
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::tetrahedral(
+        mol_dsl_concrete!(r#"{:atoms ["C#h1" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h1#T1" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+    )]
+    #[case::cis_trans(
+        mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct0"}]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#h1" "C#h1" "F" "Cl"]
+            :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]}"#),
+    )]
+    fn test_stereo_resolver_plan_project(
+        stereo_model: StereoModel,
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
+    ) {
+        let edits = StereoResolver::new(&stereo_model)
+            .plan_project(&molecule)
+            .unwrap();
+        molecule.transact([edits]).unwrap();
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    fn test_stereo_resolver_plan_project_error(stereo_model: StereoModel) {
+        let molecule = mol_dsl_concrete!(
+            r#"{:atoms ["C#h1#T0" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]}"#
+        );
+        assert_eq!(
+            StereoResolver::new(&stereo_model).plan_project(&molecule),
+            Err(StereoProjectError::AtomAssertion { atom: AtomId(0) }),
+        );
     }
 }

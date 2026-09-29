@@ -10,8 +10,8 @@ use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
-    BondId, BondUpdate, BooleanForm, Edits, ElectronCountsForm, Lattice, Molecule, NumForm,
-    RingSet, TransactionError, UnpairedElectronsForm,
+    BondId, BondUpdate, BooleanForm, Edits, ElectronCountsForm, Lattice, Molecule,
+    MoleculeApplyError, NumForm, RingSet, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -98,7 +98,7 @@ pub enum AromaticityProjectError {
     #[error("bond {bond:?} has an assertion incompatible with aromaticity")]
     BondAssertion { bond: BondId },
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Apply(#[from] MoleculeApplyError),
 }
 
 impl AromaticityResolver {
@@ -286,9 +286,7 @@ impl AromaticityResolver {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = molecule.edit();
-        editor.transact(edits)?;
-        *molecule = editor.build();
+        molecule.transact([edits])?;
         Ok(Solution::Determined(()))
     }
 
@@ -303,20 +301,37 @@ impl AromaticityResolver {
     ///
     /// Projection is idempotent and independent of system participant order when electron
     /// counts are transported with their participants. Successful projection publishes all
-    /// edits together; every failure preserves the input exactly. System removal uses the
-    /// editor's ordinary constraint-compaction semantics.
+    /// edits together; every failure preserves the input exactly. System removal compacts
+    /// constraints that refer to the removed systems.
     ///
     /// # Errors
     ///
     /// Rejects non-concrete system contributions, charge, or spin; nonzero system charge;
     /// non-singlet or nonzero-unpaired system spin; and incompatible atom or bond assertions.
-    /// Transaction reports a failure applying the accumulated assertion and removal edits.
+    /// Apply reports an edit-application or final integrity-check failure.
     pub fn project(
         &self,
         molecule: &mut Molecule,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityProjectError> {
+        let edits = self.plan_project(molecule)?;
+        if !edits.is_empty() {
+            molecule.transact([edits])?;
+        }
+        Ok(Solution::Determined(()))
+    }
+
+    /// Plans aromatic atom and bond assertions and removal of the aromatic systems.
+    ///
+    /// Applying the returned edits to the same molecule produces the result of
+    /// [AromaticityResolver::project]. The molecule remains unchanged while planning.
+    ///
+    /// # Errors
+    ///
+    /// Rejects nonconcrete system fields, nonzero charge, spin other than a closed-shell
+    /// singlet, and conflicting assertions.
+    pub fn plan_project(&self, molecule: &Molecule) -> Result<Edits, AromaticityProjectError> {
         if !molecule.has_aromatic_systems() {
-            return Ok(Solution::Determined(()));
+            return Ok(Edits::new());
         }
         let mut edits = Edits::new();
         for system in molecule.aromatic_systems().iter() {
@@ -387,10 +402,7 @@ impl AromaticityResolver {
                 })
                 .collect(),
         );
-        let mut editor = molecule.edit();
-        editor.transact(edits)?;
-        *molecule = editor.build();
-        Ok(Solution::Determined(()))
+        Ok(edits)
     }
 
     /// Selection among assignments per candidate-ring component, mutating
@@ -1750,6 +1762,44 @@ mod tests {
             Err(expected)
         );
         assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::contributions(
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#h1#a2" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]}"#),
+    )]
+    fn test_aromaticity_resolver_plan_project(
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
+    ) {
+        let model = AromaticityModel::daylight();
+        let edits = AromaticityResolver::new(&model)
+            .plan_project(&molecule)
+            .unwrap();
+        molecule.transact([edits]).unwrap();
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    fn test_aromaticity_resolver_plan_project_error(mut resolved_benzene: Molecule) {
+        resolved_benzene
+            .atom_mut(AtomId(5))
+            .attributes_mut()
+            .constraints
+            .set(AtomConstraintForm::aromatic_valence(
+                AromaticValenceForm::NotAromatic,
+            ));
+        let model = AromaticityModel::daylight();
+        assert_eq!(
+            AromaticityResolver::new(&model).plan_project(&resolved_benzene),
+            Err(AromaticityProjectError::AtomAssertion { atom: AtomId(5) }),
+        );
     }
 
     #[rstest]
