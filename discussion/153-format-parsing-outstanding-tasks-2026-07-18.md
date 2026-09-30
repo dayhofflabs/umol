@@ -249,7 +249,9 @@ Required work:
   [doc 170](170-reaction-smiles-python-2026-07-28.md).
 - Defer Python `CxSmiles`, `Mol`, and `Sdf` APIs until their Rust boundary objects and configs exist.
 - Design Python SMILES output exposure separately from the Rust Convey/export surface completed
-  in doc 226; that work did not add Python output methods or boundary wrappers.
+  in doc 226; that work did not add Python output methods or boundary wrappers. Doc 229 adds the
+  text-returning `Molecule.to_smiles` and `Reaction.to_reaction_smiles`; boundary wrappers remain
+  deferred.
 - Keep parsing methods operation-specific, with separate config types for SMILES, MOL, SDF, and CXSMILES.
 - Avoid generic format-polymorphic parsing APIs unless a later design shows concrete value.
 

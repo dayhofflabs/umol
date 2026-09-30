@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use umol_graph::export::export_reaction_smiles_with;
 use umol_graph::fingerprint::featurize_reaction;
 use umol_graph::ingest::ingest_reaction_smiles_with;
 use umol_graph::ops::model::{
@@ -43,7 +44,8 @@ use crate::defaults::ReactionDefaults;
 use crate::delta::Deltas;
 use crate::error::{
     contradiction_error, fingerprint_error, metadata_error, parse_error, reaction_integrity_error,
-    reaction_smiles_input_error, transaction_error, InvalidStructureError,
+    reaction_smiles_input_error, reaction_smiles_output_error, transaction_error,
+    InvalidStructureError,
 };
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
 use crate::fingerprint::reaction::ReactionCombinedFingerprint;
@@ -368,6 +370,44 @@ impl Reaction {
         let reaction = GraphIrReaction::try_new(lhs, deltas).map_err(reaction_integrity_error)?;
 
         Self::from_rust(py, reaction)
+    }
+
+    /// Export this reaction as reaction-SMILES text under explicit IO, chemistry, and resolution
+    /// policies, writing the atom correspondence as map labels.
+    /// Omitted options select OpenSMILES, SMILES valence, and Natural isotope policy.
+    /// The reaction is unchanged on success and failure.
+    #[pyo3(signature = (*, io_config=None, chemistry_model=None, resolve_config=None))]
+    fn to_reaction_smiles(
+        &self,
+        py: Python<'_>,
+        io_config: Option<SmilesIoConfig>,
+        chemistry_model: Option<ChemistryModel>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<String> {
+        let io_config =
+            io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
+        let chemistry_model = chemistry_model.map_or_else(
+            || GraphChemistryModel {
+                valence: GraphValenceModel::smiles(),
+                ..GraphChemistryModel::default()
+            },
+            |model| model.to_rust(),
+        );
+        let resolve_config = resolve_config.map_or_else(
+            || GraphResolveConfig {
+                isotope: GraphIsotopePolicy::Natural,
+                ..Default::default()
+            },
+            ResolveConfig::to_rust,
+        );
+
+        export_reaction_smiles_with(
+            &self.to_rust(py)?,
+            &io_config,
+            &chemistry_model,
+            &resolve_config,
+        )
+        .map_err(reaction_smiles_output_error)
     }
 
     /// The live left-hand molecule component.
