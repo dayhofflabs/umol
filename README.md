@@ -25,9 +25,9 @@ Install the distribution `umol-py`, which provides the import package `umol`:
 pip install umol-py
 ```
 
-Version 0.8.0 is an alpha release; interfaces may still change. See the
+Version 0.9.0 is an alpha release; interfaces may still change. See the
 [release notes](https://github.com/dayhofflabs/umol/blob/main/RELEASE_NOTES.md)
-for changes since 0.7.0, including API migration guidance. The
+for changes since 0.8.0, including API migration guidance. The
 [whitepaper](https://github.com/dayhofflabs/umol/blob/main/docs/umol-whitepaper.pdf)
 develops the molecular model and its algebra.
 
@@ -284,9 +284,9 @@ needs:
 
 ```toml
 [dependencies]
-umol-graph = "0.8.0"
-umol-graph-ir = "0.8.0"
-umol-io = { version = "0.8.0", features = ["depiction"] }
+umol-graph = "0.9.0"
+umol-graph-ir = "0.9.0"
+umol-io = { version = "0.9.0", features = ["depiction"] }
 ```
 
 ```rust
