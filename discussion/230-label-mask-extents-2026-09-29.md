@@ -70,9 +70,10 @@ short of a subscript's ink.
   larger. Clearance is added to both. The box is no longer symmetric about the label anchor, because
   the ink is not.
 - Clearance stays 0.08 on each side.
-- The mask rectangle has `rx` and `ry` equal to the horizontal and vertical clearance. Each corner
-  arc is centered on a corner of the glyph box, so rounding never uncovers ink. Visual review with
-  sharp corners showed bond ends cut to the rectangle's corner; rounding softens that cut.
+- The mask rectangle has `rx` and `ry` of 0.24, three times the clearance. A corner of the glyph box
+  stays covered while the radius is at most clearance × √2 / (√2 − 1) ≈ 0.273, so rounding never
+  uncovers ink. Visual review with sharp corners showed bond ends cut to the rectangle's corner. A
+  radius equal to the clearance softened it too little; three times the clearance was chosen by eye.
 
 ## Evidence
 

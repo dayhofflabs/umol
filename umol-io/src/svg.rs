@@ -26,6 +26,7 @@ const ATOM_LABEL_FONT_UNITS_PER_EM: f64 = 2048.0;
 const ATOM_LABEL_WIDEST_CHARACTER_ADVANCE: u32 = 2025;
 const ATOM_LABEL_HORIZONTAL_CLEARANCE: f64 = 0.08;
 const ATOM_LABEL_VERTICAL_CLEARANCE: f64 = 0.08;
+const ATOM_LABEL_MASK_CORNER_RADIUS: f64 = 0.24;
 const ATOM_LABEL_BASE_ASCENT: f64 = 847.0 / ATOM_LABEL_FONT_UNITS_PER_EM * TEXT_SIZE;
 const ATOM_LABEL_BASE_DEPTH: f64 = 750.0 / ATOM_LABEL_FONT_UNITS_PER_EM * TEXT_SIZE;
 const ATOM_LABEL_BASE_DESCENDER_DEPTH: f64 = 1160.0 / ATOM_LABEL_FONT_UNITS_PER_EM * TEXT_SIZE;
@@ -296,9 +297,9 @@ fn render_atom_mask(
             output.push_str(r#"" height=""#);
             write_number(output, label_box.height);
             output.push_str(r#"" rx=""#);
-            write_number(output, ATOM_LABEL_HORIZONTAL_CLEARANCE);
+            write_number(output, ATOM_LABEL_MASK_CORNER_RADIUS);
             output.push_str(r#"" ry=""#);
-            write_number(output, ATOM_LABEL_VERTICAL_CLEARANCE);
+            write_number(output, ATOM_LABEL_MASK_CORNER_RADIUS);
             output.push_str(r#"" fill="black"/>"#);
         }
     }
@@ -830,8 +831,8 @@ mod tests {
             mask_children[1].attribute("height"),
             Some("0.5109033203125")
         );
-        assert_eq!(mask_children[1].attribute("rx"), Some("0.08"));
-        assert_eq!(mask_children[1].attribute("ry"), Some("0.08"));
+        assert_eq!(mask_children[1].attribute("rx"), Some("0.24"));
+        assert_eq!(mask_children[1].attribute("ry"), Some("0.24"));
         assert_eq!(mask_children[1].attribute("fill"), Some("black"));
         assert_eq!(
             groups
