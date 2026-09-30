@@ -1,4 +1,4 @@
-# 230 — graph-IR delta module review cycle
+# 233 — graph-IR delta module review cycle
 
 Status: Proposed
 Date: 2026-09-23
@@ -6,7 +6,7 @@ Relates: [184](184-deltas-and-edits-2026-08-04.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
 [209](209-normalization-canonical-semantics-2026-08-25.md),
-[229](229-aggregate-integrity-review-2026-09-22.md),
+[232](232-aggregate-integrity-review-2026-09-22.md),
 [134](134-reaction-application-overlays-2026-06-26.md),
 [168](168-api-hygiene-2026-07-27.md),
 [227](227-repository-structure-hygiene-2026-09-10.md),
@@ -73,21 +73,21 @@ family, the stereo folds, and the inline unit-test module), `umol-graph-ir/tests
 with the generators it draws from `tests/property/strategies.rs`, and the module's re-exports in
 `ir.rs`. Consumers (`reaction.rs`, `reaction/integrity.rs`, `reaction_span.rs`, `compose.rs`,
 `canonicalize.rs`, `molecule/transact.rs`, `umol-py/src/delta.rs`) were traced for check
-ownership, synonym checks, and defense arguments, not reviewed. The pinned commit is doc 229's
+ownership, synonym checks, and defense arguments, not reviewed. The pinned commit is doc 232's
 stage S2a and is in scope.
 
 Each review agent and the refutation agent worked in its own detached worktree at the pinned
 commit; no build, test, or edit touched the primary checkout, no tracked file changed, and the
 worktrees were removed after this document was written. Every agent read the code-reviews guide,
 the review-cycle skill, the living guides and skills for its area, the status index, docs 184,
-214, 211, 209 (top notice respected), 229, 134, 135, 212, 215, 176, 161, 156, and the
+214, 211, 209 (top notice respected), 232, 134, 135, 212, 215, 176, 161, 156, and the
 whitepaper. Every finding carries a violation argument with its citation and a defense argument
 with a deferral check naming the documents consulted. The refutation agent verified every
 citation and factual premise at the pinned commit, re-ran the reproductions, and issued graded
 verdicts; ties favor the original.
 
 Evidence at the pinned commit: `cargo test -p umol-graph-ir --lib delta` 325 passed
-(`ir::delta::tests` 127 cases, including the 27 focused S2a cases doc 229 records);
+(`ir::delta::tests` 127 cases, including the 27 focused S2a cases doc 232 records);
 `--features proptest --test property delta` 30 passed. Line coverage of `src/ir/delta.rs` over
 the full lib and property runs (`cargo llvm-cov` 0.9.1): 91.4 % lines, 87.1 % regions, 94.0 %
 functions (refutation re-measurement 91.3 % / 199 missed lines), above the 80 % baseline.
@@ -137,9 +137,9 @@ data-types guide §"Closed containers and the minimum eager contract" (every pub
 gate or establishes preservation by construction); integrity guide lines 57–59 and the
 `InvalidReference` row ("a missing id would panic or select no source frame"); the module's own
 guard already rejects a created entity on a net-removed lhs atom (`:3358`). Defense: doc 214
-lines 235–236 state the cancellation rule without a reference condition; doc 229 §S2a specifies
+lines 235–236 state the cancellation rule without a reference condition; doc 232 §S2a specifies
 incidence and old-attribute agreement only, which the code implements; integrity guide lines 111
-and 177 and doc 229 lines 1573–1576 keep mutual consistency and materializability with the first
+and 177 and doc 232 lines 1573–1576 keep mutual consistency and materializability with the first
 consumer. Verdict: the deferral covers the check, not publication of a value that violates the
 closed-container contract; the first consumer does not report the deferred failure, it panics,
 which the data-types guide permits only where the producer establishes the property. Owner:
@@ -308,7 +308,7 @@ stated law whose witness cannot fail. Owner: a shuffle of interleaved multi-elem
 **F17 — created-entity contradiction paths have no witness** (`delta.rs:1916`, `2929`, `2953`,
 `2963`, `3108`, `3118` count 0; confirmed; FD9): an operation after a created entity's `Remove`,
 a second stereo `Add`, and a non-connecting stereo configuration chain. Defense: the stereo folds
-mirror the generic fold; doc 229 S2b's constructor `DuplicateReference` rejects double `Add` for
+mirror the generic fold; doc 232 S2b's constructor `DuplicateReference` rejects double `Add` for
 `Reaction` inputs. Verdict: each is a failure boundary of a public operation. The
 operation-after-`Remove` rule is stated nowhere in rustdoc.
 
@@ -338,7 +338,7 @@ dispatch. Verdict: the guide names deltas explicitly.
 **F21 — the stereo-atom created-path old-value mismatch is never executed** (`delta.rs:2981`
 count 0 while its stereo-bond twin `3136` is executed; reduced; FD8). Did not survive: per-kind
 "matrix holes" for dative, multicenter, and noncovalent old-value mismatches and the combined
-reordered-plus-intervening-change path, because doc 229's requirement is category-level and the
+reordered-plus-intervening-change path, because doc 232's requirement is category-level and the
 generic boundary (`:1936`) is executed.
 
 **F22 — `Remove` after an `Electrons` `ModifyField` on an aromatic or multicenter entity has no
@@ -364,7 +364,7 @@ reduced; FD2). All 574 sampled `Deltas` with a same-id `Add`+`Remove` pair norma
 `Contradiction` because `Add` and `Remove` draw independent forms whose pairwise `normalized_eq`
 rate is zero; the reaction generators produce no such pair. Before S2a every pair cancelled.
 Survives as a degeneracy finding: S2a changed what the property exercises without a generator
-change. Did not survive: the reading of doc 229's S2a result as a coverage claim; it lists the
+change. Did not survive: the reading of doc 232's S2a result as a coverage claim; it lists the
 property among passing gates.
 
 **F26 — `deltas_strategy` emits only atom, bond, and constraint deltas**
@@ -416,7 +416,7 @@ Recorded with their dismissing citations so they are not re-flagged.
 
 - **Asymmetric reference guard** (FA5): the guard rejects a created stereo atom on a
   net-removed atom but admits a created stereo bond on a net-removed bond and a
-  `ConstraintDelta::Add` on a removed atom. Dismissed by doc 229 §"Proposed changes" lines
+  `ConstraintDelta::Add` on a removed atom. Dismissed by doc 232 §"Proposed changes" lines
   1573–1576 (wider consistency checks stay with their existing first consumers) and the integrity
   guide's lazy-property list; `to_reaction_span` reports `Contradiction` for the bond case without
   panic and no integrity contract is breached. The finder flagged the tie; ties favor the original.
@@ -437,7 +437,7 @@ Recorded with their dismissing citations so they are not re-flagged.
   reserves the words; the identifiers carry the distinction; the change is aesthetic.
 - **`EntitySpan`/`ConstraintSpan` housed in the delta module** (FC1): the grouping rule
   (2026-08-31) post-dates the placement (2026-06-26) and the split is deliberately tracked (docs
-  168 and 227, doc 229 line 1200); folded into the split proposal, which moves them to a span
+  168 and 227, doc 232 line 1200); folded into the split proposal, which moves them to a span
   module.
 - **Focus types `Delta` and `Deltas` defined last** (FC2): the rule post-dates the layout; the
   crate precedent invoked is unwritten and not a normative source; the sibling `edit.rs` has the
@@ -460,7 +460,7 @@ proposed design rather than the findings list.
    and the macro-generated `apply_field`/`apply_constraint`.
 2. **Module size.** 5157 lines (3462 non-test) against the guide's roughly 1000. The file was 922
    lines on 2026-06-25, 3438 by 2026-07-12, and 5361 when the guide landed; the split is tracked
-   in doc 168 §"Module and file organization", doc 227, and doc 229 line 1200. The proposed split
+   in doc 168 §"Module and file organization", doc 227, and doc 232 line 1200. The proposed split
    and its visibility map follow.
 3. **Inline test module.** 1693 lines inline against "long test suites in separate test
    submodules"; crate-wide 80 inline suites against 3 separate `tests.rs` files; S2a added 322
@@ -659,7 +659,7 @@ The split in migration 2 with its visibility map, pending the module names (open
 
 ### Records
 
-- Doc 229's S2a result lists "the delta normal-form property" among passing gates; recording the
+- Doc 232's S2a result lists "the delta normal-form property" among passing gates; recording the
   property's evidence scope there (no generated cancellation input after S2a) prevents the
   reading that the property covers the change.
 - Guide clarifications under open item 7 and open item 5 belong to the living guides, not to
@@ -676,7 +676,7 @@ The split in migration 2 with its visibility map, pending the module names (open
   applies, witness findings survive on that basis. The next brief should name that skill section
   as the basis for witness findings and should not steer an area toward pushing under a guide
   that post-dates the code (FC1, FC2).
-- Two deferral checks missed governing text that changed the verdict: doc 229 §"Proposed
+- Two deferral checks missed governing text that changed the verdict: doc 232 §"Proposed
   changes" lines 1573–1576 (FA5) and doc 134 §6 I6e (FA4). Both are reachable from the status
   index; the brief's governing-document list should name completed implementation records at
   stage granularity, not only by document.

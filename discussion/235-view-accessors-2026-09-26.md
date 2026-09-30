@@ -1,4 +1,4 @@
-# 232 — View names, collection access, and algorithm placement
+# 235 — View names, collection access, and algorithm placement
 
 Status: Proposed
 Date: 2026-09-26

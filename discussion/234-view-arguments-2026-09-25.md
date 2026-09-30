@@ -1,4 +1,4 @@
-# 231 — View arguments in operations
+# 234 — View arguments in operations
 
 Status: Proposed
 Date: 2026-09-25

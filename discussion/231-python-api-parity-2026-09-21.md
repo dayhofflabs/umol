@@ -1,4 +1,4 @@
-# 228 — Python API semantic parity review
+# 231 — Python API semantic parity review
 
 Status: In Progress
 Date: 2026-09-21

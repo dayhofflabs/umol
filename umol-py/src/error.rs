@@ -2,6 +2,11 @@
 
 use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
 use pyo3::{create_exception, PyErr};
+use umol_graph::export::{
+    ConveyError as GraphConveyError, ReactionConveyError as GraphReactionConveyError,
+    ReactionSmilesOutputError as GraphReactionSmilesOutputError,
+    SmilesOutputError as GraphSmilesOutputError,
+};
 use umol_graph::fingerprint::FingerprintError as GraphFingerprintError;
 use umol_graph::ingest::{
     MoleculeInterpretationError as GraphMoleculeInterpretationError,
@@ -179,6 +184,43 @@ pub(crate) fn reaction_smiles_input_error(error: GraphReactionSmilesInputError) 
                 ) => PyRuntimeError::new_err(message),
             }
         }
+    }
+}
+
+/// Select the Python exception for a molecule that cannot be conveyed to SMILES.
+fn convey_error(error: &GraphConveyError, message: String) -> PyErr {
+    match error {
+        GraphConveyError::Contradiction(_) => ContradictionError::new_err(message),
+        GraphConveyError::Underdetermined => UnderdeterminedError::new_err(message),
+        GraphConveyError::Projection(_)
+        | GraphConveyError::Value { .. }
+        | GraphConveyError::Constraint(_)
+        | GraphConveyError::Entity { .. }
+        | GraphConveyError::StereoAtom { .. }
+        | GraphConveyError::StereoBond { .. } => ModelConversionError::new_err(message),
+    }
+}
+
+/// Map a SMILES export error onto the public Python taxonomy.
+pub(crate) fn smiles_output_error(error: GraphSmilesOutputError) -> PyErr {
+    let message = error.to_string();
+    match &error {
+        GraphSmilesOutputError::Convey(error) => convey_error(error, message),
+        GraphSmilesOutputError::Render(_) => ModelConversionError::new_err(message),
+    }
+}
+
+/// Map a reaction-SMILES export error onto the public Python taxonomy.
+pub(crate) fn reaction_smiles_output_error(error: GraphReactionSmilesOutputError) -> PyErr {
+    let message = error.to_string();
+    match &error {
+        GraphReactionSmilesOutputError::Convey(GraphReactionConveyError::Materialization(_)) => {
+            ContradictionError::new_err(message)
+        }
+        GraphReactionSmilesOutputError::Convey(
+            GraphReactionConveyError::Reactants(error) | GraphReactionConveyError::Products(error),
+        ) => convey_error(error, message),
+        GraphReactionSmilesOutputError::Render(_) => ModelConversionError::new_err(message),
     }
 }
 

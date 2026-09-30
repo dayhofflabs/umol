@@ -1412,6 +1412,7 @@ def test_molecule_consumption(method):
 
     for access in (
         lambda: repr(alias), lambda: str(alias), lambda: alias.render(),
+        lambda: alias.to_smiles(),
         lambda: alias.copy(), lambda: alias == copied, lambda: copied == alias,
         lambda: alias == alias, lambda: alias.edit(),
         lambda: alias.apply(Edits()), lambda: alias.tracked_apply(Edits()),

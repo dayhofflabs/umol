@@ -242,7 +242,14 @@ PUBLIC_EXPORTS = frozenset(
 
 if hasattr(native, "Depiction"):
     PUBLIC_EXPORTS |= frozenset(
-        {"MoleculeLayoutAlgorithm", "DepictConfig", "Depiction"}
+        {
+            "MoleculeLayoutAlgorithm",
+            "MoleculeLayout",
+            "ReactionLayout",
+            "DepictConfig",
+            "SvgConfig",
+            "Depiction",
+        }
     )
 
 EDITING_EXPORTS = frozenset(
@@ -361,6 +368,10 @@ def test_deferred_member(owner, name):
             umol.Molecule.from_smiles,
             "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
         ),
+        (
+            umol.Molecule.to_smiles,
+            "(self, /, *, io_config=None, chemistry_model=None, resolve_config=None)",
+        ),
         (umol.Molecule.edit, "(self, /)"),
         (umol.Molecule.apply, "(self, /, edits)"),
         (umol.Molecule.tracked_apply, "(self, /, edits)"),
@@ -409,6 +420,10 @@ def test_deferred_member(owner, name):
         (
             umol.Reaction.from_reaction_smiles,
             "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
+        ),
+        (
+            umol.Reaction.to_reaction_smiles,
+            "(self, /, *, io_config=None, chemistry_model=None, resolve_config=None)",
         ),
         (
             umol.Reaction.compose,

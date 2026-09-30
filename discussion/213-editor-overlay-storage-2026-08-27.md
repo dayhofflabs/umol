@@ -6,10 +6,10 @@ Relates: [117](117-entity-model-extensibility-2026-06-20.md),
 [166](166-molecule-ops-2026-07-27.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
-[228](228-python-api-parity-2026-09-21.md),
-[229](229-aggregate-integrity-review-2026-09-22.md),
-[231](231-view-arguments-2026-09-25.md),
-[232](232-view-accessors-2026-09-26.md),
+[231](231-python-api-parity-2026-09-21.md),
+[232](232-aggregate-integrity-review-2026-09-22.md),
+[234](234-view-arguments-2026-09-25.md),
+[235](235-view-accessors-2026-09-26.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
@@ -38,8 +38,8 @@ none remains an outstanding implementation task. Graph-core storage work from
 [166](166-molecule-ops-2026-07-27.md) is integrated. Return there for molecular
 operations, including hydrogen folding/unfolding, the deferred lift_constraints
 correction, and the recorded naming work.
-[231](231-view-arguments-2026-09-25.md) and
-[232](232-view-accessors-2026-09-26.md) own the separate view reviews. Doc 228's
+[234](234-view-arguments-2026-09-25.md) and
+[235](235-view-accessors-2026-09-26.md) own the separate view reviews. Doc 231's
 broader Python review remains separate; it is not a dependency of this closeout.
 
 ## Addendum — Recovery strategy handoff, 2026-09-29
@@ -758,7 +758,7 @@ This restriction does not apply to entity-level constraint views or setters.
 | Molecule::transact, tracked_transact | Submit prepared Edits, mutate the receiver on success, restore it on failure; tracked_transact returns the whole transaction's correspondence. | Bind the Rust conveniences over Transaction::run. No interactive Python Transaction is exposed. |
 
 These are specific migration obligations, not authorization for a blanket
-Option-based conversion of forms or entries. Doc 228 is unchanged.
+Option-based conversion of forms or entries. Doc 231 is unchanged.
 
 Python exposes these resolution methods on Molecule. All retain keyword-only
 chemistry_model=None and resolve_config=None:
@@ -2379,7 +2379,7 @@ whole-transformation speedups or require a broader benchmark campaign.
 ## Staged implementation plan
 
 Graph-core mutation and restoration from 166 and the aggregate integrity gate
-optimized in 229 are prerequisites already implemented. Each subitem includes
+optimized in 232 are prerequisites already implemented. Each subitem includes
 focused tests of its stated behavior, using public operations for property tests.
 Run affected-crate tests and checks as each stage closes; every stage ends green.
 Only breaking signature changes and rewires may leave the tree temporarily red

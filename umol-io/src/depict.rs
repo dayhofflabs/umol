@@ -1,12 +1,15 @@
 //! Format-neutral molecule and reaction depiction.
 //!
 //! This module is available with the `depiction` feature. [`Depict`] is implemented for graph-IR
-//! molecules and reactions: `depict` uses [`DepictConfig::default`], while `depict_with` accepts an
-//! explicit configuration. Both operations return an opaque [`Depiction`], whose
-//! [`Depiction::render_svg`] method produces SVG text.
+//! molecules and reactions. Layout generation and depiction share one trait: `layout` and
+//! `layout_with` generate a layout, `depict_layout` verifies a supplied layout and lowers it, and
+//! `depict` and `depict_with` are the composition of the two. All depiction operations return an
+//! opaque [`Depiction`], whose [`Depiction::render_svg`] and [`Depiction::render_svg_with`] methods
+//! produce SVG text.
 
 pub(crate) mod molecule;
 mod reaction;
+mod verify;
 
 pub use molecule::MoleculeDepictionError;
 pub use reaction::ReactionDepictionError;
@@ -36,15 +39,37 @@ impl Default for DepictConfig {
     }
 }
 
-/// Constructs a format-neutral depiction using default or explicitly configured operations.
+/// Lays out and depicts a value with default or explicitly configured operations.
+///
+/// Generated-layout depiction is `layout_with` followed by `depict_layout`; no other lowering
+/// exists, so a supplied layout equal to the generated one depicts identically. `depict_layout`
+/// verifies the supplied layout before lowering it and repairs nothing.
 ///
 /// Graph-IR molecules return [`MoleculeDepictionError`]. Graph-IR reactions return
 /// [`ReactionDepictionError`] and are materialized into their two sides before either side is laid
-/// out or depicted.
+/// out, verified, or depicted.
 #[cfg(feature = "coordgen")]
 pub trait Depict {
-    /// Failure produced while laying out or depicting this value.
+    /// Coordinate assignment this value is depicted in.
+    type Layout;
+    /// Failure produced while laying out, verifying, or depicting this value.
     type Error;
+
+    /// Generates the layout with [`DepictConfig::default`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when the default layout operation cannot produce the result.
+    fn layout(&self) -> Result<Self::Layout, Self::Error> {
+        self.layout_with(&DepictConfig::default())
+    }
+
+    /// Generates the layout with `config`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when the configured layout operation cannot produce the result.
+    fn layout_with(&self, config: &DepictConfig) -> Result<Self::Layout, Self::Error>;
 
     /// Constructs the depiction with [`DepictConfig::default`].
     ///
@@ -56,13 +81,30 @@ pub trait Depict {
         self.depict_with(&DepictConfig::default())
     }
 
-    /// Constructs the depiction with `config`.
+    /// Constructs the depiction with `config`: [`Self::layout_with`] then [`Self::depict_layout`].
     ///
     /// # Errors
     ///
     /// Returns [`Self::Error`] when the configured layout or depiction operation cannot produce
     /// the result.
-    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error>;
+    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error> {
+        self.depict_layout(&self.layout_with(config)?)
+    }
+
+    /// Checks that `layout` can depict this value without moving any coordinate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] naming the first entity whose supplied geometry cannot be depicted.
+    fn verify_layout(&self, layout: &Self::Layout) -> Result<(), Self::Error>;
+
+    /// Constructs the depiction in a supplied `layout`, verifying it first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when [`Self::verify_layout`] rejects `layout` or the lowering
+    /// cannot produce the result.
+    fn depict_layout(&self, layout: &Self::Layout) -> Result<Depiction, Self::Error>;
 }
 
 /// An opaque, format-neutral molecular drawing scene.
@@ -89,14 +131,42 @@ impl Depiction {
         self.bounds.as_ref()
     }
 
-    /// Renders this depiction as a complete SVG document.
+    /// Renders this depiction as a complete SVG document with [`SvgConfig::default`].
     ///
     /// Item order is preserved. Coordinates are converted from the depiction's y-up convention to
     /// SVG's y-down convention. Molecular strokes are masked beneath estimated atom-label bounds,
     /// and structured source references are encoded in `data-umol-references` attributes. The
     /// returned text can be written directly to an SVG file.
     pub fn render_svg(&self) -> String {
-        svg::render(self)
+        self.render_svg_with(&SvgConfig::default())
+    }
+
+    /// Renders this depiction as a complete SVG document with `config`.
+    pub fn render_svg_with(&self, config: &SvgConfig) -> String {
+        svg::render(self, config)
+    }
+}
+
+/// Rendering configuration for [`Depiction::render_svg_with`].
+///
+/// Rendering configuration selects properties of the emitted SVG text; the depiction's geometry
+/// is fixed before rendering. The default renders exactly as [`Depiction::render_svg`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct SvgConfig {
+    /// Font size of mapping-index text, the correspondence-pair numbers drawn beside reaction
+    /// atoms, in bond-length units. Defaults to 85% of the atom-label size.
+    pub mapping_index_text_size: f64,
+    /// Identifier of the atom-label mask definition that masked strokes reference. Depictions
+    /// inlined in one document need distinct identifiers.
+    pub mask_id: String,
+}
+
+impl Default for SvgConfig {
+    fn default() -> Self {
+        Self {
+            mapping_index_text_size: svg::MAPPING_INDEX_TEXT_SIZE,
+            mask_id: svg::ATOM_LABEL_MASK_ID.to_owned(),
+        }
     }
 }
 
@@ -533,7 +603,8 @@ mod tests {
 
         let svg = depiction.render_svg();
 
-        assert_eq!(svg, render(&depiction));
+        assert_eq!(svg, render(&depiction, &SvgConfig::default()));
+        assert_eq!(svg, depiction.render_svg_with(&SvgConfig::default()));
 
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();

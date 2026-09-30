@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use umol_graph::export::export_smiles_with;
 use umol_graph::fingerprint::PatternFingerprinter as GraphPatternFingerprinter;
 use umol_graph::ingest::ingest_smiles_with;
 use umol_graph::ops::model::{
@@ -33,7 +34,7 @@ use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
     fingerprint_error, metadata_error, molecule_apply_error, parse_error, smiles_input_error,
-    ConsumedError, InvalidStructureError, InvalidatedViewError,
+    smiles_output_error, ConsumedError, InvalidStructureError, InvalidatedViewError,
 };
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
@@ -276,6 +277,42 @@ impl Molecule {
         ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
             .map(Self::from_rust)
             .map_err(smiles_input_error)
+    }
+
+    /// Export this molecule as SMILES text under explicit IO, chemistry, and resolution policies.
+    /// Omitted options select OpenSMILES, SMILES valence, and Natural isotope policy.
+    /// The molecule is unchanged on success and failure.
+    #[pyo3(signature = (*, io_config=None, chemistry_model=None, resolve_config=None))]
+    fn to_smiles(
+        &self,
+        io_config: Option<SmilesIoConfig>,
+        chemistry_model: Option<ChemistryModel>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<String> {
+        let io_config =
+            io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
+        let chemistry_model = chemistry_model.map_or_else(
+            || GraphChemistryModel {
+                valence: GraphValenceModel::smiles(),
+                ..GraphChemistryModel::default()
+            },
+            |model| model.to_rust(),
+        );
+        let resolve_config = resolve_config.map_or_else(
+            || GraphResolveConfig {
+                isotope: GraphIsotopePolicy::Natural,
+                ..Default::default()
+            },
+            ResolveConfig::to_rust,
+        );
+
+        export_smiles_with(
+            self.to_rust()?,
+            &io_config,
+            &chemistry_model,
+            &resolve_config,
+        )
+        .map_err(smiles_output_error)
     }
 
     /// Copy the molecule into an independent owner.

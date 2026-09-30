@@ -1,10 +1,10 @@
-# 229 — Aggregate integrity review
+# 232 — Aggregate integrity review
 
 Status: Completed
 Date: 2026-09-22
 Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 [215](215-integrity-minimization-2026-08-28.md),
-[230](230-graph-ir-delta-review-2026-09-23.md),
+[233](233-graph-ir-delta-review-2026-09-23.md),
 [review guide](../docs/development/code-reviews.md),
 [integrity guide](../docs/development/integrity.md),
 [data-type guide](../docs/development/data-types.md),
@@ -2099,6 +2099,6 @@ delta normal-form property, and strict graph-IR Clippy passed.
   Reaction's removal-incidence check also remains in its constructor. These
   synthetic fixtures do not establish production workload frequencies;
   requested bytes are cumulative allocation sizes, not peak live memory.
-  The full 229 implementation diff was reviewed for scope, public surface,
+  The full 232 implementation diff was reviewed for scope, public surface,
   module visibility, tests, and naming; no unrelated source change is part of
   this closeout.

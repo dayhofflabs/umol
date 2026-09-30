@@ -7,8 +7,10 @@ use umol_graph_ir::mol;
 #[cfg(feature = "coordgen")]
 use umol_graph_ir::mol_dsl;
 #[cfg(feature = "coordgen")]
-use umol_io::layout::{layout_molecule, MoleculeLayoutAlgorithm};
-use umol_io::layout::{MoleculeLayout, MoleculeLayoutError};
+use umol_io::depict::{Depict, DepictConfig};
+#[cfg(feature = "coordgen")]
+use umol_io::layout::MoleculeLayoutAlgorithm;
+use umol_io::layout::{MoleculeLayout, MoleculeLayoutError, ReactionLayout, ReactionLayoutError};
 
 #[cfg(feature = "coordgen")]
 #[rstest]
@@ -20,7 +22,11 @@ fn test_layout_molecule_frame(#[case] algorithm: MoleculeLayoutAlgorithm) {
         (carbon) = (nitrogen),
         (carbon) - (fluorine),
     };
-    let layout = layout_molecule(&molecule, algorithm).expect("layout succeeds");
+    let layout = molecule
+        .layout_with(&DepictConfig {
+            layout_algorithm: algorithm,
+        })
+        .expect("layout succeeds");
 
     assert_eq!(layout.atom_count(), molecule.atoms().count());
     for atom_id in molecule.atoms().ids() {
@@ -37,7 +43,11 @@ fn test_layout_molecule_frame(#[case] algorithm: MoleculeLayoutAlgorithm) {
 #[rstest]
 #[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
 fn test_layout_molecule_empty_frame(#[case] algorithm: MoleculeLayoutAlgorithm) {
-    let layout = layout_molecule(&Molecule::new(), algorithm).expect("layout succeeds");
+    let layout = Molecule::new()
+        .layout_with(&DepictConfig {
+            layout_algorithm: algorithm,
+        })
+        .expect("layout succeeds");
 
     assert_eq!(layout.positions(), &[]);
 }
@@ -50,7 +60,11 @@ fn test_layout_molecule_scale(#[case] algorithm: MoleculeLayoutAlgorithm) {
         (carbon_0: C) - (carbon_1: C),
         (carbon_1) - (oxygen: O),
     };
-    let layout = layout_molecule(&molecule, algorithm).expect("layout succeeds");
+    let layout = molecule
+        .layout_with(&DepictConfig {
+            layout_algorithm: algorithm,
+        })
+        .expect("layout succeeds");
 
     assert!(layout
         .positions()
@@ -71,7 +85,11 @@ fn test_layout_molecule_projection(#[case] algorithm: MoleculeLayoutAlgorithm) {
         (generic: "*") -[ "*" ]- (oxygen: O),
     };
 
-    let layout = layout_molecule(&molecule, algorithm).expect("layout succeeds");
+    let layout = molecule
+        .layout_with(&DepictConfig {
+            layout_algorithm: algorithm,
+        })
+        .expect("layout succeeds");
 
     assert_eq!(layout.atom_count(), 2);
     assert!(layout
@@ -91,8 +109,16 @@ fn test_layout_molecule_determinism(#[case] algorithm: MoleculeLayoutAlgorithm) 
         (carbon_1) - (nitrogen: N),
     };
 
-    let first = layout_molecule(&molecule, algorithm).expect("first layout succeeds");
-    let second = layout_molecule(&molecule, algorithm).expect("second layout succeeds");
+    let first = molecule
+        .layout_with(&DepictConfig {
+            layout_algorithm: algorithm,
+        })
+        .expect("first layout succeeds");
+    let second = molecule
+        .layout_with(&DepictConfig {
+            layout_algorithm: algorithm,
+        })
+        .expect("second layout succeeds");
 
     assert_eq!(first, second);
 }
@@ -144,7 +170,10 @@ fn test_layout_molecule_cis_trans(
 ) {
     let molecule = mol_dsl!(input);
 
-    let layout = layout_molecule(&molecule, MoleculeLayoutAlgorithm::CoordGen)
+    let layout = molecule
+        .layout_with(&DepictConfig {
+            layout_algorithm: MoleculeLayoutAlgorithm::CoordGen,
+        })
         .expect("cis/trans layout succeeds");
     let [site_0, site_1] = molecule.bond(site).atom_ids();
 
@@ -233,6 +262,158 @@ fn test_molecule_layout_check_frame() {
             layout_atom_count: 1,
         })
     );
+}
+
+#[rstest]
+fn test_reaction_layout_arrange() {
+    let lhs = MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0), Point2D::new(1.0, 0.0)])
+        .expect("finite layout");
+    let rhs = MoleculeLayout::try_new(vec![Point2D::new(0.0, 1.0), Point2D::new(1.0, 3.0)])
+        .expect("finite layout");
+
+    let layout = ReactionLayout::arrange(lhs, rhs).expect("finite sides arrange");
+
+    assert_eq!(
+        layout.lhs().positions(),
+        [Point2D::new(-2.75, 0.0), Point2D::new(-1.75, 0.0)]
+    );
+    assert_eq!(
+        layout.rhs().positions(),
+        [Point2D::new(1.75, -1.0), Point2D::new(2.75, 1.0)]
+    );
+    assert_eq!(layout.arrow_start(), Point2D::new(-0.75, 0.0));
+    assert_eq!(layout.arrow_end(), Point2D::new(0.75, 0.0));
+}
+
+#[rstest]
+fn test_reaction_layout_arrange_empty_sides() {
+    let empty = MoleculeLayout::try_new(Vec::new()).expect("empty layout is valid");
+
+    let layout =
+        ReactionLayout::arrange(empty.clone(), empty.clone()).expect("empty sides arrange");
+
+    assert_eq!(layout.lhs(), &empty);
+    assert_eq!(layout.rhs(), &empty);
+    assert_eq!(layout.arrow_start(), Point2D::new(-0.75, 0.0));
+    assert_eq!(layout.arrow_end(), Point2D::new(0.75, 0.0));
+}
+
+#[rstest]
+#[case::lhs(true)]
+#[case::rhs(false)]
+fn test_reaction_layout_arrange_overflow(#[case] lhs: bool) {
+    let far = MoleculeLayout::try_new(vec![Point2D::new(0.0, f64::MAX)]).expect("finite layout");
+    let near = MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).expect("finite layout");
+    let (lhs_layout, rhs_layout) = if lhs { (far, near) } else { (near, far) };
+
+    let error = ReactionLayout::arrange(lhs_layout, rhs_layout).expect_err("translation overflows");
+
+    let translation = match error {
+        ReactionLayoutError::LhsTranslation(source) if lhs => source,
+        ReactionLayoutError::RhsTranslation(source) if !lhs => source,
+        other => panic!("unexpected error {other:?}"),
+    };
+    assert!(matches!(
+        translation,
+        MoleculeLayoutError::NonFinitePosition {
+            atom_id: AtomId(0),
+            ..
+        }
+    ));
+}
+
+#[rstest]
+fn test_reaction_layout_try_new() {
+    let lhs = MoleculeLayout::try_new(vec![Point2D::new(-2.0, 0.0)]).expect("finite layout");
+    let rhs = MoleculeLayout::try_new(vec![Point2D::new(2.0, 0.0)]).expect("finite layout");
+    let start = Point2D::new(-1.0, 0.5);
+    let end = Point2D::new(1.0, 0.5);
+
+    let layout = ReactionLayout::try_new(lhs.clone(), rhs.clone(), start, end)
+        .expect("finite distinct arrow endpoints");
+
+    assert_eq!(layout.lhs(), &lhs);
+    assert_eq!(layout.rhs(), &rhs);
+    assert_eq!(layout.arrow_start(), start);
+    assert_eq!(layout.arrow_end(), end);
+}
+
+#[rstest]
+#[case::nan_start(Point2D::new(f64::NAN, 0.0), Point2D::new(1.0, 0.0))]
+#[case::infinite_end(Point2D::new(-1.0, 0.0), Point2D::new(f64::INFINITY, 0.0))]
+fn test_reaction_layout_non_finite_arrow(#[case] start: Point2D, #[case] end: Point2D) {
+    let side = MoleculeLayout::try_new(Vec::new()).expect("empty layout is valid");
+
+    let error = ReactionLayout::try_new(side.clone(), side.clone(), start, end)
+        .expect_err("non-finite arrow must be rejected");
+
+    assert!(matches!(
+        error,
+        ReactionLayoutError::NonFiniteArrow { start: actual_start, end: actual_end }
+            if actual_start.x.to_bits() == start.x.to_bits()
+                && actual_end.x.to_bits() == end.x.to_bits()
+    ));
+}
+
+#[rstest]
+fn test_reaction_layout_degenerate_arrow() {
+    let side = MoleculeLayout::try_new(Vec::new()).expect("empty layout is valid");
+    let position = Point2D::new(0.5, -0.5);
+
+    assert_eq!(
+        ReactionLayout::try_new(side.clone(), side, position, position),
+        Err(ReactionLayoutError::DegenerateArrow { position })
+    );
+}
+
+#[rstest]
+fn test_reaction_layout_set_arrow() {
+    let side = MoleculeLayout::try_new(Vec::new()).expect("empty layout is valid");
+    let mut layout = ReactionLayout::arrange(side.clone(), side).expect("empty sides arrange");
+    let unchanged = layout.clone();
+
+    assert_eq!(
+        layout.set_arrow(Point2D::new(0.0, 0.0), Point2D::new(0.0, 0.0)),
+        Err(ReactionLayoutError::DegenerateArrow {
+            position: Point2D::new(0.0, 0.0),
+        })
+    );
+    assert_eq!(layout, unchanged);
+    assert!(matches!(
+        layout.set_arrow(Point2D::new(0.0, 0.0), Point2D::new(f64::NAN, 0.0)),
+        Err(ReactionLayoutError::NonFiniteArrow { .. })
+    ));
+    assert_eq!(layout, unchanged);
+
+    layout
+        .set_arrow(Point2D::new(-2.0, 1.0), Point2D::new(2.0, 1.0))
+        .expect("finite distinct arrow endpoints");
+    assert_eq!(layout.arrow_start(), Point2D::new(-2.0, 1.0));
+    assert_eq!(layout.arrow_end(), Point2D::new(2.0, 1.0));
+}
+
+#[rstest]
+fn test_reaction_layout_side_mutation() {
+    let side = MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).expect("finite layout");
+    let mut layout = ReactionLayout::try_new(
+        side.clone(),
+        side,
+        Point2D::new(-1.0, 0.0),
+        Point2D::new(1.0, 0.0),
+    )
+    .expect("finite distinct arrow endpoints");
+
+    layout
+        .lhs_mut()
+        .set_position(AtomId(0), Point2D::new(-3.0, 0.0))
+        .expect("in-frame finite edit");
+    layout
+        .rhs_mut()
+        .set_position(AtomId(0), Point2D::new(3.0, 0.0))
+        .expect("in-frame finite edit");
+
+    assert_eq!(layout.lhs().positions(), [Point2D::new(-3.0, 0.0)]);
+    assert_eq!(layout.rhs().positions(), [Point2D::new(3.0, 0.0)]);
 }
 
 #[cfg(feature = "coordgen")]

@@ -238,7 +238,10 @@ from .elements import E
 
 if hasattr(_native_module, "Depiction"):
     MoleculeLayoutAlgorithm = _native_module.MoleculeLayoutAlgorithm
+    MoleculeLayout = _native_module.MoleculeLayout
+    ReactionLayout = _native_module.ReactionLayout
     DepictConfig = _native_module.DepictConfig
+    SvgConfig = _native_module.SvgConfig
     Depiction = _native_module.Depiction
 
 try:
@@ -480,4 +483,13 @@ __all__ = [
 ]
 
 if hasattr(_native_module, "Depiction"):
-    __all__.extend(["MoleculeLayoutAlgorithm", "DepictConfig", "Depiction"])
+    __all__.extend(
+        [
+            "MoleculeLayoutAlgorithm",
+            "MoleculeLayout",
+            "ReactionLayout",
+            "DepictConfig",
+            "SvgConfig",
+            "Depiction",
+        ]
+    )
