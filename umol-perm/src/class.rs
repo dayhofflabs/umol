@@ -365,14 +365,7 @@ mod tests {
         assert_eq!(key.space().reindex(from_index, relabeling), Some(to_index));
     }
 
-    #[rstest]
-    fn test_class_key_space_interning() {
-        assert!(ptr::eq(
-            ClassKey::Octahedral.space(),
-            ClassKey::Octahedral.space()
-        ));
-    }
-
+    #[fixture]
     fn in_domain_keys() -> Vec<ClassKey> {
         let family_keys = (1..=MAX_DEGREE as u8).flat_map(|degree| {
             [
@@ -394,21 +387,23 @@ mod tests {
     }
 
     #[rstest]
-    fn test_class_key_space_distinct_per_key() {
-        let keys = in_domain_keys();
-        for (position, key) in keys.iter().enumerate() {
-            for other in &keys[position + 1..] {
-                assert!(!ptr::eq(key.space(), other.space()), "{key} and {other}");
+    fn test_class_key_space_interning(in_domain_keys: Vec<ClassKey>) {
+        for key in &in_domain_keys {
+            for other in &in_domain_keys {
+                assert_eq!(
+                    ptr::eq(key.space(), other.space()),
+                    key == other,
+                    "{key} and {other}"
+                );
             }
         }
     }
 
     #[rstest]
-    fn test_class_key_space_interning_across_threads() {
-        let keys = in_domain_keys();
+    fn test_class_key_space_interning_across_threads(in_domain_keys: Vec<ClassKey>) {
         let per_thread: Vec<Vec<&'static CosetSpace>> = thread::scope(|scope| {
             let handles: Vec<_> = (0..4)
-                .map(|_| scope.spawn(|| keys.iter().map(|key| key.space()).collect()))
+                .map(|_| scope.spawn(|| in_domain_keys.iter().map(|key| key.space()).collect()))
                 .collect();
             handles
                 .into_iter()
@@ -416,7 +411,7 @@ mod tests {
                 .collect()
         });
         for spaces in per_thread {
-            for (key, space) in keys.iter().zip(spaces) {
+            for (key, space) in in_domain_keys.iter().zip(spaces) {
                 assert!(ptr::eq(key.space(), space), "{key}");
             }
         }
@@ -426,7 +421,7 @@ mod tests {
     #[case::zero(ClassKey::Symmetric(0))]
     #[case::above_maximum(ClassKey::Symmetric(MAX_DEGREE as u8 + 1))]
     #[should_panic(expected = "lies outside its degree domain")]
-    fn test_class_key_space_rejects_out_of_domain(#[case] key: ClassKey) {
+    fn test_class_key_space_error(#[case] key: ClassKey) {
         key.space();
     }
 
