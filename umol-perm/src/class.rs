@@ -1,14 +1,13 @@
 //! Stereo class keys and the interned coset-space registry.
 //!
-//! `ClassKey::space` builds each `CosetSpace` once and leaks it for `'static`,
-//! mirroring umol-msym's point-group registry. The geometry classes pin the
-//! proper-rotation group as a permutation group acting on the ligand positions.
+//! `ClassKey::space` builds each `CosetSpace` once, into a static slot per key.
+//! The geometry classes pin the proper-rotation group as a permutation group
+//! acting on the ligand positions.
 
-use std::collections::HashMap;
 use std::fmt;
 use std::ops::RangeInclusive;
 use std::str::FromStr;
-use std::sync::{LazyLock, Mutex};
+use std::sync::OnceLock;
 
 use crate::coset::{CosetSpace, Decomposition};
 use crate::error::ParseClassKeyError;
@@ -137,8 +136,7 @@ impl ClassKey {
         CosetSpace::new(parent, is_partitioned, group, decomposition, improper)
     }
 
-    /// The interned coset space for this class, built once and leaked for
-    /// `'static`.
+    /// The interned coset space for this class, built once on first use.
     ///
     /// # Establishes
     ///
@@ -149,16 +147,31 @@ impl ClassKey {
     /// # Panics
     ///
     /// Panics when the key's degree lies outside [`Self::degree_domain`]. Parsing rejects such
-    /// keys, so the panic is reachable only from directly constructed ones. A build panic poisons
-    /// the shared registry: every later `space` call on any key then panics.
+    /// keys, so the panic is reachable only from directly constructed ones.
     pub fn space(self) -> &'static CosetSpace {
-        let mut registry = REGISTRY.lock().expect("coset-space registry poisoned");
-        if let Some(&interned) = registry.get(&self) {
-            return interned;
+        SPACES[self.slot()].get_or_init(|| self.build())
+    }
+
+    fn slot(self) -> usize {
+        let family_slot = |family: usize, degree: u8| {
+            assert!(
+                self.degree_domain().contains(&degree),
+                "class key {self} lies outside its degree domain"
+            );
+            family * MAX_DEGREE + degree as usize - 1
+        };
+        match self {
+            ClassKey::Symmetric(n) => family_slot(0, n),
+            ClassKey::Alternating(n) => family_slot(1, n),
+            ClassKey::Cyclic(n) => family_slot(2, n),
+            ClassKey::Dihedral(n) => family_slot(3, n),
+            ClassKey::Tetrahedral => FAMILY_SLOTS,
+            ClassKey::CisTrans => FAMILY_SLOTS + 1,
+            ClassKey::Axial => FAMILY_SLOTS + 2,
+            ClassKey::SquarePlanar => FAMILY_SLOTS + 3,
+            ClassKey::TrigonalBipyramidal => FAMILY_SLOTS + 4,
+            ClassKey::Octahedral => FAMILY_SLOTS + 5,
         }
-        let interned: &'static CosetSpace = Box::leak(Box::new(self.build()));
-        registry.insert(self, interned);
-        interned
     }
 
     /// The supported degree domain; a key whose degree lies outside it has no
@@ -266,12 +279,15 @@ impl FromStr for ClassKey {
     }
 }
 
-static REGISTRY: LazyLock<Mutex<HashMap<ClassKey, &'static CosetSpace>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+const FAMILY_SLOTS: usize = 4 * MAX_DEGREE;
+const GEOMETRY_SLOTS: usize = 6;
+
+static SPACES: [OnceLock<CosetSpace>; FAMILY_SLOTS + GEOMETRY_SLOTS] =
+    [const { OnceLock::new() }; FAMILY_SLOTS + GEOMETRY_SLOTS];
 
 #[cfg(test)]
 mod tests {
-    use std::ptr;
+    use std::{ptr, thread};
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -355,6 +371,63 @@ mod tests {
             ClassKey::Octahedral.space(),
             ClassKey::Octahedral.space()
         ));
+    }
+
+    fn in_domain_keys() -> Vec<ClassKey> {
+        let family_keys = (1..=MAX_DEGREE as u8).flat_map(|degree| {
+            [
+                ClassKey::Symmetric(degree),
+                ClassKey::Alternating(degree),
+                ClassKey::Cyclic(degree),
+                ClassKey::Dihedral(degree),
+            ]
+        });
+        let geometry_keys = [
+            ClassKey::Tetrahedral,
+            ClassKey::CisTrans,
+            ClassKey::Axial,
+            ClassKey::SquarePlanar,
+            ClassKey::TrigonalBipyramidal,
+            ClassKey::Octahedral,
+        ];
+        family_keys.chain(geometry_keys).collect()
+    }
+
+    #[rstest]
+    fn test_class_key_space_distinct_per_key() {
+        let keys = in_domain_keys();
+        for (position, key) in keys.iter().enumerate() {
+            for other in &keys[position + 1..] {
+                assert!(!ptr::eq(key.space(), other.space()), "{key} and {other}");
+            }
+        }
+    }
+
+    #[rstest]
+    fn test_class_key_space_interning_across_threads() {
+        let keys = in_domain_keys();
+        let per_thread: Vec<Vec<&'static CosetSpace>> = thread::scope(|scope| {
+            let handles: Vec<_> = (0..4)
+                .map(|_| scope.spawn(|| keys.iter().map(|key| key.space()).collect()))
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap())
+                .collect()
+        });
+        for spaces in per_thread {
+            for (key, space) in keys.iter().zip(spaces) {
+                assert!(ptr::eq(key.space(), space), "{key}");
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::zero(ClassKey::Symmetric(0))]
+    #[case::above_maximum(ClassKey::Symmetric(MAX_DEGREE as u8 + 1))]
+    #[should_panic(expected = "lies outside its degree domain")]
+    fn test_class_key_space_rejects_out_of_domain(#[case] key: ClassKey) {
+        key.space();
     }
 
     #[rstest]
