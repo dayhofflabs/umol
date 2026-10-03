@@ -5730,6 +5730,48 @@ fn test_molecule_canonicalize_error_from(
     DescriptionLevel::Full,
     [6, 6],
 )]
+#[case::full_atom_constrained(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(
+                AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+            );
+            3
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 1],
+)]
+#[case::full_atom_constraint_rejected(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(
+                AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+            ),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 5],
+)]
+#[case::full_tetrahedral_constraint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_constraint(
+                AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo(
+                    StereoCoset::Lit(0),
+                )),
+            ));
+            3
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 6],
+)]
 fn test_reaction_span_canonical_search(
     canonicalize_context: CanonicalizeContext,
     #[case] span: ReactionSpan,
@@ -5750,10 +5792,7 @@ fn test_reaction_span_canonical_search(
         &span,
         level,
         &canonicalize_context,
-        CanonicalSearchOptions {
-            automorphism_pruning: level != DescriptionLevel::Full,
-            branch_order: BranchOrdering::NodeId,
-        },
+        reaction_span_search_options(&span, level),
     )
     .expect("fixed span has initial colors");
 

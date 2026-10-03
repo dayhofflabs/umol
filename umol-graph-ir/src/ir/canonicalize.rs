@@ -17,12 +17,12 @@ use super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::bond::BondForm;
 use super::boolean::BooleanForm;
 use super::constraint::{
-    AromaticSystemConstraintForm, AromaticValenceForm, AtomConstraintForm, BondConstraintForm,
-    Constraint, DativeBondConstraintForm, LigandPermutation, MoleculeConstraint,
-    MulticenterBondConstraintForm, MulticenterValenceForm, NoncovalentBondConstraintForm,
-    OrientedLigandPermutation, RelationalConstraint, RingMembershipForm, RingScope,
-    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
-    TopicityRelationForm,
+    AromaticSystemConstraintForm, AromaticValenceForm, AtomConstraintForm, AtomConstraintsForm,
+    BondConstraintForm, Constraint, DativeBondConstraintForm, LigandPermutation,
+    MoleculeConstraint, MulticenterBondConstraintForm, MulticenterValenceForm,
+    NoncovalentBondConstraintForm, OrientedLigandPermutation, RelationalConstraint,
+    RingMembershipForm, RingScope, StereoAtomConstraintForm, StereoBondConstraintForm,
+    StereoLigandPair, StereogenicityForm, TopicityRelationForm,
 };
 use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintSpan, DativeBondDelta, Delta, EntitySpan,
@@ -2109,6 +2109,80 @@ fn retain_span_stereo_preserving_generators(
     }
     generators
         .retain(|generator| generator_preserves_span_stereo(span, incidence_graph, generator));
+}
+
+fn atom_constraints_are_frame_free(constraints: &AtomConstraintsForm) -> bool {
+    !constraints
+        .iter()
+        .any(|constraint| matches!(constraint, AtomConstraintForm::TetrahedralStereo(_)))
+}
+
+/// Whether every constraint of the span is an atom constraint free of stereo frames.
+///
+/// Full-level leaf keys then add only atom constraint rows to the structure key, so a generator
+/// that also preserves atom constraints preserves the complete key.
+fn reaction_span_constraints_are_atom_local(span: &ReactionSpan) -> bool {
+    fn all_sides<T>(span: &EntitySpan<T>, check: impl Fn(&T) -> bool) -> bool {
+        span.lhs().is_none_or(&check) && span.rhs().is_none_or(&check)
+    }
+
+    span.constraints().is_empty()
+        && span.atoms().iter().all(|entity| {
+            all_sides(entity, |form| {
+                atom_constraints_are_frame_free(&form.constraints)
+            })
+        })
+        && span
+            .bonds()
+            .iter()
+            .all(|entity| all_sides(entity, |form| form.constraints.is_empty()))
+        && span.dative_bonds().ids().all(|id| {
+            all_sides(span.dative_bonds().attributes(id), |form| {
+                form.constraints.is_empty()
+            })
+        })
+        && span.aromatic_systems().ids().all(|id| {
+            all_sides(span.aromatic_systems().attributes(id), |form| {
+                form.constraints.is_empty()
+            })
+        })
+        && span.multicenter_bonds().ids().all(|id| {
+            all_sides(span.multicenter_bonds().attributes(id), |form| {
+                form.constraints.is_empty()
+            })
+        })
+        && span.noncovalent_bonds().ids().all(|id| {
+            all_sides(span.noncovalent_bonds().attributes(id), |form| {
+                form.constraints.is_empty()
+            })
+        })
+        && span.stereo_atoms().ids().all(|id| {
+            all_sides(span.stereo_atoms().attributes(id), |form| {
+                form.constraints.is_empty()
+            })
+        })
+        && span.stereo_bonds().ids().all(|id| {
+            all_sides(span.stereo_bonds().attributes(id), |form| {
+                form.constraints.is_empty()
+            })
+        })
+}
+
+fn generator_preserves_span_atom_constraints(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    generator: &[NodeId],
+) -> bool {
+    span.atoms().iter().enumerate().all(|(index, source)| {
+        let node = incidence_graph.node_of(Entity::Atom(AtomId(index as u32)));
+        let Entity::Atom(target) = incidence_graph.entity(generator[node.index()]) else {
+            return false;
+        };
+        let target = &span.atoms()[target.index()];
+        source.lhs().map(|form| &form.constraints) == target.lhs().map(|form| &form.constraints)
+            && source.rhs().map(|form| &form.constraints)
+                == target.rhs().map(|form| &form.constraints)
+    })
 }
 
 fn source_orbits_from_generators(
@@ -4818,19 +4892,28 @@ fn reaction_span_canonical_candidate(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
-    let options = CanonicalSearchOptions {
-        automorphism_pruning: level != DescriptionLevel::Full,
-        branch_order: BranchOrdering::NodeId,
-    };
+    let options = reaction_span_search_options(span, level);
     Ok(reaction_span_canonical_search(span, level, context, options)?.candidate)
+}
+
+fn reaction_span_search_options(
+    span: &ReactionSpan,
+    level: DescriptionLevel,
+) -> CanonicalSearchOptions {
+    CanonicalSearchOptions {
+        automorphism_pruning: level != DescriptionLevel::Full
+            || reaction_span_constraints_are_atom_local(span),
+        branch_order: BranchOrdering::NodeId,
+    }
 }
 
 /// Search reaction-span leaves, pruning orbits as molecule canonicalization does.
 ///
-/// Canonicalization prunes below the full level only. Pruning uses every adapter generator at the
-/// topology and constitution levels and only stereo-preserving generators at the structure level.
-/// Under node-id branch order, orbit-minimum representatives keep the exhaustive search's first
-/// minimum leaf, so pruning selects the same candidate.
+/// Pruning uses every adapter generator at the topology and constitution levels and only
+/// stereo-preserving generators at the structure level. At the full level it also requires
+/// generators to preserve atom constraints, and canonicalization prunes there only when every
+/// constraint is atom-local. Under node-id branch order, orbit-minimum representatives keep the
+/// exhaustive search's first minimum leaf, so pruning selects the same candidate.
 fn reaction_span_canonical_search(
     span: &ReactionSpan,
     level: DescriptionLevel,
@@ -4861,6 +4944,11 @@ fn reaction_span_canonical_search(
     };
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_span_stereo_preserving_generators(span, &incidence_graph, generators);
+        if level == DescriptionLevel::Full {
+            generators.retain(|generator| {
+                generator_preserves_span_atom_constraints(span, &incidence_graph, generator)
+            });
+        }
     };
     let initial =
         match level {
@@ -4877,7 +4965,8 @@ fn reaction_span_canonical_search(
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        options.automorphism_pruning && level == DescriptionLevel::Structure,
+        options.automorphism_pruning
+            && matches!(level, DescriptionLevel::Structure | DescriptionLevel::Full),
         &filter_generators,
     ))
 }
