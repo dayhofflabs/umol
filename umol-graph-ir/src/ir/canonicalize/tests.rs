@@ -5624,6 +5624,147 @@ fn test_molecule_canonicalize_error_from(
 }
 
 #[rstest]
+#[case::symmetric_topology(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    [6, 1],
+)]
+#[case::symmetric_constitution(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    [6, 1],
+)]
+#[case::stereo_retained(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .repeat(3)
+            .into_iter()
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .collect(),
+        bonds: (0..3_u32)
+            .flat_map(|center| {
+                (1..=4).map(move |ligand| {
+                    (
+                        AtomId(5 * center),
+                        AtomId(5 * center + ligand),
+                        EntitySpan::Unchanged(BondForm::from_order(1)),
+                    )
+                })
+            })
+            .collect(),
+        stereo_atoms: [0_u32, 0, 0]
+            .into_iter()
+            .zip(0..3_u32)
+            .map(|(configuration, center)| {
+                (
+                    AtomId(5 * center),
+                    (1..=4)
+                        .map(|ligand| {
+                            StereoLigand::new(AtomId(5 * center + ligand), StereoLigandKind::Atom)
+                        })
+                        .collect(),
+                    EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, configuration)),
+                )
+            })
+            .collect(),
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    [6, 1],
+)]
+#[case::stereo_rejected(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .repeat(3)
+            .into_iter()
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .collect(),
+        bonds: (0..3_u32)
+            .flat_map(|center| {
+                (1..=4).map(move |ligand| {
+                    (
+                        AtomId(5 * center),
+                        AtomId(5 * center + ligand),
+                        EntitySpan::Unchanged(BondForm::from_order(1)),
+                    )
+                })
+            })
+            .collect(),
+        stereo_atoms: [1_u32, 0, 0]
+            .into_iter()
+            .zip(0..3_u32)
+            .map(|(configuration, center)| {
+                (
+                    AtomId(5 * center),
+                    (1..=4)
+                        .map(|ligand| {
+                            StereoLigand::new(AtomId(5 * center + ligand), StereoLigandKind::Atom)
+                        })
+                        .collect(),
+                    EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, configuration)),
+                )
+            })
+            .collect(),
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    [6, 3],
+)]
+#[case::full_exhaustive(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: NumForm::Lit(0),
+            },
+        ))],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 6],
+)]
+fn test_reaction_span_canonical_search(
+    canonicalize_context: CanonicalizeContext,
+    #[case] span: ReactionSpan,
+    #[case] level: DescriptionLevel,
+    #[case] expected_visited_leaves: [usize; 2],
+) {
+    let unpruned = reaction_span_canonical_search(
+        &span,
+        level,
+        &canonicalize_context,
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            branch_order: BranchOrdering::NodeId,
+        },
+    )
+    .expect("fixed span has initial colors");
+    let pruned = reaction_span_canonical_search(
+        &span,
+        level,
+        &canonicalize_context,
+        CanonicalSearchOptions {
+            automorphism_pruning: level != DescriptionLevel::Full,
+            branch_order: BranchOrdering::NodeId,
+        },
+    )
+    .expect("fixed span has initial colors");
+
+    assert_eq!(pruned.candidate, unpruned.candidate);
+    assert_eq!(
+        [unpruned.stats.visited_leaves, pruned.stats.visited_leaves],
+        expected_visited_leaves,
+    );
+}
+
+#[rstest]
 #[case::topology(DescriptionLevel::Topology)]
 #[case::constitution(DescriptionLevel::Constitution)]
 #[case::structure(DescriptionLevel::Structure)]

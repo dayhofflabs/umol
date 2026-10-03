@@ -2004,6 +2004,113 @@ fn retain_stereo_preserving_generators(
     generators.retain(|generator| generator_preserves_stereo(molecule, incidence_graph, generator));
 }
 
+fn generator_preserves_span_stereo(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    generator: &[NodeId],
+) -> bool {
+    let entity_image =
+        |entity| incidence_graph.entity(generator[incidence_graph.node_of(entity).index()]);
+    let frame_action = |source: &[StereoLigand], target: &[StereoLigand]| {
+        let mapped = source
+            .iter()
+            .map(|ligand| {
+                let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
+                    return None;
+                };
+                Some(StereoLigand::new(atom_id, ligand.kind))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Permutation::between(&mapped, target)
+    };
+    let side_preserved = |source: Option<&StereoConfigurationForm>,
+                          target: Option<&StereoConfigurationForm>,
+                          action: &Permutation| match (source, target) {
+        (Some(source), Some(target)) => source
+            .clone()
+            .reframe_by(action)
+            .is_some_and(|mapped| mapped.normalized_eq(target)),
+        (None, None) => true,
+        _ => false,
+    };
+
+    let stereo_atoms = span.stereo_atoms();
+    for source in stereo_atoms.ids() {
+        let Entity::StereoAtom(target) = entity_image(Entity::StereoAtom(source)) else {
+            return false;
+        };
+        if entity_image(Entity::Atom(stereo_atoms.site(source)))
+            != Entity::Atom(stereo_atoms.site(target))
+        {
+            return false;
+        }
+        let Some(action) = frame_action(stereo_atoms.ligands(source), stereo_atoms.ligands(target))
+        else {
+            return false;
+        };
+        let (source, target) = (
+            stereo_atoms.attributes(source),
+            stereo_atoms.attributes(target),
+        );
+        if !side_preserved(
+            source.lhs().map(|form| &form.configuration),
+            target.lhs().map(|form| &form.configuration),
+            &action,
+        ) || !side_preserved(
+            source.rhs().map(|form| &form.configuration),
+            target.rhs().map(|form| &form.configuration),
+            &action,
+        ) {
+            return false;
+        }
+    }
+
+    let stereo_bonds = span.stereo_bonds();
+    for source in stereo_bonds.ids() {
+        let Entity::StereoBond(target) = entity_image(Entity::StereoBond(source)) else {
+            return false;
+        };
+        if entity_image(Entity::Bond(stereo_bonds.site(source)))
+            != Entity::Bond(stereo_bonds.site(target))
+        {
+            return false;
+        }
+        let Some(action) = frame_action(stereo_bonds.ligands(source), stereo_bonds.ligands(target))
+        else {
+            return false;
+        };
+        let (source, target) = (
+            stereo_bonds.attributes(source),
+            stereo_bonds.attributes(target),
+        );
+        if !side_preserved(
+            source.lhs().map(|form| &form.configuration),
+            target.lhs().map(|form| &form.configuration),
+            &action,
+        ) || !side_preserved(
+            source.rhs().map(|form| &form.configuration),
+            target.rhs().map(|form| &form.configuration),
+            &action,
+        ) {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn retain_span_stereo_preserving_generators(
+    span: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    generators: &mut Vec<Vec<NodeId>>,
+) {
+    if span.stereo_atoms().count() == 0 && span.stereo_bonds().count() == 0 {
+        return;
+    }
+    generators
+        .retain(|generator| generator_preserves_span_stereo(span, incidence_graph, generator));
+}
+
 fn source_orbits_from_generators(
     source_node_count: usize,
     generators: &[Vec<NodeId>],
@@ -4711,6 +4818,25 @@ fn reaction_span_canonical_candidate(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
+    let options = CanonicalSearchOptions {
+        automorphism_pruning: level != DescriptionLevel::Full,
+        branch_order: BranchOrdering::NodeId,
+    };
+    Ok(reaction_span_canonical_search(span, level, context, options)?.candidate)
+}
+
+/// Search reaction-span leaves, pruning orbits as molecule canonicalization does.
+///
+/// Canonicalization prunes below the full level only. Pruning uses every adapter generator at the
+/// topology and constitution levels and only stereo-preserving generators at the structure level.
+/// Under node-id branch order, orbit-minimum representatives keep the exhaustive search's first
+/// minimum leaf, so pruning selects the same candidate.
+fn reaction_span_canonical_search(
+    span: &ReactionSpan,
+    level: DescriptionLevel,
+    context: &CanonicalizeContext,
+    options: CanonicalSearchOptions,
+) -> Result<CanonicalSearchResult<CanonicalComparisonKey>, Contradiction> {
     let incidence_level = match level {
         DescriptionLevel::Topology => IncidenceLevel::Topology,
         DescriptionLevel::Constitution => IncidenceLevel::Constitution,
@@ -4733,31 +4859,27 @@ fn reaction_span_canonical_candidate(
             entity_order: order.to_vec(),
         }
     };
-    let options = CanonicalSearchOptions {
-        automorphism_pruning: false,
-        branch_order: BranchOrdering::NodeId,
+    let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+        retain_span_stereo_preserving_generators(span, &incidence_graph, generators);
     };
-    let selected = match level {
-        DescriptionLevel::Topology => canonical_search_from_partition(
-            &adapter,
-            topology_initial_partition(&adapter, &colors),
-            context.automorphism_algorithm,
-            options,
-            &leaf_candidate,
-        ),
-        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full => {
-            let descriptors =
-                constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
-            canonical_search(
-                &adapter,
-                &descriptors,
-                context.automorphism_algorithm,
-                options,
-                &leaf_candidate,
-            )
-        }
-    };
-    Ok(selected.candidate)
+    let initial =
+        match level {
+            DescriptionLevel::Topology => topology_initial_partition(&adapter, &colors),
+            DescriptionLevel::Constitution
+            | DescriptionLevel::Structure
+            | DescriptionLevel::Full => OrderedPartition::from_descriptors(
+                &constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph),
+            ),
+        };
+    Ok(canonical_search_impl(
+        &adapter,
+        initial,
+        context.automorphism_algorithm,
+        options,
+        &leaf_candidate,
+        options.automorphism_pruning && level == DescriptionLevel::Structure,
+        &filter_generators,
+    ))
 }
 
 fn reaction_span_from_candidate(
