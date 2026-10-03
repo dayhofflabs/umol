@@ -2117,6 +2117,61 @@ fn atom_constraints_are_frame_free(constraints: &AtomConstraintsForm) -> bool {
         .any(|constraint| matches!(constraint, AtomConstraintForm::TetrahedralStereo(_)))
 }
 
+/// Whether every constraint of the molecule is an atom constraint free of stereo frames.
+///
+/// Full-level leaf keys then add only atom constraint rows to the structure key, so a generator
+/// that also preserves atom constraints preserves the complete key.
+fn molecule_constraints_are_atom_local(molecule: &Molecule) -> bool {
+    !molecule.has_constraints()
+        && molecule
+            .atoms()
+            .iter()
+            .all(|atom| atom_constraints_are_frame_free(&atom.attributes.constraints))
+        && molecule
+            .bonds()
+            .iter()
+            .all(|bond| bond.attributes.constraints.is_empty())
+        && molecule
+            .dative_bonds()
+            .iter()
+            .all(|bond| bond.attributes.constraints.is_empty())
+        && molecule
+            .aromatic_systems()
+            .iter()
+            .all(|system| system.attributes.constraints.is_empty())
+        && molecule
+            .multicenter_bonds()
+            .iter()
+            .all(|bond| bond.attributes.constraints.is_empty())
+        && molecule
+            .noncovalent_bonds()
+            .iter()
+            .all(|bond| bond.attributes.constraints.is_empty())
+        && molecule
+            .stereo_atoms()
+            .iter()
+            .all(|stereo| stereo.attributes.constraints.is_empty())
+        && molecule
+            .stereo_bonds()
+            .iter()
+            .all(|stereo| stereo.attributes.constraints.is_empty())
+}
+
+fn generator_preserves_atom_constraints(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    generator: &[NodeId],
+) -> bool {
+    (0..molecule.atoms().count()).all(|index| {
+        let source = AtomId(index as u32);
+        let node = incidence_graph.node_of(Entity::Atom(source));
+        let Entity::Atom(target) = incidence_graph.entity(generator[node.index()]) else {
+            return false;
+        };
+        molecule.atom(target).attributes.constraints == molecule.atom(source).attributes.constraints
+    })
+}
+
 /// Whether every constraint of the span is an atom constraint free of stereo frames.
 ///
 /// Full-level leaf keys then add only atom constraint rows to the structure key, so a generator
@@ -4257,15 +4312,25 @@ fn canonicalize_full_with_options(
             .expect("structure descriptors established complete normalization")
             .0
     };
-    let selected = canonical_search(
+    let automorphism_pruning =
+        options.automorphism_pruning && molecule_constraints_are_atom_local(molecule);
+    let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+        retain_stereo_preserving_generators(molecule, &incidence_graph, generators);
+        generators.retain(|generator| {
+            generator_preserves_atom_constraints(molecule, &incidence_graph, generator)
+        });
+    };
+    let selected = canonical_search_impl(
         &adapter,
-        &descriptors,
+        OrderedPartition::from_descriptors(&descriptors),
         context.automorphism_algorithm,
         CanonicalSearchOptions {
-            automorphism_pruning: false,
+            automorphism_pruning,
             ..options
         },
         &leaf_candidate,
+        automorphism_pruning,
+        &filter_generators,
     );
     let remapping =
         remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
@@ -4800,13 +4865,9 @@ fn canonicalize_molecule_with_remapping_by_effective(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
+    // Full-level search prunes only when its constraints are atom-local.
     let options = CanonicalSearchOptions {
-        automorphism_pruning: matches!(
-            level,
-            DescriptionLevel::Topology
-                | DescriptionLevel::Constitution
-                | DescriptionLevel::Structure
-        ),
+        automorphism_pruning: true,
         branch_order: if level == DescriptionLevel::Full {
             BranchOrdering::NodeId
         } else {
