@@ -6,7 +6,12 @@ Relates: [109](109-permutation-infrastructure-2026-06-09.md),
 [110](110-molecular-symmetry-structure-2026-06-11.md),
 [186](186-molecule-canonicalization-2026-08-05.md),
 [207](207-reaction-network-spike-2026-08-24.md),
-[208](208-canonicalization-scaling-2026-08-24.md)
+[208](208-canonicalization-scaling-2026-08-24.md),
+[231](231-orbit-pruning-coverage-2026-10-02.md)
+
+> **Notice (2026-10-03).** [231](231-orbit-pruning-coverage-2026-10-02.md) supersedes S4a's
+> disposition for reaction-span search. That search now prunes orbits and makes backend requests to
+> do so, and it keeps node-id order so that pruning selects the exhaustive candidate.
 
 ## Purpose
 

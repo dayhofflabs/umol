@@ -269,3 +269,4 @@ the statuses recorded here remain authoritative.
 | [228-svg-render-configuration-2026-09-15.md](228-svg-render-configuration-2026-09-15.md)                         | Completed     | 2026-09-15   | Implemented in the proposing pull request: `SvgConfig`, `Depiction::render_svg_with`, Python `SvgConfig` and `Depiction.render_svg_with`. |
 | [229-python-smiles-output-2026-09-29.md](229-python-smiles-output-2026-09-29.md)                                 | Completed     | 2026-09-29   | Implemented in the proposing pull request: `Molecule.to_smiles`, `Reaction.to_reaction_smiles` over the doc 226 exporters. |
 | [230-label-mask-extents-2026-09-29.md](230-label-mask-extents-2026-09-29.md)                                 | Completed     | 2026-09-29   | |
+| [231-orbit-pruning-coverage-2026-10-02.md](231-orbit-pruning-coverage-2026-10-02.md)                             | Completed     | 2026-10-03   | |

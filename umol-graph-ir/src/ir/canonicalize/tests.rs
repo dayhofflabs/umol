@@ -2611,6 +2611,104 @@ fn test_canonicalize_structure_orbit_pruning(
 }
 
 #[rstest]
+#[case::atom_constrained(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)); 3],
+    ..Default::default()
+}))]
+#[case::atom_constraint_rejected(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![
+        AtomForm::from_element(Element::C),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::from_element(Element::C),
+    ],
+    ..Default::default()
+}))]
+#[case::stereo_and_atom_constraints(Molecule::from_entries(MoleculeEntries {
+    atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+        .repeat(3)
+        .into_iter()
+        .map(|element| match element {
+            Element::C => AtomForm::from_element(element).with_constraint(AtomConstraintForm::valence(4)),
+            _ => AtomForm::from_element(element),
+        })
+        .collect(),
+    bonds: (0..3_u32)
+        .flat_map(|center| {
+            (1..=4).map(move |ligand| {
+                (AtomId(5 * center), AtomId(5 * center + ligand), BondForm::from_order(1))
+            })
+        })
+        .collect(),
+    stereo_atoms: [1_u32, 0, 0]
+        .into_iter()
+        .zip(0..3_u32)
+        .map(|(configuration, center)| {
+            (
+                AtomId(5 * center),
+                (1..=4)
+                    .map(|ligand| StereoLigand::new(AtomId(5 * center + ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, configuration),
+            )
+        })
+        .collect(),
+    ..Default::default()
+}))]
+#[case::symmetric_stereo(Molecule::from_entries(MoleculeEntries {
+    atoms: iter::once(
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+    )
+    .chain(iter::repeat_n(AtomForm::from_element(Element::C), 4))
+    .collect(),
+    bonds: (1..=4)
+        .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+        .collect(),
+    stereo_atoms: vec![(
+        AtomId(0),
+        vec![
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ],
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+    )],
+    ..Default::default()
+}))]
+#[case::tetrahedral_constraint(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::tetrahedral_stereo(
+            TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)),
+        ));
+        3
+    ],
+    ..Default::default()
+}))]
+fn test_canonicalize_full_with_options(
+    canonicalize_context: CanonicalizeContext,
+    #[case] molecule: Molecule,
+) {
+    let exhaustive = canonicalize_full_with_options(
+        &molecule,
+        &canonicalize_context,
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            branch_order: BranchOrdering::NodeId,
+        },
+    );
+    let pruned = canonicalize_full_with_options(
+        &molecule,
+        &canonicalize_context,
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            branch_order: BranchOrdering::NodeId,
+        },
+    );
+
+    assert_eq!(pruned, exhaustive);
+}
+
+#[rstest]
 fn test_canonicalize_structure_meso(
     meso_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
@@ -5621,6 +5719,186 @@ fn test_molecule_canonicalize_error_from(
     #[case] expected: MoleculeCanonicalizeError,
 ) {
     assert_eq!(actual, expected);
+}
+
+#[rstest]
+#[case::symmetric_topology(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    [6, 1],
+)]
+#[case::symmetric_constitution(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    [6, 1],
+)]
+#[case::stereo_retained(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .repeat(3)
+            .into_iter()
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .collect(),
+        bonds: (0..3_u32)
+            .flat_map(|center| {
+                (1..=4).map(move |ligand| {
+                    (
+                        AtomId(5 * center),
+                        AtomId(5 * center + ligand),
+                        EntitySpan::Unchanged(BondForm::from_order(1)),
+                    )
+                })
+            })
+            .collect(),
+        stereo_atoms: [0_u32, 0, 0]
+            .into_iter()
+            .zip(0..3_u32)
+            .map(|(configuration, center)| {
+                (
+                    AtomId(5 * center),
+                    (1..=4)
+                        .map(|ligand| {
+                            StereoLigand::new(AtomId(5 * center + ligand), StereoLigandKind::Atom)
+                        })
+                        .collect(),
+                    EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, configuration)),
+                )
+            })
+            .collect(),
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    [6, 1],
+)]
+#[case::stereo_rejected(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .repeat(3)
+            .into_iter()
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .collect(),
+        bonds: (0..3_u32)
+            .flat_map(|center| {
+                (1..=4).map(move |ligand| {
+                    (
+                        AtomId(5 * center),
+                        AtomId(5 * center + ligand),
+                        EntitySpan::Unchanged(BondForm::from_order(1)),
+                    )
+                })
+            })
+            .collect(),
+        stereo_atoms: [1_u32, 0, 0]
+            .into_iter()
+            .zip(0..3_u32)
+            .map(|(configuration, center)| {
+                (
+                    AtomId(5 * center),
+                    (1..=4)
+                        .map(|ligand| {
+                            StereoLigand::new(AtomId(5 * center + ligand), StereoLigandKind::Atom)
+                        })
+                        .collect(),
+                    EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, configuration)),
+                )
+            })
+            .collect(),
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    [6, 3],
+)]
+#[case::full_exhaustive(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: NumForm::Lit(0),
+            },
+        ))],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 6],
+)]
+#[case::full_atom_constrained(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(
+                AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+            );
+            3
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 1],
+)]
+#[case::full_atom_constraint_rejected(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(
+                AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+            ),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 5],
+)]
+#[case::full_tetrahedral_constraint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_constraint(
+                AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::Stereo(
+                    StereoCoset::Lit(0),
+                )),
+            ));
+            3
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    [6, 6],
+)]
+fn test_reaction_span_canonical_search(
+    canonicalize_context: CanonicalizeContext,
+    #[case] span: ReactionSpan,
+    #[case] level: DescriptionLevel,
+    #[case] expected_visited_leaves: [usize; 2],
+) {
+    let unpruned = reaction_span_canonical_search(
+        &span,
+        level,
+        &canonicalize_context,
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            branch_order: BranchOrdering::NodeId,
+        },
+    )
+    .expect("fixed span has initial colors");
+    let pruned = reaction_span_canonical_search(
+        &span,
+        level,
+        &canonicalize_context,
+        reaction_span_search_options(&span, level),
+    )
+    .expect("fixed span has initial colors");
+
+    assert_eq!(pruned.candidate, unpruned.candidate);
+    assert_eq!(
+        [unpruned.stats.visited_leaves, pruned.stats.visited_leaves],
+        expected_visited_leaves,
+    );
 }
 
 #[rstest]

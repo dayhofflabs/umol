@@ -12,12 +12,12 @@ use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Rem
 use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
-    Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, IncidenceLevel,
-    Molecule, MoleculeConstraint, MoleculeEntries, MoleculeRemapping, MulticenterBondForm,
-    MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm,
-    Reframe, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
-    TopicityForm, TopicityRelationForm,
+    Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, Deltas,
+    IncidenceLevel, Molecule, MoleculeConstraint, MoleculeEntries, MoleculeRemapping,
+    MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
+    NoncovalentBondKind, NumForm, Reaction, Reframe, StereoAtomConstraintForm, StereoAtomForm,
+    StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
 };
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
@@ -600,6 +600,28 @@ fn retained_scaling_corpus() -> Vec<CorpusCase> {
         .into()
 }
 
+fn atom_constrained_corpus() -> Vec<CorpusCase> {
+    SCALING_CASES
+        .map(|(name, source, _)| {
+            let constrained = source.replace("\"H#", "\"H#v1#");
+            let molecule = MoleculeDsl::from_edn_str(&constrained)
+                .unwrap_or_else(|error| panic!("benchmark case {name} must parse: {error}"))
+                .into_parts()
+                .0;
+            assert_eq!(
+                molecule
+                    .atoms()
+                    .iter()
+                    .filter(|atom| !atom.attributes.constraints.is_empty())
+                    .count(),
+                constrained.matches("\"H#v1#").count(),
+                "benchmark case {name} must constrain every hydrogen"
+            );
+            CorpusCase { name, molecule }
+        })
+        .into()
+}
+
 const LEVELS: [IncidenceLevel; 3] = [
     IncidenceLevel::Topology,
     IncidenceLevel::Constitution,
@@ -817,6 +839,78 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_reaction_span_canonicalize(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let mut group = c.benchmark_group("canonicalize/reaction_span");
+    for case in corpus() {
+        let span = Reaction::new(case.molecule, Deltas::new())
+            .to_reaction_span()
+            .expect("benchmark corpus materializes as an identity span");
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || span.clone(),
+                |span| {
+                    black_box(
+                        span.canonicalize(&context)
+                            .expect("benchmark identity span canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+}
+
+fn bench_atom_constrained(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let corpus = atom_constrained_corpus();
+
+    let mut group = c.benchmark_group("canonicalize/atom_constrained/molecule");
+    for case in &corpus {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .canonicalize(&context)
+                            .expect("atom-constrained case canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/atom_constrained/reaction_span");
+    for case in &corpus {
+        let span = Reaction::new(case.molecule.clone(), Deltas::new())
+            .to_reaction_span()
+            .expect("atom-constrained case materializes as an identity span");
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || span.clone(),
+                |span| {
+                    black_box(
+                        span.canonicalize(&context)
+                            .expect("atom-constrained identity span canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+}
+
 fn bench_topology_path_scaling(c: &mut Criterion) {
     let context = CanonicalizeContext {
         para_stereo: false,
@@ -921,6 +1015,8 @@ criterion_group!(
     bench_remapping,
     bench_canonicalize,
     bench_retained_scaling_cases,
+    bench_reaction_span_canonicalize,
+    bench_atom_constrained,
     bench_topology_path_scaling,
     bench_reframe,
 );

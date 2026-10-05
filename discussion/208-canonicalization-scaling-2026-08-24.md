@@ -8,7 +8,12 @@ Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [209](209-normalization-canonical-semantics-2026-08-25.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
-[216](216-canonicalization-performance-2026-08-30.md)
+[216](216-canonicalization-performance-2026-08-30.md),
+[231](231-orbit-pruning-coverage-2026-10-02.md)
+
+> **Notice (2026-10-03).** [231](231-orbit-pruning-coverage-2026-10-02.md) extends S4c's orbit
+> pruning to full-level molecule and reaction-span searches whose constraints are atom-local. Other
+> constrained full-level searches remain exhaustive.
 
 ## Purpose
 
