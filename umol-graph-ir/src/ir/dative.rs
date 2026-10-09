@@ -696,7 +696,7 @@ impl DativeBondForm {
     }
 
     /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
-    pub fn update(&self, update: &DativeBondUpdate) -> DativeBondForm {
+    pub fn update(&self, update: &DativeBondUpdate) -> Self {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
         DativeBondForm {

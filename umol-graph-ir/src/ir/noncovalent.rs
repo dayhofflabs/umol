@@ -627,7 +627,7 @@ impl NoncovalentBondForm {
     }
 
     /// Apply an attribute update, leaving an omitted kind and constraint keys unchanged.
-    pub fn update(&self, update: &NoncovalentBondUpdate) -> NoncovalentBondForm {
+    pub fn update(&self, update: &NoncovalentBondUpdate) -> Self {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
         NoncovalentBondForm {

@@ -122,7 +122,7 @@ impl AtomForm {
     }
 
     /// Apply an attribute update, leaving omitted fields and constraint keys unchanged.
-    pub fn update(&self, update: &AtomUpdate) -> AtomForm {
+    pub fn update(&self, update: &AtomUpdate) -> Self {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
         AtomForm {

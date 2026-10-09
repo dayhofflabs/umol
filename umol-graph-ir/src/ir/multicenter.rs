@@ -693,7 +693,7 @@ impl MulticenterBondForm {
     }
 
     /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
-    pub fn update(&self, update: &MulticenterBondUpdate) -> MulticenterBondForm {
+    pub fn update(&self, update: &MulticenterBondUpdate) -> Self {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
         MulticenterBondForm {

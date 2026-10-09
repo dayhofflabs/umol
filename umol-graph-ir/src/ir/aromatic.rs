@@ -694,7 +694,7 @@ impl AromaticSystemForm {
     }
 
     /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
-    pub fn update(&self, update: &AromaticSystemUpdate) -> AromaticSystemForm {
+    pub fn update(&self, update: &AromaticSystemUpdate) -> Self {
         let mut constraints = self.constraints.clone();
         constraints.update(&update.constraints);
         AromaticSystemForm {
