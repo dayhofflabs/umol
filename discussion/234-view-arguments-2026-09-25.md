@@ -12,8 +12,7 @@ Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 Narrow review of the workspace for functions that take a view as an argument and for structs that
 hold one, against the nomenclature guide's rule for views. The rule has held since views were
 introduced, yet such signatures keep reappearing. This document records every occurrence as
-one work unit so that none is fixed piecemeal or overlooked again. Doc 213 S2f is cancelled;
-its two listed functions are no longer scheduled for correction there. This document records
+one work unit so that none is fixed piecemeal or overlooked again. This document records
 facts and the required outcome; it contains no implementation plan. Line references are at
 commit `d19648bae`, at which none of the cited files had uncommitted changes.
 

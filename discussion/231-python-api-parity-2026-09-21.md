@@ -8,7 +8,7 @@ Relates: [213](213-editor-overlay-storage-2026-08-27.md),
 [Python API guide](../docs/development/python-api.md),
 [data-type guide](../docs/development/data-types.md)
 
-## Scope and urgency
+## Scope and urgency — updated 2026-10-08
 
 Review the public Python API for operations and semantics introduced in bindings
 without an owning Rust API. Python is the primary application interface; demand
@@ -16,23 +16,103 @@ for convenience methods must not create a second implementation of domain
 operations. Python may omit Rust APIs and adapt their syntax for ergonomics. It
 must preserve their semantic, reference, failure, and lifecycle contracts.
 
-The immediate trigger is Python-only collection extension for Edits and Deltas.
-S0 removed that wrapper-owned extension surface; any replacement must delegate to a
-settled operation on the Rust container. The bounded lazy-iteration correction
-is complete; return to doc 213 without waiting for the full audit or an ownership
-migration. It retains incremental construction of one Edits sequence and leaves
-independent-batch composition unresolved; resolving that composition is not a
-prerequisite for the review or removal. If resumed, its assembly and handle
-semantics must move from Deltas lowering into Edits methods, with lowering
-restructured to use them. Do not implement rebasing in umol-py or preserve the
-current methods as compatibility paths.
+S0 removed Python-only collection extension and S7 completed lazy Edits/Deltas
+iteration. S1–S6 remain withdrawn. Doc 213 subsequently completed the mutation
+and ownership migration: independent batches execute separately in transactions;
+independent-batch composition on Edits is not planned. The dated findings and
+outcomes below describe their reviewed revisions, not a fresh audit of that
+migration.
 
-This document records an urgent review and process correction, including the
-first bounded passes below, retained S0 corrections, and the withdrawal of the
-S1–S6 ownership/access plan. S7 completed lazy iteration with unchanged
-yielded-result ownership; the next work is back in doc 213. This is not a
-completed API audit. The broader ownership/type-role review remains in 192 and
-copy-cost review in 181.
+This document owns the unfinished broader semantic-parity and type-role review,
+including the remaining scope transferred from 192. The urgent 0.10 molecule
+lifecycle correction belongs to
+[181](181-python-boundary-ownership-2026-08-03.md#010-blocker--molecule-lifecycle).
+It must not wait for this full audit. Doc 181 also retains the separate boundary
+copy-cost investigation; this document owns the semantic justification of those
+boundaries. No withdrawn implementation plan is reactivated.
+
+## Next work after 181 — Reaction ownership
+
+Schedule this work immediately after the current work in
+[181](181-python-boundary-ownership-2026-08-03.md), before resuming the other
+unreviewed groups. It does not delay 181 or reactivate withdrawn S1–S6.
+
+**Confirmed finding:** Python Reaction splits a Rust Reaction into independently
+mutable Python Molecule and Deltas objects. Its lhs/deltas getters expose those
+objects, and its setters replace them without checking the combined reaction.
+Nested mutation can therefore invalidate a previously constructed Reaction.
+Each to_rust call clones both components and calls Reaction::try_new again.
+Rust Reaction instead holds private components and exposes borrowed read-only
+lhs/deltas access. This Python mutation contract is not justified by the Rust API.
+
+The correction is to retain the Rust Reaction and preserve its integrity contract,
+with read-only component access. Repeated reconstruction and integrity checks
+must not compensate for unrestricted component mutation. Study 2 in 181 measured
+small reconstruction costs on its fixtures; that does not justify the semantic
+mismatch. Its host-copy comparison did not test direct Reaction storage.
+
+The scheduled work covers:
+
+- Specify the concrete Python lhs/deltas access types, nested access, and retained
+  child lifetimes before implementation. Do not silently substitute mutable copies
+  or introduce a new wrapper hierarchy.
+- Replace split storage and unchecked component setters; use checked construction
+  for a changed reaction. Do not add a new mutation API without a demonstrated need.
+- Adapt conversions, equality, composition, application, and their callers to the
+  retained Rust value. Preserve independently retained application results.
+- Verify construction and nested-access parity, input alias isolation, retained
+  children, and application iterator behavior; update the Python API guarantees.
+  Measure conversion and application costs against the Study 2 fixtures.
+
+Concrete accessor signatures remain to be settled in this work. The finding does
+not constitute a completed review of ReactionSpan or the rest of Reaction's API.
+
+## Stereo entity form equality — 2026-10-08
+
+**Confirmed binding defect:** StereoAtomForm and StereoBondForm are produced by
+stereo_value in umol-py/src/stereo.rs without Python value equality. Two distinct
+wrappers with equal Rust values therefore compare unequal. The other six entity
+forms compare their stored Rust values; the leaf and constraint forms inspected
+also define value equality. This is not a general absence of equality for leaves.
+
+Study 4 in [181](181-python-boundary-ownership-2026-08-03.md) encountered the
+StereoAtomForm case at runtime and traced the same omission in the shared macro
+for StereoBondForm. Record this correction with the stereo entity review: equality
+must compare the Rust form value, independent of the wrapper's read-only flag.
+Verify equal and unequal values for both types, including mutable/read-only forms.
+No production fix or complete equality audit is claimed by that study.
+
+## Type-role review consolidated from 192 — 2026-10-08
+
+[192](192-python-api-type-roles-2026-08-09.md) is superseded by this review.
+Use the existing domain groups below, with one inventory entry per public Python
+type. For each entry record its Rust counterpart, construction, mutation and
+lifecycle, nested access and aliasing, equality/hash behavior, conversion costs,
+justified deviations, and verification. Inventory the actual exports rather than
+reuse 192's old counts. Missing Rust bindings are not requests for new Python APIs.
+
+The remaining questions are:
+
+- **Forms, updates, edits, deltas, and constraints:** verify that nested access
+  either writes through or is read-only, that immutable owners cannot be changed
+  through retained mutable inputs, and that copies have explicit independent
+  semantics. Doc 213 implemented read-only forms in Edit/Delta entries; this
+  supplies an existing contract to inspect, not evidence that every nested path
+  has been reviewed. Do not reopen that design merely because 192 predates it.
+- **Molecules, reactions, views, editors, and operation results:** verify owner
+  lifetime, alias behavior, and publication contracts against the owning Rust
+  operations. Molecule lifecycle changes are designed in 181 and subsequently
+  checked here for parity; 192's former molecule-boundary claims are not binding.
+- **Models, registries, configurations, and metadata:** establish whether each
+  current type is an immutable value or has a supported mutation workflow; trace
+  nested access accordingly. Model copy costs are investigated in 181.
+- **Equality and hashing:** check consistency with setters and live nested
+  values across all groups, including changes made through aliases.
+
+Use the current Python API guide for role definitions. A role review does not
+prescribe new mutable/frozen type pairs or another wrapper hierarchy. Specific
+type splits require demonstrated conflicting contracts. The review is unfinished;
+moving its scope here does not approve 192's proposals or certify its inventory.
 
 ## Strict review criteria — settled 2026-09-21
 
@@ -376,7 +456,7 @@ machinery may share evidence, with its members and exceptions identified.
 | graph-ir | Molecule compaction | Unreviewed |
 | graph-ir | Molecule remapping | Unreviewed |
 | graph-ir | Substructure matching and its configuration/results | Unreviewed |
-| graph-ir | Reaction and ReactionSpan construction/access/conversion | Unreviewed |
+| graph-ir | Reaction and ReactionSpan construction/access/conversion | Reaction ownership mismatch confirmed; correction scheduled after 181. Remaining surface unreviewed. |
 | graph-ir | Reaction application/composition and returned iterators | Unreviewed |
 | graph-ir | DSL parse/render, defaults, and molecule/reaction metadata | Unreviewed |
 | graph | Models, registries, tables, policies, and configuration | Unreviewed |
@@ -666,10 +746,9 @@ need concrete design; no fix is implemented.
   not a reproduced rollback failure. A compact exception taxonomy is a possible
   justification; no recovery bug or need for one class per Rust variant is claimed.
   The boundary infrastructure group owns this question once for all consumers.
-- **Reaction's live deltas.** [reaction.rs](../umol-py/src/reaction.rs), lines
-  390–403 and 564–571, exposes mutable deltas and later reconstructs/validates a
-  Rust Reaction. This is a source-traced candidate for the reaction aggregate
-  group, not an adjudicated finding or completed reaction review.
+- **Reaction's live components.** Confirmed against the current Rust contract;
+  see [the scheduled ownership correction](#next-work-after-181--reaction-ownership).
+  Both lhs and deltas permit changes that bypass reaction construction checks.
 
 ### Examined behavior matching current Rust
 

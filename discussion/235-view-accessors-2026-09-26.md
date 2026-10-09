@@ -14,10 +14,6 @@ unnecessary iterator interfaces, hidden allocations, and graph algorithms implem
 at the view layer. Include entity sets and corresponding reaction-span accessors where
 they expose the same operations. Trace Rust and Python consumers before proposing changes.
 
-This is a separate review, not a prerequisite for doc 213 S2j. S2i remains complete.
-Molecule/editor ownership and mutation contracts are unchanged. No implementation is
-authorized here; the examples below seed the review rather than constitute a complete audit.
-
 ## Required review output
 
 For each finding, record the current signature and implementation, proposed signature

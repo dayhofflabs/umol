@@ -27,6 +27,10 @@ the statuses recorded here remain authoritative.
 
 ## Current frontier
 
+- [181 — Python boundary ownership and copy costs](181-python-boundary-ownership-2026-08-03.md)
+  owns the 0.10 blocker: revise the destructive public molecule lifecycle in Rust
+  and Python using the recovery findings from 213. Broader copy-cost and Python
+  parity reviews are separate from that release correction.
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
@@ -208,7 +212,7 @@ the statuses recorded here remain authoritative.
 | [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
 | [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md) | In Progress | 2026-09-29 | Mutation infrastructure is complete in 213; return to hydrogen folding/unfolding, the deferred lift_constraints correction, and recorded operation naming work. |
 | [167-graph-alg-execution-2026-07-27.md](167-graph-alg-execution-2026-07-27.md)                                   | Completed     | 2026-07-27   |                                                                                                            |
-| [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-08-29   | Crate boundaries, visibility, re-exports, errors, and diagnostics; includes `Normalize` error typing and one private-link rustdoc correction. |
+| [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-10-08   | Crate boundaries, visibility, re-exports, errors, and diagnostics; includes `normalized` → `to_normalized`, `Normalize` error typing, and one private-link rustdoc correction. |
 | [169-dsl-metadata-context-2026-07-27.md](169-dsl-metadata-context-2026-07-27.md)                                 | Completed     | 2026-07-28   |                                                                                                            |
 | [170-reaction-smiles-python-2026-07-28.md](170-reaction-smiles-python-2026-07-28.md)                             | Completed     | 2026-07-28   |                                                                                                            |
 | [171-aromaticity-inconsistency-policy-2026-07-29.md](171-aromaticity-inconsistency-policy-2026-07-29.md)         | Completed     | 2026-08-01   |                                                                                                            |
@@ -221,7 +225,7 @@ the statuses recorded here remain authoritative.
 | [178-python-lattice-ops-2026-08-01.md](178-python-lattice-ops-2026-08-01.md)                                     | Completed     | 2026-08-01   |                                                                                                            |
 | [179-python-editing-and-transactions-2026-08-02.md](179-python-editing-and-transactions-2026-08-02.md)           | Completed     | 2026-08-03   |                                                                                                            |
 | [180-umol-facade-crate-2026-08-02.md](180-umol-facade-crate-2026-08-02.md)                                       | Proposed      | 2026-08-02   | Scope the top-level umol facade crate: re-exports, prelude, and the one feature flag.                      |
-| [181-python-boundary-ownership-2026-08-03.md](181-python-boundary-ownership-2026-08-03.md)                       | Proposed      | 2026-08-03   | Review Rust/Python ownership, copy costs, and reusable model data after doc 179.                           |
+| [181-python-boundary-ownership-2026-08-03.md](181-python-boundary-ownership-2026-08-03.md)                       | Proposed      | 2026-10-08   | 0.10 blocker: settle molecule lifecycle and Rust/Python interfaces using 213 recovery evidence; broader copy-cost review remains separate. |
 | [182-python-resolution-2026-08-03.md](182-python-resolution-2026-08-03.md)                                       | Completed     | 2026-08-15   |                                                                                                            |
 | [183-python-entity-update-parsing-2026-08-03.md](183-python-entity-update-parsing-2026-08-03.md)                 | Completed     | 2026-08-03   |                                                                                                            |
 | [184-deltas-and-edits-2026-08-04.md](184-deltas-and-edits-2026-08-04.md)                                         | Informational | 2026-08-04   |                                                                                                            |
@@ -232,7 +236,7 @@ the statuses recorded here remain authoritative.
 | [189-property-test-organization-2026-08-06.md](189-property-test-organization-2026-08-06.md)                     | Proposed      | 2026-08-06   |Reorganize property suites, strategies, references, and fixtures without changing their semantics.          |
 | [190-enumeration-algorithm-candidates-2026-08-08.md](190-enumeration-algorithm-candidates-2026-08-08.md)         | Informational | 2026-08-08   |                                                                                                            |
 | [191-graph-internal-coordinates-2026-08-08.md](191-graph-internal-coordinates-2026-08-08.md)                     | Informational | 2026-08-08   |                                                                                                            |
-| [192-python-api-type-roles-2026-08-09.md](192-python-api-type-roles-2026-08-09.md)                               | Proposed      | 2026-08-09   | Classify every public Python type by ownership and mutation role, then split mixed-role wrappers.          |
+| [192-python-api-type-roles-2026-08-09.md](192-python-api-type-roles-2026-08-09.md)                               | Superseded    | 2026-10-08   | Remaining type-role review consolidated into [231](231-python-api-parity-2026-09-21.md).                   |
 | [193-subpattern-constraints-2026-08-09.md](193-subpattern-constraints-2026-08-09.md)                             | Proposed      | 2026-08-09   | Redesign recursive subpattern constraints end to end before reintroducing them.                            |
 | [194-constraint-assertion-semantics-2026-08-10.md](194-constraint-assertion-semantics-2026-08-10.md)             | Completed     | 2026-08-15   |                                                                                                            |
 | [195-molecule-constraint-matching-2026-08-12.md](195-molecule-constraint-matching-2026-08-12.md)                 | Proposed      | 2026-09-03   | Evaluate molecule-level pattern constraints; later settle deferred molecule-constraint validation.         |
@@ -271,7 +275,7 @@ the statuses recorded here remain authoritative.
 | [228-svg-render-configuration-2026-09-15.md](228-svg-render-configuration-2026-09-15.md)                         | Completed     | 2026-09-15   |                                                                                                            |
 | [229-python-smiles-output-2026-09-29.md](229-python-smiles-output-2026-09-29.md)                                 | Completed     | 2026-09-29   |                                                                                                            |
 | [230-label-mask-extents-2026-09-29.md](230-label-mask-extents-2026-09-29.md)                                     | Completed     | 2026-09-29   |                                                                                                            |
-| [231-python-api-parity-2026-09-21.md](231-python-api-parity-2026-09-21.md)                                       | In Progress   | 2026-09-21   | S0/S7 complete; return to 213. Broader audit and ownership/access work remain unscheduled; S1–S6 withdrawn. |
+| [231-python-api-parity-2026-09-21.md](231-python-api-parity-2026-09-21.md)                                       | In Progress   | 2026-10-08   | Reaction ownership correction scheduled immediately after current 181 work; broader parity audit includes remaining 192 type-role scope. S1–S6 remain withdrawn. |
 | [232-aggregate-integrity-review-2026-09-22.md](232-aggregate-integrity-review-2026-09-22.md)                     | Completed     | 2026-09-23   |                                                                                                            |
 | [233-graph-ir-delta-review-2026-09-23.md](233-graph-ir-delta-review-2026-09-23.md)                               | Proposed      | 2026-09-23   | Awaiting triage of the surviving findings.                                                                 |
 | [234-view-arguments-2026-09-25.md](234-view-arguments-2026-09-25.md)                                             | Proposed      | 2026-09-25   | Awaiting interface and scheduling decisions.                                                               |
