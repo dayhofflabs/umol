@@ -241,7 +241,7 @@ proptest! {
         (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
-        let renumbered = molecule.remap(&renumbering);
+        let renumbered = molecule.clone().remap(&renumbering);
         let canonical = molecule.clone().canonicalize(&context);
         let renumbered_canonical = renumbered.canonicalize(&context);
 
@@ -252,7 +252,7 @@ proptest! {
                 .tracked_canonicalize(&context)
                 .expect("successful canonicalization returns its correspondence");
             let reframed = molecule
-                .remap(&correspondence)
+                .clone().remap(&correspondence)
                 .reframe()
                 .expect("a canonical correspondence preserves molecule integrity");
 
@@ -270,7 +270,7 @@ proptest! {
         ],
     ) {
         let context = context();
-        let renumbered = molecule.remap(&renumbering);
+        let renumbered = molecule.clone().remap(&renumbering);
         let (canonical, correspondence) = molecule
             .clone()
             .tracked_canonicalize(&context)
@@ -335,7 +335,7 @@ proptest! {
         (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
-        let renumbered = molecule.remap(&renumbering);
+        let renumbered = molecule.clone().remap(&renumbering);
 
         prop_assert_eq!(
             molecule.canonical_hash(&context),
@@ -368,7 +368,7 @@ proptest! {
         (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
-        let renumbered = molecule.remap(&renumbering);
+        let renumbered = molecule.clone().remap(&renumbering);
         let canonical = molecule.clone().canonicalize(&context);
 
         prop_assert!(molecule.canonical_eq(&molecule, &context));

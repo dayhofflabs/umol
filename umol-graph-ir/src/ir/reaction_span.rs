@@ -283,7 +283,7 @@ impl ReactionSpan {
     ///
     /// Identity is exact, inverse permutations recover the original span, and sequential
     /// renumbering agrees with composition of the component permutations.
-    pub fn remap(&self, remapping: &MoleculeRemapping) -> Self {
+    pub fn remap(self, remapping: &MoleculeRemapping) -> Self {
         self.try_remap(remapping)
             .expect("reaction-span remapping requires matching entity counts")
     }
@@ -291,7 +291,7 @@ impl ReactionSpan {
     /// Checked form of [`Self::remap`].
     ///
     /// Returns `None` when a component length differs from the corresponding union-table count.
-    pub fn try_remap(&self, remapping: &MoleculeRemapping) -> Option<Self> {
+    pub fn try_remap(self, remapping: &MoleculeRemapping) -> Option<Self> {
         let counts_match = [
             (remapping.graph().nodes().len(), self.atoms.len()),
             (remapping.graph().edges().len(), self.bonds.len()),
@@ -319,8 +319,6 @@ impl ReactionSpan {
 
         let graph_remapping = remapping.graph();
 
-        let atoms = remapping.graph().nodes().remap_vec(self.atoms.clone());
-        let bonds = remapping.graph().edges().remap_vec(self.bonds.clone());
         let edges = remapping.graph().edges().remap_vec(
             self.graph
                 .edge_ids()
@@ -337,49 +335,49 @@ impl ReactionSpan {
         let dative_bonds = DativeBondSpans::new(
             remapping
                 .dative_bonds()
-                .remap_vec(self.dative_bonds.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.dative_bonds.remap(graph_remapping).into_entries()),
         );
         let aromatic_systems = AromaticSystemSpans::new(
             remapping
                 .aromatic_systems()
-                .remap_vec(self.aromatic_systems.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.aromatic_systems.remap(graph_remapping).into_entries()),
         );
         let multicenter_bonds = MulticenterBondSpans::new(
             remapping
                 .multicenter_bonds()
-                .remap_vec(self.multicenter_bonds.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.multicenter_bonds.remap(graph_remapping).into_entries()),
         );
         let noncovalent_bonds = NoncovalentBondSpans::new(
             remapping
                 .noncovalent_bonds()
-                .remap_vec(self.noncovalent_bonds.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.noncovalent_bonds.remap(graph_remapping).into_entries()),
         );
         let stereo_atoms = StereoAtomSpans::new(
             remapping
                 .stereo_atoms()
-                .remap_vec(self.stereo_atoms.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.stereo_atoms.remap(graph_remapping).into_entries()),
         );
         let stereo_bonds = StereoBondSpans::new(
             remapping
                 .stereo_bonds()
-                .remap_vec(self.stereo_bonds.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.stereo_bonds.remap(graph_remapping).into_entries()),
         );
         let correspondence = MoleculeCorrespondence::from(remapping);
         let constraints = self
             .constraints
-            .iter()
+            .into_iter()
             .map(|span| match span {
                 ConstraintSpan::Unchanged(value) => {
-                    ConstraintSpan::Unchanged(value.clone().map(&correspondence))
+                    ConstraintSpan::Unchanged(value.map(&correspondence))
                 }
-                ConstraintSpan::Added(value) => {
-                    ConstraintSpan::Added(value.clone().map(&correspondence))
-                }
+                ConstraintSpan::Added(value) => ConstraintSpan::Added(value.map(&correspondence)),
                 ConstraintSpan::Removed(value) => {
-                    ConstraintSpan::Removed(value.clone().map(&correspondence))
+                    ConstraintSpan::Removed(value.map(&correspondence))
                 }
             })
             .collect();
+        let atoms = remapping.graph().nodes().remap_vec(self.atoms);
+        let bonds = remapping.graph().edges().remap_vec(self.bonds);
 
         Some(Self {
             graph: Graph::new(atoms.len(), &edges),
@@ -3445,7 +3443,7 @@ mod tests {
             Remapping::default(),
         );
 
-        let remapped = span.remap(&correspondence);
+        let remapped = span.clone().remap(&correspondence);
 
         assert_eq!(remapped.atoms()[0], span.atoms()[1]);
         assert_eq!(remapped.atoms()[1], span.atoms()[2]);

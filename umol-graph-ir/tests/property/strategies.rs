@@ -2416,7 +2416,7 @@ pub(crate) fn molecule_canonical_pair_strategy() -> impl Strategy<Value = (Molec
         .prop_map(
             |((molecule, renumbering), transform, charge, element, index)| {
                 let derived = match transform {
-                    0 => molecule.remap(&renumbering),
+                    0 => molecule.clone().remap(&renumbering),
                     1 => molecule
                         .clone()
                         .normalize()
@@ -2557,8 +2557,14 @@ pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = Stand
         };
         let first_remapping = remapping(&molecule, factor);
         let second_remapping = remapping(&molecule, ATOM_COUNT - factor);
-        let first_action = molecule.remap(&first_remapping).representative_action();
-        let second_action = molecule.remap(&second_remapping).representative_action();
+        let first_action = molecule
+            .clone()
+            .remap(&first_remapping)
+            .representative_action();
+        let second_action = molecule
+            .clone()
+            .remap(&second_remapping)
+            .representative_action();
         let covering_remapping = remapping(&covering_molecule, factor);
         let covering_action = covering_molecule
             .remap(&covering_remapping)

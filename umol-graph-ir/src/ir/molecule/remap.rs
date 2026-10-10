@@ -29,7 +29,7 @@ impl Molecule {
     /// Identity is exact; applying the inverse permutations recovers the original molecule.
     /// Sequential renumbering agrees with the composition of the component permutations.
     /// The result satisfies [`Self::framed_eq_under`] under the same remapping.
-    pub fn remap(&self, remapping: &MoleculeRemapping) -> Self {
+    pub fn remap(self, remapping: &MoleculeRemapping) -> Self {
         self.try_remap(remapping)
             .expect("molecule remapping requires matching entity counts")
     }
@@ -37,7 +37,7 @@ impl Molecule {
     /// Checked form of [`Self::remap`].
     ///
     /// Returns `None` when any component length differs from the molecule's entity count.
-    pub fn try_remap(&self, remapping: &MoleculeRemapping) -> Option<Self> {
+    pub fn try_remap(self, remapping: &MoleculeRemapping) -> Option<Self> {
         let counts_match = [
             (remapping.graph().nodes().len(), self.atoms.len()),
             (remapping.graph().edges().len(), self.bonds.len()),
@@ -65,14 +65,6 @@ impl Molecule {
 
         let graph_remapping = remapping.graph();
 
-        let atoms = remapping
-            .graph()
-            .nodes()
-            .remap_vec(self.atoms.as_ref().clone());
-        let bonds = remapping
-            .graph()
-            .edges()
-            .remap_vec(self.bonds.as_ref().clone());
         let edges = remapping.graph().edges().remap_vec(
             self.graph
                 .edge_ids()
@@ -85,42 +77,49 @@ impl Molecule {
                 })
                 .collect(),
         );
+        let atoms = remapping
+            .graph()
+            .nodes()
+            .remap_vec(Arc::unwrap_or_clone(self.atoms));
+        let bonds = remapping
+            .graph()
+            .edges()
+            .remap_vec(Arc::unwrap_or_clone(self.bonds));
         let graph = Graph::new(atoms.len(), &edges);
 
         let dative_bonds = DativeBonds::new(
             remapping
                 .dative_bonds()
-                .remap_vec(self.dative_bonds.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.dative_bonds.remap(graph_remapping).into_entries()),
         );
         let aromatic_systems = AromaticSystems::new(
             remapping
                 .aromatic_systems()
-                .remap_vec(self.aromatic_systems.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.aromatic_systems.remap(graph_remapping).into_entries()),
         );
         let multicenter_bonds = MulticenterBonds::new(
             remapping
                 .multicenter_bonds()
-                .remap_vec(self.multicenter_bonds.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.multicenter_bonds.remap(graph_remapping).into_entries()),
         );
         let noncovalent_bonds = NoncovalentBonds::new(
             remapping
                 .noncovalent_bonds()
-                .remap_vec(self.noncovalent_bonds.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.noncovalent_bonds.remap(graph_remapping).into_entries()),
         );
         let stereo_atoms = StereoAtoms::new(
             remapping
                 .stereo_atoms()
-                .remap_vec(self.stereo_atoms.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.stereo_atoms.remap(graph_remapping).into_entries()),
         );
         let stereo_bonds = StereoBonds::new(
             remapping
                 .stereo_bonds()
-                .remap_vec(self.stereo_bonds.clone().remap(graph_remapping).into_entries()),
+                .remap_vec(self.stereo_bonds.remap(graph_remapping).into_entries()),
         );
         let correspondence = MoleculeCorrespondence::from(remapping);
         let constraints: Constraints = self
             .constraints
-            .clone()
             .into_iter()
             .map(|constraint| constraint.map(&correspondence))
             .collect();

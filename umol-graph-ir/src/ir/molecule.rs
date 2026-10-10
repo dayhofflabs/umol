@@ -242,7 +242,8 @@ impl Molecule {
     /// succeed, `canonical_eq` holds exactly when some remapping makes this comparison true.
     /// Equality totalization for two intrinsic contradictions does not require such a witness.
     pub fn framed_eq_under(&self, other: &Self, remapping: &MoleculeRemapping) -> bool {
-        self.try_remap(remapping)
+        self.clone()
+            .try_remap(remapping)
             .is_some_and(|remapped| remapped.framed_eq(other))
     }
 

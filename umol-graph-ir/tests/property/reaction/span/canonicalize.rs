@@ -54,7 +54,7 @@ proptest! {
         scenario in reaction_span_scenario_strategy(),
     ) {
         let context = context();
-        let renumbered = scenario.span.remap(&scenario.first);
+        let renumbered = scenario.span.clone().remap(&scenario.first);
         let canonical = scenario.span.clone().canonicalize(&context);
         let renumbered_canonical = renumbered.canonicalize(&context);
 
@@ -98,7 +98,7 @@ proptest! {
         let canonical = source.clone().canonicalize(&context).map_err(|error| {
             TestCaseError::fail(format!("generated reaction span did not canonicalize: {error}"))
         })?;
-        let renumbered = source.remap(&scenario.remapping);
+        let renumbered = source.clone().remap(&scenario.remapping);
 
         prop_assert_eq!(normalized.clone().normalize(), Ok(normalized.clone()));
         prop_assert_eq!(reframed.clone().reframe(), Ok(reframed.clone()));
@@ -140,7 +140,7 @@ proptest! {
         scenario in reaction_span_scenario_strategy(),
     ) {
         let context = context();
-        let renumbered = scenario.span.remap(&scenario.first);
+        let renumbered = scenario.span.clone().remap(&scenario.first);
 
         prop_assert_eq!(
             scenario.span.canonical_hash(&context),
@@ -159,7 +159,7 @@ proptest! {
         scenario in reaction_span_scenario_strategy(),
     ) {
         let context = context();
-        let renumbered = scenario.span.remap(&scenario.first);
+        let renumbered = scenario.span.clone().remap(&scenario.first);
         let canonical = scenario.span.clone().canonicalize(&context);
 
         prop_assert!(scenario.span.canonical_eq(&scenario.span, &context));

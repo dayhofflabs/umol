@@ -675,7 +675,11 @@ fn bench_remapping(c: &mut Criterion) {
             .collect::<Vec<_>>()
             .join("_");
         group.bench_function(BenchmarkId::new(case.name, counts), |b| {
-            b.iter(|| black_box(&case.molecule).remap(black_box(&correspondence)))
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| black_box(molecule.remap(black_box(&correspondence))),
+                BatchSize::SmallInput,
+            )
         });
     }
 
@@ -734,7 +738,10 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
     let cases = retained_scaling_corpus()
         .into_iter()
         .map(|case| {
-            let renumbered = case.molecule.remap(&reverse_remapping(&case.molecule));
+            let renumbered = case
+                .molecule
+                .clone()
+                .remap(&reverse_remapping(&case.molecule));
             let additional_atom = Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O)],
                 ..Default::default()
@@ -922,7 +929,9 @@ fn bench_reaction_canonical_eq(c: &mut Criterion) {
         .map(|case| {
             let source = reaction(case.molecule.clone(), Element::N);
             let renumbered = reaction(
-                case.molecule.remap(&reverse_remapping(&case.molecule)),
+                case.molecule
+                    .clone()
+                    .remap(&reverse_remapping(&case.molecule)),
                 Element::N,
             );
             let unequal = reaction(case.molecule.clone(), Element::O);

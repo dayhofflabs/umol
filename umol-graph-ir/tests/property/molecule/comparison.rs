@@ -288,7 +288,7 @@ proptest! {
         let canonical = source.clone().canonicalize(&context).map_err(|error| {
             TestCaseError::fail(format!("generated molecule did not canonicalize: {error}"))
         })?;
-        let renumbered = source.remap(&scenario.remapping);
+        let renumbered = source.clone().remap(&scenario.remapping);
 
         prop_assert_eq!(&source, &identical);
         prop_assert!(source.normalized_eq(&identical));

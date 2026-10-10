@@ -744,7 +744,7 @@ collection clone it. S4d touches the same span types; either order works.
 
 **Tests:** existing transport results for each type.
 
-#### S2b — Consuming Molecule and ReactionSpan remap
+#### S2b — Consuming Molecule and ReactionSpan remap **Done**
 
 **Modules:** graph-IR molecule/remap, reaction_span, canonicalization, and
 callers. **Breaking, red→green within the subitem.** [dep: S2a]
@@ -753,11 +753,22 @@ Change remap and try_remap on Molecule and ReactionSpan to take `self`. Permute
 the owned tables instead of cloning them, and remap the overlay collections with
 their consuming remap. Canonicalization's final remap consumes the owned
 normalized value; callers that keep the source write `m.clone().remap(&r)`.
+The topology, constitution, and structure searches take the molecule by value.
+The full-level search remaps the normalized molecule with the remapping it
+returns, instead of rebuilding the complete candidate for the selected order.
+The reaction-span search remaps the normalized span with the remapping it
+already computed, and reaction_span_from_candidate is removed. The per-leaf
+remaps in complete_candidate and the reaction-span leaf candidate clone their
+borrowed source.
 
 **Tests:** existing remapping identity, inverse, and composition properties.
 
 **Verification:** the canonicalize bench, against a baseline taken before the
-change.
+change. The remapping cases are 1–9% faster, with the clone moved into batch
+setup. Complete canonicalization is within ±4% for most of the corpus and
+16–24% faster for overlay_heavy and frame_relative_stereo_constraint, which
+skip the rebuilt complete candidate. The scaling canonicalize and
+tracked_canonicalize cases are within ±2%.
 
 #### S2c — MoleculeMetadata::map
 

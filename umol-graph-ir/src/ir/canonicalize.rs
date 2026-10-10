@@ -3861,7 +3861,7 @@ fn complete_candidate(
 ) -> Result<(CanonicalCandidate<CanonicalComparisonKey>, Molecule), Contradiction> {
     let mut candidate = structure_candidate(molecule, incidence_graph, order)?;
     let remapping = remapping_from_order(molecule, incidence_graph, &candidate.entity_order);
-    let complete = molecule.remap(&remapping).reframe()?;
+    let complete = molecule.clone().remap(&remapping).reframe()?;
     candidate.key.constraints = constraint_blocks(&complete);
     Ok((candidate, complete))
 }
@@ -4054,19 +4054,19 @@ fn reaction_span_lhs_present(span: &ReactionSpan, entity_kind: usize, kind_id: u
 }
 
 fn canonicalize_topology(
-    molecule: &Molecule,
+    molecule: Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let (entity_keys, _) = initial_color_keys(molecule, &incidence_graph)?;
+    let (entity_keys, _) = initial_color_keys(&molecule, &incidence_graph)?;
     let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
     let CompactTopologyCarrier {
         adapter,
         initial_partition,
-    } = CompactTopologyCarrier::new(molecule, &incidence_graph, &entity_colors);
+    } = CompactTopologyCarrier::new(&molecule, &incidence_graph, &entity_colors);
     let leaf_candidate = |order: &[NodeId]| {
-        topology_candidate(molecule, &incidence_graph, order)
+        topology_candidate(&molecule, &incidence_graph, order)
             .expect("initial colors established topology normalization")
     };
     let selected = canonical_search_from_partition(
@@ -4076,25 +4076,28 @@ fn canonicalize_topology(
         options,
         &leaf_candidate,
     );
-    let remapping =
-        remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+    let remapping = remapping_from_order(
+        &molecule,
+        &incidence_graph,
+        &selected.candidate.entity_order,
+    );
 
     let canonical = molecule.remap(&remapping).reframe()?;
     Ok((canonical, remapping))
 }
 
 fn canonicalize_constitution(
-    molecule: &Molecule,
+    molecule: Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
     let leaf_candidate = |order: &[NodeId]| {
-        constitution_candidate(molecule, &incidence_graph, order)
+        constitution_candidate(&molecule, &incidence_graph, order)
             .expect("initial colors established constitution normalization")
     };
     let selected = canonical_search(
@@ -4104,24 +4107,27 @@ fn canonicalize_constitution(
         options,
         &leaf_candidate,
     );
-    let remapping =
-        remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+    let remapping = remapping_from_order(
+        &molecule,
+        &incidence_graph,
+        &selected.candidate.entity_order,
+    );
 
     let canonical = molecule.remap(&remapping).reframe()?;
     Ok((canonical, remapping))
 }
 
 fn canonicalize_structure(
-    molecule: &Molecule,
+    molecule: Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let (partition, _) = structure_partition(
-        molecule,
+        &molecule,
         &incidence_graph,
         &adapter,
         &entity_keys,
@@ -4129,11 +4135,11 @@ fn canonicalize_structure(
     )?;
     let descriptors = partition.cell_indices(adapter.graph().node_count());
     let leaf_candidate = |order: &[NodeId]| {
-        structure_candidate(molecule, &incidence_graph, order)
+        structure_candidate(&molecule, &incidence_graph, order)
             .expect("structure descriptors established entity normalization")
     };
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
-        retain_stereo_preserving_generators(molecule, &incidence_graph, generators);
+        retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
     };
     let selected = canonical_search_with_generator_filter(
         &adapter,
@@ -4143,8 +4149,11 @@ fn canonicalize_structure(
         &leaf_candidate,
         &filter_generators,
     );
-    let remapping =
-        remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+    let remapping = remapping_from_order(
+        &molecule,
+        &incidence_graph,
+        &selected.candidate.entity_order,
+    );
 
     let canonical = molecule.remap(&remapping).reframe()?;
     Ok((canonical, remapping))
@@ -4155,13 +4164,13 @@ fn canonicalize_full(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
-    let molecule = &molecule.normalize()?;
+    let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let (partition, _) = structure_partition(
-        molecule,
+        &molecule,
         &incidence_graph,
         &adapter,
         &entity_keys,
@@ -4169,7 +4178,7 @@ fn canonicalize_full(
     )?;
     let descriptors = partition.cell_indices(adapter.graph().node_count());
     let leaf_candidate = |order: &[NodeId]| {
-        complete_candidate(molecule, &incidence_graph, order)
+        complete_candidate(&molecule, &incidence_graph, order)
             .expect("structure descriptors established complete normalization")
             .0
     };
@@ -4183,10 +4192,12 @@ fn canonicalize_full(
         },
         &leaf_candidate,
     );
-    let remapping =
-        remapping_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
-    let (_, canonical) =
-        complete_candidate(molecule, &incidence_graph, &selected.candidate.entity_order)?;
+    let remapping = remapping_from_order(
+        &molecule,
+        &incidence_graph,
+        &selected.candidate.entity_order,
+    );
+    let canonical = molecule.remap(&remapping).reframe()?;
     Ok((canonical, remapping))
 }
 
@@ -4664,9 +4675,9 @@ impl Molecule {
             },
         };
         match level {
-            DescriptionLevel::Topology => canonicalize_topology(&self, context, options),
-            DescriptionLevel::Constitution => canonicalize_constitution(&self, context, options),
-            DescriptionLevel::Structure => canonicalize_structure(&self, context, options),
+            DescriptionLevel::Topology => canonicalize_topology(self, context, options),
+            DescriptionLevel::Constitution => canonicalize_constitution(self, context, options),
+            DescriptionLevel::Structure => canonicalize_structure(self, context, options),
             DescriptionLevel::Full => canonicalize_full(self, context, options),
         }
     }
@@ -4874,7 +4885,7 @@ fn reaction_span_canonical_candidate(
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let leaf_candidate = |order: &[NodeId]| {
         let remapping = lhs_anchored_remapping_from_order(span, &incidence_graph, order);
-        let remapped = span.remap(&remapping);
+        let remapped = span.clone().remap(&remapping);
         let action = remapped.representative_action();
         let reframed = remapped
             .reframe_by(&action)
@@ -4912,22 +4923,6 @@ fn reaction_span_canonical_candidate(
     Ok(selected.candidate)
 }
 
-fn reaction_span_from_candidate(
-    span: &ReactionSpan,
-    level: DescriptionLevel,
-    candidate: &CanonicalCandidate<CanonicalComparisonKey>,
-) -> Result<ReactionSpan, Contradiction> {
-    let incidence_level = match level {
-        DescriptionLevel::Topology => IncidenceLevel::Topology,
-        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
-        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
-    };
-    let incidence_graph = span.incidence_graph(incidence_level);
-    let remapping =
-        lhs_anchored_remapping_from_order(span, &incidence_graph, &candidate.entity_order);
-    span.remap(&remapping).reframe()
-}
-
 impl ReactionSpan {
     /// The canonical form at `level` and its source-to-canonical remapping.
     fn tracked_canonicalize_at(
@@ -4948,10 +4943,8 @@ impl ReactionSpan {
             &incidence_graph,
             &candidate.entity_order,
         );
-        Ok((
-            reaction_span_from_candidate(&normalized, level, &candidate)?,
-            remapping,
-        ))
+        let canonical = normalized.remap(&remapping).reframe()?;
+        Ok((canonical, remapping))
     }
 
     /// The comparison key of the canonical form at `level`: the key canonical equality compares.

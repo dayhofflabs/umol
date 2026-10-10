@@ -142,7 +142,7 @@ proptest! {
     fn test_mixed_witness_composition(
         (source, remapping) in molecule_dense_renumbering_strategy(),
     ) {
-        let remapped = source.remap(&remapping);
+        let remapped = source.clone().remap(&remapping);
         let removed = (remapped.atoms().count() > 0)
             .then_some(AtomId(0))
             .into_iter()
