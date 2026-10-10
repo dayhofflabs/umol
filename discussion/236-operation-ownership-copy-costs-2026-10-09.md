@@ -501,7 +501,7 @@ Measured over 1,000 pairs each, as identical / canonically equal but different /
 not equal: molecules 17% / 42% / 41%, reaction spans 62% / 16% / 22%, reactions
 35% / 35% / 30%. The properties pass at 256 and at 2,048 cases.
 
-#### S0b — Canonicalization helpers
+#### S0b — Canonicalization helpers **Done**
 
 **Modules:** graph-IR canonicalization and its tests. **Green.**
 [dep: none]
@@ -533,7 +533,9 @@ results. Error conversion uses `?`. Users still cannot choose the level.
 - ReactionSpan: tracked_canonicalize_at normalizes the owned span instead of a
   clone. canonical_key_at replaces canonical_reaction_span_key.
 - Reaction: tracked_canonicalize_at converts to a span, calls the span method,
-  and converts back.
+  and converts back. canonical_key_at converts to a span and returns the span's
+  key, so Reaction canonical_eq compares span keys instead of canonicalizing
+  both reactions.
 - Delete the forwarding and conversion functions:
   canonicalize_molecule_by_effective,
   canonicalize_molecule_with_remapping_by_effective,
@@ -545,12 +547,17 @@ results. Error conversion uses `?`. Users still cannot choose the level.
   canonicalize_reaction_with_remapping_by_effective. Delete the test-only
   per-level wrappers; tests call the level workers or the trait methods.
 - Rename canonicalize_level_with_constraints to level_with_constraints.
+- The span method's error converts into the reaction error through
+  `impl From<ReactionSpanCanonicalizeError> for ReactionCanonicalizeError`.
 
 **Tests:** existing canonicalization, tracked remapping, and canonical_eq
 results are unchanged.
 
 **Verification:** the canonicalize bench, against a baseline taken before the
-change.
+change. Over the complete, scaling canonicalize and tracked_canonicalize, and
+reaction canonical_eq cases, median changes were within ±3% except Reaction
+canonical_eq, which is 16–18% faster at the median and up to 29% faster on small
+reactions; single-case outliers did not reproduce on rerun.
 
 #### S0c — Borrowing canonical_hash
 

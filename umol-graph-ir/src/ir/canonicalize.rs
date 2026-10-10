@@ -69,7 +69,7 @@ enum DescriptionLevel {
     Full,
 }
 
-fn canonicalize_level_with_constraints(
+fn level_with_constraints(
     base: DescriptionLevel,
     has_inline_constraints: bool,
 ) -> DescriptionLevel {
@@ -93,13 +93,13 @@ fn entity_span_canonicalize_level<T>(
             has_inline_constraints(lhs) || has_inline_constraints(rhs)
         }
     };
-    canonicalize_level_with_constraints(base, has_inline_constraints)
+    level_with_constraints(base, has_inline_constraints)
 }
 
 fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
     match delta {
         Delta::Atom(AtomDelta::Add { attributes, .. } | AtomDelta::Remove { attributes, .. }) => {
-            canonicalize_level_with_constraints(
+            level_with_constraints(
                 DescriptionLevel::Topology,
                 !attributes.constraints.is_empty(),
             )
@@ -107,7 +107,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
         Delta::Atom(AtomDelta::ModifyField { .. }) => DescriptionLevel::Topology,
         Delta::Atom(AtomDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
         Delta::Bond(BondDelta::Add { attributes, .. } | BondDelta::Remove { attributes, .. }) => {
-            canonicalize_level_with_constraints(
+            level_with_constraints(
                 DescriptionLevel::Topology,
                 !attributes.constraints.is_empty(),
             )
@@ -116,7 +116,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
         Delta::Bond(BondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
         Delta::DativeBond(
             DativeBondDelta::Add { attributes, .. } | DativeBondDelta::Remove { attributes, .. },
-        ) => canonicalize_level_with_constraints(
+        ) => level_with_constraints(
             DescriptionLevel::Constitution,
             !attributes.constraints.is_empty(),
         ),
@@ -125,7 +125,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
         Delta::AromaticSystem(
             AromaticSystemDelta::Add { attributes, .. }
             | AromaticSystemDelta::Remove { attributes, .. },
-        ) => canonicalize_level_with_constraints(
+        ) => level_with_constraints(
             DescriptionLevel::Constitution,
             !attributes.constraints.is_empty(),
         ),
@@ -138,7 +138,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
         Delta::MulticenterBond(
             MulticenterBondDelta::Add { attributes, .. }
             | MulticenterBondDelta::Remove { attributes, .. },
-        ) => canonicalize_level_with_constraints(
+        ) => level_with_constraints(
             DescriptionLevel::Constitution,
             !attributes.constraints.is_empty(),
         ),
@@ -151,7 +151,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
         Delta::NoncovalentBond(
             NoncovalentBondDelta::Add { attributes, .. }
             | NoncovalentBondDelta::Remove { attributes, .. },
-        ) => canonicalize_level_with_constraints(
+        ) => level_with_constraints(
             DescriptionLevel::Constitution,
             !attributes.constraints.is_empty(),
         ),
@@ -163,7 +163,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
         }
         Delta::StereoAtom(
             StereoAtomDelta::Add { attributes, .. } | StereoAtomDelta::Remove { attributes, .. },
-        ) => canonicalize_level_with_constraints(
+        ) => level_with_constraints(
             DescriptionLevel::Structure,
             !attributes.constraints.is_empty(),
         ),
@@ -171,7 +171,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
         Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
         Delta::StereoBond(
             StereoBondDelta::Add { attributes, .. } | StereoBondDelta::Remove { attributes, .. },
-        ) => canonicalize_level_with_constraints(
+        ) => level_with_constraints(
             DescriptionLevel::Structure,
             !attributes.constraints.is_empty(),
         ),
@@ -4058,23 +4058,7 @@ fn reaction_span_lhs_present(span: &ReactionSpan, entity_kind: usize, kind_id: u
     }
 }
 
-#[cfg(test)]
 fn canonicalize_topology(
-    molecule: &Molecule,
-    context: &CanonicalizeContext,
-) -> Result<Molecule, MoleculeCanonicalizeError> {
-    canonicalize_topology_with_options(
-        molecule,
-        context,
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
-    )
-    .map(|(molecule, _)| molecule)
-}
-
-fn canonicalize_topology_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
@@ -4104,23 +4088,7 @@ fn canonicalize_topology_with_options(
     Ok((canonical, remapping))
 }
 
-#[cfg(test)]
 fn canonicalize_constitution(
-    molecule: &Molecule,
-    context: &CanonicalizeContext,
-) -> Result<Molecule, MoleculeCanonicalizeError> {
-    canonicalize_constitution_with_options(
-        molecule,
-        context,
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
-    )
-    .map(|(molecule, _)| molecule)
-}
-
-fn canonicalize_constitution_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
@@ -4148,23 +4116,7 @@ fn canonicalize_constitution_with_options(
     Ok((canonical, remapping))
 }
 
-#[cfg(test)]
 fn canonicalize_structure(
-    molecule: &Molecule,
-    context: &CanonicalizeContext,
-) -> Result<Molecule, MoleculeCanonicalizeError> {
-    canonicalize_structure_with_options(
-        molecule,
-        context,
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
-    )
-    .map(|(molecule, _)| molecule)
-}
-
-fn canonicalize_structure_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
@@ -4203,29 +4155,12 @@ fn canonicalize_structure_with_options(
     Ok((canonical, remapping))
 }
 
-#[cfg(test)]
 fn canonicalize_full(
-    molecule: &Molecule,
-    context: &CanonicalizeContext,
-) -> Result<Molecule, MoleculeCanonicalizeError> {
-    canonicalize_full_with_options(
-        molecule,
-        context,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
-        },
-    )
-    .map(|(molecule, _)| molecule)
-}
-
-fn canonicalize_full_with_options(
-    molecule: &Molecule,
+    molecule: Molecule,
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
-    let normalized = molecule.clone().normalize()?;
-    let molecule = &normalized;
+    let molecule = &molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
@@ -4258,139 +4193,6 @@ fn canonicalize_full_with_options(
     let (_, canonical) =
         complete_candidate(molecule, &incidence_graph, &selected.candidate.entity_order)?;
     Ok((canonical, remapping))
-}
-
-fn canonical_key_by(
-    molecule: &Molecule,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
-    if level == DescriptionLevel::Full {
-        let normalized = molecule.clone().normalize()?;
-        return canonical_key_by_full(&normalized, context);
-    }
-    let incidence_level = match level {
-        DescriptionLevel::Topology => IncidenceLevel::Topology,
-        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
-        DescriptionLevel::Structure => IncidenceLevel::Full,
-        DescriptionLevel::Full => unreachable!("handled before incidence construction"),
-    };
-    let incidence_graph = molecule.incidence_graph(incidence_level);
-    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
-    let automorphism_pruning = level != DescriptionLevel::Structure;
-    let options = CanonicalSearchOptions {
-        automorphism_pruning,
-        branch_order: if automorphism_pruning {
-            BranchOrdering::BackendCanonical
-        } else {
-            BranchOrdering::NodeId
-        },
-    };
-
-    if level == DescriptionLevel::Topology {
-        let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
-        let CompactTopologyCarrier {
-            adapter,
-            initial_partition,
-        } = CompactTopologyCarrier::new(molecule, &incidence_graph, &entity_colors);
-        let leaf_candidate = |order: &[NodeId]| {
-            topology_candidate(molecule, &incidence_graph, order)
-                .expect("initial colors established topology normalization")
-        };
-        return Ok(canonical_search_from_partition(
-            &adapter,
-            initial_partition,
-            context.automorphism_algorithm,
-            options,
-            &leaf_candidate,
-        )
-        .candidate
-        .key);
-    }
-
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let key = match level {
-        DescriptionLevel::Constitution => {
-            let descriptors =
-                constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
-            let leaf_candidate = |order: &[NodeId]| {
-                constitution_candidate(molecule, &incidence_graph, order)
-                    .expect("initial colors established constitution normalization")
-            };
-            canonical_search(
-                &adapter,
-                &descriptors,
-                context.automorphism_algorithm,
-                options,
-                &leaf_candidate,
-            )
-            .candidate
-            .key
-        }
-        DescriptionLevel::Structure => {
-            let (partition, _) = structure_partition(
-                molecule,
-                &incidence_graph,
-                &adapter,
-                &entity_keys,
-                context.para_stereo,
-            )?;
-            let descriptors = partition.cell_indices(adapter.graph().node_count());
-            let leaf_candidate = |order: &[NodeId]| {
-                structure_candidate(molecule, &incidence_graph, order)
-                    .expect("structure descriptors established entity normalization")
-            };
-            canonical_search(
-                &adapter,
-                &descriptors,
-                context.automorphism_algorithm,
-                options,
-                &leaf_candidate,
-            )
-            .candidate
-            .key
-        }
-        DescriptionLevel::Topology | DescriptionLevel::Full => {
-            unreachable!("handled before selected-layer search")
-        }
-    };
-    Ok(key)
-}
-
-fn canonical_key_by_full(
-    molecule: &Molecule,
-    context: &CanonicalizeContext,
-) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
-    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let (partition, _) = structure_partition(
-        molecule,
-        &incidence_graph,
-        &adapter,
-        &entity_keys,
-        context.para_stereo,
-    )?;
-    let descriptors = partition.cell_indices(adapter.graph().node_count());
-    let leaf_candidate = |order: &[NodeId]| {
-        complete_candidate(molecule, &incidence_graph, order)
-            .expect("normalized structure descriptors established complete normalization")
-            .0
-    };
-    Ok(canonical_search(
-        &adapter,
-        &descriptors,
-        context.automorphism_algorithm,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
-        },
-        &leaf_candidate,
-    )
-    .candidate
-    .key)
 }
 
 fn reaction_span_entity_keys(
@@ -4851,45 +4653,156 @@ fn constraint_span_key(span: &ConstraintSpan) -> CanonicalKeyValue {
     }
 }
 
-fn canonicalize_molecule_with_remapping_by_effective(
-    molecule: &Molecule,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
-    let options = CanonicalSearchOptions {
-        automorphism_pruning: matches!(
-            level,
-            DescriptionLevel::Topology
-                | DescriptionLevel::Constitution
-                | DescriptionLevel::Structure
-        ),
-        branch_order: if level == DescriptionLevel::Full {
-            BranchOrdering::NodeId
-        } else {
-            BranchOrdering::BackendCanonical
-        },
-    };
-    match level {
-        DescriptionLevel::Topology => {
-            canonicalize_topology_with_options(molecule, context, options)
+impl Molecule {
+    /// The canonical form at `level` and its source-to-canonical remapping.
+    fn tracked_canonicalize_at(
+        self,
+        level: DescriptionLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<(Self, MoleculeRemapping), MoleculeCanonicalizeError> {
+        let options = CanonicalSearchOptions {
+            automorphism_pruning: level != DescriptionLevel::Full,
+            branch_order: if level == DescriptionLevel::Full {
+                BranchOrdering::NodeId
+            } else {
+                BranchOrdering::BackendCanonical
+            },
+        };
+        match level {
+            DescriptionLevel::Topology => canonicalize_topology(&self, context, options),
+            DescriptionLevel::Constitution => canonicalize_constitution(&self, context, options),
+            DescriptionLevel::Structure => canonicalize_structure(&self, context, options),
+            DescriptionLevel::Full => canonicalize_full(self, context, options),
         }
-        DescriptionLevel::Constitution => {
-            canonicalize_constitution_with_options(molecule, context, options)
-        }
-        DescriptionLevel::Structure => {
-            canonicalize_structure_with_options(molecule, context, options)
-        }
-        DescriptionLevel::Full => canonicalize_full_with_options(molecule, context, options),
     }
-}
 
-fn canonicalize_molecule_by_effective(
-    molecule: &Molecule,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<Molecule, MoleculeCanonicalizeError> {
-    canonicalize_molecule_with_remapping_by_effective(molecule, level, context)
-        .map(|(canonical, _)| canonical)
+    /// The comparison key of the canonical form at `level`: the key canonical equality compares.
+    fn canonical_key_at(
+        &self,
+        level: DescriptionLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
+        if level == DescriptionLevel::Full {
+            let molecule = &self.clone().normalize()?;
+            let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+            let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+            let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+            let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+            let (partition, _) = structure_partition(
+                molecule,
+                &incidence_graph,
+                &adapter,
+                &entity_keys,
+                context.para_stereo,
+            )?;
+            let descriptors = partition.cell_indices(adapter.graph().node_count());
+            let leaf_candidate = |order: &[NodeId]| {
+                complete_candidate(molecule, &incidence_graph, order)
+                    .expect("normalized structure descriptors established complete normalization")
+                    .0
+            };
+            return Ok(canonical_search(
+                &adapter,
+                &descriptors,
+                context.automorphism_algorithm,
+                CanonicalSearchOptions {
+                    automorphism_pruning: false,
+                    branch_order: BranchOrdering::NodeId,
+                },
+                &leaf_candidate,
+            )
+            .candidate
+            .key);
+        }
+        let molecule = self;
+        let incidence_level = match level {
+            DescriptionLevel::Topology => IncidenceLevel::Topology,
+            DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+            DescriptionLevel::Structure => IncidenceLevel::Full,
+            DescriptionLevel::Full => unreachable!("handled before incidence construction"),
+        };
+        let incidence_graph = molecule.incidence_graph(incidence_level);
+        let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+        let automorphism_pruning = level != DescriptionLevel::Structure;
+        let options = CanonicalSearchOptions {
+            automorphism_pruning,
+            branch_order: if automorphism_pruning {
+                BranchOrdering::BackendCanonical
+            } else {
+                BranchOrdering::NodeId
+            },
+        };
+
+        if level == DescriptionLevel::Topology {
+            let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
+            let CompactTopologyCarrier {
+                adapter,
+                initial_partition,
+            } = CompactTopologyCarrier::new(molecule, &incidence_graph, &entity_colors);
+            let leaf_candidate = |order: &[NodeId]| {
+                topology_candidate(molecule, &incidence_graph, order)
+                    .expect("initial colors established topology normalization")
+            };
+            return Ok(canonical_search_from_partition(
+                &adapter,
+                initial_partition,
+                context.automorphism_algorithm,
+                options,
+                &leaf_candidate,
+            )
+            .candidate
+            .key);
+        }
+
+        let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+        let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+        let key = match level {
+            DescriptionLevel::Constitution => {
+                let descriptors =
+                    constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+                let leaf_candidate = |order: &[NodeId]| {
+                    constitution_candidate(molecule, &incidence_graph, order)
+                        .expect("initial colors established constitution normalization")
+                };
+                canonical_search(
+                    &adapter,
+                    &descriptors,
+                    context.automorphism_algorithm,
+                    options,
+                    &leaf_candidate,
+                )
+                .candidate
+                .key
+            }
+            DescriptionLevel::Structure => {
+                let (partition, _) = structure_partition(
+                    molecule,
+                    &incidence_graph,
+                    &adapter,
+                    &entity_keys,
+                    context.para_stereo,
+                )?;
+                let descriptors = partition.cell_indices(adapter.graph().node_count());
+                let leaf_candidate = |order: &[NodeId]| {
+                    structure_candidate(molecule, &incidence_graph, order)
+                        .expect("structure descriptors established entity normalization")
+                };
+                canonical_search(
+                    &adapter,
+                    &descriptors,
+                    context.automorphism_algorithm,
+                    options,
+                    &leaf_candidate,
+                )
+                .candidate
+                .key
+            }
+            DescriptionLevel::Topology | DescriptionLevel::Full => {
+                unreachable!("handled before selected-layer search")
+            }
+        };
+        Ok(key)
+    }
 }
 
 impl Canonicalize for Molecule {
@@ -4897,7 +4810,8 @@ impl Canonicalize for Molecule {
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
         let level = molecule_canonicalize_level(&self);
-        canonicalize_molecule_by_effective(&self, level, context)
+        self.tracked_canonicalize_at(level, context)
+            .map(|(canonical, _)| canonical)
     }
 
     fn tracked_canonicalize(
@@ -4905,7 +4819,7 @@ impl Canonicalize for Molecule {
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error> {
         let level = molecule_canonicalize_level(&self);
-        canonicalize_molecule_with_remapping_by_effective(&self, level, context)
+        self.tracked_canonicalize_at(level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
@@ -4914,8 +4828,8 @@ impl Canonicalize for Molecule {
         }
         let level = molecule_canonicalize_level(self).max(molecule_canonicalize_level(other));
         match (
-            canonical_key_by(self, level, context),
-            canonical_key_by(other, level, context),
+            self.canonical_key_at(level, context),
+            other.canonical_key_at(level, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
@@ -5013,71 +4927,44 @@ fn reaction_span_from_candidate(
     span.remap(&remapping).reframe()
 }
 
-fn canonicalize_reaction_span_by(
-    span: &ReactionSpan,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<ReactionSpan, ReactionSpanCanonicalizeError> {
-    Ok(canonicalize_checked_reaction_span_by(span, level, context)?)
-}
-
-fn canonicalize_checked_reaction_span_by(
-    span: &ReactionSpan,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<ReactionSpan, Contradiction> {
-    Ok(canonicalize_checked_reaction_span_with_remapping_by(span, level, context)?.0)
-}
-
-fn canonicalize_checked_reaction_span_with_remapping_by(
-    span: &ReactionSpan,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<(ReactionSpan, MoleculeRemapping), Contradiction> {
-    let normalized = span.clone().normalize()?;
-    let candidate = reaction_span_canonical_candidate(&normalized, level, context)?;
-    let incidence_level = match level {
-        DescriptionLevel::Topology => IncidenceLevel::Topology,
-        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
-        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
-    };
-    let incidence_graph = normalized.incidence_graph(incidence_level);
-    let remapping =
-        lhs_anchored_remapping_from_order(&normalized, &incidence_graph, &candidate.entity_order);
-    Ok((
-        reaction_span_from_candidate(&normalized, level, &candidate)?,
-        remapping,
-    ))
-}
-
-fn canonical_reaction_span_key(
-    span: &ReactionSpan,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
-    if level == DescriptionLevel::Full {
-        let normalized = span.clone().normalize()?;
-        return Ok(reaction_span_canonical_candidate(&normalized, level, context)?.key);
+impl ReactionSpan {
+    /// The canonical form at `level` and its source-to-canonical remapping.
+    fn tracked_canonicalize_at(
+        self,
+        level: DescriptionLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<(Self, MoleculeRemapping), ReactionSpanCanonicalizeError> {
+        let normalized = self.normalize()?;
+        let candidate = reaction_span_canonical_candidate(&normalized, level, context)?;
+        let incidence_level = match level {
+            DescriptionLevel::Topology => IncidenceLevel::Topology,
+            DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+            DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+        };
+        let incidence_graph = normalized.incidence_graph(incidence_level);
+        let remapping = lhs_anchored_remapping_from_order(
+            &normalized,
+            &incidence_graph,
+            &candidate.entity_order,
+        );
+        Ok((
+            reaction_span_from_candidate(&normalized, level, &candidate)?,
+            remapping,
+        ))
     }
-    Ok(reaction_span_canonical_candidate(span, level, context)?.key)
-}
 
-fn canonicalize_reaction_span_by_effective(
-    span: &ReactionSpan,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<ReactionSpan, ReactionSpanCanonicalizeError> {
-    canonicalize_reaction_span_by(span, level, context)
-}
-
-fn canonicalize_reaction_span_with_remapping_by_effective(
-    span: &ReactionSpan,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<(ReactionSpan, MoleculeRemapping), ReactionSpanCanonicalizeError> {
-    Ok(canonicalize_checked_reaction_span_with_remapping_by(
-        span, level, context,
-    )?)
+    /// The comparison key of the canonical form at `level`: the key canonical equality compares.
+    fn canonical_key_at(
+        &self,
+        level: DescriptionLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
+        if level == DescriptionLevel::Full {
+            let normalized = self.clone().normalize()?;
+            return Ok(reaction_span_canonical_candidate(&normalized, level, context)?.key);
+        }
+        Ok(reaction_span_canonical_candidate(self, level, context)?.key)
+    }
 }
 
 impl Canonicalize for ReactionSpan {
@@ -5085,7 +4972,8 @@ impl Canonicalize for ReactionSpan {
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
         let level = reaction_span_canonicalize_level(&self);
-        canonicalize_reaction_span_by_effective(&self, level, context)
+        self.tracked_canonicalize_at(level, context)
+            .map(|(canonical, _)| canonical)
     }
 
     fn tracked_canonicalize(
@@ -5093,7 +4981,7 @@ impl Canonicalize for ReactionSpan {
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error> {
         let level = reaction_span_canonicalize_level(&self);
-        canonicalize_reaction_span_with_remapping_by_effective(&self, level, context)
+        self.tracked_canonicalize_at(level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
@@ -5103,8 +4991,8 @@ impl Canonicalize for ReactionSpan {
         let level =
             reaction_span_canonicalize_level(self).max(reaction_span_canonicalize_level(other));
         match (
-            canonical_reaction_span_key(self, level, context),
-            canonical_reaction_span_key(other, level, context),
+            self.canonical_key_at(level, context),
+            other.canonical_key_at(level, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
@@ -5125,32 +5013,38 @@ pub enum ReactionCanonicalizeError {
     Contradiction(#[from] Contradiction),
 }
 
-fn canonicalize_reaction_by(
-    reaction: &Reaction,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<Reaction, ReactionCanonicalizeError> {
-    let span = reaction.to_reaction_span()?;
-    Ok(canonicalize_checked_reaction_span_by(&span, level, context)?.to_reaction())
+impl From<ReactionSpanCanonicalizeError> for ReactionCanonicalizeError {
+    fn from(error: ReactionSpanCanonicalizeError) -> Self {
+        match error {
+            ReactionSpanCanonicalizeError::Contradiction(contradiction) => {
+                Self::Contradiction(contradiction)
+            }
+        }
+    }
 }
 
-fn canonicalize_reaction_by_effective(
-    reaction: &Reaction,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<Reaction, ReactionCanonicalizeError> {
-    canonicalize_reaction_by(reaction, level, context)
-}
+impl Reaction {
+    /// The canonical form at `level`, read back from the canonical reaction span, and the
+    /// remapping between the two span union frames.
+    fn tracked_canonicalize_at(
+        self,
+        level: DescriptionLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<(Self, MoleculeRemapping), ReactionCanonicalizeError> {
+        let (canonical, remapping) = self
+            .to_reaction_span()?
+            .tracked_canonicalize_at(level, context)?;
+        Ok((canonical.to_reaction(), remapping))
+    }
 
-fn canonicalize_reaction_with_remapping_by_effective(
-    reaction: &Reaction,
-    level: DescriptionLevel,
-    context: &CanonicalizeContext,
-) -> Result<(Reaction, MoleculeRemapping), ReactionCanonicalizeError> {
-    let span = reaction.to_reaction_span()?;
-    let (canonical, remapping) =
-        canonicalize_checked_reaction_span_with_remapping_by(&span, level, context)?;
-    Ok((canonical.to_reaction(), remapping))
+    /// The comparison key of the canonical reaction span at `level`.
+    fn canonical_key_at(
+        &self,
+        level: DescriptionLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<CanonicalComparisonKey, ReactionCanonicalizeError> {
+        Ok(self.to_reaction_span()?.canonical_key_at(level, context)?)
+    }
 }
 
 impl Canonicalize for Reaction {
@@ -5158,7 +5052,8 @@ impl Canonicalize for Reaction {
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
         let level = reaction_canonicalize_level(&self);
-        canonicalize_reaction_by_effective(&self, level, context)
+        self.tracked_canonicalize_at(level, context)
+            .map(|(canonical, _)| canonical)
     }
 
     fn tracked_canonicalize(
@@ -5166,7 +5061,7 @@ impl Canonicalize for Reaction {
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error> {
         let level = reaction_canonicalize_level(&self);
-        canonicalize_reaction_with_remapping_by_effective(&self, level, context)
+        self.tracked_canonicalize_at(level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
@@ -5175,8 +5070,8 @@ impl Canonicalize for Reaction {
         }
         let level = reaction_canonicalize_level(self).max(reaction_canonicalize_level(other));
         match (
-            canonicalize_reaction_by_effective(self, level, context),
-            canonicalize_reaction_by_effective(other, level, context),
+            self.canonical_key_at(level, context),
+            other.canonical_key_at(level, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (

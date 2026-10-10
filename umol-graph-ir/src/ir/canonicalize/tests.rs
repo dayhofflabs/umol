@@ -1084,7 +1084,10 @@ fn test_molecule_canonicalize_description_level(
     #[case] source: Molecule,
     #[case] expected: DescriptionLevel,
 ) {
-    let forced_full = canonicalize_full(&source, &canonicalize_context)
+    let forced_full = source
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Full, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
         .expect("representative molecule canonicalizes at Full");
     let canonical = source
         .clone()
@@ -1198,9 +1201,11 @@ fn test_reaction_canonicalize_description_level(
     #[case] source: Reaction,
     #[case] expected: DescriptionLevel,
 ) {
-    let forced_full =
-        canonicalize_reaction_by(&source, DescriptionLevel::Full, &canonicalize_context)
-            .expect("representative reaction canonicalizes at Full");
+    let forced_full = source
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Full, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
+        .expect("representative reaction canonicalizes at Full");
     let canonical = source
         .clone()
         .canonicalize(&canonicalize_context)
@@ -1321,9 +1326,11 @@ fn test_reaction_span_canonicalize_description_level(
     let source = reaction
         .to_reaction_span()
         .expect("representative reaction materializes");
-    let forced_full =
-        canonicalize_reaction_span_by(&source, DescriptionLevel::Full, &canonicalize_context)
-            .expect("representative span canonicalizes at Full");
+    let forced_full = source
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Full, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
+        .expect("representative span canonicalizes at Full");
     let canonical = source
         .clone()
         .canonicalize(&canonicalize_context)
@@ -1681,7 +1688,7 @@ fn test_canonicalize_structure_para_stereo(
         para_stereo: true,
         ..canonicalize_context
     };
-    let (canonical, remapping) = canonicalize_structure_with_options(
+    let (canonical, remapping) = canonicalize_structure(
         &para_stereo_canonicalization_molecule,
         &context,
         CanonicalSearchOptions {
@@ -1690,7 +1697,7 @@ fn test_canonicalize_structure_para_stereo(
         },
     )
     .expect("fixed molecule canonicalizes");
-    let (unpruned, unpruned_remapping) = canonicalize_structure_with_options(
+    let (unpruned, unpruned_remapping) = canonicalize_structure(
         &para_stereo_canonicalization_molecule,
         &context,
         CanonicalSearchOptions {
@@ -1714,10 +1721,19 @@ fn test_canonicalize_structure_para_stereo(
         Ok(canonical.clone()),
     );
     assert_eq!(
-        canonicalize_structure(&renumbered, &context),
+        renumbered
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &context)
+            .map(|(canonical, _)| canonical),
         Ok(canonical.clone()),
     );
-    assert_eq!(canonicalize_structure(&canonical, &context), Ok(canonical));
+    assert_eq!(
+        canonical
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &context)
+            .map(|(canonical, _)| canonical),
+        Ok(canonical)
+    );
 }
 
 #[rstest]
@@ -1761,18 +1777,24 @@ fn test_canonicalize_structure_stereo_atom(
         Vec::new(),
     ]);
     let renumbered = stereo_atom_canonicalization_molecule.remap(&renumbering);
-    let canonical = canonicalize_structure(
-        &stereo_atom_canonicalization_molecule,
-        &canonicalize_context,
-    )
-    .expect("fixed molecule canonicalizes");
+    let canonical = stereo_atom_canonicalization_molecule
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
+        .expect("fixed molecule canonicalizes");
 
     assert_eq!(
-        canonicalize_structure(&renumbered, &canonicalize_context),
+        renumbered
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(canonical.clone()),
     );
     assert_eq!(
-        canonicalize_structure(&canonical, &canonicalize_context),
+        canonical
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(canonical.clone()),
     );
     assert_eq!(canonical.check_integrity(), Ok(()));
@@ -1791,11 +1813,14 @@ fn test_canonicalize_structure_configuration(
         .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32);
 
     assert_ne!(
-        canonicalize_structure(
-            &stereo_atom_canonicalization_molecule,
-            &canonicalize_context,
-        ),
-        canonicalize_structure(&opposite, &canonicalize_context),
+        stereo_atom_canonicalization_molecule
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
+        opposite
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
     );
 }
 
@@ -1815,18 +1840,24 @@ fn test_canonicalize_structure_stereo_bond(
         vec![0],
     ]);
     let renumbered = stereo_bond_canonicalization_molecule.remap(&renumbering);
-    let canonical = canonicalize_structure(
-        &stereo_bond_canonicalization_molecule,
-        &canonicalize_context,
-    )
-    .expect("fixed molecule canonicalizes");
+    let canonical = stereo_bond_canonicalization_molecule
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
+        .expect("fixed molecule canonicalizes");
 
     assert_eq!(
-        canonicalize_structure(&renumbered, &canonicalize_context),
+        renumbered
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(canonical.clone()),
     );
     assert_eq!(
-        canonicalize_structure(&canonical, &canonicalize_context),
+        canonical
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(canonical.clone()),
     );
     assert_eq!(canonical.check_integrity(), Ok(()));
@@ -1856,8 +1887,14 @@ fn test_canonicalize_structure_stereo_atom_constraints(
         .expect("integrity-valid molecule reframes");
 
     assert_eq!(
-        canonicalize_structure(&reframed, &canonicalize_context),
-        canonicalize_structure(&source, &canonicalize_context),
+        reframed
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
+        source
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
     );
 }
 
@@ -1882,9 +1919,15 @@ fn test_canonicalize_structure_stereo_bond_constraints(
         .clone()
         .reframe()
         .expect("integrity-valid molecule reframes");
-    let left = canonicalize_structure(&source, &canonicalize_context)
+    let left = source
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
         .expect("fixed molecule canonicalizes");
-    let right = canonicalize_structure(&reframed, &canonicalize_context)
+    let right = reframed
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
         .expect("reframed molecule canonicalizes");
 
     assert_eq!(
@@ -2017,13 +2060,16 @@ fn test_canonicalize_molecule_by_effective_regression(
         DescriptionLevel::Structure,
         DescriptionLevel::Full,
     ] {
-        let canonical = canonicalize_molecule_by_effective(&source, level, &canonicalize_context)
+        let canonical = source
+            .clone()
+            .tracked_canonicalize_at(level, &canonicalize_context)
+            .map(|(canonical, _)| canonical)
             .expect("retained molecule canonicalizes");
 
         assert_eq!(canonical, expected);
         assert_eq!(
-            canonical_key_by(&canonical, level, &canonicalize_context),
-            canonical_key_by(&expected, level, &canonicalize_context),
+            canonical.canonical_key_at(level, &canonicalize_context),
+            expected.canonical_key_at(level, &canonicalize_context),
         );
     }
 
@@ -2176,16 +2222,12 @@ fn test_canonical_key_by_topology(canonicalize_context: CanonicalizeContext) {
     });
 
     assert_eq!(
-        canonical_key_by(&left, DescriptionLevel::Topology, &canonicalize_context),
-        canonical_key_by(&right, DescriptionLevel::Topology, &canonicalize_context),
+        left.canonical_key_at(DescriptionLevel::Topology, &canonicalize_context),
+        right.canonical_key_at(DescriptionLevel::Topology, &canonicalize_context),
     );
     assert_ne!(
-        canonical_key_by(&left, DescriptionLevel::Constitution, &canonicalize_context,),
-        canonical_key_by(
-            &right,
-            DescriptionLevel::Constitution,
-            &canonicalize_context,
-        ),
+        left.canonical_key_at(DescriptionLevel::Constitution, &canonicalize_context),
+        right.canonical_key_at(DescriptionLevel::Constitution, &canonicalize_context),
     );
 }
 
@@ -2209,28 +2251,14 @@ fn test_canonical_key_by_constitution(
     });
 
     assert_eq!(
-        canonical_key_by(
-            &constitution,
-            DescriptionLevel::Constitution,
-            &canonicalize_context,
-        ),
-        canonical_key_by(
-            &stereo_atom_canonicalization_molecule,
-            DescriptionLevel::Constitution,
-            &canonicalize_context,
-        ),
+        constitution.canonical_key_at(DescriptionLevel::Constitution, &canonicalize_context),
+        stereo_atom_canonicalization_molecule
+            .canonical_key_at(DescriptionLevel::Constitution, &canonicalize_context),
     );
     assert_ne!(
-        canonical_key_by(
-            &constitution,
-            DescriptionLevel::Structure,
-            &canonicalize_context,
-        ),
-        canonical_key_by(
-            &stereo_atom_canonicalization_molecule,
-            DescriptionLevel::Structure,
-            &canonicalize_context,
-        ),
+        constitution.canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
+        stereo_atom_canonicalization_molecule
+            .canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
     );
 }
 
@@ -2248,16 +2276,12 @@ fn test_canonical_key_by_structure(canonicalize_context: CanonicalizeContext) {
     });
 
     assert_eq!(
-        canonical_key_by(&plain, DescriptionLevel::Structure, &canonicalize_context),
-        canonical_key_by(
-            &constrained,
-            DescriptionLevel::Structure,
-            &canonicalize_context,
-        ),
+        plain.canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
+        constrained.canonical_key_at(DescriptionLevel::Structure, &canonicalize_context),
     );
     assert_ne!(
-        canonical_key_by(&plain, DescriptionLevel::Full, &canonicalize_context),
-        canonical_key_by(&constrained, DescriptionLevel::Full, &canonicalize_context,),
+        plain.canonical_key_at(DescriptionLevel::Full, &canonicalize_context),
+        constrained.canonical_key_at(DescriptionLevel::Full, &canonicalize_context),
     );
 }
 
@@ -2398,9 +2422,15 @@ fn test_canonicalize_structure_selected_layer(
     initial_color_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
 ) {
-    let canonical = canonicalize_structure(&initial_color_molecule, &canonicalize_context)
+    let canonical = initial_color_molecule
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
         .expect("fixed molecule canonicalizes");
-    let canonical_again = canonicalize_structure(&canonical, &canonicalize_context)
+    let canonical_again = canonical
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
         .expect("canonical molecule canonicalizes");
 
     assert_eq!(
@@ -2415,11 +2445,11 @@ fn test_canonicalize_structure_renumbering(
     symmetric_stereo_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
 ) {
-    let canonical = canonicalize_structure(
-        &symmetric_stereo_canonicalization_molecule,
-        &canonicalize_context,
-    )
-    .expect("fixed molecule canonicalizes");
+    let canonical = symmetric_stereo_canonicalization_molecule
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
+        .expect("fixed molecule canonicalizes");
 
     for rank in 0..(1..=5).product() {
         let permutation = Permutation::unrank(5, rank);
@@ -2437,7 +2467,7 @@ fn test_canonicalize_structure_renumbering(
             Vec::new(),
         ]);
         let renumbered = symmetric_stereo_canonicalization_molecule.remap(&remapping);
-        let (actual, canonical_remapping) = canonicalize_structure_with_options(
+        let (actual, canonical_remapping) = canonicalize_structure(
             &renumbered,
             &canonicalize_context,
             CanonicalSearchOptions {
@@ -2546,7 +2576,7 @@ fn test_canonicalize_structure_minimum(
             branch_order: BranchOrdering::BackendCanonical,
         },
     ] {
-        let (canonical, remapping) = canonicalize_structure_with_options(
+        let (canonical, remapping) = canonicalize_structure(
             &symmetric_stereo_canonicalization_molecule,
             &CanonicalizeContext {
                 automorphism_algorithm: algorithm,
@@ -2726,8 +2756,14 @@ fn test_canonicalize_structure_meso(
     let renumbered = meso_canonicalization_molecule.remap(&remapping);
 
     assert_eq!(
-        canonicalize_structure(&renumbered, &canonicalize_context),
-        canonicalize_structure(&meso_canonicalization_molecule, &canonicalize_context,),
+        renumbered
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
+        meso_canonicalization_molecule
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
     );
 }
 
@@ -2750,8 +2786,14 @@ fn test_canonicalize_structure_stereo_frame(
         .expect("integrity-valid molecule reframes");
 
     assert_eq!(
-        canonicalize_structure(&reframed, &canonicalize_context),
-        canonicalize_structure(&source, &canonicalize_context),
+        reframed
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
+        source
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
     );
 }
 
@@ -4193,7 +4235,7 @@ fn test_ordered_partition_refine_exhaustive_domain(
                 ..Default::default()
             });
             let renumbered = molecule.remap(&reverse_remapping(&molecule));
-            let (expected, expected_remapping) = canonicalize_topology_with_options(
+            let (expected, expected_remapping) = canonicalize_topology(
                 &molecule,
                 &canonicalize_context,
                 CanonicalSearchOptions {
@@ -4202,7 +4244,7 @@ fn test_ordered_partition_refine_exhaustive_domain(
                 },
             )
             .unwrap();
-            let (actual, actual_remapping) = canonicalize_topology_with_options(
+            let (actual, actual_remapping) = canonicalize_topology(
                 &renumbered,
                 &canonicalize_context,
                 CanonicalSearchOptions {
@@ -4562,7 +4604,10 @@ fn test_canonicalize_topology(canonicalize_context: CanonicalizeContext) {
     });
 
     assert_eq!(
-        canonicalize_topology(&molecule, &canonicalize_context),
+        molecule
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Topology, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(expected),
     );
 }
@@ -4630,12 +4675,16 @@ fn test_canonicalize_topology_relabeling(
         automorphism_pruning: true,
         branch_order: BranchOrdering::BackendCanonical,
     };
-    let expected = canonicalize_topology(&molecule, &canonicalize_context).unwrap();
+    let expected = molecule
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Topology, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
+        .unwrap();
     let renumbered = molecule.remap(&reverse_remapping(&molecule));
 
     for source in [&molecule, &renumbered, &expected] {
         let (actual, remapping) =
-            canonicalize_topology_with_options(source, &canonicalize_context, options).unwrap();
+            canonicalize_topology(source, &canonicalize_context, options).unwrap();
 
         assert_eq!(actual, expected);
         assert!(source.framed_eq_under(&actual, &remapping));
@@ -4677,7 +4726,10 @@ fn test_canonicalize_topology_components(
     #[case] expected: Molecule,
 ) {
     assert_eq!(
-        canonicalize_topology(&molecule, &canonicalize_context),
+        molecule
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Topology, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(expected),
     );
 }
@@ -4709,7 +4761,10 @@ fn test_canonicalize_topology_error(
     #[case] molecule: Molecule,
 ) {
     assert_eq!(
-        canonicalize_topology(&molecule, &canonicalize_context),
+        molecule
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Topology, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Err(MoleculeCanonicalizeError::Contradiction(Contradiction,)),
     );
 }
@@ -4733,7 +4788,7 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
     ]);
     let remapped = molecule.remap(&remapping);
 
-    let (canonical, remapping) = canonicalize_topology_with_options(
+    let (canonical, remapping) = canonicalize_topology(
         &molecule,
         &canonicalize_context,
         CanonicalSearchOptions {
@@ -4742,7 +4797,7 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
         },
     )
     .unwrap();
-    let (canonical_remapped, remapped_remapping) = canonicalize_topology_with_options(
+    let (canonical_remapped, remapped_remapping) = canonicalize_topology(
         &remapped,
         &canonicalize_context,
         CanonicalSearchOptions {
@@ -4753,7 +4808,11 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
     .unwrap();
     let canonical_incidence = canonical.incidence_graph(IncidenceLevel::Topology);
     let canonical_remapped_incidence = canonical_remapped.incidence_graph(IncidenceLevel::Topology);
-    let canonical_again = canonicalize_topology(&canonical, &canonicalize_context).unwrap();
+    let canonical_again = canonical
+        .clone()
+        .tracked_canonicalize_at(DescriptionLevel::Topology, &canonicalize_context)
+        .map(|(canonical, _)| canonical)
+        .unwrap();
     let canonical_again_incidence = canonical_again.incidence_graph(IncidenceLevel::Topology);
 
     assert!(molecule.framed_eq_under(&canonical, &remapping));
@@ -4829,7 +4888,7 @@ fn test_canonicalize_topology_exhaustive_domain(
                 ..Default::default()
             });
 
-            let (canonical, remapping) = canonicalize_topology_with_options(
+            let (canonical, remapping) = canonicalize_topology(
                 &molecule,
                 &canonicalize_context,
                 CanonicalSearchOptions {
@@ -4838,7 +4897,7 @@ fn test_canonicalize_topology_exhaustive_domain(
                 },
             )
             .unwrap();
-            let (unpruned, _) = canonicalize_topology_with_options(
+            let (unpruned, _) = canonicalize_topology(
                 &molecule,
                 &canonicalize_context,
                 CanonicalSearchOptions {
@@ -4858,7 +4917,10 @@ fn test_canonicalize_topology_exhaustive_domain(
             );
             assert_eq!(canonical.check_integrity(), Ok(()));
             assert_eq!(
-                canonicalize_topology(&canonical, &canonicalize_context),
+                canonical
+                    .clone()
+                    .tracked_canonicalize_at(DescriptionLevel::Topology, &canonicalize_context)
+                    .map(|(canonical, _)| canonical),
                 Ok(canonical.clone()),
                 "complete bond form {complete_bond_form}, edge mask {edge_mask:#08b}",
             );
@@ -4883,7 +4945,7 @@ fn test_canonicalize_topology_exhaustive_domain(
                 let renumbered = molecule.remap(&renumbering);
 
                 assert_eq!(
-                    canonicalize_topology(&renumbered, &canonicalize_context),
+                    renumbered.clone().tracked_canonicalize_at(DescriptionLevel::Topology, &canonicalize_context).map(|(canonical, _)| canonical),
                     Ok(canonical.clone()),
                     "complete bond form {complete_bond_form}, edge mask {edge_mask:#08b}, renumbering {index}",
                 );
@@ -5014,7 +5076,7 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
     let expected = molecule.remap(&expected_remapping).reframe().unwrap();
 
     assert_eq!(
-        canonicalize_constitution_with_options(
+        canonicalize_constitution(
             &molecule,
             &canonicalize_context,
             CanonicalSearchOptions {
@@ -5079,7 +5141,7 @@ fn test_canonicalize_constitution_excluded_data(canonicalize_context: Canonicali
         ..Default::default()
     });
 
-    let (_, left_remapping) = canonicalize_constitution_with_options(
+    let (_, left_remapping) = canonicalize_constitution(
         &left,
         &canonicalize_context,
         CanonicalSearchOptions {
@@ -5088,7 +5150,7 @@ fn test_canonicalize_constitution_excluded_data(canonicalize_context: Canonicali
         },
     )
     .unwrap();
-    let (_, right_remapping) = canonicalize_constitution_with_options(
+    let (_, right_remapping) = canonicalize_constitution(
         &right,
         &canonicalize_context,
         CanonicalSearchOptions {
@@ -5107,7 +5169,7 @@ fn test_canonicalize_constitution_properties(
     canonicalize_context: CanonicalizeContext,
 ) {
     let normalized_source = initial_color_molecule.clone().normalize().unwrap();
-    let (canonical, remapping) = canonicalize_constitution_with_options(
+    let (canonical, remapping) = canonicalize_constitution(
         &initial_color_molecule,
         &canonicalize_context,
         CanonicalSearchOptions {
@@ -5141,7 +5203,7 @@ fn test_canonicalize_constitution_properties(
     assert!(canonical.framed_eq_under(&normalized_source, &inverse));
     assert_eq!(canonical.check_integrity(), Ok(()));
 
-    let (canonical_again, _) = canonicalize_constitution_with_options(
+    let (canonical_again, _) = canonicalize_constitution(
         &canonical,
         &canonicalize_context,
         CanonicalSearchOptions {
@@ -5170,7 +5232,7 @@ fn test_canonicalize_constitution_properties(
 
     let renumbering = reverse_remapping(&initial_color_molecule);
     let renumbered = initial_color_molecule.remap(&renumbering);
-    let (canonical_renumbered, renumbered_remapping) = canonicalize_constitution_with_options(
+    let (canonical_renumbered, renumbered_remapping) = canonicalize_constitution(
         &renumbered,
         &canonicalize_context,
         CanonicalSearchOptions {
@@ -5281,7 +5343,7 @@ fn test_canonicalize_constitution_properties(
         ),
     );
 
-    let (unpruned, _) = canonicalize_constitution_with_options(
+    let (unpruned, _) = canonicalize_constitution(
         &initial_color_molecule,
         &canonicalize_context,
         CanonicalSearchOptions {
@@ -5396,7 +5458,7 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             adapter_entity_blocks(&incidence_graph),
             &leaf_candidate,
         );
-        let (canonical, remapping) = canonicalize_constitution_with_options(
+        let (canonical, remapping) = canonicalize_constitution(
             &molecule,
             &canonicalize_context,
             CanonicalSearchOptions {
@@ -5405,7 +5467,7 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             },
         )
         .unwrap();
-        let (unpruned, _) = canonicalize_constitution_with_options(
+        let (unpruned, _) = canonicalize_constitution(
             &molecule,
             &canonicalize_context,
             CanonicalSearchOptions {
@@ -5450,7 +5512,10 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             let renumbered = molecule.remap(&molecule_remapping(&images));
 
             assert_eq!(
-                canonicalize_constitution(&renumbered, &canonicalize_context),
+                renumbered
+                    .clone()
+                    .tracked_canonicalize_at(DescriptionLevel::Constitution, &canonicalize_context)
+                    .map(|(canonical, _)| canonical),
                 Ok(canonical.clone()),
                 "{entity_kind}, renumbering {index}",
             );
@@ -5510,8 +5575,13 @@ fn test_canonicalize_constitution_participant_order(canonicalize_context: Canoni
     });
 
     assert_eq!(
-        canonicalize_constitution(&right, &canonicalize_context),
-        canonicalize_constitution(&left, &canonicalize_context),
+        right
+            .clone()
+            .tracked_canonicalize_at(DescriptionLevel::Constitution, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
+        left.clone()
+            .tracked_canonicalize_at(DescriptionLevel::Constitution, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
     );
 }
 
@@ -5560,7 +5630,10 @@ fn test_canonicalize_constitution_contradiction(canonicalize_context: Canonicali
         ("excluded stereo", excluded_stereo),
     ] {
         assert_eq!(
-            canonicalize_constitution(&molecule, &canonicalize_context),
+            molecule
+                .clone()
+                .tracked_canonicalize_at(DescriptionLevel::Constitution, &canonicalize_context)
+                .map(|(canonical, _)| canonical),
             Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),
             "{location}",
         );
@@ -5862,11 +5935,17 @@ fn test_canonicalize_checked_reaction_span_by(
     });
 
     assert_eq!(
-        canonicalize_checked_reaction_span_by(&source, level, &canonicalize_context,),
+        source
+            .clone()
+            .tracked_canonicalize_at(level, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(expected.clone()),
     );
     assert_eq!(
-        canonicalize_reaction_span_by(&source, level, &canonicalize_context),
+        source
+            .clone()
+            .tracked_canonicalize_at(level, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(expected),
     );
 }
@@ -5895,12 +5974,15 @@ fn test_canonicalize_checked_reaction_span_modified(
     });
 
     assert_eq!(
-        canonicalize_checked_reaction_span_by(&source, level, &canonicalize_context),
+        source
+            .clone()
+            .tracked_canonicalize_at(level, &canonicalize_context)
+            .map(|(canonical, _)| canonical),
         Ok(expected.clone()),
     );
     assert_eq!(
-        canonical_reaction_span_key(&source, level, &canonicalize_context),
-        canonical_reaction_span_key(&expected, level, &canonicalize_context),
+        source.canonical_key_at(level, &canonicalize_context),
+        expected.canonical_key_at(level, &canonicalize_context),
     );
 }
 
