@@ -22,8 +22,9 @@ use umol_graph_ir::ir::{
 };
 
 use crate::strategies::{
-    edge_set_strategy, element_strategy, molecule_dense_renumbering_strategy,
-    standardization_scenario_strategy, stereo_reframed_molecule_pair_strategy,
+    edge_set_strategy, element_strategy, molecule_canonical_pair_strategy,
+    molecule_dense_renumbering_strategy, standardization_scenario_strategy,
+    stereo_reframed_molecule_pair_strategy,
 };
 
 fn context() -> CanonicalizeContext {
@@ -388,6 +389,24 @@ proptest! {
             prop_assert!(renumbered.canonical_eq(&canonical, &context));
             prop_assert!(molecule.canonical_eq(&canonical, &context));
         }
+    }
+
+    /// `canonical_eq` agrees with equality of the canonical forms, with two contradictions equal.
+    #[test]
+    fn test_molecule_canonical_eq_contract(
+        (left, right) in molecule_canonical_pair_strategy(),
+    ) {
+        let context = context();
+        let expected = match (
+            left.clone().canonicalize(&context),
+            right.clone().canonicalize(&context),
+        ) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => true,
+            _ => false,
+        };
+
+        prop_assert_eq!(left.canonical_eq(&right, &context), expected);
     }
 
     #[test]

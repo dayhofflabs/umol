@@ -20,7 +20,7 @@ use umol_graph_ir::ir::{
     ReactionCanonicalizeError, ReactionSpan, Reframe,
 };
 
-use super::span::reaction_span_scenario_strategy;
+use super::span::{reaction_canonical_pair_strategy, reaction_span_scenario_strategy};
 use crate::strategies::*;
 
 #[derive(Clone, Copy)]
@@ -479,6 +479,24 @@ proptest! {
         (reaction, expected) in canonicalization_error_strategy(),
     ) {
         prop_assert_eq!(reaction.canonicalize(&context()), Err(expected));
+    }
+
+    /// `canonical_eq` agrees with equality of the canonical forms, with two contradictions equal.
+    #[test]
+    fn test_reaction_canonical_eq_contract(
+        (left, right) in reaction_canonical_pair_strategy(),
+    ) {
+        let context = context();
+        let expected = match (
+            left.clone().canonicalize(&context),
+            right.clone().canonicalize(&context),
+        ) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => true,
+            _ => false,
+        };
+
+        prop_assert_eq!(left.canonical_eq(&right, &context), expected);
     }
 
     #[test]

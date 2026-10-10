@@ -453,50 +453,53 @@ beside an unchanged conjunct and an empty conjunction;
 test_reaction_span_reframe_projection and test_reaction_canonicalize_application
 hold on the S0a6 generators.
 
-#### S0a6 — Molecule-level constraints in aggregate generators
+#### S0a6 — Molecule-level constraints in aggregate generators **Done**
 
-**Modules:** graph-IR property-test strategies. **Additive, green.** [dep: S0a1–S0a5]
+**Modules:** graph-IR property-test strategies and the reaction property tests.
+**Additive, green.** [dep: S0a1–S0a5]
 
 The Molecule properties draw molecule-level constraints from
-molecule_with_constraints_strategy. The ReactionSpan and Reaction generators
-produce none: reaction_span_entries_strategy has no constraint spans, and
-materializable_reaction_strategy builds its lhs from molecules without
-constraints. Give one in ten generated reaction lhs molecules constraint_strategy
-trees sized by their ConstraintCounts, and let reaction_over add constraint
-deltas at the same rate. The span entries strategy produces Unchanged, Added, and
-Removed constraint spans at the same rate. Constraints force the Full
-canonicalization level, so the rate stays small to bound property-suite time.
-Matching rejects patterns with molecule-scope constraints until doc 195's
-evaluation lands, so the application properties that match (test_reaction_apply,
-test_react_react, test_react_react_slice) draw reactions whose lhs carries none;
-the apply_at properties keep them.
+molecule_with_constraints_strategy; the ReactionSpan and Reaction generators
+produced none. materializable_reaction_strategy gives a reaction one or two lhs
+constraint_strategy trees with probability 1/20, each removed by a constraint
+delta with probability 1/2, and independently one added tree with probability
+1/20; reaction_span_strategy gives an entries-built span one or two constraint
+spans with probability 1/10, in constraint order. Trees range over the value's
+own entity counts, and a draw that fails molecule integrity, span integrity, or
+materialization keeps the unconstrained value. Matching rejects patterns with
+molecule-scope constraints until doc 195's evaluation lands, so the application
+properties that match (test_reaction_apply, test_react_react,
+test_react_react_slice) draw from matchable_reaction_strategy, which adds
+constraints but gives the lhs none; the apply_at properties keep them.
+molecule_with_removals_strategy no longer removes a bond that connects a stereo
+site to one of its atom ligands, since topology removal cascades a stereo entity
+only when a participant is removed.
 
-**Tests:** the existing aggregate properties run on the extended generators.
+Measured over 2,000 draws each: 3.8% of materializable reactions carry lhs
+constraints and 5.2% constraint deltas; 2.4% of matchable reactions carry
+constraint deltas and none lhs constraints; 5.4% of reaction spans carry
+constraint spans. The graph-IR property suite runs in 37.5 s, against 33.8 s
+before.
 
-**Verification:** the property suite's wall time before and after the change;
-the share of generated values carrying molecule-level constraints.
+**Tests:** the existing aggregate properties on the extended generators.
 
-#### S0a7 — Canonical equality contract properties
+#### S0a7 — Canonical equality contract properties **Done**
 
 **Modules:** graph-IR property tests for molecule, reaction span, and reaction
 canonicalization. **Additive, green.** [dep: S0a6]
 
-For Molecule, ReactionSpan, and Reaction, assert that canonical_eq agrees with
-equality of the canonical forms in both directions, with two contradictions
-equal. Each test draws a pair from a generated value `a` and a value `b`
-derived from it:
+For Molecule, ReactionSpan, and Reaction, test_<aggregate>_canonical_eq_contract
+asserts that canonical_eq agrees with equality of the canonical forms, with two
+contradictions equal. molecule_canonical_pair_strategy derives `b` from a
+generated molecule by renumbering, normalization, reframing, setting one atom's
+charge, or adding an atom. reaction_canonical_pair_strategy derives it from a
+generated reaction by renumbering its span, normalization, reframing,
+rematerializing its span, a no-op charge modification of one atom, or adding an
+atom; reaction_span_canonical_pair_strategy takes the spans of those pairs.
 
-- equivalent with a different span: `b` converts a non-normal equivalent span
-  of `a` to the aggregate, such as an Unchanged entry written as an equivalent
-  Modified entry or a non-canonical constraint set difference (spans and
-  reactions only);
-- equivalent by renumbering, normalization, or reframing;
-- not equivalent: one attribute or constraint of `a` mutated.
-
-**Tests:** the three contract properties.
-
-**Verification:** the generated pairs include equivalent and non-equivalent
-pairs from every transform.
+Measured over 1,000 pairs each, as identical / canonically equal but different /
+not equal: molecules 17% / 42% / 41%, reaction spans 62% / 16% / 22%, reactions
+35% / 35% / 30%. The properties pass at 256 and at 2,048 cases.
 
 #### S0b — Canonicalization helpers
 

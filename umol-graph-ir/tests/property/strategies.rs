@@ -2402,6 +2402,50 @@ pub(crate) fn molecule_dense_renumbering_strategy(
     })
 }
 
+/// A molecule and a molecule derived from it for the canonical equality contract: its
+/// renumbering, normal form, or reframing (equivalent), one atom's charge set to a drawn literal,
+/// or one added atom (usually not equivalent).
+pub(crate) fn molecule_canonical_pair_strategy() -> impl Strategy<Value = (Molecule, Molecule)> {
+    (
+        molecule_dense_renumbering_strategy(),
+        0u8..5,
+        -2i64..=2,
+        element_strategy(),
+        any::<prop::sample::Index>(),
+    )
+        .prop_map(
+            |((molecule, renumbering), transform, charge, element, index)| {
+                let derived = match transform {
+                    0 => molecule.remap(&renumbering),
+                    1 => molecule
+                        .clone()
+                        .normalize()
+                        .unwrap_or_else(|_| molecule.clone()),
+                    2 => molecule
+                        .clone()
+                        .reframe()
+                        .unwrap_or_else(|_| molecule.clone()),
+                    3 if molecule.atoms().count() > 0 => {
+                        let id = AtomId(index.index(molecule.atoms().count()) as u32);
+                        let mut editor = molecule.clone().edit();
+                        editor.atom_mut(id).attributes_mut().charge = NumForm::Lit(charge);
+                        editor
+                            .finish()
+                            .expect("setting a charge preserves integrity")
+                    }
+                    _ => Molecule::combine_all([
+                        &molecule,
+                        &Molecule::from_entries(MoleculeEntries {
+                            atoms: vec![AtomForm::from_element(element)],
+                            ..Default::default()
+                        }),
+                    ]),
+                };
+                (molecule, derived)
+            },
+        )
+}
+
 /// Raw, satisfiable molecule/reaction/span values sharing all six overlay kinds. Singleton numeric
 /// sets make normalization observable, nonuniform positional payloads make frame transport
 /// observable, and distinct normalized atom charges keep canonicalization inexpensive.

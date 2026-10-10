@@ -10,16 +10,16 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph_core::{Correspondence, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomForm, AtomId, BondId, ConstraintSpan, DativeBondId, EntitySpan, Molecule,
-    MoleculeCorrespondence, MoleculeEntries, MoleculeRemapping, MulticenterBondId,
-    NoncovalentBondId, Normalize, Reaction, ReactionSpan, ReactionSpanEntries, StereoAtomId,
-    StereoBondId, StereoLigand,
+    AromaticSystemId, AtomDelta, AtomFieldChange, AtomForm, AtomId, BondId, ConstraintSpan,
+    DativeBondId, Delta, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries,
+    MoleculeRemapping, MulticenterBondId, NoncovalentBondId, Normalize, Reaction, ReactionSpan,
+    ReactionSpanEntries, Reframe, StereoAtomId, StereoBondId, StereoLigand,
 };
 
 use crate::strategies::{
-    constraint_strategy, materializable_reaction_strategy, molecule_entries_strategy,
-    molecule_entries_structurally_unambiguous_strategy, overlay_reaction_strategy,
-    reaction_strategy, with_normalized_constraints, ConstraintCounts,
+    constraint_strategy, element_strategy, materializable_reaction_strategy,
+    molecule_entries_strategy, molecule_entries_structurally_unambiguous_strategy,
+    overlay_reaction_strategy, reaction_strategy, with_normalized_constraints, ConstraintCounts,
 };
 
 #[path = "span/canonicalize.rs"]
@@ -454,6 +454,77 @@ pub(super) fn reaction_span_scenario_strategy() -> impl Strategy<Value = Reactio
             first: dense_union_remapping(&span, first_seed),
             second: dense_union_remapping(&span, second_seed),
             span,
+        },
+    )
+}
+
+/// A reaction and a reaction derived from it for the canonical equality contract: its
+/// renumbering, normal form, or reframing, its span rematerialized, or a no-op charge
+/// modification of one atom (equivalent), or one added atom (usually not equivalent).
+pub(super) fn reaction_canonical_pair_strategy() -> impl Strategy<Value = (Reaction, Reaction)> {
+    (
+        reaction_span_scenario_strategy(),
+        0u8..6,
+        element_strategy(),
+        any::<prop::sample::Index>(),
+    )
+        .prop_map(|(scenario, transform, element, index)| {
+            let reaction = scenario.span.to_reaction();
+            let derived = match transform {
+                0 => scenario.span.remap(&scenario.first).to_reaction(),
+                1 => reaction
+                    .clone()
+                    .normalize()
+                    .unwrap_or_else(|_| reaction.clone()),
+                2 => reaction
+                    .clone()
+                    .reframe()
+                    .unwrap_or_else(|_| reaction.clone()),
+                3 => reaction
+                    .to_reaction_span()
+                    .map(|span| span.to_reaction())
+                    .unwrap_or_else(|_| reaction.clone()),
+                4 if reaction.lhs().atoms().count() > 0 => {
+                    let id = AtomId(index.index(reaction.lhs().atoms().count()) as u32);
+                    let charge = reaction.lhs().atom(id).attributes().charge.clone();
+                    let mut deltas = reaction.deltas().clone();
+                    deltas.push(Delta::Atom(AtomDelta::ModifyField {
+                        id,
+                        change: AtomFieldChange::Charge {
+                            old: charge.clone(),
+                            new: charge,
+                        },
+                    }));
+                    Reaction::new(reaction.lhs().clone(), deltas)
+                }
+                _ => {
+                    let added = reaction
+                        .deltas()
+                        .iter()
+                        .filter(|delta| matches!(delta, Delta::Atom(AtomDelta::Add { .. })))
+                        .count();
+                    let mut deltas = reaction.deltas().clone();
+                    deltas.push(Delta::Atom(AtomDelta::Add {
+                        id: AtomId((reaction.lhs().atoms().count() + added) as u32),
+                        attributes: AtomForm::from_element(element),
+                    }));
+                    Reaction::new(reaction.lhs().clone(), deltas)
+                }
+            };
+            (reaction, derived)
+        })
+}
+
+/// A reaction span and a span derived from it, through the reaction pairs.
+pub(super) fn reaction_span_canonical_pair_strategy(
+) -> impl Strategy<Value = (ReactionSpan, ReactionSpan)> {
+    reaction_canonical_pair_strategy().prop_filter_map(
+        "both reactions materialize",
+        |(reaction, derived)| {
+            Some((
+                reaction.to_reaction_span().ok()?,
+                derived.to_reaction_span().ok()?,
+            ))
         },
     )
 }
