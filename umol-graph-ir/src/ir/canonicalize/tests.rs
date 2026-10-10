@@ -1106,7 +1106,7 @@ fn test_molecule_canonicalize_description_level(
     assert_eq!(source.remap(&remapping).reframe(), Ok(canonical.clone()));
     assert_eq!(
         source.canonical_hash(&canonicalize_context),
-        Ok(hash_value(&canonical)),
+        canonical.canonical_hash(&canonicalize_context),
     );
 }
 
@@ -1228,7 +1228,7 @@ fn test_reaction_canonicalize_description_level(
     assert_eq!(transported, canonical);
     assert_eq!(
         source.canonical_hash(&canonicalize_context),
-        Ok(hash_value(&canonical)),
+        canonical.canonical_hash(&canonicalize_context),
     );
 }
 
@@ -1349,7 +1349,7 @@ fn test_reaction_span_canonicalize_description_level(
     assert_eq!(source.remap(&remapping).reframe(), Ok(canonical.clone()));
     assert_eq!(
         source.canonical_hash(&canonicalize_context),
-        Ok(hash_value(&canonical)),
+        canonical.canonical_hash(&canonicalize_context),
     );
 }
 

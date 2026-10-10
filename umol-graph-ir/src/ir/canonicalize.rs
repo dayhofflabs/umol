@@ -358,7 +358,8 @@ pub trait Canonicalize: Reframe {
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), Self::Error>;
 
-    /// Hash the complete canonical form.
+    /// Hash the comparison key of the complete canonical form, the value canonical equality
+    /// compares.
     ///
     /// The returned value uses Rust's [`DefaultHasher`]. It may collide and is not a persistent
     /// identifier: both the hasher and umol's canonical comparison schema may change between
@@ -370,15 +371,9 @@ pub trait Canonicalize: Reframe {
     ///
     /// # Semantic properties
     ///
-    /// Successful hashes are invariant under valid dense entity remapping. Two successfully
-    /// canonicalized values that are equal have equal canonical hashes.
-    fn canonical_hash(self, context: &CanonicalizeContext) -> Result<u64, Self::Error>
-    where
-        Self: Hash,
-    {
-        self.canonicalize(context)
-            .map(|canonical| hash_value(&canonical))
-    }
+    /// Successful hashes are invariant under valid dense entity remapping. Canonically equal
+    /// values have equal canonical hashes when both hash operations succeed.
+    fn canonical_hash(&self, context: &CanonicalizeContext) -> Result<u64, Self::Error>;
 
     /// Compare complete canonical forms.
     ///
@@ -4822,6 +4817,12 @@ impl Canonicalize for Molecule {
         self.tracked_canonicalize_at(level, context)
     }
 
+    fn canonical_hash(&self, context: &CanonicalizeContext) -> Result<u64, Self::Error> {
+        let level = molecule_canonicalize_level(self);
+        self.canonical_key_at(level, context)
+            .map(|key| hash_value(&key))
+    }
+
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
@@ -4984,6 +4985,12 @@ impl Canonicalize for ReactionSpan {
         self.tracked_canonicalize_at(level, context)
     }
 
+    fn canonical_hash(&self, context: &CanonicalizeContext) -> Result<u64, Self::Error> {
+        let level = reaction_span_canonicalize_level(self);
+        self.canonical_key_at(level, context)
+            .map(|key| hash_value(&key))
+    }
+
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
@@ -5062,6 +5069,12 @@ impl Canonicalize for Reaction {
     ) -> Result<(Self, MoleculeRemapping), Self::Error> {
         let level = reaction_canonicalize_level(&self);
         self.tracked_canonicalize_at(level, context)
+    }
+
+    fn canonical_hash(&self, context: &CanonicalizeContext) -> Result<u64, Self::Error> {
+        let level = reaction_canonicalize_level(self);
+        self.canonical_key_at(level, context)
+            .map(|key| hash_value(&key))
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {

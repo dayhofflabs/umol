@@ -5,8 +5,6 @@
 //! complete equality and canonical-hash relations, LHS anchoring, reaction-normal-form convergence,
 //! integrity, and the documented weakened reversal law.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
-
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
@@ -25,12 +23,6 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
-}
-
-fn structural_hash<T: Hash>(value: &T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn reaction_normal_form(span: &ReactionSpan) -> ReactionSpan {
@@ -151,13 +143,13 @@ proptest! {
         let renumbered = scenario.span.remap(&scenario.first);
 
         prop_assert_eq!(
-            scenario.span.clone().canonical_hash(&context),
-            renumbered.clone().canonical_hash(&context),
+            scenario.span.canonical_hash(&context),
+            renumbered.canonical_hash(&context),
         );
         if let Ok(canonical) = scenario.span.clone().canonicalize(&context) {
             prop_assert_eq!(
                 scenario.span.canonical_hash(&context),
-                Ok(structural_hash(&canonical)),
+                canonical.canonical_hash(&context),
             );
         }
     }
@@ -198,6 +190,11 @@ proptest! {
         };
 
         prop_assert_eq!(left.canonical_eq(&right, &context), expected);
+        match (left.canonical_hash(&context), right.canonical_hash(&context)) {
+            (Ok(left), Ok(right)) => prop_assert_eq!(left == right, expected),
+            (Err(_), Err(_)) => prop_assert!(expected),
+            _ => prop_assert!(!expected),
+        }
     }
 
     #[test]

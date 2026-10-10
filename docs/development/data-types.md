@@ -427,7 +427,7 @@ pub trait Canonicalize: Reframe {
     ) -> Result<(Self, MoleculeRemapping), Self::Error>;
 
     fn canonical_hash(
-        self,
+        &self,
         context: &CanonicalizeContext,
     ) -> Result<u64, Self::Error>;
 

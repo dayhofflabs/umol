@@ -9,8 +9,6 @@
 //! constitution-bearing, and structure-bearing molecules, plus adjacent description-level
 //! operands for binary equality.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
-
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
@@ -32,12 +30,6 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
-}
-
-fn structural_hash<T: Hash>(value: &T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn dense_renumbering_strategy(molecule: Molecule) -> BoxedStrategy<(Molecule, MoleculeRemapping)> {
@@ -298,8 +290,8 @@ proptest! {
         prop_assert_eq!(molecule.clone().canonicalize(&context), Ok(canonical.clone()));
         prop_assert_eq!(renumbered.clone().canonicalize(&context), Ok(canonical.clone()));
         prop_assert_eq!(
-            molecule.clone().canonical_hash(&context),
-            renumbered.clone().canonical_hash(&context),
+            molecule.canonical_hash(&context),
+            renumbered.canonical_hash(&context),
         );
         prop_assert_eq!(
             molecule.remap(&correspondence).reframe(),
@@ -346,13 +338,13 @@ proptest! {
         let renumbered = molecule.remap(&renumbering);
 
         prop_assert_eq!(
-            molecule.clone().canonical_hash(&context),
-            renumbered.clone().canonical_hash(&context),
+            molecule.canonical_hash(&context),
+            renumbered.canonical_hash(&context),
         );
         if let Ok(canonical) = molecule.clone().canonicalize(&context) {
             prop_assert_eq!(
                 molecule.canonical_hash(&context),
-                Ok(structural_hash(&canonical)),
+                canonical.canonical_hash(&context),
             );
         }
     }
@@ -407,6 +399,11 @@ proptest! {
         };
 
         prop_assert_eq!(left.canonical_eq(&right, &context), expected);
+        match (left.canonical_hash(&context), right.canonical_hash(&context)) {
+            (Ok(left), Ok(right)) => prop_assert_eq!(left == right, expected),
+            (Err(_), Err(_)) => prop_assert!(expected),
+            _ => prop_assert!(!expected),
+        }
     }
 
     #[test]

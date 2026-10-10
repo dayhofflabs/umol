@@ -559,7 +559,7 @@ reaction canonical_eq cases, median changes were within ±3% except Reaction
 canonical_eq, which is 16–18% faster at the median and up to 29% faster on small
 reactions; single-case outliers did not reproduce on rerun.
 
-#### S0c — Borrowing canonical_hash
+#### S0c — Borrowing canonical_hash **Done**
 
 **Modules:** graph-IR canonicalization; Python bindings that call it.
 **Breaking, red→green within the subitem.** [dep: S0b]
@@ -570,11 +570,16 @@ canonical_eq compares. Equal comparison keys then imply equal hashes.
 
 Update the Canonicalize trait listing in the data-type guide.
 
-**Tests:** hash equality for canonically equal inputs under remapping;
-agreement with canonical_eq on equal and unequal pairs; contradiction errors.
+No Python binding calls canonical_hash.
+
+**Tests:** hash equality for canonically equal inputs under remapping, and a
+value and its canonical form hash alike; the canonical equality contract
+properties also assert that the hashes agree with canonical_eq on their pairs,
+with two errors equal.
 
 **Verification:** the canonicalize bench canonical_hash cases, against a
-baseline taken before the change.
+baseline taken before the change: 4–7% faster, since the hash no longer builds
+the canonical form.
 
 #### S0d — Consuming tower implementations move their storage
 
