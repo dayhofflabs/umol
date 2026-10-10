@@ -1,7 +1,5 @@
 //! Boolean form.
 
-use std::borrow::Cow;
-
 use super::error::{Contradiction, NoJoinError};
 use super::traits::{AsLit, Lattice, Normalize};
 
@@ -33,8 +31,8 @@ impl Normalize for BooleanForm {
         Ok(self)
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        Ok(Cow::Borrowed(self))
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -160,5 +158,14 @@ mod tests {
     #[case::undetermined(BooleanForm::Undetermined)]
     fn test_boolean_form_normalize(#[case] b: BooleanForm) {
         assert_eq!(b.normalize(), Ok(b));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_boolean_form_normalized_eq_default(
+        #[values(BooleanForm::Undetermined, BooleanForm::Lit(true), BooleanForm::Lit(false))] left: BooleanForm,
+        #[values(BooleanForm::Undetermined, BooleanForm::Lit(true), BooleanForm::Lit(false))] right: BooleanForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.normalize() == right.normalize());
     }
 }

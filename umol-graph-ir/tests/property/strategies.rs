@@ -199,9 +199,9 @@ pub(crate) fn raw_num_form_strategy() -> BoxedStrategy<NumForm> {
     .boxed()
 }
 
-// Raw (non-normal, satisfiable) generators for the remaining
-// `normalized()`-overriding leaves, to fuzz the *fold* path of the universal
-// lattice laws (the normalizing strategies only ever reach the borrow path).
+// Raw (non-normal, satisfiable) generators for the remaining leaves with a
+// fold path, to fuzz the *fold* path of the universal lattice laws (the
+// normalizing strategies only ever produce normal values).
 // Each mixes deliberately non-normal draws with the normalized strategy, then
 // filters to satisfiable values (the `matches` law's RHS only agrees with the
 // default on satisfiable targets).
@@ -1207,11 +1207,6 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     if let Ok(j) = a.join(b) {
         prop_assert_eq!(j.clone().normalize(), Ok(j));
     }
-    // `normalized()` (the borrow fast-path) agrees with `normalize()`.
-    prop_assert_eq!(
-        a.normalized().map(|c| c.into_owned()),
-        a.clone().normalize()
-    );
     // `normalized_eq` is equality of normal forms.
     prop_assert_eq!(
         a.normalized_eq(b),

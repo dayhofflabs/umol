@@ -1,8 +1,6 @@
 //! Electron-count leaf: the per-member-atom electron-count vector shared by
 //! `AromaticSystemForm` and `MulticenterBondForm`.
 
-use std::borrow::Cow;
-
 use umol_graph_core::ParticipantPosition;
 use umol_perm::DynPermutation;
 
@@ -66,8 +64,8 @@ impl Normalize for ElectronCountsForm {
         Ok(self)
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        Ok(Cow::Borrowed(self))
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -198,6 +196,15 @@ mod tests {
     #[case::lit(ElectronCountsForm::Lit(vec![1, 1, 1]))]
     fn test_electron_counts_form_normalize_identity(#[case] input: ElectronCountsForm) {
         assert_eq!(input.clone().normalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_electron_counts_form_normalized_eq_default(
+        #[values(ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![2, 0, 1]))] left: ElectronCountsForm,
+        #[values(ElectronCountsForm::Undetermined, ElectronCountsForm::Lit(vec![1, 1, 1]), ElectronCountsForm::Lit(vec![2, 0, 1]))] right: ElectronCountsForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
 
     #[rustfmt::skip]

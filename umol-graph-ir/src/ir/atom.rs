@@ -1,6 +1,5 @@
 //! Atom forms and updates shared across crates.
 
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
@@ -333,10 +332,11 @@ impl Normalize for ElementForm {
         })
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        match self {
-            ElementForm::Undetermined | ElementForm::Lit(_) => Ok(Cow::Borrowed(self)),
-            _ => Ok(Cow::Owned(self.clone().normalize()?)),
+    /// Structural when both values are trivially normal; otherwise compares normal forms.
+    fn normalized_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined | Self::Lit(_), Self::Undetermined | Self::Lit(_)) => self == other,
+            _ => self == other || self.clone().normalize() == other.clone().normalize(),
         }
     }
 }
@@ -486,17 +486,17 @@ impl Lattice for ElementForm {
     /// Greatest lower bound (set intersection), canonicalizing operands and
     /// result. `Var` meets only an equal `Var`; `Var` vs concrete → `None`.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.normalized().ok()?;
-        let b = other.normalized().ok()?;
+        let a = self.clone().normalize().ok()?;
+        let b = other.clone().normalize().ok()?;
         use ElementForm::*;
-        match (a.as_ref(), b.as_ref()) {
-            (Undetermined, _) => Some(b.as_ref().clone()),
-            (_, Undetermined) => Some(a.as_ref().clone()),
-            (Var(x), Var(y)) => (x == y).then(|| a.as_ref().clone()),
+        match (&a, &b) {
+            (Undetermined, _) => Some(b.clone()),
+            (_, Undetermined) => Some(a.clone()),
+            (Var(x), Var(y)) => (x == y).then(|| a.clone()),
             (Var(_), _) | (_, Var(_)) => None,
             _ => {
-                let (sa, na) = element_set_view(a.as_ref()).unwrap();
-                let (sb, nb) = element_set_view(b.as_ref()).unwrap();
+                let (sa, na) = element_set_view(&a).unwrap();
+                let (sb, nb) = element_set_view(&b).unwrap();
                 let (set, negated) = match (na, nb) {
                     (false, false) => (intersect(&sa, &sb), false),
                     (false, true) => (difference(&sa, &sb), false),
@@ -515,16 +515,16 @@ impl Lattice for ElementForm {
 
     /// Least upper bound (set union), canonicalizing operands and result.
     fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
-        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
+        let a = self.clone().normalize().unwrap_or(Self::Undetermined);
+        let b = other.clone().normalize().unwrap_or(Self::Undetermined);
         use ElementForm::*;
-        Ok(match (a.as_ref(), b.as_ref()) {
+        Ok(match (&a, &b) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
-            (Var(x), Var(y)) if x == y => a.as_ref().clone(),
+            (Var(x), Var(y)) if x == y => a.clone(),
             (Var(_), _) | (_, Var(_)) => Undetermined,
             _ => {
-                let (sa, na) = element_set_view(a.as_ref()).unwrap();
-                let (sb, nb) = element_set_view(b.as_ref()).unwrap();
+                let (sa, na) = element_set_view(&a).unwrap();
+                let (sb, nb) = element_set_view(&b).unwrap();
                 let (set, negated) = match (na, nb) {
                     (false, false) => (union(&sa, &sb), false),
                     (false, true) => (difference(&sb, &sa), true),
@@ -547,8 +547,8 @@ impl Lattice for ElementForm {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::NotSet(_) | Self::Var(_), _) | (_, Self::NotSet(_) | Self::Var(_)) => {
-                match (self.meet(target), target.normalized()) {
-                    (Some(meet), Ok(target)) => meet == *target,
+                match (self.meet(target), target.clone().normalize()) {
+                    (Some(meet), Ok(target)) => meet == target,
                     _ => false,
                 }
             }
@@ -651,12 +651,14 @@ impl Normalize for IsotopeMassForm {
         })
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        match self {
-            IsotopeMassForm::Undetermined | IsotopeMassForm::Natural | IsotopeMassForm::Lit(_) => {
-                Ok(Cow::Borrowed(self))
-            }
-            _ => Ok(Cow::Owned(self.clone().normalize()?)),
+    /// Structural when both values are trivially normal; otherwise compares normal forms.
+    fn normalized_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Undetermined | Self::Natural | Self::Lit(_),
+                Self::Undetermined | Self::Natural | Self::Lit(_),
+            ) => self == other,
+            _ => self == other || self.clone().normalize() == other.clone().normalize(),
         }
     }
 }
@@ -727,19 +729,19 @@ impl Lattice for IsotopeMassForm {
     /// ground (meets only itself); mass sets meet by intersection (empty →
     /// `None`). `Var` meets only an equal `Var`; `Var` vs concrete → `None`.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.normalized().ok()?;
-        let b = other.normalized().ok()?;
+        let a = self.clone().normalize().ok()?;
+        let b = other.clone().normalize().ok()?;
         use IsotopeMassForm::*;
-        match (a.as_ref(), b.as_ref()) {
-            (Undetermined, _) => Some(b.as_ref().clone()),
-            (_, Undetermined) => Some(a.as_ref().clone()),
+        match (&a, &b) {
+            (Undetermined, _) => Some(b.clone()),
+            (_, Undetermined) => Some(a.clone()),
             (Natural, Natural) => Some(Natural),
             (Natural, _) | (_, Natural) => None,
-            (Var(x), Var(y)) => (x == y).then(|| a.as_ref().clone()),
+            (Var(x), Var(y)) => (x == y).then(|| a.clone()),
             (Var(_), _) | (_, Var(_)) => None,
             _ => {
-                let sa = mass_set_view(a.as_ref()).unwrap();
-                let sb = mass_set_view(b.as_ref()).unwrap();
+                let sa = mass_set_view(&a).unwrap();
+                let sb = mass_set_view(&b).unwrap();
                 let intersection: BTreeSet<u32> = sa.intersection(&sb).copied().collect();
                 LitSet(Box::new(intersection)).normalize().ok()
             }
@@ -749,18 +751,18 @@ impl Lattice for IsotopeMassForm {
     /// Least upper bound. `Undetermined` absorbs; `Natural` joins only
     /// itself (else `Undetermined`); mass sets join by union.
     fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
-        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
+        let a = self.clone().normalize().unwrap_or(Self::Undetermined);
+        let b = other.clone().normalize().unwrap_or(Self::Undetermined);
         use IsotopeMassForm::*;
-        Ok(match (a.as_ref(), b.as_ref()) {
+        Ok(match (&a, &b) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
             (Natural, Natural) => Natural,
             (Natural, _) | (_, Natural) => Undetermined,
-            (Var(x), Var(y)) if x == y => a.as_ref().clone(),
+            (Var(x), Var(y)) if x == y => a.clone(),
             (Var(_), _) | (_, Var(_)) => Undetermined,
             _ => {
-                let sa = mass_set_view(a.as_ref()).unwrap();
-                let sb = mass_set_view(b.as_ref()).unwrap();
+                let sa = mass_set_view(&a).unwrap();
+                let sb = mass_set_view(&b).unwrap();
                 let union: BTreeSet<u32> = sa.union(&sb).copied().collect();
                 LitSet(Box::new(union)).normalize().unwrap_or(Undetermined)
             }
@@ -773,8 +775,8 @@ impl Lattice for IsotopeMassForm {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Var(_), _) | (_, Self::Var(_)) => {
-                match (self.meet(target), target.normalized()) {
-                    (Some(meet), Ok(target)) => meet == *target,
+                match (self.meet(target), target.clone().normalize()) {
+                    (Some(meet), Ok(target)) => meet == target,
                     _ => false,
                 }
             }
@@ -1102,6 +1104,15 @@ mod tests {
         assert_eq!(input.clone().normalize(), Ok(input));
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_element_form_normalized_eq_default(
+        #[values(ElementForm::Undetermined, ElementForm::Lit(Element::C), ElementForm::Lit(Element::N), ElementForm::lit_set([Element::C]), ElementForm::lit_set([Element::C, Element::N]), ElementForm::lit_set([]), ElementForm::not_set([]), ElementForm::not(Element::H), ElementForm::var("x"), ElementForm::var_in("x", []))] left: ElementForm,
+        #[values(ElementForm::Undetermined, ElementForm::Lit(Element::C), ElementForm::Lit(Element::N), ElementForm::lit_set([Element::C]), ElementForm::lit_set([Element::C, Element::N]), ElementForm::lit_set([]), ElementForm::not_set([]), ElementForm::not(Element::H), ElementForm::var("x"), ElementForm::var_in("x", []))] right: ElementForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
+    }
+
     /// Cardinality polarity + universe boundaries (need the 118-element universe,
     /// so expected sets are computed from `Element::all()`, not hardcoded).
     #[rstest]
@@ -1302,6 +1313,15 @@ mod tests {
     #[case::var_in_singleton(IsotopeMassForm::var_in("m", [12]))]
     fn test_isotope_mass_form_normalize_identity(#[case] input: IsotopeMassForm) {
         assert_eq!(input.clone().normalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_isotope_mass_form_normalized_eq_default(
+        #[values(IsotopeMassForm::Undetermined, IsotopeMassForm::Natural, IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(13), IsotopeMassForm::lit_set([12]), IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::lit_set([]), IsotopeMassForm::var("m"), IsotopeMassForm::var_in("m", []))] left: IsotopeMassForm,
+        #[values(IsotopeMassForm::Undetermined, IsotopeMassForm::Natural, IsotopeMassForm::Lit(12), IsotopeMassForm::Lit(13), IsotopeMassForm::lit_set([12]), IsotopeMassForm::lit_set([12, 13]), IsotopeMassForm::lit_set([]), IsotopeMassForm::var("m"), IsotopeMassForm::var_in("m", []))] right: IsotopeMassForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
 
     #[rustfmt::skip]

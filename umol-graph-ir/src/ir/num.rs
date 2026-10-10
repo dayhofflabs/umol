@@ -1,6 +1,5 @@
 //! Numeric form and its expression language.
 
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -134,10 +133,11 @@ impl Normalize for NumForm {
         })
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        match self {
-            NumForm::Undetermined | NumForm::Lit(_) => Ok(Cow::Borrowed(self)),
-            _ => Ok(Cow::Owned(self.clone().normalize()?)),
+    /// Structural when both values are trivially normal; otherwise compares normal forms.
+    fn normalized_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Undetermined | Self::Lit(_), Self::Undetermined | Self::Lit(_)) => self == other,
+            _ => self == other || self.clone().normalize() == other.clone().normalize(),
         }
     }
 }
@@ -505,12 +505,12 @@ impl Lattice for NumForm {
     /// Distinct symbolic forms (`ArithExpr`/`PredExpr`) meet only when equal once
     /// normalized; symbolic versus concrete is rejected.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.normalized().ok()?;
-        let b = other.normalized().ok()?;
+        let a = self.clone().normalize().ok()?;
+        let b = other.clone().normalize().ok()?;
         use NumForm::*;
-        Some(match (a.as_ref(), b.as_ref()) {
-            (Undetermined, _) => b.as_ref().clone(),
-            (_, Undetermined) => a.as_ref().clone(),
+        Some(match (&a, &b) {
+            (Undetermined, _) => b.clone(),
+            (_, Undetermined) => a.clone(),
             (Lit(x), Lit(y)) => {
                 if x == y {
                     Lit(*x)
@@ -563,14 +563,10 @@ impl Lattice for NumForm {
 
     /// Least upper bound, canonicalizing both operands and the result.
     fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
-        let a = self
-            .normalized()
-            .unwrap_or(Cow::Owned(NumForm::Undetermined));
-        let b = other
-            .normalized()
-            .unwrap_or(Cow::Owned(NumForm::Undetermined));
+        let a = self.clone().normalize().unwrap_or(NumForm::Undetermined);
+        let b = other.clone().normalize().unwrap_or(NumForm::Undetermined);
         use NumForm::*;
-        Ok(match (a.as_ref(), b.as_ref()) {
+        Ok(match (&a, &b) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
             (Lit(x), Lit(y)) => {
                 if x == y {
@@ -605,8 +601,8 @@ impl Lattice for NumForm {
         match (self, target) {
             (Self::ArithExpr(_) | Self::PredExpr(_), _)
             | (_, Self::ArithExpr(_) | Self::PredExpr(_)) => {
-                match (self.meet(target), target.normalized()) {
-                    (Some(meet), Ok(target)) => meet == *target,
+                match (self.meet(target), target.clone().normalize()) {
+                    (Some(meet), Ok(target)) => meet == target,
                     _ => false,
                 }
             }
@@ -808,6 +804,15 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(left.normalized_eq(&right), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_num_form_normalized_eq_default(
+        #[values(NumForm::Undetermined, NumForm::Lit(3), NumForm::Lit(4), NumForm::lit_set([3]), NumForm::lit_set([1, 2]), NumForm::lit_set(Vec::<i64>::new()), NumForm::RangeFrom(1), NumForm::RangeTo(5), NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])), NumForm::arith_expr(ArithExpr::Var("x".to_string())), NumForm::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(2))))] left: NumForm,
+        #[values(NumForm::Undetermined, NumForm::Lit(3), NumForm::Lit(4), NumForm::lit_set([3]), NumForm::lit_set([1, 2]), NumForm::lit_set(Vec::<i64>::new()), NumForm::RangeFrom(1), NumForm::RangeTo(5), NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)])), NumForm::arith_expr(ArithExpr::Var("x".to_string())), NumForm::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(2))))] right: NumForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
 
     #[rustfmt::skip]

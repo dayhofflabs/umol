@@ -331,7 +331,8 @@ the subitem.** [dep: none]
 Remove normalized from Normalize and its 11 overrides. Migrate every caller to
 `clone().normalize()`, following the measured experiment. Override
 normalized_eq in the scalar forms to compare trivially normal variants without
-cloning. Remove the property assertion that compared normalized with normalize.
+cloning. The stereo forms delegate to coset_normalized_eq, a kind-parameterized
+coset comparison beside coset_meet. Remove the property assertion that compared normalized with normalize.
 Update rustdoc that refers to normalized.
 
 **Tests:** normalized_eq overrides agree with the default for every variant

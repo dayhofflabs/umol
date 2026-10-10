@@ -1,6 +1,5 @@
 //! Atom constraints.
 
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::mem;
 
@@ -822,13 +821,11 @@ impl Normalize for AromaticValenceForm {
         })
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        match self {
-            Self::Aromatic(v) => Ok(match v.normalized()? {
-                Cow::Borrowed(_) => Cow::Borrowed(self),
-                Cow::Owned(cv) => Cow::Owned(Self::Aromatic(cv)),
-            }),
-            _ => Ok(Cow::Borrowed(self)),
+    /// Delegates to the inner `NumForm`; no variant normalizes into another.
+    fn normalized_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Aromatic(a), Self::Aromatic(b)) => a.normalized_eq(b),
+            _ => self == other,
         }
     }
 }
@@ -862,9 +859,9 @@ impl Lattice for AromaticValenceForm {
 
     /// Greatest lower bound, canonicalizing operands and output.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.normalized().ok()?;
-        let b = other.normalized().ok()?;
-        match (a.as_ref(), b.as_ref()) {
+        let a = self.clone().normalize().ok()?;
+        let b = other.clone().normalize().ok()?;
+        match (&a, &b) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::NotAromatic, Self::NotAromatic) => Some(Self::NotAromatic),
             (Self::NotAromatic, Self::Aromatic(_)) | (Self::Aromatic(_), Self::NotAromatic) => None,
@@ -873,9 +870,9 @@ impl Lattice for AromaticValenceForm {
     }
 
     fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
-        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-        Ok(match (a.as_ref(), b.as_ref()) {
+        let a = self.clone().normalize().unwrap_or(Self::Undetermined);
+        let b = other.clone().normalize().unwrap_or(Self::Undetermined);
+        Ok(match (&a, &b) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::NotAromatic, Self::NotAromatic) => Self::NotAromatic,
             (Self::NotAromatic, Self::Aromatic(_)) | (Self::Aromatic(_), Self::NotAromatic) => {
@@ -890,7 +887,7 @@ impl Lattice for AromaticValenceForm {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Undetermined, Self::Undetermined | Self::NotAromatic) => true,
-            (Self::Undetermined, Self::Aromatic(v)) => v.normalized().is_ok(),
+            (Self::Undetermined, Self::Aromatic(v)) => v.clone().normalize().is_ok(),
             (Self::NotAromatic, Self::NotAromatic) => true,
             (Self::Aromatic(p), Self::Aromatic(q)) => p.matches(q),
             _ => false,
@@ -992,13 +989,11 @@ impl Normalize for MulticenterValenceForm {
         })
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        match self {
-            Self::Multicenter(v) => Ok(match v.normalized()? {
-                Cow::Borrowed(_) => Cow::Borrowed(self),
-                Cow::Owned(cv) => Cow::Owned(Self::Multicenter(cv)),
-            }),
-            _ => Ok(Cow::Borrowed(self)),
+    /// Delegates to the inner `NumForm`; no variant normalizes into another.
+    fn normalized_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Multicenter(a), Self::Multicenter(b)) => a.normalized_eq(b),
+            _ => self == other,
         }
     }
 }
@@ -1031,9 +1026,9 @@ impl Lattice for MulticenterValenceForm {
 
     /// Greatest lower bound, canonicalizing operands and output.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.normalized().ok()?;
-        let b = other.normalized().ok()?;
-        match (a.as_ref(), b.as_ref()) {
+        let a = self.clone().normalize().ok()?;
+        let b = other.clone().normalize().ok()?;
+        match (&a, &b) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::NotMulticenter, Self::NotMulticenter) => Some(Self::NotMulticenter),
             (Self::NotMulticenter, Self::Multicenter(_))
@@ -1043,9 +1038,9 @@ impl Lattice for MulticenterValenceForm {
     }
 
     fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
-        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-        Ok(match (a.as_ref(), b.as_ref()) {
+        let a = self.clone().normalize().unwrap_or(Self::Undetermined);
+        let b = other.clone().normalize().unwrap_or(Self::Undetermined);
+        Ok(match (&a, &b) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::NotMulticenter, Self::NotMulticenter) => Self::NotMulticenter,
             (Self::NotMulticenter, Self::Multicenter(_))
@@ -1059,7 +1054,7 @@ impl Lattice for MulticenterValenceForm {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Undetermined, Self::Undetermined | Self::NotMulticenter) => true,
-            (Self::Undetermined, Self::Multicenter(v)) => v.normalized().is_ok(),
+            (Self::Undetermined, Self::Multicenter(v)) => v.clone().normalize().is_ok(),
             (Self::NotMulticenter, Self::NotMulticenter) => true,
             (Self::Multicenter(p), Self::Multicenter(q)) => p.matches(q),
             _ => false,
@@ -1332,6 +1327,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    fn test_aromatic_valence_form_normalized_eq_default(
+        #[values(AromaticValenceForm::Undetermined, AromaticValenceForm::NotAromatic, AromaticValenceForm::aromatic(0), AromaticValenceForm::aromatic(2), AromaticValenceForm::Aromatic(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)]))), AromaticValenceForm::Aromatic(NumForm::lit_set(Vec::<i64>::new())))] left: AromaticValenceForm,
+        #[values(AromaticValenceForm::Undetermined, AromaticValenceForm::NotAromatic, AromaticValenceForm::aromatic(0), AromaticValenceForm::aromatic(2), AromaticValenceForm::Aromatic(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)]))), AromaticValenceForm::Aromatic(NumForm::lit_set(Vec::<i64>::new())))] right: AromaticValenceForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::und_aromatic(AromaticValenceForm::Undetermined, AromaticValenceForm::aromatic(1), Some(AromaticValenceForm::aromatic(1)))]
     #[case::not_not(AromaticValenceForm::NotAromatic, AromaticValenceForm::NotAromatic, Some(AromaticValenceForm::NotAromatic))]
     #[case::not_aromatic(AromaticValenceForm::NotAromatic, AromaticValenceForm::aromatic(1), None)]
@@ -1517,6 +1521,15 @@ mod tests {
     #[case::multicenter_zero(MulticenterValenceForm::multicenter(0))]
     fn test_multicenter_valence_form_normalize_identity(#[case] input: MulticenterValenceForm) {
         assert_eq!(input.clone().normalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_multicenter_valence_form_normalized_eq_default(
+        #[values(MulticenterValenceForm::Undetermined, MulticenterValenceForm::NotMulticenter, MulticenterValenceForm::multicenter(0), MulticenterValenceForm::multicenter(2), MulticenterValenceForm::Multicenter(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)]))), MulticenterValenceForm::Multicenter(NumForm::lit_set(Vec::<i64>::new())))] left: MulticenterValenceForm,
+        #[values(MulticenterValenceForm::Undetermined, MulticenterValenceForm::NotMulticenter, MulticenterValenceForm::multicenter(0), MulticenterValenceForm::multicenter(2), MulticenterValenceForm::Multicenter(NumForm::arith_expr(ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(1)]))), MulticenterValenceForm::Multicenter(NumForm::lit_set(Vec::<i64>::new())))] right: MulticenterValenceForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
 
     #[rustfmt::skip]

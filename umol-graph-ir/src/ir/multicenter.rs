@@ -33,7 +33,7 @@ pub(crate) struct MulticenterBondEntry<'a> {
 impl Normalize for MulticenterBondEntry<'_> {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         self.attributes = match self.attributes {
-            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Borrowed(attributes) => Cow::Owned(attributes.clone().normalize()?),
             Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
         };
         Ok(self)

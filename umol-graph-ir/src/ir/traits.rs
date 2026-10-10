@@ -6,7 +6,6 @@
 //! `Lattice` defines the refinement lattice on forms.
 //! `Normalize` puts a form into normal fixed-frame representation.
 
-use std::borrow::Cow;
 use std::hash::Hash;
 
 use super::error::{Contradiction, NoJoinError};
@@ -100,8 +99,8 @@ pub trait Lattice: Normalize {
     /// to `target`'s normal form. Default is `meet`-derived; override only as
     /// a cheaper shortcut that yields the same result.
     fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.normalized()) {
-            (Some(meet), Ok(target)) => meet == *target,
+        match (self.meet(target), target.clone().normalize()) {
+            (Some(meet), Ok(target)) => meet == target,
             _ => false,
         }
     }
@@ -152,24 +151,16 @@ pub trait Lattice: Normalize {
 /// unsatisfiable value (e.g. an empty set).
 ///
 /// Equality is **lazy**: `==`/`Hash`/`Ord` stay derived-structural ("same
-/// tree"); semantic equality is [`Normalize::normalized_eq`], comparing normal forms. The hot
-/// path is cheap — `normalized` borrows values that are already normalized.
+/// tree"); semantic equality is [`Normalize::normalized_eq`], comparing normal forms.
 pub trait Normalize: Sized + Clone + PartialEq {
     /// By-value normal form (the folding lives here). Idempotent.
     fn normalize(self) -> Result<Self, Contradiction>;
 
-    /// By-reference normal form: `Cow::Borrowed` when already normalized (the
-    /// fast path), else clone + `normalize`. `Err` = unsatisfiable. The
-    /// default always clones; override to borrow the trivial variants.
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        Ok(Cow::Owned(self.clone().normalize()?))
-    }
-
     /// Equal normal forms. Two unsatisfiable values count as equal.
     /// Structural equality short-circuits normalization; otherwise the normal forms
-    /// with the derived structural `==` (on `Result<Cow<_>, _>`) — no recursion.
+    /// with the derived structural `==` (on `Result<Self, _>`) — no recursion.
     fn normalized_eq(&self, other: &Self) -> bool {
-        self == other || self.normalized() == other.normalized()
+        self == other || self.clone().normalize() == other.clone().normalize()
     }
 }
 

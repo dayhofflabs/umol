@@ -1,6 +1,5 @@
 //! Stereo-element constraints.
 
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::hash::Hash;
@@ -646,10 +645,14 @@ macro_rules! relation_form {
                 }
             }
 
-            fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-                match self {
-                    Self::Undetermined | Self::Lit(_) => Ok(Cow::Borrowed(self)),
-                    _ => Ok(Cow::Owned(self.clone().normalize()?)),
+            /// Structural when both values are trivially normal; otherwise compares normal
+            /// forms.
+            fn normalized_eq(&self, other: &Self) -> bool {
+                match (self, other) {
+                    (Self::Undetermined | Self::Lit(_), Self::Undetermined | Self::Lit(_)) => {
+                        self == other
+                    }
+                    _ => self == other || self.clone().normalize() == other.clone().normalize(),
                 }
             }
         }
@@ -1093,6 +1096,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    fn test_topicity_relation_form_normalized_eq_default(
+        #[values(TopicityRelationForm::Undetermined, TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic])), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationForm::LitSet(BTreeSet::new()))] left: TopicityRelationForm,
+        #[values(TopicityRelationForm::Undetermined, TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic])), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationForm::LitSet(BTreeSet::new()))] right: TopicityRelationForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::lit(TopicityRelationForm::Lit(Topicity::Homotopic), Some(Topicity::Homotopic))]
     #[case::undetermined(TopicityRelationForm::Undetermined, None)]
     #[case::notset(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic])), None)]
@@ -1180,6 +1192,15 @@ mod tests {
         #[case] expected: Result<StereogenicityForm, Contradiction>,
     ) {
         assert_eq!(input.normalize(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_stereogenicity_form_normalized_eq_default(
+        #[values(StereogenicityForm::Undetermined, StereogenicityForm::Lit(Stereogenicity::Stereogenic), StereogenicityForm::Lit(Stereogenicity::Symmetric), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic])), StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Symmetric])), StereogenicityForm::LitSet(BTreeSet::new()))] left: StereogenicityForm,
+        #[values(StereogenicityForm::Undetermined, StereogenicityForm::Lit(Stereogenicity::Stereogenic), StereogenicityForm::Lit(Stereogenicity::Symmetric), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic])), StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Symmetric])), StereogenicityForm::LitSet(BTreeSet::new()))] right: StereogenicityForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
 
     #[rustfmt::skip]

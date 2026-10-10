@@ -46,7 +46,7 @@ pub(crate) struct StereoAtomEntry<'a> {
 impl Normalize for StereoAtomEntry<'_> {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         self.attributes = match self.attributes {
-            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Borrowed(attributes) => Cow::Owned(attributes.clone().normalize()?),
             Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
         };
         Ok(self)
@@ -485,7 +485,7 @@ pub(crate) struct StereoBondEntry<'a> {
 impl Normalize for StereoBondEntry<'_> {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         self.attributes = match self.attributes {
-            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Borrowed(attributes) => Cow::Owned(attributes.clone().normalize()?),
             Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
         };
         Ok(self)
@@ -1757,10 +1757,18 @@ impl Normalize for StereoConfigurationForm {
         })
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        match self {
-            Self::Kinded(..) => Ok(Cow::Owned(self.clone().normalize()?)),
-            Self::Undetermined => Ok(Cow::Borrowed(self)),
+    /// Delegates to the coset comparison under a shared kind; values of different kinds are
+    /// equal only when both are unsatisfiable.
+    fn normalized_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Kinded(kind, a), Self::Kinded(other_kind, b)) if kind == other_kind => {
+                coset_normalized_eq(a, b, *kind)
+            }
+            (Self::Kinded(kind, a), Self::Kinded(other_kind, b)) => {
+                canon_coset(a.clone(), *kind).is_err()
+                    && canon_coset(b.clone(), *other_kind).is_err()
+            }
+            _ => self == other,
         }
     }
 }
@@ -1816,9 +1824,9 @@ impl Lattice for StereoConfigurationForm {
     }
 
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.normalized().ok()?;
-        let b = other.normalized().ok()?;
-        match (a.as_ref(), b.as_ref()) {
+        let a = self.clone().normalize().ok()?;
+        let b = other.clone().normalize().ok()?;
+        match (&a, &b) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::Kinded(k1, ca), Self::Kinded(k2, cb)) => {
                 if k1 != k2 {
@@ -1830,9 +1838,9 @@ impl Lattice for StereoConfigurationForm {
     }
 
     fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
-        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-        Ok(match (a.as_ref(), b.as_ref()) {
+        let a = self.clone().normalize().unwrap_or(Self::Undetermined);
+        let b = other.clone().normalize().unwrap_or(Self::Undetermined);
+        Ok(match (&a, &b) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::Kinded(k1, ca), Self::Kinded(k2, cb)) => {
                 if k1 != k2 {
@@ -1920,10 +1928,11 @@ macro_rules! stereo_site {
                 })
             }
 
-            fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-                match self {
-                    Self::Stereo(_) => Ok(Cow::Owned(self.clone().normalize()?)),
-                    _ => Ok(Cow::Borrowed(self)),
+            /// Delegates to the coset comparison; no other variant normalizes into another.
+            fn normalized_eq(&self, other: &Self) -> bool {
+                match (self, other) {
+                    (Self::Stereo(a), Self::Stereo(b)) => coset_normalized_eq(a, b, $kind),
+                    _ => self == other,
                 }
             }
         }
@@ -1969,9 +1978,9 @@ macro_rules! stereo_site {
             }
 
             fn meet(&self, other: &Self) -> Option<Self> {
-                let a = self.normalized().ok()?;
-                let b = other.normalized().ok()?;
-                match (a.as_ref(), b.as_ref()) {
+                let a = self.clone().normalize().ok()?;
+                let b = other.clone().normalize().ok()?;
+                match (&a, &b) {
                     (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
                     (Self::NotStereo, Self::NotStereo) => Some(Self::NotStereo),
                     (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => None,
@@ -1982,9 +1991,9 @@ macro_rules! stereo_site {
             }
 
             fn join(&self, other: &Self) -> Result<Self, NoJoinError> {
-                let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-                let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
-                Ok(match (a.as_ref(), b.as_ref()) {
+                let a = self.clone().normalize().unwrap_or(Self::Undetermined);
+                let b = other.clone().normalize().unwrap_or(Self::Undetermined);
+                Ok(match (&a, &b) {
                     (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
                     (Self::NotStereo, Self::NotStereo) => Self::NotStereo,
                     (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => {
@@ -2283,6 +2292,18 @@ pub(crate) fn canon_coset(
         Ok(StereoCoset::Lit(set.into_iter().next().unwrap()))
     } else {
         Ok(StereoCoset::LitSet(set))
+    }
+}
+
+/// Equal normal forms under `kind`, or both unsatisfiable. `Undetermined` and `Lit` are normal
+/// under every kind and compare structurally.
+pub(crate) fn coset_normalized_eq(a: &StereoCoset, b: &StereoCoset, kind: StereoKind) -> bool {
+    match (a, b) {
+        (
+            StereoCoset::Undetermined | StereoCoset::Lit(_),
+            StereoCoset::Undetermined | StereoCoset::Lit(_),
+        ) => a == b,
+        _ => a == b || canon_coset(a.clone(), kind) == canon_coset(b.clone(), kind),
     }
 }
 
@@ -4589,6 +4610,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    fn test_stereo_configuration_form_normalized_eq_default(
+        #[values(StereoConfigurationForm::Undetermined, StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var("x"))), StereoConfigurationForm::Kinded(StereoKind::Octahedral, StereoCoset::Lit(1)), StereoConfigurationForm::Kinded(StereoKind::SquarePlanar, StereoCoset::LitSet(BTreeSet::new())), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var_in("x", []))))] left: StereoConfigurationForm,
+        #[values(StereoConfigurationForm::Undetermined, StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var("x"))), StereoConfigurationForm::Kinded(StereoKind::Octahedral, StereoCoset::Lit(1)), StereoConfigurationForm::Kinded(StereoKind::SquarePlanar, StereoCoset::LitSet(BTreeSet::new())), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var_in("x", []))))] right: StereoConfigurationForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::kind_lit(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)), Some(StereoConfiguration { kind: StereoKind::Tetrahedral, coset: 1 }))]
     #[case::undetermined(StereoConfigurationForm::Undetermined, None)]
     #[case::kind_open(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined), None)]
@@ -4723,6 +4753,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    fn test_tetrahedral_stereo_form_normalized_eq_default(
+        #[values(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoForm::Stereo(StereoCoset::LitSet(BTreeSet::new())))] left: TetrahedralStereoForm,
+        #[values(TetrahedralStereoForm::Undetermined, TetrahedralStereoForm::NotStereo, TetrahedralStereoForm::Stereo(StereoCoset::Undetermined), TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoForm::Stereo(StereoCoset::LitSet(BTreeSet::new())))] right: TetrahedralStereoForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)), Some(TetrahedralStereo::Stereo(1)))]
     #[case::stereo_zero(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)), Some(TetrahedralStereo::Stereo(0)))]
     #[case::not_stereo(TetrahedralStereoForm::NotStereo, Some(TetrahedralStereo::NotStereo))]
@@ -4807,6 +4846,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    fn test_cis_trans_stereo_form_normalized_eq_default(
+        #[values(CisTransStereoForm::Undetermined, CisTransStereoForm::NotStereo, CisTransStereoForm::Stereo(StereoCoset::Undetermined), CisTransStereoForm::Stereo(StereoCoset::Lit(0)), CisTransStereoForm::Stereo(StereoCoset::Lit(1)), CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoForm::Stereo(StereoCoset::LitSet(BTreeSet::new())))] left: CisTransStereoForm,
+        #[values(CisTransStereoForm::Undetermined, CisTransStereoForm::NotStereo, CisTransStereoForm::Stereo(StereoCoset::Undetermined), CisTransStereoForm::Stereo(StereoCoset::Lit(0)), CisTransStereoForm::Stereo(StereoCoset::Lit(1)), CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoForm::Stereo(StereoCoset::LitSet(BTreeSet::new())))] right: CisTransStereoForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::stereo_zero(CisTransStereoForm::Stereo(StereoCoset::Lit(0)), Some(CisTransStereo::Stereo(0)))]
     #[case::stereo_lit(CisTransStereoForm::Stereo(StereoCoset::Lit(1)), Some(CisTransStereo::Stereo(1)))]
     #[case::not_stereo(CisTransStereoForm::NotStereo, Some(CisTransStereo::NotStereo))]
@@ -4857,6 +4905,16 @@ mod tests {
     #[case::empty_set(StereoCoset::LitSet(BTreeSet::new()), StereoKind::SquarePlanar)]
     fn test_canon_coset_error(#[case] coset: StereoCoset, #[case] kind: StereoKind) {
         assert_eq!(canon_coset(coset, kind), Err(Contradiction));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_coset_normalized_eq_default(
+        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([1]), StereoCoset::lit_set([0, 1]), StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0))), StereoCoset::term(StereoTerm::var("x")), StereoCoset::LitSet(BTreeSet::new()), StereoCoset::term(StereoTerm::var_in("x", [])))] a: StereoCoset,
+        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([1]), StereoCoset::lit_set([0, 1]), StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0))), StereoCoset::term(StereoTerm::var("x")), StereoCoset::LitSet(BTreeSet::new()), StereoCoset::term(StereoTerm::var_in("x", [])))] b: StereoCoset,
+        #[values(StereoKind::Tetrahedral, StereoKind::Octahedral)] kind: StereoKind,
+    ) {
+        assert_eq!(coset_normalized_eq(&a, &b, kind), canon_coset(a.clone(), kind) == canon_coset(b.clone(), kind));
     }
 
     #[rustfmt::skip]

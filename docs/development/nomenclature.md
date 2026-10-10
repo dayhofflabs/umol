@@ -1226,8 +1226,7 @@ semantic deduplication.
 
 **Not:** aggregate canonicalization, which selects an entity and participant frame and requires an
 explicit context. Not chemical standardization, resolution, validation, or repair.
-**In code:** `Normalize`, `normalize`, `normalized`, `Normalized<T>`,
-`Normalize::normalized_eq`.
+**In code:** `Normalize`, `normalize`, `Normalized<T>`, `Normalize::normalized_eq`.
 
 ### Normalizer
 

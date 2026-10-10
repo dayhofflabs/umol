@@ -191,9 +191,9 @@ proptest! {
     }
 
     /// The universal normalization-independent laws on raw, non-normal inputs —
-    /// the `normalized()` fold path, `normalized_eq`, `matches`↔meet, and meet/join
+    /// the normalization fold path, `normalized_eq`, `matches`↔meet, and meet/join
     /// normality — which the normalized strategies above never reach. One per
-    /// `normalized()`-overriding leaf with a fold path.
+    /// leaf with a fold path.
     #[test]
     fn test_num_form_lattice_laws_raw(
         a in raw_num_form_strategy(),

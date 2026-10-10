@@ -30,7 +30,7 @@ pub(crate) struct NoncovalentBondEntry<'a> {
 impl Normalize for NoncovalentBondEntry<'_> {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         self.attributes = match self.attributes {
-            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Borrowed(attributes) => Cow::Owned(attributes.clone().normalize()?),
             Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
         };
         Ok(self)
@@ -704,8 +704,8 @@ impl Normalize for NoncovalentBondKindForm {
         Ok(self)
     }
 
-    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        Ok(Cow::Borrowed(self))
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -1698,6 +1698,15 @@ mod tests {
     #[case::lit(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond))]
     fn test_noncovalent_bond_kind_form_normalize_identity(#[case] input: NoncovalentBondKindForm) {
         assert_eq!(input.clone().normalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    fn test_noncovalent_bond_kind_form_normalized_eq_default(
+        #[values(NoncovalentBondKindForm::Undetermined, NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindForm::Lit(NoncovalentBondKind::HalogenBond))] left: NoncovalentBondKindForm,
+        #[values(NoncovalentBondKindForm::Undetermined, NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindForm::Lit(NoncovalentBondKind::HalogenBond))] right: NoncovalentBondKindForm,
+    ) {
+        assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
 
     #[rustfmt::skip]

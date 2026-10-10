@@ -32,7 +32,7 @@ pub(crate) struct DativeBondEntry<'a> {
 impl Normalize for DativeBondEntry<'_> {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         self.attributes = match self.attributes {
-            Cow::Borrowed(attributes) => attributes.normalized()?,
+            Cow::Borrowed(attributes) => Cow::Owned(attributes.clone().normalize()?),
             Cow::Owned(attributes) => Cow::Owned(attributes.normalize()?),
         };
         Ok(self)

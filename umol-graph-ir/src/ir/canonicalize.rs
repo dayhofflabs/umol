@@ -3108,35 +3108,32 @@ fn atom_inherent_fields(attributes: &AtomForm) -> Result<Vec<FieldKey>, Contradi
     Ok(vec![
         field(
             0,
-            element_form_key(attributes.element.normalized()?.as_ref()),
+            element_form_key(&attributes.element.clone().normalize()?),
         ),
         field(
             1,
-            isotope_mass_form_key(attributes.isotope_mass.normalized()?.as_ref()),
+            isotope_mass_form_key(&attributes.isotope_mass.clone().normalize()?),
         ),
-        field(2, num_form_key(attributes.charge.normalized()?.as_ref())),
+        field(2, num_form_key(&attributes.charge.clone().normalize()?)),
         field(
             3,
-            num_form_key(attributes.implicit_hydrogens.normalized()?.as_ref()),
+            num_form_key(&attributes.implicit_hydrogens.clone().normalize()?),
         ),
-        field(
-            4,
-            num_form_key(attributes.lone_pairs.normalized()?.as_ref()),
-        ),
+        field(4, num_form_key(&attributes.lone_pairs.clone().normalize()?)),
         field(
             5,
-            unpaired_electrons_form_key(attributes.unpaired_electrons.normalized()?.as_ref()),
+            unpaired_electrons_form_key(&attributes.unpaired_electrons.clone().normalize()?),
         ),
     ])
 }
 
 fn bond_inherent_fields(attributes: &BondForm) -> Result<Vec<FieldKey>, Contradiction> {
     Ok(vec![
-        field(1, num_form_key(attributes.order.normalized()?.as_ref())),
-        field(2, num_form_key(attributes.charge.normalized()?.as_ref())),
+        field(1, num_form_key(&attributes.order.clone().normalize()?)),
+        field(2, num_form_key(&attributes.charge.clone().normalize()?)),
         field(
             3,
-            unpaired_electrons_form_key(attributes.unpaired_electrons.normalized()?.as_ref()),
+            unpaired_electrons_form_key(&attributes.unpaired_electrons.clone().normalize()?),
         ),
     ])
 }
@@ -3165,7 +3162,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 .attributes();
             (
                 EntityBlockPosition::DATIVE_BOND,
-                positioned_product([(2, num_form_key(attributes.order.normalized()?.as_ref()))]),
+                positioned_product([(2, num_form_key(&attributes.order.clone().normalize()?))]),
             )
         }
         Entity::AromaticSystem(id) => {
@@ -3182,11 +3179,11 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
             (
                 EntityBlockPosition::AROMATIC_SYSTEM,
                 positioned_product([
-                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (2, num_form_key(&attributes.charge.clone().normalize()?)),
                     (
                         3,
                         unpaired_electrons_form_key(
-                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                            &attributes.unpaired_electrons.clone().normalize()?,
                         ),
                     ),
                 ]),
@@ -3206,11 +3203,11 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
             (
                 EntityBlockPosition::MULTICENTER_BOND,
                 positioned_product([
-                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (2, num_form_key(&attributes.charge.clone().normalize()?)),
                     (
                         3,
                         unpaired_electrons_form_key(
-                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                            &attributes.unpaired_electrons.clone().normalize()?,
                         ),
                     ),
                 ]),
@@ -3226,7 +3223,7 @@ fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorK
                 EntityBlockPosition::NONCOVALENT_BOND,
                 positioned_product([(
                     1,
-                    noncovalent_bond_kind_form_key(attributes.kind.normalized()?.as_ref()),
+                    noncovalent_bond_kind_form_key(&attributes.kind.clone().normalize()?),
                 )]),
             )
         }
@@ -3307,7 +3304,7 @@ fn reaction_span_entity_color_key(
             normalized_entity_span_key(span.dative_bonds().attributes(id), |attributes| {
                 Ok(positioned_product([(
                     2,
-                    num_form_key(attributes.order.normalized()?.as_ref()),
+                    num_form_key(&attributes.order.clone().normalize()?),
                 )]))
             })?,
         ),
@@ -3320,11 +3317,11 @@ fn reaction_span_entity_color_key(
                     return Err(Contradiction);
                 }
                 Ok(positioned_product([
-                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (2, num_form_key(&attributes.charge.clone().normalize()?)),
                     (
                         3,
                         unpaired_electrons_form_key(
-                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                            &attributes.unpaired_electrons.clone().normalize()?,
                         ),
                     ),
                 ]))
@@ -3339,11 +3336,11 @@ fn reaction_span_entity_color_key(
                     return Err(Contradiction);
                 }
                 Ok(positioned_product([
-                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (2, num_form_key(&attributes.charge.clone().normalize()?)),
                     (
                         3,
                         unpaired_electrons_form_key(
-                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                            &attributes.unpaired_electrons.clone().normalize()?,
                         ),
                     ),
                 ]))
@@ -3354,7 +3351,7 @@ fn reaction_span_entity_color_key(
             normalized_entity_span_key(span.noncovalent_bonds().attributes(id), |attributes| {
                 Ok(positioned_product([(
                     1,
-                    noncovalent_bond_kind_form_key(attributes.kind.normalized()?.as_ref()),
+                    noncovalent_bond_kind_form_key(&attributes.kind.clone().normalize()?),
                 )]))
             })?,
         ),
@@ -3565,7 +3562,7 @@ fn constitution_candidate(
                     1,
                     CanonicalKeyValue::Unsigned(atom_images[bond.acceptor_id().index()] as u64),
                 ),
-                field(2, num_form_key(bond.order().normalized()?.as_ref())),
+                field(2, num_form_key(&bond.order().clone().normalize()?)),
             ];
             Ok((
                 CanonicalKeyValue::Product(fields),
@@ -3584,16 +3581,16 @@ fn constitution_candidate(
         .aromatic_systems()
         .iter()
         .map(|system| {
-            let electrons = system.electrons().normalized()?;
+            let electrons = system.electrons().clone().normalize()?;
             let mut fields =
-                electron_occurrence_fields(system.atom_ids(), electrons.as_ref(), &atom_images)
+                electron_occurrence_fields(system.atom_ids(), &electrons, &atom_images)
                     .into_iter()
                     .collect::<Vec<_>>();
             fields.extend([
-                field(2, num_form_key(system.charge().normalized()?.as_ref())),
+                field(2, num_form_key(&system.charge().clone().normalize()?)),
                 field(
                     3,
-                    unpaired_electrons_form_key(system.unpaired_electrons().normalized()?.as_ref()),
+                    unpaired_electrons_form_key(&system.unpaired_electrons().clone().normalize()?),
                 ),
             ]);
             Ok((
@@ -3613,16 +3610,15 @@ fn constitution_candidate(
         .multicenter_bonds()
         .iter()
         .map(|bond| {
-            let electrons = bond.electrons().normalized()?;
-            let mut fields =
-                electron_occurrence_fields(bond.atom_ids(), electrons.as_ref(), &atom_images)
-                    .into_iter()
-                    .collect::<Vec<_>>();
+            let electrons = bond.electrons().clone().normalize()?;
+            let mut fields = electron_occurrence_fields(bond.atom_ids(), &electrons, &atom_images)
+                .into_iter()
+                .collect::<Vec<_>>();
             fields.extend([
-                field(2, num_form_key(bond.charge().normalized()?.as_ref())),
+                field(2, num_form_key(&bond.charge().clone().normalize()?)),
                 field(
                     3,
-                    unpaired_electrons_form_key(bond.unpaired_electrons().normalized()?.as_ref()),
+                    unpaired_electrons_form_key(&bond.unpaired_electrons().clone().normalize()?),
                 ),
             ]);
             Ok((
@@ -3653,7 +3649,7 @@ fn constitution_candidate(
                 ),
                 field(
                     1,
-                    noncovalent_bond_kind_form_key(bond.kind().normalized()?.as_ref()),
+                    noncovalent_bond_kind_form_key(&bond.kind().clone().normalize()?),
                 ),
             ];
             Ok((
@@ -4533,7 +4529,7 @@ fn reaction_span_comparison_key(
                     Ok(product([
                         sequence(donors.iter().copied().map(index_key)),
                         index_key(acceptor.index()),
-                        num_form_key(attributes.order.normalized()?.as_ref()),
+                        num_form_key(&attributes.order.clone().normalize()?),
                     ]))
                 })
             })
@@ -4544,10 +4540,10 @@ fn reaction_span_comparison_key(
             .map(|(atoms, span)| {
                 relation_span_key(atoms, span, |attributes| {
                     Ok(product([
-                        electron_counts_form_key(attributes.electrons.normalized()?.as_ref()),
-                        num_form_key(attributes.charge.normalized()?.as_ref()),
+                        electron_counts_form_key(&attributes.electrons.clone().normalize()?),
+                        num_form_key(&attributes.charge.clone().normalize()?),
                         unpaired_electrons_form_key(
-                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                            &attributes.unpaired_electrons.clone().normalize()?,
                         ),
                     ]))
                 })
@@ -4559,10 +4555,10 @@ fn reaction_span_comparison_key(
             .map(|(atoms, span)| {
                 relation_span_key(atoms, span, |attributes| {
                     Ok(product([
-                        electron_counts_form_key(attributes.electrons.normalized()?.as_ref()),
-                        num_form_key(attributes.charge.normalized()?.as_ref()),
+                        electron_counts_form_key(&attributes.electrons.clone().normalize()?),
+                        num_form_key(&attributes.charge.clone().normalize()?),
                         unpaired_electrons_form_key(
-                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                            &attributes.unpaired_electrons.clone().normalize()?,
                         ),
                     ]))
                 })
@@ -4578,7 +4574,7 @@ fn reaction_span_comparison_key(
                             index_key(first.index().min(second.index())),
                             index_key(first.index().max(second.index())),
                         ]),
-                        noncovalent_bond_kind_form_key(attributes.kind.normalized()?.as_ref()),
+                        noncovalent_bond_kind_form_key(&attributes.kind.clone().normalize()?),
                     ]))
                 })
             })
@@ -4615,7 +4611,7 @@ fn reaction_span_comparison_key(
                                 .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
                         ),
                         stereo_configuration_form_key(
-                            attributes.configuration.normalized()?.as_ref(),
+                            &attributes.configuration.clone().normalize()?,
                         ),
                     ]))
                 })
@@ -4634,7 +4630,7 @@ fn reaction_span_comparison_key(
                                 .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
                         ),
                         stereo_configuration_form_key(
-                            attributes.configuration.normalized()?.as_ref(),
+                            &attributes.configuration.clone().normalize()?,
                         ),
                     ]))
                 })
