@@ -938,12 +938,7 @@ impl Molecule {
     }
 
     pub(crate) fn add_atoms(&mut self, atoms: Vec<AtomForm>) -> IdRange<AtomId> {
-        let start = self.atoms.len();
-        self.graph.extend_nodes(atoms.len());
-        if !atoms.is_empty() {
-            Arc::make_mut(&mut self.atoms).extend(atoms);
-        }
-        IdRange::new(start, self.atoms.len())
+        self.add_topology(atoms, Vec::new()).0
     }
 
     pub(crate) fn add_bond(
@@ -958,17 +953,32 @@ impl Molecule {
     }
 
     pub(crate) fn add_bonds(&mut self, bonds: Vec<([AtomId; 2], BondForm)>) -> IdRange<BondId> {
+        self.add_topology(Vec::new(), bonds).1
+    }
+
+    pub(crate) fn add_topology(
+        &mut self,
+        atoms: Vec<AtomForm>,
+        bonds: Vec<([AtomId; 2], BondForm)>,
+    ) -> (IdRange<AtomId>, IdRange<BondId>) {
         let edges: Vec<_> = bonds
             .iter()
             .map(|(atoms, _)| atoms.map(NodeId::from))
             .collect();
-        let start = self.bonds.len();
-        self.graph.extend_edges(&edges);
+        let atom_start = self.atoms.len();
+        let bond_start = self.bonds.len();
+        self.graph.extend(atoms.len(), &edges);
+        if !atoms.is_empty() {
+            Arc::make_mut(&mut self.atoms).extend(atoms);
+        }
         if !bonds.is_empty() {
             Arc::make_mut(&mut self.bonds)
                 .extend(bonds.into_iter().map(|(_, attributes)| attributes));
         }
-        IdRange::new(start, self.bonds.len())
+        (
+            IdRange::new(atom_start, self.atoms.len()),
+            IdRange::new(bond_start, self.bonds.len()),
+        )
     }
 
     pub(crate) fn add_dative_bond(
@@ -1715,14 +1725,12 @@ impl Molecule {
         let stereo_bond_offset = self.stereo_bonds().count();
         let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-        self.add_atoms(
+        self.add_topology(
             other
                 .atoms()
                 .iter()
                 .map(|atom| atom.attributes().clone())
                 .collect(),
-        );
-        self.add_bonds(
             other
                 .bonds()
                 .iter()
@@ -1964,45 +1972,39 @@ impl Molecule {
             union_participants(&mut uf, self.constraint_atoms(constraint));
         }
 
-        let mut atom_component = vec![0usize; atom_count];
+        // Each atom's component and its id within that component.
         let mut component_atoms: Vec<Vec<AtomId>> = Vec::new();
         let mut index_of_root: HashMap<usize, usize> = HashMap::new();
-        for (idx, assigned_component) in atom_component.iter_mut().enumerate() {
-            let root = uf.find(idx);
-            let component = *index_of_root.entry(root).or_insert_with(|| {
-                component_atoms.push(Vec::new());
-                component_atoms.len() - 1
-            });
-            *assigned_component = component;
-            component_atoms[component].push(AtomId(idx as u32));
-        }
-        let component_of = |a: AtomId| atom_component[a.index()];
+        let atom_placements: Vec<(usize, AtomId)> = (0..atom_count)
+            .map(|idx| {
+                let root = uf.find(idx);
+                let component = *index_of_root.entry(root).or_insert_with(|| {
+                    component_atoms.push(Vec::new());
+                    component_atoms.len() - 1
+                });
+                let component_atom = AtomId::from(component_atoms[component].len());
+                component_atoms[component].push(AtomId(idx as u32));
+                (component, component_atom)
+            })
+            .collect();
+        let component_of = |a: AtomId| atom_placements[a.index()].0;
+        let map_atom = |a: AtomId| atom_placements[a.index()].1;
 
         component_atoms
             .iter()
             .enumerate()
             .map(|(component, atoms)| {
                 let mut editor = Molecule::new().edit();
-                let added_atoms = editor.add_atoms(
-                    atoms
-                        .iter()
-                        .map(|atom| self.atom(*atom).attributes().clone())
-                        .collect(),
-                );
-                let atom_pairs = atoms.iter().copied().zip(added_atoms).collect();
-                let atom_correspondence = Correspondence::new(atom_pairs, atom_count, atoms.len())
-                    .expect("split assigns each selected source atom a component id");
-                let map_atom = |id: AtomId| {
-                    atom_correspondence
-                        .right_of(id)
-                        .expect("the component contains every routed atom reference")
-                };
                 let bonds: Vec<_> = self
                     .bonds()
                     .iter()
                     .filter(|bond| component_of(bond.atom_ids()[0]) == component)
                     .collect();
-                let added_bonds = editor.add_bonds(
+                let (added_atoms, added_bonds) = editor.add_topology(
+                    atoms
+                        .iter()
+                        .map(|atom| self.atom(*atom).attributes().clone())
+                        .collect(),
                     bonds
                         .iter()
                         .map(|bond| {
@@ -2011,6 +2013,9 @@ impl Molecule {
                         })
                         .collect(),
                 );
+                let atom_pairs = atoms.iter().copied().zip(added_atoms).collect();
+                let atom_correspondence = Correspondence::new(atom_pairs, atom_count, atoms.len())
+                    .expect("split assigns each selected source atom a component id");
                 let bond_pairs: Vec<_> = bonds
                     .iter()
                     .map(|bond| bond.id())

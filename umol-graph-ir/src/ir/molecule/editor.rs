@@ -118,6 +118,22 @@ impl MoleculeEditor {
         self.molecule.add_bonds(bonds)
     }
 
+    /// Append atoms and localized bonds in input order and return their ids.
+    ///
+    /// Bond endpoints refer to the resulting atom space, including the appended atoms, and are
+    /// stored in increasing atom-id order.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside the resulting atom space.
+    pub fn add_topology(
+        &mut self,
+        atoms: Vec<AtomForm>,
+        bonds: Vec<([AtomId; 2], BondForm)>,
+    ) -> (IdRange<AtomId>, IdRange<BondId>) {
+        self.molecule.add_topology(atoms, bonds)
+    }
+
     /// Append a dative-bond overlay directly to the editor. The acceptor is factor 1; the donors
     /// are factor 2. Their supplied order is retained as the stored frame.
     pub fn add_dative_bond(
@@ -801,6 +817,63 @@ mod tests {
         assert_eq!(ids.len(), 0);
         assert_eq!(triatomic.finish(), Ok(original));
         assert_eq!(ids.next(), None);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_topology(
+        mut addition_entries: MoleculeEntries,
+        #[values(false, true)] shared: bool,
+    ) {
+        let source = Molecule::from_entries(addition_entries.clone());
+        let original = shared.then(|| source.clone());
+        let mut editor = source.edit();
+        let (mut atom_ids, mut bond_ids) = editor.add_topology(
+            vec![
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            vec![
+                ([AtomId(7), AtomId(1)], BondForm::from_order(1)),
+                ([AtomId(6), AtomId(7)], BondForm::from_order(2)),
+            ],
+        );
+
+        assert_eq!(atom_ids.len(), 2);
+        assert_eq!(atom_ids.next(), Some(AtomId(6)));
+        assert_eq!(bond_ids.len(), 2);
+        assert_eq!(bond_ids.next(), Some(BondId(6)));
+        assert_eq!(editor.atom_count(), 8);
+        assert_eq!(editor.bond_count(), 8);
+        if let Some(original) = original {
+            assert_eq!(original, Molecule::from_entries(addition_entries.clone()));
+        }
+        addition_entries.atoms.extend([
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::O),
+        ]);
+        addition_entries.bonds.extend([
+            (AtomId(1), AtomId(7), BondForm::from_order(1)),
+            (AtomId(6), AtomId(7), BondForm::from_order(2)),
+        ]);
+        let expected = Molecule::from_entries(addition_entries);
+        assert_eq!(editor.finish(), Ok(expected));
+        assert_eq!(atom_ids.collect::<Vec<_>>(), vec![AtomId(7)]);
+        assert_eq!(bond_ids.collect::<Vec<_>>(), vec![BondId(7)]);
+    }
+
+    #[rstest]
+    fn test_molecule_editor_add_topology_identity(mut triatomic: MoleculeEditor) {
+        let original = triatomic.probe().unwrap().clone();
+        let (mut atom_ids, mut bond_ids) = triatomic.add_topology(vec![], vec![]);
+
+        assert!(Arc::ptr_eq(&triatomic.molecule.atoms, &original.atoms));
+        assert!(Arc::ptr_eq(&triatomic.molecule.bonds, &original.bonds));
+
+        assert_eq!(atom_ids.len(), 0);
+        assert_eq!(bond_ids.len(), 0);
+        assert_eq!(triatomic.finish(), Ok(original));
+        assert_eq!(atom_ids.next(), None);
+        assert_eq!(bond_ids.next(), None);
     }
 
     #[rstest]

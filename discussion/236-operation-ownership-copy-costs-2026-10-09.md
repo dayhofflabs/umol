@@ -707,6 +707,30 @@ kind.
 taken before the change: split and tracked_split are 60% faster at size 64 and
 unchanged at size 8.
 
+#### S1e1 — Mixed topology batch add **Done**
+
+**Modules:** graph-IR molecule and editor. **Green.** [dep: S1e]
+
+Add `add_topology(&mut self, atoms: Vec<AtomForm>, bonds: Vec<([AtomId; 2],
+BondForm)>) -> (IdRange<AtomId>, IdRange<BondId>)` to Molecule and the
+molecule editor, over Graph::extend. Bond endpoints refer to the resulting
+atom space, including the appended atoms. add_atoms and add_bonds delegate to
+it. combine_from and tracked_split add their atoms and bonds with one
+add_topology call, so the separate node extension no longer copies a shared
+adjacency that the edge rebuild then replaces. tracked_split records each
+atom's id within its component during the partition, so bond endpoints are
+known before the call.
+
+**Tests:** test_molecule_editor_add_topology, for bonds between appended and
+existing atoms on owned and shared sources, and
+test_molecule_editor_add_topology_identity, for empty input; existing combine
+and split results.
+
+**Verification:** the combine and split cases in the reaction bench, against a
+baseline taken before the change: combine and combine_from are 7–10% faster at
+size 8 and 3% faster at size 64; split and tracked_split are 3–4% faster at
+both sizes.
+
 ### S2 — Transport
 
 #### S2a — Consuming entity-collection transport
