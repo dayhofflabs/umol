@@ -32,9 +32,9 @@ pub(crate) use umol_graph_ir::ir::{
     AtomConstraintKey, AtomConstraintsForm, AtomDelta, AtomFieldChange, AtomForm, AtomHandle,
     AtomId, AtomUpdate, BondConstraintForm, BondConstraintKey, BondConstraintsForm, BondDelta,
     BondFieldChange, BondForm, BondHandle, BondId, BondUpdate, BooleanForm, CisTransStereoForm,
-    Constraint, ConstraintEdit, Constraints, DativeBondConstraintForm, DativeBondConstraintKey,
-    DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange, DativeBondForm,
-    DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, Edit, Edits,
+    Constraint, ConstraintDelta, ConstraintEdit, Constraints, DativeBondConstraintForm,
+    DativeBondConstraintKey, DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange,
+    DativeBondForm, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, Edit, Edits,
     ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind, FluxionalityForm,
     FrameTransport, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
     LigandSymmetryForm, MemOp, Molecule, MoleculeConstraint, MoleculeCorrespondence,
@@ -1736,6 +1736,21 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
         )
 }
 
+/// `molecule` with its molecule-level constraints in normal form, for comparisons under their
+/// set-like semantics.
+pub(crate) fn with_normalized_constraints(molecule: &Molecule) -> Molecule {
+    let mut editor = molecule.clone().edit();
+    let constraints = editor
+        .constraints()
+        .clone()
+        .normalize()
+        .expect("generated constraints are satisfiable");
+    *editor.constraints_mut() = constraints;
+    editor
+        .finish()
+        .expect("normalizing constraints preserves integrity")
+}
+
 pub(crate) fn molecule_strategy() -> impl Strategy<Value = Molecule> {
     molecule_entries_strategy().prop_map(Molecule::from_entries)
 }
@@ -1766,6 +1781,19 @@ impl ConstraintCounts {
             noncovalent: entries.noncovalent.len(),
             stereo_atom: entries.stereo_atoms.len(),
             stereo_bond: entries.stereo_bonds.len(),
+        }
+    }
+
+    pub(crate) fn from_reaction_span(span: &ReactionSpan) -> Self {
+        Self {
+            atom: span.atoms().len(),
+            bond: span.bonds().len(),
+            dative: span.dative_bonds().count(),
+            aromatic: span.aromatic_systems().count(),
+            multicenter: span.multicenter_bonds().count(),
+            noncovalent: span.noncovalent_bonds().count(),
+            stereo_atom: span.stereo_atoms().count(),
+            stereo_bond: span.stereo_bonds().count(),
         }
     }
 
@@ -2631,6 +2659,9 @@ pub(crate) fn molecule_with_atom_subset_strategy() -> impl Strategy<Value = (Mol
     })
 }
 
+/// Atom and bond removals that leave the molecule valid. Topology removal cascades a stereo entity
+/// only when one of its participants is removed, so the removed bonds exclude every bond that
+/// connects a stereo site to one of its atom ligands.
 pub(crate) fn molecule_with_removals_strategy(
 ) -> impl Strategy<Value = (Molecule, Vec<AtomId>, Vec<BondId>)> {
     molecule_strategy().prop_flat_map(|molecule| {
@@ -2642,6 +2673,29 @@ pub(crate) fn molecule_with_removals_strategy(
             prop::collection::vec(any::<bool>(), bond_count),
         )
             .prop_map(|(molecule, atom_mask, bond_mask)| {
+                let graph = molecule.raw_graph();
+                let ligand_bond = |sites: &[AtomId], ligand: &StereoLigand| {
+                    (ligand.kind == StereoLigandKind::Atom)
+                        .then(|| {
+                            sites.iter().find_map(|&site| {
+                                graph.find_edge(NodeId::from(site), NodeId::from(ligand.atom_id))
+                            })
+                        })
+                        .flatten()
+                };
+                let mut ligand_bonds = HashSet::new();
+                for view in molecule.stereo_atoms().iter() {
+                    for ligand in view.ligand_ids() {
+                        ligand_bonds.extend(ligand_bond(&[view.site_id()], ligand));
+                    }
+                }
+                for view in molecule.stereo_bonds().iter() {
+                    let [first, second] = graph.edge_endpoints(EdgeId::from(view.site_id()));
+                    let sites = [AtomId::from(first), AtomId::from(second)];
+                    for ligand in view.ligand_ids() {
+                        ligand_bonds.extend(ligand_bond(&sites, ligand));
+                    }
+                }
                 let atoms = atom_mask
                     .into_iter()
                     .enumerate()
@@ -2650,7 +2704,10 @@ pub(crate) fn molecule_with_removals_strategy(
                 let bonds = bond_mask
                     .into_iter()
                     .enumerate()
-                    .filter_map(|(index, remove)| remove.then_some(BondId(index as u32)))
+                    .filter(|&(index, remove)| {
+                        remove && !ligand_bonds.contains(&EdgeId(index as u32))
+                    })
+                    .map(|(index, _)| BondId(index as u32))
                     .collect();
                 (molecule, atoms, bonds)
             })
@@ -4743,19 +4800,86 @@ pub(crate) fn comprehensive_reaction_strategy() -> BoxedStrategy<Reaction> {
         2 => overlay_reaction_strategy(),
         1 => replacement_reaction_strategy(),
     ]
+    .prop_flat_map(|reaction| sparsely_constrained_reaction(reaction, true))
     .boxed()
 }
 
+/// Materializable reactions whose lhs carries no molecule-scope constraints, which matching
+/// rejects until their evaluation is designed. Constraint additions remain.
+pub(crate) fn matchable_reaction_strategy() -> BoxedStrategy<Reaction> {
+    prop_oneof![
+        2 => overlay_reaction_strategy(),
+        1 => replacement_reaction_strategy(),
+    ]
+    .prop_flat_map(|reaction| sparsely_constrained_reaction(reaction, false))
+    .boxed()
+}
+
+/// Molecule-level constraints on about one in ten reactions: one or two lhs constraint trees when
+/// `lhs_constraints` holds, each removed by a constraint delta with probability one half, and
+/// independently one added tree. Trees range over the lhs entity counts. A choice that fails
+/// molecule integrity or materialization keeps the unconstrained reaction.
+fn sparsely_constrained_reaction(
+    reaction: Reaction,
+    lhs_constraints: bool,
+) -> impl Strategy<Value = Reaction> {
+    let counts = ConstraintCounts::from_ir(reaction.lhs());
+    (
+        prop::option::weighted(
+            0.05,
+            prop::collection::vec((constraint_strategy(counts), any::<bool>()), 1..=2),
+        ),
+        prop::option::weighted(0.05, constraint_strategy(counts)),
+    )
+        .prop_map(move |(drawn, added)| {
+            let lhs_constraints = drawn.filter(|_| lhs_constraints);
+            if lhs_constraints.is_none() && added.is_none() {
+                return reaction.clone();
+            }
+            let mut editor = reaction.lhs().clone().edit();
+            let mut deltas = reaction.deltas().clone();
+            for (constraint, removed) in lhs_constraints.into_iter().flatten() {
+                if removed {
+                    if let Ok(normalized) = constraint.clone().normalize() {
+                        deltas.push(Delta::Constraint(ConstraintDelta::Remove(normalized)));
+                    }
+                }
+                editor.constraints_mut().push(constraint);
+            }
+            if let Some(constraint) = added {
+                deltas.push(Delta::Constraint(ConstraintDelta::Add(constraint)));
+            }
+            editor
+                .finish()
+                .ok()
+                .map(|lhs| Reaction::new(lhs, deltas))
+                .filter(|candidate| candidate.to_reaction_span().is_ok())
+                .unwrap_or_else(|| reaction.clone())
+        })
+}
+
 /// Reactions whose delta collection materializes a reaction span by construction. The generated
-/// cases cover replacement reactions and reactions over every entity kind without filtering out
-/// failed materializations.
+/// cases cover replacement reactions, reactions over every entity kind, and molecule-level
+/// constraint deltas, without filtering out failed materializations.
 pub(crate) fn materializable_reaction_strategy() -> BoxedStrategy<Reaction> {
     comprehensive_reaction_strategy()
 }
 
 pub(crate) fn reaction_application_strategy(
 ) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
-    (materializable_reaction_strategy(), molecule_strategy()).prop_map(|(reaction, extra)| {
+    reaction_application_over(materializable_reaction_strategy())
+}
+
+/// Applications of reactions that matching accepts, for properties that enumerate matches.
+pub(crate) fn matchable_reaction_application_strategy(
+) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
+    reaction_application_over(matchable_reaction_strategy())
+}
+
+fn reaction_application_over(
+    reactions: impl Strategy<Value = Reaction>,
+) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
+    (reactions, molecule_strategy()).prop_map(|(reaction, extra)| {
         let host = Molecule::combine_all([reaction.lhs(), &extra]);
         let correspondence = MoleculeCorrespondence::new(
             Correspondence::from_images(

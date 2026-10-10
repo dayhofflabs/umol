@@ -1282,13 +1282,20 @@ impl Molecule {
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
                 let constraint = state.resolve_constraint(constraint)?;
-                let position = self
+                let positions = self
                     .constraints()
                     .as_slice()
                     .iter()
-                    .rposition(|c| *c == constraint)
-                    .ok_or(TransactionError::MissingEntry)?;
-                self.remove_constraint_at(position);
+                    .enumerate()
+                    .filter(|(_, stored)| stored.normalized_eq(&constraint))
+                    .map(|(position, _)| position)
+                    .collect::<Vec<_>>();
+                if positions.is_empty() {
+                    return Err(TransactionError::MissingEntry);
+                }
+                for &position in positions.iter().rev() {
+                    self.remove_constraint_at(position);
+                }
                 Ok(())
             }
         }
@@ -2352,18 +2359,28 @@ impl Molecule {
             }
             Edit::RemoveMoleculeConstraint { constraint } => {
                 let constraint = state.resolve_constraint(constraint)?;
-                let position = self
+                let positions = self
                     .constraints()
                     .as_slice()
                     .iter()
-                    .rposition(|c| *c == constraint)
-                    .ok_or(TransactionError::MissingEntry)?;
-                let constraint = self.remove_constraint_at(position);
-                Ok(Undo::RestoreMoleculeConstraints(CascadedConstraints {
-                    removed: vec![RemovedConstraint {
+                    .enumerate()
+                    .filter(|(_, stored)| stored.normalized_eq(&constraint))
+                    .map(|(position, _)| position)
+                    .collect::<Vec<_>>();
+                if positions.is_empty() {
+                    return Err(TransactionError::MissingEntry);
+                }
+                let mut removed = positions
+                    .into_iter()
+                    .rev()
+                    .map(|position| RemovedConstraint {
                         position,
-                        constraint,
-                    }],
+                        constraint: self.remove_constraint_at(position),
+                    })
+                    .collect::<Vec<_>>();
+                removed.reverse();
+                Ok(Undo::RestoreMoleculeConstraints(CascadedConstraints {
+                    removed,
                     modified: Vec::new(),
                 }))
             }
@@ -5333,29 +5350,40 @@ mod tests {
     }
 
     #[rstest]
+    #[case::repeated(Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1)))]
+    #[case::equivalent(Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::degree(NumForm::lit_set([1]))
+    ))]
     fn test_molecule_apply_edit_remove_molecule_constraint(
         mut removal_entries: MoleculeEntries,
+        #[case] copy: Constraint,
         #[values(false, true)] journaled: bool,
     ) {
-        let repeated = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
+        let removed = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(1));
         let middle = Constraint::Atom(AtomId(1), AtomConstraintForm::degree(2));
-        removal_entries.constraints =
-            vec![repeated.clone(), middle.clone(), repeated.clone()].into();
+        removal_entries.constraints = vec![removed.clone(), middle.clone(), copy.clone()].into();
         let initial = Molecule::from_entries(removal_entries.clone());
         let mut molecule = initial.clone();
         let mut state = ApplicationState::new(&molecule);
         let edit = Edit::RemoveMoleculeConstraint {
-            constraint: repeated.clone().into(),
+            constraint: removed.clone().into(),
         };
         let undo = if journaled {
             let undo = molecule.apply_edit_with_undo(edit, &mut state).unwrap();
             assert_eq!(
                 undo,
                 Some(Undo::RestoreMoleculeConstraints(CascadedConstraints {
-                    removed: vec![RemovedConstraint {
-                        position: 2,
-                        constraint: repeated.clone()
-                    }],
+                    removed: vec![
+                        RemovedConstraint {
+                            position: 0,
+                            constraint: removed,
+                        },
+                        RemovedConstraint {
+                            position: 2,
+                            constraint: copy,
+                        },
+                    ],
                     modified: Vec::new(),
                 }))
             );
@@ -5364,7 +5392,7 @@ mod tests {
             molecule.apply_edit(edit, &mut state).unwrap();
             None
         };
-        removal_entries.constraints = vec![repeated, middle].into();
+        removal_entries.constraints = vec![middle].into();
         assert_eq!(molecule, Molecule::from_entries(removal_entries));
         if let Some(undo) = undo {
             molecule.apply_undo(undo);
@@ -5375,9 +5403,6 @@ mod tests {
     #[rstest]
     #[case::missing(Edit::RemoveMoleculeConstraint {
         constraint: Constraint::Atom(AtomId(0), AtomConstraintForm::degree(2)).into(),
-    }, TransactionError::MissingEntry)]
-    #[case::equivalent(Edit::RemoveMoleculeConstraint {
-        constraint: Constraint::Atom(AtomId(0), AtomConstraintForm::degree(NumForm::lit_set([1]))).into(),
     }, TransactionError::MissingEntry)]
     #[case::add_nested(Edit::AddMoleculeConstraint {
         constraint: Constraint::And(vec![
@@ -5453,10 +5478,16 @@ mod tests {
         assert_eq!(
             constraint,
             Undo::RestoreMoleculeConstraints(CascadedConstraints {
-                removed: vec![RemovedConstraint {
-                    position: 1,
-                    constraint: Constraint::Atom(AtomId(2), AtomConstraintForm::degree(2)),
-                }],
+                removed: vec![
+                    RemovedConstraint {
+                        position: 0,
+                        constraint: Constraint::Atom(AtomId(2), AtomConstraintForm::degree(2)),
+                    },
+                    RemovedConstraint {
+                        position: 1,
+                        constraint: Constraint::Atom(AtomId(2), AtomConstraintForm::degree(2)),
+                    },
+                ],
                 modified: Vec::new(),
             })
         );

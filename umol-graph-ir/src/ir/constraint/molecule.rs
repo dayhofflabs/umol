@@ -566,10 +566,19 @@ impl Normalize for Constraint {
 }
 
 impl Normalize for Constraints {
-    /// The store is an implicit conjunction, so it canonicalizes like an `And`:
-    /// flatten top-level `And` entries, drop empty `And`/`Or`, sort + dedup.
+    /// Normalize each stored constraint on its own: a top-level `And` stays one constraint, as an
+    /// `Or` does. Drop empty `And`/`Or`, then sort + dedup.
     fn normalize(self) -> Result<Self, Contradiction> {
-        Ok(Self(normalize_logical_constraints(self.0, true)?))
+        let mut constraints = Vec::with_capacity(self.0.len());
+        for constraint in self.0 {
+            match constraint.normalize()? {
+                Constraint::And(inner) | Constraint::Or(inner) if inner.is_empty() => {}
+                other => constraints.push(other),
+            }
+        }
+        constraints.sort();
+        constraints.dedup();
+        Ok(Self(constraints))
     }
 }
 
@@ -603,8 +612,7 @@ impl Constraints {
 
 /// Normalize each child, splice same-combinator children (flatten), drop
 /// empty `And`/`Or`, then sort + dedup. `is_and` selects which combinator is the
-/// parent: `true` flattens nested `And` (and the conjunctive top-level store),
-/// `false` flattens nested `Or`.
+/// parent: `true` flattens nested `And`, `false` flattens nested `Or`.
 fn normalize_logical_constraints(
     constraints: Vec<Constraint>,
     is_and: bool,
@@ -2080,7 +2088,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::flattens_top_level_and_then_sorts(
+    #[case::unwraps_single_conjunct_then_sorts(
         Constraints::from(vec![
             Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true)))]),
             Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
@@ -2088,6 +2096,22 @@ mod tests {
         Ok(Constraints::from(vec![
             Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
             Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+        ])),
+    )]
+    #[case::keeps_top_level_and(
+        Constraints::from(vec![
+            Constraint::And(vec![
+                Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+                Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
+            ]),
+            Constraint::Atom(AtomId(1), AtomConstraintForm::degree(2)),
+        ]),
+        Ok(Constraints::from(vec![
+            Constraint::Atom(AtomId(1), AtomConstraintForm::degree(2)),
+            Constraint::And(vec![
+                Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
+                Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+            ]),
         ])),
     )]
     #[case::drops_empty_or_and_dedups(

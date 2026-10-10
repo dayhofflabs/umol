@@ -320,68 +320,187 @@ subitems only after their decisions.
 
 ### S0 — Normal-form tower
 
-S0b follows S0d; the others are independent of each other.
-
-#### S0a — Remove Normalize::normalized
+#### S0a — Remove Normalize::normalized **Done**
 
 **Modules:** graph-IR traits, the 11 scalar forms, lattice implementations,
 entity entries, canonicalization, property tests. **Breaking, red→green within
 the subitem.** [dep: none]
 
 Remove normalized from Normalize and its 11 overrides. Migrate every caller to
-`clone().normalize()`, following the measured experiment. Override
-normalized_eq in the scalar forms to compare trivially normal variants without
-cloning. The stereo forms delegate to coset_normalized_eq, a kind-parameterized
-coset comparison beside coset_meet. Remove the property assertion that compared normalized with normalize.
-Update rustdoc that refers to normalized.
+`clone().normalize()`. Override normalized_eq in the scalar forms to compare
+trivially normal variants without cloning. The stereo forms delegate to
+coset_normalized_eq, a kind-parameterized coset comparison beside coset_meet.
+Remove the property assertion that compared normalized with normalize. Update
+rustdoc that refers to normalized.
 
 **Tests:** normalized_eq overrides agree with the default for every variant
 pair of each scalar form, including unsatisfiable values.
 
-**Verification:** the production diff matches the experiment except for the
-normalized_eq overrides. Run the canonicalize and resolve benches against a
-baseline taken before the change; the composite resolver calls meet on scalar
-forms.
+**Verification:** the canonicalize and resolve benches against a baseline taken
+before the change; the composite resolver calls meet on scalar forms.
 
-#### S0b — Borrowing canonical_hash
+#### S0a1 — Normalized reaction-span constraint keys **Done**
 
-**Modules:** graph-IR canonicalization; Python bindings that call it.
-**Breaking, red→green within the subitem.** [dep: S0d]
+**Modules:** graph-IR canonicalization and its tests. **Red→green
+within the subitem.** [dep: none]
 
-Change the signature to `canonical_hash(&self, context) -> Result<u64,
-Self::Error>`. Each aggregate hashes its canonical_key_at result, the value
-canonical_eq compares. Equal comparison keys then imply equal hashes.
+ReactionSpan canonical_eq is not invariant under renumbering when the span
+carries a constraint with an id list. Molecule-level subsets (ChargeSum,
+UnpairedElectronCoupling, BondOrderSum, Connected) and relational atom lists
+(DativeBondDonors, DativeBondContainsAllDonors) are sets whose normal form is
+sorted and deduplicated. Each span search leaf keys
+`span.remap(&remapping).reframe_by(&action)`, which leaves the remapped lists in
+permuted order, and the molecule-level constraint block of
+reaction_span_comparison_key reads them in stored order. Molecule is
+unaffected, and the span's own final canonicalization step normalizes.
 
-Update the Canonicalize trait listing in the data-type guide.
+reaction_span_comparison_key keys each constraint span after normalizing it, as
+it already keys normalized entity values. Spans without constraints take the
+unchanged path.
 
-**Tests:** hash equality for canonically equal inputs under remapping;
-agreement with canonical_eq on equal and unequal pairs; contradiction errors.
+**Tests:** canonical_eq of a span with a molecule-level subset constraint and of
+a span with a relational atom-list constraint against a renumbered copy; the
+same pairs through Reaction canonical_eq.
 
-**Verification:** the canonicalize bench canonical_hash cases, against a
+**Verification:** a short run of the reaction canonical_eq cases against a
 baseline taken before the change.
 
-#### S0c — Consuming tower implementations move their storage
+Molecule-level constraints are a set under normalized identity: normalized-equal
+stored constraints, such as `c` and `And([c])`, count as one constraint, and every
+constraint delta acts on all of them. Materialization, ReactionSpan::superimpose
+(and with it from_sides and composition), Molecule normalization, and canonical
+comparison keys follow this definition, as the data-type guide states.
+Application and reaction-span integrity do not; S0a2 and S0a3 bring them in line.
 
-**Modules:** graph-IR aromatic, dative, multicenter, noncovalent, stereo,
-reaction. **Internal, green.** [dep: none]
+#### S0a2 — Conflicting constraint spans in reaction-span integrity **Done**
 
-Molecule's six overlay collections and the six span types clone each entity's
-attributes inside normalize and reframe_by:
-`*set.data_mut(id) = set.data(id).clone().normalize()?`. Move the stored value
-out with mem::take on data_mut, normalize or transport it, and write it back;
-the forms implement Default. Reaction normalize passes its deltas to
-normalize_reaction_deltas by reference and rebuilds them. Change that function
-to consume the deltas. Results are unchanged.
+**Modules:** graph-IR reaction_span and its tests. **Red→green within the
+subitem.** [dep: none]
 
-**Tests:** existing normalize and reframe results for each type and for
-Reaction.
+ReactionSpan integrity accepts entries that give normalized-equal constraints two
+span states, such as `Unchanged(c)` with `Added(c)`. Each pairing of different states
+asserts the constraint both present and absent on one side, and to_reaction turns
+such a span into a reaction that does not materialize. check_integrity rejects
+entries in which two constraint spans of different states carry
+normalized-equal constraints, with the new variant
+`ReactionSpanIntegrityError::ConflictingConstraintSpans { constraint:
+Constraint }`. Normalized-equal constraints under one state remain valid.
 
-**Verification:** the reframe and canonicalize bench cases, against a baseline
-taken before the change.
+**Tests:** try_from_entries rejects `Unchanged` with `Added`, `Unchanged` with
+`Removed`, and `Added` with `Removed` of one constraint, also when the second
+constraint is a non-normal equivalent such as `And([c])`, and accepts
+normalized-equal constraints under one state. These cases replace
+test_reaction_span_to_reaction_constraint_conflict, whose spans become invalid.
 
-#### S0d — Canonicalization helpers
+#### S0a3 — Constraint removal acts on all normalized-equal constraints **Done**
 
-**Modules:** graph-IR canonicalization and its tests. **Internal, green.**
+**Modules:** graph-IR molecule apply and reaction tests. **Red→green within the
+subitem.** [dep: none]
+
+RemoveMoleculeConstraint removes the one stored constraint that is structurally
+equal to the edit's. A reaction whose lhs stores `And([c])` and whose delta
+removes `c` therefore materializes but fails to apply with MissingEntry, and a
+host holding two equivalent copies keeps one. RemoveMoleculeConstraint removes
+every stored constraint normalized-equal to the edit's and fails with
+MissingEntry when there is none; the undo payload records each removed constraint
+with its position, as it already supports.
+
+**Tests:** test_reaction_apply_at_non_normal_constraint asserts the exact
+product; a molecule-apply case removes two equivalent stored copies through one
+normal-form edit and its undo restores both. The `equivalent` case of
+test_molecule_apply_edit_molecule_constraint_error moves to the positive cases.
+
+#### S0a4 — Set-like constraints in reaction-span construction **Done**
+
+**Modules:** graph-IR reaction_span, the reaction property tests. **Red→green
+within the subitem.** [dep: S0a2]
+
+to_reaction_span and ReactionSpan::superimpose build the constraint spans from
+the normalized constraint sets of the two sides, in constraint order, so a
+span carries no normalized-equal duplicates. Their rustdoc states the set-like
+semantics: the lhs projection has the same structural entities and canonically
+equal constraint-set semantics. A redundant or non-normal stored lhs constraint
+therefore does not return exactly through a span. test_reaction_span_roundtrip
+and the two `span.lhs() == host` assertions of the application properties
+compared the lhs exactly; they compare it with its molecule-level constraints in
+normal form. to_reaction emits one delta per normal form.
+
+**Tests:** test_reaction_to_reaction_span_constraint covers a non-normal stored
+constraint removed by its stored form and `c` beside `And([c])` under one
+Remove, each with one Removed span in normal form.
+
+#### S0a5 — Top-level conjunctions stay one constraint **Done**
+
+**Modules:** graph-IR constraint and reaction_span and their tests; the
+data-type guide. **Red→green within the subitem.** [dep: S0a4]
+
+Constraints normalization flattened a top-level `And` into its conjuncts, while
+it kept a top-level `Or` as one constraint, and every constraint operation
+identifies a stored constraint by its own normal form. A canonical reaction then
+removed the conjuncts separately and no longer applied to a host that stores the
+conjunction. Constraints normalization normalizes each stored constraint on its
+own, so a top-level `And` stays one constraint, as an `Or` does; empty `And` and
+`Or` are dropped, and the rest sorts and deduplicates. Reaction-span
+normalization derives each constraint span's state from the two normalized
+sides, ordered by constraint, so the span's lhs and rhs equal the normalized
+sides. Materialization emits the constraint spans in the same constraint order, so a
+normalized span rematerializes in its own order. The data-type guide
+states the rule.
+
+**Tests:** test_constraints_normalize keeps a two-conjunct top-level `And`;
+test_reaction_span_normalize_constraints covers added and removed conjunctions
+beside an unchanged conjunct and an empty conjunction;
+test_reaction_span_reframe_projection and test_reaction_canonicalize_application
+hold on the S0a6 generators.
+
+#### S0a6 — Molecule-level constraints in aggregate generators
+
+**Modules:** graph-IR property-test strategies. **Additive, green.** [dep: S0a1–S0a5]
+
+The Molecule properties draw molecule-level constraints from
+molecule_with_constraints_strategy. The ReactionSpan and Reaction generators
+produce none: reaction_span_entries_strategy has no constraint spans, and
+materializable_reaction_strategy builds its lhs from molecules without
+constraints. Give one in ten generated reaction lhs molecules constraint_strategy
+trees sized by their ConstraintCounts, and let reaction_over add constraint
+deltas at the same rate. The span entries strategy produces Unchanged, Added, and
+Removed constraint spans at the same rate. Constraints force the Full
+canonicalization level, so the rate stays small to bound property-suite time.
+Matching rejects patterns with molecule-scope constraints until doc 195's
+evaluation lands, so the application properties that match (test_reaction_apply,
+test_react_react, test_react_react_slice) draw reactions whose lhs carries none;
+the apply_at properties keep them.
+
+**Tests:** the existing aggregate properties run on the extended generators.
+
+**Verification:** the property suite's wall time before and after the change;
+the share of generated values carrying molecule-level constraints.
+
+#### S0a7 — Canonical equality contract properties
+
+**Modules:** graph-IR property tests for molecule, reaction span, and reaction
+canonicalization. **Additive, green.** [dep: S0a6]
+
+For Molecule, ReactionSpan, and Reaction, assert that canonical_eq agrees with
+equality of the canonical forms in both directions, with two contradictions
+equal. Each test draws a pair from a generated value `a` and a value `b`
+derived from it:
+
+- equivalent with a different span: `b` converts a non-normal equivalent span
+  of `a` to the aggregate, such as an Unchanged entry written as an equivalent
+  Modified entry or a non-canonical constraint set difference (spans and
+  reactions only);
+- equivalent by renumbering, normalization, or reframing;
+- not equivalent: one attribute or constraint of `a` mutated.
+
+**Tests:** the three contract properties.
+
+**Verification:** the generated pairs include equivalent and non-equivalent
+pairs from every transform.
+
+#### S0b — Canonicalization helpers
+
+**Modules:** graph-IR canonicalization and its tests. **Green.**
 [dep: none]
 
 Replace the private canonicalization helper layers with two private methods per
@@ -430,13 +549,47 @@ results are unchanged.
 **Verification:** the canonicalize bench, against a baseline taken before the
 change.
 
-### S1 — Combination, constraints, and components
+#### S0c — Borrowing canonical_hash
 
-S1b follows S1a; the others are independent of each other.
+**Modules:** graph-IR canonicalization; Python bindings that call it.
+**Breaking, red→green within the subitem.** [dep: S0b]
+
+Change the signature to `canonical_hash(&self, context) -> Result<u64,
+Self::Error>`. Each aggregate hashes its canonical_key_at result, the value
+canonical_eq compares. Equal comparison keys then imply equal hashes.
+
+Update the Canonicalize trait listing in the data-type guide.
+
+**Tests:** hash equality for canonically equal inputs under remapping;
+agreement with canonical_eq on equal and unequal pairs; contradiction errors.
+
+**Verification:** the canonicalize bench canonical_hash cases, against a
+baseline taken before the change.
+
+#### S0d — Consuming tower implementations move their storage
+
+**Modules:** graph-IR aromatic, dative, multicenter, noncovalent, stereo,
+reaction. **Green.** [dep: none]
+
+Molecule's six overlay collections and the six span types clone each entity's
+attributes inside normalize and reframe_by:
+`*set.data_mut(id) = set.data(id).clone().normalize()?`. Move the stored value
+out with mem::take on data_mut, normalize or transport it, and write it back;
+the forms implement Default. Reaction normalize passes its deltas to
+normalize_reaction_deltas by reference and rebuilds them. Change that function
+to consume the deltas. Results are unchanged.
+
+**Tests:** existing normalize and reframe results for each type and for
+Reaction.
+
+**Verification:** the reframe and canonicalize bench cases, against a baseline
+taken before the change.
+
+### S1 — Combination, constraints, and components
 
 #### S1a — Batch combine_from
 
-**Modules:** graph-IR molecule. **Internal, green.** [dep: none]
+**Modules:** graph-IR molecule. **Green.** [dep: none]
 
 Rewrite combine_from to append other's entities with add_atoms, add_bonds, and
 the overlay batch methods, so that one combine extends the graph once. Ids,
@@ -495,7 +648,7 @@ and contradictions.
 
 #### S1e — Batch component building in split
 
-**Modules:** graph-IR molecule. **Internal, green.** [dep: none]
+**Modules:** graph-IR molecule. **Green.** [dep: none]
 
 tracked_split builds each component with one add_atom, add_bond, or overlay add
 per entity, and each add_bond extends the component's graph. Build each
@@ -510,8 +663,6 @@ kind.
 taken before the change.
 
 ### S2 — Transport
-
-S2b follows S2a; S2c is independent.
 
 #### S2a — Consuming entity-collection transport
 
@@ -550,8 +701,6 @@ rename the Python method to match.
 **Tests:** existing metadata remapping tests under the new name.
 
 ### S3 — Engines
-
-S3a–S3d are independent; S3e follows S3b; S3f follows S3c, S3d, and S3e.
 
 #### S3a — Consuming add_systems
 
@@ -599,7 +748,7 @@ kekulization results are unchanged.
 #### S3d — In-place transform_into without a transaction
 
 **Modules:** graph transform/aromatizer and transform/delocalize_charge.
-**Internal, green.** [dep: none]
+**Green.** [dep: none]
 
 Aromatizer and DelocalizeCharge transform_into apply their plan in place instead
 of through transact. Planning failures leave the receiver unchanged.
@@ -610,7 +759,7 @@ Aromatizer planning failure.
 #### S3e — Individual resolver _into without a transaction
 
 **Modules:** graph resolve isotope, aromaticity, stereo, bonds, multicenter.
-**Internal, green.** [dep: S3b]
+**Green.** [dep: S3b]
 
 The eight resolve_into and project_into methods apply their plan in place
 instead of through transact. Outcomes decided during planning leave the receiver
@@ -634,14 +783,10 @@ nomenclature guide's Transformation entry still agrees.
 
 ### S4 — Copy-on-write storage
 
-The copy-on-write measurements are approved. S4a–S4d are internal, green, and
-independent of each other. The worktree experiment touched 12 graph-IR source
-files with about 230 changed lines; each subitem lists its share.
-
 #### S4a — Molecule constraints
 
 **Modules:** graph-IR molecule, molecule/editor, molecule/pushout,
-molecule/remap, molecule/tests. **Internal, green.** [dep: none]
+molecule/remap, molecule/tests. **Green.** [dep: none]
 
 Change the field to `Arc<Constraints>`. constraints_mut uses Arc::make_mut, and
 every mutating call (take, push, extend, remove_at, compact, tracked_compact,
@@ -658,7 +803,7 @@ on one copy leave the other unchanged.
 
 #### S4b — Reaction deltas
 
-**Modules:** graph-IR reaction. **Internal, green.** [dep: none]
+**Modules:** graph-IR reaction. **Green.** [dep: none]
 
 Change the field to `Arc<Deltas>`. Reaction::try_new wraps the supplied Deltas.
 normalize wraps its rebuilt Deltas. reframe_by, reframe, and into_parts use
@@ -670,7 +815,7 @@ shared and of a uniquely owned reaction.
 
 #### S4c — ReactionSpan tables
 
-**Modules:** graph-IR reaction_span. **Internal, green.** [dep: none]
+**Modules:** graph-IR reaction_span. **Green.** [dep: none]
 
 Change atoms, bonds, and constraints to `Arc<Vec<…>>`. Wrap at construction in
 from_entries, try_remap, and reverse_sides. normalize, reframe_by, and reframe
@@ -682,7 +827,7 @@ inner Vec where they need an owned table.
 #### S4d — ReactionSpan overlay span newtypes
 
 **Modules:** graph-IR dative, aromatic, multicenter, noncovalent, stereo.
-**Internal, green.** [dep: none]
+**Green.** [dep: none]
 
 Wrap the relation set of DativeBondSpans, AromaticSystemSpans,
 MulticenterBondSpans, NoncovalentBondSpans, StereoAtomSpans, and
@@ -740,4 +885,4 @@ Run workspace tests and lints with all features, and the Python suite in the
 repository's Python 3.13 environment. Rerun benchmarks only for cases whose
 production code differs from what was measured.
 
-**Critical path:** within S0, S0d before S0b; within S1, S1a before S1b; within S2, S2a before S2b; S4e after S4a–S4d; S5a after S0–S4; S6a last. The stages S0–S4 are otherwise independent of each other.
+**Critical path:** within S0, S0b before S0c; within S1, S1a before S1b; within S2, S2a before S2b; S4e after S4a–S4d; S5a after S0–S4; S6a last. The stages S0–S4 are otherwise independent of each other.

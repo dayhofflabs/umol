@@ -10,16 +10,16 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph_core::{Correspondence, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomForm, AtomId, BondId, DativeBondId, EntitySpan, Molecule,
+    AromaticSystemId, AtomForm, AtomId, BondId, ConstraintSpan, DativeBondId, EntitySpan, Molecule,
     MoleculeCorrespondence, MoleculeEntries, MoleculeRemapping, MulticenterBondId,
-    NoncovalentBondId, Reaction, ReactionSpan, ReactionSpanEntries, StereoAtomId, StereoBondId,
-    StereoLigand,
+    NoncovalentBondId, Normalize, Reaction, ReactionSpan, ReactionSpanEntries, StereoAtomId,
+    StereoBondId, StereoLigand,
 };
 
 use crate::strategies::{
-    materializable_reaction_strategy, molecule_entries_strategy,
+    constraint_strategy, materializable_reaction_strategy, molecule_entries_strategy,
     molecule_entries_structurally_unambiguous_strategy, overlay_reaction_strategy,
-    reaction_strategy,
+    reaction_strategy, with_normalized_constraints, ConstraintCounts,
 };
 
 #[path = "span/canonicalize.rs"]
@@ -347,12 +347,50 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
         })
 }
 
+/// Constraint spans on about one in ten spans: one or two trees over the span's entity counts, each
+/// Unchanged, Added, or Removed, ordered by normal form as materialization orders them. A choice
+/// that fails span integrity keeps the span without constraints.
+fn sparsely_constrained_reaction_span(
+    entries: ReactionSpanEntries,
+) -> impl Strategy<Value = ReactionSpan> {
+    let span = ReactionSpan::try_from_entries(entries.clone())
+        .expect("generated span entries satisfy representation integrity");
+    let counts = ConstraintCounts::from_reaction_span(&span);
+    prop::option::weighted(
+        0.1,
+        prop::collection::vec((constraint_strategy(counts), 0u8..3), 1..=2),
+    )
+    .prop_map(move |constraints| {
+        let Some(constraints) = constraints else {
+            return span.clone();
+        };
+        let mut constrained = entries.clone();
+        constrained.constraints = constraints
+            .into_iter()
+            .map(|(constraint, tag)| match tag {
+                0 => ConstraintSpan::Unchanged(constraint),
+                1 => ConstraintSpan::Added(constraint),
+                _ => ConstraintSpan::Removed(constraint),
+            })
+            .collect();
+        constrained.constraints.sort_by_cached_key(|span| {
+            let constraint = match span {
+                ConstraintSpan::Unchanged(constraint)
+                | ConstraintSpan::Added(constraint)
+                | ConstraintSpan::Removed(constraint) => constraint,
+            };
+            constraint
+                .clone()
+                .normalize()
+                .unwrap_or_else(|_| constraint.clone())
+        });
+        ReactionSpan::try_from_entries(constrained).unwrap_or_else(|_| span.clone())
+    })
+}
+
 fn reaction_span_strategy() -> impl Strategy<Value = ReactionSpan> {
     prop_oneof![
-        2 => reaction_span_entries_strategy().prop_map(|entries| {
-            ReactionSpan::try_from_entries(entries)
-                .expect("generated span entries satisfy representation integrity")
-        }),
+        2 => reaction_span_entries_strategy().prop_flat_map(sparsely_constrained_reaction_span),
         3 => materializable_reaction_strategy().prop_map(|reaction| {
             reaction
                 .to_reaction_span()
@@ -491,8 +529,9 @@ proptest! {
         prop_assert_eq!(rebuilt, Some(span));
     }
 
-    /// Reaction → span → reaction is an exact idempotent delta normal form that retains the lhs and
-    /// materialized span, including all entity kinds.
+    /// Reaction → span → reaction is an exact idempotent delta normal form that retains the lhs,
+    /// with its molecule-level constraints compared as a set, and the materialized span, including
+    /// all entity kinds.
     #[test]
     fn test_reaction_span_roundtrip(reaction in materializable_reaction_strategy()) {
         let span = reaction
@@ -504,7 +543,10 @@ proptest! {
             .expect("reaction derived from a constructed span materializes");
         let normalized_twice = normalized_span.to_reaction();
 
-        prop_assert_eq!(normalized.lhs(), reaction.lhs());
+        prop_assert_eq!(
+            with_normalized_constraints(normalized.lhs()),
+            with_normalized_constraints(reaction.lhs()),
+        );
         prop_assert_eq!(normalized_span, span);
         prop_assert_eq!(normalized_twice, normalized);
     }

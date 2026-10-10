@@ -297,9 +297,10 @@ solely to make an exact structural roundtrip retain redundant input.
 Molecule-level `Constraints` is the reference case. Its raw `Vec` representation permits ordering
 and duplicate entries, and `==` observes both. Its semantic value is an implicit conjunction:
 conjunct order is irrelevant and repeated equal constraints are idempotent. Normalization
-therefore normalizes the individual constraints, flattens conjunctions, sorts them, and removes
-duplicates. Reaction deltas, reaction spans, matching, and aggregate canonicalization must use this
-set-like semantic value; they must not treat duplicate occurrences as distinct chemical assertions.
+therefore normalizes the individual constraints, sorts them, and removes duplicates. A top-level
+conjunction stays one constraint, as a disjunction does. Reaction deltas, reaction spans,
+matching, and aggregate canonicalization must use this set-like semantic value; they must not
+treat duplicate occurrences as distinct chemical assertions.
 Context-free constraint-delta normalization deduplicates repeated additions or removals and cancels
 an equal addition/removal pair. Materializing the normalized delta against an LHS then enforces
 continuity: adding an already-present canonical constraint or removing an absent one is a

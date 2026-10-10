@@ -3807,10 +3807,7 @@ fn test_transaction_rollback_molecule_constraint_order(mut one_atom: MoleculeEdi
                     constraint: repeated.clone().into(),
                 }]))
                 .unwrap();
-            assert_eq!(
-                transaction.molecule.constraints().as_slice(),
-                &[repeated, middle]
-            );
+            assert_eq!(transaction.molecule.constraints().as_slice(), &[middle]);
 
             transaction.rollback();
             Ok(())

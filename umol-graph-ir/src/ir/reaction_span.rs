@@ -6,6 +6,7 @@
 //! a `Molecule`. `Modified` (a preserved entity relabeled across the reaction) is the
 //! relabeling-DPO reading: the entity persists in `K`, its label resolved per side.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::Hash;
 use std::mem;
@@ -22,7 +23,9 @@ use super::aromatic::{
 };
 use super::atom::AtomForm;
 use super::bond::BondForm;
-use super::constraint::{Constraint, ConstraintFrameActionDomain, ConstraintFrameActionMap};
+use super::constraint::{
+    Constraint, ConstraintFrameActionDomain, ConstraintFrameActionMap, Constraints,
+};
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bond_spans_with, DativeBondForm, DativeBondSpans};
 use super::delta::{
@@ -124,6 +127,8 @@ pub enum ReactionSpanIntegrityError {
         lhs: StereoKind,
         rhs: StereoKind,
     },
+    #[error("constraint spans give {constraint:?} more than one state")]
+    ConflictingConstraintSpans { constraint: Constraint },
 }
 
 impl ReactionSpan {
@@ -210,6 +215,32 @@ impl ReactionSpan {
         Molecule::try_from_entries(self.project_entries(Side::Right))
             .map_err(ReactionSpanIntegrityError::Rhs)?;
         self.check_stereo_kind_unchanged()?;
+        self.check_constraint_span_states()?;
+        Ok(())
+    }
+
+    /// Normalized-equal constraints share one span state; two states assert the constraint both
+    /// present and absent on one side. A constraint that fails normalization is keyed by its
+    /// stored form.
+    fn check_constraint_span_states(&self) -> Result<(), ReactionSpanIntegrityError> {
+        let mut states = BTreeMap::new();
+        for span in &self.constraints {
+            let constraint = match span {
+                ConstraintSpan::Unchanged(constraint)
+                | ConstraintSpan::Added(constraint)
+                | ConstraintSpan::Removed(constraint) => constraint,
+            };
+            let normal_form = constraint
+                .clone()
+                .normalize()
+                .unwrap_or_else(|_| constraint.clone());
+            let state = mem::discriminant(span);
+            if *states.entry(normal_form).or_insert(state) != state {
+                return Err(ReactionSpanIntegrityError::ConflictingConstraintSpans {
+                    constraint: constraint.clone(),
+                });
+            }
+        }
         Ok(())
     }
 
@@ -545,7 +576,8 @@ impl ReactionSpan {
     ///
     /// # Semantic properties
     ///
-    /// For a compatible correspondence, the lhs projection is structurally equal to `lhs`. The rhs
+    /// For a compatible correspondence, the lhs projection has the same structural entities as
+    /// `lhs` and canonically equal constraint-set semantics. The rhs
     /// projection is `rhs` reindexed into the lhs-anchored reaction frame: preserved entities retain
     /// lhs ids and rhs-only entities are appended. It is equivalent to `rhs` under the induced total
     /// correspondence, but need not be structurally equal when matched pairs cross entity order.
@@ -1031,19 +1063,19 @@ impl ReactionSpan {
             .map(Normalize::normalize)
             .collect::<Result<_, _>>()
             .ok()?;
-        let mut constraints: Vec<ConstraintSpan> = Vec::new();
-        for c in lhs_constraints.iter() {
-            if rhs_constraints.contains(c) {
-                constraints.push(ConstraintSpan::Unchanged(c.clone()));
-            } else {
-                constraints.push(ConstraintSpan::Removed(c.clone()));
-            }
-        }
-        for c in &rhs_constraints {
-            if !lhs_constraints.contains(c) {
-                constraints.push(ConstraintSpan::Added(c.clone()));
-            }
-        }
+        let constraints = lhs_constraints
+            .union(&rhs_constraints)
+            .map(|constraint| {
+                match (
+                    lhs_constraints.contains(constraint),
+                    rhs_constraints.contains(constraint),
+                ) {
+                    (true, true) => ConstraintSpan::Unchanged(constraint.clone()),
+                    (true, false) => ConstraintSpan::Removed(constraint.clone()),
+                    _ => ConstraintSpan::Added(constraint.clone()),
+                }
+            })
+            .collect::<Vec<_>>();
 
         ReactionSpan::try_from_entries(ReactionSpanEntries {
             atoms,
@@ -1562,16 +1594,27 @@ impl ReactionSpan {
             }
         }
         if let Some(correspondence) = &correspondence {
+            // One delta per normal form: normalized-equal removed constraints share one Remove.
+            let mut emitted = BTreeSet::new();
             for span in &self.constraints {
-                match span {
-                    ConstraintSpan::Added(c) => deltas.push(Delta::Constraint(
-                        ConstraintDelta::Add(c.clone().map(correspondence)),
-                    )),
-                    ConstraintSpan::Removed(c) => deltas.push(Delta::Constraint(
-                        ConstraintDelta::Remove(c.clone().map(correspondence)),
-                    )),
-                    ConstraintSpan::Unchanged(_) => {}
+                let (constraint, added) = match span {
+                    ConstraintSpan::Added(c) => (c, true),
+                    ConstraintSpan::Removed(c) => (c, false),
+                    ConstraintSpan::Unchanged(_) => continue,
+                };
+                let normal_form = constraint
+                    .clone()
+                    .normalize()
+                    .unwrap_or_else(|_| constraint.clone());
+                if !emitted.insert((normal_form, added)) {
+                    continue;
                 }
+                let constraint = constraint.clone().map(correspondence);
+                deltas.push(Delta::Constraint(if added {
+                    ConstraintDelta::Add(constraint)
+                } else {
+                    ConstraintDelta::Remove(constraint)
+                }));
             }
         }
         Reaction::new(self.lhs(), deltas)
@@ -1786,15 +1829,51 @@ fn normalize_entity_spans<T: Normalize>(
     spans.into_iter().map(Normalize::normalize).collect()
 }
 
+/// Normalize each side as a molecule's constraints normalize, then derive each span's state
+/// from the sides that contain its constraint. The lhs and rhs of the result are the normalized
+/// sides.
 fn normalize_constraint_spans(
     spans: Vec<ConstraintSpan>,
 ) -> Result<Vec<ConstraintSpan>, Contradiction> {
-    let mut spans = spans
+    let mut lhs = Vec::new();
+    let mut rhs = Vec::new();
+    for span in spans {
+        match span {
+            ConstraintSpan::Unchanged(constraint) => {
+                lhs.push(constraint.clone());
+                rhs.push(constraint);
+            }
+            ConstraintSpan::Removed(constraint) => lhs.push(constraint),
+            ConstraintSpan::Added(constraint) => rhs.push(constraint),
+        }
+    }
+    let mut lhs = Constraints::from(lhs)
+        .normalize()?
+        .take()
         .into_iter()
-        .map(Normalize::normalize)
-        .collect::<Result<Vec<_>, _>>()?;
-    spans.sort();
-    spans.dedup();
+        .peekable();
+    let mut rhs = Constraints::from(rhs)
+        .normalize()?
+        .take()
+        .into_iter()
+        .peekable();
+    let mut spans = Vec::new();
+    loop {
+        let span = match (lhs.peek(), rhs.peek()) {
+            (Some(left), Some(right)) => match left.cmp(right) {
+                Ordering::Less => ConstraintSpan::Removed(lhs.next().unwrap()),
+                Ordering::Greater => ConstraintSpan::Added(rhs.next().unwrap()),
+                Ordering::Equal => {
+                    rhs.next();
+                    ConstraintSpan::Unchanged(lhs.next().unwrap())
+                }
+            },
+            (Some(_), None) => ConstraintSpan::Removed(lhs.next().unwrap()),
+            (None, Some(_)) => ConstraintSpan::Added(rhs.next().unwrap()),
+            (None, None) => break,
+        };
+        spans.push(span);
+    }
     Ok(spans)
 }
 
@@ -2484,35 +2563,37 @@ impl Reaction {
             stereo_bonds.push((site, ligands, EntitySpan::Added(attributes)));
         }
 
-        let lhs_constraints: BTreeSet<Constraint> = lhs
+        let lhs_constraints = lhs
             .constraints()
             .iter()
             .cloned()
             .map(Normalize::normalize)
-            .collect::<Result<_, _>>()?;
-        let added_constraints: BTreeSet<Constraint> = added_constraints.into_iter().collect();
-        let removed_constraints: BTreeSet<Constraint> = removed_constraints.into_iter().collect();
-        if added_constraints
-            .iter()
-            .any(|constraint| lhs_constraints.contains(constraint))
-            || removed_constraints
-                .iter()
-                .any(|constraint| !lhs_constraints.contains(constraint))
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        let added_constraints = added_constraints
+            .into_iter()
+            .map(Normalize::normalize)
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        let removed_constraints = removed_constraints
+            .into_iter()
+            .map(Normalize::normalize)
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        if !added_constraints.is_disjoint(&lhs_constraints)
+            || !removed_constraints.is_subset(&lhs_constraints)
         {
             return Err(Contradiction);
         }
-        let mut constraints: Vec<ConstraintSpan> =
-            Vec::with_capacity(lhs_constraints.len() + added_constraints.len());
-        for constraint in lhs_constraints {
-            if removed_constraints.contains(&constraint) {
-                constraints.push(ConstraintSpan::Removed(constraint));
-            } else {
-                constraints.push(ConstraintSpan::Unchanged(constraint));
-            }
-        }
-        for constraint in added_constraints {
-            constraints.push(ConstraintSpan::Added(constraint));
-        }
+        let constraints = lhs_constraints
+            .union(&added_constraints)
+            .map(|constraint| {
+                if added_constraints.contains(constraint) {
+                    ConstraintSpan::Added(constraint.clone())
+                } else if removed_constraints.contains(constraint) {
+                    ConstraintSpan::Removed(constraint.clone())
+                } else {
+                    ConstraintSpan::Unchanged(constraint.clone())
+                }
+            })
+            .collect::<Vec<_>>();
 
         ReactionSpan::try_from_entries(ReactionSpanEntries {
             atoms,
@@ -2932,6 +3013,65 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::added_conjunction(
+        vec![ConstraintSpan::Added(Constraint::And(vec![
+            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }),
+        ]))],
+        vec![ConstraintSpan::Added(Constraint::And(vec![
+            Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }),
+            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+        ]))],
+    )]
+    #[case::conjunction_overlaps_unchanged(
+        vec![
+            ConstraintSpan::Added(Constraint::And(vec![
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+                Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }),
+            ])),
+            ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ],
+        vec![
+            ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+            ConstraintSpan::Added(Constraint::And(vec![
+                Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }),
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            ])),
+        ],
+    )]
+    #[case::removed_conjunction_overlaps_unchanged(
+        vec![
+            ConstraintSpan::Removed(Constraint::And(vec![
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+                Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }),
+            ])),
+            ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ],
+        vec![
+            ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+            ConstraintSpan::Removed(Constraint::And(vec![
+                Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) }),
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            ])),
+        ],
+    )]
+    #[case::empty_conjunction(
+        vec![ConstraintSpan::Added(Constraint::And(Vec::new()))],
+        Vec::new(),
+    )]
+    fn test_reaction_span_normalize_constraints(
+        #[case] constraints: Vec<ConstraintSpan>,
+        #[case] expected: Vec<ConstraintSpan>,
+    ) {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries { constraints, ..Default::default() })
+            .normalize()
+            .unwrap();
+
+        assert_eq!(span.constraints(), expected.as_slice());
+    }
+
     #[rstest]
     fn test_reaction_span_normalize() {
         let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
@@ -3241,6 +3381,22 @@ mod tests {
             AtomId(0),
             AtomConstraintForm::valence(NumForm::Lit(4)),
         ))],
+    )]
+    #[case::constraint_copies(
+        ReactionSpanEntries {
+            constraints: vec![
+                ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+                ConstraintSpan::Unchanged(Constraint::And(vec![Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })])),
+            ],
+            ..Default::default()
+        },
+        Graph::new(0, &[]),
+        Vec::new(),
+        Vec::new(),
+        vec![
+            ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+            ConstraintSpan::Unchanged(Constraint::And(vec![Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })])),
+        ],
     )]
     fn test_reaction_span_try_from_entries(
         #[case] entries: ReactionSpanEntries,
@@ -4089,10 +4245,62 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unchanged_added(
+        ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+    )]
+    #[case::unchanged_removed(
+        ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+    )]
+    #[case::added_removed(
+        ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+    )]
+    #[case::unchanged_added_equivalent(
+        ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Added(Constraint::And(vec![Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })])),
+    )]
+    #[case::unchanged_removed_equivalent(
+        ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Removed(Constraint::And(vec![Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })])),
+    )]
+    #[case::added_removed_equivalent(
+        ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Removed(Constraint::And(vec![Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })])),
+    )]
+    fn test_reaction_span_try_from_entries_constraint_state_error(
+        #[case] first: ConstraintSpan,
+        #[case] second: ConstraintSpan,
+    ) {
+        let constraint = match &second {
+            ConstraintSpan::Unchanged(constraint)
+            | ConstraintSpan::Added(constraint)
+            | ConstraintSpan::Removed(constraint) => constraint.clone(),
+        };
+        let entries = ReactionSpanEntries {
+            constraints: vec![first, second],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            ReactionSpan::try_from_entries(entries),
+            Err(ReactionSpanIntegrityError::ConflictingConstraintSpans { constraint }),
+        );
+    }
+
     #[rstest]
     #[case::invalid(
         ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(3)) },
         "reaction span entries reference unavailable atom 3",
+    )]
+    #[case::conflicting_constraint_spans(
+        ReactionSpanIntegrityError::ConflictingConstraintSpans {
+            constraint: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+        },
+        "constraint spans give Molecule(Connected { atoms: None }) more than one state",
     )]
     fn test_reaction_span_entries_error_display(
         #[case] error: ReactionSpanIntegrityError,
@@ -4444,6 +4652,67 @@ mod tests {
                 MoleculeConstraint::Connected {
                     atoms: Some(vec![AtomId(0), AtomId(1)]),
                 },
+            ))],
+            ..Default::default()
+        }),
+    )]
+    #[case::non_normal_constraint_removed(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::O),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+                constraints: Constraints::from(Constraint::And(vec![Constraint::Molecule(
+                    MoleculeConstraint::Connected {
+                        atoms: Some(vec![AtomId(0), AtomId(1)]),
+                    },
+                )])),
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(Constraint::And(
+                vec![Constraint::Molecule(MoleculeConstraint::Connected {
+                    atoms: Some(vec![AtomId(0), AtomId(1)]),
+                })],
+            )))]),
+        ),
+        ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            )],
+            constraints: vec![ConstraintSpan::Removed(Constraint::Molecule(
+                MoleculeConstraint::Connected {
+                    atoms: Some(vec![AtomId(0), AtomId(1)]),
+                },
+            ))],
+            ..Default::default()
+        }),
+    )]
+    #[case::normalized_equal_constraints_removed(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C)],
+                constraints: Constraints::from_iter([
+                    Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+                    Constraint::And(vec![Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })]),
+                ]),
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(
+                MoleculeConstraint::Connected { atoms: None },
+            )))]),
+        ),
+        ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C))],
+            constraints: vec![ConstraintSpan::Removed(Constraint::Molecule(
+                MoleculeConstraint::Connected { atoms: None },
             ))],
             ..Default::default()
         }),

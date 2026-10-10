@@ -11,13 +11,13 @@ use umol_edn::FromEdn;
 use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
-    Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, IncidenceLevel,
-    Molecule, MoleculeConstraint, MoleculeEntries, MoleculeRemapping, MulticenterBondForm,
-    MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm,
-    Reframe, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
-    TopicityForm, TopicityRelationForm,
+    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomForm, AtomId,
+    BondForm, BondId, Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId,
+    Delta, Deltas, IncidenceLevel, Molecule, MoleculeConstraint, MoleculeEntries,
+    MoleculeRemapping, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm,
+    NoncovalentBondId, NoncovalentBondKind, NumForm, Reaction, Reframe, StereoAtomConstraintForm,
+    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind,
+    StereoLigand, StereoLigandKind, StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
 };
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
@@ -902,6 +902,63 @@ fn bench_reframe(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_reaction_canonical_eq(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let reaction = |lhs: Molecule, element: Element| {
+        let id = AtomId(lhs.atoms().count() as u32);
+        Reaction::new(
+            lhs,
+            Deltas::from_iter([Delta::Atom(AtomDelta::Add {
+                id,
+                attributes: AtomForm::from_element(element),
+            })]),
+        )
+    };
+    let cases = corpus()
+        .into_iter()
+        .map(|case| {
+            let source = reaction(case.molecule.clone(), Element::N);
+            let renumbered = reaction(
+                case.molecule.remap(&reverse_remapping(&case.molecule)),
+                Element::N,
+            );
+            let unequal = reaction(case.molecule.clone(), Element::O);
+            let spans = (
+                source.to_reaction_span().unwrap(),
+                renumbered.to_reaction_span().unwrap(),
+            );
+            (case.name, source, renumbered, unequal, spans)
+        })
+        .collect::<Vec<_>>();
+
+    let mut group = c.benchmark_group("canonicalize/reaction/canonical_eq_equal");
+    for (name, source, renumbered, _, _) in &cases {
+        group.bench_function(*name, |b| {
+            b.iter(|| black_box(source).canonical_eq(black_box(renumbered), &context))
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/reaction/canonical_eq_unequal");
+    for (name, source, _, unequal, _) in &cases {
+        group.bench_function(*name, |b| {
+            b.iter(|| black_box(source).canonical_eq(black_box(unequal), &context))
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/reaction_span/canonical_eq_equal");
+    for (name, _, _, _, (left, right)) in &cases {
+        group.bench_function(*name, |b| {
+            b.iter(|| black_box(left).canonical_eq(black_box(right), &context))
+        });
+    }
+    group.finish();
+}
+
 fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
     [
         molecule.atoms().count(),
@@ -923,5 +980,6 @@ criterion_group!(
     bench_retained_scaling_cases,
     bench_topology_path_scaling,
     bench_reframe,
+    bench_reaction_canonical_eq,
 );
 criterion_main!(canonicalize);

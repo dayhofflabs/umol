@@ -4759,9 +4759,9 @@ fn reaction_span_comparison_key(
 
         let mut values = entries
             .constraints
-            .iter()
-            .map(constraint_span_key)
-            .collect::<Vec<_>>();
+            .into_iter()
+            .map(|span| Ok(constraint_span_key(&span.normalize()?)))
+            .collect::<Result<Vec<_>, Contradiction>>()?;
         values.sort();
         values.dedup();
         if !values.is_empty() {

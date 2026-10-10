@@ -2280,6 +2280,44 @@ fn reaction_canonicalization_fixture() -> Reaction {
     )
 }
 
+#[rustfmt::skip]
+#[rstest]
+#[case::molecule_subset(ReactionSpan::from_entries(ReactionSpanEntries {
+    atoms: vec![
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+    ],
+    constraints: vec![ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+        atoms: Some(vec![AtomId(0), AtomId(1)]),
+        sum: NumForm::Lit(0),
+    }))],
+    ..Default::default()
+}))]
+#[case::relational_atom_list(ReactionSpan::from_entries(ReactionSpanEntries {
+    atoms: vec![
+        EntitySpan::Unchanged(AtomForm::from_element(Element::Fe)),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+    ],
+    dative: vec![(vec![AtomId(1), AtomId(2)], AtomId(0), EntitySpan::Unchanged(DativeBondForm::from_order(1)))],
+    constraints: vec![ConstraintSpan::Unchanged(Constraint::Relational(RelationalConstraint::DativeBondDonors {
+        bond: DativeBondId(0),
+        atoms: vec![AtomId(1), AtomId(2)],
+    }))],
+    ..Default::default()
+}))]
+fn test_reaction_span_canonical_eq_renumbering(
+    canonicalize_context: CanonicalizeContext,
+    #[case] span: ReactionSpan,
+) {
+    let images = reaction_span_counts(&span).map(|count| (0..count).rev().collect::<Vec<_>>());
+    let renumbered = span.remap(&molecule_remapping(&images));
+
+    assert!(span.canonical_eq(&renumbered, &canonicalize_context));
+    assert!(span.to_reaction().canonical_eq(&renumbered.to_reaction(), &canonicalize_context));
+}
+
 #[rstest]
 #[case::contradiction(
         Reaction::new(

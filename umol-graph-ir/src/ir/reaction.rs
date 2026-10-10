@@ -5355,6 +5355,24 @@ mod tests {
     }
 
     #[rstest]
+    fn test_reaction_apply_at_non_normal_constraint() {
+        let connected = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            constraints: Constraints::from(Constraint::And(vec![connected.clone()])),
+            ..Default::default()
+        });
+        let reaction = Reaction::new(
+            lhs.clone(),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(connected))]),
+        );
+
+        assert_eq!(
+            reaction.apply_at(&lhs, &MoleculeCorrespondence::empty()),
+            Ok(Some(Molecule::default())),
+        );
+    }
+
+    #[rstest]
     fn test_reaction_apply_at_dative_bond_frame() {
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
