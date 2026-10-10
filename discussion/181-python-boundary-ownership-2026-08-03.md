@@ -6,6 +6,7 @@ Relates: [179](179-python-editing-and-transactions-2026-08-02.md),
 [151](151-python-molecule-workflows-2026-07-13.md),
 [213](213-editor-overlay-storage-2026-08-27.md),
 [231](231-python-api-parity-2026-09-21.md),
+[236](236-operation-ownership-copy-costs-2026-10-09.md),
 [Python API guide](../docs/development/python-api.md),
 [data-type guide](../docs/development/data-types.md)
 
@@ -229,14 +230,11 @@ decided independently; this proposal concerns Rust.
 #### Entry and completion
 
 ```rust
-// Molecule: preserve the source and edit an independent working copy.
-fn edit(&self) -> MoleculeEditor;
-fn apply(&self, edits: Edits) -> Result<Molecule, MoleculeApplyError>;
-fn tracked_apply(&self, edits: Edits)
+// Molecule: move the molecule into an editor, or apply a batch to it.
+fn edit(self) -> MoleculeEditor;
+fn apply(self, edits: Edits) -> Result<Molecule, MoleculeApplyError>;
+fn tracked_apply(self, edits: Edits)
     -> Result<(Molecule, MoleculeCorrespondence), MoleculeApplyError>;
-
-// Molecule: transfer the original into the same editor without copying.
-fn into_editor(self) -> MoleculeEditor;
 
 // MoleculeEditor
 fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError>;
@@ -246,11 +244,11 @@ fn probe(&self) -> Result<&Molecule, MoleculeIntegrityError>;
 fn finish(self) -> Result<Molecule, MoleculeIntegrityError>;
 ```
 
-into_editor is approved. Direct mutation methods and mutable entity views
-are the same for both entry routes. edit clones once; into_editor moves the
-input. Neither route records undo. Molecule apply and tracked_apply are
-conveniences over edit, batch application, and finish; they preserve the source
-on success and failure.
+edit, apply, and tracked_apply consume the molecule, as they do today;
+[236](236-operation-ownership-copy-costs-2026-10-09.md) owns their ownership contract. edit moves the storage into the editor
+without copying; a caller that keeps the molecule clones it first. No route
+records undo. Molecule apply and tracked_apply are conveniences over edit,
+batch application, and finish; on failure the consumed input is dropped.
 
 Editor apply checks edit preconditions but provides no rollback. It mutably
 borrows the editor rather than consuming it. Failure leaves completed changes
@@ -299,7 +297,7 @@ Molecule tracked_apply returns its correspondence only after successful finish.
 #### No-recovery route
 
 ```rust
-let mut editor = molecule.into_editor();
+let mut editor = molecule.edit();
 editor.atom_mut(id).attributes_mut().charge = charge;
 editor.apply(edits)?;
 let correspondence = editor.tracked_apply(more_edits)?;
@@ -314,41 +312,25 @@ integrity. No-recovery does not mean publishing an integrity-invalid Molecule.
 The transaction API is retained with the proposed implementation changes in
 point 2. Value-trait ownership remains a separate decision.
 
-### Resolution / projection / transformation API — 2026-10-08
+### Resolution / projection / transformation API
 
-**Retained draft; reconsider before implementation.** Keep one naming convention
-across molecule editing and higher-level operations: unsuffixed operations produce
-independent results; _into operations mutate the borrowed receiver with recovery.
-The user will reconsider this choice before the migration starts. No implementation
-is authorized by retaining it in this plan.
+[236](236-operation-ownership-copy-costs-2026-10-09.md) settles the naming and ownership. The bare verb consumes its molecule;
+`_into` mutates a borrowed molecule with recovery; a caller that keeps its
+molecule clones it explicitly. Python binds the bare verb as clone followed by
+the Rust method.
 
 | Operation | Molecule ownership and result |
 | --- | --- |
-| resolve / resolve_with_report | Borrow the source; return an independent molecule on Determined |
-| project | Borrow the source; return an independent projected molecule on Determined |
-| transform | Borrow the source; return an independent transformed molecule on success |
-| resolve_into / resolve_into_with_report / project_into / transform_into | Mutable borrow; retain successful changes and recover on other outcomes |
+| resolve / resolve_with_report / project | Consume the molecule; return it on Determined |
+| transform | Consume the molecule; return the transformed molecule on success |
+| composite resolve_into / resolve_into_with_report / project_into | Mutable borrow with RollbackMethod last; retain changes only on Determined |
+| individual resolvers' resolve_into / project_into, transform_into | Mutable borrow; failures are decided during planning, so the plan is applied in place without a selector |
 | transform_iter | Borrow the source and lazily produce independent results |
 
-For unsuffixed methods, take &Molecule instead of Molecule and retain the existing
-result and diagnostic types. For _into methods, retain the existing result types
-and add RollbackMethod last, after existing inputs such as ProjectFlags. Only
-Determined commits resolution/projection; transform_into commits on success.
-Other outcomes preserve the receiver under the existing normalized restoration
-contract. Ordinary resolve does not construct a report.
-
-Copy-producing execution clones once and applies through an owning editor without
-recovery machinery. Mutating execution uses one transaction with the selected
-Clone or Journal implementation. Callers that do not need an independent result
-use _into; the copying operation is not a reason to migrate them to copies.
-Apply this rule to the existing individual resolver families. ValenceResolver's
-existing no-op project remains unchanged.
-
-Retain internal consuming execution for owned ingestion/parsing inputs and export
-intermediates, without another copy or recovery journal. transform_iter lazily
-calls the copy-producing transform without a preliminary clone. No participle
-names or additional public consuming names are introduced. The editor and
-transaction mechanisms are unchanged.
+Existing result and diagnostic types are retained. Ordinary resolve does not
+construct a report. Ingestion, parsing, and export pass their owned molecules to
+the consuming methods without another copy or recovery journal.
+ValenceResolver's existing no-op project remains unchanged.
 
 ### Other inventory boundaries
 
@@ -390,8 +372,9 @@ Higher-level operations select a default and allow callers to override it. This
 is an execution option, separate from chemistry parameters, following the
 explicit algorithm-selection pattern in graph-core. The outer operation owns
 the selection; phase planners do not open independent recovery scopes. No
-automatic selection heuristic or universal winner is proposed. Concrete
-higher-level option signatures and defaults remain to be specified.
+automatic selection heuristic or universal winner is proposed. The composite
+_into methods take RollbackMethod last; Python resolve_into and
+resolve_into_with_report default to Clone.
 
 ```rust
 Transaction::run(&mut molecule, RollbackMethod::Clone, |mut tx| {
@@ -1613,8 +1596,8 @@ consume that editor with finish. After callback success, the method calls finish
 converts integrity failure through MoleculeApplyError, and installs only success.
 Return the callback's T after installation. Error or callback unwinding leaves the
 receiver untouched. This uses the same error-conversion bound as Transaction::run;
-it needs no new error enum or editor mode. The names into_editor, edit_into, and
-apply_into and the callback signature are settled.
+it needs no new error enum or editor mode. The names edit_into and apply_into and
+the callback signature are settled.
 
 ### Transaction entry and higher-level selection
 
@@ -1649,13 +1632,12 @@ methods provide the same recovery guarantee with either choice. Journal is the
 default because its recovery storage scales with changes rather than molecule
 size; it is not a claim that journaling is always cheaper.
 
-Under the retained higher-level draft, each mutating _into method takes
-RollbackMethod last, after its existing inputs (including ProjectFlags). Rust
-callers select explicitly. Python resolve_into/resolve_into_with_report expose
-a keyword-only rollback_method, proposed to default to Clone for resolution;
-Journal remains selectable. This is not a universal performance claim. Python
-transact retains its separately agreed Journal default. The higher-level lifecycle
-and naming remain held for reconsideration as stated in section 1.
+Each mutating _into method except transform_into and the individual resolvers'
+_into methods takes RollbackMethod last, after its existing inputs (including
+ProjectFlags). Rust callers select explicitly. Python resolve_into and
+resolve_into_with_report expose a keyword-only rollback_method defaulting to
+Clone; Journal remains selectable. This is not a universal performance claim.
+Python transact retains its separately agreed Journal default.
 
 ### Correspondence without Undo payload retention
 
@@ -1711,30 +1693,26 @@ parse.rs, and export.rs. They are not cross-crate umol-io callers. Consequently,
 retaining no-recovery execution for those owned inputs does not require new public
 consuming resolver/projector methods.
 
-Proposed organization: retain the consuming algorithms as crate-private free
-functions in ops::resolve named resolve, resolve_with_report, and project, taking
-&Resolver followed by the owned Molecule and existing operation arguments. Public
-borrowed Resolver methods clone once and call those functions. Ingestion/parse/
-export pass their owned molecule directly. This introduces no execution adapter,
-mode-bearing editor, or generic batch-session abstraction. These internal function
-interfaces are proposals for review, not existing functions.
+The public consuming resolve, resolve_with_report, and project serve those callers
+directly; no crate-private consuming functions are needed.
 
 For individual single-plan resolvers and transformers, keep planning against the
 source and apply to one editor; do not introduce a second execution abstraction.
-transform_iter invokes the borrowed transform lazily without first cloning its
-input again.
+transform_iter clones its source lazily, once per result, and calls transform.
 
 Proposed scope disposition for Normalize, Reframe, Canonicalize, builder completion,
 and consuming construction-data conversions: retain existing Rust ownership
 contracts. The molecule/editor/resolver migration does not require changing these
 traits. Python copy-preserving operations remain explicit binding decisions;
-no blanket consuming-to-borrowed trait rewrite is included.
+no blanket consuming-to-borrowed trait rewrite is included. [236](236-operation-ownership-copy-costs-2026-10-09.md) owns the
+ownership contracts of these traits; it removes Normalize::normalized and makes
+canonical_hash borrow.
 
 ### Outstanding review before implementation
 
-- Higher-level lifecycle/naming: the retained unsuffixed/copying and _into/mutating
-  draft above is held for reconsideration. The proposed Python resolution rollback
-  default is Clone; the prepared-transaction default Journal is already settled.
+- Higher-level lifecycle/naming is settled in [236](236-operation-ownership-copy-costs-2026-10-09.md). The Python
+  resolution rollback default is Clone; the prepared-transaction default is
+  Journal.
 
 S1's carrier names, enum declarations, and 88/104 layouts are settled. S2's
 Rust and Python interfaces, field/key grouping, prefix recovery, and DSL syntax
@@ -1750,6 +1728,10 @@ not a claim that the unimplemented migration has passed its verification gates.
 
 ### S0 — Molecule, editor, and transaction migration
 
+[236](236-operation-ownership-copy-costs-2026-10-09.md)'s implementation plan runs first. Both plans together are the 0.10 release
+blocker. After 236, the resolvers, transformers, and AromaticityPerceiver no
+longer use transactions, so they need no migration here.
+
 The baseline precedes all production changes. The six migration groups follow.
 The migration interface review distinguishes settled interfaces from remaining
 proposals; an unresolved interface must be specified before its item starts.
@@ -1760,7 +1742,7 @@ separate task merely to write another plan.
 
 **Modules:** existing graph-IR editor/reaction benches, graph resolve benches,
 bounded operation/Python measurements, and this record. **Measurement, green.**
-[dep: none; precedes every production-change subitem]
+[dep: 236 complete; precedes every production-change subitem here]
 
 Run the existing editor, reaction, and resolve benchmark targets before changing
 production code. Record the source revision, toolchain, build settings, fixture
@@ -1817,7 +1799,7 @@ consumed. Finish consumes on both success and integrity failure.
 
 | Current caller | Required change |
 | --- | --- |
-| graph-IR Molecule apply/tracked_apply in `ir/molecule.rs` | Hold a mutable editor; apply returns unit, tracked_apply returns only the correspondence; finish that editor. Molecule methods still consume until S0c2. |
+| graph-IR Molecule apply/tracked_apply in `ir/molecule.rs` | Hold a mutable editor; apply returns unit, tracked_apply returns only the correspondence; finish that editor. Molecule methods keep consuming. |
 | graph composite Resolver resolve/resolve_with_report/project in `ops/resolve.rs` | Remove every `editor = editor.apply(...)` reassignment, retain phase order, probe locations, error mappings, and final finish. |
 | graph individual resolvers: aromaticity/isotope/stereo resolve and project; bonds/multicenter resolve | Split edit/apply/finish chains into a mutable editor, application, then finish. Preserve current public receivers and result types. |
 | graph Kekulizer/Aromatizer/DelocalizeCharge transform | Split editor chains likewise; retain existing plan assertions and Kekulizer's post-publication validation. |
@@ -1845,51 +1827,19 @@ editor/Edits lifecycle. Migrate callers and tests with the signature change.
 partial-state behavior, checked probe, and terminal finish are specified above.
 No additional interface decision is identified for this subitem.
 
-#### S0c1 — Consuming editor entry and owned callers
+#### S0c1 — Dropped
 
-**Modules:** graph-IR molecule/build/fragment, graph resolvers/transformers,
-benchmarks and tests. **Additive entry and caller migration, green.** [dep: S0b]
+into_editor is not added; owned callers keep `edit(self)`. See [236](236-operation-ownership-copy-costs-2026-10-09.md).
 
-Add the approved into_editor(self) -> MoleculeEditor by moving the current edit
-implementation to it. Until S0c2, the still-consuming edit delegates to into_editor.
-The final borrowing edit will clone once and call this same consuming entry.
+#### S0c2 — Python Molecule editing without consumption
 
-Migrate these owned entry points now, before edit changes semantics:
+**Modules:** Python Molecule edit/apply, binding tests, and the Python guide.
+**Python behavior change; Rust signatures unchanged.** [dep: S0b]
 
-| Caller | Entry after this subitem |
-| --- | --- |
-| graph composite resolve/resolve_with_report/project | `molecule.into_editor()`; their public Molecule argument remains consuming until S10a |
-| graph five individual resolver modules and three transformer implementations listed in S0b | Move the owned input through into_editor; no new clone or transaction |
-| graph-IR MoleculeBuilder new/with_capacity | `Molecule::new().into_editor()` |
-| graph-IR Molecule tracked_split | Move both newly constructed empty molecules and intermediate entity molecules into editors |
-| graph-IR Fragment finish_open/attach | Move self.body or the newly combined body into the editor |
-| graph-IR Molecule apply/tracked_apply | Move self into the editor; borrowed entry follows in S0c2 |
-
-Migrate owned fixture/editor construction across graph-IR view, molecule,
-correspondence, canonicalization, DSL and property tests; graph and IO tests;
-and Python binding unit fixtures. A source retained for a test comparison still
-needs one explicit clone here. In editor/reaction/concrete benchmarks, owned
-setup values use into_editor; preserve whether setup cloning is timed.
-
-**Checks:** existing construction, split/extract, fragment, resolver and transformer
-results; no added clone at these entry points. All affected targets compile and
-focused tests pass before changing edit's receiver.
-
-#### S0c2 — Borrowed Molecule entry and prepared application
-
-**Modules:** graph-IR molecule/reaction, Python Molecule edit/apply, benchmarks,
-callers and tests. **Breaking, red→green within the subitem.** [dep: S0c1]
-
-Implement edit(&self), apply(&self, Edits), and tracked_apply(&self, Edits) with the
-section 1 results. edit clones once into into_editor; apply/tracked_apply use that
-editor and finish. Ordinary attribute mutation remains unchanged.
-
-| Caller | Required change |
-| --- | --- |
-| graph-IR Molecule tracked_extract | `self.clone().edit()` becomes `self.edit()`; retain one copy and the existing tracked removal/finish sequence |
-| graph-IR reaction supplied-match application in `ir/reaction.rs` | `host.clone().apply(edits)` becomes `host.apply(edits)`; retain the current product/rejection/error mapping and one independent product copy |
-| Rust tests retaining an original with `source.clone().edit/apply/tracked_apply` | Remove the preliminary clone when exercising the new copying API; owned-route tests continue using into_editor explicitly |
-| Python `src/molecule.rs` edit/apply/tracked_apply | Borrow through to_rust; never take the molecule or advance its counter. Transfer Edits and return the new editor/molecule/correspondence. |
+Python edit, apply, and tracked_apply borrow the source through to_rust, clone
+it, and call the consuming Rust method. They never take the molecule or advance
+its counter. Transfer Edits and return the new editor, molecule, or
+correspondence.
 
 Python Molecule still has Option storage because resolve/resolve_with_report
 consume until S10a. Keep to_rust fallible and retain take for those consumers;
@@ -1898,27 +1848,21 @@ binding unit tests and `test_transaction.py`, `test_edit.py`, `test_molecule.py`
 and `test_molecule_view.py` where consumption/invalidation was caused by these
 three methods. Remove redundant copy-before-edit/apply in Python
 `test_resolve.py` and `test_workflow.py`; retain the source-preservation assertions.
-Keep consumption tests for resolution until its migration.
-
-Migrate no-recovery benchmark calls that formerly invoked consuming Molecule
-apply/tracked_apply to into_editor, mutable application, and finish; the tracked
-case returns the correspondence with the finished molecule. Source-preserving
-benchmark rows call borrowed apply directly, without an outer clone. Preserve
-both measured contracts from S0a rather than changing an existing row's meaning.
-Update affected method docs and the Python guide's Molecule editing paragraph.
+Keep consumption tests for resolution until its migration. Update the Python
+guide's Molecule editing paragraph.
 
 **Checks:** source preservation on success/failure, independent results, retained
-source views, correct tracked result after publication, extraction/reaction
-results, and one copy on copying routes versus none on owned routes. Existing
-resolver/transformer signatures and ingestion/export calls remain unchanged.
+source views, and correct tracked results. Rust edit/apply/tracked_apply,
+resolver/transformer signatures, and ingestion/export calls remain unchanged.
 
 #### S0d — Scoped in-place editing conveniences
 
 **Modules:** graph-IR molecule and tests. **Additive, green.**
-[dep: S0c2]
+[dep: S0b]
 
 Implement edit_into and apply_into using the concrete signatures in the interface
-review. One working copy, one successful installation, no journal. Return callback
+review. One working copy, `self.clone().edit()`, one successful installation, no
+journal. Return callback
 errors unchanged; convert finish errors through MoleculeApplyError. An editor
 application error does not latch an abort: the callback may catch it, continue
 editing, and return Ok. Install that result if finish passes integrity checks.
@@ -1985,7 +1929,7 @@ also pass Journal until their own migration selects otherwise.
 
 **run caller migration in this subitem:** Molecule transact/tracked_transact in
 `ir/molecule/transact.rs`, composite Resolver resolve_into/resolve_into_with_report/
-project_into, and Kekulizer transform_into pass Journal in the new second argument.
+project_into pass Journal in the new second argument.
 Their public signatures stay unchanged here. Update graph-IR molecule/transaction
 unit tests, edit properties, and run's rustdoc examples at the same boundary.
 Exercise both methods in transaction recovery tests; retain Journal explicitly
@@ -2038,9 +1982,6 @@ Python Transaction handles/callbacks are not introduced.
 
 | Caller | Required change |
 | --- | --- |
-| graph aromaticity/isotope/stereo resolve_into/project_into; bonds/multicenter resolve_into | Pass Journal after the batches, keeping their public signatures until S10b |
-| graph Aromatizer/DelocalizeCharge transform_into | Pass Journal; selectable public operation policy arrives in S10c |
-| graph AromaticityPerceiver add_systems | Pass Journal for its existing transaction; no new public argument in this work |
 | Python `src/molecule.rs` transact/tracked_transact | Accept the keyword-only RollbackMethod selector and forward it, default Journal; retain current extraction, sequential Edits transfer and counter timing |
 | graph-IR editor/reaction benchmarks and molecule/transaction/property tests; graph resolver tests | Supply the explicit selector. Keep baseline journal rows on Journal; add Clone comparison cases without relabeling old results. |
 
@@ -2621,6 +2562,27 @@ workspace consumers compile and pass their relevant tests, and the new variants
 do not defeat the selected compact enum layouts. If a payload would widen an
 enum, settle its representation before proceeding; do not silently undo S1.
 
+#### S2i — Edits DSL fuzz target
+
+**Modules:** umol-graph-ir fuzz. **Additive, green.** [dep: S2a–S2h]
+
+Add `fuzz_edits` beside the existing targets: parsing arbitrary input as
+EditsDsl must not panic, and a parsed value converts to Edits without
+panicking. EditsDsl has one parser, the tree path behind from_edn_str, so there
+is no streaming parity to check. Register it in the fuzz Cargo.toml.
+
+#### S2j — Remove fuzz_constraints
+
+**Modules:** umol-graph-ir fuzz and scripts/run-fuzz.sh. **Removal, green.**
+[dep: S2i]
+
+fuzz_constraints parses ConstraintDsl and ConstraintsDsl through the tree path
+only; fuzz_molecule already reaches both constraint parsers and checks their
+streaming and tree paths against each other. Remove the target, its Cargo.toml
+entry, its corpus and artifacts, and its entry in scripts/run-fuzz.sh. Carry its
+seeds over to fuzz_molecule, each wrapped in a molecule that places the
+constraint where it occurs.
+
 ### S3 — Resolver and projector emission
 
 #### S3a — Resolution plans
@@ -2977,34 +2939,31 @@ within each subitem; it does not repair a build left broken by S0.
 
 | Boundary | State before S10 | Change owned by S10 |
 | --- | --- | --- |
-| Composite resolve/resolve_with_report/project | Consume Molecule; use into_editor internally | Borrow source and clone once; retain consuming internal execution for ingest/parse/export |
+| Composite resolve/resolve_with_report/project | Consume Molecule; use edit internally | Unchanged Rust signatures |
 | Composite _into methods | Existing signatures, one Journal transaction | Expose the approved selector and forward it through that transaction |
-| Individual resolvers | Consuming ordinary methods, journaled _into methods | Borrowed ordinary methods and selected _into recovery |
-| Transformer | Consuming transform; transform_iter clones once; _into uses Journal | Borrowed transform; iterator drops its preliminary clone; _into accepts the selector |
-| Python resolve/resolve_with_report | Still take the molecule; Option and consumed checks remain | Borrow without taking; preserve source/views, enabling S11a to remove Option |
+| Individual resolvers | Consuming ordinary methods, journaled _into methods | No change in 181; see 236 |
+| Transformer | Consuming transform; transform_iter clones once; _into uses Journal | No change in 181; see 236 |
+| Python resolve/resolve_with_report | Still take the molecule; Option and consumed checks remain | Clone the source and consume the clone; preserve source/views, enabling S11a to remove Option |
 
 Each S10 item includes its changed Rust/Python callers, tests, benchmark call
-sites, and the corresponding guide paragraphs. Keep owned ingestion/parsing and
-projected export intermediates on the consuming internal route when public
-resolve/project become borrowed. There is no intervening release or stage where
-those pipelines silently gain an extra clone.
+sites, and the corresponding guide paragraphs. Owned ingestion/parsing and
+projected export intermediates keep calling the consuming methods without an
+extra clone.
 
 #### S10a — Composite resolver and ingestion/export
 
-**Modules:** graph resolve/ingest/parse/export, Python resolve bindings, consumers
-and tests. **Breaking borrowed signatures, red→green within the subitem.**
-[dep: S0c2, S0g; higher-level lifecycle/naming review]
+**Modules:** graph resolve, Python resolve bindings, consumers and tests.
+**Breaking _into selector, red→green within the subitem.** [dep: S0c2, S0g]
 
-Implement the section 1 borrowed resolve/resolve_with_report/project signatures,
-preserving all Solution, report, and error types. Ordinary resolve builds no report.
-Keep one no-recovery consuming execution for owned inputs using the approved
-internal interface. Move ingestion/parsing/export callers onto that route; public
-copy-producing calls clone exactly once. All phases share the selected transaction
-for _into execution; no per-phase recovery scopes or additional source copy.
-Only Determined commits. Other outcomes preserve the receiver and diagnostics.
+Keep the consuming resolve/resolve_with_report/project signatures and all
+Solution, report, and error types. Ordinary resolve builds no report. Ingestion,
+parsing, and export keep passing their owned molecules. All phases share the
+selected transaction for _into execution; no per-phase recovery scopes or
+additional source copy. Only Determined commits. Other outcomes preserve the
+receiver and diagnostics.
 
-Update Python resolve/resolve_with_report to borrow the source and preserve its
-views. The two _into methods retain their receiver and invalidation contracts and
+Update Python resolve/resolve_with_report to clone the source, consume the clone,
+and preserve the source's views. The two _into methods retain their receiver and invalidation contracts and
 expose the approved rollback selector. Keep ChemistryModel borrowing from S5 if
 already implemented; do not restore extraction copies.
 
@@ -3013,38 +2972,15 @@ execution failures, optional report equivalence, late projection failure,
 ingest/export fixtures, and unique/shared inputs. Count copies at call boundaries
 rather than inferring their number from API names.
 
-#### S10b — Individual resolvers
+#### S10b — Dropped
 
-**Modules:** graph resolve isotope/aromaticity/stereo/bonds/multicenter and all
-callers/tests. **Breaking, red→green within the subitem.**
-[dep: S0c2, S0g; higher-level lifecycle/naming review]
+The individual resolvers keep their consuming ordinary methods. Their in-place
+_into methods are planned in [236](236-operation-ownership-copy-costs-2026-10-09.md) (S3b, S3e).
 
-Migrate the exact method families in the current inventory to borrowed unsuffixed
-methods and selected recovery for _into. Preserve operation-specific result/error
-types and planner APIs. ValenceResolver's existing no-op project remains unchanged;
-no new valence method family is introduced. Composite phases reuse plans within
-their outer execution and do not invoke individual recovery operations.
+#### S10c — Dropped
 
-**Checks:** existing chemistry outcomes, successful result agreement between
-copying and both recovery paths, rejected receiver preservation, and no extra
-cloning of owned phase inputs.
-
-#### S10c — Transformer trait and implementations
-
-**Modules:** graph Transformer, Kekulizer, Aromatizer, DelocalizeCharge, consumers
-and tests. **Breaking, red→green within the subitem.**
-[dep: S0c2, S0g; higher-level lifecycle/naming review]
-
-Change transform to borrow &Molecule and return an independent result. Keep
-transform_iter's borrowed/lazy result contract; remove its preliminary clone when
-calling borrowed transform. Add the approved recovery selector to transform_into.
-Plan once against the current source, then use the chosen execution route without
-nested copying/recovery. Retain existing error types and infallible special cases;
-no transformer rename or new Python Transformer binding is included.
-
-**Checks:** exact transformation results, iteration laziness/source preservation,
-independent results, both recovery methods on supported failures, and unchanged
-chemistry/error semantics for all three implementations.
+transform keeps consuming and transform_iter keeps its per-result clone.
+transform_into's in-place application is planned in [236](236-operation-ownership-copy-costs-2026-10-09.md) (S3c, S3d).
 
 ### S11 — Python molecule storage and guarantees
 
@@ -3081,15 +3017,15 @@ existing invalid-access exceptions. Exercise nested views, not just entity roots
 
 **Modules:** Python API guide, binding docs/examples, Python integration tests,
 and affected Rust data-type/nomenclature guides. **Documentation/tests, green.**
-[dep: S0d, S0g, S10a–S10c, S11a, S6a]
+[dep: S0d, S0g, S10a, S11a, S6a]
 
 Document source/result/receiver ownership for each changed operation, terminal
 editor finish, explicit Edits copy, rollback selection, and view invalidation.
 Remove consumed-Molecule examples and exception claims without deleting the
 remaining Edits/editor lifecycle guarantees. Justify Python defaults and copying
 against the selected Rust operations. Preserve current-state documentation rather
-than narrating the migration. Value-trait ownership is unchanged if the proposed
-scope disposition is approved; do not silently alter those traits here.
+than narrating the migration. Value-trait ownership and the general operation
+ownership rules are documented through [236](236-operation-ownership-copy-costs-2026-10-09.md)'s S5a.
 
 ### S12 — Whole-operation comparison and final verification
 
@@ -3131,12 +3067,12 @@ removing scratch artifacts. Close 181 only when its agreed work is complete;
 then start the Reaction ownership work already scheduled in 231.
 
 **Dependencies:** S0a precedes every production change;
-S0b → S0c1 → S0c2 → S0d; S0e → S0f → S0g;
+S0b → S0c2 and S0b → S0d; S0e → S0f → S0g;
 then S1a/S1b → S2a–S2h → S3a/S3b → S4a;
 independently, S5a → S5b, S6a/S6b/S6c, and S7a → S7b → S7c.
 S1a/S1b and S2a–S2g are independent within their stages; S2h follows S2g
-once their prerequisites are met. S5 needs no boxing, batching, or molecule
+once their prerequisites are met, S2i follows S2a–S2h, and S2j follows S2i. S5 needs no boxing, batching, or molecule
 lifecycle change and is not deferred. S0 assigns lifecycle/recovery; S10–S12
 assign operation, Python, and final-measurement work. S8/S9 material has moved
 to S0; later labels are retained. Their dependencies are listed per item. The
-migration interface review remains open; this is not a readiness declaration.
+migration interface review has no open interface points.

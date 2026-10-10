@@ -26,11 +26,14 @@ wrappers. Converting a consuming Rust operation into a reusable copy-producing P
 a lifecycle change. Neither defensive cloning nor a universal ban on copying decides its contract.
 Do not change the Rust API solely to legitimize a wrapper convenience.
 
-Preserve consumption when the owning Rust operation consumes its input. Possible reuse does not
-justify an unconditional copy: callers explicitly copy when they need to retain the input, as in
-Rust. A departure requires a concrete justification beyond possible reuse or a general claim that
-consumption is unsuitable for Python. Failure ordering and accessor implementation are interface
-questions, not reasons to assume copying is necessary.
+Python cannot transfer ownership. A consuming Rust operation on a value with copy-on-write storage,
+such as Molecule, is bound by cloning the Rust value and consuming the clone: edit, apply,
+tracked_apply, resolve, resolve_with_report, project, and transform. The Python source and its
+views stay valid on every outcome. The clone increments reference counts, and the operation copies
+only the tables it writes, which is the copy a Rust caller pays when it keeps its value and clones
+it explicitly. A method named into_… states consumption in its name and is never bound with clone
+semantics. Consumption is preserved where a clone copies the whole value, as for Edits and Deltas;
+callers copy them explicitly.
 
 Consumption leaves all aliases of the Python owner in a consumed state and invalidates its
 outstanding views and iterators, including nested accessors. Access raises one of two shared
