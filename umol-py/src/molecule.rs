@@ -407,7 +407,7 @@ impl Molecule {
     /// Combine by disjoint concatenation. For each entity kind, this molecule's ids remain
     /// the prefix and other follows in its original order.
     fn combine(&self, other: &Self) -> PyResult<Self> {
-        Ok(Self::from_rust(self.to_rust()?.combine(other.to_rust()?)))
+        Ok(Self::from_rust(self.to_rust()?.clone().combine(other.to_rust()?)))
     }
 
     /// Append other in place, preserving existing ids and each entity kind's order.

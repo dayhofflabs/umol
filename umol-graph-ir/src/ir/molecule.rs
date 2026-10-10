@@ -1763,8 +1763,9 @@ impl Molecule {
 
     /// Combine `self` and `other` by disjoint concatenation. For every entity kind,
     /// `self` keeps its ids as the prefix and `other` follows in its original order.
-    pub fn combine(&self, other: &Molecule) -> Molecule {
-        Self::combine_all([self, other])
+    pub fn combine(mut self, other: &Molecule) -> Molecule {
+        self.combine_from(other);
+        self
     }
 
     /// Append `other` by disjoint concatenation. For every entity kind, existing ids remain

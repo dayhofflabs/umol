@@ -91,7 +91,7 @@ fn whitepaper_rust_primer() -> Result<(), Box<dyn Error>> {
     // Listing: combining and splitting.
     let ammonia = ingest::ingest_smiles("N")?;
     let chloride = ingest::ingest_smiles("[Cl-]")?;
-    let combined = ammonia.combine(&chloride);
+    let combined = ammonia.clone().combine(&chloride);
     let components = combined.split();
     assert_eq!(components.len(), 2);
 

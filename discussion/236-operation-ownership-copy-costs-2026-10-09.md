@@ -640,7 +640,7 @@ length, and its start-after-end panic.
 a baseline taken before the change: 36% faster on 8 atoms and 86% faster on 64
 atoms (81.6 to 11.7 µs), within 10% of combine_all.
 
-#### S1b — Consuming combine
+#### S1b — Consuming combine **Done**
 
 **Modules:** graph-IR molecule and fragment; Python molecule binding; tests and
 benches that call combine. **Breaking, red→green within the subitem.**
@@ -654,8 +654,10 @@ property tests, the whitepaper test, and the reaction bench. The Python combine
 binding clones the receiver and consumes the clone, so the Python source is
 unchanged.
 
-**Tests:** combine of an owned and of a cloned receiver gives identical results;
-the original of a cloned receiver is unchanged.
+**Tests:** test_molecule_combine_receiver: combine of an owned and of a cloned
+receiver gives identical results, and the original of a cloned receiver is
+unchanged. The reaction bench's combine case clones its receiver in the batch
+setup, outside the measurement.
 
 #### S1c — Consuming Constraints::compact
 
@@ -913,6 +915,18 @@ Add to the nomenclature guide an `_into` suffix entry and an update entry: a
 form's update applies an update record and returns a new form; a container's
 update merges a same-type container in place by key. Note in the Combine entry
 that combine consumes its receiver.
+
+#### S5b — Whitepaper code against the library
+
+**Modules:** whitepaper/main.tex and umol-graph/tests/whitepaper.rs.
+**Documentation.** [dep: S0–S4]
+
+Check every code listing and inline code reference in the whitepaper against
+the library after this plan: names, signatures, ownership, and results. Update
+the listings that differ, and keep umol-graph/tests/whitepaper.rs compiling the
+Rust-primer appendix listings exactly as printed.
+
+**Tests:** the whitepaper test.
 
 ### S6 — Verification
 

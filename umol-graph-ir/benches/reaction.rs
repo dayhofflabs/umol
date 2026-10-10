@@ -319,7 +319,11 @@ fn benchmark_mutation(c: &mut Criterion) {
             },
         );
         group.bench_function(BenchmarkId::new("combine/path_pair", size), |b| {
-            b.iter(|| black_box(&molecule).combine(black_box(&molecule)))
+            b.iter_batched(
+                || molecule.clone(),
+                |combined| black_box(combined.combine(black_box(&molecule))),
+                BatchSize::SmallInput,
+            )
         });
         group.bench_function(BenchmarkId::new("combine_from/path_pair", size), |b| {
             b.iter_batched(

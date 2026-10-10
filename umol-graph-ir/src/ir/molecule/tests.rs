@@ -7369,6 +7369,28 @@ fn test_molecule_combine() {
 }
 
 #[rstest]
+fn test_molecule_combine_receiver() {
+    let entries = MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::O),
+        ],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        ..Default::default()
+    };
+    let left = Molecule::from_entries(entries.clone());
+    let right = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::N)],
+        ..Default::default()
+    });
+
+    let from_clone = left.clone().combine(&right);
+
+    assert_eq!(left, Molecule::from_entries(entries));
+    assert_eq!(left.combine(&right), from_clone);
+}
+
+#[rstest]
 fn test_molecule_combine_from() {
     let mut left = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
@@ -7912,7 +7934,7 @@ fn test_molecule_combine_split_roundtrip() {
         bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
         ..Default::default()
     });
-    let union = left.combine(&right);
+    let union = left.clone().combine(&right);
     let components = union.tracked_split();
     assert_eq!(
         union.split(),
@@ -8168,7 +8190,7 @@ fn test_molecule_split_constraint_entity_kinds(
     .into();
     let right = Molecule::from_entries(right_entries);
 
-    let combined = left.combine(&right);
+    let combined = left.clone().combine(&right);
     let components = combined.tracked_split();
     assert_eq!(
         combined.split(),

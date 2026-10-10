@@ -209,7 +209,7 @@ proptest! {
         left in molecule_structurally_unambiguous_strategy(),
         right in molecule_structurally_unambiguous_strategy(),
     ) {
-        let combined = left.combine(&right);
+        let combined = left.clone().combine(&right);
         let correspondence = MoleculeCorrespondence::new(
             Correspondence::from_images(
                 &(0..right.atoms().count())
@@ -268,7 +268,7 @@ proptest! {
         left in molecule_structurally_unambiguous_strategy(),
         right in molecule_structurally_unambiguous_strategy(),
     ) {
-        let expected = left.combine(&right);
+        let expected = left.clone().combine(&right);
         let mut combined = left;
         combined.combine_from(&right);
 
