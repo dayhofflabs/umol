@@ -9,6 +9,7 @@ mod dpo;
 mod integrity;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::mem;
 use std::vec::IntoIter;
 
 use dpo::check_reaction_dpo;
@@ -380,7 +381,7 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
 /// field and constraint deltas are stated in the owning frame.
 pub(super) fn normalize_reaction_deltas(
     lhs: &Molecule,
-    deltas: &Deltas,
+    deltas: Deltas,
 ) -> Result<Deltas, Contradiction> {
     let mut dative_adds = HashMap::new();
     let mut aromatic_adds = HashMap::new();
@@ -421,7 +422,7 @@ pub(super) fn normalize_reaction_deltas(
         }
     }
 
-    let mut restated = deltas.clone();
+    let mut restated = deltas;
     for delta in restated.iter_mut() {
         match delta {
             Delta::DativeBond(DativeBondDelta::Remove {
@@ -437,8 +438,7 @@ pub(super) fn normalize_reaction_deltas(
                     .or_else(|| dative_adds.get(id).cloned())
                     .ok_or(Contradiction)?;
                 let action = DynPermutation::between(donors, &owner.0).ok_or(Contradiction)?;
-                *attributes = attributes
-                    .clone()
+                *attributes = mem::take(attributes)
                     .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *donors = owner.0;
@@ -456,8 +456,7 @@ pub(super) fn normalize_reaction_deltas(
                     .or_else(|| aromatic_adds.get(id).cloned())
                     .ok_or(Contradiction)?;
                 let action = DynPermutation::between(atoms, &owner).ok_or(Contradiction)?;
-                *attributes = attributes
-                    .clone()
+                *attributes = mem::take(attributes)
                     .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *atoms = owner;
@@ -474,8 +473,7 @@ pub(super) fn normalize_reaction_deltas(
                     .or_else(|| multicenter_adds.get(id).cloned())
                     .ok_or(Contradiction)?;
                 let action = DynPermutation::between(atoms, &owner).ok_or(Contradiction)?;
-                *attributes = attributes
-                    .clone()
+                *attributes = mem::take(attributes)
                     .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *atoms = owner;
@@ -492,8 +490,7 @@ pub(super) fn normalize_reaction_deltas(
                     .or_else(|| noncovalent_adds.get(id).copied())
                     .ok_or(Contradiction)?;
                 let action = DynPermutation::between(atoms, &owner).ok_or(Contradiction)?;
-                *attributes = attributes
-                    .clone()
+                *attributes = mem::take(attributes)
                     .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *atoms = owner;
@@ -515,8 +512,7 @@ pub(super) fn normalize_reaction_deltas(
                     })
                     .ok_or(Contradiction)?;
                 let action = Permutation::between(ligands, owner.1).ok_or(Contradiction)?;
-                *attributes = attributes
-                    .clone()
+                *attributes = mem::take(attributes)
                     .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *site = owner.0;
@@ -539,8 +535,7 @@ pub(super) fn normalize_reaction_deltas(
                     })
                     .ok_or(Contradiction)?;
                 let action = Permutation::between(ligands, owner.1).ok_or(Contradiction)?;
-                *attributes = attributes
-                    .clone()
+                *attributes = mem::take(attributes)
                     .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *site = owner.0;
@@ -887,7 +882,7 @@ fn reframe_reaction_deltas(
 
 impl Normalize for Reaction {
     fn normalize(self) -> Result<Self, Contradiction> {
-        let deltas = normalize_reaction_deltas(&self.lhs, &self.deltas)?;
+        let deltas = normalize_reaction_deltas(&self.lhs, self.deltas)?;
         let lhs = self.lhs.normalize()?;
         Ok(Self { lhs, deltas })
     }
@@ -1161,7 +1156,7 @@ impl Reaction {
             }
         }
 
-        let deltas = normalize_reaction_deltas(&self.lhs, &self.deltas)?;
+        let deltas = normalize_reaction_deltas(&self.lhs, self.deltas.clone())?;
         self.apply_deltas_at(host, correspondence, deltas)
     }
 
@@ -2171,7 +2166,7 @@ impl Reaction {
         if !stereo_delta_domains_are_valid(&self.lhs, &self.deltas) {
             return Err(ApplyPreconditionError::InconsistentReaction);
         }
-        let deltas = normalize_reaction_deltas(&self.lhs, &self.deltas)
+        let deltas = normalize_reaction_deltas(&self.lhs, self.deltas.clone())
             .map_err(|_| ApplyPreconditionError::InconsistentReaction)?;
 
         check_reaction_dpo(&self.lhs, &deltas).map_err(ApplyPreconditionError::ReactionDpo)?;

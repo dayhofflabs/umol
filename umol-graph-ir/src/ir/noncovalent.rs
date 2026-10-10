@@ -2,6 +2,7 @@
 
 use std::array;
 use std::borrow::Cow;
+use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
@@ -355,7 +356,7 @@ pub(crate) fn reframe_noncovalent_bonds_with(
         let id = NoncovalentBondId::from(relation_id);
         let stored = set.participants(relation_id).map(AtomId::from);
         let action = noncovalent_bond_representative_action(stored);
-        let attributes = set.data(relation_id).clone().normalize()?;
+        let attributes = mem::take(set.data_mut(relation_id)).normalize()?;
         *set.data_mut(relation_id) = attributes
             .reframe_by(&action)
             .ok_or(Contradiction)?
@@ -369,7 +370,7 @@ pub(crate) fn reframe_noncovalent_bonds_with(
 impl Normalize for NoncovalentBonds {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for attributes in self.attributes_iter_mut() {
-            *attributes = attributes.clone().normalize()?;
+            *attributes = mem::take(attributes).normalize()?;
         }
         Ok(self)
     }
@@ -385,7 +386,7 @@ impl FrameTransport for NoncovalentBonds {
             if action.degree() != 2 {
                 return None;
             }
-            *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
             set.permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
@@ -475,7 +476,7 @@ impl NoncovalentBondSpans {
 impl Normalize for NoncovalentBondSpans {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for id in self.0.ids().collect::<Vec<_>>() {
-            *self.0.data_mut(id) = self.0.data(id).clone().normalize()?;
+            *self.0.data_mut(id) = mem::take(self.0.data_mut(id)).normalize()?;
         }
         Ok(self)
     }
@@ -490,7 +491,8 @@ impl FrameTransport for NoncovalentBondSpans {
             if action.degree() != 2 {
                 return None;
             }
-            *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
+            *self.0.data_mut(relation_id) =
+                mem::take(self.0.data_mut(relation_id)).reframe_by(action)?;
             self.0
                 .permute_participants(relation_id, &participant_order(action));
         }
@@ -524,7 +526,7 @@ pub(crate) fn reframe_noncovalent_bond_spans_with(
             .participants(relation_id)
             .map(AtomId::from);
         let action = noncovalent_bond_representative_action(stored);
-        let span = noncovalent_bonds.0.data(relation_id).clone().normalize()?;
+        let span = mem::take(noncovalent_bonds.0.data_mut(relation_id)).normalize()?;
         *noncovalent_bonds.0.data_mut(relation_id) =
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         noncovalent_bonds

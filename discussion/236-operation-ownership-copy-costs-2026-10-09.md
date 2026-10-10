@@ -581,7 +581,7 @@ with two errors equal.
 baseline taken before the change: 4–7% faster, since the hash no longer builds
 the canonical form.
 
-#### S0d — Consuming tower implementations move their storage
+#### S0d — Consuming tower implementations move their storage **Done**
 
 **Modules:** graph-IR aromatic, dative, multicenter, noncovalent, stereo,
 reaction. **Green.** [dep: none]
@@ -594,11 +594,18 @@ the forms implement Default. Reaction normalize passes its deltas to
 normalize_reaction_deltas by reference and rebuilds them. Change that function
 to consume the deltas. Results are unchanged.
 
+The span types store `EntitySpan<form>`, so EntitySpan gains
+`impl<T: Default> Default for EntitySpan<T>`, returning `Unchanged(T::default())`.
+normalize_reaction_deltas also moves the attributes it transports. Its three
+borrowing callers (to_reaction_span, apply_at, prepare_deltas) clone the deltas
+they pass, where the function used to clone internally.
+
 **Tests:** existing normalize and reframe results for each type and for
 Reaction.
 
 **Verification:** the reframe and canonicalize bench cases, against a baseline
-taken before the change.
+taken before the change: reframe cases 0.5–5.6% faster, the canonicalize and
+reaction canonical_eq cases unchanged within ±4%.
 
 ### S1 — Combination, constraints, and components
 

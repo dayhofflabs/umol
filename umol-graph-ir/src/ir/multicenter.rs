@@ -1,6 +1,7 @@
 //! Multicenter bonds: the molecule's collection and one bond's attribute form.
 
 use std::borrow::Cow;
+use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
@@ -393,7 +394,7 @@ pub(crate) fn reframe_multicenter_bonds_with(
             .map(|&atom| AtomId::from(atom))
             .collect();
         let action = multicenter_bond_representative_action(stored);
-        let attributes = set.data(relation_id).clone().normalize()?;
+        let attributes = mem::take(set.data_mut(relation_id)).normalize()?;
         *set.data_mut(relation_id) = attributes
             .reframe_by(&action)
             .ok_or(Contradiction)?
@@ -407,7 +408,7 @@ pub(crate) fn reframe_multicenter_bonds_with(
 impl Normalize for MulticenterBonds {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for attributes in self.attributes_iter_mut() {
-            *attributes = attributes.clone().normalize()?;
+            *attributes = mem::take(attributes).normalize()?;
         }
         Ok(self)
     }
@@ -423,7 +424,7 @@ impl FrameTransport for MulticenterBonds {
             if action.degree() != set.participants(relation_id).len() {
                 return None;
             }
-            *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
             set.permute_participants(relation_id, &participant_order(action));
         }
         Some(self)
@@ -519,7 +520,7 @@ impl MulticenterBondSpans {
 impl Normalize for MulticenterBondSpans {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for id in self.0.ids().collect::<Vec<_>>() {
-            *self.0.data_mut(id) = self.0.data(id).clone().normalize()?;
+            *self.0.data_mut(id) = mem::take(self.0.data_mut(id)).normalize()?;
         }
         Ok(self)
     }
@@ -534,7 +535,8 @@ impl FrameTransport for MulticenterBondSpans {
             if action.degree() != self.0.participants(relation_id).len() {
                 return None;
             }
-            *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
+            *self.0.data_mut(relation_id) =
+                mem::take(self.0.data_mut(relation_id)).reframe_by(action)?;
             self.0
                 .permute_participants(relation_id, &participant_order(action));
         }
@@ -570,7 +572,7 @@ pub(crate) fn reframe_multicenter_bond_spans_with(
             .map(|&atom| AtomId::from(atom))
             .collect();
         let action = multicenter_bond_representative_action(stored);
-        let span = multicenter_bonds.0.data(relation_id).clone().normalize()?;
+        let span = mem::take(multicenter_bonds.0.data_mut(relation_id)).normalize()?;
         *multicenter_bonds.0.data_mut(relation_id) =
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         multicenter_bonds

@@ -1661,6 +1661,12 @@ pub enum EntitySpan<T> {
     Removed(T),
 }
 
+impl<T: Default> Default for EntitySpan<T> {
+    fn default() -> Self {
+        Self::Unchanged(T::default())
+    }
+}
+
 impl<T> EntitySpan<T> {
     /// The lhs (`L`) value, or `None` if the entity is created.
     pub fn lhs(&self) -> Option<&T> {
@@ -4528,6 +4534,14 @@ mod tests {
         };
 
         assert_eq!(input.reframe_by(&action), None);
+    }
+
+    #[rstest]
+    fn test_entity_span_default() {
+        assert_eq!(
+            EntitySpan::<AtomForm>::default(),
+            EntitySpan::Unchanged(AtomForm::default()),
+        );
     }
 
     #[rstest]

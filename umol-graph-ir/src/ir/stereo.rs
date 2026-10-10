@@ -10,6 +10,7 @@ pub(crate) mod integrity;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::mem;
 use std::sync::Arc;
 
 use strum::VariantArray;
@@ -399,7 +400,7 @@ pub(crate) fn reframe_stereo_atoms_with(
         let id = StereoAtomId::from(relation_id);
         let action = stereo_atom_representative_action(set.participants_2(relation_id))
             .ok_or(Contradiction)?;
-        let attributes = set.data(relation_id).clone().normalize()?;
+        let attributes = mem::take(set.data_mut(relation_id)).normalize()?;
         *set.data_mut(relation_id) = attributes
             .reframe_by(&action)
             .ok_or(Contradiction)?
@@ -429,7 +430,7 @@ fn participant_order(action: Permutation) -> Vec<ParticipantPosition> {
 impl Normalize for StereoAtoms {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for attributes in self.attributes_iter_mut() {
-            *attributes = attributes.clone().normalize()?;
+            *attributes = mem::take(attributes).normalize()?;
         }
         Ok(self)
     }
@@ -445,7 +446,7 @@ impl FrameTransport for StereoAtoms {
             if action.degree() != set.participants_2(relation_id).len() {
                 return None;
             }
-            *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
             set.permute_participants_2(relation_id, &participant_order(*action));
         }
         Some(self)
@@ -860,7 +861,7 @@ pub(crate) fn reframe_stereo_bonds_with(
         let id = StereoBondId::from(relation_id);
         let action = stereo_bond_representative_action(set.participants_2(relation_id))
             .ok_or(Contradiction)?;
-        let attributes = set.data(relation_id).clone().normalize()?;
+        let attributes = mem::take(set.data_mut(relation_id)).normalize()?;
         *set.data_mut(relation_id) = attributes
             .reframe_by(&action)
             .ok_or(Contradiction)?
@@ -874,7 +875,7 @@ pub(crate) fn reframe_stereo_bonds_with(
 impl Normalize for StereoBonds {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for attributes in self.attributes_iter_mut() {
-            *attributes = attributes.clone().normalize()?;
+            *attributes = mem::take(attributes).normalize()?;
         }
         Ok(self)
     }
@@ -890,7 +891,7 @@ impl FrameTransport for StereoBonds {
             if action.degree() != set.participants_2(relation_id).len() {
                 return None;
             }
-            *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
+            *set.data_mut(relation_id) = mem::take(set.data_mut(relation_id)).reframe_by(action)?;
             set.permute_participants_2(relation_id, &participant_order(*action));
         }
         Some(self)
@@ -994,7 +995,7 @@ impl StereoAtomSpans {
 impl Normalize for StereoAtomSpans {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for id in self.0.ids().collect::<Vec<_>>() {
-            *self.0.data_mut(id) = self.0.data(id).clone().normalize()?;
+            *self.0.data_mut(id) = mem::take(self.0.data_mut(id)).normalize()?;
         }
         Ok(self)
     }
@@ -1009,7 +1010,8 @@ impl FrameTransport for StereoAtomSpans {
             if action.degree() != self.0.participants_2(relation_id).len() {
                 return None;
             }
-            *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
+            *self.0.data_mut(relation_id) =
+                mem::take(self.0.data_mut(relation_id)).reframe_by(action)?;
             self.0
                 .permute_participants_2(relation_id, &participant_order(*action));
         }
@@ -1043,7 +1045,7 @@ pub(crate) fn reframe_stereo_atom_spans_with(
         let id = StereoAtomId::from(relation_id);
         let action = stereo_atom_representative_action(stereo_atoms.0.participants_2(relation_id))
             .ok_or(Contradiction)?;
-        let span = stereo_atoms.0.data(relation_id).clone().normalize()?;
+        let span = mem::take(stereo_atoms.0.data_mut(relation_id)).normalize()?;
         *stereo_atoms.0.data_mut(relation_id) =
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         stereo_atoms
@@ -1133,7 +1135,7 @@ impl StereoBondSpans {
 impl Normalize for StereoBondSpans {
     fn normalize(mut self) -> Result<Self, Contradiction> {
         for id in self.0.ids().collect::<Vec<_>>() {
-            *self.0.data_mut(id) = self.0.data(id).clone().normalize()?;
+            *self.0.data_mut(id) = mem::take(self.0.data_mut(id)).normalize()?;
         }
         Ok(self)
     }
@@ -1148,7 +1150,8 @@ impl FrameTransport for StereoBondSpans {
             if action.degree() != self.0.participants_2(relation_id).len() {
                 return None;
             }
-            *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
+            *self.0.data_mut(relation_id) =
+                mem::take(self.0.data_mut(relation_id)).reframe_by(action)?;
             self.0
                 .permute_participants_2(relation_id, &participant_order(*action));
         }
@@ -1182,7 +1185,7 @@ pub(crate) fn reframe_stereo_bond_spans_with(
         let id = StereoBondId::from(relation_id);
         let action = stereo_bond_representative_action(stereo_bonds.0.participants_2(relation_id))
             .ok_or(Contradiction)?;
-        let span = stereo_bonds.0.data(relation_id).clone().normalize()?;
+        let span = mem::take(stereo_bonds.0.data_mut(relation_id)).normalize()?;
         *stereo_bonds.0.data_mut(relation_id) =
             span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
         stereo_bonds

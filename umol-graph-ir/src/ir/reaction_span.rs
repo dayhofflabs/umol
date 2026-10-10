@@ -2065,7 +2065,7 @@ impl Reaction {
     /// exact error, non-applicability, or product and host-to-product correspondence. Repeating
     /// the span/reaction conversion on `n` returns `n` by exact structural equality.
     pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
-        let deltas = normalize_reaction_deltas(self.lhs(), self.deltas())?;
+        let deltas = normalize_reaction_deltas(self.lhs(), self.deltas().clone())?;
         let lhs = self.lhs();
         let atom_count = lhs.atoms().count();
         let bond_count = lhs.bonds().count();
