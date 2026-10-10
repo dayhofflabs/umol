@@ -11,7 +11,8 @@ use std::fmt::{self, Display, Formatter};
 
 use umol_nauty_sys::{run as run_vendored_nauty, NautyInput};
 
-use crate::graph::{EdgeId, Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::{EdgeId, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AutomorphismAlgorithm {

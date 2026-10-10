@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{Compaction, EdgeId, Graph, GraphCompaction};
+use umol_graph_core::{Compaction, EdgeId, Graph, GraphCompaction, IdRange};
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::atom::AtomForm;
@@ -95,10 +95,7 @@ impl MoleculeEditor {
     }
 
     /// Append atoms in input order and return their ids.
-    pub fn add_atoms(
-        &mut self,
-        atoms: Vec<AtomForm>,
-    ) -> impl ExactSizeIterator<Item = AtomId> + use<> {
+    pub fn add_atoms(&mut self, atoms: Vec<AtomForm>) -> IdRange<AtomId> {
         self.molecule.add_atoms(atoms)
     }
 
@@ -117,10 +114,7 @@ impl MoleculeEditor {
     /// # Panics
     ///
     /// Panics if an endpoint is outside the current atom space.
-    pub fn add_bonds(
-        &mut self,
-        bonds: Vec<([AtomId; 2], BondForm)>,
-    ) -> impl ExactSizeIterator<Item = BondId> + use<> {
+    pub fn add_bonds(&mut self, bonds: Vec<([AtomId; 2], BondForm)>) -> IdRange<BondId> {
         self.molecule.add_bonds(bonds)
     }
 
@@ -142,7 +136,7 @@ impl MoleculeEditor {
     pub fn add_dative_bonds(
         &mut self,
         entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
-    ) -> impl ExactSizeIterator<Item = DativeBondId> + use<> {
+    ) -> IdRange<DativeBondId> {
         self.molecule.add_dative_bonds(entries)
     }
 
@@ -162,7 +156,7 @@ impl MoleculeEditor {
     pub fn add_aromatic_systems(
         &mut self,
         entries: Vec<(&[AtomId], AromaticSystemForm)>,
-    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + use<> {
+    ) -> IdRange<AromaticSystemId> {
         self.molecule.add_aromatic_systems(entries)
     }
 
@@ -182,7 +176,7 @@ impl MoleculeEditor {
     pub fn add_multicenter_bonds(
         &mut self,
         entries: Vec<(&[AtomId], MulticenterBondForm)>,
-    ) -> impl ExactSizeIterator<Item = MulticenterBondId> + use<> {
+    ) -> IdRange<MulticenterBondId> {
         self.molecule.add_multicenter_bonds(entries)
     }
 
@@ -202,7 +196,7 @@ impl MoleculeEditor {
     pub fn add_noncovalent_bonds(
         &mut self,
         entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
-    ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + use<> {
+    ) -> IdRange<NoncovalentBondId> {
         self.molecule.add_noncovalent_bonds(entries)
     }
 
@@ -223,7 +217,7 @@ impl MoleculeEditor {
     pub fn add_stereo_atoms(
         &mut self,
         entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
-    ) -> impl ExactSizeIterator<Item = StereoAtomId> + use<> {
+    ) -> IdRange<StereoAtomId> {
         self.molecule.add_stereo_atoms(entries)
     }
 
@@ -244,7 +238,7 @@ impl MoleculeEditor {
     pub fn add_stereo_bonds(
         &mut self,
         entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
-    ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
+    ) -> IdRange<StereoBondId> {
         self.molecule.add_stereo_bonds(entries)
     }
 

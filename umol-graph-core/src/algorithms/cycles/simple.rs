@@ -14,7 +14,8 @@ use std::collections::VecDeque;
 use std::ops::ControlFlow;
 
 use super::Cycle;
-use crate::graph::{EdgeId, Graph, Neighbor, NodeId};
+use crate::graph::{Graph, Neighbor};
+use crate::id::{EdgeId, NodeId};
 
 #[derive(Clone, Copy)]
 enum PathExtension {

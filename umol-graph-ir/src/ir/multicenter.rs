@@ -5,8 +5,8 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    Compaction, GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition,
-    RelationId, VarRelationSet,
+    Compaction, GraphCompaction, GraphCorrespondence, GraphRemapping, IdRange, NodeId,
+    ParticipantPosition, RelationId, VarRelationSet,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
@@ -200,7 +200,7 @@ impl MulticenterBonds {
     pub(crate) fn extend(
         &mut self,
         entries: Vec<(&[AtomId], MulticenterBondForm)>,
-    ) -> impl ExactSizeIterator<Item = MulticenterBondId> + use<> {
+    ) -> IdRange<MulticenterBondId> {
         let start = self.count();
         if !entries.is_empty() {
             let nodes: Vec<NodeId> = entries
@@ -216,9 +216,9 @@ impl MulticenterBonds {
                     (atoms, attributes)
                 })
                 .collect();
-            let _ = Arc::make_mut(&mut self.0).extend(entries);
+            Arc::make_mut(&mut self.0).extend(entries);
         }
-        (start..self.count()).map(MulticenterBondId::from)
+        IdRange::new(start, self.count())
     }
 
     pub(crate) fn remove(&mut self, ids: &[MulticenterBondId]) {

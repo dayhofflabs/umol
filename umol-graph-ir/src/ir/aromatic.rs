@@ -5,8 +5,8 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    Compaction, GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId, ParticipantPosition,
-    RelationId, VarRelationSet,
+    Compaction, GraphCompaction, GraphCorrespondence, GraphRemapping, IdRange, NodeId,
+    ParticipantPosition, RelationId, VarRelationSet,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
@@ -201,7 +201,7 @@ impl AromaticSystems {
     pub(crate) fn extend(
         &mut self,
         entries: Vec<(&[AtomId], AromaticSystemForm)>,
-    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + use<> {
+    ) -> IdRange<AromaticSystemId> {
         let start = self.count();
         if !entries.is_empty() {
             let nodes: Vec<NodeId> = entries
@@ -217,9 +217,9 @@ impl AromaticSystems {
                     (atoms, attributes)
                 })
                 .collect();
-            let _ = Arc::make_mut(&mut self.0).extend(entries);
+            Arc::make_mut(&mut self.0).extend(entries);
         }
-        (start..self.count()).map(AromaticSystemId::from)
+        IdRange::new(start, self.count())
     }
 
     pub(crate) fn remove(&mut self, ids: &[AromaticSystemId]) {

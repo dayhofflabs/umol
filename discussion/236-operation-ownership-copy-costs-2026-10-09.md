@@ -609,19 +609,36 @@ reaction canonical_eq cases unchanged within ±4%.
 
 ### S1 — Combination, constraints, and components
 
-#### S1a — Batch combine_from
+#### S1a — Batch combine_from **Done**
 
-**Modules:** graph-IR molecule. **Green.** [dep: none]
+**Modules:** graph-core id, graph, and relation sets; graph-IR molecule, editor,
+and overlay collections; the graph-core and reaction benches. **Breaking,
+red→green within the subitem.** [dep: none]
 
 Rewrite combine_from to append other's entities with add_atoms, add_bonds, and
 the overlay batch methods, so that one combine extends the graph once. Ids,
 order, attributes, and constraints are unchanged.
 
-**Tests:** existing combine and combine_from results, including every overlay
-kind and molecule-level constraints.
+The batch-append methods returned their appended ids as an opaque
+`impl ExactSizeIterator`, which inherits Iterator's `must_use` although the
+mutation has already happened; every caller that does not need the ids had to
+discard them. They return `IdRange<Id>` instead: the contiguous positions
+`start..end`, iterating as ids through `Id: From<usize>`, with
+Iterator, DoubleEndedIterator, ExactSizeIterator, and FusedIterator and no
+`must_use`. This covers Graph::extend_nodes, extend_edges, and extend, the five
+relation sets' extend, Molecule's and MoleculeEditor's batch add methods, and the
+overlay collections' extend. The graph-core ids NodeId, EdgeId, and RelationId
+move with IdRange into a new id module; the crate root re-exports the same
+names. The discards of appended ids in graph-core, its benches, and graph-IR are
+removed.
 
-**Verification:** a combine case in the reaction bench, against a baseline
-taken before the change.
+**Tests:** existing combine and combine_from results, including every overlay
+kind and molecule-level constraints; IdRange iteration in both directions, its
+length, and its start-after-end panic.
+
+**Verification:** the reaction bench's new combine_from/path_pair cases, against
+a baseline taken before the change: 36% faster on 8 atoms and 86% faster on 64
+atoms (81.6 to 11.7 µs), within 10% of combine_all.
 
 #### S1b — Consuming combine
 

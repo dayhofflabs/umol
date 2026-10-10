@@ -13,7 +13,8 @@ use bitvec::prelude::*;
 use super::relevant::ShortestPathDag;
 use super::{Cycle, MinimumCycleBasis};
 use crate::algorithms::connectivity::ConnectedComponentsAlgorithm;
-use crate::graph::{EdgeId, Graph};
+use crate::graph::Graph;
+use crate::id::EdgeId;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct EdgeVector {

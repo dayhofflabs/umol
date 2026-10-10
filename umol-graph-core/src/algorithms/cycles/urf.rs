@@ -14,7 +14,8 @@ use num_bigint::BigUint;
 use super::basis::{CycleVectorBasis, EdgeVector};
 use super::relevant::RelevantCycleAnalysis;
 use super::{Cycle, RelevantCycleCount, UniqueRingFamilies, UniqueRingFamily, UniqueRingFamilyId};
-use crate::graph::{EdgeId, Graph, NodeId, SubdividedGraph, SubdivisionNodeSource};
+use crate::graph::{Graph, SubdividedGraph, SubdivisionNodeSource};
+use crate::id::{EdgeId, NodeId};
 use crate::union_find::UnionFind;
 
 #[derive(Debug)]

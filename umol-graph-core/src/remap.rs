@@ -3,7 +3,7 @@
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
-use crate::graph::{EdgeId, NodeId};
+use crate::id::{EdgeId, NodeId};
 
 /// Failure to construct a permutation of a dense id space.
 #[derive(Clone, Debug, PartialEq, Eq)]

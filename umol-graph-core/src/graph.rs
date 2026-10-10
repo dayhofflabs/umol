@@ -7,92 +7,16 @@
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-use std::ops::{Add, Sub};
 use std::sync::Arc;
 
 use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NodeId(pub u32);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct EdgeId(pub u32);
+use crate::id::{EdgeId, IdRange, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Neighbor {
     pub node: NodeId,
     pub edge: EdgeId,
-}
-
-impl NodeId {
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl From<NodeId> for usize {
-    fn from(id: NodeId) -> Self {
-        id.0 as usize
-    }
-}
-
-impl From<usize> for NodeId {
-    fn from(index: usize) -> Self {
-        Self(index as u32)
-    }
-}
-
-/// Dense positional offset, for renumbering a dense id space.
-impl Add<usize> for NodeId {
-    type Output = Self;
-
-    fn add(self, offset: usize) -> Self {
-        Self(self.0 + offset as u32)
-    }
-}
-
-impl Sub<usize> for NodeId {
-    type Output = Self;
-
-    fn sub(self, offset: usize) -> Self {
-        Self(self.0 - offset as u32)
-    }
-}
-
-impl EdgeId {
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl From<EdgeId> for usize {
-    fn from(id: EdgeId) -> Self {
-        id.0 as usize
-    }
-}
-
-impl From<usize> for EdgeId {
-    fn from(index: usize) -> Self {
-        Self(index as u32)
-    }
-}
-
-/// Dense positional offset, for renumbering a dense id space.
-impl Add<usize> for EdgeId {
-    type Output = Self;
-
-    fn add(self, offset: usize) -> Self {
-        Self(self.0 + offset as u32)
-    }
-}
-
-impl Sub<usize> for EdgeId {
-    type Output = Self;
-
-    fn sub(self, offset: usize) -> Self {
-        Self(self.0 - offset as u32)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -279,7 +203,7 @@ impl Graph {
     /// starting at the original node count. A zero count leaves storage unchanged;
     /// other clones retain their original graph. Properties in `tests/property/graph.rs`
     /// compare the result with independently constructed topology.
-    pub fn extend_nodes(&mut self, count: usize) -> impl ExactSizeIterator<Item = NodeId> + use<> {
+    pub fn extend_nodes(&mut self, count: usize) -> IdRange<NodeId> {
         let start = self.csr.node_count;
         let end = start + count;
         if count != 0 {
@@ -288,7 +212,7 @@ impl Graph {
             csr.offsets.resize(end + 1, offset);
             csr.node_count = end;
         }
-        (start..end).map(NodeId::from)
+        IdRange::new(start, end)
     }
 
     /// Append edges between existing nodes and return their ids in input order.
@@ -307,10 +231,7 @@ impl Graph {
     /// # Panics
     ///
     /// Panics if an endpoint is outside this graph.
-    pub fn extend_edges(
-        &mut self,
-        edges: &[[NodeId; 2]],
-    ) -> impl ExactSizeIterator<Item = EdgeId> + use<> {
+    pub fn extend_edges(&mut self, edges: &[[NodeId; 2]]) -> IdRange<EdgeId> {
         self.extend(0, edges).1
     }
 
@@ -318,8 +239,8 @@ impl Graph {
     ///
     /// Endpoints refer to the resulting node space, including appended nodes.
     /// Adjacency is rebuilt once when adding edges; node-only batches use
-    /// [`Self::extend_nodes`]. Mutation completes before return. Both allocation-free
-    /// exact-size iterators own their bounds and borrow neither the graph nor the input.
+    /// [`Self::extend_nodes`]. Mutation completes before return. Both ranges own their
+    /// bounds and borrow neither the graph nor the input.
     ///
     /// # Semantic properties
     ///
@@ -336,14 +257,11 @@ impl Graph {
         &mut self,
         node_count: usize,
         edges: &[[NodeId; 2]],
-    ) -> (
-        impl ExactSizeIterator<Item = NodeId> + use<>,
-        impl ExactSizeIterator<Item = EdgeId> + use<>,
-    ) {
+    ) -> (IdRange<NodeId>, IdRange<EdgeId>) {
         let node_start = self.csr.node_count;
         let edge_start = self.csr.edge_count;
         if edges.is_empty() {
-            let _ = self.extend_nodes(node_count);
+            self.extend_nodes(node_count);
         } else {
             let node_end = node_start + node_count;
             let endpoints: Vec<_> = self
@@ -356,8 +274,8 @@ impl Graph {
             self.csr = Arc::new(Self::build_csr(node_end, &endpoints));
         }
         (
-            (node_start..self.csr.node_count).map(NodeId::from),
-            (edge_start..self.csr.edge_count).map(EdgeId::from),
+            IdRange::new(node_start, self.csr.node_count),
+            IdRange::new(edge_start, self.csr.edge_count),
         )
     }
 
@@ -1339,7 +1257,7 @@ mod tests {
     #[should_panic]
     fn test_graph_extend_edges_error(#[case] edge: [NodeId; 2]) {
         let mut graph = Graph::new(2, &[]);
-        let _ = graph.extend_edges(&[edge]);
+        graph.extend_edges(&[edge]);
     }
 
     #[rstest]
@@ -1348,7 +1266,7 @@ mod tests {
     #[should_panic]
     fn test_graph_extend_error(#[case] edge: [NodeId; 2]) {
         let mut graph = Graph::new(2, &[]);
-        let _ = graph.extend(1, &[edge]);
+        graph.extend(1, &[edge]);
     }
 
     #[rstest]

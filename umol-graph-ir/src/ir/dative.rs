@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use umol_graph_core::{
     Compaction, FixedVarBirelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping,
-    NodeId, ParticipantPosition, RelationId,
+    IdRange, NodeId, ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
@@ -215,7 +215,7 @@ impl DativeBonds {
     pub(crate) fn extend(
         &mut self,
         entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
-    ) -> impl ExactSizeIterator<Item = DativeBondId> + use<> {
+    ) -> IdRange<DativeBondId> {
         let start = self.count();
         if !entries.is_empty() {
             let nodes: Vec<NodeId> = entries
@@ -231,9 +231,9 @@ impl DativeBonds {
                     ([NodeId::from(acceptor)], donors, attributes)
                 })
                 .collect();
-            let _ = Arc::make_mut(&mut self.0).extend(entries);
+            Arc::make_mut(&mut self.0).extend(entries);
         }
-        (start..self.count()).map(DativeBondId::from)
+        IdRange::new(start, self.count())
     }
 
     pub(crate) fn remove(&mut self, ids: &[DativeBondId]) {

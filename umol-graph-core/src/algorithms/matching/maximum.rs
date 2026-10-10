@@ -11,7 +11,8 @@ use std::collections::{HashSet, VecDeque};
 #[cfg(test)]
 use super::enumeration::{MatchingEnumerationAlgorithm, MatchingSearchState};
 use crate::algorithms::bipartite::{BipartitionAlgorithm, NonBipartiteGraphError};
-use crate::graph::{EdgeId, Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::{EdgeId, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BipartiteMaximumMatchingAlgorithm {
@@ -459,7 +460,8 @@ mod tests {
     use super::PerfectMatchingAlgorithm::BacktrackingDfs;
     use super::{Matching, MatchingSearchState};
     use crate::algorithms::bipartite::NonBipartiteGraphError;
-    use crate::graph::{EdgeId, Graph, NodeId};
+    use crate::graph::Graph;
+    use crate::id::{EdgeId, NodeId};
 
     #[rstest]
     #[case::single_edge(2, vec![[0, 1]], vec![EdgeId(0)], true)]

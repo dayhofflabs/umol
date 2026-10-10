@@ -16,7 +16,7 @@ use std::sync::Arc;
 use strum::VariantArray;
 use umol_graph_core::{
     Compaction, EdgeId, FixedVarBirelationSet, GraphCompaction, GraphCorrespondence,
-    GraphRemapping, NodeId, ParticipantPosition, RelationId,
+    GraphRemapping, IdRange, NodeId, ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation, MAX_DEGREE};
@@ -214,16 +214,16 @@ impl StereoAtoms {
     pub(crate) fn extend(
         &mut self,
         entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
-    ) -> impl ExactSizeIterator<Item = StereoAtomId> + use<> {
+    ) -> IdRange<StereoAtomId> {
         let start = self.count();
         if !entries.is_empty() {
             let entries = entries
                 .into_iter()
                 .map(|(site, ligands, attributes)| ([NodeId::from(site)], ligands, attributes))
                 .collect();
-            let _ = Arc::make_mut(&mut self.0).extend(entries);
+            Arc::make_mut(&mut self.0).extend(entries);
         }
-        (start..self.count()).map(StereoAtomId::from)
+        IdRange::new(start, self.count())
     }
 
     pub(crate) fn remove(&mut self, ids: &[StereoAtomId]) {
@@ -675,16 +675,16 @@ impl StereoBonds {
     pub(crate) fn extend(
         &mut self,
         entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
-    ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
+    ) -> IdRange<StereoBondId> {
         let start = self.count();
         if !entries.is_empty() {
             let entries = entries
                 .into_iter()
                 .map(|(site, ligands, attributes)| ([EdgeId::from(site)], ligands, attributes))
                 .collect();
-            let _ = Arc::make_mut(&mut self.0).extend(entries);
+            Arc::make_mut(&mut self.0).extend(entries);
         }
-        (start..self.count()).map(StereoBondId::from)
+        IdRange::new(start, self.count())
     }
 
     pub(crate) fn remove(&mut self, ids: &[StereoBondId]) {

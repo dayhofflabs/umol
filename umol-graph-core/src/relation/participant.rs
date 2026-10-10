@@ -7,7 +7,7 @@ use std::hash::Hash;
 
 use crate::compact::GraphCompaction;
 use crate::correspondence::GraphCorrespondence;
-use crate::graph::{EdgeId, NodeId};
+use crate::id::{EdgeId, NodeId};
 use crate::remap::GraphRemapping;
 
 /// Position within one relation factor, independent of node, edge, and relation ids.

@@ -10,6 +10,7 @@ pub(crate) mod compact;
 pub(crate) mod correspondence;
 pub(crate) mod digraph;
 pub(crate) mod graph;
+pub(crate) mod id;
 mod relation;
 pub(crate) mod remap;
 pub(crate) mod rewriting;
@@ -55,10 +56,11 @@ pub use correspondence::{
     GraphCorrespondenceComposeError,
 };
 pub use digraph::DiGraph;
-pub use graph::{EdgeId, Graph, Neighbor, NodeId, SubdividedGraph, SubdivisionNodeSource};
+pub use graph::{Graph, Neighbor, SubdividedGraph, SubdivisionNodeSource};
+pub use id::{EdgeId, IdRange, NodeId, RelationId};
 pub use relation::{
     FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, ParticipantPosition,
-    ParticipantRefs, RelationId, RelationParticipant, RelationPullbackCorrespondence,
+    ParticipantRefs, RelationParticipant, RelationPullbackCorrespondence,
     RelationPushoutCorrespondence, VarRelationSet, VarVarBirelationSet,
 };
 pub use remap::{GraphRemapping, Remapping, RemappingError};

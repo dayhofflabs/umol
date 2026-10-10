@@ -13,8 +13,8 @@ pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 pub use transact::{Transaction, TransactionError};
 use umol_graph_core::{
-    Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, NodeId,
-    UnionFind,
+    Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, IdRange,
+    NodeId, UnionFind,
 };
 
 use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
@@ -1006,15 +1006,13 @@ impl Molecule {
         AtomId::from(id)
     }
 
-    pub(crate) fn add_atoms(
-        &mut self,
-        atoms: Vec<AtomForm>,
-    ) -> impl ExactSizeIterator<Item = AtomId> + use<> {
-        let ids = self.graph.extend_nodes(atoms.len()).map(AtomId::from);
+    pub(crate) fn add_atoms(&mut self, atoms: Vec<AtomForm>) -> IdRange<AtomId> {
+        let start = self.atoms.len();
+        self.graph.extend_nodes(atoms.len());
         if !atoms.is_empty() {
             Arc::make_mut(&mut self.atoms).extend(atoms);
         }
-        ids
+        IdRange::new(start, self.atoms.len())
     }
 
     pub(crate) fn add_bond(
@@ -1028,20 +1026,18 @@ impl Molecule {
         BondId::from(id)
     }
 
-    pub(crate) fn add_bonds(
-        &mut self,
-        bonds: Vec<([AtomId; 2], BondForm)>,
-    ) -> impl ExactSizeIterator<Item = BondId> + use<> {
+    pub(crate) fn add_bonds(&mut self, bonds: Vec<([AtomId; 2], BondForm)>) -> IdRange<BondId> {
         let edges: Vec<_> = bonds
             .iter()
             .map(|(atoms, _)| atoms.map(NodeId::from))
             .collect();
-        let ids = self.graph.extend_edges(&edges).map(BondId::from);
+        let start = self.bonds.len();
+        self.graph.extend_edges(&edges);
         if !bonds.is_empty() {
             Arc::make_mut(&mut self.bonds)
                 .extend(bonds.into_iter().map(|(_, attributes)| attributes));
         }
-        ids
+        IdRange::new(start, self.bonds.len())
     }
 
     pub(crate) fn add_dative_bond(
@@ -1056,7 +1052,7 @@ impl Molecule {
     pub(crate) fn add_dative_bonds(
         &mut self,
         entries: Vec<(&[AtomId], AtomId, DativeBondForm)>,
-    ) -> impl ExactSizeIterator<Item = DativeBondId> + use<> {
+    ) -> IdRange<DativeBondId> {
         self.dative_bonds.extend(entries)
     }
 
@@ -1071,7 +1067,7 @@ impl Molecule {
     pub(crate) fn add_aromatic_systems(
         &mut self,
         entries: Vec<(&[AtomId], AromaticSystemForm)>,
-    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + use<> {
+    ) -> IdRange<AromaticSystemId> {
         self.aromatic_systems.extend(entries)
     }
 
@@ -1086,7 +1082,7 @@ impl Molecule {
     pub(crate) fn add_multicenter_bonds(
         &mut self,
         entries: Vec<(&[AtomId], MulticenterBondForm)>,
-    ) -> impl ExactSizeIterator<Item = MulticenterBondId> + use<> {
+    ) -> IdRange<MulticenterBondId> {
         self.multicenter_bonds.extend(entries)
     }
 
@@ -1101,7 +1097,7 @@ impl Molecule {
     pub(crate) fn add_noncovalent_bonds(
         &mut self,
         entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
-    ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + use<> {
+    ) -> IdRange<NoncovalentBondId> {
         self.noncovalent_bonds.extend(entries)
     }
 
@@ -1117,7 +1113,7 @@ impl Molecule {
     pub(crate) fn add_stereo_atoms(
         &mut self,
         entries: Vec<(AtomId, &[StereoLigand], StereoAtomForm)>,
-    ) -> impl ExactSizeIterator<Item = StereoAtomId> + use<> {
+    ) -> IdRange<StereoAtomId> {
         self.stereo_atoms.extend(entries)
     }
 
@@ -1133,7 +1129,7 @@ impl Molecule {
     pub(crate) fn add_stereo_bonds(
         &mut self,
         entries: Vec<(BondId, &[StereoLigand], StereoBondForm)>,
-    ) -> impl ExactSizeIterator<Item = StereoBondId> + use<> {
+    ) -> IdRange<StereoBondId> {
         self.stereo_bonds.extend(entries)
     }
 
@@ -1784,46 +1780,84 @@ impl Molecule {
         let stereo_bond_offset = self.stereo_bonds().count();
         let shift_atom = |id: AtomId| AtomId(id.0 + atom_offset as u32);
 
-        for atom in other.atoms().iter() {
-            self.add_atom(atom.attributes().clone());
-        }
-        for bond in other.bonds().iter() {
-            let [first, second] = bond.atom_ids();
-            self.add_bond(
-                shift_atom(first),
-                shift_atom(second),
-                bond.attributes().clone(),
-            );
-        }
-        for bond in other.dative_bonds().iter() {
-            self.add_dative_bond(
-                &bond
-                    .donors()
-                    .map(|donor| shift_atom(donor.id()))
-                    .collect::<Vec<_>>(),
-                shift_atom(bond.acceptor_id()),
-                bond.attributes().clone(),
-            );
-        }
-        for system in other.aromatic_systems().iter() {
-            self.add_aromatic_system(
-                &system.atom_ids().map(shift_atom).collect::<Vec<_>>(),
-                system.attributes().clone(),
-            );
-        }
-        for bond in other.multicenter_bonds().iter() {
-            self.add_multicenter_bond(
-                &bond.atom_ids().map(shift_atom).collect::<Vec<_>>(),
-                bond.attributes().clone(),
-            );
-        }
-        for bond in other.noncovalent_bonds().iter() {
-            let [first, second] = bond.atom_ids();
-            self.add_noncovalent_bond(
-                [shift_atom(first), shift_atom(second)],
-                bond.attributes().clone(),
-            );
-        }
+        self.add_atoms(
+            other
+                .atoms()
+                .iter()
+                .map(|atom| atom.attributes().clone())
+                .collect(),
+        );
+        self.add_bonds(
+            other
+                .bonds()
+                .iter()
+                .map(|bond| {
+                    let [first, second] = bond.atom_ids();
+                    (
+                        [shift_atom(first), shift_atom(second)],
+                        bond.attributes().clone(),
+                    )
+                })
+                .collect(),
+        );
+        let donors: Vec<Vec<AtomId>> = other
+            .dative_bonds()
+            .iter()
+            .map(|bond| bond.donors().map(|donor| shift_atom(donor.id())).collect())
+            .collect();
+        self.add_dative_bonds(
+            other
+                .dative_bonds()
+                .iter()
+                .zip(&donors)
+                .map(|(bond, donors)| {
+                    (
+                        donors.as_slice(),
+                        shift_atom(bond.acceptor_id()),
+                        bond.attributes().clone(),
+                    )
+                })
+                .collect(),
+        );
+        let aromatic_atoms: Vec<Vec<AtomId>> = other
+            .aromatic_systems()
+            .iter()
+            .map(|system| system.atom_ids().map(shift_atom).collect())
+            .collect();
+        self.add_aromatic_systems(
+            other
+                .aromatic_systems()
+                .iter()
+                .zip(&aromatic_atoms)
+                .map(|(system, atoms)| (atoms.as_slice(), system.attributes().clone()))
+                .collect(),
+        );
+        let multicenter_atoms: Vec<Vec<AtomId>> = other
+            .multicenter_bonds()
+            .iter()
+            .map(|bond| bond.atom_ids().map(shift_atom).collect())
+            .collect();
+        self.add_multicenter_bonds(
+            other
+                .multicenter_bonds()
+                .iter()
+                .zip(&multicenter_atoms)
+                .map(|(bond, atoms)| (atoms.as_slice(), bond.attributes().clone()))
+                .collect(),
+        );
+        self.add_noncovalent_bonds(
+            other
+                .noncovalent_bonds()
+                .iter()
+                .map(|bond| {
+                    let [first, second] = bond.atom_ids();
+                    (
+                        [shift_atom(first), shift_atom(second)],
+                        bond.attributes().clone(),
+                    )
+                })
+                .collect(),
+        );
 
         let participant_correspondence = GraphCorrespondence::new(
             offset_correspondence(
@@ -1837,26 +1871,58 @@ impl Molecule {
                 bond_offset + other.bonds().count(),
             ),
         );
-        for id in other.stereo_atoms.ids() {
-            let site = shift_atom(other.stereo_atoms.site(id));
-            let ligands: Vec<_> = other
+        let stereo_atom_ligands: Vec<Vec<StereoLigand>> = other
+            .stereo_atoms
+            .ids()
+            .map(|id| {
+                other
+                    .stereo_atoms
+                    .ligands(id)
+                    .iter()
+                    .map(|ligand| ligand.map(&participant_correspondence))
+                    .collect()
+            })
+            .collect();
+        self.add_stereo_atoms(
+            other
                 .stereo_atoms
-                .ligands(id)
-                .iter()
-                .map(|ligand| ligand.map(&participant_correspondence))
-                .collect();
-            self.add_stereo_atom(site, &ligands, other.stereo_atoms.attributes(id).clone());
-        }
-        for id in other.stereo_bonds.ids() {
-            let site = BondId(other.stereo_bonds.site(id).0 + bond_offset as u32);
-            let ligands: Vec<_> = other
+                .ids()
+                .zip(&stereo_atom_ligands)
+                .map(|(id, ligands)| {
+                    (
+                        shift_atom(other.stereo_atoms.site(id)),
+                        ligands.as_slice(),
+                        other.stereo_atoms.attributes(id).clone(),
+                    )
+                })
+                .collect(),
+        );
+        let stereo_bond_ligands: Vec<Vec<StereoLigand>> = other
+            .stereo_bonds
+            .ids()
+            .map(|id| {
+                other
+                    .stereo_bonds
+                    .ligands(id)
+                    .iter()
+                    .map(|ligand| ligand.map(&participant_correspondence))
+                    .collect()
+            })
+            .collect();
+        self.add_stereo_bonds(
+            other
                 .stereo_bonds
-                .ligands(id)
-                .iter()
-                .map(|ligand| ligand.map(&participant_correspondence))
-                .collect();
-            self.add_stereo_bond(site, &ligands, other.stereo_bonds.attributes(id).clone());
-        }
+                .ids()
+                .zip(&stereo_bond_ligands)
+                .map(|(id, ligands)| {
+                    (
+                        BondId(other.stereo_bonds.site(id).0 + bond_offset as u32),
+                        ligands.as_slice(),
+                        other.stereo_bonds.attributes(id).clone(),
+                    )
+                })
+                .collect(),
+        );
 
         let correspondence = MoleculeCorrespondence::new(
             offset_correspondence(

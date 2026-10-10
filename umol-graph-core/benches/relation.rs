@@ -319,7 +319,7 @@ fn fixed_extend(c: &mut Criterion) {
                         )
                     },
                     |(relations, added)| {
-                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations.extend(black_box(mem::take(added))));
                         black_box(relations);
                     },
                     BatchSize::SmallInput,
@@ -693,7 +693,7 @@ fn var_extend(c: &mut Criterion) {
                         )
                     },
                     |(relations, added)| {
-                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations.extend(black_box(mem::take(added))));
                         black_box(relations);
                     },
                     BatchSize::SmallInput,
@@ -1130,7 +1130,7 @@ fn fixed_fixed_extend(c: &mut Criterion) {
                         )
                     },
                     |(relations, added)| {
-                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations.extend(black_box(mem::take(added))));
                         black_box(relations);
                     },
                     BatchSize::SmallInput,
@@ -1824,7 +1824,7 @@ fn fixed_var_extend(c: &mut Criterion) {
                         )
                     },
                     |(relations, added)| {
-                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations.extend(black_box(mem::take(added))));
                         black_box(relations);
                     },
                     BatchSize::SmallInput,
@@ -2629,7 +2629,7 @@ fn var_var_extend(c: &mut Criterion) {
                         )
                     },
                     |(relations, added)| {
-                        let _ = black_box(relations.extend(black_box(mem::take(added))));
+                        black_box(relations.extend(black_box(mem::take(added))));
                         black_box(relations);
                     },
                     BatchSize::SmallInput,

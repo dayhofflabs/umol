@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::{Add, Sub};
 
-use crate::graph::{EdgeId, NodeId};
+use crate::id::{EdgeId, NodeId};
 
 /// Failure to construct a compaction over a finite source domain.
 #[derive(Clone, Debug, PartialEq, Eq)]

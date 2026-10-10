@@ -19,8 +19,6 @@
 //! graph/relation sequences against original rows and independently scanned incidence. Manipulated
 //! undo inputs must not panic; their resulting storage is unspecified.
 
-use std::ops::{Add, Sub};
-
 pub use self::fixed::FixedRelationSet;
 pub use self::fixed_fixed::FixedFixedBirelationSet;
 pub use self::fixed_var::FixedVarBirelationSet;
@@ -28,6 +26,7 @@ pub use self::participant::{ParticipantPosition, ParticipantRefs, RelationPartic
 pub use self::var::VarRelationSet;
 pub use self::var_var::VarVarBirelationSet;
 use crate::correspondence::Correspondence;
+use crate::id::RelationId;
 use crate::remap::GraphRemapping;
 
 mod fixed;
@@ -37,48 +36,6 @@ mod incidence;
 mod participant;
 mod var;
 mod var_var;
-
-/// Dense row index within a relation set.
-///
-/// This value carries no set identity or range validation. Indexed operations check it
-/// against their receiver; conversion from usize narrows to u32.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct RelationId(pub u32);
-
-impl RelationId {
-    /// Return the row index as usize.
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl From<RelationId> for usize {
-    fn from(id: RelationId) -> Self {
-        id.0 as usize
-    }
-}
-
-impl From<usize> for RelationId {
-    fn from(index: usize) -> Self {
-        Self(index as u32)
-    }
-}
-
-impl Add<usize> for RelationId {
-    type Output = Self;
-
-    fn add(self, offset: usize) -> Self {
-        Self(self.0 + offset as u32)
-    }
-}
-
-impl Sub<usize> for RelationId {
-    type Output = Self;
-
-    fn sub(self, offset: usize) -> Self {
-        Self(self.0 - offset as u32)
-    }
-}
 
 /// The two input-to-result correspondences of a same-space relation-set pushout.
 ///

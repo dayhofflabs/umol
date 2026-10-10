@@ -12,7 +12,8 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::{Add, Sub};
 
 use crate::compact::{Compaction, GraphCompaction};
-use crate::graph::{EdgeId, Graph, NodeId};
+use crate::graph::Graph;
+use crate::id::{EdgeId, NodeId};
 use crate::remap::{GraphRemapping, Remapping};
 
 /// A partial bijection between two `Id` spaces: the matched `(left, right)` pairs; every unmatched

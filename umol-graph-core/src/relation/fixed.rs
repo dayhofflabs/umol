@@ -6,11 +6,12 @@ use super::incidence::Incidence;
 use super::participant::{ParticipantPosition, RelationParticipant};
 use super::{
     participants_match, permute_participants, relation_pullback, relation_pushout,
-    remappable_under, RelationId, RelationPullbackCorrespondence, RelationPushoutCorrespondence,
+    remappable_under, RelationPullbackCorrespondence, RelationPushoutCorrespondence,
 };
 use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::GraphCorrespondence;
-use crate::graph::{EdgeId, NodeId};
+use crate::id::{EdgeId, NodeId};
+use crate::id::{IdRange, RelationId};
 use crate::remap::GraphRemapping;
 
 /// Fixed-arity relations over typed participants, with opaque payloads.
@@ -240,10 +241,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
     /// An empty batch leaves storage unchanged. For representable sizes, appending
     /// batches agrees with concatenating their rows; removing the added ids restores
     /// the original set. These laws use a row model in `tests/property/relation.rs`.
-    pub fn extend(
-        &mut self,
-        entries: Vec<([P; N], D)>,
-    ) -> impl ExactSizeIterator<Item = RelationId> + use<P, D, N> {
+    pub fn extend(&mut self, entries: Vec<([P; N], D)>) -> IdRange<RelationId> {
         let start = self.count();
         if !entries.is_empty() {
             self.participants.reserve(entries.len());
@@ -260,7 +258,7 @@ impl<P: RelationParticipant, D, const N: usize> FixedRelationSet<P, D, N> {
                 );
             });
         }
-        (start..self.count()).map(RelationId::from)
+        IdRange::new(start, self.count())
     }
 
     /// Remove whole relations, preserving survivor order and making their ids dense.

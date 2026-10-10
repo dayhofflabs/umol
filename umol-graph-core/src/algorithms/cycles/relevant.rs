@@ -14,7 +14,8 @@ use num_bigint::BigUint;
 use super::basis::{CycleVectorBasis, EdgeVector};
 use super::Cycle;
 use crate::algorithms::connectivity::BiconnectedComponentsAlgorithm;
-use crate::graph::{EdgeId, Graph, Neighbor, NodeId};
+use crate::graph::{Graph, Neighbor};
+use crate::id::{EdgeId, NodeId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ShortestPath {
@@ -684,7 +685,8 @@ mod tests {
 
     use super::{RelevantCycleAnalysis, ShortestPath, ShortestPathDag};
     use crate::algorithms::cycles::Cycle;
-    use crate::graph::{EdgeId, Graph, NodeId};
+    use crate::graph::Graph;
+    use crate::id::{EdgeId, NodeId};
 
     #[rstest]
     #[case::triangle(

@@ -52,7 +52,7 @@ fn extend_nodes(c: &mut Criterion) {
                             }
                         },
                         |graph| {
-                            let _ = black_box(graph.extend_nodes(black_box(count)));
+                            black_box(graph.extend_nodes(black_box(count)));
                             black_box(graph);
                         },
                         BatchSize::SmallInput,
@@ -103,7 +103,7 @@ fn extend_edges(c: &mut Criterion) {
                             }
                         },
                         |graph| {
-                            let _ = black_box(graph.extend_edges(black_box(&edges)));
+                            black_box(graph.extend_edges(black_box(&edges)));
                             black_box(graph);
                         },
                         BatchSize::SmallInput,
@@ -157,7 +157,7 @@ fn extend(c: &mut Criterion) {
                             }
                         },
                         |graph| {
-                            let _ = black_box(graph.extend(black_box(count), black_box(&edges)));
+                            black_box(graph.extend(black_box(count), black_box(&edges)));
                             black_box(graph);
                         },
                         BatchSize::SmallInput,

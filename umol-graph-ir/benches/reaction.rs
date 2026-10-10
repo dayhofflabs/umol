@@ -321,6 +321,16 @@ fn benchmark_mutation(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("combine/path_pair", size), |b| {
             b.iter(|| black_box(&molecule).combine(black_box(&molecule)))
         });
+        group.bench_function(BenchmarkId::new("combine_from/path_pair", size), |b| {
+            b.iter_batched(
+                || molecule.clone(),
+                |mut combined| {
+                    combined.combine_from(black_box(&molecule));
+                    black_box(combined)
+                },
+                BatchSize::SmallInput,
+            )
+        });
         group.bench_function(BenchmarkId::new("split/two_paths", size), |b| {
             b.iter(|| black_box(&disconnected).split())
         });

@@ -6,8 +6,8 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    Compaction, FixedRelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping, NodeId,
-    ParticipantPosition, RelationId,
+    Compaction, FixedRelationSet, GraphCompaction, GraphCorrespondence, GraphRemapping, IdRange,
+    NodeId, ParticipantPosition, RelationId,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
@@ -194,16 +194,16 @@ impl NoncovalentBonds {
     pub(crate) fn extend(
         &mut self,
         entries: Vec<([AtomId; 2], NoncovalentBondForm)>,
-    ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + use<> {
+    ) -> IdRange<NoncovalentBondId> {
         let start = self.count();
         if !entries.is_empty() {
             let entries = entries
                 .into_iter()
                 .map(|(atoms, attributes)| (atoms.map(NodeId::from), attributes))
                 .collect();
-            let _ = Arc::make_mut(&mut self.0).extend(entries);
+            Arc::make_mut(&mut self.0).extend(entries);
         }
-        (start..self.count()).map(NoncovalentBondId::from)
+        IdRange::new(start, self.count())
     }
 
     pub(crate) fn remove(&mut self, ids: &[NoncovalentBondId]) {
