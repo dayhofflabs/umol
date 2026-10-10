@@ -673,7 +673,7 @@ callers passing a Vec are unchanged.
 
 **Tests:** existing compaction, tracked-compaction, and restoration results.
 
-#### S1d — Consuming constraint placement
+#### S1d — Consuming constraint placement **Done**
 
 **Modules:** graph-IR molecule and its tests. **Breaking, red→green within the
 subitem.** [dep: none]
@@ -685,7 +685,10 @@ contradiction on failure; it no longer clones the constraints into a plan.
 Migrate the test callers in molecule/tests and tests/property/edit.
 
 **Tests:** existing lift, inline, and round-trip results, including collisions
-and contradictions.
+and contradictions. Two list entries with the same key on one entity combine
+by meet: test_molecule_inline_constraints_meets_list_collision and
+test_molecule_inline_constraints_contradiction_on_list_collision replace the
+last-wins test, which asserted that the later entry overwrote the earlier.
 
 #### S1e — Batch component building in split
 

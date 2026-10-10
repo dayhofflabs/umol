@@ -594,15 +594,10 @@ proptest! {
     /// fixpoint; a meet to `⊥` fails the first pass and never the second.
     #[test]
     fn test_lift_inline_idempotent(molecule in molecule_with_constraints_strategy()) {
-        let mut once = molecule.clone();
-        once.lift_constraints();
-        if once.inline_constraints().is_err() {
+        let Ok(once) = molecule.lift_constraints().inline_constraints() else {
             return Ok(());
-        }
-
-        let mut twice = once.clone();
-        twice.lift_constraints();
-        twice.inline_constraints().unwrap();
+        };
+        let twice = once.clone().lift_constraints().inline_constraints().unwrap();
 
         prop_assert_eq!(once, twice);
     }
@@ -610,8 +605,7 @@ proptest! {
     /// `lift_constraints` drains every entity's inline `constraints` store.
     #[test]
     fn test_lift_drains_entity_stores(molecule in molecule_with_constraints_strategy()) {
-        let mut a = molecule;
-        a.lift_constraints();
+        let a = molecule.lift_constraints();
         for view in a.atoms().iter() {
             prop_assert!(view.attributes().constraints.is_empty());
         }
@@ -859,17 +853,13 @@ proptest! {
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow
-    /// leaf from the molecule list; a meet to `⊥` fails and leaves the
-    /// molecule unchanged. Combinator-nested entries, relational leaves,
+    /// leaf from the molecule list; a meet to `⊥` fails. Combinator-nested entries, relational leaves,
     /// molecule-scope leaves are preserved.
     #[test]
     fn test_inline_removes_top_level_leaves(molecule in molecule_with_constraints_strategy()) {
-        let mut a = molecule;
-        let before = a.clone();
-        if a.inline_constraints().is_err() {
-            prop_assert_eq!(a, before);
+        let Ok(a) = molecule.inline_constraints() else {
             return Ok(());
-        }
+        };
         for c in a.constraints().iter() {
             prop_assert!(
                 !matches!(
@@ -923,12 +913,9 @@ proptest! {
             }
         }
 
-        let mut a = molecule;
-        let before = a.clone();
-        if a.inline_constraints().is_err() {
-            prop_assert_eq!(a, before);
+        let Ok(a) = molecule.inline_constraints() else {
             return Ok(());
-        }
+        };
 
         for (id, key) in atom_keys {
             prop_assert!(

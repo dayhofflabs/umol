@@ -7040,8 +7040,7 @@ fn assert_same_constraints(a: &Constraints, b: &Constraints) {
 
 #[rstest]
 fn test_molecule_lift_constraints_empty() {
-    let mut molecule = Molecule::default();
-    molecule.lift_constraints();
+    let molecule = Molecule::default().lift_constraints();
     assert!(molecule.constraints().is_empty());
 }
 
@@ -7073,7 +7072,7 @@ fn test_molecule_lift_constraints_drains_inline_stores(
             NumForm::Lit(1),
         ));
 
-    molecule.lift_constraints();
+    let molecule = molecule.lift_constraints();
 
     assert!(molecule.atom(AtomId(0)).attributes().constraints.is_empty());
     assert!(molecule.atom(AtomId(2)).attributes().constraints.is_empty());
@@ -7118,8 +7117,7 @@ fn test_molecule_lift_constraints_appends_to_existing(#[from(rich_molecule)] mol
         .constraints
         .set(AtomConstraintForm::Valence(NumForm::Lit(4)));
 
-    let mut molecule = editor.finish().unwrap();
-    molecule.lift_constraints();
+    let molecule = editor.finish().unwrap().lift_constraints();
 
     let mut expected = Constraints::new();
     expected.push(prior);
@@ -7148,8 +7146,7 @@ fn test_molecule_inline_constraints_drains_top_level_leaves(
         DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
     ));
 
-    let mut molecule = editor.finish().unwrap();
-    molecule.inline_constraints().unwrap();
+    let molecule = editor.finish().unwrap().inline_constraints().unwrap();
 
     assert!(molecule.constraints().is_empty());
     assert_eq!(
@@ -7173,7 +7170,30 @@ fn test_molecule_inline_constraints_drains_top_level_leaves(
 }
 
 #[rstest]
-fn test_molecule_inline_constraints_last_wins_on_collision(
+fn test_molecule_inline_constraints_meets_list_collision(
+    #[from(rich_molecule)] molecule: Molecule,
+) {
+    let mut editor = molecule.edit();
+    editor.constraints_mut().push(Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::Valence(NumForm::RangeFrom(3)),
+    ));
+    editor.constraints_mut().push(Constraint::Atom(
+        AtomId(0),
+        AtomConstraintForm::Valence(NumForm::Lit(4)),
+    ));
+
+    let molecule = editor.finish().unwrap().inline_constraints().unwrap();
+
+    assert!(molecule.constraints().is_empty());
+    assert_eq!(
+        molecule.atom(AtomId(0)).attributes().constraints,
+        AtomConstraintsForm::from_iter([AtomConstraintForm::Valence(NumForm::Lit(4))])
+    );
+}
+
+#[rstest]
+fn test_molecule_inline_constraints_contradiction_on_list_collision(
     #[from(rich_molecule)] molecule: Molecule,
 ) {
     let mut editor = molecule.edit();
@@ -7186,21 +7206,10 @@ fn test_molecule_inline_constraints_last_wins_on_collision(
         AtomConstraintForm::Valence(NumForm::Lit(4)),
     ));
 
-    let mut molecule = editor.finish().unwrap();
-    molecule.inline_constraints().unwrap();
-
-    // Only one Valence survives; with two competing inserts of the same kind,
-    // exactly one wins (which one is unspecified). Verify count and kind.
-    assert_eq!(molecule.atom(AtomId(0)).attributes().constraints.len(), 1);
-    let v = molecule
-        .atom(AtomId(0))
-        .attributes()
-        .constraints
-        .iter()
-        .next()
-        .unwrap()
-        .clone();
-    assert!(matches!(v, AtomConstraintForm::Valence(_)));
+    assert_eq!(
+        editor.finish().unwrap().inline_constraints(),
+        Err(Contradiction)
+    );
 }
 
 #[rstest]
@@ -7218,8 +7227,7 @@ fn test_molecule_inline_constraints_skips_combinator_nested(
     ]);
     editor.constraints_mut().push(nested.clone());
 
-    let mut molecule = editor.finish().unwrap();
-    molecule.inline_constraints().unwrap();
+    let molecule = editor.finish().unwrap().inline_constraints().unwrap();
 
     let mut expected = Constraints::new();
     expected.push(nested);
@@ -7247,8 +7255,7 @@ fn test_molecule_inline_constraints_skips_relational_and_molecule(
         AtomConstraintForm::Valence(NumForm::Lit(4)),
     ));
 
-    let mut molecule = editor.finish().unwrap();
-    molecule.inline_constraints().unwrap();
+    let molecule = editor.finish().unwrap().inline_constraints().unwrap();
 
     let mut expected = Constraints::new();
     expected.push(rel);
@@ -7290,9 +7297,9 @@ fn test_molecule_lift_then_inline_roundtrips_inline_state(
 
     let original = molecule.clone();
 
-    molecule.lift_constraints();
+    let molecule = molecule.lift_constraints();
     assert!(molecule.atom(AtomId(0)).attributes().constraints.is_empty());
-    molecule.inline_constraints().unwrap();
+    let molecule = molecule.inline_constraints().unwrap();
 
     assert_eq!(molecule, original);
 }
