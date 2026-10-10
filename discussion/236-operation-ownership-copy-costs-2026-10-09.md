@@ -659,7 +659,7 @@ receiver gives identical results, and the original of a cloned receiver is
 unchanged. The reaction bench's combine case clones its receiver in the batch
 setup, outside the measurement.
 
-#### S1c — Consuming Constraints::compact
+#### S1c — Consuming Constraints::compact **Done**
 
 **Modules:** graph-IR constraint/molecule and molecule. **Breaking, red→green
 within the subitem.** [dep: none]

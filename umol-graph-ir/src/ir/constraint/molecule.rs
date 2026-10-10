@@ -667,7 +667,7 @@ impl Constraints {
     ///
     /// Entries move into storage without normalization or reference checks.
     /// Empty input leaves the collection unchanged.
-    pub fn extend(&mut self, constraints: Vec<Constraint>) {
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = Constraint>) {
         self.0.extend(constraints);
     }
 
@@ -689,11 +689,13 @@ impl Constraints {
 
     /// Remap entity indices. Entries that reference a removed entity (directly
     /// or via a combinator subtree) are dropped.
-    pub fn compact(&mut self, compaction: &MoleculeCompaction) {
-        self.0 = mem::take(&mut self.0)
-            .into_iter()
-            .filter_map(|c| c.compact(compaction))
-            .collect();
+    pub fn compact(self, compaction: &MoleculeCompaction) -> Self {
+        Self(
+            self.0
+                .into_iter()
+                .filter_map(|c| c.compact(compaction))
+                .collect(),
+        )
     }
 
     /// Remap entity ids and record removed or rewritten constraints at their original positions.
@@ -705,10 +707,10 @@ impl Constraints {
     ///
     /// Produces the same constraints as [`Self::compact`]. Restoring the returned
     /// changes recovers the original list, including its order and duplicates.
-    pub fn tracked_compact(&mut self, compaction: &MoleculeCompaction) -> CascadedConstraints {
+    pub fn tracked_compact(self, compaction: &MoleculeCompaction) -> (Self, CascadedConstraints) {
         let mut update = CascadedConstraints::default();
         let mut next = Vec::new();
-        for (position, constraint) in mem::take(&mut self.0).into_iter().enumerate() {
+        for (position, constraint) in self.0.into_iter().enumerate() {
             match constraint.clone().compact(compaction) {
                 Some(mapped) => {
                     if mapped != constraint {
@@ -726,8 +728,7 @@ impl Constraints {
                 }),
             }
         }
-        self.0 = next;
-        update
+        (Self(next), update)
     }
 
     /// Restore removed entries and rewritten values at their recorded positions.
@@ -1943,7 +1944,7 @@ mod tests {
         for c in items {
             cs.push(c);
         }
-        cs.compact(&compaction);
+        let cs = cs.compact(&compaction);
         assert_eq!(cs.as_slice(), expected.as_slice());
     }
 
@@ -1960,7 +1961,7 @@ mod tests {
             atoms: Some(vec![AtomId(0), AtomId(2)]),
         }));
 
-        let update = cs.tracked_compact(&id_compaction(vec![1], vec![1]));
+        let (cs, update) = cs.tracked_compact(&id_compaction(vec![1], vec![1]));
 
         assert_eq!(
             cs.as_slice(),

@@ -1366,14 +1366,17 @@ impl Molecule {
     }
 
     pub(crate) fn compact_constraints(&mut self, compaction: &MoleculeCompaction) {
-        self.constraints.compact(compaction);
+        let constraints = mem::take(self.constraints_mut());
+        *self.constraints_mut() = constraints.compact(compaction);
     }
 
     pub(crate) fn tracked_compact_constraints(
         &mut self,
         compaction: &MoleculeCompaction,
     ) -> CascadedConstraints {
-        self.constraints.tracked_compact(compaction)
+        let (constraints, update) = mem::take(self.constraints_mut()).tracked_compact(compaction);
+        *self.constraints_mut() = constraints;
+        update
     }
 
     /// Restore graph topology and atom/bond attributes from matching removal data.

@@ -68,10 +68,8 @@ proptest! {
             Compaction::new(4, ids(masks[7]).map(StereoBondId).collect()).unwrap(),
         );
         let original = Constraints::from(entries);
-        let mut plain = original.clone();
-        plain.compact(&compaction);
-        let mut restored = original.clone();
-        let changes = restored.tracked_compact(&compaction);
+        let plain = original.clone().compact(&compaction);
+        let (mut restored, changes) = original.clone().tracked_compact(&compaction);
         prop_assert_eq!(&restored, &plain);
         restored.restore(&changes);
         prop_assert_eq!(restored, original);
