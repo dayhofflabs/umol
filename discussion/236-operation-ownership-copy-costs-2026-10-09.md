@@ -770,7 +770,7 @@ setup. Complete canonicalization is within ±4% for most of the corpus and
 skip the rebuilt complete candidate. The scaling canonicalize and
 tracked_canonicalize cases are within ±2%.
 
-#### S2c — MoleculeMetadata::map
+#### S2c — MoleculeMetadata::map **Done**
 
 **Modules:** graph-IR dsl/metadata; Python metadata binding.
 **Breaking, red→green within the subitem.** [dep: none]

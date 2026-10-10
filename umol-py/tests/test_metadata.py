@@ -60,7 +60,7 @@ def test_molecule_metadata_set_keyword_error():
     assert metadata.keyword(Entity.Bond(0)) is None
 
 
-def test_molecule_metadata_remap():
+def test_molecule_metadata_map():
     source = Molecule.from_entries(
         [AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(2))],
@@ -75,7 +75,7 @@ def test_molecule_metadata_remap():
     metadata.set_keyword(Entity.Atom(1), "nitrogen")
     metadata.set_keyword(Entity.Bond(0), "bond")
 
-    remapped = metadata.remap(correspondence)
+    remapped = metadata.map(correspondence)
 
     assert remapped.keyword(Entity.Atom(1)) == "oxygen"
     assert remapped.keyword(Entity.Atom(2)) == "nitrogen"
