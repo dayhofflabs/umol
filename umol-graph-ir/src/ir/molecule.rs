@@ -1983,11 +1983,13 @@ impl Molecule {
             .enumerate()
             .map(|(component, atoms)| {
                 let mut editor = Molecule::new().edit();
-                let mut atom_pairs = Vec::new();
-                for atom in atoms {
-                    let added = editor.add_atom(self.atom(*atom).attributes().clone());
-                    atom_pairs.push((*atom, added));
-                }
+                let added_atoms = editor.add_atoms(
+                    atoms
+                        .iter()
+                        .map(|atom| self.atom(*atom).attributes().clone())
+                        .collect(),
+                );
+                let atom_pairs = atoms.iter().copied().zip(added_atoms).collect();
                 let atom_correspondence = Correspondence::new(atom_pairs, atom_count, atoms.len())
                     .expect("split assigns each selected source atom a component id");
                 let map_atom = |id: AtomId| {
@@ -1995,15 +1997,25 @@ impl Molecule {
                         .right_of(id)
                         .expect("the component contains every routed atom reference")
                 };
-                let mut bond_pairs = Vec::new();
-                for bond in self.bonds().iter() {
-                    let [a, b] = bond.atom_ids();
-                    if component_of(a) == component {
-                        let new_bond =
-                            editor.add_bond(map_atom(a), map_atom(b), bond.attributes().clone());
-                        bond_pairs.push((bond.id(), new_bond));
-                    }
-                }
+                let bonds: Vec<_> = self
+                    .bonds()
+                    .iter()
+                    .filter(|bond| component_of(bond.atom_ids()[0]) == component)
+                    .collect();
+                let added_bonds = editor.add_bonds(
+                    bonds
+                        .iter()
+                        .map(|bond| {
+                            let [a, b] = bond.atom_ids();
+                            ([map_atom(a), map_atom(b)], bond.attributes().clone())
+                        })
+                        .collect(),
+                );
+                let bond_pairs: Vec<_> = bonds
+                    .iter()
+                    .map(|bond| bond.id())
+                    .zip(added_bonds)
+                    .collect();
                 let component_bond_count = bond_pairs.len();
                 let bond_correspondence =
                     Correspondence::new(bond_pairs, self.bonds().count(), component_bond_count)
@@ -2030,96 +2042,174 @@ impl Molecule {
                     )
                     .expect("component edge pairs are injective"),
                 );
-                let mut dative_pairs = Vec::new();
-                for dative in self.dative_bonds().iter() {
-                    if component_of(dative.acceptor_id()) == component {
-                        let donors: Vec<_> = dative.donors().map(|d| map_atom(d.id())).collect();
-                        let added = editor.add_dative_bond(
-                            &donors,
-                            map_atom(dative.acceptor_id()),
-                            dative.attributes().clone(),
-                        );
-                        dative_pairs.push((dative.id(), added));
-                    }
-                }
-                let mut aromatic_pairs = Vec::new();
-                for system in self.aromatic_systems().iter() {
-                    let members: Vec<AtomId> = system.atom_ids().collect();
-                    if members
-                        .first()
-                        .is_some_and(|a| component_of(*a) == component)
-                    {
-                        let added = editor.add_aromatic_system(
-                            &members.iter().map(|a| map_atom(*a)).collect::<Vec<_>>(),
-                            system.attributes().clone(),
-                        );
-                        aromatic_pairs.push((system.id(), added));
-                    }
-                }
-                let mut multicenter_pairs = Vec::new();
-                for bond in self.multicenter_bonds().iter() {
-                    let members: Vec<AtomId> = bond.atom_ids().collect();
-                    if members
-                        .first()
-                        .is_some_and(|a| component_of(*a) == component)
-                    {
-                        let added = editor.add_multicenter_bond(
-                            &members.iter().map(|a| map_atom(*a)).collect::<Vec<_>>(),
-                            bond.attributes().clone(),
-                        );
-                        multicenter_pairs.push((bond.id(), added));
-                    }
-                }
-                let mut noncovalent_pairs = Vec::new();
-                for bond in self.noncovalent_bonds().iter() {
-                    let [a, b] = bond.atom_ids();
-                    if component_of(a) == component {
-                        let added = editor.add_noncovalent_bond(
-                            [map_atom(a), map_atom(b)],
-                            bond.attributes().clone(),
-                        );
-                        noncovalent_pairs.push((bond.id(), added));
-                    }
-                }
-                let mut stereo_atom_pairs = Vec::new();
-                for rid in self.stereo_atoms.ids() {
-                    let site = self.stereo_atoms.site(rid);
-                    if component_of(site) == component {
-                        let ligands: Vec<StereoLigand> = self
-                            .stereo_atoms
+                let datives: Vec<_> = self
+                    .dative_bonds()
+                    .iter()
+                    .filter(|dative| component_of(dative.acceptor_id()) == component)
+                    .collect();
+                let dative_donors: Vec<Vec<AtomId>> = datives
+                    .iter()
+                    .map(|dative| dative.donors().map(|d| map_atom(d.id())).collect())
+                    .collect();
+                let added_datives = editor.add_dative_bonds(
+                    datives
+                        .iter()
+                        .zip(&dative_donors)
+                        .map(|(dative, donors)| {
+                            (
+                                donors.as_slice(),
+                                map_atom(dative.acceptor_id()),
+                                dative.attributes().clone(),
+                            )
+                        })
+                        .collect(),
+                );
+                let dative_pairs = datives
+                    .iter()
+                    .map(|dative| dative.id())
+                    .zip(added_datives)
+                    .collect();
+                let systems: Vec<_> = self
+                    .aromatic_systems()
+                    .iter()
+                    .filter(|system| {
+                        system
+                            .atom_ids()
+                            .next()
+                            .is_some_and(|a| component_of(a) == component)
+                    })
+                    .collect();
+                let system_atoms: Vec<Vec<AtomId>> = systems
+                    .iter()
+                    .map(|system| system.atom_ids().map(map_atom).collect())
+                    .collect();
+                let added_systems = editor.add_aromatic_systems(
+                    systems
+                        .iter()
+                        .zip(&system_atoms)
+                        .map(|(system, members)| (members.as_slice(), system.attributes().clone()))
+                        .collect(),
+                );
+                let aromatic_pairs = systems
+                    .iter()
+                    .map(|system| system.id())
+                    .zip(added_systems)
+                    .collect();
+                let multicenters: Vec<_> = self
+                    .multicenter_bonds()
+                    .iter()
+                    .filter(|bond| {
+                        bond.atom_ids()
+                            .next()
+                            .is_some_and(|a| component_of(a) == component)
+                    })
+                    .collect();
+                let multicenter_atoms: Vec<Vec<AtomId>> = multicenters
+                    .iter()
+                    .map(|bond| bond.atom_ids().map(map_atom).collect())
+                    .collect();
+                let added_multicenters = editor.add_multicenter_bonds(
+                    multicenters
+                        .iter()
+                        .zip(&multicenter_atoms)
+                        .map(|(bond, members)| (members.as_slice(), bond.attributes().clone()))
+                        .collect(),
+                );
+                let multicenter_pairs = multicenters
+                    .iter()
+                    .map(|bond| bond.id())
+                    .zip(added_multicenters)
+                    .collect();
+                let noncovalents: Vec<_> = self
+                    .noncovalent_bonds()
+                    .iter()
+                    .filter(|bond| component_of(bond.atom_ids()[0]) == component)
+                    .collect();
+                let added_noncovalents = editor.add_noncovalent_bonds(
+                    noncovalents
+                        .iter()
+                        .map(|bond| {
+                            let [a, b] = bond.atom_ids();
+                            ([map_atom(a), map_atom(b)], bond.attributes().clone())
+                        })
+                        .collect(),
+                );
+                let noncovalent_pairs = noncovalents
+                    .iter()
+                    .map(|bond| bond.id())
+                    .zip(added_noncovalents)
+                    .collect();
+                let stereo_atoms: Vec<StereoAtomId> = self
+                    .stereo_atoms
+                    .ids()
+                    .filter(|&rid| component_of(self.stereo_atoms.site(rid)) == component)
+                    .collect();
+                let stereo_atom_ligands: Vec<Vec<StereoLigand>> = stereo_atoms
+                    .iter()
+                    .map(|&rid| {
+                        self.stereo_atoms
                             .ligands(rid)
                             .iter()
                             .map(|ligand| ligand.map(&participant_correspondence))
-                            .collect();
-                        let added = editor.add_stereo_atom(
-                            map_atom(site),
-                            &ligands,
-                            self.stereo_atoms.attributes(rid).clone(),
-                        );
-                        stereo_atom_pairs.push((rid, added));
-                    }
-                }
-                let mut stereo_bond_pairs = Vec::new();
-                for rid in self.stereo_bonds.ids() {
-                    let bond = BondId(self.stereo_bonds.site(rid).0);
-                    let [a, _] = self.bond(bond).atom_ids();
-                    if component_of(a) == component {
-                        let ligands: Vec<StereoLigand> = self
-                            .stereo_bonds
+                            .collect()
+                    })
+                    .collect();
+                let added_stereo_atoms = editor.add_stereo_atoms(
+                    stereo_atoms
+                        .iter()
+                        .zip(&stereo_atom_ligands)
+                        .map(|(&rid, ligands)| {
+                            (
+                                map_atom(self.stereo_atoms.site(rid)),
+                                ligands.as_slice(),
+                                self.stereo_atoms.attributes(rid).clone(),
+                            )
+                        })
+                        .collect(),
+                );
+                let stereo_atom_pairs = stereo_atoms
+                    .iter()
+                    .copied()
+                    .zip(added_stereo_atoms)
+                    .collect();
+                let stereo_bonds: Vec<StereoBondId> = self
+                    .stereo_bonds
+                    .ids()
+                    .filter(|&rid| {
+                        let [a, _] = self.bond(BondId(self.stereo_bonds.site(rid).0)).atom_ids();
+                        component_of(a) == component
+                    })
+                    .collect();
+                let stereo_bond_ligands: Vec<Vec<StereoLigand>> = stereo_bonds
+                    .iter()
+                    .map(|&rid| {
+                        self.stereo_bonds
                             .ligands(rid)
                             .iter()
                             .map(|ligand| ligand.map(&participant_correspondence))
-                            .collect();
-                        let added = editor.add_stereo_bond(
-                            bond_correspondence
-                                .right_of(bond)
-                                .expect("the component contains the routed stereo-bond site"),
-                            &ligands,
-                            self.stereo_bonds.attributes(rid).clone(),
-                        );
-                        stereo_bond_pairs.push((rid, added));
-                    }
-                }
+                            .collect()
+                    })
+                    .collect();
+                let added_stereo_bonds = editor.add_stereo_bonds(
+                    stereo_bonds
+                        .iter()
+                        .zip(&stereo_bond_ligands)
+                        .map(|(&rid, ligands)| {
+                            (
+                                bond_correspondence
+                                    .right_of(BondId(self.stereo_bonds.site(rid).0))
+                                    .expect("the component contains the routed stereo-bond site"),
+                                ligands.as_slice(),
+                                self.stereo_bonds.attributes(rid).clone(),
+                            )
+                        })
+                        .collect(),
+                );
+                let stereo_bond_pairs = stereo_bonds
+                    .iter()
+                    .copied()
+                    .zip(added_stereo_bonds)
+                    .collect();
                 let entities = editor
                     .finish()
                     .expect("component extraction preserves molecule integrity");

@@ -690,7 +690,7 @@ by meet: test_molecule_inline_constraints_meets_list_collision and
 test_molecule_inline_constraints_contradiction_on_list_collision replace the
 last-wins test, which asserted that the later entry overwrote the earlier.
 
-#### S1e — Batch component building in split
+#### S1e — Batch component building in split **Done**
 
 **Modules:** graph-IR molecule. **Green.** [dep: none]
 
@@ -704,7 +704,8 @@ their order, and the returned correspondences are unchanged.
 kind.
 
 **Verification:** the split case in the reaction bench, against a baseline
-taken before the change.
+taken before the change: split and tracked_split are 60% faster at size 64 and
+unchanged at size 8.
 
 ### S2 — Transport
 
