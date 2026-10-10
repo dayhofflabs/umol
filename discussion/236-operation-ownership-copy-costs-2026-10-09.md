@@ -733,7 +733,7 @@ both sizes.
 
 ### S2 — Transport
 
-#### S2a — Consuming entity-collection transport
+#### S2a — Consuming entity-collection transport **Done**
 
 **Modules:** graph-IR aromatic, dative, multicenter, noncovalent, stereo.
 **Breaking, red→green within the subitem.** [dep: none]

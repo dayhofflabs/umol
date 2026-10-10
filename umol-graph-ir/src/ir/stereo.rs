@@ -345,18 +345,18 @@ impl StereoAtoms {
     ///
     /// # Panics
     /// Panics if a referenced node or edge has no image in `correspondence`.
-    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+    pub fn map(self, correspondence: &GraphCorrespondence) -> Self {
         self.try_map(correspondence)
             .expect("correspondence must cover every participant reference")
     }
 
     /// Map participant references, or return `None` if any reference has no image.
     /// Unreferenced nodes and edges need not have images. No entity is dropped.
-    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+    pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
         Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
-    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
+    pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
@@ -367,7 +367,7 @@ impl StereoAtoms {
     pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0
             .pushout(
-                &right.map(correspondence).0,
+                &right.clone().map(correspondence).0,
                 // A stereo atom's site is an atom, unique by integrity: the sharpest node anchor.
                 |set, site, ligands| {
                     site.first()
@@ -806,18 +806,18 @@ impl StereoBonds {
     ///
     /// # Panics
     /// Panics if a referenced node or edge has no image in `correspondence`.
-    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+    pub fn map(self, correspondence: &GraphCorrespondence) -> Self {
         self.try_map(correspondence)
             .expect("correspondence must cover every participant reference")
     }
 
     /// Map participant references, or return `None` if any reference has no image.
     /// Unreferenced nodes and edges need not have images. No entity is dropped.
-    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+    pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
         Some(Self(Arc::new(self.0.try_map(correspondence)?)))
     }
 
-    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
+    pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
@@ -828,7 +828,7 @@ impl StereoBonds {
     pub(crate) fn glue(&self, right: &Self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0
             .pushout(
-                &right.map(correspondence).0,
+                &right.clone().map(correspondence).0,
                 // A stereo bond's site is a bond: the one entity kind scanning the edge index.
                 |set, site, ligands| {
                     site.first()
@@ -976,18 +976,18 @@ impl StereoAtomSpans {
     ///
     /// # Panics
     /// Panics if a referenced node or edge has no image in `correspondence`.
-    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+    pub fn map(self, correspondence: &GraphCorrespondence) -> Self {
         self.try_map(correspondence)
             .expect("correspondence must cover every participant reference")
     }
 
     /// Map participant references, or return `None` if any reference has no image.
     /// Unreferenced nodes and edges need not have images. No entity is dropped.
-    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+    pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0.try_map(correspondence).map(Self)
     }
 
-    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
+    pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
 }
@@ -1116,18 +1116,18 @@ impl StereoBondSpans {
     ///
     /// # Panics
     /// Panics if a referenced node or edge has no image in `correspondence`.
-    pub fn map(&self, correspondence: &GraphCorrespondence) -> Self {
+    pub fn map(self, correspondence: &GraphCorrespondence) -> Self {
         self.try_map(correspondence)
             .expect("correspondence must cover every participant reference")
     }
 
     /// Map participant references, or return `None` if any reference has no image.
     /// Unreferenced nodes and edges need not have images. No entity is dropped.
-    pub fn try_map(&self, correspondence: &GraphCorrespondence) -> Option<Self> {
+    pub fn try_map(self, correspondence: &GraphCorrespondence) -> Option<Self> {
         self.0.try_map(correspondence).map(Self)
     }
 
-    pub(crate) fn remap(&self, remapping: &GraphRemapping) -> Self {
+    pub(crate) fn remap(self, remapping: &GraphRemapping) -> Self {
         Self(self.0.remap(remapping))
     }
 }
@@ -3242,7 +3242,7 @@ mod tests {
         } else {
             None
         };
-        assert_eq!(input.try_map(&correspondence), expected);
+        assert_eq!(input.clone().try_map(&correspondence), expected);
         if let Some(expected) = expected {
             assert_eq!(input.map(&correspondence), expected);
         }
@@ -3369,7 +3369,7 @@ mod tests {
         } else {
             None
         };
-        assert_eq!(input.try_map(&correspondence), expected);
+        assert_eq!(input.clone().try_map(&correspondence), expected);
         if let Some(expected) = expected {
             assert_eq!(input.map(&correspondence), expected);
         }
@@ -4312,7 +4312,7 @@ mod tests {
         } else {
             None
         };
-        assert_eq!(input.try_map(&correspondence), expected);
+        assert_eq!(input.clone().try_map(&correspondence), expected);
         if let Some(expected) = expected {
             assert_eq!(input.map(&correspondence), expected);
         }
@@ -4440,7 +4440,7 @@ mod tests {
         } else {
             None
         };
-        assert_eq!(input.try_map(&correspondence), expected);
+        assert_eq!(input.clone().try_map(&correspondence), expected);
         if let Some(expected) = expected {
             assert_eq!(input.map(&correspondence), expected);
         }
