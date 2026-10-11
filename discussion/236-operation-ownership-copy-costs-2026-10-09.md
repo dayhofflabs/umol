@@ -256,8 +256,8 @@ with no completions, and the conformance validator reports the derivation's
 first inconsistency, as stereo perception's derive serves the stereo resolver
 and validator. `AromaticityPerceiver::plan_aromatic_system(&self, molecule:
 &Molecule, atoms: Vec<AtomId>, form: AromaticSystemForm) -> Edits` adds a system
-and discharges its members' aromatic valence and its bonds' aromatic constraint;
-the standalone resolver, the composite resolver, and the aromatizer use it.
+and discharges its members' aromatic valence; the standalone resolver, the
+composite resolver, and the aromatizer use it.
 AromaticityPerceiver::add_systems, which no production code calls, is removed.
 
 The perceiver, its derivation, the three rule types with their errors and
@@ -385,13 +385,13 @@ no `#m!`.
 The composite resolver has no closing discharge pass. Discharge is part of each
 resolver's plan: the plan removes the assertions that its own results realize.
 Valence discharges `#v` on each atom it completes. Aromaticity discharges the
-aromatic valence of each member of a system it adds and the aromatic constraint
-of each bond of that system, and writes no aromatic constraint on those bonds.
-Stereo discharges the tetrahedral or cis-trans constraint at each site where it
-adds an entity. `reset_aromatic_valence` and `reset_stereo_constraints` are
-removed. Assertions on entities that resolution neither adds nor completes stay.
-Resolution no longer evaluates the other assertions or the molecule-level list;
-the validators report a violated one.
+aromatic valence of each member of a system it adds, and the aromatic constraint
+of each bond outside the stored systems that its result confirms; it writes no
+aromatic constraint on bonds. Stereo discharges the tetrahedral or cis-trans
+constraint at each site where it adds an entity. `reset_aromatic_valence` and
+`reset_stereo_constraints` are removed. Assertions on entities that resolution
+neither adds nor completes stay. Resolution no longer evaluates the other
+assertions or the molecule-level list; the validators report a violated one.
 
 Each check that the closing pass made for a discharged key moves into the
 planning of the resolver that discharges the key. Valence admission already
@@ -438,9 +438,10 @@ plan.
 4. An incident bond's assertion of aromaticity is the same evidence as the
    atom's own `#a+`; conflicting evidence is ⊥.
 5. Resolution discharges the assertions its results realize: the aromatic
-   valence of each member and the aromatic constraint of each bond of a system
-   it adds, the tetrahedral or cis-trans constraint at each site where it adds
-   an entity, and `#v` on each atom it completes.
+   valence of each member of a system it adds, the aromatic constraint of each
+   bond outside the stored systems that its result confirms, the tetrahedral or
+   cis-trans constraint at each site where it adds an entity, and `#v` on each
+   atom it completes.
 6. Every other assertion, and the molecule-level list, leaves resolution
    unchanged.
 7. A SMILES or MOL input that resolves under the Error policies carries no
@@ -1024,7 +1025,7 @@ rename the Python method to match.
 
 ### S3 — Constraint readings and discharge
 
-#### S3a — Aromatic skeleton generator
+#### S3a — Aromatic skeleton generator **Done**
 
 **Modules:** umol-graph tests/property/strategies.rs. **Additive, green.** [dep:
 none]
@@ -1037,7 +1038,8 @@ documentation states the domain it emits. Add the SMILES and MOL renderings of a
 generated skeleton.
 
 **Tests:** a coverage test that every evidence kind, topology, and option
-occurs.
+occurs; properties that the SMILES and MOL renderings raise to the skeleton's
+elements, hydrogen counts, and bonds.
 
 #### S3b — Evidenced readings
 
@@ -1173,6 +1175,21 @@ table bonds is aromatic.
 aliphatic atom joined by an explicit aromatic bond writes `#a!` on it, and
 ingesting that input reports NoMatch; resolved ingestion results are unchanged.
 
+#### S3h1 — Raising writes #a! on a single bond between aromatic atoms
+
+**Modules:** umol-io table_ir/raise and its tests; graph ingest tests.
+**Green.** [dep: S3h, S3l]
+
+Raise a single table bond with `#a!` when the table marks both of its atoms
+aromatic. In SMILES this is an explicit single bond between aromatic atoms, such
+as the bond joining the rings of `c1ccccc1-c1ccccc1`, which SMILES defines as
+not aromatic.
+
+**Tests:** raising `c1ccccc1-c1ccccc1` writes `#a!` on the bond joining the
+rings and `#a` on every ring bond; raising `c1ccccc1C` and `CC` writes no
+aromatic constraint on their single bonds; ingesting `c1ccc-cc1` fails with an
+AromaticValenceFailure; other resolved ingestion results are unchanged.
+
 #### S3i — Aromaticity discharges what its systems realize
 
 **Modules:** graph resolve/aromaticity and resolve; umol-py resolve bindings and
@@ -1180,13 +1197,15 @@ Python tests; docs/development/nomenclature.md. **Breaking, red→green within t
 subitem.** [dep: none]
 
 plan_system removes the aromatic valence assertion of each member of the system
-it adds and the aromatic constraint of each bond of that system, and writes no
-aromatic constraint. Remove `reset_aromatic_valence` from
-AromaticityResolveConfig and from the Python binding's keyword, getter, and
-repr. Remove its name from the nomenclature guide's Reset entry.
+it adds and writes no aromatic constraint. The aromaticity plan removes the
+aromatic constraint of each bond outside the stored systems that its result
+confirms. Remove `reset_aromatic_valence` from AromaticityResolveConfig and from
+the Python binding's keyword, getter, and repr. Remove its name from the
+nomenclature guide's Reset entry.
 
 **Tests:** standalone resolution removes those assertions for each added system
-and keeps them for a stored system; composite results are unchanged.
+and keeps them for a stored system; `#a!` on the bond joining the two rings of
+biphenyl is removed; composite results are unchanged.
 
 #### S3j — Stereo discharges what its entities realize
 
@@ -1239,7 +1258,8 @@ contribution.
 #### S3m — Closing discharge pass removed
 
 **Modules:** graph resolve and ingest tests; docs/development/nomenclature.md.
-**Breaking, red→green within the subitem.** [dep: S3h, S3i, S3j, S3k, S3l, S3a]
+**Breaking, red→green within the subitem.** [dep: S3h, S3h1, S3i, S3j, S3k, S3l,
+S3a]
 
 Remove plan_discharge and its call sites, DischargeContradiction,
 ResolveContradiction::Discharge, and ResolveError::DischargeEvaluation and
