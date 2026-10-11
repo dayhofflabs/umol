@@ -38,6 +38,25 @@ macro_rules! stereo_constraint {
         }
 
         impl $constraint {
+            /// Vacuous form at `key`: the top of the key's fiber.
+            pub fn undetermined(key: $key) -> Self {
+                match key {
+                    $key::LigandSymmetry(permutation) => Self::LigandSymmetry(LigandSymmetryForm {
+                        permutation,
+                        invariant: BooleanForm::Undetermined,
+                    }),
+                    $key::Fluxionality(permutation) => Self::Fluxionality(FluxionalityForm {
+                        permutation,
+                        active: BooleanForm::Undetermined,
+                    }),
+                    $key::Topicity(pair) => Self::Topicity(TopicityForm {
+                        pair,
+                        relation: TopicityRelationForm::Undetermined,
+                    }),
+                    $key::Stereogenicity => Self::Stereogenicity(StereogenicityForm::Undetermined),
+                }
+            }
+
             /// Stereo constraint key, unique within a `StereoConstraints` container.
             pub fn key(&self) -> $key {
                 match self {
@@ -50,23 +69,7 @@ macro_rules! stereo_constraint {
 
             /// Vacuous form of constraint key, used for removal.
             pub fn as_undetermined(&self) -> Self {
-                match self {
-                    Self::LigandSymmetry(ls) => Self::LigandSymmetry(LigandSymmetryForm {
-                        permutation: ls.permutation,
-                        invariant: BooleanForm::Undetermined,
-                    }),
-                    Self::Fluxionality(f) => Self::Fluxionality(FluxionalityForm {
-                        permutation: f.permutation,
-                        active: BooleanForm::Undetermined,
-                    }),
-                    Self::Topicity(t) => Self::Topicity(TopicityForm {
-                        pair: t.pair,
-                        relation: TopicityRelationForm::Undetermined,
-                    }),
-                    Self::Stereogenicity(_) => {
-                        Self::Stereogenicity(StereogenicityForm::Undetermined)
-                    }
-                }
+                Self::undetermined(self.key())
             }
 
             /// Frame-relative ligand positions carry no atom ids, so compact is a no-op.
@@ -988,6 +991,25 @@ mod tests {
         assert_eq!(constraint.uses_participant_frame(), expected);
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ligand_symmetry(
+        StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }),
+        StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined }))]
+    #[case::fluxionality(
+        StereoBondConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))),
+        StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Undetermined }))]
+    #[case::topicity(
+        StereoBondConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
+        StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined }))]
+    #[case::stereogenicity(StereoBondConstraintKey::Stereogenicity, StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined))]
+    fn test_stereo_bond_constraint_form_undetermined(
+        #[case] key: StereoBondConstraintKey,
+        #[case] expected: StereoBondConstraintForm,
+    ) {
+        assert_eq!(StereoBondConstraintForm::undetermined(key), expected);
+    }
+
     #[rstest]
     #[case::equal(
         LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
@@ -1387,6 +1409,25 @@ mod tests {
         #[case] expected: Result<TopicityForm, NoJoinError>,
     ) {
         assert_eq!(a.join(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ligand_symmetry(
+        StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }),
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined }))]
+    #[case::fluxionality(
+        StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))),
+        StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Undetermined }))]
+    #[case::topicity(
+        StereoAtomConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
+        StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined }))]
+    #[case::stereogenicity(StereoAtomConstraintKey::Stereogenicity, StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined))]
+    fn test_stereo_atom_constraint_form_undetermined(
+        #[case] key: StereoAtomConstraintKey,
+        #[case] expected: StereoAtomConstraintForm,
+    ) {
+        assert_eq!(StereoAtomConstraintForm::undetermined(key), expected);
     }
 
     #[rustfmt::skip]

@@ -26,6 +26,15 @@ impl MulticenterBondConstraintForm {
         Self::ElectronCount(v.into())
     }
 
+    /// Vacuous form at `key`: the top of the key's fiber.
+    pub fn undetermined(key: MulticenterBondConstraintKey) -> Self {
+        match key {
+            MulticenterBondConstraintKey::ElectronCount => {
+                Self::ElectronCount(NumForm::Undetermined)
+            }
+        }
+    }
+
     /// Multicenter-bond constraint key, unique within a `MulticenterBondConstraintsForm` container.
     pub fn key(&self) -> MulticenterBondConstraintKey {
         match self {
@@ -35,9 +44,7 @@ impl MulticenterBondConstraintForm {
 
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
-        match self {
-            Self::ElectronCount(_) => Self::ElectronCount(NumForm::Undetermined),
-        }
+        Self::undetermined(self.key())
     }
 
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
@@ -426,6 +433,16 @@ mod tests {
         #[case] expected: MulticenterBondConstraintForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraint_form_undetermined() {
+        assert_eq!(
+            MulticenterBondConstraintForm::undetermined(
+                MulticenterBondConstraintKey::ElectronCount
+            ),
+            MulticenterBondConstraintForm::ElectronCount(NumForm::Undetermined)
+        );
     }
 
     #[rstest]

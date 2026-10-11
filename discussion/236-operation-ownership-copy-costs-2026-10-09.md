@@ -336,18 +336,38 @@ Molecule apply executes caller-supplied edits.
 
 ## Decided: constraint readings and discharge
 
-A derivable constraint gains two readings on every constraints view, `evidenced`
-and `evidenced_complete`. `evidenced` is the meet of all the evidence the
-molecule holds for a key: the entity's own assertion, the value derived from the
-relations it takes part in, and, for an atom's aromatic valence, each incident
-bond's assertion of aromaticity, read as `#a+`. Contradictory evidence meets to
-⊥. `evidenced_complete` adds the closure: where the molecule holds no evidence
-for an overlay-incidence key, the key reads its definite negative. Its claim is
-that the molecule states every positive overlay fact, as an assertion or as a
-relation, without either source alone being complete; `asserted_complete` claims
-that the assertions are complete, and `derived_complete` that the relations are.
-Topology keys always have a derived value, so the two readings agree on them. A
-ring key requires ring context, as `derived` does.
+Every constraints view has six readings of a key: `asserted`, `derived`, and
+`evidenced`, and their complete variants. Each reading is the meet of its
+sources, starting from top. `asserted` meets the entity's own stored value,
+`derived` the value derived from the relations the entity takes part in, and
+`evidenced` all the evidence the molecule holds: the own assertion, the derived
+value, and, for an atom's aromatic valence, each incident bond's assertion of
+aromaticity, read as `#a+`. Each reading returns `Option<F>`: `None` is ⊥, as in
+`meet`, and the key's vacuous form is no information, so every value has one
+encoding. Top met with a value is that value's normal form, and a vacuous entry
+and an absent one both give top, so every reading returns the same value on a
+molecule and on its normal form. On a molecule that normalizes, only `evidenced`
+reaches ⊥, from conflicting evidence.
+
+A complete variant replaces no information with the key's definite negative
+where the key has one. For an assertion, no information is a top value: a
+vacuous entry states nothing. For a relation, it is the absence of the overlay:
+an overlay entity states that it exists even when its value is open, as a stereo
+atom of undetermined kind, whose derived tetrahedral stereo is top, does not
+close to `#T!`. `evidenced_complete` returns `evidenced` where it is not top and
+`derived_complete` otherwise. Its claim is that the molecule states every
+positive overlay fact, as an assertion or as a relation, without either source
+alone being complete; `asserted_complete` claims that the assertions are
+complete, and `derived_complete` that the relations are. Topology keys always
+have a derived value, so the readings agree on them. Every reading that derives
+a ring key requires ring context.
+
+Each constraint form type gains `undetermined(key)`, its vacuous form at a key,
+which a reading returns for a key without a source. The containers' typed
+getters return the stored value, owned, and the vacuous value for an absent key,
+as `aromatic()`, `electron_count()`, `intramolecular()`, and `stereogenicity()`
+already do. `get`, `contains`, and `iter` remain the storage accessors, and the
+views' inherited getters follow the containers'.
 
 `asserted_complete` reads only the entity's own storage and the absence cell. An
 incident bond's assertion of aromaticity moves into the evidenced readings,
@@ -370,9 +390,11 @@ gives it n ≠ m as ⊥, not m. An atom without aromatic evidence outside every
 system is excluded from perception instead of contributing zero electrons.
 Stereo perception's outcomes are unchanged.
 
-Substructure matching, and reaction matching through it, compares each pattern
-entry against the host's `evidenced_complete` value, and the constraints views'
-`satisfies` is removed. On a host whose relations realize its positive
+Substructure matching, and reaction matching through it, asks the constraints
+views' `satisfies` whether a host entity meets a pattern entity's constraints.
+`satisfies` states that logical requirement and answers it algebraically: every
+pattern entry must be satisfied by the host's `evidenced_complete` value at its
+key, and ⊥ satisfies no entry. On a host whose relations realize its positive
 assertions, the result is unchanged. A host atom whose aromatic assertion no
 system realizes, or whose only aromatic evidence is an incident bond, now
 matches an aromatic pattern entry.
@@ -456,6 +478,8 @@ plan.
     contribution.
 12. Every atom the kekulizer changes satisfies electron conservation and its own
     assertions.
+13. Every constraint reading returns the same value on a molecule and on its
+    normal form.
 
 ## Copy-on-write storage
 
@@ -1041,34 +1065,81 @@ generated skeleton.
 occurs; properties that the SMILES and MOL renderings raise to the skeleton's
 elements, hydrogen counts, and bonds.
 
-#### S3b — Evidenced readings
+#### S3a1 — Constraint forms at a key **Done**
 
-**Modules:** graph-IR view/constraints and the entity view modules;
-docs/development/nomenclature.md. **Additive, green.** [dep: none]
+**Modules:** graph-IR constraint/atom, bond, dative, aromatic, multicenter,
+noncovalent, and stereo; umol-graph-ir tests/property. **Additive, green.**
+[dep: none]
 
-Add `pub fn evidenced(&self, key: K) -> Result<Option<F>, Contradiction>` and
-`pub fn evidenced_complete(&self, key: K) -> Result<Option<F>, Contradiction>`
-to the eight constraints views, with each view's key type K and form type F.
-`Err(Contradiction)` is evidence that meets to ⊥. `Ok(None)` is a key without
-evidence and, for `evidenced_complete`, without an absence cell.
+Add `undetermined(key)` to the eight constraint form types: the vacuous form at
+`key`, keeping the ring scope, ligand pair, or ligand permutation that the key
+carries.
 
-In the nomenclature guide's Derived and asserted entry, define both readings and
-the claim behind the closure, and list them under In code. Replace the sentence
-that each consumer reads exactly one flat accessor: a pattern's own entries read
-`asserted`, resolution and matching hosts read `evidenced_complete`, and
-aromatization reads `evidenced`. Correct the doc comment of
-atom_derived_constraint, which says that a bond asserting aromaticity yields
-`Aromatic(Undetermined)` on the derived side.
+**Tests:** per form type, the vacuous form at each key, compared with a literal;
+a property over generated constraint forms of the eight types:
+`undetermined(x.key())` has the key of x, is vacuous, equals
+`x.as_undetermined()`, and meets x to its normal form, or to ⊥ where x does not
+normalize.
 
-**Tests:** per view, evidence from both sources agreeing and conflicting, from
-the assertion only, from the relations only, and none, where the open reading
-gives none and the complete reading the absence cell or none; a topology key; on
-atoms, aromatic valence evidenced by an incident bond's `#a` alone, an own
-assertion met with it, a non-aromatic assertion next to it (⊥), an incident
-bond's `#a!`, which is no evidence for the atom, and a ring key with ring
-context. A property over generated molecules, for invariants 3 and 4: in each
-case, `evidenced_complete` equals the corresponding flat reading or their meet,
-and an atom's own `#a+` and an incident bond's `#a` read alike.
+#### S3a2 — Owned typed getters on constraint containers
+
+**Modules:** graph-IR constraint/atom, bond, and dative, and view/constraints;
+their callers in graph-IR, graph, io, and umol-py. **Breaking, red→green within
+the subitem.** [dep: none]
+
+The typed getters that return `Option<&T>` return `T`, the stored value or the
+vacuous value for an absent key: the atom getters (`valence`,
+`aromatic_valence`, `multicenter_valence`, `tetrahedral_stereo`, `degree`,
+`total_degree`, `total_valence`, `ring_degree`, `ring_valence`,
+`total_hydrogens`, `donated_pairs`, `accepted_pairs`, `ring_count`, and
+`ring_size_count`), `cis_trans_stereo` on bonds, and `ring_count` and
+`ring_size_count` on bonds and dative bonds. The views' inherited getters
+follow. Callers match the value instead of an option, and matches that cover
+both `None` and the vacuous value collapse.
+
+**Tests:** per getter, a stored value and an absent key, which reads the vacuous
+value; existing results.
+
+**Verification:** the resolve and substructure bench groups, against a baseline
+taken before the change.
+
+#### S3b — Constraint readings as meets
+
+**Modules:** graph-IR view/constraints and the entity view modules, and their
+callers in graph-IR, graph, io, and umol-py; umol-graph-ir tests/property;
+docs/development/nomenclature.md. **Breaking, red→green within the subitem.**
+[dep: S3a1]
+
+Give the eight constraints views the six readings of the constraint-readings
+decision, each folding `meet` over its sources from `undetermined(key)` and
+returning `Option<F>`, with `None` as ⊥ and the vacuous form as no information.
+`asserted`, `asserted_complete`, `derived`, and `derived_complete` change from
+`Option<&F>` and `Option<F>` with `None` for absence; `evidenced` and
+`evidenced_complete` are added. `asserted_complete` changes only its encoding
+and keeps the incident-bond merge, which S3g removes. Callers migrate.
+
+In the nomenclature guide's Derived and asserted entry, define the six readings
+as meets, the closure of each complete variant, and the claim behind it, and
+list them under In code. Replace the sentence that each consumer reads exactly
+one flat accessor: a pattern's own entries read `asserted`, resolution and
+matching hosts read `evidenced_complete`, and aromatization reads `evidenced`.
+Correct the doc comment of atom_derived_constraint, which says that a bond
+asserting aromaticity yields `Aromatic(Undetermined)` on the derived side.
+
+**Tests:** per view and reading, a source present, absent, and vacuous, and, for
+`evidenced`, two sources agreeing and conflicting (`None`); each complete
+variant closing where its source carries no information and keeping top for an
+overlay entity with an open value, such as a stereo atom of undetermined kind; a
+topology key; on atoms, aromatic valence evidenced by an incident bond's `#a`
+alone, an own assertion met with it, a non-aromatic assertion next to it
+(`None`), an incident bond's `#a!`, which is no evidence for the atom, and a
+ring key with ring context. A property over generated molecules, for invariants
+3, 4, and 13: `evidenced_complete` equals the corresponding flat reading or
+their meet, an atom's own `#a+` and an incident bond's `#a` read alike, and
+every reading returns the same value on a molecule and on its normal form.
+
+**Verification:** the resolve and substructure bench groups, against a baseline
+taken before the change.
 
 #### S3c — Valence admission reads evidenced_complete
 
@@ -1127,22 +1198,21 @@ and mismatches.
 
 #### S3f — Matching reads evidenced_complete
 
-**Modules:** graph-IR substructure and view/constraints;
-docs/development/nomenclature.md. **Breaking, red→green within the subitem.**
-[dep: S3b, S3a]
+**Modules:** graph-IR view/constraints and the substructure tests;
+docs/development/nomenclature.md. **Green.** [dep: S3b, S3a]
 
-Substructure matching compares each pattern entry against the host's
-`evidenced_complete` value, and ⊥ satisfies no entry. Remove `satisfies` from
-the constraints views; Lattice::satisfies is unaffected. Restate the views'
-`is_compatible` over `evidenced`. Remove `satisfies` from the nomenclature
+Restate the constraints views' `satisfies` over `evidenced_complete`: every
+pattern entry is satisfied by the host's value at its key, and ⊥ satisfies no
+entry. Substructure matching keeps calling it. Restate the views'
+`is_compatible` over `evidenced`. Restate `satisfies` in the nomenclature
 guide's Constraints view entry and list the evidenced readings there.
 
 **Tests:** existing substructure and reaction matching results; a host atom
 whose aromatic assertion no system realizes, and one whose only aromatic
 evidence is an incident bond, match an aromatic pattern entry; the views'
-is_compatible cases; a property over generated hosts, for invariant 3: a single
-pattern entry matches a host entity exactly when it is compatible with the
-entity's `evidenced_complete` value; a property in umol-graph
+satisfies and is_compatible cases; a property over generated hosts, for
+invariant 3: a single pattern entry matches a host entity exactly when the
+entity's `evidenced_complete` value satisfies it; a property in umol-graph
 tests/property/project.rs over hosts resolved from the skeleton generator, for
 invariant 9: a host and its projection satisfy the same generated aromatic and
 stereo pattern entries.
@@ -1155,9 +1225,9 @@ the change.
 **Modules:** graph-IR view/atom and the view tests;
 docs/development/nomenclature.md. **Green.** [dep: S3c]
 
-The atom's `asserted_complete` returns its own assertion, else the absence cell,
-and no longer reads incident bonds. Move the guide's sentence on the two
-aromatic placements to the evidenced readings.
+The atom's `asserted_complete` closes `asserted` alone, where it is top, to the
+absence cell, and no longer reads incident bonds. Move the guide's sentence on
+the two aromatic placements to the evidenced readings.
 
 **Tests:** an atom whose only aromatic evidence is an incident bond reads
 non-aromatic under `asserted_complete`; the existing cases with own assertions.
@@ -1680,4 +1750,4 @@ Run workspace tests and lints with all features, and the Python suite in the
 repository's Python 3.13 environment. Rerun benchmarks only for cases whose
 production code differs from what was measured.
 
-**Critical path:** S3b → S3d → S3l → S4j → S4l → S4n → S6a → S7a.
+**Critical path:** S3a1 → S3b → S3d → S3l → S4j → S4l → S4n → S6a → S7a.

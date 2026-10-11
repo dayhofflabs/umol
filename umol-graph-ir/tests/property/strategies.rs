@@ -293,6 +293,124 @@ pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<Stereogeni
     .boxed()
 }
 
+// Raw constraint forms at every key of the eight constraint form types: payloads
+// from the raw leaf generators, plus the unsatisfiable empty set for counts, so a
+// draw may be non-normal or may not normalize at all.
+
+fn raw_count_strategy() -> BoxedStrategy<NumForm> {
+    prop_oneof![
+        4 => raw_num_form_strategy(),
+        1 => Just(NumForm::LitSet(Box::default())),
+    ]
+    .boxed()
+}
+
+fn ring_scope_strategy() -> impl Strategy<Value = RingScope> {
+    prop_oneof![Just(RingScope::All), (3u8..=10).prop_map(RingScope::Size)]
+}
+
+fn boolean_form_strategy() -> impl Strategy<Value = BooleanForm> {
+    prop_oneof![
+        Just(BooleanForm::Undetermined),
+        any::<bool>().prop_map(BooleanForm::Lit),
+    ]
+}
+
+pub(crate) fn raw_atom_constraint_strategy() -> BoxedStrategy<AtomConstraintForm> {
+    prop_oneof![
+        raw_count_strategy().prop_map(AtomConstraintForm::Valence),
+        raw_count_strategy().prop_map(AtomConstraintForm::DonatedPairs),
+        raw_count_strategy().prop_map(AtomConstraintForm::AcceptedPairs),
+        raw_aromatic_valence_form_strategy().prop_map(AtomConstraintForm::AromaticValence),
+        raw_multicenter_valence_form_strategy().prop_map(AtomConstraintForm::MulticenterValence),
+        raw_tetrahedral_stereo_strategy().prop_map(AtomConstraintForm::TetrahedralStereo),
+        raw_count_strategy().prop_map(AtomConstraintForm::Degree),
+        raw_count_strategy().prop_map(AtomConstraintForm::TotalDegree),
+        raw_count_strategy().prop_map(AtomConstraintForm::TotalValence),
+        raw_count_strategy().prop_map(AtomConstraintForm::RingDegree),
+        raw_count_strategy().prop_map(AtomConstraintForm::RingValence),
+        raw_count_strategy().prop_map(AtomConstraintForm::TotalHydrogens),
+        (ring_scope_strategy(), raw_count_strategy()).prop_map(|(scope, count)| {
+            AtomConstraintForm::RingMembership(RingMembershipForm::new(scope, count))
+        }),
+    ]
+    .boxed()
+}
+
+pub(crate) fn raw_bond_constraint_strategy() -> BoxedStrategy<BondConstraintForm> {
+    prop_oneof![
+        boolean_form_strategy().prop_map(BondConstraintForm::Aromatic),
+        raw_cis_trans_stereo_strategy().prop_map(BondConstraintForm::CisTransStereo),
+        (ring_scope_strategy(), raw_count_strategy()).prop_map(|(scope, count)| {
+            BondConstraintForm::RingMembership(RingMembershipForm::new(scope, count))
+        }),
+    ]
+    .boxed()
+}
+
+pub(crate) fn raw_dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraintForm> {
+    prop_oneof![
+        boolean_form_strategy().prop_map(DativeBondConstraintForm::Aromatic),
+        (ring_scope_strategy(), raw_count_strategy()).prop_map(|(scope, count)| {
+            DativeBondConstraintForm::RingMembership(RingMembershipForm::new(scope, count))
+        }),
+    ]
+    .boxed()
+}
+
+pub(crate) fn raw_aromatic_system_constraint_strategy(
+) -> BoxedStrategy<AromaticSystemConstraintForm> {
+    raw_count_strategy()
+        .prop_map(AromaticSystemConstraintForm::ElectronCount)
+        .boxed()
+}
+
+pub(crate) fn raw_multicenter_bond_constraint_strategy(
+) -> BoxedStrategy<MulticenterBondConstraintForm> {
+    raw_count_strategy()
+        .prop_map(MulticenterBondConstraintForm::ElectronCount)
+        .boxed()
+}
+
+pub(crate) fn raw_noncovalent_bond_constraint_strategy(
+) -> BoxedStrategy<NoncovalentBondConstraintForm> {
+    boolean_form_strategy()
+        .prop_map(NoncovalentBondConstraintForm::Intramolecular)
+        .boxed()
+}
+
+/// Stereo constraints of every kind and key: the generated forms with raw topicity and
+/// stereogenicity relations added.
+macro_rules! raw_stereo_constraint_strategy {
+    ($name:ident, $strategy:ident, $constraint:ident) => {
+        pub(crate) fn $name() -> BoxedStrategy<$constraint> {
+            stereo_atom_kind_strategy()
+                .prop_flat_map(|kind| {
+                    prop_oneof![
+                        $strategy(kind),
+                        (
+                            ligand_pair_strategy(kind.degree()),
+                            raw_topicity_relation_strategy()
+                        )
+                            .prop_map(|(pair, relation)| {
+                                $constraint::Topicity(TopicityForm { pair, relation })
+                            }),
+                        raw_stereogenicity_relation_strategy()
+                            .prop_map($constraint::Stereogenicity),
+                    ]
+                })
+                .boxed()
+        }
+    };
+}
+
+raw_stereo_constraint_strategy! {
+    raw_stereo_atom_constraint_strategy, stereo_atom_constraint_strategy, StereoAtomConstraintForm
+}
+raw_stereo_constraint_strategy! {
+    raw_stereo_bond_constraint_strategy, stereo_bond_constraint_strategy, StereoBondConstraintForm
+}
+
 pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassForm> {
     prop_oneof![
         3 => Just(IsotopeMassForm::Natural),

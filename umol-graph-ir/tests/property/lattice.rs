@@ -836,3 +836,63 @@ proptest! {
     }
 
 }
+
+// Top at a key is the meet identity on every constraint form type: for each x,
+// `undetermined(x.key())` has the key of x, is vacuous, equals `x.as_undetermined()`,
+// and meets x to its normal form, or to ⊥ where x does not normalize. The domain is
+// the raw constraint forms, so draws may be non-normal or fail to normalize.
+macro_rules! undetermined_top_property {
+    ($test:ident, $form:ident, $strategy:ident) => {
+        proptest! {
+            #[test]
+            fn $test(x in $strategy()) {
+                let top = $form::undetermined(x.key());
+                prop_assert_eq!(top.key(), x.key());
+                prop_assert!(top.is_undetermined());
+                prop_assert_eq!(&top, &x.as_undetermined());
+                prop_assert_eq!(top.meet(&x), x.clone().normalize().ok());
+            }
+        }
+    };
+}
+
+undetermined_top_property!(
+    test_atom_constraint_form_undetermined_top,
+    AtomConstraintForm,
+    raw_atom_constraint_strategy
+);
+undetermined_top_property!(
+    test_bond_constraint_form_undetermined_top,
+    BondConstraintForm,
+    raw_bond_constraint_strategy
+);
+undetermined_top_property!(
+    test_dative_bond_constraint_form_undetermined_top,
+    DativeBondConstraintForm,
+    raw_dative_bond_constraint_strategy
+);
+undetermined_top_property!(
+    test_aromatic_system_constraint_form_undetermined_top,
+    AromaticSystemConstraintForm,
+    raw_aromatic_system_constraint_strategy
+);
+undetermined_top_property!(
+    test_multicenter_bond_constraint_form_undetermined_top,
+    MulticenterBondConstraintForm,
+    raw_multicenter_bond_constraint_strategy
+);
+undetermined_top_property!(
+    test_noncovalent_bond_constraint_form_undetermined_top,
+    NoncovalentBondConstraintForm,
+    raw_noncovalent_bond_constraint_strategy
+);
+undetermined_top_property!(
+    test_stereo_atom_constraint_form_undetermined_top,
+    StereoAtomConstraintForm,
+    raw_stereo_atom_constraint_strategy
+);
+undetermined_top_property!(
+    test_stereo_bond_constraint_form_undetermined_top,
+    StereoBondConstraintForm,
+    raw_stereo_bond_constraint_strategy
+);

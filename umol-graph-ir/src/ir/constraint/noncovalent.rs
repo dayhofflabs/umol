@@ -26,6 +26,15 @@ impl NoncovalentBondConstraintForm {
         Self::Intramolecular(b.into())
     }
 
+    /// Vacuous form at `key`: the top of the key's fiber.
+    pub fn undetermined(key: NoncovalentBondConstraintKey) -> Self {
+        match key {
+            NoncovalentBondConstraintKey::Intramolecular => {
+                Self::Intramolecular(BooleanForm::Undetermined)
+            }
+        }
+    }
+
     /// Noncovalent-bond constraint key, unique within a `NoncovalentBondConstraintsForm` container.
     pub fn key(&self) -> NoncovalentBondConstraintKey {
         match self {
@@ -35,9 +44,7 @@ impl NoncovalentBondConstraintForm {
 
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
-        match self {
-            Self::Intramolecular(_) => Self::Intramolecular(BooleanForm::Undetermined),
-        }
+        Self::undetermined(self.key())
     }
 
     /// Value-only: no indices to compact.
@@ -429,6 +436,16 @@ mod tests {
         #[case] expected: NoncovalentBondConstraintForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraint_form_undetermined() {
+        assert_eq!(
+            NoncovalentBondConstraintForm::undetermined(
+                NoncovalentBondConstraintKey::Intramolecular
+            ),
+            NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)
+        );
     }
 
     #[rstest]

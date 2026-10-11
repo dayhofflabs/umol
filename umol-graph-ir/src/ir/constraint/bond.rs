@@ -34,6 +34,19 @@ impl BondConstraintForm {
         Self::RingMembership(RingMembershipForm::new(scope, count.into()))
     }
 
+    /// Vacuous form at `key`: the top of the key's fiber.
+    pub fn undetermined(key: BondConstraintKey) -> Self {
+        match key {
+            BondConstraintKey::Aromatic => Self::Aromatic(BooleanForm::Undetermined),
+            BondConstraintKey::CisTransStereo => {
+                Self::CisTransStereo(CisTransStereoForm::Undetermined)
+            }
+            BondConstraintKey::RingMembership(scope) => {
+                Self::RingMembership(RingMembershipForm::new(scope, NumForm::Undetermined))
+            }
+        }
+    }
+
     /// Bond constraint key, unique within a `BondConstraintsForm` container.
     pub fn key(&self) -> BondConstraintKey {
         match self {
@@ -45,13 +58,7 @@ impl BondConstraintForm {
 
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
-        match self {
-            Self::Aromatic(_) => Self::Aromatic(BooleanForm::Undetermined),
-            Self::CisTransStereo(_) => Self::CisTransStereo(CisTransStereoForm::Undetermined),
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipForm::new(m.scope, NumForm::Undetermined))
-            }
-        }
+        Self::undetermined(self.key())
     }
 
     /// Value-only payload: no entity ids to compact, so this never drops.
@@ -474,6 +481,19 @@ mod tests {
         #[case] expected: BondConstraintForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(BondConstraintKey::Aromatic, BondConstraintForm::Aromatic(BooleanForm::Undetermined))]
+    #[case::cis_trans_stereo(BondConstraintKey::CisTransStereo, BondConstraintForm::CisTransStereo(CisTransStereoForm::Undetermined))]
+    #[case::ring_membership_all(BondConstraintKey::RingMembership(RingScope::All), BondConstraintForm::RingMembership(RingMembershipForm { scope: RingScope::All, count: NumForm::Undetermined }))]
+    #[case::ring_membership_size(BondConstraintKey::RingMembership(RingScope::Size(6)), BondConstraintForm::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Undetermined }))]
+    fn test_bond_constraint_form_undetermined(
+        #[case] key: BondConstraintKey,
+        #[case] expected: BondConstraintForm,
+    ) {
+        assert_eq!(BondConstraintForm::undetermined(key), expected);
     }
 
     #[rustfmt::skip]

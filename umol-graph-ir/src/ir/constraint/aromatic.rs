@@ -26,6 +26,15 @@ impl AromaticSystemConstraintForm {
         Self::ElectronCount(v.into())
     }
 
+    /// Vacuous form at `key`: the top of the key's fiber.
+    pub fn undetermined(key: AromaticSystemConstraintKey) -> Self {
+        match key {
+            AromaticSystemConstraintKey::ElectronCount => {
+                Self::ElectronCount(NumForm::Undetermined)
+            }
+        }
+    }
+
     /// Aromatic-system constraint key, unique within an `AromaticSystemConstraintsForm` container.
     pub fn key(&self) -> AromaticSystemConstraintKey {
         match self {
@@ -35,9 +44,7 @@ impl AromaticSystemConstraintForm {
 
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
-        match self {
-            Self::ElectronCount(_) => Self::ElectronCount(NumForm::Undetermined),
-        }
+        Self::undetermined(self.key())
     }
 
     pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
@@ -426,6 +433,14 @@ mod tests {
         #[case] expected: AromaticSystemConstraintForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraint_form_undetermined() {
+        assert_eq!(
+            AromaticSystemConstraintForm::undetermined(AromaticSystemConstraintKey::ElectronCount),
+            AromaticSystemConstraintForm::ElectronCount(NumForm::Undetermined)
+        );
     }
 
     #[rstest]

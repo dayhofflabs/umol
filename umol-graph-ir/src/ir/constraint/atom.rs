@@ -86,6 +86,33 @@ impl AtomConstraintForm {
         Self::RingMembership(RingMembershipForm::new(scope, count))
     }
 
+    /// Vacuous form at `key`: the top of the key's fiber.
+    pub fn undetermined(key: AtomConstraintKey) -> Self {
+        match key {
+            AtomConstraintKey::Valence => Self::Valence(NumForm::Undetermined),
+            AtomConstraintKey::DonatedPairs => Self::DonatedPairs(NumForm::Undetermined),
+            AtomConstraintKey::AcceptedPairs => Self::AcceptedPairs(NumForm::Undetermined),
+            AtomConstraintKey::AromaticValence => {
+                Self::AromaticValence(AromaticValenceForm::Undetermined)
+            }
+            AtomConstraintKey::MulticenterValence => {
+                Self::MulticenterValence(MulticenterValenceForm::Undetermined)
+            }
+            AtomConstraintKey::TetrahedralStereo => {
+                Self::TetrahedralStereo(TetrahedralStereoForm::Undetermined)
+            }
+            AtomConstraintKey::Degree => Self::Degree(NumForm::Undetermined),
+            AtomConstraintKey::TotalDegree => Self::TotalDegree(NumForm::Undetermined),
+            AtomConstraintKey::TotalValence => Self::TotalValence(NumForm::Undetermined),
+            AtomConstraintKey::RingDegree => Self::RingDegree(NumForm::Undetermined),
+            AtomConstraintKey::RingValence => Self::RingValence(NumForm::Undetermined),
+            AtomConstraintKey::TotalHydrogens => Self::TotalHydrogens(NumForm::Undetermined),
+            AtomConstraintKey::RingMembership(scope) => {
+                Self::RingMembership(RingMembershipForm::new(scope, NumForm::Undetermined))
+            }
+        }
+    }
+
     /// Atom constraint key, unique within an `AtomConstraintsForm` container.
     pub fn key(&self) -> AtomConstraintKey {
         match self {
@@ -107,27 +134,7 @@ impl AtomConstraintForm {
 
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
-        match self {
-            Self::Valence(_) => Self::Valence(NumForm::Undetermined),
-            Self::DonatedPairs(_) => Self::DonatedPairs(NumForm::Undetermined),
-            Self::AcceptedPairs(_) => Self::AcceptedPairs(NumForm::Undetermined),
-            Self::AromaticValence(_) => Self::AromaticValence(AromaticValenceForm::Undetermined),
-            Self::MulticenterValence(_) => {
-                Self::MulticenterValence(MulticenterValenceForm::Undetermined)
-            }
-            Self::TetrahedralStereo(_) => {
-                Self::TetrahedralStereo(TetrahedralStereoForm::Undetermined)
-            }
-            Self::Degree(_) => Self::Degree(NumForm::Undetermined),
-            Self::TotalDegree(_) => Self::TotalDegree(NumForm::Undetermined),
-            Self::TotalValence(_) => Self::TotalValence(NumForm::Undetermined),
-            Self::RingDegree(_) => Self::RingDegree(NumForm::Undetermined),
-            Self::RingValence(_) => Self::RingValence(NumForm::Undetermined),
-            Self::TotalHydrogens(_) => Self::TotalHydrogens(NumForm::Undetermined),
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipForm::new(m.scope, NumForm::Undetermined))
-            }
-        }
+        Self::undetermined(self.key())
     }
 
     /// Value-only payload: no entity ids to compact, so this never drops.
@@ -1115,6 +1122,29 @@ mod tests {
         #[case] expected: AtomConstraintForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::valence(AtomConstraintKey::Valence, AtomConstraintForm::Valence(NumForm::Undetermined))]
+    #[case::donated_pairs(AtomConstraintKey::DonatedPairs, AtomConstraintForm::DonatedPairs(NumForm::Undetermined))]
+    #[case::accepted_pairs(AtomConstraintKey::AcceptedPairs, AtomConstraintForm::AcceptedPairs(NumForm::Undetermined))]
+    #[case::aromatic_valence(AtomConstraintKey::AromaticValence, AtomConstraintForm::AromaticValence(AromaticValenceForm::Undetermined))]
+    #[case::multicenter_valence(AtomConstraintKey::MulticenterValence, AtomConstraintForm::MulticenterValence(MulticenterValenceForm::Undetermined))]
+    #[case::tetrahedral_stereo(AtomConstraintKey::TetrahedralStereo, AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Undetermined))]
+    #[case::degree(AtomConstraintKey::Degree, AtomConstraintForm::Degree(NumForm::Undetermined))]
+    #[case::total_degree(AtomConstraintKey::TotalDegree, AtomConstraintForm::TotalDegree(NumForm::Undetermined))]
+    #[case::total_valence(AtomConstraintKey::TotalValence, AtomConstraintForm::TotalValence(NumForm::Undetermined))]
+    #[case::ring_degree(AtomConstraintKey::RingDegree, AtomConstraintForm::RingDegree(NumForm::Undetermined))]
+    #[case::ring_valence(AtomConstraintKey::RingValence, AtomConstraintForm::RingValence(NumForm::Undetermined))]
+    #[case::total_hydrogens(AtomConstraintKey::TotalHydrogens, AtomConstraintForm::TotalHydrogens(NumForm::Undetermined))]
+    #[case::ring_membership_all(AtomConstraintKey::RingMembership(RingScope::All), AtomConstraintForm::RingMembership(RingMembershipForm { scope: RingScope::All, count: NumForm::Undetermined }))]
+    #[case::ring_membership_size(AtomConstraintKey::RingMembership(RingScope::Size(6)), AtomConstraintForm::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Undetermined }))]
+    fn test_atom_constraint_form_undetermined(
+        #[case] key: AtomConstraintKey,
+        #[case] expected: AtomConstraintForm,
+    ) {
+        assert_eq!(AtomConstraintForm::undetermined(key), expected);
     }
 
     #[rustfmt::skip]

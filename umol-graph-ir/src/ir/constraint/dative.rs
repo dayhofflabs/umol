@@ -32,6 +32,16 @@ impl DativeBondConstraintForm {
         Self::RingMembership(RingMembershipForm::new(scope, count))
     }
 
+    /// Vacuous form at `key`: the top of the key's fiber.
+    pub fn undetermined(key: DativeBondConstraintKey) -> Self {
+        match key {
+            DativeBondConstraintKey::Aromatic => Self::Aromatic(BooleanForm::Undetermined),
+            DativeBondConstraintKey::RingMembership(scope) => {
+                Self::RingMembership(RingMembershipForm::new(scope, NumForm::Undetermined))
+            }
+        }
+    }
+
     /// Dative bond constraint key, unique within a `DativeBondConstraintsForm` container.
     pub fn key(&self) -> DativeBondConstraintKey {
         match self {
@@ -42,12 +52,7 @@ impl DativeBondConstraintForm {
 
     /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
-        match self {
-            Self::Aromatic(_) => Self::Aromatic(BooleanForm::Undetermined),
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipForm::new(m.scope, NumForm::Undetermined))
-            }
-        }
+        Self::undetermined(self.key())
     }
 
     /// Value-only payload: no entity ids to compact, so this never drops.
@@ -472,6 +477,18 @@ mod tests {
         #[case] expected: DativeBondConstraintForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(DativeBondConstraintKey::Aromatic, DativeBondConstraintForm::Aromatic(BooleanForm::Undetermined))]
+    #[case::ring_membership_all(DativeBondConstraintKey::RingMembership(RingScope::All), DativeBondConstraintForm::RingMembership(RingMembershipForm { scope: RingScope::All, count: NumForm::Undetermined }))]
+    #[case::ring_membership_size(DativeBondConstraintKey::RingMembership(RingScope::Size(6)), DativeBondConstraintForm::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Undetermined }))]
+    fn test_dative_bond_constraint_form_undetermined(
+        #[case] key: DativeBondConstraintKey,
+        #[case] expected: DativeBondConstraintForm,
+    ) {
+        assert_eq!(DativeBondConstraintForm::undetermined(key), expected);
     }
 
     #[rustfmt::skip]
