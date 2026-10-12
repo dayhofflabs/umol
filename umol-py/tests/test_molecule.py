@@ -795,7 +795,6 @@ def test_molecule_from_smiles_chemistry_model_stereo():
                             MaximumIndependentSetAlgorithm.BranchAndBound()
                         ),
                     ),
-                    reset_aromatic_valence=False,
                 ),
                 stereo=StereoResolveConfig(),
             ),
@@ -810,9 +809,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
         (
             "c1ccccc1",
             ResolveConfig(
-                aromaticity=AromaticityResolveConfig(
-                    reset_aromatic_valence=True,
-                ),
+                aromaticity=AromaticityResolveConfig(),
                 stereo=StereoResolveConfig(),
             ),
             (

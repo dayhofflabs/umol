@@ -1144,23 +1144,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::retained(
+    #[case::default(
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![AromaticValenceForm::Undetermined; 6]
-    )]
-    #[case::reset(
-        SmilesIoConfig::opensmiles(),
-        ChemistryModel::default(),
-        ResolveConfig {
-            isotope: IsotopePolicy::Strict,
-            aromaticity: AromaticityResolveConfig {
-                reset_aromatic_valence: true,
-                ..AromaticityResolveConfig::default()
-            },
-            stereo: StereoResolveConfig::default(),
-        },
         vec![AromaticValenceForm::Undetermined; 6]
     )]
     fn test_ingest_smiles_with_aromatic_valence(

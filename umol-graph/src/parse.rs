@@ -70,10 +70,7 @@ mod tests {
         AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
         RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
     };
-    use crate::ops::resolve::{
-        AromaticityResolveConfig, ResolveConfig, ResolveUnderdetermined, Resolver,
-        StereoResolveConfig,
-    };
+    use crate::ops::resolve::{ResolveConfig, ResolveUnderdetermined, Resolver};
     use crate::ops::valence::ValenceTable;
     use crate::ops::validate::ConnectivityModel;
 
@@ -180,23 +177,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::retained(
+    #[case::default(
         CtfileIoConfig::basic(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![AromaticValenceForm::Undetermined; 6]
-    )]
-    #[case::reset(
-        CtfileIoConfig::basic(),
-        ChemistryModel::default(),
-        ResolveConfig {
-            isotope: Default::default(),
-            aromaticity: AromaticityResolveConfig {
-                reset_aromatic_valence: true,
-                ..AromaticityResolveConfig::default()
-            },
-            stereo: StereoResolveConfig::default(),
-        },
         vec![AromaticValenceForm::Undetermined; 6]
     )]
     fn test_parse_mol_bytes_with_aromatic_valence(

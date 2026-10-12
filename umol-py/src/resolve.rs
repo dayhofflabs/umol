@@ -101,18 +101,16 @@ pub struct AromaticityResolveConfig(GraphAromaticityResolveConfig);
 #[pymethods]
 impl AromaticityResolveConfig {
     #[new]
-    #[pyo3(signature = (*, perception=AromaticityConfig::default(), aromatic_valence_failure=AromaticityFailurePolicy::Error, aromatic_system_failure=AromaticityFailurePolicy::Error, reset_aromatic_valence=false))]
+    #[pyo3(signature = (*, perception=AromaticityConfig::default(), aromatic_valence_failure=AromaticityFailurePolicy::Error, aromatic_system_failure=AromaticityFailurePolicy::Error))]
     fn new(
         perception: AromaticityConfig,
         aromatic_valence_failure: AromaticityFailurePolicy,
         aromatic_system_failure: AromaticityFailurePolicy,
-        reset_aromatic_valence: bool,
     ) -> Self {
         Self(GraphAromaticityResolveConfig {
             perception: perception.to_rust(),
             aromatic_valence_failure: aromatic_valence_failure.to_rust(),
             aromatic_system_failure: aromatic_system_failure.to_rust(),
-            reset_aromatic_valence,
         })
     }
 
@@ -131,22 +129,12 @@ impl AromaticityResolveConfig {
         AromaticityFailurePolicy::from_rust(self.0.aromatic_system_failure)
     }
 
-    #[getter]
-    fn reset_aromatic_valence(&self) -> bool {
-        self.0.reset_aromatic_valence
-    }
-
     fn __repr__(&self) -> String {
         format!(
-            "AromaticityResolveConfig(perception={}, aromatic_valence_failure=AromaticityFailurePolicy.{:?}, aromatic_system_failure=AromaticityFailurePolicy.{:?}, reset_aromatic_valence={})",
+            "AromaticityResolveConfig(perception={}, aromatic_valence_failure=AromaticityFailurePolicy.{:?}, aromatic_system_failure=AromaticityFailurePolicy.{:?})",
             self.perception().__repr__(),
             self.aromatic_valence_failure(),
             self.aromatic_system_failure(),
-            if self.0.reset_aromatic_valence {
-                "True"
-            } else {
-                "False"
-            },
         )
     }
 }
@@ -395,20 +383,17 @@ mod tests {
         AromaticityConfig::default(),
         AromaticityFailurePolicy::Error,
         AromaticityFailurePolicy::Error,
-        false,
         GraphAromaticityResolveConfig::default()
     )]
-    #[case::configured(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, true, GraphAromaticityResolveConfig {
+    #[case::configured(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, GraphAromaticityResolveConfig {
         perception: Default::default(),
         aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
         aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
-        reset_aromatic_valence: true,
     })]
     fn test_aromaticity_resolve_config_new(
         #[case] perception: AromaticityConfig,
         #[case] aromatic_valence_failure: AromaticityFailurePolicy,
         #[case] aromatic_system_failure: AromaticityFailurePolicy,
-        #[case] reset_aromatic_valence: bool,
         #[case] expected: GraphAromaticityResolveConfig,
     ) {
         assert_eq!(
@@ -416,7 +401,6 @@ mod tests {
                 perception,
                 aromatic_valence_failure,
                 aromatic_system_failure,
-                reset_aromatic_valence,
             )
             .0,
             expected
@@ -425,12 +409,12 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error, false),
-        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Error, aromatic_system_failure=AromaticityFailurePolicy.Error, reset_aromatic_valence=False)"
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error),
+        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Error, aromatic_system_failure=AromaticityFailurePolicy.Error)"
     )]
     #[case::nondefault(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, true),
-        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, reset_aromatic_valence=True)"
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
+        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep)"
     )]
     fn test_aromaticity_resolve_config_repr(
         #[case] config: AromaticityResolveConfig,
@@ -445,7 +429,6 @@ mod tests {
         perception: Default::default(),
         aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
         aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
-        reset_aromatic_valence: true,
     })]
     fn test_aromaticity_resolve_config_from_rust(#[case] config: GraphAromaticityResolveConfig) {
         assert_eq!(AromaticityResolveConfig::from_rust(config).0, config);
@@ -455,14 +438,12 @@ mod tests {
     #[case::default(AromaticityResolveConfig::new(
         AromaticityConfig::default(),
         AromaticityFailurePolicy::Error,
-        AromaticityFailurePolicy::Error,
-        false
+        AromaticityFailurePolicy::Error
     ))]
     #[case::nondefault(AromaticityResolveConfig::new(
         AromaticityConfig::default(),
         AromaticityFailurePolicy::Keep,
-        AromaticityFailurePolicy::Keep,
-        true
+        AromaticityFailurePolicy::Keep
     ))]
     fn test_aromaticity_resolve_config_to_rust(#[case] config: AromaticityResolveConfig) {
         assert_eq!(config.to_rust(), config.0);
@@ -549,8 +530,7 @@ mod tests {
         AromaticityResolveConfig::new(
             AromaticityConfig::default(),
             AromaticityFailurePolicy::Error,
-            AromaticityFailurePolicy::Error,
-            false
+            AromaticityFailurePolicy::Error
         ),
         StereoResolveConfig::new(
             StereoFailurePolicy::Error,
@@ -562,7 +542,7 @@ mod tests {
         GraphResolveConfig::default()
     )]
     #[case::aromaticity(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, true),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
         StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, false),
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
@@ -570,13 +550,12 @@ mod tests {
                 perception: Default::default(),
                 aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
                 aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
-                reset_aromatic_valence: true,
             },
             stereo: GraphStereoResolveConfig::default(),
         },
     )]
     #[case::stereo(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error, false),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error),
         StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, true),
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
@@ -617,11 +596,11 @@ mod tests {
     #[case::default(ResolveConfig::default(), "ResolveConfig.default()")]
     #[case::configured(
         ResolveConfig::new(
-            AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, true),
+            AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
             StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, true),
             IsotopePolicy::Strict,
         ),
-        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, reset_aromatic_valence=True), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, reset_stereo_constraints=True))",
+        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, reset_stereo_constraints=True))",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -635,7 +614,6 @@ mod tests {
             perception: Default::default(),
             aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
             aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
-            reset_aromatic_valence: true,
         },
         stereo: GraphStereoResolveConfig {
             tetrahedral_stereo_failure: GraphStereoFailurePolicy::Keep,
@@ -655,8 +633,7 @@ mod tests {
         AromaticityResolveConfig::new(
             AromaticityConfig::default(),
             AromaticityFailurePolicy::Keep,
-            AromaticityFailurePolicy::Keep,
-            true
+            AromaticityFailurePolicy::Keep
         ),
         StereoResolveConfig::new(
             StereoFailurePolicy::Keep,

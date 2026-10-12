@@ -1105,7 +1105,9 @@ impl<'a> Resolver<'a> {
     }
 
     fn plan_constitution(&self, molecule: &Molecule, state: &ResolveState) -> Edits {
-        let mut edits = Edits::new();
+        let mut edits = self
+            .aromaticity
+            .plan_bond_discharge(molecule, &state.systems);
         for (atom, disjuncts) in state.completions.iter() {
             let current = molecule.atom(atom).attributes();
             // Preserve stored assertions when selecting field values.
@@ -1764,10 +1766,7 @@ mod tests {
             ResolveConfig::default(),
             ResolveConfig {
                 isotope: IsotopePolicy::Strict,
-                aromaticity: AromaticityResolveConfig {
-                    reset_aromatic_valence: false,
-                    ..AromaticityResolveConfig::default()
-                },
+                aromaticity: AromaticityResolveConfig::default(),
                 stereo: StereoResolveConfig {
                     reset_stereo_constraints: false,
                     ..StereoResolveConfig::default()
@@ -1796,14 +1795,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::reset_aromatic_valence(ResolveConfig {
-        isotope: IsotopePolicy::Strict,
-        aromaticity: AromaticityResolveConfig {
-            reset_aromatic_valence: true,
-            ..AromaticityResolveConfig::default()
-        },
-        stereo: StereoResolveConfig::default(),
-    })]
     #[case::reset_stereo_constraints(ResolveConfig {
         isotope: IsotopePolicy::Strict,
         aromaticity: AromaticityResolveConfig::default(),
@@ -1833,13 +1824,6 @@ mod tests {
             resolver.stereo.plan_resolve(&stereo_molecule),
             expected_stereo
         );
-        if config.aromaticity != AromaticityResolveConfig::default() {
-            assert_ne!(
-                expected_aromaticity,
-                AromaticityResolver::new(&chemistry_model.aromaticity)
-                    .plan_resolve(&aromatic_molecule)
-            );
-        }
         if config.stereo != StereoResolveConfig::default() {
             assert_ne!(
                 expected_stereo,

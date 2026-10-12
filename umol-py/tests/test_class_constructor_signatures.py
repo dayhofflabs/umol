@@ -69,8 +69,7 @@ import umol
         (
             umol.AromaticityResolveConfig,
             "(*, perception=Ellipsis, aromatic_valence_failure=Ellipsis, "
-            "aromatic_system_failure=Ellipsis, "
-            "reset_aromatic_valence=False)",
+            "aromatic_system_failure=Ellipsis)",
         ),
         (
             umol.StereoResolveConfig,

@@ -5,6 +5,11 @@
 //! input leaves electron fields undetermined; both valence sources and tie-breaks must
 //! produce the expected complete molecule.
 //!
+//! Aromatic discharge is checked against independently assembled results for
+//! separate or linked benzene rings with mixed stored and newly added systems.
+//! Stored-system assertions and unrelated keys survive; newly realized assertions
+//! and negative linking-bond assertions are removed. Resolution is idempotent.
+//!
 //! Semantic property: for carriers whose components stay within the
 //! enumeration bound, both aromatic selectors return the outcome of a
 //! selection that enumerates every completion combination of every component
@@ -30,16 +35,19 @@ use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityInconsistency, AromaticityPerceiver,
 };
-use umol_graph::ops::model::{AromaticityTieBreak, ChemistryModel, ValenceModel, ValenceTieBreak};
+use umol_graph::ops::model::{
+    AromaticityModel, AromaticityTieBreak, ChemistryModel, ValenceModel, ValenceTieBreak,
+};
 use umol_graph::ops::resolve::{
     AromaticityFailurePolicy, AromaticityResolver, ResolveState, Resolver,
 };
 use umol_graph::ops::valence::compare::compare_by_key;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomForm, AtomId, BondForm,
-    ElectronCountsForm, ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm,
-    RingConfig, RingModel, RingSetKind, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
+    BondConstraintForm, BondForm, BooleanForm, ElectronCountsForm, ElementForm, IsotopeMassForm,
+    Molecule, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind, UnpairedElectronsForm,
 };
+use umol_graph_ir::{atom_dsl, bond_dsl};
 use umol_utils::solution::Solution;
 
 use crate::strategies::{select_scenario, SelectScenario};
@@ -372,6 +380,74 @@ fn exhaustive_select(
 }
 
 proptest! {
+    #[test]
+    fn test_aromaticity_resolver_resolve_discharge(
+        rings in prop::collection::vec((any::<bool>(), 0u8..3), 1..5),
+        linked in any::<bool>(),
+    ) {
+        let mut source = MoleculeEntries::default();
+        let mut expected = MoleculeEntries::default();
+        let mut additions = Vec::new();
+        for (ring, &(stored, bond_assertions)) in rings.iter().enumerate() {
+            let offset = ring * 6;
+            for position in 0..6 {
+                let degree = 2 + i64::from(linked
+                    && ((position == 0 && ring > 0)
+                        || (position == 3 && ring + 1 < rings.len())));
+                let mut atom = atom_dsl!("C#i=#c0#n0#u0#s");
+                atom.implicit_hydrogens = NumForm::Lit(3 - degree);
+                atom.constraints.set(AtomConstraintForm::Valence(NumForm::Lit(degree)));
+                let mut asserted = atom.clone();
+                asserted.constraints.set(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(NumForm::Lit(1))));
+                expected.atoms.push(if stored { asserted.clone() } else { atom });
+                source.atoms.push(asserted);
+
+                let a = AtomId::from(offset + position);
+                let b = AtomId::from(offset + (position + 1) % 6);
+                let bond = bond_dsl!("1#c0#u0#s#R+");
+                let mut asserted = bond.clone();
+                if bond_assertions != 0 {
+                    asserted.constraints.set(BondConstraintForm::Aromatic(
+                        if bond_assertions == 1 { BooleanForm::Undetermined }
+                        else { BooleanForm::Lit(true) }
+                    ));
+                }
+                expected.bonds.push((a, b, if stored { asserted.clone() } else { bond }));
+                source.bonds.push((a, b, asserted));
+            }
+            let system = ((offset..offset + 6).map(AtomId::from).collect(), AromaticSystemForm {
+                electrons: ElectronCountsForm::Lit(vec![1; 6]),
+                charge: NumForm::Lit(0),
+                unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+                constraints: Default::default(),
+            });
+            if stored {
+                source.aromatic.push(system.clone());
+                expected.aromatic.push(system);
+            } else {
+                additions.push(system);
+            }
+            if linked && ring > 0 {
+                let a = AtomId::from(offset - 3);
+                let b = AtomId::from(offset);
+                let bond = bond_dsl!("1#c0#u0#s");
+                let mut asserted = bond.clone();
+                asserted.constraints.set(BondConstraintForm::Aromatic(BooleanForm::Lit(false)));
+                source.bonds.push((a, b, asserted));
+                expected.bonds.push((a, b, bond));
+            }
+        }
+        expected.aromatic.extend(additions);
+        let mut molecule = Molecule::from_entries(source);
+        let expected = Molecule::from_entries(expected);
+        let resolver = AromaticityResolver::new(&AromaticityModel::daylight());
+        prop_assert_eq!(resolver.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
+        prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(&molecule, &expected);
+        prop_assert_eq!(resolver.resolve(molecule), Ok(Solution::Determined(expected)));
+    }
+
     #[test]
     fn test_aromaticity_resolver_select_with_report_search_independence(
         scenario in select_scenario()

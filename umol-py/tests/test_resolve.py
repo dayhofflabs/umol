@@ -120,7 +120,6 @@ def test_aromaticity_resolve_config_default():
     assert config.perception == AromaticityConfig()
     assert config.aromatic_valence_failure == AromaticityFailurePolicy.Error
     assert config.aromatic_system_failure == AromaticityFailurePolicy.Error
-    assert config.reset_aromatic_valence is False
     assert config == AromaticityResolveConfig()
 
 
@@ -128,39 +127,33 @@ def test_aromaticity_resolve_config_default():
     (
         "aromatic_valence_failure",
         "aromatic_system_failure",
-        "reset_aromatic_valence",
     ),
     [
         (
             AromaticityFailurePolicy.Error,
             AromaticityFailurePolicy.Error,
-            False,
         ),
         (
             AromaticityFailurePolicy.Keep,
             AromaticityFailurePolicy.Keep,
-            True,
         ),
     ],
 )
 def test_aromaticity_resolve_config_new(
     aromatic_valence_failure,
     aromatic_system_failure,
-    reset_aromatic_valence,
 ):
     perception = AromaticityConfig()
     config = AromaticityResolveConfig(
         perception=perception,
         aromatic_valence_failure=aromatic_valence_failure,
         aromatic_system_failure=aromatic_system_failure,
-        reset_aromatic_valence=reset_aromatic_valence,
     )
 
     assert config.perception == perception
     assert config.perception is not perception
     assert config.aromatic_valence_failure == aromatic_valence_failure
     assert config.aromatic_system_failure == aromatic_system_failure
-    assert config.reset_aromatic_valence is reset_aromatic_valence
 
 
 def test_aromaticity_resolve_config_new_error():
@@ -182,14 +175,12 @@ def test_aromaticity_resolve_config_new_error():
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
             "aromatic_valence_failure=AromaticityFailurePolicy.Error, "
-            "aromatic_system_failure=AromaticityFailurePolicy.Error, "
-            "reset_aromatic_valence=False)",
+            "aromatic_system_failure=AromaticityFailurePolicy.Error)",
         ),
         (
             AromaticityResolveConfig(
                 aromatic_valence_failure=AromaticityFailurePolicy.Keep,
                 aromatic_system_failure=AromaticityFailurePolicy.Keep,
-                reset_aromatic_valence=True,
             ),
             "AromaticityResolveConfig(perception=AromaticityConfig("
             "ring_config=RingConfig(simple_cycle_algorithm="
@@ -200,8 +191,7 @@ def test_aromaticity_resolve_config_new_error():
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
-            "aromatic_system_failure=AromaticityFailurePolicy.Keep, "
-            "reset_aromatic_valence=True)",
+            "aromatic_system_failure=AromaticityFailurePolicy.Keep)",
         ),
     ],
 )
@@ -215,7 +205,6 @@ def test_aromaticity_resolve_config_repr(config, expected):
         ("perception", AromaticityConfig()),
         ("aromatic_valence_failure", AromaticityFailurePolicy.Keep),
         ("aromatic_system_failure", AromaticityFailurePolicy.Keep),
-        ("reset_aromatic_valence", True),
     ],
 )
 def test_aromaticity_resolve_config_mutation(field, value):
@@ -365,7 +354,6 @@ def test_resolve_config_default():
         (
             AromaticityResolveConfig(
                 aromatic_valence_failure=AromaticityFailurePolicy.Keep,
-                reset_aromatic_valence=True,
             ),
             StereoResolveConfig(),
         ),
@@ -395,7 +383,6 @@ def test_resolve_config_new_error():
         ResolveConfig(
             aromaticity=AromaticityResolveConfig(
                 aromatic_system_failure=AromaticityFailurePolicy.Keep,
-                reset_aromatic_valence=False,
             ),
             stereo=StereoResolveConfig(),
         ),
@@ -421,7 +408,6 @@ def test_resolve_config_equality(other):
                 aromaticity=AromaticityResolveConfig(
                     aromatic_valence_failure=AromaticityFailurePolicy.Keep,
                     aromatic_system_failure=AromaticityFailurePolicy.Keep,
-                    reset_aromatic_valence=True,
                 ),
                 stereo=StereoResolveConfig(
                     reset_stereo_constraints=True,
@@ -437,8 +423,7 @@ def test_resolve_config_equality(other):
             "maximum_independent_set_algorithm="
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
-            "aromatic_system_failure=AromaticityFailurePolicy.Keep, "
-            "reset_aromatic_valence=True), "
+            "aromatic_system_failure=AromaticityFailurePolicy.Keep), "
             "stereo=StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Keep, stereo_atom_failure="
             "StereoFailurePolicy.Error, cis_trans_stereo_failure="

@@ -878,9 +878,7 @@ def test_reaction_from_reaction_smiles_resolve_config():
     reaction = Reaction.from_reaction_smiles(
         "[cH+:1]1[cH:2][cH:3]1>>[cH+:1]1[cH:2][cH:3]1",
         resolve_config=ResolveConfig(
-            aromaticity=AromaticityResolveConfig(
-                reset_aromatic_valence=False,
-            ),
+            aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(),
         ),
     )

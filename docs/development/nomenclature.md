@@ -1564,7 +1564,7 @@ expresses removal by leaving removed source ids without images.
 **Reset** clears a constraint by setting it to its undetermined form.
 
 **Not:** a general synonym for removing an entity or replacing determined structural information.
-**In code:** `reset_aromatic_valence`, `reset_stereo_constraints`.
+**In code:** `reset_stereo_constraints`.
 
 ### Resolution
 

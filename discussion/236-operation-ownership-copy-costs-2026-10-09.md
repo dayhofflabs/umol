@@ -2778,7 +2778,7 @@ Criterion reports improvements for the aliphatic cases and a change within its
 noise threshold for aromatic_fused. These measure raising only. The baseline
 executable and logs are saved in scratch/236-s3h.
 
-#### S3i — Aromaticity discharges what its systems realize
+#### S3i — Aromaticity discharges what its systems realize **Done**
 
 **Modules:** graph resolve/aromaticity and resolve; umol-py resolve bindings and
 Python tests; docs/development/nomenclature.md. **Breaking, red→green within the
@@ -2794,6 +2794,51 @@ nomenclature guide's Reset entry.
 **Tests:** standalone resolution removes those assertions for each added system
 and keeps them for a stored system; `#a!` on the bond joining the two rings of
 biphenyl is removed; composite results are unchanged.
+
+**Completion (2026-10-12):** system addition now removes each member's own
+aromatic-valence assertion and writes no bond assertion. Standalone aromaticity
+planning and composite constitution planning share the bond discharge planner:
+outside pre-existing systems, it removes assertions satisfied by membership in
+the accepted systems, including negative assertions on linking bonds. It uses
+the existing derivation or selection without perceiving again. It allocates the
+membership lookup only when a relevant bond assertion exists. Standalone
+resolution preserves member and internal-bond assertions of stored systems.
+Discharge preserves unrelated constraint keys and inherent fields.
+
+Removed reset_aromatic_valence from the Rust config and its Python constructor,
+getter, and repr, and from the nomenclature guide. The shared planner adds no
+public API or failure variant. Composite resolution still has its closing
+discharge pass until S3m.
+
+Both new discharge fixtures failed before implementation. All 1,999 graph unit
+tests, four resolution properties, 683 resolution conformance cases, and 50
+Rust binding tests pass. The generated discharge property covers separate or
+linked rings with mixed stored/new systems, absent/vacuous/positive internal
+bond assertions, preservation of unrelated keys, and idempotence. Composite
+conformance snapshots are unchanged. After rebuilding with Python 3.13, the
+affected Python suites pass with 407 tests and two existing skips. Scoped
+Clippy with warnings denied, formatting, and diff checks pass. Workspace tests
+remain for the related-change batch gate.
+
+The existing smiles_roundtrip/resolve cases were compared against commit
+6a47de37f with 40 samples, one-second warm-up, and two-second measurement,
+without concurrent builds or tests:
+
+| Case | Initial time change | 95% interval |
+| --- | ---: | ---: |
+| chain_64 | +2.39% | +2.03% to +2.79% |
+| aromatic_fused | -5.62% | -8.03% to -3.15% |
+| aromatic_lone_pair | -4.04% | -4.99% to -3.01% |
+
+Short repeats of the saved executables exposed drift: a forward chain
+comparison detected no change, while a reverse comparison favored the baseline
+by 6.40%. Four further pairs, alternating execution order, gave a change of
++0.49% in the average of their mean times (82.21 to 82.61 µs), with individual
+pairs ranging from -0.99% to +1.58%. These controls do not reproduce the larger
+chain slowdown, but do not establish a strict one-percent bound. The new bond
+scan performs no allocation on this assertion-free input. The aromatic cases
+avoid the former per-system bond collection and assertion writes. Executables,
+logs, and alternating-run estimates are saved in scratch/236-s3i.
 
 #### S3j — Stereo discharges what its entities realize
 

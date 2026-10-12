@@ -1,6 +1,6 @@
 //! Aromaticity resolver. Perception reads aromatic valence constraints from the
 //! materialized valence stage; planning emits complete aromatic systems and
-//! localized bond aromatic constraints without mutating the source molecule.
+//! discharges the assertions they realize without mutating the source molecule.
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
@@ -9,9 +9,10 @@ use smallvec::smallvec;
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValence,
-    AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate,
-    BondConstraintForm, BondHandle, BondId, BondUpdate, BooleanForm, Edits, ElectronCountsForm,
-    Lattice, Molecule, MoleculeApplyError, NumForm, RingSet, UnpairedElectronsForm,
+    AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomHandle,
+    AtomId, AtomUpdate, BondConstraintForm, BondConstraintKey, BondHandle, BondId, BondUpdate,
+    BooleanForm, Edit, Edits, ElectronCountsForm, Lattice, Molecule, MoleculeApplyError, NumForm,
+    RingSet, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -38,7 +39,6 @@ pub struct AromaticityResolveConfig {
     pub perception: AromaticityConfig,
     pub aromatic_valence_failure: AromaticityFailurePolicy,
     pub aromatic_system_failure: AromaticityFailurePolicy,
-    pub reset_aromatic_valence: bool,
 }
 
 impl Default for AromaticityResolveConfig {
@@ -47,7 +47,6 @@ impl Default for AromaticityResolveConfig {
             perception: AromaticityConfig::default(),
             aromatic_valence_failure: AromaticityFailurePolicy::Error,
             aromatic_system_failure: AromaticityFailurePolicy::Error,
-            reset_aromatic_valence: false,
         }
     }
 }
@@ -90,6 +89,9 @@ impl AromaticityResolver {
     }
 
     /// Construct the complete aromaticity edit plan without mutating `molecule`.
+    /// Newly added systems discharge their members' aromatic-valence assertions.
+    /// Outside stored systems, confirmed bond-aromaticity assertions are removed.
+    /// Assertions on stored systems and other constraint keys are preserved.
     /// Mismatched evidence is contradictory regardless of the failure policies.
     pub fn plan_resolve(
         &self,
@@ -126,7 +128,7 @@ impl AromaticityResolver {
                     })
                     .collect();
 
-                let mut edits = Edits::new();
+                let mut edits = self.plan_bond_discharge(molecule, &derivation.systems);
                 for (atoms, system) in derivation.systems {
                     let mut key = atoms.clone();
                     key.sort_unstable();
@@ -403,52 +405,65 @@ impl AromaticityResolver {
         atoms: Vec<AtomId>,
         system: AromaticSystemForm,
     ) -> Edits {
-        let mut atom_updates = Vec::new();
-        if self.config.reset_aromatic_valence {
-            for &atom_id in &atoms {
-                let mut update = AtomUpdate::default();
-                update.constraints.set(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Undetermined,
-                ));
-                atom_updates.push((atom_id, update));
-            }
-        }
-
         let mut edits = Edits::new();
         edits.add_aromatic_system(atoms.iter().copied().map(AtomHandle::Id).collect(), system);
-        for (atom_id, update) in atom_updates {
-            edits.update_atom(
-                AtomHandle::Id(atom_id),
-                molecule.atom(atom_id).attributes(),
-                &update,
-            );
-        }
-
-        let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
-        let mut bond_ids = BTreeSet::new();
-        for &atom_id in &atoms {
-            for neighbor in molecule.atom(atom_id).neighbors() {
-                if members.contains(&neighbor.atom_id()) {
-                    bond_ids.insert(neighbor.bond_id());
-                }
-            }
-        }
-        for bond_id in bond_ids {
-            if matches!(
-                molecule.bond(bond_id).attributes().constraints.aromatic(),
-                BooleanForm::Lit(_)
-            ) {
-                continue;
-            }
-            let mut update = BondUpdate::default();
-            update
+        for atom in atoms {
+            if let Some(asserted) = molecule
+                .atom(atom)
+                .attributes()
                 .constraints
-                .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
-            edits.update_bond(
-                BondHandle::Id(bond_id),
-                molecule.bond(bond_id).attributes(),
-                &update,
-            );
+                .get(AtomConstraintKey::AromaticValence)
+            {
+                edits.push(Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(atom),
+                    old: Some(asserted.clone()),
+                    new: None,
+                });
+            }
+        }
+        edits
+    }
+
+    pub(crate) fn plan_bond_discharge(
+        &self,
+        molecule: &Molecule,
+        systems: &[(Vec<AtomId>, AromaticSystemForm)],
+    ) -> Edits {
+        let mut bonds = molecule
+            .bonds()
+            .iter()
+            .filter_map(|bond| {
+                let Some(BondConstraintForm::Aromatic(asserted)) = bond
+                    .attributes()
+                    .constraints
+                    .get(BondConstraintKey::Aromatic)
+                else {
+                    return None;
+                };
+                (!bond.is_in_aromatic_system()).then_some((bond, asserted))
+            })
+            .peekable();
+        let mut edits = Edits::new();
+        if bonds.peek().is_none() {
+            return edits;
+        }
+        let mut membership = vec![None; molecule.atoms().count()];
+        for (system, (atoms, _)) in systems.iter().enumerate() {
+            for atom in atoms {
+                membership[atom.index()] = Some(system);
+            }
+        }
+        for (bond, asserted) in bonds {
+            let [a, b] = bond.atom_ids();
+            let aromatic =
+                membership[a.index()].is_some() && membership[a.index()] == membership[b.index()];
+            if asserted.meet(&BooleanForm::Lit(aromatic)).is_some() {
+                edits.push(Edit::ModifyBondConstraint {
+                    id: BondHandle::Id(bond.id()),
+                    old: Some(BondConstraintForm::Aromatic(*asserted)),
+                    new: None,
+                });
+            }
         }
         edits
     }
@@ -1040,8 +1055,8 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, NumForm, RingConfig, RingModel,
-        RingSetKind, UnpairedElectronsForm,
+        AromaticSystemId, BondId, Edit, Edits, NumForm, RingConfig, RingModel, RingSetKind,
+        UnpairedElectronsForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
@@ -1183,7 +1198,6 @@ mod tests {
                 perception: AromaticityConfig::default(),
                 aromatic_valence_failure: AromaticityFailurePolicy::Error,
                 aromatic_system_failure: AromaticityFailurePolicy::Error,
-                reset_aromatic_valence: false,
             }
         );
     }
@@ -1206,7 +1220,6 @@ mod tests {
                         maximum_independent_set_algorithm:
                             MaximumIndependentSetAlgorithm::BranchAndBound,
                     },
-                    reset_aromatic_valence: false,
                     ..AromaticityResolveConfig::default()
                 },
             )
@@ -1218,35 +1231,47 @@ mod tests {
                         .with_charge(0)
                         .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
                 },
-                Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(BondId(0)),
-                    old: None,
-                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(0)),
+                    old: Some(AtomConstraintForm::AromaticValence(
+                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+                    )),
+                    new: None,
                 },
-                Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(BondId(1)),
-                    old: None,
-                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(1)),
+                    old: Some(AtomConstraintForm::AromaticValence(
+                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+                    )),
+                    new: None,
                 },
-                Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(BondId(2)),
-                    old: None,
-                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(2)),
+                    old: Some(AtomConstraintForm::AromaticValence(
+                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+                    )),
+                    new: None,
                 },
-                Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(BondId(3)),
-                    old: None,
-                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(3)),
+                    old: Some(AtomConstraintForm::AromaticValence(
+                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+                    )),
+                    new: None,
                 },
-                Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(BondId(4)),
-                    old: None,
-                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(4)),
+                    old: Some(AtomConstraintForm::AromaticValence(
+                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+                    )),
+                    new: None,
                 },
-                Edit::ModifyBondConstraint {
-                    id: BondHandle::Id(BondId(5)),
-                    old: None,
-                    new: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(5)),
+                    old: Some(AtomConstraintForm::AromaticValence(
+                        AromaticValenceForm::Aromatic(NumForm::Lit(1)),
+                    )),
+                    new: None,
                 },
             ])))
         );
@@ -1411,28 +1436,25 @@ mod tests {
     #[rstest]
     #[case::homogeneous_localized(
         AromaticityResolveConfig::default(),
-        mol_dsl_concrete!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
+        mol_dsl_concrete!(r#"{:atoms ["C#h#a" "C#h#a" "C#c+#h#a0"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
-        NumForm::Lit(0),
-        vec![NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(1)],
-        vec![
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-            AromaticValenceForm::Aromatic(NumForm::Lit(0)),
-        ]
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "C#c+#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,0]"}]
+        }"#)
     )]
     #[case::heterogeneous_localized(
         AromaticityResolveConfig::default(),
-        mol_dsl_concrete!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a"
-                                      "C #h #a" "C #h #a" "C #h #a"]
-                              :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
-                                      [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
-        NumForm::Lit(0),
-        vec![
-            NumForm::Lit(1), NumForm::Lit(0), NumForm::Lit(0),
-            NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(0),
-        ],
-        vec![AromaticValenceForm::Aromatic(NumForm::Lit(1)); 6]
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#c+#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["N#c+#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
     )]
     #[case::accepted_system_with_rejected_projections(
         AromaticityResolveConfig {
@@ -1440,81 +1462,79 @@ mod tests {
             ..AromaticityResolveConfig::default()
         },
         mol_dsl_concrete!(r#"{
-            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"
-                    "C#h3#a"]
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h3#a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
         }"#),
-        NumForm::Lit(0),
-        vec![NumForm::Lit(0); 7],
-        vec![
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-            AromaticValenceForm::Aromatic(NumForm::Lit(1)),
-        ]
-    )]
-    #[case::reset_source_constraints(
-        AromaticityResolveConfig {
-            reset_aromatic_valence: true,
-            ..AromaticityResolveConfig::default()
-        },
-        benzene(),
-        NumForm::Lit(0),
-        vec![NumForm::Lit(0); 6],
-        vec![AromaticValenceForm::Undetermined; 6]
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h3#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
     )]
     fn test_aromaticity_resolver_resolve(
         aromaticity_model: AromaticityModel,
         #[case] config: AromaticityResolveConfig,
         #[case] mut molecule: Molecule,
-        #[case] expected_system_charge: NumForm,
-        #[case] expected_atom_charges: Vec<NumForm>,
-        #[case] expected_aromatic_valences: Vec<AromaticValenceForm>,
+        #[case] expected: Molecule,
     ) {
-        let consumed =
-            AromaticityResolver::with_config(&aromaticity_model, config).resolve(molecule.clone());
+        let resolver = AromaticityResolver::with_config(&aromaticity_model, config);
         assert_eq!(
-            AromaticityResolver::with_config(&aromaticity_model, config)
-                .resolve_into(&mut molecule),
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule),
             Ok(Solution::Determined(()))
         );
-        assert_eq!(molecule.aromatic_systems().count(), 1);
-        assert_eq!(
-            molecule
-                .aromatic_system(AromaticSystemId(0))
-                .attributes()
-                .charge,
-            expected_system_charge
-        );
-        assert_eq!(
-            molecule
-                .atoms()
-                .iter()
-                .map(|atom| atom.attributes().charge.clone())
-                .collect::<Vec<_>>(),
-            expected_atom_charges
-        );
-        assert_eq!(
-            molecule
-                .atoms()
-                .iter()
-                .map(|atom| atom.attributes().constraints.aromatic_valence().clone())
-                .collect::<Vec<_>>(),
-            expected_aromatic_valences
-        );
-        assert!(molecule.bonds().iter().all(|bond| matches!(
-            bond.attributes()
-                .constraints
-                .get(BondConstraintKey::Aromatic),
-            Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))
-        )));
-        assert_eq!(consumed, Ok(Solution::Determined(molecule)));
+        assert_eq!(molecule, expected);
     }
 
     type SelectOutcome = Solution<ResolveState, AromaticityContradiction>;
+
+    #[rstest]
+    #[case::added_system(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a#v2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a#R+"] [1 2 "1#a"] [2 3 "1#a"]
+                    [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#v2" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1#R+"] [1 2 "1"] [2 3 "1"]
+                    [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
+    )]
+    #[case::biphenyl(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"
+                    "C#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"]
+                    [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]
+                    [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"]
+                    [9 10 "1#a"] [10 11 "1#a"] [11 6 "1#a"] [0 6 "1#a!"]]
+        }"#),
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C#h" "C#h" "C#h" "C#h" "C#h"
+                    "C" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
+                    [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [6 7 "1"] [7 8 "1"] [8 9 "1"]
+                    [9 10 "1"] [10 11 "1"] [11 6 "1"] [0 6 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}
+                               {:atoms [6 7 8 9 10 11] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
+    )]
+    fn test_aromaticity_resolver_resolve_discharge(
+        aromaticity_model: AromaticityModel,
+        #[case] molecule: Molecule,
+        #[case] expected: Molecule,
+    ) {
+        assert_eq!(
+            AromaticityResolver::new(&aromaticity_model).resolve(molecule),
+            Ok(Solution::Determined(expected))
+        );
+    }
 
     #[rstest]
     #[case::benzene(resolved_benzene(),
