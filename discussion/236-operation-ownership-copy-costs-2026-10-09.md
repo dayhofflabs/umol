@@ -1580,7 +1580,7 @@ This plan runs before 181's. Both plans together are the 0.10 release blocker.
 No production change starts before its subitem is written here. Subitem labels
 remain stable; implementation follows document order and the explicit
 dependencies, with the agreed exception that S3b1–S3b3 finish before returning
-to the open S3a3–S3a4 items. S3c, S3f, and S3g specify parts of S3b, as marked
+to S3a3–S3a4. S3c, S3f, and S3g specify parts of S3b, as marked
 below. S3b is the Rust reading migration; S3b1–S3b3 sequence ring ownership,
 ring bindings, and semantic-reading bindings after it.
 
@@ -2130,7 +2130,7 @@ that read an absent key as `None`, which read `Undetermined`.
 **Verification:** the resolve and substructure bench groups, against a baseline
 taken before the change.
 
-#### S3a3 — Vacuous stereo constraint matching
+#### S3a3 — Vacuous stereo constraint matching **Done**
 
 **Modules:** graph-IR constraint/stereo. **Green.** [dep: S3a2]
 
@@ -2145,6 +2145,25 @@ an absent target entry; a target carrying only another parameterized key;
 matching and conflicting determined values; and a determined pattern against
 an absent or vacuous target. Check exact booleans against the meet-based
 definition and retain the existing normalization cases.
+
+**Completion (2026-10-12):** The shared matches implementation reads the
+target's ligand-symmetry invariant and fluxionality active value through the
+borrowed getters at the pattern's full key. An absent key therefore contributes
+top, including when the target contains only another permutation, orientation,
+or ligand pair. Matching remains pattern-driven and adds no cloning,
+allocation, or normalization. Public signatures and storage are unchanged.
+
+Both containers gain 28 exact cases covering all four key families, with
+checks against the meet definition and normalized forms in the matching tables.
+The new raw-input cases exposed ten failures before the correction; all 107
+targeted constraint-container matching cases pass afterward. Existing matching
+and normalization cases are retained.
+
+**Verification:** Workspace tests with all features pass (37,001 tests, ten
+ignored), including the stereo lattice properties and normalization cases.
+The full Python suite passes (2,204 tests, two skipped) after rebuilding under
+Python 3.13.15. Workspace Clippy with all targets/features and warnings denied,
+formatting, and diff checks also pass. Logs are in scratch/236-s3a3.
 
 #### S3a4 — Borrow stereo validation entries
 
