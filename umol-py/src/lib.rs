@@ -113,10 +113,9 @@ use crate::{
     reaction_span::ReactionSpan,
     remap::{MoleculeRemapping, Remapping},
     resolve::{
-        AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
-        AromaticityResolveConfig, AtomCompletions, IsotopePolicy, ResolveConfig,
-        ResolveContradiction, ResolveReport, Solution, StereoFailurePolicy, StereoMismatchPolicy,
-        StereoResolveConfig,
+        AromaticityFailurePolicy, AromaticityResolveConfig, AtomCompletions, IsotopePolicy,
+        ResolveConfig, ResolveContradiction, ResolveReport, Solution, StereoFailurePolicy,
+        StereoMismatchPolicy, StereoResolveConfig,
     },
     ring::{
         RingAtomView, RingBondView, RingConfig, RingConnection, RingGraph, RingModel, RingRelation,
@@ -286,9 +285,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticityModel>()?;
         module.add_class::<AromaticityRule>()?;
         module.add_class::<AromaticityTieBreak>()?;
-        module.add_class::<AromaticBondConstraintMismatchPolicy>()?;
         module.add_class::<AromaticityFailurePolicy>()?;
-        module.add_class::<AromaticityMismatchPolicy>()?;
         module.add_class::<StereoFailurePolicy>()?;
         module.add_class::<StereoMismatchPolicy>()?;
         module.add_class::<StereoKindModel>()?;

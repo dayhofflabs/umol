@@ -7,7 +7,6 @@ import umol._native as native
 
 PUBLIC_EXPORTS = frozenset(
     """
-    AromaticBondConstraintMismatchPolicy
     AromaticSystemForm
     AromaticSystemUpdate
     AromaticSystemConstraintForm
@@ -22,7 +21,6 @@ PUBLIC_EXPORTS = frozenset(
     AromaticValenceForm
     AromaticityConfig
     AromaticityFailurePolicy
-    AromaticityMismatchPolicy
     AromaticityModel
     AromaticityRule
     AromaticityTieBreak

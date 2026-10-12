@@ -1,11 +1,9 @@
 import pytest
 
 from umol import (
-    AromaticBondConstraintMismatchPolicy,
     AromaticValenceForm,
     AromaticityConfig,
     AromaticityFailurePolicy,
-    AromaticityMismatchPolicy,
     AromaticityResolveConfig,
     AtomForm,
     AtomFieldChange,
@@ -66,10 +64,6 @@ def test_resolved_smiles_workflow():
             ),
             aromatic_valence_failure=AromaticityFailurePolicy.Error,
             aromatic_system_failure=AromaticityFailurePolicy.Error,
-            aromatic_valence_mismatch=AromaticityMismatchPolicy.Error,
-            aromatic_bond_constraint_mismatch=(
-                AromaticBondConstraintMismatchPolicy.Error
-            ),
             reset_aromatic_valence=False,
         ),
         stereo=StereoResolveConfig(reset_stereo_constraints=False),

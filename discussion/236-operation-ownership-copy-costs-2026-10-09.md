@@ -1583,6 +1583,9 @@ dependencies, with the agreed exception that S3b1–S3b3 finish before returning
 to S3a3–S3a4. S3c, S3f, and S3g specify parts of S3b, as marked
 below. S3b is the Rust reading migration; S3b1–S3b3 sequence ring ownership,
 ring bindings, and semantic-reading bindings after it.
+S3d includes S4g's aromaticity mismatch-policy removal: reading contradictory
+evidence as bottom cannot supply a ReplaceEntity candidate. S4g retains the
+stereo mismatch-policy removal.
 
 Use focused checks for individual subitems. Run workspace tests after a set of
 related changes and at the final gate.
@@ -2449,10 +2452,17 @@ keep their results.
 **Verification:** the resolve bench groups resolve_ingest_smiles and
 smiles_roundtrip/resolve, against a baseline taken before the change.
 
-#### S3d — Perception reads typed contributions from evidenced_complete
+#### S3d — Perception reads typed contributions from evidenced_complete **Done**
 
-**Modules:** graph aromaticity, its rule modules, resolve/aromaticity, and
-transform/aromatizer. **Green.** [dep: S3b]
+**Modules:** graph aromaticity, its rule modules, resolve/aromaticity, resolve,
+and transform/aromatizer; umol-py resolve bindings, exports, and tests.
+**Breaking, red→green within the subitem.** [dep: S3b]
+
+Remove AromaticityMismatchPolicy and AromaticBondConstraintMismatchPolicy,
+including the aromatic_valence_mismatch and aromatic_bond_constraint_mismatch
+config fields, recovery branches, Python classes, keywords, getters, and repr
+fields. Every aromaticity mismatch is a contradiction. This portion of S4g
+moves here because bottom evidence cannot produce a replacement candidate.
 
 Perception takes each atom's contribution through `impl Fn(AtomId) ->
 AromaticValence` instead of `Fn(AtomId) -> Option<u8>`: find_systems, each
@@ -2472,6 +2482,59 @@ seven-membered ring, no longer form a system, so the six atoms are an
 AromaticValenceFailure in standalone resolution; an atom that asserts
 non-aromaticity next to a bond that asserts aromaticity is an
 AromaticValenceBondMismatch in standalone resolution.
+Cover mismatch contradictions in standalone and composite resolution; remove
+tests of the retired recovery policies and retain the Python config parity tests.
+
+**Completion (2026-10-12):** Perception callbacks, completion selection, and
+electrons_from_kekule now use AromaticValence. NotAromatic excludes an atom;
+Aromatic(0) remains eligible. Numeric consumers use infallible casts and
+ordinary arithmetic under the repository size assumption; integer-representation
+bounds do not determine aromatic eligibility. derive reads complete evidence
+once per atom; selection does so for atoms without completions. Both retain
+scalar contributions for subsequent perception calls.
+Positive evidence with a nonliteral count leaves the result Underdetermined;
+bottom reports the corresponding system or localized-bond mismatch. Stored
+electron-vector length failures retain their existing classification.
+
+Both aromaticity mismatch policies and their recovery branches are removed
+from Rust and Python, including config fields, exports, constructor keywords,
+getters, and repr fields. The remaining failure policies cannot permit a
+mismatch. S4g retains only the stereo policy removal.
+
+**Verification:** All focused checks pass: 331 aromatic unit cases, 187
+composite-resolver cases, 13 aromatizer cases, the exhaustive-selection
+reference property, 34 aromatic conformance fixtures, and 27 matching and
+kekulization integration cases. The missing-evidence regression fails before
+the change and passes afterward; its explicit zero-contribution counterpart
+remains aromatic. Tests also cover evidence refinement, both new and existing
+mismatch paths, and unchanged inputs after rejected resolution. The reference
+property retains its generator and search law.
+
+After rebuilding with Python 3.13.15, all 60 Rust binding cases and 225 focused
+Python cases pass. Clippy for umol-graph and umol-py with all targets/features
+and warnings denied, formatting, and diff checks pass. Workspace tests were
+not rerun for this subitem. Logs are in scratch/236-s3d.
+
+After removing the numeric conversion guards, the aromatic unit cases,
+selection reference property, aromatic conformance fixtures, and umol-graph
+Clippy with all targets/features pass again.
+
+**Performance:** Recorded before removing the numeric conversion guards.
+A before/after comparison of the existing resolve_ingest_smiles
+aromatic cases used the s3d-before baseline, 20 samples, one-second warm-up,
+and two-second measurement per case. No builds or tests ran concurrently.
+
+| Case | Criterion change | 95% interval |
+| --- | ---: | ---: |
+| benzene | -0.20% | -0.54% to +0.09% |
+| pyridine | -0.65% | -1.56% to +0.04% |
+| quinoline | -0.33% | -0.77% to +0.06% |
+| purine | +1.92% | +1.08% to +2.87% |
+
+Criterion detects no significant change for the first three cases and flags
+a regression for purine. This single short comparison does not isolate its
+cause or establish performance beyond these cases. Both benchmark logs are
+in scratch/236-s3d.
 
 #### S3e — Stereo perception reads evidenced_complete
 
@@ -2714,15 +2777,14 @@ Aromatizer planning failure.
 
 #### S4g — Mismatch policies removed
 
-**Modules:** graph resolve/aromaticity, resolve/stereo, and resolve; umol-py
+The aromaticity policy removal is included in S3d.
+
+**Modules:** graph resolve/stereo and resolve; umol-py
 resolve bindings, the Python package exports, and Python tests. **Breaking,
 red→green within the subitem.** [dep: none]
 
-Remove AromaticityMismatchPolicy, AromaticBondConstraintMismatchPolicy, and
-StereoMismatchPolicy, with the fields aromatic_valence_mismatch,
-aromatic_bond_constraint_mismatch, tetrahedral_stereo_mismatch, and
-cis_trans_stereo_mismatch. Every mismatch is a contradiction: the aromaticity
-resolver's Keep, RemoveConstraint, and ReplaceEntity branches and the stereo
+Remove StereoMismatchPolicy, with the fields tetrahedral_stereo_mismatch and
+cis_trans_stereo_mismatch. Every stereo mismatch is a contradiction: the
 resolver's Keep, RemoveConstraint, ReplaceEntity, and RemoveBoth branches go.
 Remove the Python classes, keywords, getters, and repr fields.
 

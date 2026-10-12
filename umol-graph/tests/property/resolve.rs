@@ -36,9 +36,9 @@ use umol_graph::ops::resolve::{
 };
 use umol_graph::ops::valence::compare::compare_by_key;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticValenceForm, AtomForm, AtomId, BondForm, ElectronCountsForm,
-    ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel,
-    RingSetKind, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomForm, AtomId, BondForm,
+    ElectronCountsForm, ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm,
+    RingConfig, RingModel, RingSetKind, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -166,19 +166,20 @@ fn exhaustive_select(
                 .zip(&completion_indices)
                 .map(|(&(atom, _), &index)| (atom, index))
                 .collect();
-            let outcome =
-                perception
-                    .find_systems(molecule, AromaticityConfig::default(), |atom| match choice
-                        .get(&atom)
-                    {
+            let outcome = perception
+                .find_systems(molecule, AromaticityConfig::default(), |atom| {
+                    match choice.get(&atom) {
                         Some(&index) => {
                             contribution(&completions.get(atom).expect("flexible atom")[index])
                         }
                         None => completions
                             .get(atom)
                             .and_then(|disjuncts| contribution(&disjuncts[0])),
-                    })
-                    .expect("Hückel perception is infallible");
+                    }
+                    .map(|value| AromaticValence::Aromatic(i64::from(value)))
+                    .unwrap_or(AromaticValence::NotAromatic)
+                })
+                .expect("Hückel perception is infallible");
             let found = match outcome {
                 Solution::Determined(found) => found,
                 Solution::Underdetermined(_) => {

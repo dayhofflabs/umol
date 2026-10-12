@@ -8,16 +8,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use smallvec::smallvec;
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
-    AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
-    BondId, BondUpdate, BooleanForm, Edits, ElectronCountsForm, Lattice, Molecule,
-    MoleculeApplyError, NumForm, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValence,
+    AromaticValenceForm, AsLit, AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate,
+    BondConstraintForm, BondHandle, BondId, BondUpdate, BooleanForm, Edits, ElectronCountsForm,
+    Lattice, Molecule, MoleculeApplyError, NumForm, RingSet, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
-    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityInconsistency,
-    AromaticityPerceiver,
+    read_aromatic_valence, AromaticityConfig, AromaticityContradiction, AromaticityError,
+    AromaticityInconsistency, AromaticityPerceiver,
 };
 use crate::ops::model::{AromaticityModel, AromaticityTieBreak, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
@@ -33,32 +33,11 @@ pub enum AromaticityFailurePolicy {
     Keep,
 }
 
-/// How aromaticity resolution handles a valid aromatic-valence constraint that disagrees with a
-/// valid aromatic system.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AromaticityMismatchPolicy {
-    Error,
-    Keep,
-    RemoveConstraint,
-    ReplaceEntity,
-}
-
-/// How aromaticity resolution handles a valid localized-bond aromatic constraint that disagrees
-/// with a valid aromatic system.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AromaticBondConstraintMismatchPolicy {
-    Error,
-    Keep,
-    RemoveConstraint,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AromaticityResolveConfig {
     pub perception: AromaticityConfig,
     pub aromatic_valence_failure: AromaticityFailurePolicy,
     pub aromatic_system_failure: AromaticityFailurePolicy,
-    pub aromatic_valence_mismatch: AromaticityMismatchPolicy,
-    pub aromatic_bond_constraint_mismatch: AromaticBondConstraintMismatchPolicy,
     pub reset_aromatic_valence: bool,
 }
 
@@ -68,8 +47,6 @@ impl Default for AromaticityResolveConfig {
             perception: AromaticityConfig::default(),
             aromatic_valence_failure: AromaticityFailurePolicy::Error,
             aromatic_system_failure: AromaticityFailurePolicy::Error,
-            aromatic_valence_mismatch: AromaticityMismatchPolicy::Error,
-            aromatic_bond_constraint_mismatch: AromaticBondConstraintMismatchPolicy::Error,
             reset_aromatic_valence: false,
         }
     }
@@ -113,6 +90,7 @@ impl AromaticityResolver {
     }
 
     /// Construct the complete aromaticity edit plan without mutating `molecule`.
+    /// Mismatched evidence is contradictory regardless of the failure policies.
     pub fn plan_resolve(
         &self,
         molecule: &Molecule,
@@ -129,14 +107,9 @@ impl AromaticityResolver {
                         AromaticityInconsistency::AromaticSystemFailure { .. } => {
                             self.config.aromatic_system_failure == AromaticityFailurePolicy::Error
                         }
-                        AromaticityInconsistency::AromaticValenceMismatch { .. } => {
-                            self.config.aromatic_valence_mismatch
-                                == AromaticityMismatchPolicy::Error
-                        }
-                        AromaticityInconsistency::AromaticBondConstraintMismatch { .. } => {
-                            self.config.aromatic_bond_constraint_mismatch
-                                == AromaticBondConstraintMismatchPolicy::Error
-                        }
+                        AromaticityInconsistency::AromaticValenceMismatch { .. }
+                        | AromaticityInconsistency::AromaticValenceBondMismatch { .. }
+                        | AromaticityInconsistency::AromaticBondConstraintMismatch { .. } => true,
                     };
                     if error {
                         return Ok(Solution::Contradictory(inconsistency.into()));
@@ -154,112 +127,10 @@ impl AromaticityResolver {
                     .collect();
 
                 let mut edits = Edits::new();
-                let mut remove_constraints = BTreeSet::new();
-                let mut remove_bond_constraints = BTreeSet::new();
-                let mut replacements = BTreeSet::new();
-                let mut suppressed = BTreeSet::new();
-
-                for inconsistency in derivation.inconsistencies {
-                    match inconsistency {
-                        AromaticityInconsistency::AromaticValenceMismatch { atom, system } => {
-                            let existing_members: BTreeSet<AtomId> =
-                                molecule.aromatic_system(system).atom_ids().collect();
-                            let candidate = derivation.systems.iter().position(|(atoms, _)| {
-                                atoms.iter().copied().collect::<BTreeSet<_>>() == existing_members
-                            });
-                            match self.config.aromatic_valence_mismatch {
-                                AromaticityMismatchPolicy::Error => unreachable!(),
-                                AromaticityMismatchPolicy::Keep => {
-                                    if let Some(candidate) = candidate {
-                                        suppressed.insert(candidate);
-                                    }
-                                }
-                                AromaticityMismatchPolicy::RemoveConstraint => {
-                                    remove_constraints.insert(atom);
-                                    if let Some(candidate) = candidate {
-                                        suppressed.insert(candidate);
-                                    }
-                                }
-                                AromaticityMismatchPolicy::ReplaceEntity => {
-                                    if let Some(candidate) = candidate {
-                                        replacements.insert((system, candidate));
-                                    }
-                                }
-                            }
-                        }
-                        AromaticityInconsistency::AromaticBondConstraintMismatch {
-                            bond, ..
-                        } => match self.config.aromatic_bond_constraint_mismatch {
-                            AromaticBondConstraintMismatchPolicy::Error => unreachable!(),
-                            AromaticBondConstraintMismatchPolicy::Keep => {}
-                            AromaticBondConstraintMismatchPolicy::RemoveConstraint => {
-                                remove_bond_constraints.insert(bond);
-                            }
-                        },
-                        AromaticityInconsistency::AromaticValenceFailure { .. }
-                        | AromaticityInconsistency::AromaticSystemFailure { .. } => {}
-                    }
-                }
-
-                if !replacements.is_empty() {
-                    let removes = replacements
-                        .iter()
-                        .map(|&(system, _)| {
-                            let view = molecule.aromatic_system(system);
-                            (
-                                AromaticSystemHandle::Id(system),
-                                view.atom_ids().map(AtomHandle::Id).collect(),
-                                view.attributes().clone(),
-                            )
-                        })
-                        .collect();
-                    edits.remove_aromatic_systems(removes);
-                }
-
-                for id in remove_constraints {
-                    let mut update = AtomUpdate::default();
-                    update.constraints.set(AtomConstraintForm::AromaticValence(
-                        AromaticValenceForm::Undetermined,
-                    ));
-                    edits.update_atom(AtomHandle::Id(id), molecule.atom(id).attributes(), &update);
-                }
-                for bond in remove_bond_constraints {
-                    let mut update = BondUpdate::default();
-                    update
-                        .constraints
-                        .set(BondConstraintForm::Aromatic(BooleanForm::Undetermined));
-                    edits.update_bond(
-                        BondHandle::Id(bond),
-                        molecule.bond(bond).attributes(),
-                        &update,
-                    );
-                }
-
-                let replaced_candidates: BTreeSet<usize> = replacements
-                    .iter()
-                    .map(|&(_, candidate)| candidate)
-                    .collect();
-                let replaced_entities: BTreeSet<AromaticSystemId> =
-                    replacements.iter().map(|&(system, _)| system).collect();
-                let retained_existing: BTreeSet<Vec<AtomId>> = molecule
-                    .aromatic_systems()
-                    .iter()
-                    .filter(|system| !replaced_entities.contains(&system.id()))
-                    .map(|system| {
-                        let mut atoms: Vec<AtomId> = system.atom_ids().collect();
-                        atoms.sort_unstable();
-                        atoms
-                    })
-                    .collect();
-
-                for (candidate, (atoms, system)) in derivation.systems.into_iter().enumerate() {
+                for (atoms, system) in derivation.systems {
                     let mut key = atoms.clone();
                     key.sort_unstable();
-                    if replaced_candidates.contains(&candidate)
-                        || (!suppressed.contains(&candidate)
-                            && !existing.contains(&key)
-                            && !retained_existing.contains(&key))
-                    {
+                    if !existing.contains(&key) {
                         for edit in self.plan_system(molecule, atoms, system) {
                             edits.push(edit);
                         }
@@ -462,7 +333,7 @@ impl AromaticityResolver {
     ///
     /// Each combination chooses one completion per flexible atom and the systems
     /// perceived from those contributions. Atoms outside the candidate sets use
-    /// their stored or overlay-derived contributions. Accepted systems remain
+    /// their complete aromatic-valence evidence. Accepted systems remain
     /// disjoint: selection takes a whole combination's systems together.
     ///
     /// A combination must reproduce stored systems touching the component. Under
@@ -475,7 +346,8 @@ impl AromaticityResolver {
     ///
     /// More than MAX_COMPLETION_COMBINATIONS combinations in a component, a
     /// nonliteral stored contribution outside the candidate sets, or undetermined
-    /// perception yields Underdetermined. An uncovered atom requiring aromaticity
+    /// perception yields Underdetermined. Contradictory evidence outside the candidate
+    /// sets yields Contradictory. An uncovered atom requiring aromaticity
     /// yields Contradictory under the Error failure policy. If no positive aromatic
     /// assertion or stored aromatic system requires selection, returns state unchanged.
     /// Leaves state.tie_breaks unchanged; use [`Self::select_with_report`] to include
@@ -616,15 +488,21 @@ impl AromaticityResolver {
             mut systems,
             mut tie_breaks,
         } = state;
-        let carrier_atoms: BTreeSet<AtomId> = completions.iter().map(|(atom, _)| atom).collect();
-        let stored_gate = molecule.atoms().iter().any(|atom| {
-            !carrier_atoms.contains(&atom.id())
-                && matches!(
-                    atom.attributes().constraints.aromatic_valence(),
-                    AromaticValenceForm::Aromatic(valence) if valence.as_lit().is_none()
-                )
-        });
-        if stored_gate {
+        let mut stored = vec![AromaticValence::NotAromatic; molecule.atoms().count()];
+        let mut underdetermined = false;
+        for atom in molecule.atoms().ids() {
+            if completions.get(atom).is_some() {
+                continue;
+            }
+            match read_aromatic_valence(molecule, atom) {
+                Ok(Some(value)) => stored[atom.index()] = value,
+                Ok(None) => underdetermined = true,
+                Err(inconsistency) => {
+                    return Ok(Solution::Contradictory(inconsistency.into()));
+                }
+            }
+        }
+        if underdetermined {
             return Ok(Solution::Underdetermined(ResolveState {
                 completions,
                 systems,
@@ -632,18 +510,19 @@ impl AromaticityResolver {
             }));
         }
 
-        let contribution = |form: &AtomForm| -> Option<u8> {
-            match form.constraints.aromatic_valence() {
-                AromaticValenceForm::Aromatic(NumForm::Lit(valence)) => u8::try_from(*valence).ok(),
-                _ => None,
-            }
+        let contribution = |form: &AtomForm| -> AromaticValence {
+            form.constraints
+                .aromatic_valence()
+                .as_lit()
+                .unwrap_or(AromaticValence::NotAromatic)
         };
 
         // Flexible: carrier atoms whose disjuncts differ in contribution.
-        let flexible: Vec<(AtomId, Vec<Option<u8>>)> = completions
+        let flexible: Vec<(AtomId, Vec<AromaticValence>)> = completions
             .iter()
             .filter_map(|(atom, disjuncts)| {
-                let contributions: Vec<Option<u8>> = disjuncts.iter().map(contribution).collect();
+                let contributions: Vec<AromaticValence> =
+                    disjuncts.iter().map(contribution).collect();
                 (contributions.iter().collect::<BTreeSet<_>>().len() > 1)
                     .then_some((atom, contributions))
             })
@@ -657,11 +536,13 @@ impl AromaticityResolver {
             .perception
             .candidate_rings(molecule, self.config.perception);
         let components = candidate_components(&rings, |atom_id| match completions.get(atom_id) {
-            Some(disjuncts) => disjuncts.iter().any(|form| contribution(form).is_some()),
-            None => stored_contribution(molecule, atom_id).is_some(),
+            Some(disjuncts) => disjuncts
+                .iter()
+                .any(|form| matches!(contribution(form), AromaticValence::Aromatic(_))),
+            None => matches!(stored[atom_id.index()], AromaticValence::Aromatic(_)),
         });
         for component in &components {
-            let component_flexible: Vec<&(AtomId, Vec<Option<u8>>)> = flexible
+            let component_flexible: Vec<&(AtomId, Vec<AromaticValence>)> = flexible
                 .iter()
                 .filter(|(atom, _)| component.contains(atom))
                 .collect();
@@ -721,7 +602,7 @@ impl AromaticityResolver {
                     }
                 }
             }
-            let component_flexible: Vec<(AtomId, Vec<Option<u8>>)> = ordered_atoms
+            let component_flexible: Vec<(AtomId, Vec<AromaticValence>)> = ordered_atoms
                 .iter()
                 .map(|&atom| {
                     flexible
@@ -753,7 +634,7 @@ impl AromaticityResolver {
                     })
                 })
                 .collect();
-            let fixed_contributions: BTreeMap<AtomId, Option<u8>> = component
+            let fixed_contributions: BTreeMap<AtomId, AromaticValence> = component
                 .iter()
                 .filter(|atom| !flexible_positions.contains_key(atom))
                 .map(|&atom| {
@@ -761,7 +642,7 @@ impl AromaticityResolver {
                         atom,
                         match completions.get(atom) {
                             Some(disjuncts) => contribution(&disjuncts[0]),
-                            None => stored_contribution(molecule, atom),
+                            None => stored[atom.index()],
                         },
                     )
                 })
@@ -782,12 +663,22 @@ impl AromaticityResolver {
                             let options = &component_flexible[position].1;
                             let assigned = (position < path.len())
                                 .then(|| options[path[position]])
-                                .map(|value| value.map(|value| (value, value)));
+                                .map(|value| match value {
+                                    AromaticValence::Aromatic(value) => {
+                                        Some((value as u32, value as u32))
+                                    }
+                                    AromaticValence::NotAromatic => None,
+                                });
                             match assigned {
                                 Some(value) => value,
                                 None => {
-                                    let values: Vec<u8> =
-                                        options.iter().filter_map(|&value| value).collect();
+                                    let values: Vec<u32> = options
+                                        .iter()
+                                        .filter_map(|&value| match value {
+                                            AromaticValence::Aromatic(value) => Some(value as u32),
+                                            AromaticValence::NotAromatic => None,
+                                        })
+                                        .collect();
                                     values
                                         .iter()
                                         .copied()
@@ -796,12 +687,13 @@ impl AromaticityResolver {
                                 }
                             }
                         }
-                        None => fixed_contributions[atom].map(|value| (value, value)),
+                        None => match fixed_contributions[atom] {
+                            AromaticValence::Aromatic(value) => Some((value as u32, value as u32)),
+                            AromaticValence::NotAromatic => None,
+                        },
                     };
                     match range {
-                        Some((lower, upper)) => {
-                            ranges.push((u32::from(lower), u32::from(upper)));
-                        }
+                        Some(range) => ranges.push(range),
                         None => return true,
                     }
                 }
@@ -843,7 +735,7 @@ impl AromaticityResolver {
                             }
                             None => match completions.get(atom) {
                                 Some(disjuncts) => contribution(&disjuncts[0]),
-                                None => stored_contribution(molecule, atom),
+                                None => stored[atom.index()],
                             },
                         },
                     )?;
@@ -1090,24 +982,6 @@ impl AromaticityResolver {
     }
 }
 
-/// Member-wise lexicographic comparison of two restrictions for
-/// the same system, in ascending member order, each member compared by the
-/// tie-break key over its candidate forms.
-/// The contribution of an atom outside the carrier: a literal stored
-/// assertion, else — with no assertion opinion — the stored aromatic
-/// system's literal electron count.
-fn stored_contribution(molecule: &Molecule, atom: AtomId) -> Option<u8> {
-    let view = molecule.atom(atom);
-    match view.attributes().constraints.aromatic_valence() {
-        AromaticValenceForm::Aromatic(NumForm::Lit(valence)) => u8::try_from(*valence).ok(),
-        AromaticValenceForm::Aromatic(_) | AromaticValenceForm::NotAromatic => None,
-        AromaticValenceForm::Undetermined => match view.aromatic_valence() {
-            NumForm::Lit(valence) => u8::try_from(valence).ok(),
-            _ => None,
-        },
-    }
-}
-
 /// Connected components of the aromatic-candidate graph: the perception's
 /// rings whose members are all aromatic-capable, connected over shared
 /// atoms. The aromaticity rule's acceptance couples atoms only within a
@@ -1309,8 +1183,6 @@ mod tests {
                 perception: AromaticityConfig::default(),
                 aromatic_valence_failure: AromaticityFailurePolicy::Error,
                 aromatic_system_failure: AromaticityFailurePolicy::Error,
-                aromatic_valence_mismatch: AromaticityMismatchPolicy::Error,
-                aromatic_bond_constraint_mismatch: AromaticBondConstraintMismatchPolicy::Error,
                 reset_aromatic_valence: false,
             }
         );
@@ -1397,145 +1269,95 @@ mod tests {
     }
 
     #[rstest]
-    #[case::error(
-        AromaticityMismatchPolicy::Error,
-        Solution::Contradictory(AromaticityContradiction::Inconsistency(
-            AromaticityInconsistency::AromaticValenceMismatch {
-                atom: AtomId(0),
-                system: AromaticSystemId(0),
-            }
-        ))
-    )]
-    #[case::keep(AromaticityMismatchPolicy::Keep, Solution::Determined(Edits::new()))]
-    #[case::remove_constraint(
-        AromaticityMismatchPolicy::RemoveConstraint,
-        Solution::Determined(Edits::from_iter([
-            Edit::ModifyAtomConstraint {
-                id: AtomHandle::Id(AtomId(0)),
-                old: Some(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Aromatic(NumForm::Lit(2)),
-                )),
-                new: None,
-            },
-            Edit::ModifyAtomConstraint {
-                id: AtomHandle::Id(AtomId(1)),
-                old: Some(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Aromatic(NumForm::Lit(0)),
-                )),
-                new: None,
-            },
-        ]))
-    )]
-    #[case::replace_entity(
-        AromaticityMismatchPolicy::ReplaceEntity,
-        Solution::Determined(Edits::from_iter([
-            Edit::RemoveAromaticSystems {
-                removes: vec![(
-                    AromaticSystemHandle::Id(AromaticSystemId(0)),
-                    (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
-                    AromaticSystemForm::from_electrons(vec![1; 6]),
-                )],
-            },
-            Edit::AddAromaticSystem {
-                atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
-                attributes: AromaticSystemForm::from_electrons(vec![2, 0, 1, 1, 1, 1])
-                    .with_charge(0)
-                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
-            },
-        ]))
-    )]
     fn test_aromaticity_resolver_plan_resolve_aromatic_valence_mismatch(
         aromaticity_model: AromaticityModel,
         aromatic_valence_mismatch: Molecule,
-        #[case] policy: AromaticityMismatchPolicy,
-        #[case] expected: Solution<Edits, AromaticityContradiction>,
+        #[values(AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Keep)]
+        failure: AromaticityFailurePolicy,
     ) {
         let resolver = AromaticityResolver::with_config(
             &aromaticity_model,
             AromaticityResolveConfig {
-                aromatic_valence_mismatch: policy,
+                aromatic_valence_failure: failure,
+                aromatic_system_failure: failure,
                 ..AromaticityResolveConfig::default()
             },
         );
-
         assert_eq!(
             resolver.plan_resolve(&aromatic_valence_mismatch),
-            Ok(expected)
+            Ok(Solution::Contradictory(
+                AromaticityInconsistency::AromaticValenceMismatch {
+                    atom: AtomId(0),
+                    system: AromaticSystemId(0),
+                }
+                .into()
+            )),
         );
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_resolve_into_aromatic_valence_mismatch_reset(
-        aromaticity_model: AromaticityModel,
-        mut aromatic_valence_mismatch: Molecule,
-    ) {
-        let resolver = AromaticityResolver::with_config(
-            &aromaticity_model,
-            AromaticityResolveConfig {
-                aromatic_valence_mismatch: AromaticityMismatchPolicy::ReplaceEntity,
-                reset_aromatic_valence: true,
-                ..AromaticityResolveConfig::default()
-            },
-        );
-        let expected = mol_dsl!(
-            r#"{
-            :atoms ["C" "C" "C" "C" "C" "C"]
-            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
-                    [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
-            :aromatic-systems [{
-                :atoms [0 1 2 3 4 5]
-                :attrs "[2,0,1,1,1,1]#c0#u0#s"
-            }]
-        }"#
-        );
-
-        assert_eq!(
-            resolver.resolve_into(&mut aromatic_valence_mismatch),
-            Ok(Solution::Determined(()))
-        );
-        assert_eq!(aromatic_valence_mismatch, expected);
-    }
-
-    #[rstest]
-    #[case::error(
-        AromaticBondConstraintMismatchPolicy::Error,
-        Solution::Contradictory(AromaticityContradiction::Inconsistency(
-            AromaticityInconsistency::AromaticBondConstraintMismatch {
-                bond: BondId(0),
-                system: AromaticSystemId(0),
-            }
-        ))
-    )]
-    #[case::keep(
-        AromaticBondConstraintMismatchPolicy::Keep,
-        Solution::Determined(Edits::new())
-    )]
-    #[case::remove_constraint(
-        AromaticBondConstraintMismatchPolicy::RemoveConstraint,
-        Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraint {
-            id: BondHandle::Id(BondId(0)),
-            old: Some(BondConstraintForm::Aromatic(BooleanForm::Lit(false))),
-            new: None,
-        }]))
-    )]
     fn test_aromaticity_resolver_plan_resolve_aromatic_bond_constraint_mismatch(
         aromaticity_model: AromaticityModel,
         aromatic_bond_constraint_mismatch: Molecule,
-        #[case] policy: AromaticBondConstraintMismatchPolicy,
-        #[case] expected: Solution<Edits, AromaticityContradiction>,
+        #[values(AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Keep)]
+        failure: AromaticityFailurePolicy,
     ) {
         let resolver = AromaticityResolver::with_config(
             &aromaticity_model,
             AromaticityResolveConfig {
-                aromatic_bond_constraint_mismatch: policy,
+                aromatic_valence_failure: failure,
+                aromatic_system_failure: failure,
                 ..AromaticityResolveConfig::default()
             },
         );
-
         assert_eq!(
             resolver.plan_resolve(&aromatic_bond_constraint_mismatch),
-            Ok(expected)
+            Ok(Solution::Contradictory(
+                AromaticityInconsistency::AromaticBondConstraintMismatch {
+                    bond: BondId(0),
+                    system: AromaticSystemId(0),
+                }
+                .into()
+            )),
         );
+    }
+
+    #[rstest]
+    #[case::missing_evidence(
+        mol_dsl!(r#"{
+            :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#h2"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"]
+                    [4 5 "1"] [5 6 "1"] [6 0 "1"]]
+        }"#),
+        AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+    )]
+    #[case::bond_evidence(
+        mol_dsl!(r#"{:atoms ["C#a!" "C#a"] :bonds [[0 1 "1#a"]]}"#),
+        AromaticityInconsistency::AromaticValenceBondMismatch { atom: AtomId(0), bond: BondId(0) },
+    )]
+    #[case::negative_system_member(
+        mol_dsl!(r#"{
+            :atoms ["C#a!" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        AromaticityInconsistency::AromaticValenceMismatch { atom: AtomId(0), system: AromaticSystemId(0) },
+    )]
+    fn test_aromaticity_resolver_plan_resolve_evidence(
+        #[case] mut molecule: Molecule,
+        #[case] expected: AromaticityInconsistency,
+    ) {
+        let original = molecule.clone();
+        let resolver = AromaticityResolver::new(&AromaticityModel::daylight());
+        assert_eq!(
+            resolver.plan_resolve(&molecule),
+            Ok(Solution::Contradictory(expected.into()))
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule),
+            Ok(Solution::Contradictory(expected.into()))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
@@ -2035,6 +1857,45 @@ mod tests {
             tie_breaks: Vec::new(),
         })
     )]
+    #[case::stored_system_refines_assertion(
+        mol_dsl!(r#"{
+            :atoms ["C#a+" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        AtomCompletions::new(),
+        ValenceTieBreak::Strict,
+        Solution::Determined(ResolveState {
+            completions: AtomCompletions::new(),
+            systems: vec![(
+                (0..6).map(AtomId).collect(),
+                AromaticSystemForm::from_electrons(vec![1; 6])
+                    .with_charge(0)
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+            )],
+            tie_breaks: Vec::new(),
+        })
+    )]
+    #[case::bond_evidence_mismatch(
+        mol_dsl!(r#"{:atoms ["C#a!" "C#a"] :bonds [[0 1 "1#a"]]}"#),
+        AtomCompletions::new(),
+        ValenceTieBreak::Strict,
+        Solution::Contradictory(AromaticityInconsistency::AromaticValenceBondMismatch {
+            atom: AtomId(0), bond: BondId(0),
+        }.into())
+    )]
+    #[case::system_evidence_mismatch(
+        mol_dsl!(r#"{
+            :atoms ["C#a2" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        AtomCompletions::new(),
+        ValenceTieBreak::Strict,
+        Solution::Contradictory(AromaticityInconsistency::AromaticValenceMismatch {
+            atom: AtomId(0), system: AromaticSystemId(0),
+        }.into())
+    )]
     #[case::unclaimed_aromatic_contradiction(
         mol_dsl!(r#"{:atoms ["N#c0#a+"] :bonds []}"#),
         AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
@@ -2047,9 +1908,13 @@ mod tests {
         mol_dsl!(r#"{:atoms ["N#c0" "C#c0"] :bonds [[0 1 "1#a+"]]}"#),
         AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
         ValenceTieBreak::Strict,
-        Solution::Contradictory(AromaticityContradiction::Inconsistency(
-            AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }
-        ))
+        Solution::Underdetermined(ResolveState {
+            completions: AtomCompletions::from_iter([(AtomId(0), smallvec![
+                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+            ])]),
+            systems: vec![],
+            tie_breaks: vec![],
+        })
     )]
     #[case::dative_bond_constraint(
         mol_dsl!(r#"{

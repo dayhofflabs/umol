@@ -12,8 +12,8 @@ use std::iter;
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AtomHandle, AtomId, BondConstraintForm, BondHandle, BondUpdate, Edits, ElementForm, Molecule,
-    NumForm,
+    AromaticValence, AtomHandle, AtomId, BondConstraintForm, BondHandle, BondUpdate, Edits,
+    ElementForm, Molecule, NumForm,
 };
 
 use crate::ops::aromaticity::{
@@ -117,26 +117,28 @@ impl Transformer for Aromatizer {
 /// - Zero incident double bonds, atom is C with charge `+1` → 0 π electrons
 ///   (sp² carbocation, empty p_z, e.g. tropylium C⁺).
 /// - Anything else (sp³ C, two or more double bonds, undetermined data) →
-///   `None`, marking the atom as not aromatic-eligible.
-pub fn electrons_from_kekule(molecule: &Molecule, atom: AtomId) -> Option<u8> {
+///   `AromaticValence::NotAromatic`, excluding the atom from perception.
+pub fn electrons_from_kekule(molecule: &Molecule, atom: AtomId) -> AromaticValence {
     let view = molecule.atom(atom);
     let ElementForm::Lit(element) = view.attributes().element else {
-        return None;
+        return AromaticValence::NotAromatic;
     };
     let double_count = view
         .neighbors()
         .filter(|n| matches!(n.bond().attributes().order, NumForm::Lit(2)))
         .count();
     match double_count {
-        1 => Some(1),
+        1 => AromaticValence::Aromatic(1),
         0 => match element {
             Element::N | Element::O | Element::S | Element::Se | Element::P | Element::As => {
-                Some(2)
+                AromaticValence::Aromatic(2)
             }
-            Element::C if matches!(view.attributes().charge, NumForm::Lit(1)) => Some(0),
-            _ => None,
+            Element::C if matches!(view.attributes().charge, NumForm::Lit(1)) => {
+                AromaticValence::Aromatic(0)
+            }
+            _ => AromaticValence::NotAromatic,
         },
-        _ => None,
+        _ => AromaticValence::NotAromatic,
     }
 }
 
@@ -311,5 +313,30 @@ mod tests {
         assert_eq!(results.next(), None);
         assert_eq!(results.next(), None);
         assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::saturated(
+        mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#),
+        AromaticValence::NotAromatic,
+    )]
+    #[case::empty_orbital(
+        mol_dsl_concrete!(r#"{:atoms ["C#c+#h3"]}"#),
+        AromaticValence::Aromatic(0),
+    )]
+    #[case::double_bond(
+        mol_dsl_concrete!(r#"{:atoms ["C#h2" "C#h2"] :bonds [[0 1 "2"]]}"#),
+        AromaticValence::Aromatic(1),
+    )]
+    #[case::lone_pair(
+        mol_dsl_concrete!(r#"{:atoms ["N#h3#n1"]}"#),
+        AromaticValence::Aromatic(2),
+    )]
+    #[case::cumulated_bonds(
+        mol_dsl_concrete!(r#"{:atoms ["C" "C#h2" "C#h2"] :bonds [[0 1 "2"] [0 2 "2"]]}"#),
+        AromaticValence::NotAromatic,
+    )]
+    fn test_electrons_from_kekule(#[case] molecule: Molecule, #[case] expected: AromaticValence) {
+        assert_eq!(electrons_from_kekule(&molecule, AtomId(0)), expected);
     }
 }

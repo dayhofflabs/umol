@@ -3,9 +3,7 @@
 
 use pyo3::prelude::*;
 use umol_graph::ops::resolve::{
-    AromaticBondConstraintMismatchPolicy as GraphAromaticBondConstraintMismatchPolicy,
     AromaticityFailurePolicy as GraphAromaticityFailurePolicy,
-    AromaticityMismatchPolicy as GraphAromaticityMismatchPolicy,
     AromaticityResolveConfig as GraphAromaticityResolveConfig, IsotopePolicy as GraphIsotopePolicy,
     ResolveConfig as GraphResolveConfig, ResolveContradiction as GraphResolveContradiction,
     StereoFailurePolicy as GraphStereoFailurePolicy,
@@ -65,63 +63,6 @@ impl AromaticityFailurePolicy {
         match self {
             Self::Error => GraphAromaticityFailurePolicy::Error,
             Self::Keep => GraphAromaticityFailurePolicy::Keep,
-        }
-    }
-}
-
-/// Policy for a valid aromatic-valence constraint that disagrees with a valid aromatic system.
-#[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum AromaticityMismatchPolicy {
-    Error,
-    Keep,
-    RemoveConstraint,
-    ReplaceEntity,
-}
-
-impl AromaticityMismatchPolicy {
-    pub(crate) fn from_rust(policy: GraphAromaticityMismatchPolicy) -> Self {
-        match policy {
-            GraphAromaticityMismatchPolicy::Error => Self::Error,
-            GraphAromaticityMismatchPolicy::Keep => Self::Keep,
-            GraphAromaticityMismatchPolicy::RemoveConstraint => Self::RemoveConstraint,
-            GraphAromaticityMismatchPolicy::ReplaceEntity => Self::ReplaceEntity,
-        }
-    }
-
-    pub(crate) fn to_rust(self) -> GraphAromaticityMismatchPolicy {
-        match self {
-            Self::Error => GraphAromaticityMismatchPolicy::Error,
-            Self::Keep => GraphAromaticityMismatchPolicy::Keep,
-            Self::RemoveConstraint => GraphAromaticityMismatchPolicy::RemoveConstraint,
-            Self::ReplaceEntity => GraphAromaticityMismatchPolicy::ReplaceEntity,
-        }
-    }
-}
-
-/// Policy for a localized-bond aromatic constraint that disagrees with a valid aromatic system.
-#[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum AromaticBondConstraintMismatchPolicy {
-    Error,
-    Keep,
-    RemoveConstraint,
-}
-
-impl AromaticBondConstraintMismatchPolicy {
-    pub(crate) fn from_rust(policy: GraphAromaticBondConstraintMismatchPolicy) -> Self {
-        match policy {
-            GraphAromaticBondConstraintMismatchPolicy::Error => Self::Error,
-            GraphAromaticBondConstraintMismatchPolicy::Keep => Self::Keep,
-            GraphAromaticBondConstraintMismatchPolicy::RemoveConstraint => Self::RemoveConstraint,
-        }
-    }
-
-    pub(crate) fn to_rust(self) -> GraphAromaticBondConstraintMismatchPolicy {
-        match self {
-            Self::Error => GraphAromaticBondConstraintMismatchPolicy::Error,
-            Self::Keep => GraphAromaticBondConstraintMismatchPolicy::Keep,
-            Self::RemoveConstraint => GraphAromaticBondConstraintMismatchPolicy::RemoveConstraint,
         }
     }
 }
@@ -194,21 +135,17 @@ pub struct AromaticityResolveConfig(GraphAromaticityResolveConfig);
 #[pymethods]
 impl AromaticityResolveConfig {
     #[new]
-    #[pyo3(signature = (*, perception=AromaticityConfig::default(), aromatic_valence_failure=AromaticityFailurePolicy::Error, aromatic_system_failure=AromaticityFailurePolicy::Error, aromatic_valence_mismatch=AromaticityMismatchPolicy::Error, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy::Error, reset_aromatic_valence=false))]
+    #[pyo3(signature = (*, perception=AromaticityConfig::default(), aromatic_valence_failure=AromaticityFailurePolicy::Error, aromatic_system_failure=AromaticityFailurePolicy::Error, reset_aromatic_valence=false))]
     fn new(
         perception: AromaticityConfig,
         aromatic_valence_failure: AromaticityFailurePolicy,
         aromatic_system_failure: AromaticityFailurePolicy,
-        aromatic_valence_mismatch: AromaticityMismatchPolicy,
-        aromatic_bond_constraint_mismatch: AromaticBondConstraintMismatchPolicy,
         reset_aromatic_valence: bool,
     ) -> Self {
         Self(GraphAromaticityResolveConfig {
             perception: perception.to_rust(),
             aromatic_valence_failure: aromatic_valence_failure.to_rust(),
             aromatic_system_failure: aromatic_system_failure.to_rust(),
-            aromatic_valence_mismatch: aromatic_valence_mismatch.to_rust(),
-            aromatic_bond_constraint_mismatch: aromatic_bond_constraint_mismatch.to_rust(),
             reset_aromatic_valence,
         })
     }
@@ -229,28 +166,16 @@ impl AromaticityResolveConfig {
     }
 
     #[getter]
-    fn aromatic_valence_mismatch(&self) -> AromaticityMismatchPolicy {
-        AromaticityMismatchPolicy::from_rust(self.0.aromatic_valence_mismatch)
-    }
-
-    #[getter]
-    fn aromatic_bond_constraint_mismatch(&self) -> AromaticBondConstraintMismatchPolicy {
-        AromaticBondConstraintMismatchPolicy::from_rust(self.0.aromatic_bond_constraint_mismatch)
-    }
-
-    #[getter]
     fn reset_aromatic_valence(&self) -> bool {
         self.0.reset_aromatic_valence
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "AromaticityResolveConfig(perception={}, aromatic_valence_failure=AromaticityFailurePolicy.{:?}, aromatic_system_failure=AromaticityFailurePolicy.{:?}, aromatic_valence_mismatch=AromaticityMismatchPolicy.{:?}, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy.{:?}, reset_aromatic_valence={})",
+            "AromaticityResolveConfig(perception={}, aromatic_valence_failure=AromaticityFailurePolicy.{:?}, aromatic_system_failure=AromaticityFailurePolicy.{:?}, reset_aromatic_valence={})",
             self.perception().__repr__(),
             self.aromatic_valence_failure(),
             self.aromatic_system_failure(),
-            self.aromatic_valence_mismatch(),
-            self.aromatic_bond_constraint_mismatch(),
             if self.0.reset_aromatic_valence {
                 "True"
             } else {
@@ -494,91 +419,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::error(
-        GraphAromaticityMismatchPolicy::Error,
-        AromaticityMismatchPolicy::Error
-    )]
-    #[case::keep(GraphAromaticityMismatchPolicy::Keep, AromaticityMismatchPolicy::Keep)]
-    #[case::remove_constraint(
-        GraphAromaticityMismatchPolicy::RemoveConstraint,
-        AromaticityMismatchPolicy::RemoveConstraint
-    )]
-    #[case::replace_entity(
-        GraphAromaticityMismatchPolicy::ReplaceEntity,
-        AromaticityMismatchPolicy::ReplaceEntity
-    )]
-    fn test_aromaticity_mismatch_policy_from_rust(
-        #[case] policy: GraphAromaticityMismatchPolicy,
-        #[case] expected: AromaticityMismatchPolicy,
-    ) {
-        assert_eq!(AromaticityMismatchPolicy::from_rust(policy), expected);
-    }
-
-    #[rstest]
-    #[case::error(
-        AromaticityMismatchPolicy::Error,
-        GraphAromaticityMismatchPolicy::Error
-    )]
-    #[case::keep(AromaticityMismatchPolicy::Keep, GraphAromaticityMismatchPolicy::Keep)]
-    #[case::remove_constraint(
-        AromaticityMismatchPolicy::RemoveConstraint,
-        GraphAromaticityMismatchPolicy::RemoveConstraint
-    )]
-    #[case::replace_entity(
-        AromaticityMismatchPolicy::ReplaceEntity,
-        GraphAromaticityMismatchPolicy::ReplaceEntity
-    )]
-    fn test_aromaticity_mismatch_policy_to_rust(
-        #[case] policy: AromaticityMismatchPolicy,
-        #[case] expected: GraphAromaticityMismatchPolicy,
-    ) {
-        assert_eq!(policy.to_rust(), expected);
-    }
-
-    #[rstest]
-    #[case::error(
-        GraphAromaticBondConstraintMismatchPolicy::Error,
-        AromaticBondConstraintMismatchPolicy::Error
-    )]
-    #[case::keep(
-        GraphAromaticBondConstraintMismatchPolicy::Keep,
-        AromaticBondConstraintMismatchPolicy::Keep
-    )]
-    #[case::remove_constraint(
-        GraphAromaticBondConstraintMismatchPolicy::RemoveConstraint,
-        AromaticBondConstraintMismatchPolicy::RemoveConstraint
-    )]
-    fn test_aromatic_bond_constraint_mismatch_policy_from_rust(
-        #[case] policy: GraphAromaticBondConstraintMismatchPolicy,
-        #[case] expected: AromaticBondConstraintMismatchPolicy,
-    ) {
-        assert_eq!(
-            AromaticBondConstraintMismatchPolicy::from_rust(policy),
-            expected
-        );
-    }
-
-    #[rstest]
-    #[case::error(
-        AromaticBondConstraintMismatchPolicy::Error,
-        GraphAromaticBondConstraintMismatchPolicy::Error
-    )]
-    #[case::keep(
-        AromaticBondConstraintMismatchPolicy::Keep,
-        GraphAromaticBondConstraintMismatchPolicy::Keep
-    )]
-    #[case::remove_constraint(
-        AromaticBondConstraintMismatchPolicy::RemoveConstraint,
-        GraphAromaticBondConstraintMismatchPolicy::RemoveConstraint
-    )]
-    fn test_aromatic_bond_constraint_mismatch_policy_to_rust(
-        #[case] policy: AromaticBondConstraintMismatchPolicy,
-        #[case] expected: GraphAromaticBondConstraintMismatchPolicy,
-    ) {
-        assert_eq!(policy.to_rust(), expected);
-    }
-
-    #[rstest]
     #[case::error(GraphStereoFailurePolicy::Error, StereoFailurePolicy::Error)]
     #[case::keep(GraphStereoFailurePolicy::Keep, StereoFailurePolicy::Keep)]
     #[case::remove(GraphStereoFailurePolicy::Remove, StereoFailurePolicy::Remove)]
@@ -649,25 +489,19 @@ mod tests {
         AromaticityConfig::default(),
         AromaticityFailurePolicy::Error,
         AromaticityFailurePolicy::Error,
-        AromaticityMismatchPolicy::Error,
-        AromaticBondConstraintMismatchPolicy::Error,
         false,
         GraphAromaticityResolveConfig::default()
     )]
-    #[case::configured(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, AromaticityMismatchPolicy::ReplaceEntity, AromaticBondConstraintMismatchPolicy::RemoveConstraint, true, GraphAromaticityResolveConfig {
+    #[case::configured(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, true, GraphAromaticityResolveConfig {
         perception: Default::default(),
         aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
         aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
-        aromatic_valence_mismatch: GraphAromaticityMismatchPolicy::ReplaceEntity,
-        aromatic_bond_constraint_mismatch: GraphAromaticBondConstraintMismatchPolicy::RemoveConstraint,
         reset_aromatic_valence: true,
     })]
     fn test_aromaticity_resolve_config_new(
         #[case] perception: AromaticityConfig,
         #[case] aromatic_valence_failure: AromaticityFailurePolicy,
         #[case] aromatic_system_failure: AromaticityFailurePolicy,
-        #[case] aromatic_valence_mismatch: AromaticityMismatchPolicy,
-        #[case] aromatic_bond_constraint_mismatch: AromaticBondConstraintMismatchPolicy,
         #[case] reset_aromatic_valence: bool,
         #[case] expected: GraphAromaticityResolveConfig,
     ) {
@@ -676,8 +510,6 @@ mod tests {
                 perception,
                 aromatic_valence_failure,
                 aromatic_system_failure,
-                aromatic_valence_mismatch,
-                aromatic_bond_constraint_mismatch,
                 reset_aromatic_valence,
             )
             .0,
@@ -687,12 +519,12 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error, AromaticityMismatchPolicy::Error, AromaticBondConstraintMismatchPolicy::Error, false),
-        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Error, aromatic_system_failure=AromaticityFailurePolicy.Error, aromatic_valence_mismatch=AromaticityMismatchPolicy.Error, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy.Error, reset_aromatic_valence=False)"
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error, false),
+        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Error, aromatic_system_failure=AromaticityFailurePolicy.Error, reset_aromatic_valence=False)"
     )]
     #[case::nondefault(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, AromaticityMismatchPolicy::ReplaceEntity, AromaticBondConstraintMismatchPolicy::RemoveConstraint, true),
-        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, aromatic_valence_mismatch=AromaticityMismatchPolicy.ReplaceEntity, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy.RemoveConstraint, reset_aromatic_valence=True)"
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, true),
+        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, reset_aromatic_valence=True)"
     )]
     fn test_aromaticity_resolve_config_repr(
         #[case] config: AromaticityResolveConfig,
@@ -707,8 +539,6 @@ mod tests {
         perception: Default::default(),
         aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
         aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
-        aromatic_valence_mismatch: GraphAromaticityMismatchPolicy::ReplaceEntity,
-        aromatic_bond_constraint_mismatch: GraphAromaticBondConstraintMismatchPolicy::RemoveConstraint,
         reset_aromatic_valence: true,
     })]
     fn test_aromaticity_resolve_config_from_rust(#[case] config: GraphAromaticityResolveConfig) {
@@ -720,16 +550,12 @@ mod tests {
         AromaticityConfig::default(),
         AromaticityFailurePolicy::Error,
         AromaticityFailurePolicy::Error,
-        AromaticityMismatchPolicy::Error,
-        AromaticBondConstraintMismatchPolicy::Error,
         false
     ))]
     #[case::nondefault(AromaticityResolveConfig::new(
         AromaticityConfig::default(),
         AromaticityFailurePolicy::Keep,
         AromaticityFailurePolicy::Keep,
-        AromaticityMismatchPolicy::ReplaceEntity,
-        AromaticBondConstraintMismatchPolicy::RemoveConstraint,
         true
     ))]
     fn test_aromaticity_resolve_config_to_rust(#[case] config: AromaticityResolveConfig) {
@@ -828,8 +654,6 @@ mod tests {
             AromaticityConfig::default(),
             AromaticityFailurePolicy::Error,
             AromaticityFailurePolicy::Error,
-            AromaticityMismatchPolicy::Error,
-            AromaticBondConstraintMismatchPolicy::Error,
             false
         ),
         StereoResolveConfig::new(
@@ -844,7 +668,7 @@ mod tests {
         GraphResolveConfig::default()
     )]
     #[case::aromaticity(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, AromaticityMismatchPolicy::ReplaceEntity, AromaticBondConstraintMismatchPolicy::RemoveConstraint, true),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, true),
         StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoMismatchPolicy::Error, StereoFailurePolicy::Error, StereoFailurePolicy::Error, StereoMismatchPolicy::Error, false),
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
@@ -852,15 +676,13 @@ mod tests {
                 perception: Default::default(),
                 aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
                 aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
-                aromatic_valence_mismatch: GraphAromaticityMismatchPolicy::ReplaceEntity,
-                aromatic_bond_constraint_mismatch: GraphAromaticBondConstraintMismatchPolicy::RemoveConstraint,
                 reset_aromatic_valence: true,
             },
             stereo: GraphStereoResolveConfig::default(),
         },
     )]
     #[case::stereo(
-        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error, AromaticityMismatchPolicy::Error, AromaticBondConstraintMismatchPolicy::Error, false),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error, false),
         StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoMismatchPolicy::RemoveConstraint, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, StereoMismatchPolicy::ReplaceEntity, true),
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
@@ -903,11 +725,11 @@ mod tests {
     #[case::default(ResolveConfig::default(), "ResolveConfig.default()")]
     #[case::configured(
         ResolveConfig::new(
-            AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, AromaticityMismatchPolicy::ReplaceEntity, AromaticBondConstraintMismatchPolicy::RemoveConstraint, true),
+            AromaticityResolveConfig::new(AromaticityConfig::default(), AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep, true),
             StereoResolveConfig::new(StereoFailurePolicy::Keep, StereoFailurePolicy::Remove, StereoMismatchPolicy::RemoveConstraint, StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, StereoMismatchPolicy::ReplaceEntity, true),
             IsotopePolicy::Strict,
         ),
-        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, aromatic_valence_mismatch=AromaticityMismatchPolicy.ReplaceEntity, aromatic_bond_constraint_mismatch=AromaticBondConstraintMismatchPolicy.RemoveConstraint, reset_aromatic_valence=True), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, tetrahedral_stereo_mismatch=StereoMismatchPolicy.RemoveConstraint, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, cis_trans_stereo_mismatch=StereoMismatchPolicy.ReplaceEntity, reset_stereo_constraints=True))",
+        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep, reset_aromatic_valence=True), stereo=StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep, stereo_atom_failure=StereoFailurePolicy.Remove, tetrahedral_stereo_mismatch=StereoMismatchPolicy.RemoveConstraint, cis_trans_stereo_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, cis_trans_stereo_mismatch=StereoMismatchPolicy.ReplaceEntity, reset_stereo_constraints=True))",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -921,8 +743,6 @@ mod tests {
             perception: Default::default(),
             aromatic_valence_failure: GraphAromaticityFailurePolicy::Keep,
             aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
-            aromatic_valence_mismatch: GraphAromaticityMismatchPolicy::ReplaceEntity,
-            aromatic_bond_constraint_mismatch: GraphAromaticBondConstraintMismatchPolicy::RemoveConstraint,
             reset_aromatic_valence: true,
         },
         stereo: GraphStereoResolveConfig {
@@ -946,8 +766,6 @@ mod tests {
             AromaticityConfig::default(),
             AromaticityFailurePolicy::Keep,
             AromaticityFailurePolicy::Keep,
-            AromaticityMismatchPolicy::ReplaceEntity,
-            AromaticBondConstraintMismatchPolicy::RemoveConstraint,
             true
         ),
         StereoResolveConfig::new(

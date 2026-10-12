@@ -5,10 +5,8 @@ from importlib.metadata import PackageNotFoundError, version
 from . import _native as _native_module
 
 from ._native import (
-    AromaticBondConstraintMismatchPolicy,
     AromaticityConfig,
     AromaticityFailurePolicy,
-    AromaticityMismatchPolicy,
     AromaticityModel,
     AromaticityResolveConfig,
     AromaticityRule,
@@ -260,10 +258,8 @@ except PackageNotFoundError:
     __version__ = "0.0.0"
 
 __all__ = [
-    "AromaticBondConstraintMismatchPolicy",
     "AromaticityConfig",
     "AromaticityFailurePolicy",
-    "AromaticityMismatchPolicy",
     "AromaticityModel",
     "AromaticityResolveConfig",
     "AromaticityRule",

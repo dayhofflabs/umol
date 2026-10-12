@@ -70,8 +70,6 @@ import umol
             umol.AromaticityResolveConfig,
             "(*, perception=Ellipsis, aromatic_valence_failure=Ellipsis, "
             "aromatic_system_failure=Ellipsis, "
-            "aromatic_valence_mismatch=Ellipsis, "
-            "aromatic_bond_constraint_mismatch=Ellipsis, "
             "reset_aromatic_valence=False)",
         ),
         (

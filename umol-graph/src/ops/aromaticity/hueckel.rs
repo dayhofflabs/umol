@@ -9,7 +9,8 @@ use std::collections::HashSet;
 
 use umol_graph_core::UnionFind;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, ElementForm, Molecule, RingId, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AtomId, ElementForm, Molecule, RingId, RingSet,
+    UnpairedElectronsForm,
 };
 
 use crate::ops::model::{ElementScope, RingLimits};
@@ -39,6 +40,8 @@ impl HueckelAromaticity {
         first <= upper
     }
 
+    /// Perceive systems from the supplied rings and aromatic contributions.
+    /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
     pub fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
@@ -46,7 +49,7 @@ impl HueckelAromaticity {
         electrons_at: &F,
     ) -> Vec<(Vec<AtomId>, AromaticSystemForm)>
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
     {
         let eligible_cycles: Vec<RingId> = rings
             .ids()
@@ -89,8 +92,8 @@ impl HueckelAromaticity {
             let mut electrons: Vec<i64> = Vec::with_capacity(atoms.len());
             let mut valid = true;
             for &atom in &atoms {
-                if let Some(e) = electrons_at(atom) {
-                    electrons.push(i64::from(e));
+                if let AromaticValence::Aromatic(e) = electrons_at(atom) {
+                    electrons.push(e);
                 } else {
                     valid = false;
                     break;
@@ -113,7 +116,7 @@ impl HueckelAromaticity {
 
     fn is_atom_eligible<F>(&self, molecule: &Molecule, id: AtomId, electrons_at: &F) -> bool
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
     {
         let view = molecule.atom(id);
         let element = match view.attributes().element {
@@ -123,7 +126,7 @@ impl HueckelAromaticity {
         if !self.element_scope.contains(element) {
             return false;
         }
-        electrons_at(id).is_some()
+        matches!(electrons_at(id), AromaticValence::Aromatic(_))
     }
 
     fn filter_ring<F>(
@@ -134,7 +137,7 @@ impl HueckelAromaticity {
         electrons_at: &F,
     ) -> bool
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
     {
         let Some(ring) = rings.get(ring) else {
             return false;
@@ -226,11 +229,14 @@ fn check_4n_plus_2(electron_count: u32) -> bool {
 
 fn ring_electron_count<F>(ids: &[AtomId], electrons_at: &F) -> Option<u32>
 where
-    F: Fn(AtomId) -> Option<u8>,
+    F: Fn(AtomId) -> AromaticValence,
 {
     let mut total: u32 = 0;
     for &id in ids {
-        total += electrons_at(id)? as u32;
+        let AromaticValence::Aromatic(electrons) = electrons_at(id) else {
+            return None;
+        };
+        total += electrons as u32;
     }
     Some(total)
 }
@@ -589,8 +595,10 @@ mod tests {
             .constraints
             .aromatic_valence()
         {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-            _ => None,
+            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                AromaticValence::Aromatic(*n)
+            }
+            _ => AromaticValence::NotAromatic,
         });
         assert_eq!(systems.len(), 1);
         assert_eq!(systems[0].0.len(), expected_atoms);
@@ -622,8 +630,10 @@ mod tests {
             .constraints
             .aromatic_valence()
         {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-            _ => None,
+            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                AromaticValence::Aromatic(*n)
+            }
+            _ => AromaticValence::NotAromatic,
         });
         assert!(systems.is_empty());
     }
@@ -654,8 +664,10 @@ mod tests {
             .constraints
             .aromatic_valence()
         {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-            _ => None,
+            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                AromaticValence::Aromatic(*n)
+            }
+            _ => AromaticValence::NotAromatic,
         });
 
         assert_eq!(
@@ -686,8 +698,10 @@ mod tests {
             .constraints
             .aromatic_valence()
         {
-            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-            _ => None,
+            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                AromaticValence::Aromatic(*n)
+            }
+            _ => AromaticValence::NotAromatic,
         });
         assert_eq!(systems.len(), 1);
         assert_eq!(systems[0].0.len(), 6);

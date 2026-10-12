@@ -11,7 +11,8 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, ElementForm, Molecule, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticValence, AtomId, ElementForm, Molecule, RingSet,
+    UnpairedElectronsForm,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
@@ -60,6 +61,8 @@ impl HmoAromaticity {
         true
     }
 
+    /// Perceive systems from the supplied rings and aromatic contributions.
+    /// NotAromatic excludes an atom; Aromatic(0) remains eligible.
     pub fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
@@ -68,7 +71,7 @@ impl HmoAromaticity {
         electrons_at: &F,
     ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, HmoError>
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
     {
         let pi_atoms: Vec<AtomId> = molecule
             .atoms()
@@ -81,7 +84,7 @@ impl HmoAromaticity {
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                electrons_at(view.id()).map(|_| view.id())
+                matches!(electrons_at(view.id()), AromaticValence::Aromatic(_)).then_some(view.id())
             })
             .collect();
 
@@ -128,7 +131,7 @@ impl HmoAromaticity {
 
                 let electrons: Vec<i64> = atoms
                     .iter()
-                    .map(|&id| electrons_at(id).unwrap_or(0) as i64)
+                    .map(|&id| electrons_at(id).valence_count())
                     .collect();
 
                 candidates.push((
@@ -150,7 +153,7 @@ impl HmoAromaticity {
         electrons_at: &F,
     ) -> Result<HmoCalculator, HmoError>
     where
-        F: Fn(AtomId) -> Option<u8>,
+        F: Fn(AtomId) -> AromaticValence,
     {
         let subgraph = molecule.induced_subgraph(pi_atoms);
         let n = pi_atoms.len();
@@ -167,9 +170,12 @@ impl HmoAromaticity {
                     ))
                 }
             };
-            let valence = electrons_at(view.id()).ok_or_else(|| {
-                HmoError::UndeterminedAtom("undetermined aromatic valence".to_string())
-            })?;
+            let AromaticValence::Aromatic(valence) = electrons_at(view.id()) else {
+                return Err(HmoError::InvalidInput(
+                    "non-aromatic atom in pi-system".to_string(),
+                ));
+            };
+            let valence = valence as u8;
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
                 HmoError::MissingParameters(format!(
                     "no Van-Catledge parameters for {:?} with {} pi-electrons",
@@ -378,8 +384,10 @@ mod tests {
                 .constraints
                 .aromatic_valence()
             {
-                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                    AromaticValence::Aromatic(*n)
+                }
+                _ => AromaticValence::NotAromatic,
             })
             .unwrap()
             .solve()
@@ -528,8 +536,10 @@ mod tests {
                 &ring_info,
                 ConnectedComponentsAlgorithm::Bfs,
                 &|v| match molecule.atom(v).attributes().constraints.aromatic_valence() {
-                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                    _ => None,
+                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                        AromaticValence::Aromatic(*n)
+                    }
+                    _ => AromaticValence::NotAromatic,
                 },
             )
             .unwrap();
@@ -573,8 +583,10 @@ mod tests {
                 .constraints
                 .aromatic_valence()
             {
-                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => {
+                    AromaticValence::Aromatic(*n)
+                }
+                _ => AromaticValence::NotAromatic,
             })
             .unwrap();
         let h = &calc.hamiltonian;

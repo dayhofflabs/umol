@@ -1,12 +1,10 @@
 import pytest
 
 from umol import (
-    AromaticBondConstraintMismatchPolicy,
     AromaticityConfig,
     AromaticityFailurePolicy,
     AromaticityModel,
     AromaticityRule,
-    AromaticityMismatchPolicy,
     AromaticityResolveConfig,
     AtomCompletions,
     AtomForm,
@@ -38,16 +36,6 @@ from umol import (
             AromaticityFailurePolicy.Keep,
             True,
         ),
-        (
-            AromaticityMismatchPolicy.ReplaceEntity,
-            AromaticityMismatchPolicy.ReplaceEntity,
-            True,
-        ),
-        (
-            AromaticBondConstraintMismatchPolicy.RemoveConstraint,
-            AromaticBondConstraintMismatchPolicy.Keep,
-            False,
-        ),
     ],
 )
 def test_aromaticity_policy_equality(left, right, expected):
@@ -57,13 +45,9 @@ def test_aromaticity_policy_equality(left, right, expected):
 def test_aromaticity_policy_hash():
     policies = {
         AromaticityFailurePolicy.Keep: "failure",
-        AromaticityMismatchPolicy.ReplaceEntity: "aromatic valence",
-        AromaticBondConstraintMismatchPolicy.RemoveConstraint: "bond",
     }
 
     assert policies[AromaticityFailurePolicy.Keep] == "failure"
-    assert policies[AromaticityMismatchPolicy.ReplaceEntity] == "aromatic valence"
-    assert policies[AromaticBondConstraintMismatchPolicy.RemoveConstraint] == "bond"
 
 
 @pytest.mark.parametrize(
@@ -72,14 +56,6 @@ def test_aromaticity_policy_hash():
         (
             AromaticityFailurePolicy.Keep,
             "AromaticityFailurePolicy.Keep",
-        ),
-        (
-            AromaticityMismatchPolicy.ReplaceEntity,
-            "AromaticityMismatchPolicy.ReplaceEntity",
-        ),
-        (
-            AromaticBondConstraintMismatchPolicy.RemoveConstraint,
-            "AromaticBondConstraintMismatchPolicy.RemoveConstraint",
         ),
     ],
 )
@@ -91,8 +67,6 @@ def test_aromaticity_policy_repr(policy, expected):
     "policy",
     [
         AromaticityFailurePolicy.Keep,
-        AromaticityMismatchPolicy.RemoveConstraint,
-        AromaticBondConstraintMismatchPolicy.RemoveConstraint,
     ],
 )
 def test_aromaticity_policy_mutation(policy):
@@ -154,11 +128,6 @@ def test_aromaticity_resolve_config_default():
     assert config.perception == AromaticityConfig()
     assert config.aromatic_valence_failure == AromaticityFailurePolicy.Error
     assert config.aromatic_system_failure == AromaticityFailurePolicy.Error
-    assert config.aromatic_valence_mismatch == AromaticityMismatchPolicy.Error
-    assert (
-        config.aromatic_bond_constraint_mismatch
-        == AromaticBondConstraintMismatchPolicy.Error
-    )
     assert config.reset_aromatic_valence is False
     assert config == AromaticityResolveConfig()
 
@@ -167,23 +136,17 @@ def test_aromaticity_resolve_config_default():
     (
         "aromatic_valence_failure",
         "aromatic_system_failure",
-        "aromatic_valence_mismatch",
-        "aromatic_bond_constraint_mismatch",
         "reset_aromatic_valence",
     ),
     [
         (
             AromaticityFailurePolicy.Error,
             AromaticityFailurePolicy.Error,
-            AromaticityMismatchPolicy.Error,
-            AromaticBondConstraintMismatchPolicy.Error,
             False,
         ),
         (
             AromaticityFailurePolicy.Keep,
             AromaticityFailurePolicy.Keep,
-            AromaticityMismatchPolicy.ReplaceEntity,
-            AromaticBondConstraintMismatchPolicy.RemoveConstraint,
             True,
         ),
     ],
@@ -191,8 +154,6 @@ def test_aromaticity_resolve_config_default():
 def test_aromaticity_resolve_config_new(
     aromatic_valence_failure,
     aromatic_system_failure,
-    aromatic_valence_mismatch,
-    aromatic_bond_constraint_mismatch,
     reset_aromatic_valence,
 ):
     perception = AromaticityConfig()
@@ -200,8 +161,6 @@ def test_aromaticity_resolve_config_new(
         perception=perception,
         aromatic_valence_failure=aromatic_valence_failure,
         aromatic_system_failure=aromatic_system_failure,
-        aromatic_valence_mismatch=aromatic_valence_mismatch,
-        aromatic_bond_constraint_mismatch=aromatic_bond_constraint_mismatch,
         reset_aromatic_valence=reset_aromatic_valence,
     )
 
@@ -209,11 +168,6 @@ def test_aromaticity_resolve_config_new(
     assert config.perception is not perception
     assert config.aromatic_valence_failure == aromatic_valence_failure
     assert config.aromatic_system_failure == aromatic_system_failure
-    assert config.aromatic_valence_mismatch == aromatic_valence_mismatch
-    assert (
-        config.aromatic_bond_constraint_mismatch
-        == aromatic_bond_constraint_mismatch
-    )
     assert config.reset_aromatic_valence is reset_aromatic_valence
 
 
@@ -237,19 +191,12 @@ def test_aromaticity_resolve_config_new_error():
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
             "aromatic_valence_failure=AromaticityFailurePolicy.Error, "
             "aromatic_system_failure=AromaticityFailurePolicy.Error, "
-            "aromatic_valence_mismatch=AromaticityMismatchPolicy.Error, "
-            "aromatic_bond_constraint_mismatch="
-            "AromaticBondConstraintMismatchPolicy.Error, "
             "reset_aromatic_valence=False)",
         ),
         (
             AromaticityResolveConfig(
                 aromatic_valence_failure=AromaticityFailurePolicy.Keep,
                 aromatic_system_failure=AromaticityFailurePolicy.Keep,
-                aromatic_valence_mismatch=AromaticityMismatchPolicy.ReplaceEntity,
-                aromatic_bond_constraint_mismatch=(
-                    AromaticBondConstraintMismatchPolicy.RemoveConstraint
-                ),
                 reset_aromatic_valence=True,
             ),
             "AromaticityResolveConfig(perception=AromaticityConfig("
@@ -262,10 +209,6 @@ def test_aromaticity_resolve_config_new_error():
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
             "aromatic_system_failure=AromaticityFailurePolicy.Keep, "
-            "aromatic_valence_mismatch="
-            "AromaticityMismatchPolicy.ReplaceEntity, "
-            "aromatic_bond_constraint_mismatch="
-            "AromaticBondConstraintMismatchPolicy.RemoveConstraint, "
             "reset_aromatic_valence=True)",
         ),
     ],
@@ -280,11 +223,6 @@ def test_aromaticity_resolve_config_repr(config, expected):
         ("perception", AromaticityConfig()),
         ("aromatic_valence_failure", AromaticityFailurePolicy.Keep),
         ("aromatic_system_failure", AromaticityFailurePolicy.Keep),
-        ("aromatic_valence_mismatch", AromaticityMismatchPolicy.ReplaceEntity),
-        (
-            "aromatic_bond_constraint_mismatch",
-            AromaticBondConstraintMismatchPolicy.RemoveConstraint,
-        ),
         ("reset_aromatic_valence", True),
     ],
 )
@@ -513,12 +451,6 @@ def test_resolve_config_equality(other):
                 aromaticity=AromaticityResolveConfig(
                     aromatic_valence_failure=AromaticityFailurePolicy.Keep,
                     aromatic_system_failure=AromaticityFailurePolicy.Keep,
-                    aromatic_valence_mismatch=(
-                        AromaticityMismatchPolicy.ReplaceEntity
-                    ),
-                    aromatic_bond_constraint_mismatch=(
-                        AromaticBondConstraintMismatchPolicy.RemoveConstraint
-                    ),
                     reset_aromatic_valence=True,
                 ),
                 stereo=StereoResolveConfig(
@@ -536,10 +468,6 @@ def test_resolve_config_equality(other):
             "MaximumIndependentSetAlgorithm.BranchAndBound()), "
             "aromatic_valence_failure=AromaticityFailurePolicy.Keep, "
             "aromatic_system_failure=AromaticityFailurePolicy.Keep, "
-            "aromatic_valence_mismatch="
-            "AromaticityMismatchPolicy.ReplaceEntity, "
-            "aromatic_bond_constraint_mismatch="
-            "AromaticBondConstraintMismatchPolicy.RemoveConstraint, "
             "reset_aromatic_valence=True), "
             "stereo=StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Keep, stereo_atom_failure="

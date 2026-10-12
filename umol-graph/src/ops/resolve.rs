@@ -16,10 +16,7 @@ use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 
 use aromaticity::AromaticityProjectError;
-pub use aromaticity::{
-    AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
-    AromaticityResolveConfig, AromaticityResolver,
-};
+pub use aromaticity::{AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver};
 use bitflags::bitflags;
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 use isotope::IsotopeProjectError;
@@ -1206,10 +1203,6 @@ impl<'a> Resolver<'a> {
                                 self.config.aromaticity.aromatic_valence_failure
                                     != AromaticityFailurePolicy::Error
                             }
-                            AtomConstraintForm::AromaticValence(_) => {
-                                self.config.aromaticity.aromatic_valence_mismatch
-                                    != AromaticityMismatchPolicy::Error
-                            }
                             AtomConstraintForm::TetrahedralStereo(
                                 TetrahedralStereoForm::NotStereo,
                             ) => {
@@ -1259,10 +1252,6 @@ impl<'a> Resolver<'a> {
                                 self.config.aromaticity.aromatic_valence_failure
                                     != AromaticityFailurePolicy::Error
                             }
-                            BondConstraintForm::Aromatic(_) => {
-                                self.config.aromaticity.aromatic_bond_constraint_mismatch
-                                    != AromaticBondConstraintMismatchPolicy::Error
-                            }
                             BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo) => {
                                 self.config.stereo.cis_trans_stereo_failure
                                     != StereoFailurePolicy::Error
@@ -1309,10 +1298,6 @@ impl<'a> Resolver<'a> {
                             DativeBondConstraintForm::Aromatic(BooleanForm::Lit(false)) => {
                                 self.config.aromaticity.aromatic_valence_failure
                                     != AromaticityFailurePolicy::Error
-                            }
-                            DativeBondConstraintForm::Aromatic(_) => {
-                                self.config.aromaticity.aromatic_bond_constraint_mismatch
-                                    != AromaticBondConstraintMismatchPolicy::Error
                             }
                             _ => false,
                         };
@@ -1747,7 +1732,7 @@ mod tests {
         RingLimits, StereoModel, ValenceModel,
     };
     use crate::ops::stereo::{StereoInconsistency, StereoPerception};
-    use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
+    use crate::ops::valence::{AtomTypeRegistry, CountsError, ValenceTable};
     use crate::ops::validate::{ConnectivityModel, IncidenceConstraintInvariantsContradiction};
 
     #[fixture]
@@ -2653,6 +2638,59 @@ mod tests {
         assert_eq!(
             Resolver::new(&model).resolve_into(&mut molecule),
             Ok(expected)
+        );
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::atom_system(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h#a2" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        ResolveContradiction::Valence(ValenceContradiction::Counts(CountsError::NoMatch)),
+    )]
+    #[case::atom_bond(
+        mol_dsl_concrete!(r#"{:atoms ["C#h3#a!" "C#h3#a"] :bonds [[0 1 "1#a"]]}"#),
+        ResolveContradiction::Valence(ValenceContradiction::Counts(CountsError::NoMatch)),
+    )]
+    #[case::bond_system(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1#a!"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        ResolveContradiction::Discharge(DischargeContradiction::Assertion {
+            constraint: Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(false))),
+        }),
+    )]
+    fn test_resolver_resolve_aromatic_mismatch(
+        chemistry_model: ChemistryModel,
+        #[case] mut molecule: Molecule,
+        #[case] expected: ResolveContradiction,
+        #[values(AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Keep)]
+        failure: AromaticityFailurePolicy,
+    ) {
+        let original = molecule.clone();
+        let resolver = Resolver::with_config(
+            &chemistry_model,
+            ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    aromatic_valence_failure: failure,
+                    aromatic_system_failure: failure,
+                    ..AromaticityResolveConfig::default()
+                },
+                ..ResolveConfig::default()
+            },
+        );
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Contradictory(expected.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule),
+            Ok(Solution::Contradictory(expected))
         );
         assert_eq!(molecule, original);
     }
