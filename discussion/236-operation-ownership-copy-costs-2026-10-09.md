@@ -2916,7 +2916,7 @@ skipped_stereo_bonds query, including ring enumeration when needed. These
 measurements cover the listed literal-configuration inputs. Executables and
 logs are saved in scratch/236-s3j.
 
-#### S3k — Valence discharges #v
+#### S3k — Valence discharges #v **Done**
 
 **Modules:** graph resolve. **Green.** [dep: none]
 
@@ -2925,6 +2925,36 @@ fields it completes.
 
 **Tests:** the constitution plan of an atom asserting `#v` that it completes
 removes the assertion, and that of an atom it does not complete leaves it.
+
+**Completion (2026-10-12):** the shared constitution planner removes the valence
+assertion from each selected atom completion before computing its attribute
+update. The existing edit projection emits the checked removal. Other stored
+assertions and atoms without completions are preserved by this plan. Admission
+already checks valence assertions; no additional validation pass or public API
+change is needed. The closing discharge pass remains until S3m, so final
+composite preservation of assertions on untouched atoms still awaits that step.
+
+Seven exact planner cases cover literal, set-valued, explicitly vacuous, and
+absent valence assertions; preservation of other keys and an untouched atom in
+the same molecule; and empty, complete, and uncompleted inputs without selected
+completions. The three discharge cases failed before the implementation change.
+All 2,012 graph unit tests, five resolution properties, and 683 resolution
+conformance cases pass; snapshots are unchanged. Scoped Clippy with warnings
+denied, formatting, and diff checks pass. Workspace tests remain for the
+related-change batch gate.
+
+The existing smiles_roundtrip/resolve cases were compared against commit
+d60dab38b with 40 samples, one-second warm-up, and two-second measurement,
+without concurrent builds or tests:
+
+| Case | Time change | 95% interval |
+| --- | ---: | ---: |
+| chain_64 | -1.97% | -5.41% to +0.93% |
+| aromatic_fused | -0.63% | -3.11% to +1.45% |
+
+Criterion detects no performance change in either case. These inputs carry no
+valence assertions, so the comparison checks overhead on ordinary resolution
+paths, not discharge savings. Executables and logs are saved in scratch/236-s3k.
 
 #### S3l — Aromaticity planning makes the closing pass's checks
 

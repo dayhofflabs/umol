@@ -1110,9 +1110,10 @@ impl<'a> Resolver<'a> {
             .plan_bond_discharge(molecule, &state.systems);
         for (atom, disjuncts) in state.completions.iter() {
             let current = molecule.atom(atom).attributes();
-            // Preserve stored assertions when selecting field values.
+            // Preserve other stored assertions when selecting field values.
             let mut selected = disjuncts[0].clone();
             selected.constraints = current.constraints.clone();
+            selected.constraints.remove(AtomConstraintKey::Valence);
             let update = current.difference_to(&selected);
             edits.update_atom(AtomHandle::Id(atom), current, &update);
         }
@@ -1709,6 +1710,7 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::{fixture, rstest};
+    use smallvec::smallvec;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
         AtomConstraintForm, AtomForm, AtomId, IsotopeMassForm, MoleculeConstraint, MoleculeEntries,
@@ -3087,5 +3089,49 @@ mod tests {
         );
         assert_eq!(resolver.project_into(&mut molecule, flags), Err(expected));
         assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::literal(Some(NumForm::Lit(0)))]
+    #[case::set(Some(NumForm::LitSet(Box::new(BTreeSet::from([0, 1])))))]
+    #[case::vacuous(Some(NumForm::Undetermined))]
+    #[case::absent(None)]
+    fn test_resolver_plan_constitution(
+        chemistry_model: ChemistryModel,
+        #[case] valence: Option<NumForm>,
+    ) {
+        let mut atom = atom_dsl!("C#i=#c0#h4#u0#s#a!#T*");
+        if let Some(valence) = valence {
+            atom.constraints.set(AtomConstraintForm::Valence(valence));
+        }
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom, atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#a!")],
+            ..MoleculeEntries::default()
+        });
+        let state = ResolveState {
+            completions: [(AtomId(0), smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#a!")])]
+                .into_iter()
+                .collect(),
+            ..ResolveState::default()
+        };
+        let edits = Resolver::new(&chemistry_model).plan_constitution(&molecule, &state);
+        assert_eq!(
+            molecule.edit().apply(edits).unwrap().finish().unwrap(),
+            mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!#T*" "C#i=#c0#h4#n0#u0#s#v0#a!"]}"#)
+        );
+    }
+
+    #[rstest]
+    #[case::empty(Molecule::new())]
+    #[case::complete(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#))]
+    #[case::uncompleted(mol_dsl!(r#"{:atoms ["C#i=#v0#a!"]}"#))]
+    fn test_resolver_plan_constitution_identity(
+        chemistry_model: ChemistryModel,
+        #[case] molecule: Molecule,
+    ) {
+        assert_eq!(
+            Resolver::new(&chemistry_model).plan_constitution(&molecule, &ResolveState::default()),
+            Edits::new()
+        );
     }
 }
