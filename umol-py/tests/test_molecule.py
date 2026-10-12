@@ -824,7 +824,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             "C[C@H](N)O",
             ResolveConfig(
                 aromaticity=AromaticityResolveConfig(),
-                stereo=StereoResolveConfig(reset_stereo_constraints=True),
+                stereo=StereoResolveConfig(),
             ),
             (
                 [NumForm.Lit(0)] * 4,

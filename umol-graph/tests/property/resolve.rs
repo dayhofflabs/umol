@@ -10,6 +10,10 @@
 //! Stored-system assertions and unrelated keys survive; newly realized assertions
 //! and negative linking-bond assertions are removed. Resolution is idempotent.
 //!
+//! Stereo discharge is checked against independent results for mixtures of stored
+//! and newly added tetrahedral and cis-trans entities with literal or open configurations.
+//! Existing assertions and unrelated keys are preserved, and resolution is idempotent.
+//!
 //! Semantic property: for carriers whose components stay within the
 //! enumeration bound, both aromatic selectors return the outcome of a
 //! selection that enumerates every completion combination of every component
@@ -36,16 +40,19 @@ use umol_graph::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityInconsistency, AromaticityPerceiver,
 };
 use umol_graph::ops::model::{
-    AromaticityModel, AromaticityTieBreak, ChemistryModel, ValenceModel, ValenceTieBreak,
+    AromaticityModel, AromaticityTieBreak, ChemistryModel, StereoModel, ValenceModel,
+    ValenceTieBreak,
 };
 use umol_graph::ops::resolve::{
-    AromaticityFailurePolicy, AromaticityResolver, ResolveState, Resolver,
+    AromaticityFailurePolicy, AromaticityResolver, ResolveState, Resolver, StereoResolver,
 };
 use umol_graph::ops::valence::compare::compare_by_key;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticValence, AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId,
-    BondConstraintForm, BondForm, BooleanForm, ElectronCountsForm, ElementForm, IsotopeMassForm,
-    Molecule, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind, UnpairedElectronsForm,
+    BondConstraintForm, BondForm, BondId, BooleanForm, CisTransStereoForm, ElectronCountsForm,
+    ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel,
+    RingSetKind, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, TetrahedralStereoForm, UnpairedElectronsForm,
 };
 use umol_graph_ir::{atom_dsl, bond_dsl};
 use umol_utils::solution::Solution;
@@ -380,6 +387,81 @@ fn exhaustive_select(
 }
 
 proptest! {
+    #[test]
+    fn test_stereo_resolver_resolve_discharge(
+        sites in prop::collection::vec((any::<bool>(), any::<bool>(), 0u32..3), 1..5),
+    ) {
+        let mut source = MoleculeEntries::default();
+        let mut expected = MoleculeEntries::default();
+        let mut added_atoms = Vec::new();
+        let mut added_bonds = Vec::new();
+        for (cis_trans, stored, coset) in sites {
+            let coset = if coset == 2 { StereoCoset::Undetermined } else { StereoCoset::Lit(coset) };
+            let offset = source.atoms.len();
+            let a = AtomId::from(offset);
+            let b = AtomId::from(offset + 1);
+            let c = AtomId::from(offset + 2);
+            let d = AtomId::from(offset + 3);
+            let mut atoms = if cis_trans {
+                vec![atom_dsl!("C#h"), atom_dsl!("C#h"), atom_dsl!("F"), atom_dsl!("Cl")]
+            } else {
+                vec![atom_dsl!("C#h"), atom_dsl!("F"), atom_dsl!("Cl"), atom_dsl!("Br")]
+            };
+            atoms[0].constraints.set(AtomConstraintForm::Valence(NumForm::Lit(3)));
+            let mut bonds = if cis_trans {
+                vec![(a, b, bond_dsl!("2#R!")), (a, c, bond_dsl!("1")), (b, d, bond_dsl!("1"))]
+            } else {
+                vec![(a, b, bond_dsl!("1#R!")), (a, c, bond_dsl!("1")), (a, d, bond_dsl!("1"))]
+            };
+            let mut expected_atoms = atoms.clone();
+            let mut expected_bonds = bonds.clone();
+            if cis_trans {
+                let assertion = BondConstraintForm::CisTransStereo(
+                    CisTransStereoForm::Stereo(coset.clone()));
+                bonds[0].2.constraints.set(assertion.clone());
+                if stored { expected_bonds[0].2.constraints.set(assertion); }
+                let entity = (BondId::from(source.bonds.len()), vec![
+                    StereoLigand::new(c, StereoLigandKind::Atom),
+                    StereoLigand::new(a, StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(d, StereoLigandKind::Atom),
+                    StereoLigand::new(b, StereoLigandKind::ImplicitHydrogen),
+                ], StereoBondForm::new(StereoKind::CisTrans, coset.clone()));
+                if stored {
+                    source.stereo_bonds.push(entity.clone());
+                    expected.stereo_bonds.push(entity);
+                } else { added_bonds.push(entity); }
+            } else {
+                let assertion = AtomConstraintForm::TetrahedralStereo(
+                    TetrahedralStereoForm::Stereo(coset.clone()));
+                atoms[0].constraints.set(assertion.clone());
+                if stored { expected_atoms[0].constraints.set(assertion); }
+                let entity = (a, vec![
+                    StereoLigand::new(b, StereoLigandKind::Atom),
+                    StereoLigand::new(c, StereoLigandKind::Atom),
+                    StereoLigand::new(d, StereoLigandKind::Atom),
+                    StereoLigand::new(a, StereoLigandKind::ImplicitHydrogen),
+                ], StereoAtomForm::new(StereoKind::Tetrahedral, coset.clone()));
+                if stored {
+                    source.stereo_atoms.push(entity.clone());
+                    expected.stereo_atoms.push(entity);
+                } else { added_atoms.push(entity); }
+            }
+            source.atoms.extend(atoms);
+            source.bonds.extend(bonds);
+            expected.atoms.extend(expected_atoms);
+            expected.bonds.extend(expected_bonds);
+        }
+        expected.stereo_atoms.extend(added_atoms);
+        expected.stereo_bonds.extend(added_bonds);
+        let mut molecule = Molecule::from_entries(source);
+        let expected = Molecule::from_entries(expected);
+        let resolver = StereoResolver::new(&StereoModel::default());
+        prop_assert_eq!(resolver.resolve(molecule.clone()), Ok(Solution::Determined(expected.clone())));
+        prop_assert_eq!(resolver.resolve_into(&mut molecule), Ok(Solution::Determined(())));
+        prop_assert_eq!(&molecule, &expected);
+        prop_assert_eq!(resolver.resolve(molecule), Ok(Solution::Determined(expected)));
+    }
+
     #[test]
     fn test_aromaticity_resolver_resolve_discharge(
         rings in prop::collection::vec((any::<bool>(), 0u8..3), 1..5),

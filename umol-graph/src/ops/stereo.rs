@@ -70,8 +70,6 @@ impl StereoPerception {
         }
     }
 
-    // TODO: fold this back into `derive` once the resolver accepts undetermined inputs and the
-    // partial-constraint gate in `StereoResolver::plan` is gone; it is separate only for that gate.
     /// Sites of cis-trans assertions the model does not realize: double bonds whose smallest
     /// ring is below `stereo_bond_minimum_ring_size`. Empty when the threshold is zero or no bond
     /// carries an assertion, without enumerating rings.

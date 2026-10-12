@@ -65,7 +65,7 @@ def test_resolved_smiles_workflow():
             aromatic_valence_failure=AromaticityFailurePolicy.Error,
             aromatic_system_failure=AromaticityFailurePolicy.Error,
         ),
-        stereo=StereoResolveConfig(reset_stereo_constraints=False),
+        stereo=StereoResolveConfig(),
     )
 
     molecule = Molecule.from_smiles(

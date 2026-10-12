@@ -1767,10 +1767,7 @@ mod tests {
             ResolveConfig {
                 isotope: IsotopePolicy::Strict,
                 aromaticity: AromaticityResolveConfig::default(),
-                stereo: StereoResolveConfig {
-                    reset_stereo_constraints: false,
-                    ..StereoResolveConfig::default()
-                },
+                stereo: StereoResolveConfig::default(),
             }
         );
     }
@@ -1795,19 +1792,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case::reset_stereo_constraints(ResolveConfig {
-        isotope: IsotopePolicy::Strict,
-        aromaticity: AromaticityResolveConfig::default(),
-        stereo: StereoResolveConfig {
-            reset_stereo_constraints: true,
-            ..StereoResolveConfig::default()
+    #[case::keep_stereo_failure(
+        ResolveConfig {
+            isotope: IsotopePolicy::Strict,
+            aromaticity: AromaticityResolveConfig::default(),
+            stereo: StereoResolveConfig {
+                tetrahedral_stereo_failure: StereoFailurePolicy::Keep,
+                ..StereoResolveConfig::default()
+            },
         },
-    })]
+        mol_dsl_concrete!(r#"{:atoms ["C#h4#T1"]}"#)
+    )]
     fn test_resolver_with_config(
         chemistry_model: ChemistryModel,
         aromatic_molecule: Molecule,
-        stereo_molecule: Molecule,
         #[case] config: ResolveConfig,
+        #[case] stereo_molecule: Molecule,
     ) {
         let resolver = Resolver::with_config(&chemistry_model, config);
         let expected_aromaticity =
@@ -2052,7 +2052,6 @@ mod tests {
                     stereo_atom_failure: failure,
                     cis_trans_stereo_failure: failure,
                     stereo_bond_failure: failure,
-                    ..StereoResolveConfig::default()
                 },
                 ..ResolveConfig::default()
             },
@@ -2546,14 +2545,28 @@ mod tests {
     }
 
     #[rstest]
-    fn test_resolver_resolve_later_underdetermined(chemistry_model: ChemistryModel) {
-        let mut molecule = mol_dsl!(
-            r#"{
+    #[case::isotope_and_hydrogen_completion(mol_dsl!(r#"{
             :atoms ["C#i*#c0#h*#n0#u0#s#T+" "F#i=#c0#h0#n0#u0#s"
                     "Cl#i=#c0#h0#n0#u0#s" "Br#i=#c0#h0#n0#u0#s"]
             :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
-        }"#
-        );
+        }"#))]
+    #[case::tetrahedral_open(mol_dsl_concrete!(r#"{
+        :atoms ["C#h#T+" "F#n3" "Cl#n3" "Br#n3"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+    }"#))]
+    #[case::cis_trans_open(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "C#h" "F#n3" "Cl#n3"]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
+    }"#))]
+    #[case::stored_open(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "C#h" "F#n3" "Cl#n3"]
+        :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]
+    }"#))]
+    fn test_resolver_resolve_later_underdetermined(
+        chemistry_model: ChemistryModel,
+        #[case] mut molecule: Molecule,
+    ) {
         let original = molecule.clone();
 
         assert_eq!(

@@ -1672,7 +1672,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::retained(
+    #[case::default(
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
             valence: ValenceModel {
@@ -1682,25 +1682,6 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        TetrahedralStereoForm::Undetermined
-    )]
-    #[case::reset(
-        SmilesIoConfig::opensmiles(),
-        ChemistryModel {
-            valence: ValenceModel {
-                tie_break: ValenceTieBreak::MostSaturated,
-                ..ValenceModel::default()
-            },
-            ..ChemistryModel::default()
-        },
-        ResolveConfig {
-            isotope: IsotopePolicy::Strict,
-            aromaticity: AromaticityResolveConfig::default(),
-            stereo: StereoResolveConfig {
-                reset_stereo_constraints: true,
-                ..StereoResolveConfig::default()
-            },
-        },
         TetrahedralStereoForm::Undetermined
     )]
     fn test_ingest_smiles_with_stereo(

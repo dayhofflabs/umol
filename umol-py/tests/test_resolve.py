@@ -221,7 +221,6 @@ def test_stereo_resolve_config_default():
     assert config.stereo_atom_failure == StereoFailurePolicy.Error
     assert config.cis_trans_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_bond_failure == StereoFailurePolicy.Error
-    assert config.reset_stereo_constraints is False
     assert config == StereoResolveConfig()
 
 
@@ -231,7 +230,6 @@ def test_stereo_resolve_config_default():
         "stereo_atom_failure",
         "cis_trans_stereo_failure",
         "stereo_bond_failure",
-        "reset_stereo_constraints",
     ),
     [
         (
@@ -239,14 +237,12 @@ def test_stereo_resolve_config_default():
             StereoFailurePolicy.Error,
             StereoFailurePolicy.Error,
             StereoFailurePolicy.Error,
-            False,
         ),
         (
             StereoFailurePolicy.Keep,
             StereoFailurePolicy.Remove,
             StereoFailurePolicy.Remove,
             StereoFailurePolicy.Keep,
-            True,
         ),
     ],
 )
@@ -255,21 +251,18 @@ def test_stereo_resolve_config_new(
     stereo_atom_failure,
     cis_trans_stereo_failure,
     stereo_bond_failure,
-    reset_stereo_constraints,
 ):
     config = StereoResolveConfig(
         tetrahedral_stereo_failure=tetrahedral_stereo_failure,
         stereo_atom_failure=stereo_atom_failure,
         cis_trans_stereo_failure=cis_trans_stereo_failure,
         stereo_bond_failure=stereo_bond_failure,
-        reset_stereo_constraints=reset_stereo_constraints,
     )
 
     assert config.tetrahedral_stereo_failure == tetrahedral_stereo_failure
     assert config.stereo_atom_failure == stereo_atom_failure
     assert config.cis_trans_stereo_failure == cis_trans_stereo_failure
     assert config.stereo_bond_failure == stereo_bond_failure
-    assert config.reset_stereo_constraints is reset_stereo_constraints
 
 
 def test_stereo_resolve_config_new_error():
@@ -286,7 +279,7 @@ def test_stereo_resolve_config_new_error():
             "StereoFailurePolicy.Error, stereo_atom_failure="
             "StereoFailurePolicy.Error, cis_trans_stereo_failure="
             "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error, reset_stereo_constraints=False)",
+            "StereoFailurePolicy.Error)",
         ),
         (
             StereoResolveConfig(
@@ -294,13 +287,12 @@ def test_stereo_resolve_config_new_error():
                 stereo_atom_failure=StereoFailurePolicy.Remove,
                 cis_trans_stereo_failure=StereoFailurePolicy.Remove,
                 stereo_bond_failure=StereoFailurePolicy.Keep,
-                reset_stereo_constraints=True,
             ),
             "StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Keep, stereo_atom_failure="
             "StereoFailurePolicy.Remove, cis_trans_stereo_failure="
             "StereoFailurePolicy.Remove, stereo_bond_failure="
-            "StereoFailurePolicy.Keep, reset_stereo_constraints=True)",
+            "StereoFailurePolicy.Keep)",
         ),
     ],
 )
@@ -315,7 +307,6 @@ def test_stereo_resolve_config_repr(config, expected):
         ("stereo_atom_failure", StereoFailurePolicy.Remove),
         ("cis_trans_stereo_failure", StereoFailurePolicy.Remove),
         ("stereo_bond_failure", StereoFailurePolicy.Keep),
-        ("reset_stereo_constraints", True),
     ],
 )
 def test_stereo_resolve_config_mutation(field, value):
@@ -359,7 +350,7 @@ def test_resolve_config_default():
         ),
         (
             AromaticityResolveConfig(),
-            StereoResolveConfig(reset_stereo_constraints=True),
+            StereoResolveConfig(tetrahedral_stereo_failure=StereoFailurePolicy.Keep),
         ),
     ],
 )
@@ -389,7 +380,6 @@ def test_resolve_config_new_error():
         ResolveConfig(
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(
-                reset_stereo_constraints=True,
                 tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
             ),
         ),
@@ -410,7 +400,6 @@ def test_resolve_config_equality(other):
                     aromatic_system_failure=AromaticityFailurePolicy.Keep,
                 ),
                 stereo=StereoResolveConfig(
-                    reset_stereo_constraints=True,
                     tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
                 ),
             ),
@@ -428,7 +417,7 @@ def test_resolve_config_equality(other):
             "StereoFailurePolicy.Keep, stereo_atom_failure="
             "StereoFailurePolicy.Error, cis_trans_stereo_failure="
             "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error, reset_stereo_constraints=True))",
+            "StereoFailurePolicy.Error))",
         ),
     ],
 )

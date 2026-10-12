@@ -446,6 +446,13 @@ constraint at each site where it adds an entity. `reset_aromatic_valence` and
 neither adds nor completes stay. Resolution no longer evaluates the other
 assertions or the molecule-level list; the validators report a violated one.
 
+Standalone stereo resolution completes the structural step without requiring a
+literal configuration. Positive open assertions `#T+` and `#C+` can become
+entities with undetermined cosets, and are then discharged. Vacuous `#T*` and
+`#C*` do not require entities. The composite resolver retains its final
+concreteness check: an open entity leaves the result Underdetermined, and
+in-place resolution preserves the input.
+
 Each check that the closing pass made for a discharged key moves into the
 planning of the resolver that discharges the key. Valence admission already
 checks `#v`, and stereo planning already applies the stereo failure policies and
@@ -2840,20 +2847,74 @@ scan performs no allocation on this assertion-free input. The aromatic cases
 avoid the former per-system bond collection and assertion writes. Executables,
 logs, and alternating-run estimates are saved in scratch/236-s3i.
 
-#### S3j — Stereo discharges what its entities realize
+#### S3j — Stereo discharges what its entities realize **Done**
 
-**Modules:** graph resolve/stereo; umol-py resolve bindings and Python tests;
-docs/development/nomenclature.md. **Breaking, red→green within the subitem.**
+**Modules:** graph resolve/stereo, resolve, and stereo; umol-py resolve bindings
+and Python tests; docs/development/nomenclature.md. **Breaking, red→green within the subitem.**
 [dep: none]
 
 The stereo plan removes the tetrahedral or cis-trans constraint at each site
-where it adds an entity. Remove `reset_stereo_constraints` from
-StereoResolveConfig and from the Python binding's keyword, getter, and repr.
+where it adds an entity. Remove the partial-input gate so structurally
+realizable positive evidence can produce an entity with an open configuration;
+the composite resolver's final concreteness check remains. Remove
+`reset_stereo_constraints` from StereoResolveConfig and from the Python
+binding's keyword, getter, and repr.
 Remove the guide's Reset entry with its last code names.
 
-**Tests:** standalone and composite resolution remove the constraint at each
-site that gains an entity, including one whose configuration is undetermined,
-and keep it at a site with an existing entity.
+**Tests:** standalone resolution removes the constraint at each site that gains
+an entity, including one whose configuration is undetermined, and keeps it at
+a site with an existing entity. Vacuous stereo assertions add no entity. The
+composite resolver uses this plan and preserves its existing concrete results;
+open configurations still give Underdetermined with unchanged input. Composite
+preservation of existing-site assertions follows when S3m removes the closing
+discharge pass.
+
+**Completion (2026-10-12):** stereo planning unconditionally removes the
+tetrahedral or cis-trans assertion at each newly added entity's site, using
+direct constraint-removal edits. Retained entities do not trigger discharge;
+other keys and inherent fields are preserved by discharge. The existing failure
+policies and small-ring assertion exclusions remain.
+
+The partial-input gate prevented the planned open-configuration case from
+reaching perception. Its removal was accepted during implementation:
+standalone resolution may produce Th* or Ct* from positive open evidence and
+discharge the assertion without choosing a coset. Vacuous assertions add no
+entity, and existing open entities are retained. Unrealizable open evidence now
+reaches the same realizability checks and failure policies as literal evidence.
+The composite resolver's final concreteness check and preservation of the input
+on Underdetermined are unchanged. Its closing discharge pass remains until S3m.
+
+Removed reset_stereo_constraints from the Rust config and Python constructor,
+getter, and repr, and removed the nomenclature guide's Reset entry. No public
+symbol or error variant was added.
+
+The new discharge and open-configuration fixtures failed before their changes.
+All 2,005 graph unit tests, five resolution properties, 683 resolution conformance
+cases, and 50 Rust binding tests pass. The discharge property compares exact
+independent results for mixtures of stored/new tetrahedral and cis-trans
+entities with literal or undetermined configurations, including unrelated-key
+preservation and idempotence. Composite conformance snapshots are unchanged.
+After rebuilding with Python 3.13, all 287 focused Python tests pass. Scoped
+Clippy with warnings denied, formatting, and diff checks pass. Workspace tests
+remain for the related-change batch gate.
+
+The existing smiles_roundtrip/resolve cases were compared against commit
+83e1f2ae5 with 40 samples, one-second warm-up, and two-second measurement,
+without concurrent builds or tests:
+
+| Case | Time change | 95% interval |
+| --- | ---: | ---: |
+| chain_64 | -0.24% | -0.73% to +0.25% |
+| tetra_four | -0.98% | -1.69% to -0.30% |
+| alkene_four | -11.41% | -11.99% to -10.83% |
+| shared_chain | -11.79% | -13.49% to -10.60% |
+
+Criterion detects no change for chain_64, reports tetra_four within its noise
+threshold, and reports improvements for the two cis-trans cases. Removing the
+gate eliminates its preliminary atom/bond scans and the duplicate
+skipped_stereo_bonds query, including ring enumeration when needed. These
+measurements cover the listed literal-configuration inputs. Executables and
+logs are saved in scratch/236-s3j.
 
 #### S3k — Valence discharges #v
 

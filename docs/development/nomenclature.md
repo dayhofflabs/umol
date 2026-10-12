@@ -1559,13 +1559,6 @@ payload stays aligned without being touched.
 expresses removal by leaving removed source ids without images.
 **In code:** `Remapping`, `GraphRemapping`, `MoleculeRemapping`, `remap`.
 
-### Reset
-
-**Reset** clears a constraint by setting it to its undetermined form.
-
-**Not:** a general synonym for removing an entity or replacing determined structural information.
-**In code:** `reset_stereo_constraints`.
-
 ### Resolution
 
 **Resolution** applies configured recovery policy, constructs edit plans against private drafts,
