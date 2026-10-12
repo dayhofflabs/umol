@@ -1584,6 +1584,9 @@ to S3a3–S3a4. S3c, S3f, and S3g specify parts of S3b, as marked
 below. S3b is the Rust reading migration; S3b1–S3b3 sequence ring ownership,
 ring bindings, and semantic-reading bindings after it.
 
+Use focused checks for individual subitems. Run workspace tests after a set of
+related changes and at the final gate.
+
 ### S0 — Normal-form tower
 
 #### S0a — Remove Normalize::normalized **Done**
@@ -2165,7 +2168,7 @@ The full Python suite passes (2,204 tests, two skipped) after rebuilding under
 Python 3.13.15. Workspace Clippy with all targets/features and warnings denied,
 formatting, and diff checks also pass. Logs are in scratch/236-s3a3.
 
-#### S3a4 — Borrow stereo validation entries
+#### S3a4 — Borrow stereo validation entries **Done**
 
 **Modules:** graph ops/validate/stereo. **Green.** [dep: S3a2]
 
@@ -2179,6 +2182,23 @@ Preserve validation order and all existing outcomes.
 run the public stereo-conformance cases for determined, underdetermined, and
 contradictory results, including invalid topicity positions and permutation
 degrees. No new public API or result type.
+
+**Completion (2026-10-12):** Both stereo validation callers pass their borrowed
+topicity and ligand-symmetry iterators directly to the private validate_symmetry
+helper. This removes two Vec collections and their entry clones per entity.
+The validation loops, order, and outcomes are unchanged; non-Copy asserted
+payloads are cloned only when constructing an owned contradiction. Public APIs
+and stored constraints are unchanged.
+
+**Verification:** All 44 focused stereo-validation cases pass before and after
+the refactor. Existing helper cases now use borrowed iterators. Five added
+public cases cover underdetermined configurations and topicity assertions for
+both entity kinds, plus preservation of a non-Copy assertion in a contradiction.
+The rebuilt Python suite passes (2,204 tests, two skipped) under Python 3.13.15.
+Workspace Clippy with all targets/features and warnings denied, formatting,
+and diff checks pass. The workspace test run was stopped at the user's request
+to reserve it for batches of related changes; it is not a completed gate for
+this subitem. Logs are in scratch/236-s3a4.
 
 #### S3b — Constraint readings as meets **Done**
 

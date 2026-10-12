@@ -169,9 +169,6 @@ impl StereoConformanceValidator {
         let view = molecule.stereo_atom(id);
         let constraints = view.constraints();
         let stereogenicity = constraints.stereogenicity();
-        let topicities: Vec<TopicityForm> = constraints.topicities().cloned().collect();
-        let ligand_symmetries: Vec<LigandSymmetryForm> =
-            constraints.ligand_symmetries().cloned().collect();
         if view
             .attributes()
             .configuration
@@ -182,7 +179,12 @@ impl StereoConformanceValidator {
             return Solution::Underdetermined(());
         }
         let sym = molecule.stereo_atom_symmetry(symmetry, id);
-        self.validate_symmetry(&sym, stereogenicity, &topicities, &ligand_symmetries)
+        self.validate_symmetry(
+            &sym,
+            stereogenicity,
+            constraints.topicities(),
+            constraints.ligand_symmetries(),
+        )
     }
 
     fn validate_stereo_bond(
@@ -194,9 +196,6 @@ impl StereoConformanceValidator {
         let view = molecule.stereo_bond(id);
         let constraints = view.constraints();
         let stereogenicity = constraints.stereogenicity();
-        let topicities: Vec<TopicityForm> = constraints.topicities().cloned().collect();
-        let ligand_symmetries: Vec<LigandSymmetryForm> =
-            constraints.ligand_symmetries().cloned().collect();
         if view
             .attributes()
             .configuration
@@ -207,16 +206,21 @@ impl StereoConformanceValidator {
             return Solution::Underdetermined(());
         }
         let sym = molecule.stereo_bond_symmetry(symmetry, id);
-        self.validate_symmetry(&sym, stereogenicity, &topicities, &ligand_symmetries)
+        self.validate_symmetry(
+            &sym,
+            stereogenicity,
+            constraints.topicities(),
+            constraints.ligand_symmetries(),
+        )
     }
 
     /// Compare derived symmetry against constraints.
-    fn validate_symmetry(
+    fn validate_symmetry<'a>(
         &self,
         sym: &StereoSymmetry,
         stereogenicity: &StereogenicityForm,
-        topicities: &[TopicityForm],
-        ligand_symmetries: &[LigandSymmetryForm],
+        topicities: impl Iterator<Item = &'a TopicityForm>,
+        ligand_symmetries: impl Iterator<Item = &'a LigandSymmetryForm>,
     ) -> Solution<(), StereoConformanceContradiction> {
         let mut any_undetermined = false;
         let degree = sym.group().degree();
@@ -288,10 +292,13 @@ impl StereoConformanceValidator {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AtomId, BondId, LigandPermutation, OrientedLigandPermutation, StereoAtomConstraintForm,
-        StereoBondConstraintForm, StereoLigandPosition, StereogenicityForm,
+        StereoBondConstraintForm, StereoConfigurationForm, StereoLigandPosition,
+        StereogenicityForm,
     };
     use umol_graph_ir::mol_dsl_concrete;
     use umol_perm::{Orientation, Permutation};
@@ -496,6 +503,59 @@ mod tests {
     }
 
     #[rstest]
+    #[case::atom_configuration(
+        CFCLBRI,
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes_mut().configuration =
+                StereoConfigurationForm::Undetermined;
+        }) as fn(&mut Molecule)
+    )]
+    #[case::bond_configuration(
+        BUTENE,
+        (|molecule: &mut Molecule| {
+            molecule.stereo_bond_mut(StereoBondId(0)).attributes_mut().configuration =
+                StereoConfigurationForm::Undetermined;
+        }) as fn(&mut Molecule)
+    )]
+    #[case::atom_topicity(
+        CFCLBRI,
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes_mut().constraints.set(
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+                    relation: TopicityRelationForm::LitSet(BTreeSet::from([
+                        Topicity::Homotopic, Topicity::Diastereotopic,
+                    ])),
+                }),
+            );
+        }) as fn(&mut Molecule)
+    )]
+    #[case::bond_topicity(
+        BUTENE,
+        (|molecule: &mut Molecule| {
+            molecule.stereo_bond_mut(StereoBondId(0)).attributes_mut().constraints.set(
+                StereoBondConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+                    relation: TopicityRelationForm::LitSet(BTreeSet::from([
+                        Topicity::Homotopic, Topicity::Diastereotopic,
+                    ])),
+                }),
+            );
+        }) as fn(&mut Molecule)
+    )]
+    fn test_stereo_conformance_validator_validate_underdetermined(
+        #[case] dsl: &str,
+        #[case] mutate: fn(&mut Molecule),
+    ) {
+        let mut molecule = mol_dsl_concrete!(dsl);
+        mutate(&mut molecule);
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
+            Ok(Solution::Underdetermined(())),
+        );
+    }
+
+    #[rstest]
     #[case::improper_on_achiral(
         BUTENE,
         (|molecule: &mut Molecule| {
@@ -543,6 +603,22 @@ mod tests {
         StereoConformanceContradiction::TopicityMismatch {
             pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
             asserted: TopicityRelationForm::Lit(Topicity::Homotopic),
+            derived: Topicity::Diastereotopic,
+        }
+    )]
+    #[case::topicity_complement_mismatch(
+        CFCLBRI,
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes_mut().constraints.set(
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+                    relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])),
+                }),
+            );
+        }) as fn(&mut Molecule),
+        StereoConformanceContradiction::TopicityMismatch {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+            asserted: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])),
             derived: Topicity::Diastereotopic,
         }
     )]
@@ -609,8 +685,8 @@ mod tests {
             StereoConformanceValidator::new(&StereoModel::default()).validate_symmetry(
                 &symmetry,
                 &StereogenicityForm::Undetermined,
-                &[topicity],
-                &[],
+                [topicity].iter(),
+                [].iter(),
             ),
             Solution::Determined(()),
         );
@@ -641,8 +717,8 @@ mod tests {
             StereoConformanceValidator::new(&StereoModel::default()).validate_symmetry(
                 &symmetry,
                 &StereogenicityForm::Undetermined,
-                &[topicity],
-                &[],
+                [topicity].iter(),
+                [].iter(),
             ),
             Solution::Contradictory(StereoConformanceContradiction::TopicityPositionOutOfRange {
                 pair,
@@ -682,8 +758,8 @@ mod tests {
             StereoConformanceValidator::new(&StereoModel::default()).validate_symmetry(
                 &symmetry,
                 &StereogenicityForm::Undetermined,
-                &[],
-                &[asserted],
+                [].iter(),
+                [asserted].iter(),
             ),
             Solution::Contradictory(StereoConformanceContradiction::LigandSymmetryViolation {
                 asserted,
