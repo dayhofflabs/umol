@@ -16,11 +16,11 @@ from umol import (
     NumForm,
     IsotopePolicy,
     Molecule,
+    MoleculeDefaults,
     ResolveConfig,
     ResolveReport,
     Solution,
     StereoFailurePolicy,
-    StereoMismatchPolicy,
     StereoResolveConfig,
     UnderdeterminedError,
     ValenceModel,
@@ -79,8 +79,6 @@ def test_aromaticity_policy_mutation(policy):
     [
         (StereoFailurePolicy.Keep, StereoFailurePolicy.Keep, True),
         (StereoFailurePolicy.Remove, StereoFailurePolicy.Error, False),
-        (StereoMismatchPolicy.ReplaceEntity, StereoMismatchPolicy.ReplaceEntity, True),
-        (StereoMismatchPolicy.RemoveBoth, StereoMismatchPolicy.Keep, False),
     ],
 )
 def test_stereo_policy_equality(left, right, expected):
@@ -90,20 +88,15 @@ def test_stereo_policy_equality(left, right, expected):
 def test_stereo_policy_hash():
     policies = {
         StereoFailurePolicy.Remove: "failure",
-        StereoMismatchPolicy.RemoveConstraint: "mismatch",
     }
 
     assert policies[StereoFailurePolicy.Remove] == "failure"
-    assert policies[StereoMismatchPolicy.RemoveConstraint] == "mismatch"
 
 
 @pytest.mark.parametrize(
     ("policy", "expected"),
     [
         (StereoFailurePolicy.Remove, "StereoFailurePolicy.Remove"),
-        (StereoMismatchPolicy.RemoveConstraint, "StereoMismatchPolicy.RemoveConstraint"),
-        (StereoMismatchPolicy.ReplaceEntity, "StereoMismatchPolicy.ReplaceEntity"),
-        (StereoMismatchPolicy.RemoveBoth, "StereoMismatchPolicy.RemoveBoth"),
     ],
 )
 def test_stereo_policy_repr(policy, expected):
@@ -114,7 +107,6 @@ def test_stereo_policy_repr(policy, expected):
     "policy",
     [
         StereoFailurePolicy.Keep,
-        StereoMismatchPolicy.RemoveConstraint,
     ],
 )
 def test_stereo_policy_mutation(policy):
@@ -238,10 +230,8 @@ def test_stereo_resolve_config_default():
 
     assert config.tetrahedral_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_atom_failure == StereoFailurePolicy.Error
-    assert config.tetrahedral_stereo_mismatch == StereoMismatchPolicy.Error
     assert config.cis_trans_stereo_failure == StereoFailurePolicy.Error
     assert config.stereo_bond_failure == StereoFailurePolicy.Error
-    assert config.cis_trans_stereo_mismatch == StereoMismatchPolicy.Error
     assert config.reset_stereo_constraints is False
     assert config == StereoResolveConfig()
 
@@ -250,29 +240,23 @@ def test_stereo_resolve_config_default():
     (
         "tetrahedral_stereo_failure",
         "stereo_atom_failure",
-        "tetrahedral_stereo_mismatch",
         "cis_trans_stereo_failure",
         "stereo_bond_failure",
-        "cis_trans_stereo_mismatch",
         "reset_stereo_constraints",
     ),
     [
         (
             StereoFailurePolicy.Error,
             StereoFailurePolicy.Error,
-            StereoMismatchPolicy.Error,
             StereoFailurePolicy.Error,
             StereoFailurePolicy.Error,
-            StereoMismatchPolicy.Error,
             False,
         ),
         (
             StereoFailurePolicy.Keep,
             StereoFailurePolicy.Remove,
-            StereoMismatchPolicy.RemoveConstraint,
             StereoFailurePolicy.Remove,
             StereoFailurePolicy.Keep,
-            StereoMismatchPolicy.ReplaceEntity,
             True,
         ),
     ],
@@ -280,28 +264,22 @@ def test_stereo_resolve_config_default():
 def test_stereo_resolve_config_new(
     tetrahedral_stereo_failure,
     stereo_atom_failure,
-    tetrahedral_stereo_mismatch,
     cis_trans_stereo_failure,
     stereo_bond_failure,
-    cis_trans_stereo_mismatch,
     reset_stereo_constraints,
 ):
     config = StereoResolveConfig(
         tetrahedral_stereo_failure=tetrahedral_stereo_failure,
         stereo_atom_failure=stereo_atom_failure,
-        tetrahedral_stereo_mismatch=tetrahedral_stereo_mismatch,
         cis_trans_stereo_failure=cis_trans_stereo_failure,
         stereo_bond_failure=stereo_bond_failure,
-        cis_trans_stereo_mismatch=cis_trans_stereo_mismatch,
         reset_stereo_constraints=reset_stereo_constraints,
     )
 
     assert config.tetrahedral_stereo_failure == tetrahedral_stereo_failure
     assert config.stereo_atom_failure == stereo_atom_failure
-    assert config.tetrahedral_stereo_mismatch == tetrahedral_stereo_mismatch
     assert config.cis_trans_stereo_failure == cis_trans_stereo_failure
     assert config.stereo_bond_failure == stereo_bond_failure
-    assert config.cis_trans_stereo_mismatch == cis_trans_stereo_mismatch
     assert config.reset_stereo_constraints is reset_stereo_constraints
 
 
@@ -317,29 +295,23 @@ def test_stereo_resolve_config_new_error():
             StereoResolveConfig(),
             "StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Error, stereo_atom_failure="
-            "StereoFailurePolicy.Error, tetrahedral_stereo_mismatch="
-            "StereoMismatchPolicy.Error, cis_trans_stereo_failure="
+            "StereoFailurePolicy.Error, cis_trans_stereo_failure="
             "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error, cis_trans_stereo_mismatch="
-            "StereoMismatchPolicy.Error, reset_stereo_constraints=False)",
+            "StereoFailurePolicy.Error, reset_stereo_constraints=False)",
         ),
         (
             StereoResolveConfig(
                 tetrahedral_stereo_failure=StereoFailurePolicy.Keep,
                 stereo_atom_failure=StereoFailurePolicy.Remove,
-                tetrahedral_stereo_mismatch=StereoMismatchPolicy.RemoveConstraint,
                 cis_trans_stereo_failure=StereoFailurePolicy.Remove,
                 stereo_bond_failure=StereoFailurePolicy.Keep,
-                cis_trans_stereo_mismatch=StereoMismatchPolicy.ReplaceEntity,
                 reset_stereo_constraints=True,
             ),
             "StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Keep, stereo_atom_failure="
-            "StereoFailurePolicy.Remove, tetrahedral_stereo_mismatch="
-            "StereoMismatchPolicy.RemoveConstraint, cis_trans_stereo_failure="
+            "StereoFailurePolicy.Remove, cis_trans_stereo_failure="
             "StereoFailurePolicy.Remove, stereo_bond_failure="
-            "StereoFailurePolicy.Keep, cis_trans_stereo_mismatch="
-            "StereoMismatchPolicy.ReplaceEntity, reset_stereo_constraints=True)",
+            "StereoFailurePolicy.Keep, reset_stereo_constraints=True)",
         ),
     ],
 )
@@ -352,10 +324,8 @@ def test_stereo_resolve_config_repr(config, expected):
     [
         ("tetrahedral_stereo_failure", StereoFailurePolicy.Keep),
         ("stereo_atom_failure", StereoFailurePolicy.Remove),
-        ("tetrahedral_stereo_mismatch", StereoMismatchPolicy.RemoveConstraint),
         ("cis_trans_stereo_failure", StereoFailurePolicy.Remove),
         ("stereo_bond_failure", StereoFailurePolicy.Keep),
-        ("cis_trans_stereo_mismatch", StereoMismatchPolicy.RemoveBoth),
         ("reset_stereo_constraints", True),
     ],
 )
@@ -471,11 +441,9 @@ def test_resolve_config_equality(other):
             "reset_aromatic_valence=True), "
             "stereo=StereoResolveConfig(tetrahedral_stereo_failure="
             "StereoFailurePolicy.Keep, stereo_atom_failure="
-            "StereoFailurePolicy.Error, tetrahedral_stereo_mismatch="
-            "StereoMismatchPolicy.Error, cis_trans_stereo_failure="
+            "StereoFailurePolicy.Error, cis_trans_stereo_failure="
             "StereoFailurePolicy.Error, stereo_bond_failure="
-            "StereoFailurePolicy.Error, cis_trans_stereo_mismatch="
-            "StereoMismatchPolicy.Error, reset_stereo_constraints=True))",
+            "StereoFailurePolicy.Error, reset_stereo_constraints=True))",
         ),
     ],
 )
@@ -518,6 +486,47 @@ def test_molecule_from_smiles_underdetermined(source, valence):
 
     assert str(excinfo.value) == "resolution underdetermined"
     assert not hasattr(excinfo.value, "report")
+
+
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        pytest.param(
+            '{:atoms ["C#T1" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+            ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}',
+            "stereo inconsistency: tetrahedral stereo constraint at atom AtomId(0) "
+            "disagrees with stereo atom StereoAtomId(0)",
+            id="tetrahedral",
+        ),
+        pytest.param(
+            '{:atoms ["C" "C" "F#n3" "Cl#n3" "Br#n3" "I#n3"] '
+            ':bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
+            ':stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}',
+            "stereo inconsistency: cis-trans stereo constraint at bond BondId(0) "
+            "disagrees with stereo bond StereoBondId(0)",
+            id="cis_trans",
+        ),
+    ],
+)
+@pytest.mark.parametrize("failure", [StereoFailurePolicy.Error, StereoFailurePolicy.Keep, StereoFailurePolicy.Remove])
+def test_molecule_resolve_into_stereo_mismatch(source, expected, failure):
+    molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
+    original = molecule.copy()
+    result = molecule.resolve_into(
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(
+                tetrahedral_stereo_failure=failure,
+                stereo_atom_failure=failure,
+                cis_trans_stereo_failure=failure,
+                stereo_bond_failure=failure,
+            ),
+        ),
+    )
+    assert isinstance(result, Solution.Contradictory)
+    assert str(result.contradiction) == expected
+    assert molecule == original
 
 
 @pytest.mark.parametrize("method", ["resolve_with_report", "resolve_into_with_report"])

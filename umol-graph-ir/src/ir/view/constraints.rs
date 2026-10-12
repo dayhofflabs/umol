@@ -9,12 +9,17 @@
 //! `asserted_complete` closes top own assertions for overlay keys;
 //! `derived_complete` closes absent overlays. `evidenced_complete` applies
 //! relation closure only when the combined evidence is top.
+//! Stereo projections transport the stored configuration to neighbor order,
+//! with virtual ligands last, within each endpoint block for cis-trans.
+//! A configuration that cannot be transported yields bottom; model-dependent
+//! realizability remains a separate check.
 //!
 //! # Semantic properties
 //!
 //! Readings do not mutate storage. Normalizing a molecule successfully preserves
 //! its readings in the same ring context. Contradiction in a contributing source
 //! yields bottom; unrelated fields do not participate in the reading.
+//! Successful participant reframing preserves the atom and bond stereo readings.
 
 use super::super::boolean::BooleanForm;
 use super::super::constraint::{
@@ -1015,6 +1020,15 @@ mod tests {
             TetrahedralStereoForm::stereo(StereoCoset::Lit(1)),
         )),
     )]
+    #[case::tetrahedral_incomplete_frame(
+        mol_dsl!(r#"{
+            :atoms ["C#T1" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3] :attrs "Th1"}]
+        }"#),
+        AtomConstraintKey::TetrahedralStereo,
+        None,
+    )]
     #[case::tetrahedral_undetermined_configuration(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 5],
@@ -1053,6 +1067,36 @@ mod tests {
             molecule.atom(AtomId(0)).constraints().derived(key),
             expected
         );
+    }
+
+    #[rstest]
+    #[case::actual_swap(mol_dsl!(r#"{
+        :atoms ["C#T1" "F" "Cl" "Br" "I"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th0"}]
+    }"#))]
+    #[case::virtual_last(mol_dsl!(r#"{
+        :atoms ["C#h#T1" "F" "Cl" "Br"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        :stereo-atoms [{:site 0 :ligands [[:h 0] 1 2 3] :attrs "Th0"}]
+    }"#))]
+    #[case::lone_pair_last(mol_dsl!(r#"{
+        :atoms ["N#T1" "F" "Cl" "Br"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        :stereo-atoms [{:site 0 :ligands [[:lp 0] 1 2 3] :attrs "Th0"}]
+    }"#))]
+    fn test_atom_constraints_view_derived_frame(#[case] molecule: Molecule) {
+        let original = molecule.clone();
+        let view = molecule.atom(AtomId(0)).constraints();
+        let key = AtomConstraintKey::TetrahedralStereo;
+        let expected = Some(AtomConstraintForm::tetrahedral_stereo(
+            TetrahedralStereoForm::stereo(StereoCoset::Lit(1)),
+        ));
+        assert_eq!(view.derived(key), expected);
+        assert_eq!(view.derived_complete(key), expected);
+        assert_eq!(view.evidenced(key), expected);
+        assert_eq!(view.evidenced_complete(key), expected);
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
@@ -1619,6 +1663,36 @@ mod tests {
         #[case] expected: Option<BondConstraintForm>,
     ) {
         assert_eq!(molecule.bond(bond).constraints().derived(key), expected);
+    }
+
+    #[rstest]
+    #[case::side_swap(mol_dsl!(r#"{
+        :atoms ["C" "C" "F" "Cl" "Br" "I"]
+        :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :stereo-bonds [{:site 0 :ligands [3 2 4 5] :attrs "Ct0"}]
+    }"#))]
+    #[case::endpoint_swap(mol_dsl!(r#"{
+        :atoms ["C" "C" "F" "Cl" "Br" "I"]
+        :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :stereo-bonds [{:site 0 :ligands [5 4 2 3] :attrs "Ct0"}]
+    }"#))]
+    #[case::virtual_last(mol_dsl!(r#"{
+        :atoms ["C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "2#C1"] [0 2 "1"] [1 3 "1"]]
+        :stereo-bonds [{:site 0 :ligands [[:h 0] 2 3 [:h 1]] :attrs "Ct0"}]
+    }"#))]
+    fn test_bond_constraints_view_derived_frame(#[case] molecule: Molecule) {
+        let original = molecule.clone();
+        let view = molecule.bond(BondId(0)).constraints();
+        let key = BondConstraintKey::CisTransStereo;
+        let expected = Some(BondConstraintForm::cis_trans_stereo(
+            CisTransStereoForm::stereo(StereoCoset::Lit(1)),
+        ));
+        assert_eq!(view.derived(key), expected);
+        assert_eq!(view.derived_complete(key), expected);
+        assert_eq!(view.evidenced(key), expected);
+        assert_eq!(view.evidenced_complete(key), expected);
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

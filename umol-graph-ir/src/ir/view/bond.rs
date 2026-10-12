@@ -1,6 +1,7 @@
 //! Bond views.
 
 use umol_graph_core::{EdgeId, NodeId};
+use umol_perm::Permutation;
 
 use super::super::bond::BondForm;
 use super::super::boolean::BooleanForm;
@@ -10,7 +11,7 @@ use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::{CisTransStereoForm, StereoKind};
+use super::super::stereo::{coset_apply_permutation, CisTransStereoForm, StereoKind};
 use super::super::traits::{Lattice, Normalize};
 use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
@@ -408,7 +409,17 @@ pub(crate) fn bond_derived_constraint(
                     stereo.attributes().configuration.coset(),
                 ) {
                     (Some(StereoKind::CisTrans), Some(coset)) => {
-                        CisTransStereoForm::stereo(coset.clone())
+                        let ligands = stereo.ligand_ids();
+                        let mut image = [0, 1, 2, 3];
+                        for side in image.chunks_exact_mut(2) {
+                            side.sort_unstable_by_key(|&i| (ligands[i].kind, ligands[i].atom_id));
+                        }
+                        // Swapping the complete endpoint blocks preserves cis-trans configuration.
+                        CisTransStereoForm::stereo(coset_apply_permutation(
+                            coset,
+                            Permutation::from_image(&image),
+                            StereoKind::CisTrans,
+                        )?)
                     }
                     (Some(StereoKind::CisTrans), None) | (None, _) => {
                         CisTransStereoForm::Undetermined

@@ -3,12 +3,14 @@
 //! numeric cases independently normalize sources before computing their meet.
 //! Container/view equality checks the shared own-assertion contract on molecule entities;
 //! container unit cases independently cover raw contradictions and closure of absence.
+//! Reframing invariance checks stereo readings on generated molecules whose stored
+//! participant orders change, independently of the fixed-frame normalization law.
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, BondForm, Lattice, Molecule,
-    MoleculeEntries, Normalize, NumForm, RingConfig, RingModel,
+    AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, BondConstraintKey, BondForm, Lattice,
+    Molecule, MoleculeEntries, Normalize, NumForm, Reframe, RingConfig, RingModel,
 };
 
 use super::strategies::{molecule_with_constraints_strategy, raw_num_form_strategy};
@@ -89,6 +91,30 @@ proptest! {
             }
             for entity in molecule.stereo_bonds().iter() {
                 for entry in entity.constraints().iter() { check_readings!(entity.constraints(), normal.stereo_bond(entity.id()).constraints(), &entity.attributes().constraints, entry.key()); }
+            }
+        }
+    }
+
+    #[test]
+    fn prop_constraint_readings_reframe(molecule in molecule_with_constraints_strategy()) {
+        if let Ok(reframed) = molecule.clone().reframe() {
+            for atom in molecule.atoms().iter() {
+                let before = atom.constraints();
+                let after = reframed.atom(atom.id()).constraints();
+                let key = AtomConstraintKey::TetrahedralStereo;
+                prop_assert_eq!(before.derived(key), after.derived(key));
+                prop_assert_eq!(before.derived_complete(key), after.derived_complete(key));
+                prop_assert_eq!(before.evidenced(key), after.evidenced(key));
+                prop_assert_eq!(before.evidenced_complete(key), after.evidenced_complete(key));
+            }
+            for bond in molecule.bonds().iter() {
+                let before = bond.constraints();
+                let after = reframed.bond(bond.id()).constraints();
+                let key = BondConstraintKey::CisTransStereo;
+                prop_assert_eq!(before.derived(key), after.derived(key));
+                prop_assert_eq!(before.derived_complete(key), after.derived_complete(key));
+                prop_assert_eq!(before.evidenced(key), after.evidenced(key));
+                prop_assert_eq!(before.evidenced_complete(key), after.evidenced_complete(key));
             }
         }
     }

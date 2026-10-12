@@ -2248,8 +2248,7 @@ pub(crate) fn canon_coset(
 ) -> Result<StereoCoset, Contradiction> {
     let s = kind.class_key().space();
     let set: BTreeSet<u32> = match &coset {
-        StereoCoset::Undetermined => return Ok(StereoCoset::Undetermined),
-        StereoCoset::Lit(i) => BTreeSet::from([*i]),
+        StereoCoset::Undetermined | StereoCoset::Lit(_) => return Ok(coset),
         StereoCoset::LitSet(values) => values.clone(),
         StereoCoset::Term(t) => {
             let Some((base, g)) = compose_term(t, kind) else {
@@ -2319,10 +2318,11 @@ pub(crate) fn coset_meet(
 ) -> Option<StereoCoset> {
     let ca = canon_coset(a.clone(), kind).ok()?;
     let cb = canon_coset(b.clone(), kind).ok()?;
-    use StereoCoset::{Term, Undetermined};
+    use StereoCoset::{Lit, Term, Undetermined};
     match (&ca, &cb) {
         (Undetermined, _) => Some(cb),
         (_, Undetermined) => Some(ca),
+        (Lit(a), Lit(b)) => (a == b).then_some(ca),
         (Term(_), Term(_)) => (ca == cb).then_some(ca),
         (Term(_), _) | (_, Term(_)) => None,
         _ => {
@@ -2389,6 +2389,10 @@ pub(crate) fn coset_apply_permutation(
     let s = kind.class_key().space();
     match coset {
         StereoCoset::Undetermined => Some(StereoCoset::Undetermined),
+        StereoCoset::Lit(i) if permutation == Permutation::identity(kind.degree()) => {
+            s.unindex(*i)?;
+            Some(StereoCoset::Lit(*i))
+        }
         StereoCoset::Lit(i) => Some(StereoCoset::Lit(s.reindex(*i, permutation)?)),
         StereoCoset::LitSet(set) => Some(StereoCoset::LitSet(
             set.iter()
@@ -4964,14 +4968,27 @@ mod tests {
     }
 
     #[rstest]
-    #[case::literal(StereoCoset::Lit(2))]
-    #[case::set(StereoCoset::lit_set([0, 2]))]
-    #[case::term_literal(StereoCoset::term(StereoTerm::Lit(2)))]
-    #[case::term_set(StereoCoset::term(StereoTerm::lit_set([0, 2])))]
-    #[case::empty_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [])))]
-    fn test_coset_apply_permutation_error(#[case] coset: StereoCoset) {
+    #[case::tetrahedral(StereoCoset::Lit(1), StereoKind::Tetrahedral)]
+    #[case::cis_trans(StereoCoset::Lit(0), StereoKind::CisTrans)]
+    #[case::octahedral(StereoCoset::Lit(29), StereoKind::Octahedral)]
+    fn test_coset_apply_permutation_identity(#[case] coset: StereoCoset, #[case] kind: StereoKind) {
         assert_eq!(
-            coset_apply_permutation(&coset, Permutation::identity(4), StereoKind::Tetrahedral),
+            coset_apply_permutation(&coset, Permutation::identity(kind.degree()), kind),
+            Some(coset),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::literal(StereoCoset::Lit(2), Permutation::identity(4))]
+    #[case::set(StereoCoset::lit_set([0, 2]), Permutation::identity(4))]
+    #[case::term_literal(StereoCoset::term(StereoTerm::Lit(2)), Permutation::identity(4))]
+    #[case::term_set(StereoCoset::term(StereoTerm::lit_set([0, 2])), Permutation::identity(4))]
+    #[case::empty_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [])), Permutation::identity(4))]
+    #[case::wrong_degree(StereoCoset::Lit(0), Permutation::identity(3))]
+    fn test_coset_apply_permutation_error(#[case] coset: StereoCoset, #[case] permutation: Permutation) {
+        assert_eq!(
+            coset_apply_permutation(&coset, permutation, StereoKind::Tetrahedral),
             None,
         );
     }

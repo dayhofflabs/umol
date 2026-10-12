@@ -26,8 +26,7 @@ pub use multicenter::{
 };
 use stereo::StereoProjectError;
 pub use stereo::{
-    StereoContradiction, StereoError, StereoFailurePolicy, StereoMismatchPolicy,
-    StereoResolveConfig, StereoResolver,
+    StereoContradiction, StereoError, StereoFailurePolicy, StereoResolveConfig, StereoResolver,
 };
 use thiserror::Error;
 use umol_graph_ir::ir::{
@@ -1209,10 +1208,6 @@ impl<'a> Resolver<'a> {
                                 self.config.stereo.tetrahedral_stereo_failure
                                     != StereoFailurePolicy::Error
                             }
-                            AtomConstraintForm::TetrahedralStereo(_) => {
-                                self.config.stereo.tetrahedral_stereo_mismatch
-                                    != StereoMismatchPolicy::Error
-                            }
                             _ => false,
                         };
                         if !tolerated {
@@ -1255,10 +1250,6 @@ impl<'a> Resolver<'a> {
                             BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo) => {
                                 self.config.stereo.cis_trans_stereo_failure
                                     != StereoFailurePolicy::Error
-                            }
-                            BondConstraintForm::CisTransStereo(_) => {
-                                self.config.stereo.cis_trans_stereo_mismatch
-                                    != StereoMismatchPolicy::Error
                             }
                             _ => false,
                         };
@@ -2034,6 +2025,65 @@ mod tests {
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#));
+    }
+
+    #[rstest]
+    #[case::tetrahedral(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#T1" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]
+        }"#),
+        StereoInconsistency::TetrahedralStereoMismatch {
+            atom: AtomId(0), stereo_atom: StereoAtomId(0),
+        },
+    )]
+    #[case::cis_trans(
+        mol_dsl_concrete!(r#"{
+            :atoms ["C" "C" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
+            :bonds [[0 1 "2#C1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]
+        }"#),
+        StereoInconsistency::CisTransStereoMismatch {
+            bond: BondId(0), stereo_bond: StereoBondId(0),
+        },
+    )]
+    fn test_resolver_resolve_stereo_mismatch(
+        chemistry_model: ChemistryModel,
+        #[case] mut molecule: Molecule,
+        #[case] inconsistency: StereoInconsistency,
+        #[values(
+            StereoFailurePolicy::Error,
+            StereoFailurePolicy::Keep,
+            StereoFailurePolicy::Remove
+        )]
+        failure: StereoFailurePolicy,
+    ) {
+        let original = molecule.clone();
+        let resolver = Resolver::with_config(
+            &chemistry_model,
+            ResolveConfig {
+                stereo: StereoResolveConfig {
+                    tetrahedral_stereo_failure: failure,
+                    stereo_atom_failure: failure,
+                    cis_trans_stereo_failure: failure,
+                    stereo_bond_failure: failure,
+                    ..StereoResolveConfig::default()
+                },
+                ..ResolveConfig::default()
+            },
+        );
+        let expected =
+            ResolveContradiction::Stereo(StereoContradiction::Inconsistency(inconsistency));
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Contradictory(expected.clone()))
+        );
+        assert_eq!(
+            resolver.resolve_into(&mut molecule),
+            Ok(Solution::Contradictory(expected))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

@@ -76,10 +76,8 @@ import umol
             umol.StereoResolveConfig,
             "(*, tetrahedral_stereo_failure=Ellipsis, "
             "stereo_atom_failure=Ellipsis, "
-            "tetrahedral_stereo_mismatch=Ellipsis, "
             "cis_trans_stereo_failure=Ellipsis, "
             "stereo_bond_failure=Ellipsis, "
-            "cis_trans_stereo_mismatch=Ellipsis, "
             "reset_stereo_constraints=False)",
         ),
         (umol.ResolveConfig, "(*, aromaticity, stereo, isotope=Ellipsis)"),

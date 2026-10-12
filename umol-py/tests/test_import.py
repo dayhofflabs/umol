@@ -213,7 +213,6 @@ PUBLIC_EXPORTS = frozenset(
     StereoLigandKind
     StereoLigandPair
     StereoModel
-    StereoMismatchPolicy
     StereoResolveConfig
     StereoTerm
     Stereogenicity

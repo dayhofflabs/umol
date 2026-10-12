@@ -1584,8 +1584,8 @@ to S3a3–S3a4. S3c, S3f, and S3g specify parts of S3b, as marked
 below. S3b is the Rust reading migration; S3b1–S3b3 sequence ring ownership,
 ring bindings, and semantic-reading bindings after it.
 S3d includes S4g's aromaticity mismatch-policy removal: reading contradictory
-evidence as bottom cannot supply a ReplaceEntity candidate. S4g retains the
-stereo mismatch-policy removal.
+evidence as bottom cannot supply a ReplaceEntity candidate. S3e includes the
+stereo mismatch-policy removal for the same reason.
 
 Use focused checks for individual subitems. Run workspace tests after a set of
 related changes and at the final gate.
@@ -2499,7 +2499,7 @@ electron-vector length failures retain their existing classification.
 Both aromaticity mismatch policies and their recovery branches are removed
 from Rust and Python, including config fields, exports, constructor keywords,
 getters, and repr fields. The remaining failure policies cannot permit a
-mismatch. S4g retains only the stereo policy removal.
+mismatch. The stereo policy removal is covered by S3e.
 
 **Verification:** All focused checks pass: 331 aromatic unit cases, 187
 composite-resolver cases, 13 aromatizer cases, the exhaustive-selection
@@ -2538,14 +2538,170 @@ in scratch/236-s3d.
 
 #### S3e — Stereo perception reads evidenced_complete
 
-**Modules:** graph stereo. **Green.** [dep: S3b]
+**Modules:** graph-IR stereo, view/atom, view/bond, and view/constraints; graph stereo,
+resolve/stereo, and resolve; umol-py resolve bindings, exports, and tests.
+**Breaking, red→green within the subitem.**
+[dep: S3b]
 
 Read each site's tetrahedral or cis-trans evidence from `evidenced_complete`. A
 stereo value derives or confirms the site's entity, ⊥ is the existing mismatch,
 and the negative leaves the site without an entity.
+Independent constraint and entity realizability failures retain their existing
+diagnostics and failure policies. Bottom in an own assertion without an entity
+is a constraint failure.
+The resolver's partial-input gate reads the same evidence, so a stored entity
+can refine an open assertion before that gate classifies it as underdetermined.
+
+Transport stored stereo configurations into the assertion frame in the shared
+graph-IR projections before meeting them with assertions. Actual ligands follow
+neighbor order, with virtual ligands last; cis-trans uses that order within each
+endpoint block. Exchanging whole endpoint blocks preserves cis-trans configuration.
+The previous projections copied the stored coset without transport and could report
+false bottom when stored ligands are reordered. This prerequisite fix is included
+in S3e and also corrects the Python readings.
+
+Remove StereoMismatchPolicy, the tetrahedral_stereo_mismatch and
+cis_trans_stereo_mismatch config fields, recovery branches, and corresponding
+Python classes, keywords, getters, repr fields, and exports. Every mismatch is
+a contradiction. This remaining portion of S4g moves here because bottom
+evidence cannot supply a ReplaceEntity candidate.
 
 **Tests:** existing stereo derivation and resolution results, including failures
-and mismatches.
+and mismatches; frame transport in shared readings, including virtual ligands;
+refinement of open assertions by stored entities; unconditional
+mismatch rejection in standalone and composite resolution; Python config parity.
+
+**Implementation (2026-10-12; performance acceptance open):** perception reads complete evidence, uses site lookup
+instead of scanning every stereo entity, and builds each candidate frame once.
+The partial-input gate allows a stored entity to refine an open assertion.
+Ground assertions or configurations skip that reading because their evidence
+is ground or bottom; absent assertions and entities also cannot produce partial
+evidence. For consistent tetrahedral evidence, entity validation checks the
+distinct ligand set without transporting the configuration again. Cis-trans
+retains its block-aware check, with the existing same-frame shortcut.
+Independent entity checks still reject an unrealizable virtual ligand without
+inventing a replacement entity. The small-ring assertion exclusion is retained.
+StereoMismatchPolicy and its Rust/Python config and export surface are removed,
+completing S4g.
+
+The shared projections now transport through a four-position stack array and the
+existing coset action, without rewriting storage. Six frame regressions and two
+open-assertion refinement regressions failed before their fixes and pass after.
+Molecule construction and attribute mutation retain their existing contracts.
+
+**Verification:** 280 graph stereo unit cases (including composite resolution
+and validation), 144 graph-IR constraint-view cases, three constraint-reading
+properties including reframing invariance, 36 stereo resolution conformance
+cases, two stereo projection properties, 50 Rust binding cases, and 373 focused
+Python cases passed after rebuilding the extension with Python 3.13.
+Clippy passed with warnings denied for graph-IR, graph, and Python across all
+targets, including the affected property/conformance features. Formatting and
+git diff --check passed. No workspace tests were run for this subitem.
+
+The four existing smiles_roundtrip/resolve stereo cases were compared with the
+s3e-before baseline using 20 samples, one-second warm-up, and two-second
+measurement, with no simultaneous builds or tests:
+
+| Case | Time change | 95% interval |
+| --- | ---: | ---: |
+| tetra_four | +2.49% | -0.67% to +5.06% |
+| tetra_ring | +5.61% | +2.63% to +7.90% |
+| alkene_four | +4.68% | -2.12% to +11.01% |
+| shared_chain | +4.31% | +3.65% to +4.98% |
+
+Criterion flags regressions for tetra_ring and shared_chain and detects no
+significant change for the other two. The baseline had outliers; this short
+comparison records the measured cost of the subitem without isolating its
+cause or establishing broader performance. Logs are in scratch/236-s3e.
+
+The user accepts approximately 1% overhead but finds 5% too costly. Performance
+acceptance was reopened to attribute and reduce these regressions. The results
+below address that work; S3e remains open for review of the measured cost.
+Passing correctness checks does not settle performance acceptance.
+
+**Performance attribution (2026-10-12):** rebuilt the committed baseline
+cb63b560b773de7be6b2af119564854e7ca516d5 and saved separate executables for
+the original S3e implementation and a diagnostic variant with its consumer
+changes but the old projections. The diagnostic variant deliberately lacks the
+frame correction and is only a cost-isolation experiment. Eight interleaved
+rounds of a separate public-API harness gave these median times, in microseconds:
+
+| Case | Baseline | S3e consumers, old projections | Original S3e |
+| --- | ---: | ---: | ---: |
+| tetra_four | 7.797 | 7.725 | 8.096 |
+| tetra_ring | 12.712 | 13.096 | 13.503 |
+| alkene_four | 11.253 | 11.452 | 11.671 |
+| shared_chain | 13.387 | 13.598 | 13.920 |
+
+This diagnostic timing includes input clone and result destruction, unlike the
+existing Criterion resolve group. It isolates the projection change at roughly
+0.37–0.41 microseconds for the tetrahedral cases and 0.22–0.32 for the cis-trans
+cases. The remaining consumer cost includes evidence reads on sites without
+stereo and repeated readings in the partial-input gate. A branched molecule
+without stereo gained approximately 0.31 microseconds from those consumer changes.
+
+The tetrahedral ring has noncanonical stored ligand order. Original S3e
+transported its configuration in the partial-input gate, again in perception's
+evidence reading, and again in the independent entity check. Only the evidence
+reading needs that transport: a ground configuration cannot yield partial
+evidence, and consistent tetrahedral evidence leaves the entity check with the
+ligand-set comparison. Other inputs also paid general coset transport for an
+identity permutation. None of this rewrites the stored molecule.
+
+The implementation now skips those redundant reads and transports. Literal
+coset normalization returns the existing normal value, and literal/literal
+meet compares the values directly; both avoid temporary sets. Identity
+transport retains the existing invalid-index and degree behavior. Complete
+evidence semantics, partial forms, mismatch diagnostics, and infallible attribute
+mutation are unchanged.
+
+Allocation counts from one warmed resolution, excluding input construction:
+
+| Case | Baseline | Original S3e | Optimized S3e |
+| --- | ---: | ---: | ---: |
+| tetra_four | 45 | 43 | 41 |
+| tetra_ring | 67 | 67 | 63 |
+| alkene_four | 99 | 99 | 88 |
+| shared_chain | 134 | 134 | 112 |
+
+The original regression therefore did not come from increased total allocation
+counts. Removing the temporary literal sets additionally improves existing
+work in the closure checks. The complete stereo reading sweep allocates zero
+times on these four resolved inputs after optimization.
+
+Source snapshots, saved executables, build records, allocation counts, and
+interleaved timing logs are in scratch/236-s3e/attribution.
+
+**Final performance comparison:** three repetitions of the four existing
+Criterion resolve cases, using separate saved baseline and final executables,
+40 samples, one-second warm-up, and two-second measurement. Baseline and final
+runs were adjacent for each case; the second repetition reversed both variant
+and case order. No builds or tests ran concurrently. These are Criterion's
+reported change estimates, with the reversed comparison expressed as final
+relative to baseline; negative means faster:
+
+| Case | Run 1 | Run 2 | Run 3 | Median estimate |
+| --- | ---: | ---: | ---: | ---: |
+| tetra_four | +0.58% | -2.15% | -6.26% | -2.15% |
+| tetra_ring | -2.11% | -3.56% | -0.81% | -2.11% |
+| alkene_four | -2.26% | -3.18% | -1.81% | -2.26% |
+| shared_chain | -1.26% | +0.24% | -4.52% | -1.26% |
+
+The repeated 4–6% regression is no longer observed. All positive point estimates
+are below 1%, but this is not a strict 1% statistical bound: the noisy tetra_four
+first run has a 95% interval of -2.39% to +5.80%, and shared_chain's second run
+has -1.83% to +2.96%. The other comparisons show improvements. The median column
+summarizes the three estimates; it is not a pooled confidence interval, and
+these four cases do not establish performance on other workloads.
+
+**Follow-up verification:** 3,081 graph-IR stereo unit cases, 282 graph stereo
+unit cases, 144 constraint-view cases, 115 lattice property cases, three
+constraint-reading properties, 36 stereo conformance cases, and two stereo
+resolver properties passed. After rebuilding the extension with Python 3.13,
+254 constraint-reading and resolver Python cases passed. Clippy passed with
+warnings denied for graph-IR, graph, and Python across all targets and the
+affected property/conformance features. Formatting and git diff --check passed.
+No workspace tests were run.
 
 #### S3f — Matching reads evidenced_complete **Done**
 
@@ -2775,9 +2931,10 @@ of through transact. Planning failures leave the receiver unchanged.
 **Tests:** existing transform_into results, and an unchanged receiver on
 Aromatizer planning failure.
 
-#### S4g — Mismatch policies removed
+#### S4g — Mismatch policies removed **Done**
 
-The aromaticity policy removal is included in S3d.
+**Completed with S3d and S3e.** The aromaticity policy removal is included in
+S3d, and the stereo policy removal is included in S3e.
 
 **Modules:** graph resolve/stereo and resolve; umol-py
 resolve bindings, the Python package exports, and Python tests. **Breaking,

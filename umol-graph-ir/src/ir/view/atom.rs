@@ -2,6 +2,7 @@
 
 use umol_chem::element::Element;
 use umol_graph_core::NodeId;
+use umol_perm::Permutation;
 
 use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::super::constraint::AtomConstraintsForm;
@@ -14,7 +15,7 @@ use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::{StereoKind, TetrahedralStereoForm};
+use super::super::stereo::{coset_apply_permutation, StereoKind, TetrahedralStereoForm};
 use super::super::traits::{Lattice, Normalize};
 use super::aromatic::AromaticSystemView;
 use super::constraints::AtomConstraintsView;
@@ -715,7 +716,17 @@ pub(crate) fn atom_derived_constraint(
                     stereo.attributes().configuration.coset(),
                 ) {
                     (Some(StereoKind::Tetrahedral), Some(coset)) => {
-                        TetrahedralStereoForm::stereo(coset.clone())
+                        let ligands = stereo.ligand_ids();
+                        if ligands.len() != StereoKind::Tetrahedral.degree() {
+                            return None;
+                        }
+                        let mut image = [0, 1, 2, 3];
+                        image.sort_unstable_by_key(|&i| (ligands[i].kind, ligands[i].atom_id));
+                        TetrahedralStereoForm::stereo(coset_apply_permutation(
+                            coset,
+                            Permutation::from_image(&image),
+                            StereoKind::Tetrahedral,
+                        )?)
                     }
                     (Some(StereoKind::Tetrahedral), None) | (None, _) => {
                         TetrahedralStereoForm::Undetermined
