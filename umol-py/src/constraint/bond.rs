@@ -2,12 +2,13 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
     BondConstraintForm as GraphIrBondConstraintForm, BondConstraintKey as GraphIrBondConstraintKey,
-    BondConstraintsForm as GraphIrBondConstraintsForm, BondId as GraphIrBondId,
+    BondConstraintsForm as GraphIrBondConstraintsForm,
+    BondConstraintsView as GraphIrBondConstraintsView, BondId as GraphIrBondId,
     RingScope as GraphIrRingScope,
 };
 
@@ -18,6 +19,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
+use crate::ring::RingSet;
 use crate::stereo::{CisTransStereoForm, CisTransStereoLike};
 
 /// The key (identity) of a bond constraint, for keyed lookup. The ring-membership
@@ -303,6 +305,32 @@ impl BondConstraintsForm {
         bond_constraint_items(py, &self.0)
     }
 
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.0
+            .asserted(key)
+            .map(|value| BondConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.0
+            .asserted_complete(key)
+            .map(|value| BondConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
     /// The constraint with the given key, or `default` (`None`) if absent.
     #[pyo3(signature = (key, default=None))]
     pub(crate) fn get(
@@ -541,12 +569,50 @@ pub(crate) enum BondConstraintsStorage {
 /// standalone `BondForm`. Reads borrow the bond's constraints and read only the item
 /// they need (no whole-container clone); mutators write through to the bond in place,
 /// without a clone-and-writeback.
+/// Semantic readings return independent normal values; None is bottom.
+/// Derivation, evidence, and comparisons require molecule context.
 #[pyclass]
 pub struct BondConstraintsView {
     pub(crate) storage: BondConstraintsStorage,
+    pub(crate) rings: Option<Py<RingSet>>,
 }
 
 impl BondConstraintsView {
+    fn read_view<R>(
+        &self,
+        py: Python<'_>,
+        keys: impl IntoIterator<Item = GraphIrBondConstraintKey>,
+        f: impl FnOnce(GraphIrBondConstraintsView<'_>) -> PyResult<R>,
+    ) -> PyResult<R> {
+        let BondConstraintsStorage::Molecule { owner, counter, id } = &self.storage else {
+            return Err(PyValueError::new_err(
+                "BondConstraintsView requires molecule context",
+            ));
+        };
+        let molecule = owner.try_borrow(py)?;
+        molecule.check_access(*counter, stringify!(BondConstraintsView))?;
+        let entity = molecule
+            .to_rust()?
+            .bonds()
+            .get(*id)
+            .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
+        let view = entity.constraints();
+        if let Some(rings) = &self.rings {
+            let rings = rings.try_borrow(py)?;
+            f(view.with_rings(rings.to_rust()))
+        } else {
+            if keys
+                .into_iter()
+                .any(|key| matches!(key, GraphIrBondConstraintKey::RingMembership(_)))
+            {
+                return Err(PyValueError::new_err(
+                    "BondConstraintsView requires ring context; use with_rings",
+                ));
+            }
+            f(view)
+        }
+    }
+
     /// Borrow the backing bond's constraints and read one item through `f` — no clone.
     pub(crate) fn read<R>(
         &self,
@@ -626,6 +692,138 @@ impl BondConstraintsView {
 
 #[pymethods]
 impl BondConstraintsView {
+    /// Return a view of the same molecule entity with borrowed ring context.
+    /// Retains rings without copying; topology must agree for meaningful readings.
+    /// Raises ValueError on a standalone form. The source view is unchanged.
+    fn with_rings(&self, py: Python<'_>, rings: Py<RingSet>) -> PyResult<Self> {
+        let BondConstraintsStorage::Molecule { owner, counter, id } = &self.storage else {
+            return Err(PyValueError::new_err(
+                "BondConstraintsView requires molecule context",
+            ));
+        };
+        owner
+            .try_borrow(py)?
+            .check_access(*counter, stringify!(BondConstraintsView))?;
+        Ok(Self {
+            storage: BondConstraintsStorage::Molecule {
+                owner: owner.clone_ref(py),
+                counter: *counter,
+                id: *id,
+            },
+            rings: Some(rings),
+        })
+    }
+
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read(py, |view| {
+            view.asserted(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read(py, |view| {
+            view.asserted_complete(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection; None is bottom and undetermined is top.
+    /// Raises ValueError without molecule context or required ring context.
+    fn derived(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.derived(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection with closure; None remains bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn derived_complete(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.derived_complete(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Meet the own assertion with derived and additional evidence; None is bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn evidenced(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.evidenced(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read combined evidence with relation closure; None remains bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn evidenced_complete(
+        &self,
+        py: Python<'_>,
+        key: &BondConstraintKey,
+    ) -> PyResult<Option<BondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.evidenced_complete(key)
+                .map(|value| BondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Whether complete evidence satisfies every pattern entry.
+    /// Requires molecule context even for empty inputs. Missing molecule or required
+    /// ring context raises ValueError.
+    fn satisfies(&self, py: Python<'_>, pattern: &BondConstraintsForm) -> PyResult<bool> {
+        self.read_view(
+            py,
+            pattern.0.iter().map(GraphIrBondConstraintForm::key),
+            |view| Ok(view.satisfies(&pattern.0)),
+        )
+    }
+
+    /// Whether open evidence is compatible with every entry of other.
+    /// Requires molecule context even for empty inputs. Missing molecule or required
+    /// ring context raises ValueError.
+    fn is_compatible(&self, py: Python<'_>, other: &BondConstraintsForm) -> PyResult<bool> {
+        self.read_view(
+            py,
+            other.0.iter().map(GraphIrBondConstraintForm::key),
+            |view| Ok(view.is_compatible(&other.0)),
+        )
+    }
+
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let count = self.read(py, |cs| Ok(cs.len()))?;
         Ok(format!("BondConstraintsView({count} entries)"))

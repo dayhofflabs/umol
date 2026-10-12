@@ -352,8 +352,9 @@ costs and rare-form copying remain as recorded; acceptance does not claim zero
 overhead or universal speedups. The diagnostic contracts and Python reading
 interface are also settled below. Shared container readings and diagnostic
 formatting are implemented in S3b, owned/borrowed ring data in S3b1, and Python
-ring bindings in S3b2. Python constraint readings follow in S3b3. Later
-perception and discharge work retains its separately scheduled scope.
+ring bindings in S3b2. S3b3 implements Python constraint readings and completes
+the numeric projections. Later perception and discharge work retains its
+separately scheduled scope.
 
 Every constraints view has six readings of a key: `asserted`, `derived`, and
 `evidenced`, and their complete variants. Each reading is the meet of its
@@ -859,8 +860,9 @@ The reading signatures, closure rules, diagnostics, Python reading interface,
 and measured performance trade-off are accepted. S3b supplies the shared
 container implementation, diagnostic formatting, and Rust verification;
 S3b1 implements ring ownership, and S3b2 supplies the Python ring interface.
-S3b3 remains to bind the constraint readings. The comparisons below emphasize
-common variants and keep rare-form stress results separate.
+S3b3 binds the constraint readings and completes the numeric projections. The
+comparisons below emphasize common variants and keep rare-form stress results
+separate.
 
 ### Ring data and view ownership (accepted 2026-10-12)
 
@@ -2325,7 +2327,7 @@ Python 3.13.15. Workspace tests with all features pass (36,945 tests, ten
 ignored), as do workspace Clippy with all targets/features and warnings denied,
 formatting, and diff checks. Logs are in scratch/236-s3b2.
 
-#### S3b3 — Python constraint readings and numeric projections
+#### S3b3 — Python constraint readings and numeric projections **Done**
 
 **Modules:** umol-py entity constraint containers and views, atom/bond bindings,
 and Python tests. **Additive, green.** [dep: S3b, S3b2]
@@ -2350,6 +2352,29 @@ bottom versus top; optional numeric results; and unchanged live-view mutation
 and invalidation. Verify Rust/Python reading parity and independent returned
 forms without introducing a Python-only reading implementation or a separate
 storage-proxy class.
+
+**Completion (2026-10-12):** All eight Python constraint containers expose the
+two own-assertion readings, and their views expose all six readings plus
+satisfies and is_compatible. They delegate to the shared Rust implementations;
+None denotes bottom and undetermined denotes top. Standalone assertion reads
+work without molecule context; graph-dependent operations reject missing
+context with ValueError, including empty comparisons. Atom/bond ring keys
+require explicit ring context for derivation, evidence, and comparisons.
+
+with_rings retains the supplied RingSet owner and the same molecule entity
+without copying. The resulting view shares the existing invalidation contract;
+attribute and constraint mutation remain visible. Returned readings are
+independent normal values, and storage getters retain their raw meaning.
+AtomView's nine numeric properties complete the ten projections with S3b2's
+RingAtomView.ring_valence. No additional Python types are introduced.
+
+**Verification:** 147 new Python cases cover all eight entity families,
+normalization without storage rewrites, bottom/top, closure, scoped keys,
+missing context, explicit ring ownership, live mutation, invalidation, and the
+numeric projections. The full Python suite passes (2,204 tests, two skipped)
+after rebuilding under Python 3.13.15. Workspace tests with all features pass
+(36,945 tests, ten ignored), as do workspace Clippy with all targets/features
+and warnings denied, formatting, and diff checks. Logs are in scratch/236-s3b3.
 
 #### S3c — Valence admission and implicit hydrogen inference read evidenced_complete **Done**
 

@@ -11,8 +11,9 @@ use pyo3::types::PyDict;
 use umol_chem::element::Element as ChemElement;
 use umol_graph_ir::ir::{
     AsLit, AtomForm as GraphIrAtomForm, AtomId as GraphIrAtomId, AtomUpdate as GraphIrAtomUpdate,
-    ElementForm as GraphIrElementForm, IsotopeMass as GraphIrIsotopeMass,
-    IsotopeMassForm as GraphIrIsotopeMassForm, Molecule as GraphIrMolecule,
+    AtomView as GraphIrAtomView, ElementForm as GraphIrElementForm,
+    IsotopeMass as GraphIrIsotopeMass, IsotopeMassForm as GraphIrIsotopeMassForm,
+    Molecule as GraphIrMolecule, NumForm as GraphIrNumForm,
 };
 
 use crate::constraint::atom::{
@@ -499,6 +500,7 @@ impl AtomForm {
     #[getter]
     fn constraints(slf: Py<Self>) -> AtomConstraintsView {
         AtomConstraintsView {
+            rings: None,
             storage: AtomConstraintsStorage::Atom(slf),
         }
     }
@@ -676,6 +678,23 @@ pub struct AtomView {
 }
 
 impl AtomView {
+    fn read_projection(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(GraphIrAtomView<'_>) -> Option<GraphIrNumForm>,
+    ) -> PyResult<Option<NumForm>> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        let view = molecule
+            .to_rust()?
+            .atoms()
+            .get(self.id)
+            .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
+        f(view)
+            .map(|value| NumForm::from_rust(py, &value))
+            .transpose()
+    }
+
     fn atom<'a>(&self, molecule: &'a GraphIrMolecule) -> PyResult<&'a GraphIrAtomForm> {
         molecule
             .atoms()
@@ -828,6 +847,60 @@ impl AtomView {
         Ok(())
     }
 
+    /// Sum of normalized incident covalent bond orders; None is bottom, Undetermined is top.
+    #[getter]
+    fn valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.valence())
+    }
+
+    /// Pairs donated through binary dative bonds; None is bottom, Undetermined is top.
+    #[getter]
+    fn donated_pairs(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.donated_pairs())
+    }
+
+    /// Pairs accepted through incident dative bonds; None is bottom, Undetermined is top.
+    #[getter]
+    fn accepted_pairs(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.accepted_pairs())
+    }
+
+    /// Localized degree, implicit hydrogens, and multicenter degree; None is bottom, Undetermined is top.
+    #[getter]
+    fn total_degree(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.total_degree())
+    }
+
+    /// Explicit and implicit hydrogen count; None is bottom, Undetermined is top.
+    #[getter]
+    fn total_hydrogens(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.total_hydrogens())
+    }
+
+    /// Localized, implicit-hydrogen, aromatic, and multicenter valence; None is bottom, Undetermined is top.
+    #[getter]
+    fn total_valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.total_valence())
+    }
+
+    /// Electrons gained through sharing; None is bottom, Undetermined is top.
+    #[getter]
+    fn covalence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.covalence())
+    }
+
+    /// Localized neighbors whose normalized element is not hydrogen; None is bottom, Undetermined is top.
+    #[getter]
+    fn heavy_atom_degree(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.heavy_atom_degree())
+    }
+
+    /// Localized valence from neighbors whose normalized element is not hydrogen; None is bottom, Undetermined is top.
+    #[getter]
+    fn heavy_atom_valence(&self, py: Python<'_>) -> PyResult<Option<NumForm>> {
+        self.read_projection(py, |view| view.heavy_atom_valence())
+    }
+
     /// The atom's constraints as a live handle onto the molecule: reads borrow the
     /// current state, mutators write through to the atom in place.
     #[getter]
@@ -835,6 +908,7 @@ impl AtomView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         Ok(AtomConstraintsView {
+            rings: None,
             storage: AtomConstraintsStorage::Molecule {
                 owner: self.owner.clone_ref(py),
                 counter: self.counter,
@@ -1311,6 +1385,7 @@ mod tests {
             let view = Py::new(
                 py,
                 AtomConstraintsView {
+                    rings: None,
                     storage: AtomConstraintsStorage::Atom(src),
                 },
             )
@@ -1351,6 +1426,7 @@ mod tests {
             let own_view = Py::new(
                 py,
                 AtomConstraintsView {
+                    rings: None,
                     storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
                 },
             )
@@ -1666,6 +1742,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
                     counter: 0,
@@ -1679,6 +1756,7 @@ mod tests {
             .unwrap();
             view.set(py, valence).unwrap();
             let fresh = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner,
                     counter: 0,
@@ -1715,6 +1793,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
                     counter: 0,
@@ -1734,6 +1813,7 @@ mod tests {
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
             let fresh = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner,
                     counter: 0,
@@ -1756,6 +1836,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
                     counter: 0,
@@ -1773,6 +1854,7 @@ mod tests {
             )
             .unwrap();
             let fresh = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner,
                     counter: 0,
@@ -1792,6 +1874,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
             };
             let valence = into_py_variant(
@@ -1802,6 +1885,7 @@ mod tests {
             view.set(py, valence).unwrap();
             // a fresh view proves the write hit the standalone atom, not a copy
             let fresh = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Atom(atom),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
@@ -1832,6 +1916,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
             };
             let removed = view
@@ -1847,6 +1932,7 @@ mod tests {
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
             let fresh = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Atom(atom),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 0);
@@ -1862,6 +1948,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
             };
             let mut other = GraphIrAtomConstraintsForm::new();
@@ -1875,6 +1962,7 @@ mod tests {
             )
             .unwrap();
             let fresh = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Atom(atom),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 2);
@@ -1972,6 +2060,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
                     counter: 0,
@@ -1981,6 +2070,7 @@ mod tests {
             view.set_aromatic_valence(py, AromaticValenceLike::Value(NumLike::Lit(1)))
                 .unwrap();
             let fresh = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner,
                     counter: 0,
@@ -2026,6 +2116,7 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
                     counter: 0,
@@ -2037,6 +2128,7 @@ mod tests {
                 .__setitem__(py, 5, NumLike::Lit(1))
                 .unwrap();
             let fresh = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Molecule {
                     owner,
                     counter: 0,
@@ -2123,11 +2215,13 @@ mod tests {
             )
             .unwrap();
             let view = AtomConstraintsView {
+                rings: None,
                 storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
             };
             let other = Py::new(
                 py,
                 AtomConstraintsView {
+                    rings: None,
                     storage: AtomConstraintsStorage::Atom(atom.clone_ref(py)),
                 },
             )

@@ -398,6 +398,12 @@ impl RingConnectionIter {
 #[pyclass(frozen)]
 pub struct RingSet(GraphIrRingSet);
 
+impl RingSet {
+    pub(crate) fn to_rust(&self) -> &GraphIrRingSet {
+        &self.0
+    }
+}
+
 #[pymethods]
 impl RingSet {
     #[getter]

@@ -246,6 +246,7 @@ impl BondForm {
     #[getter]
     fn constraints(slf: Py<Self>) -> BondConstraintsView {
         BondConstraintsView {
+            rings: None,
             storage: BondConstraintsStorage::Bond(slf),
         }
     }
@@ -459,6 +460,7 @@ impl BondView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(BondView))?;
         Ok(BondConstraintsView {
+            rings: None,
             storage: BondConstraintsStorage::Molecule {
                 owner: self.owner.clone_ref(py),
                 counter: self.counter,
@@ -703,6 +705,7 @@ mod tests {
             let view = Py::new(
                 py,
                 BondConstraintsView {
+                    rings: None,
                     storage: BondConstraintsStorage::Bond(src),
                 },
             )
@@ -1099,6 +1102,7 @@ mod tests {
             let own_view = Py::new(
                 py,
                 BondConstraintsView {
+                    rings: None,
                     storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
                 },
             )
@@ -1126,11 +1130,13 @@ mod tests {
             )
             .unwrap();
             let view = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             let other = Py::new(
                 py,
                 BondConstraintsView {
+                    rings: None,
                     storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
                 },
             )
@@ -1231,6 +1237,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             let aromatic = into_py_variant(
@@ -1245,6 +1252,7 @@ mod tests {
             view.set(py, aromatic).unwrap();
             // a fresh view proves the write hit the standalone bond, not a copy
             let fresh = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
@@ -1274,6 +1282,7 @@ mod tests {
             )
             .unwrap();
             let view = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             let removed = view
@@ -1289,6 +1298,7 @@ mod tests {
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
             let fresh = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 0);
@@ -1300,6 +1310,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             let mut other = GraphIrBondConstraintsForm::new();
@@ -1318,6 +1329,7 @@ mod tests {
             )
             .unwrap();
             let fresh = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(fresh.__len__(py).unwrap(), 2);
@@ -1329,6 +1341,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             assert_eq!(
@@ -1337,6 +1350,7 @@ mod tests {
             );
             view.set_aromatic(py, BooleanLike::Lit(true)).unwrap();
             let fresh = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(
@@ -1369,6 +1383,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond.clone_ref(py)),
             };
             view.ring_size_count(py)
@@ -1376,6 +1391,7 @@ mod tests {
                 .__setitem__(py, 5, NumLike::Lit(1))
                 .unwrap();
             let fresh = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Bond(bond),
             };
             assert_eq!(
@@ -1496,6 +1512,7 @@ mod tests {
         Python::attach(|py| {
             let owner = ethene(py);
             let view = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
                     counter: 0,
@@ -1513,6 +1530,7 @@ mod tests {
             .unwrap();
             view.set(py, aromatic).unwrap();
             let fresh = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Molecule {
                     owner,
                     counter: 0,
@@ -1532,6 +1550,7 @@ mod tests {
         Python::attach(|py| {
             let owner = ethene(py);
             let view = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Molecule {
                     owner: owner.clone_ref(py),
                     counter: 0,
@@ -1543,6 +1562,7 @@ mod tests {
                 .__setitem__(py, 6, NumLike::Lit(1))
                 .unwrap();
             let fresh = BondConstraintsView {
+                rings: None,
                 storage: BondConstraintsStorage::Molecule {
                     owner,
                     counter: 0,

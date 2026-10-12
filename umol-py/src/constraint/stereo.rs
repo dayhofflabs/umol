@@ -4,17 +4,19 @@
 use std::collections::BTreeSet;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
     FluxionalityForm as GraphIrFluxionalityForm, LigandSymmetryForm as GraphIrLigandSymmetryForm,
     StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
     StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
     StereoAtomConstraintsForm as GraphIrStereoAtomConstraintsForm,
+    StereoAtomConstraintsView as GraphIrStereoAtomConstraintsView,
     StereoAtomId as GraphIrStereoAtomId,
     StereoBondConstraintForm as GraphIrStereoBondConstraintForm,
     StereoBondConstraintKey as GraphIrStereoBondConstraintKey,
     StereoBondConstraintsForm as GraphIrStereoBondConstraintsForm,
+    StereoBondConstraintsView as GraphIrStereoBondConstraintsView,
     StereoBondId as GraphIrStereoBondId, StereogenicityForm as GraphIrStereogenicityForm,
     TopicityForm as GraphIrTopicityForm, TopicityRelationForm as GraphIrTopicityRelationForm,
 };
@@ -467,7 +469,7 @@ macro_rules! stereo_constraints {
         $update:ident, $resolved:ident, $like:ident,
         $key_iter:ident, $iter:ident, $items_iter:ident,
         $rust_key:ident, $rust_constraint:ident, $rust_constraints:ident,
-        $value:ident, $view:ident, $storage:ident,
+        $value:ident, $view:ident, $storage:ident, $rust_view:ident,
         $rust_id:ident, $namespace:ident, $entity_mut:ident, $id_error:literal $(,)?
     ) => {
         /// The key (identity) of a stereo constraint: the sub-keyed oriented/ligand
@@ -796,6 +798,28 @@ macro_rules! stereo_constraints {
                 })
             }
 
+            /// Read the normalized own assertion; absence is top and None is bottom.
+            fn asserted(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.0
+                    .asserted(key)
+                    .map(|value| $constraint::from_rust(py, &value))
+                    .transpose()
+            }
+
+            /// Read the own assertion with closure of top; None remains bottom.
+            fn asserted_complete(
+                &self,
+                py: Python<'_>,
+                key: &$key,
+            ) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.0
+                    .asserted_complete(key)
+                    .map(|value| $constraint::from_rust(py, &value))
+                    .transpose()
+            }
+
             /// The constraint with the given key, or `default` (`None`) if absent.
             #[pyo3(signature = (key, default=None))]
             pub(crate) fn get(
@@ -977,12 +1001,35 @@ macro_rules! stereo_constraints {
         /// A live handle onto one stereo entity's constraints, backed by either a
         /// molecule-embedded entity or a standalone value. Reads borrow the entity and read
         /// only what they need; mutations write directly to the stored constraints.
+        /// Semantic readings return independent normal values; None is bottom.
+        /// Derivation, evidence, and comparisons require molecule context.
         #[pyclass]
         pub struct $view {
             pub(crate) storage: $storage,
         }
 
         impl $view {
+            fn read_view<R>(
+                &self,
+                py: Python<'_>,
+                f: impl FnOnce($rust_view<'_>) -> PyResult<R>,
+            ) -> PyResult<R> {
+                let $storage::Molecule { owner, counter, id } = &self.storage else {
+                    return Err(PyValueError::new_err(concat!(
+                        stringify!($view),
+                        " requires molecule context"
+                    )));
+                };
+                let molecule = owner.try_borrow(py)?;
+                molecule.check_access(*counter, stringify!($view))?;
+                let entity = molecule
+                    .to_rust()?
+                    .$namespace()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err($id_error))?;
+                f(entity.constraints())
+            }
+
             /// Borrow the backing entity's constraints and read through `f` — no clone.
             pub(crate) fn read<R>(
                 &self,
@@ -1010,6 +1057,94 @@ macro_rules! stereo_constraints {
 
         #[pymethods]
         impl $view {
+            /// Read the normalized own assertion; absence is top and None is bottom.
+            fn asserted(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read(py, |view| {
+                    view.asserted(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Read the own assertion with closure of top; None remains bottom.
+            fn asserted_complete(
+                &self,
+                py: Python<'_>,
+                key: &$key,
+            ) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read(py, |view| {
+                    view.asserted_complete(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Read the relation projection; None is bottom and undetermined is top.
+            /// Raises ValueError without molecule context.
+            fn derived(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_view(py, |view| {
+                    view.derived(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Read the relation projection with closure; None remains bottom.
+            /// Raises ValueError without molecule context.
+            fn derived_complete(
+                &self,
+                py: Python<'_>,
+                key: &$key,
+            ) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_view(py, |view| {
+                    view.derived_complete(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Meet the own assertion with derived and additional evidence; None is bottom.
+            /// Raises ValueError without molecule context.
+            fn evidenced(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_view(py, |view| {
+                    view.evidenced(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Read combined evidence with relation closure; None remains bottom.
+            /// Raises ValueError without molecule context.
+            fn evidenced_complete(
+                &self,
+                py: Python<'_>,
+                key: &$key,
+            ) -> PyResult<Option<$constraint>> {
+                let key = key.to_rust(py);
+                self.read_view(py, |view| {
+                    view.evidenced_complete(key)
+                        .map(|value| $constraint::from_rust(py, &value))
+                        .transpose()
+                })
+            }
+
+            /// Whether complete evidence satisfies every pattern entry.
+            /// Raises ValueError without molecule context, including for empty inputs.
+            fn satisfies(&self, py: Python<'_>, pattern: &$constraints) -> PyResult<bool> {
+                self.read_view(py, |view| Ok(view.satisfies(&pattern.0)))
+            }
+
+            /// Whether open evidence is compatible with every entry of other.
+            /// Raises ValueError without molecule context, including for empty inputs.
+            fn is_compatible(&self, py: Python<'_>, other: &$constraints) -> PyResult<bool> {
+                self.read_view(py, |view| Ok(view.is_compatible(&other.0)))
+            }
+
             pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
                 let count = self.read(py, |cs| Ok(cs.len()))?;
                 Ok(format!("{}({count} entries)", stringify!($view)))
@@ -1299,7 +1434,7 @@ stereo_constraints! {
     StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsLike,
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
     GraphIrStereoAtomConstraintKey, GraphIrStereoAtomConstraintForm, GraphIrStereoAtomConstraintsForm,
-    StereoAtomForm, StereoAtomConstraintsView, StereoAtomConstraintsStorage,
+    StereoAtomForm, StereoAtomConstraintsView, StereoAtomConstraintsStorage, GraphIrStereoAtomConstraintsView,
     GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut, "stereo atom id out of range",
 }
 
@@ -1308,6 +1443,6 @@ stereo_constraints! {
     StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsLike,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     GraphIrStereoBondConstraintKey, GraphIrStereoBondConstraintForm, GraphIrStereoBondConstraintsForm,
-    StereoBondForm, StereoBondConstraintsView, StereoBondConstraintsStorage,
+    StereoBondForm, StereoBondConstraintsView, StereoBondConstraintsStorage, GraphIrStereoBondConstraintsView,
     GraphIrStereoBondId, stereo_bonds, stereo_bond_mut, "stereo bond id out of range",
 }

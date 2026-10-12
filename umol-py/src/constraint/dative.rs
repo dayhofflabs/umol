@@ -2,13 +2,14 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
     DativeBondConstraintForm as GraphIrDativeBondConstraintForm,
     DativeBondConstraintKey as GraphIrDativeBondConstraintKey,
     DativeBondConstraintsForm as GraphIrDativeBondConstraintsForm,
+    DativeBondConstraintsView as GraphIrDativeBondConstraintsView,
     DativeBondId as GraphIrDativeBondId, RingScope as GraphIrRingScope,
 };
 
@@ -312,6 +313,32 @@ impl DativeBondConstraintsForm {
         dative_bond_constraint_items(py, &self.0)
     }
 
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &DativeBondConstraintKey,
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.0
+            .asserted(key)
+            .map(|value| DativeBondConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &DativeBondConstraintKey,
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.0
+            .asserted_complete(key)
+            .map(|value| DativeBondConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
     /// The constraint with the given key, or `default` (`None`) if absent.
     #[pyo3(signature = (key, default=None))]
     pub(crate) fn get(
@@ -539,12 +566,35 @@ pub(crate) enum DativeBondConstraintsStorage {
 /// molecule-bond or a standalone `DativeBondForm`. Reads borrow the bond's
 /// constraints and read only the item they need (no whole-container clone);
 /// mutators write through to the bond in place, without a clone-and-writeback.
+/// Semantic readings return independent normal values; None is bottom.
+/// Derivation, evidence, and comparisons require molecule context.
 #[pyclass]
 pub struct DativeBondConstraintsView {
     pub(crate) storage: DativeBondConstraintsStorage,
 }
 
 impl DativeBondConstraintsView {
+    fn read_view<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(GraphIrDativeBondConstraintsView<'_>) -> PyResult<R>,
+    ) -> PyResult<R> {
+        let DativeBondConstraintsStorage::Molecule { owner, counter, id } = &self.storage else {
+            return Err(PyValueError::new_err(
+                "DativeBondConstraintsView requires molecule context",
+            ));
+        };
+        let molecule = owner.try_borrow(py)?;
+        molecule.check_access(*counter, stringify!(DativeBondConstraintsView))?;
+        let entity = molecule
+            .to_rust()?
+            .dative_bonds()
+            .get(*id)
+            .ok_or_else(|| PyIndexError::new_err("dative bond id out of range"))?;
+        let view = entity.constraints();
+        f(view)
+    }
+
     /// Borrow the backing bond's constraints and read one item through `f` — no clone.
     pub(crate) fn read<R>(
         &self,
@@ -624,6 +674,106 @@ impl DativeBondConstraintsView {
 
 #[pymethods]
 impl DativeBondConstraintsView {
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &DativeBondConstraintKey,
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read(py, |view| {
+            view.asserted(key)
+                .map(|value| DativeBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &DativeBondConstraintKey,
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read(py, |view| {
+            view.asserted_complete(key)
+                .map(|value| DativeBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection; None is bottom and undetermined is top.
+    /// Raises ValueError without molecule context.
+    fn derived(
+        &self,
+        py: Python<'_>,
+        key: &DativeBondConstraintKey,
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, |view| {
+            view.derived(key)
+                .map(|value| DativeBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection with closure; None remains bottom.
+    /// Raises ValueError without molecule context.
+    fn derived_complete(
+        &self,
+        py: Python<'_>,
+        key: &DativeBondConstraintKey,
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, |view| {
+            view.derived_complete(key)
+                .map(|value| DativeBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Meet the own assertion with derived and additional evidence; None is bottom.
+    /// Raises ValueError without molecule context.
+    fn evidenced(
+        &self,
+        py: Python<'_>,
+        key: &DativeBondConstraintKey,
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, |view| {
+            view.evidenced(key)
+                .map(|value| DativeBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read combined evidence with relation closure; None remains bottom.
+    /// Raises ValueError without molecule context.
+    fn evidenced_complete(
+        &self,
+        py: Python<'_>,
+        key: &DativeBondConstraintKey,
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, |view| {
+            view.evidenced_complete(key)
+                .map(|value| DativeBondConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Whether complete evidence satisfies every pattern entry.
+    /// Raises ValueError without molecule context, including for empty inputs.
+    fn satisfies(&self, py: Python<'_>, pattern: &DativeBondConstraintsForm) -> PyResult<bool> {
+        self.read_view(py, |view| Ok(view.satisfies(&pattern.0)))
+    }
+
+    /// Whether open evidence is compatible with every entry of other.
+    /// Raises ValueError without molecule context, including for empty inputs.
+    fn is_compatible(&self, py: Python<'_>, other: &DativeBondConstraintsForm) -> PyResult<bool> {
+        self.read_view(py, |view| Ok(view.is_compatible(&other.0)))
+    }
+
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let count = self.read(py, |cs| Ok(cs.len()))?;
         Ok(format!("DativeBondConstraintsView({count} entries)"))

@@ -9,7 +9,8 @@ use umol_graph_ir::ir::{
     AromaticValence as GraphIrAromaticValence, AromaticValenceForm as GraphIrAromaticValenceForm,
     AsLit, AtomConstraintForm as GraphIrAtomConstraintForm,
     AtomConstraintKey as GraphIrAtomConstraintKey,
-    AtomConstraintsForm as GraphIrAtomConstraintsForm, AtomId as GraphIrAtomId,
+    AtomConstraintsForm as GraphIrAtomConstraintsForm,
+    AtomConstraintsView as GraphIrAtomConstraintsView, AtomId as GraphIrAtomId,
     MulticenterValence as GraphIrMulticenterValence,
     MulticenterValenceForm as GraphIrMulticenterValenceForm, RingScope as GraphIrRingScope,
     TetrahedralStereoForm as GraphIrTetrahedralStereoForm,
@@ -21,6 +22,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
+use crate::ring::RingSet;
 use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoForm};
 
 /// Exact ground aromatic-valence state.
@@ -724,6 +726,32 @@ impl AtomConstraintsForm {
         atom_constraint_items(py, &self.0)
     }
 
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &AtomConstraintKey,
+    ) -> PyResult<Option<AtomConstraintForm>> {
+        let key = key.to_rust(py);
+        self.0
+            .asserted(key)
+            .map(|value| AtomConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &AtomConstraintKey,
+    ) -> PyResult<Option<AtomConstraintForm>> {
+        let key = key.to_rust(py);
+        self.0
+            .asserted_complete(key)
+            .map(|value| AtomConstraintForm::from_rust(py, &value))
+            .transpose()
+    }
+
     /// The constraint with the given key, or `default` (`None`) if absent.
     #[pyo3(signature = (key, default=None))]
     pub(crate) fn get(
@@ -1125,12 +1153,54 @@ pub(crate) enum AtomConstraintsStorage {
 /// a standalone `AtomForm`. Reads borrow the atom's constraints and read only the
 /// item they need (no whole-container clone); mutators write through to the atom in
 /// place, without a clone-and-writeback.
+/// Semantic readings return independent normal values; None is bottom.
+/// Derivation, evidence, and comparisons require molecule context.
 #[pyclass]
 pub struct AtomConstraintsView {
     pub(crate) storage: AtomConstraintsStorage,
+    pub(crate) rings: Option<Py<RingSet>>,
 }
 
 impl AtomConstraintsView {
+    fn read_view<R>(
+        &self,
+        py: Python<'_>,
+        keys: impl IntoIterator<Item = GraphIrAtomConstraintKey>,
+        f: impl FnOnce(GraphIrAtomConstraintsView<'_>) -> PyResult<R>,
+    ) -> PyResult<R> {
+        let AtomConstraintsStorage::Molecule { owner, counter, id } = &self.storage else {
+            return Err(PyValueError::new_err(
+                "AtomConstraintsView requires molecule context",
+            ));
+        };
+        let molecule = owner.try_borrow(py)?;
+        molecule.check_access(*counter, stringify!(AtomConstraintsView))?;
+        let entity = molecule
+            .to_rust()?
+            .atoms()
+            .get(*id)
+            .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
+        let view = entity.constraints();
+        if let Some(rings) = &self.rings {
+            let rings = rings.try_borrow(py)?;
+            f(view.with_rings(rings.to_rust()))
+        } else {
+            if keys.into_iter().any(|key| {
+                matches!(
+                    key,
+                    GraphIrAtomConstraintKey::RingMembership(_)
+                        | GraphIrAtomConstraintKey::RingDegree
+                        | GraphIrAtomConstraintKey::RingValence
+                )
+            }) {
+                return Err(PyValueError::new_err(
+                    "AtomConstraintsView requires ring context; use with_rings",
+                ));
+            }
+            f(view)
+        }
+    }
+
     /// Borrow the backing atom's constraints and read one item through `f` — no clone.
     pub(crate) fn read<R>(
         &self,
@@ -1210,6 +1280,138 @@ impl AtomConstraintsView {
 
 #[pymethods]
 impl AtomConstraintsView {
+    /// Return a view of the same molecule entity with borrowed ring context.
+    /// Retains rings without copying; topology must agree for meaningful readings.
+    /// Raises ValueError on a standalone form. The source view is unchanged.
+    fn with_rings(&self, py: Python<'_>, rings: Py<RingSet>) -> PyResult<Self> {
+        let AtomConstraintsStorage::Molecule { owner, counter, id } = &self.storage else {
+            return Err(PyValueError::new_err(
+                "AtomConstraintsView requires molecule context",
+            ));
+        };
+        owner
+            .try_borrow(py)?
+            .check_access(*counter, stringify!(AtomConstraintsView))?;
+        Ok(Self {
+            storage: AtomConstraintsStorage::Molecule {
+                owner: owner.clone_ref(py),
+                counter: *counter,
+                id: *id,
+            },
+            rings: Some(rings),
+        })
+    }
+
+    /// Read the normalized own assertion; absence is top and None is bottom.
+    fn asserted(
+        &self,
+        py: Python<'_>,
+        key: &AtomConstraintKey,
+    ) -> PyResult<Option<AtomConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read(py, |view| {
+            view.asserted(key)
+                .map(|value| AtomConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the own assertion with closure of top; None remains bottom.
+    fn asserted_complete(
+        &self,
+        py: Python<'_>,
+        key: &AtomConstraintKey,
+    ) -> PyResult<Option<AtomConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read(py, |view| {
+            view.asserted_complete(key)
+                .map(|value| AtomConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection; None is bottom and undetermined is top.
+    /// Raises ValueError without molecule context or required ring context.
+    fn derived(
+        &self,
+        py: Python<'_>,
+        key: &AtomConstraintKey,
+    ) -> PyResult<Option<AtomConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.derived(key)
+                .map(|value| AtomConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read the relation projection with closure; None remains bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn derived_complete(
+        &self,
+        py: Python<'_>,
+        key: &AtomConstraintKey,
+    ) -> PyResult<Option<AtomConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.derived_complete(key)
+                .map(|value| AtomConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Meet the own assertion with derived and additional evidence; None is bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn evidenced(
+        &self,
+        py: Python<'_>,
+        key: &AtomConstraintKey,
+    ) -> PyResult<Option<AtomConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.evidenced(key)
+                .map(|value| AtomConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Read combined evidence with relation closure; None remains bottom.
+    /// Raises ValueError without molecule context or required ring context.
+    fn evidenced_complete(
+        &self,
+        py: Python<'_>,
+        key: &AtomConstraintKey,
+    ) -> PyResult<Option<AtomConstraintForm>> {
+        let key = key.to_rust(py);
+        self.read_view(py, [key], |view| {
+            view.evidenced_complete(key)
+                .map(|value| AtomConstraintForm::from_rust(py, &value))
+                .transpose()
+        })
+    }
+
+    /// Whether complete evidence satisfies every pattern entry.
+    /// Requires molecule context even for empty inputs. Missing molecule or required
+    /// ring context raises ValueError.
+    fn satisfies(&self, py: Python<'_>, pattern: &AtomConstraintsForm) -> PyResult<bool> {
+        self.read_view(
+            py,
+            pattern.0.iter().map(GraphIrAtomConstraintForm::key),
+            |view| Ok(view.satisfies(&pattern.0)),
+        )
+    }
+
+    /// Whether open evidence is compatible with every entry of other.
+    /// Requires molecule context even for empty inputs. Missing molecule or required
+    /// ring context raises ValueError.
+    fn is_compatible(&self, py: Python<'_>, other: &AtomConstraintsForm) -> PyResult<bool> {
+        self.read_view(
+            py,
+            other.0.iter().map(GraphIrAtomConstraintForm::key),
+            |view| Ok(view.is_compatible(&other.0)),
+        )
+    }
+
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let count = self.read(py, |cs| Ok(cs.len()))?;
         Ok(format!("AtomConstraintsView({count} entries)"))
