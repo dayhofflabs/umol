@@ -986,6 +986,12 @@ mod tests {
             ValenceContradiction::Counts(CountsError::NoMatch)
         ))
     )]
+    #[case::non_aromatic_atom_on_aromatic_bond(
+        "C:C",
+        SmilesInputError::Contradiction(ResolveContradiction::Valence(
+            ValenceContradiction::Counts(CountsError::NoMatch)
+        ))
+    )]
     #[case::duplicate_bracket_h(
         "[C@H2](F)(Cl)Br",
         SmilesInputError::ModelConversion(RaiseError::MoleculeEntries(
@@ -1297,6 +1303,21 @@ mod tests {
     }
 
     #[rstest]
+    #[case::ethanol(
+        "CCO",
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h3" "C#h2" "O#h1#n2"]
+            :bonds [[0 1 "1"] [1 2 "1"]]
+        }"#)
+    )]
+    #[case::benzene(
+        "c1ccccc1",
+        mol_dsl_concrete!(r#"{
+            :atoms ["C#h1" "C#h1" "C#h1" "C#h1" "C#h1" "C#h1"]
+            :bonds [[0 5 "1"] [0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
+    )]
     #[case::pyrrole(
         "c1cccn1",
         mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,2]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s"] :bonds [[0 4 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]]}"##)

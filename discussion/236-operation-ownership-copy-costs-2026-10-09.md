@@ -2536,7 +2536,7 @@ a regression for purine. This single short comparison does not isolate its
 cause or establish performance beyond these cases. Both benchmark logs are
 in scratch/236-s3d.
 
-#### S3e — Stereo perception reads evidenced_complete
+#### S3e — Stereo perception reads evidenced_complete **Done**
 
 **Modules:** graph-IR stereo, view/atom, view/bond, and view/constraints; graph stereo,
 resolve/stereo, and resolve; umol-py resolve bindings, exports, and tests.
@@ -2571,7 +2571,7 @@ and mismatches; frame transport in shared readings, including virtual ligands;
 refinement of open assertions by stored entities; unconditional
 mismatch rejection in standalone and composite resolution; Python config parity.
 
-**Implementation (2026-10-12; performance acceptance open):** perception reads complete evidence, uses site lookup
+**Completion (2026-10-12; performance accepted):** perception reads complete evidence, uses site lookup
 instead of scanning every stereo entity, and builds each candidate frame once.
 The partial-input gate allows a stored entity to refine an open assertion.
 Ground assertions or configurations skip that reading because their evidence
@@ -2615,9 +2615,9 @@ comparison records the measured cost of the subitem without isolating its
 cause or establishing broader performance. Logs are in scratch/236-s3e.
 
 The user accepts approximately 1% overhead but finds 5% too costly. Performance
-acceptance was reopened to attribute and reduce these regressions. The results
-below address that work; S3e remains open for review of the measured cost.
-Passing correctness checks does not settle performance acceptance.
+acceptance was reopened to attribute and reduce these regressions. The user
+accepted the optimized implementation and the measurements below on 2026-10-12,
+completing S3e.
 
 **Performance attribution (2026-10-12):** rebuilt the committed baseline
 cb63b560b773de7be6b2af119564854e7ca516d5 and saved separate executables for
@@ -2740,7 +2740,7 @@ the two aromatic placements to the evidenced readings.
 **Tests:** an atom whose only aromatic evidence is an incident bond reads
 non-aromatic under `asserted_complete`; the existing cases with own assertions.
 
-#### S3h — Raising writes #a! only next to an aromatic bond
+#### S3h — Raising writes #a! only next to an aromatic bond **Done**
 
 **Modules:** umol-io table_ir/raise and its tests; graph ingest tests.
 **Green.** [dep: S3b, S3d]
@@ -2752,6 +2752,31 @@ table bonds is aromatic.
 `#a+` on every atom and the aromatic constraint on every bond; raising an
 aliphatic atom joined by an explicit aromatic bond writes `#a!` on it, and
 ingesting that input reports NoMatch; resolved ingestion results are unchanged.
+
+**Completion (2026-10-12):** molecule raising adds the negative assertion during
+its existing bond traversal, only for a table atom marked non-aromatic and
+incident to a definite aromatic table bond. Standalone atom raising has no bond
+context and writes only positive aromatic assertions. No additional adjacency
+structure is built. Invalid bond references still report MoleculeEntries errors.
+
+The 267 raising tests, 242 ingest tests, and three focused raising properties
+pass, including exact unchanged ethanol and benzene results and C:C reporting
+CountsError::NoMatch. Scoped Clippy with warnings denied, formatting, and diff
+checks pass. Workspace tests remain for the related-change batch gate.
+
+The existing smiles_roundtrip/raise cases were compared against commit
+204b66a5b with 40 samples, one-second warm-up, and two-second measurement,
+without concurrent builds or tests:
+
+| Case | Time change | 95% interval |
+| --- | ---: | ---: |
+| chain_64 | -6.49% | -6.77% to -6.21% |
+| branched | -2.88% | -3.60% to -1.76% |
+| aromatic_fused | -0.73% | -1.21% to -0.26% |
+
+Criterion reports improvements for the aliphatic cases and a change within its
+noise threshold for aromatic_fused. These measure raising only. The baseline
+executable and logs are saved in scratch/236-s3h.
 
 #### S3i — Aromaticity discharges what its systems realize
 
