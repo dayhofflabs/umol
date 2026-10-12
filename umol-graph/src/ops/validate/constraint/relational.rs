@@ -353,13 +353,16 @@ fn evaluate_atom(
         };
         let ring_atom = rings.atom(atom_id);
         let (asserted, derived) = match predicate {
-            AtomConstraintForm::RingDegree(asserted) => (asserted, ring_atom.ring_degree()),
+            AtomConstraintForm::RingDegree(asserted) => (asserted, Some(ring_atom.ring_degree())),
             AtomConstraintForm::RingValence(asserted) => (asserted, ring_atom.ring_valence()),
             AtomConstraintForm::RingMembership(membership) => (
                 &membership.count,
-                ring_atom.ring_membership(membership.scope),
+                Some(ring_atom.ring_membership(membership.scope)),
             ),
             _ => unreachable!("ring predicate classified above"),
+        };
+        let Some(derived) = derived else {
+            return Truth::False;
         };
         if asserted.is_undetermined() {
             Truth::True

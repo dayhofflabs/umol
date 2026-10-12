@@ -76,8 +76,16 @@ impl MorganFeaturizer {
 fn atom_components(mol: &Molecule, rings: &RingSet, id: AtomId) -> Vec<u32> {
     let atom = mol.atom(id);
     let element = atom.element().as_lit().expect("ground atom");
-    let heavy_degree = atom.heavy_atom_degree().as_lit().expect("ground atom");
-    let hydrogens = atom.total_hydrogens().as_lit().expect("ground atom");
+    let heavy_degree = atom
+        .heavy_atom_degree()
+        .expect("concrete molecule")
+        .as_lit()
+        .expect("ground atom");
+    let hydrogens = atom
+        .total_hydrogens()
+        .expect("concrete molecule")
+        .as_lit()
+        .expect("ground atom");
     let charge = atom.charge().as_lit().expect("ground atom");
     let delta_mass: i32 = match atom.isotope_mass() {
         IsotopeMassForm::Natural => 0,

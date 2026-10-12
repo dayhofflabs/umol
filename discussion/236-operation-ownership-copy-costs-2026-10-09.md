@@ -1,6 +1,6 @@
 # 236 — Operation ownership and copy costs
 
-Status: Proposed
+Status: In Progress
 Date: 2026-10-09
 Relates: [181](181-python-boundary-ownership-2026-08-03.md),
 [168](168-api-hygiene-2026-07-27.md),
@@ -12,7 +12,8 @@ This document owns the ownership contracts of graph-IR and graph operations:
 which operations consume, borrow, or mutate their input, how they are named, and
 the copy costs those contracts imply. It also owns the planning of resolvers and
 transformers, with the shared aromaticity machinery, the constraint readings and
-discharge, and copy-on-write storage for the three graph-IR aggregates.
+discharge, their ring context and Python interface, and copy-on-write storage
+for the three graph-IR aggregates.
 
 [181](181-python-boundary-ownership-2026-08-03.md) remains the plan of record
 for the molecule lifecycle, recovery, and Python ownership. Its plan follows the
@@ -334,7 +335,25 @@ Composite resolution and Molecule apply genuinely fail after mutation: each
 later resolution phase plans against the result of the earlier ones, and
 Molecule apply executes caller-supplied edits.
 
-## Decided: constraint readings and discharge
+## Constraint readings and discharge
+
+The S3b reading contract and measured implementation are accepted as of
+2026-10-12. All six semantic readings on all eight constraints views return
+normalized owned Option<F>, with meet's interpretation: None is bottom and
+Some(undetermined(key)) is top. Storage absence contributes top, not a separate
+reading outcome. The ten numeric projections listed below likewise return
+Option<NumForm> with None as bottom. Interpretation is local to contributing
+sources; storage getters still borrow, storage is not normalized eagerly, and
+attribute mutation remains infallible. This settles invariant 13.
+
+The optimized trial and retained caller optimizations justify accepting the
+performance trade-off on the measured workloads. Small standalone owned-read
+costs and rare-form copying remain as recorded; acceptance does not claim zero
+overhead or universal speedups. The diagnostic contracts and Python reading
+interface are also settled below. Shared container readings and diagnostic
+formatting are implemented in S3b; ring ownership and bindings follow in
+S3b1–S3b3. Later perception and discharge work retains its separately scheduled
+scope.
 
 Every constraints view has six readings of a key: `asserted`, `derived`, and
 `evidenced`, and their complete variants. Each reading is the meet of its
@@ -345,9 +364,10 @@ value, and, for an atom's aromatic valence, each incident bond's assertion of
 aromaticity, read as `#a+`. Each reading returns `Option<F>`: `None` is ⊥, as in
 `meet`, and the key's vacuous form is no information, so every value has one
 encoding. Top met with a value is that value's normal form, and a vacuous entry
-and an absent one both give top, so every reading returns the same value on a
-molecule and on its normal form. On a molecule that normalizes, only `evidenced`
-reaches ⊥, from conflicting evidence.
+and an absent one both give top, so every reading agrees exactly before and
+after successful molecule normalization in the same entity and ring context.
+On a molecule that normalizes, only the evidenced readings reach ⊥, from
+conflicting evidence.
 
 A complete variant replaces no information with the key's definite negative
 where the key has one. For an assertion, no information is a top value: a
@@ -358,9 +378,10 @@ close to `#T!`. `evidenced_complete` returns `evidenced` where it is not top and
 `derived_complete` otherwise. Its claim is that the molecule states every
 positive overlay fact, as an assertion or as a relation, without either source
 alone being complete; `asserted_complete` claims that the assertions are
-complete, and `derived_complete` that the relations are. Topology keys always
-have a derived value, so the readings agree on them. Every reading that derives
-a ring key requires ring context.
+complete, and `derived_complete` that the relations are. Where a topology key
+has a projection, `derived` and `derived_complete` agree. The own assertion
+can be absent or disagree, and meeting it into evidence can yield ⊥. Every
+reading that derives a ring key requires ring context.
 
 Each constraint form type gains `undetermined(key)`, its vacuous form at a key,
 which a reading returns for a key without a source. The constraint container of
@@ -453,6 +474,965 @@ entities, and after, from the projected assertions. A pattern that contains an
 aromatic system or a stereo entity as an entity still needs that entity in the
 host.
 
+### S3b premise review (2026-10-11)
+
+This review describes the pre-trial implementation and the questions that led
+to the accepted signature and closure contract below. Its ownership and
+normalization questions were settled on 2026-10-12.
+
+The proposal conflates three decisions: which evidence contributes to a
+reading; whether its result must be in exact normal form; and whether the API
+returns borrowed or owned data. Semantic consistency and avoiding eager
+rewrites both govern the decision. Neither preserving the current borrowed
+lookup nor requiring a normalized result is justified by that principle alone.
+
+Avoiding eager rewrites is a presumption, not an absolute prohibition. As with
+the trade-off behind integrity checks, an earlier guarantee needs a concrete
+account of the downstream simplifications it buys and the additional work it
+imposes. Establishing normal storage at publication, normalizing a temporary
+reading, and evaluating a semantic query without rewriting are different
+choices: they affect different callers, preserve different raw observations,
+and pay their costs at different frequencies. The review must identify which
+consumers need each guarantee, what checks or special cases it removes, and
+what copying or repeated computation it adds before settling the boundary.
+
+- **Stored assertions already borrow.** All eight views' asserted accessors
+  return Option<&F> directly from the constraint container. The typed getters
+  and iterators also borrow and remain borrowed even in the written S3b plan.
+  No source combination occurs in asserted. The claim that all assertion
+  access must now return owned values is unsupported.
+- **Exact normalization offers a downstream simplification.** A stored
+  Valence(LitSet({2})) becomes Valence(Lit(2)) under normalization. A reference
+  to the former cannot be a reference to the latter; a new value is needed if
+  the accessor promises that exact result. The two stored readings already
+  agree under normalized_eq, but that alone does not make them interchangeable
+  for consumers: NumForm::as_lit and is_ground distinguish them by design.
+  Returning normal forms is therefore a substantive API guarantee, not merely
+  cosmetic equality. A borrowed raw form would require consumers to normalize
+  it or restrict themselves to operations respecting normalized equivalence.
+  Raw get/contains/iter can expose storage distinctions. Whether removing that
+  burden from reading consumers justifies normalization at every reading, or
+  at an earlier boundary, remains part of the trade-off.
+- **Normalizing the result alone is insufficient.** A molecule with one bond
+  whose order is LitSet({1}) gives derived Valence(Undetermined), whereas its
+  normal form gives Valence(Lit(1)). The valence sum uses NumForm arithmetic,
+  which returns Undetermined for non-literal operands. Meeting the result with
+  top cannot recover the lost information. Also, an isolated atom's explicitly
+  vacuous aromatic assertion currently gives asserted_complete top, but after
+  normalization removes that entry it gives NotAromatic. These are semantic
+  changes, not just different encodings. S3b's invariance requires examining
+  derivation inputs and closure decisions, not only wrapping existing results
+  in meet. Both discrepancies are reproduced by the public-API probe.
+- **Some computed results require construction.** For example,
+  {1, 2, 3} meet {2, 3, 4} is {2, 3}, which is neither operand. A derived count,
+  an absent parameterized key's outer form, or a normal form different from
+  storage cannot generally be returned as a plain reference to an existing
+  form. This justifies construction on those paths, not cloning every stored
+  assertion. Cow is not carried forward: it reintroduces the borrow-or-normalize
+  API complexity removed with Normalize::normalized, without establishing a
+  sufficient benefit.
+- **Folding from top is not cost-neutral.** NumForm::meet clones and normalizes
+  both operands, then clones the surviving operand in its top case. For a
+  multi-element LitSet, even top meet x copies the boxed set twice. Expressions
+  can copy trees; nested forms delegate to these operations. Existing
+  matches/is_compatible implementations have borrowing shortcuts, while
+  current view satisfies and valence admission already construct some meets.
+  Account for copies in those actual callers; neither zero added cost nor a
+  workload-wide slowdown follows from the signatures alone.
+- **The consumers distinguish absence from failure.** Incidence validation's
+  keyed asserted lookup currently treats None as no assertion to validate.
+  A change to None meaning ⊥ must change that behavior deliberately, or it can
+  report a contradiction as success. The new evidence reading can give None
+  that meaning without requiring a storage lookup to use the same encoding.
+  Stereo constraints currently have no derived projection at all, so their
+  stored assertions are a particularly clear case without a merge to perform.
+- **Two subsidiary claims need correction.** Only the two derived readings
+  agree on derivable topology keys: an isolated atom without a degree
+  assertion currently has asserted None and derived Degree(Lit(0)). Also, the
+  earlier S3b sequence retained asserted_complete's incident-bond fallback
+  until S3g while describing every reading as a meet. That fallback gives an
+  own assertion precedence; it is not a meet with bond evidence. The revised
+  migration below removes this intermediate contract.
+
+The reproduced discrepancies identify work needed for the proposed invariance
+law; they do not establish where normalization should occur or justify eager
+rewriting by themselves. A plain reference to arbitrary stored F cannot
+promise a normalized F, but that observation alone settles neither the result
+contract nor ownership. Compare the guarantees, costs, and downstream
+simplifications together before implementing S3b. At this review, only the
+meet-compatible result encoding was settled; the later trial and measurements
+support the accepted scope of owned readings and local normalization.
+
+Evidence: [view/constraints](../umol-graph-ir/src/ir/view/constraints.rs),
+[NumForm](../umol-graph-ir/src/ir/num.rs),
+[atom typing](../umol-graph/src/ops/valence/atom_typing.rs),
+[incidence validation](../umol-graph/src/ops/validate/constraint/incidence.rs),
+and [stereo views](../umol-graph-ir/src/ir/view/stereo.rs).
+The public-API probe in scratch/236-constraint-readings reproduces the stereo
+matching discrepancy and the raw/normalized assertion distinction. The 51
+existing constraint-container matching unit cases pass; they omit the failing
+vacuous stereo cases.
+
+### S3b producer and consumer analysis (2026-10-11)
+
+This source analysis preceded the trial and acceptance. Its conclusions require
+neither running tests nor benchmarking; they identify the benefit, dependency
+boundary, and copying costs of normalized readings computed on demand.
+
+**Consumer benefit.** Returning a normal form makes structural literal and
+groundness inspection independent of the source's raw encoding. It does not
+prove that the whole consuming operation is normalization-invariant: consumers
+also inspect other raw attributes, such as element and charge.
+
+| Consumer | Current observation | What the proposed readings supply |
+| --- | --- | --- |
+| Incidence validation; top-level stereo-constraint evaluation | is_undetermined and is_ground select success or underdetermination before matches. | A singleton set or reducible expression is classified by its normal form. A contradictory reading is distinct from an absent assertion. |
+| Atom-typing admission and classification | Repeated per-row branches combine asserted and derived values, clone assertion-only values, and choose closure fallbacks. | One evidence/closure contract replaces the repeated source-selection branches. This simplification comes from evidence composition, independently of normalization. |
+| Implicit-H inference in both valence implementations | Typed assertion getters take precedence over derived values; as_lit requires structural literals. | Normalized evidence supplies literal interpretation and detects disagreement instead of selecting one source. |
+| Aromaticity derive | Raw aromatic assertions are tested with as_lit and matched against Aromatic(Lit); absence selects the stored-system contribution. | Normalized evidence removes encoding-dependent literal checks and centralizes the assertion/system/bond-source decision. |
+| Stereo perception's skipped-bond selector | It checks only the outer Stereo variant, which normalization preserves. | This particular predicate gains nothing from normalizing or owning the coset. |
+| Constraint-view satisfies and is_compatible | All eight views already construct combined host forms, with separate branches for missing sources. | Evidence readings centralize composition; these callers already pay some ownership costs. Borrowing matches/is_compatible shortcuts do not themselves require materialized normal forms. |
+| Typed getters, get, and iter | Storage inspection and borrowing of assertions. | No normalized owned result is needed merely to inspect storage. |
+
+The current resolver discharge also uses derived.is_ground after a meet and
+can distinguish singleton sets from literals. Its removal is already planned;
+its work is not a permanent downstream saving attributable to S3b. Python's
+constraint views currently expose storage operations and typed getters, not
+the keyed semantic readings. Changing Rust readings alone does not establish
+Python parity.
+
+Evidence: [incidence evaluation](../umol-graph/src/ops/validate/constraint/incidence.rs),
+[stereo-constraint evaluation](../umol-graph/src/ops/validate/constraint.rs),
+[atom typing](../umol-graph/src/ops/valence/atom_typing.rs),
+[counts](../umol-graph/src/ops/valence/counts.rs),
+[aromaticity](../umol-graph/src/ops/aromaticity.rs),
+[constraint views](../umol-graph-ir/src/ir/view/constraints.rs), and
+[Python constraint views](../umol-py/src/constraint/atom.rs).
+
+**Producer dependencies.** Molecule normalization changes attributes and
+constraint values, not topology, relation membership, or entity ids. Constraint
+normalization preserves keys and removes vacuous entries. Therefore source
+interpretation can be local to the requested key. The table covers the derived
+keys of all eight constraint views; asserted reads need only their own entry.
+
+| Derived key or group | Inputs requiring interpretation |
+| --- | --- |
+| Atom degree, ring degree, ring membership; bond ring membership | Topology and supplied ring context only; results are already literal. |
+| Atom valence and ring valence | Orders of the contributing localized bonds; normalize before arithmetic loses non-literal information. |
+| Atom donated and accepted pairs | Orders of the contributing dative bonds. Preserve the current limits on multi-donor projection; normalization does not define that missing chemistry. |
+| Atom total degree | Topology counts plus the atom's implicit-hydrogen form. |
+| Atom total hydrogens | The atom's implicit-hydrogen form and neighboring element forms; normalize before literal hydrogen classification. |
+| Atom aromatic and multicenter valence | Overlay membership and the relevant positional electron-count cells. ElectronCountsForm normalization is identity; missing cells retain their current undetermined meaning. |
+| Atom total valence | Localized valence, implicit hydrogens, and aromatic/multicenter contributions from the preceding rows. |
+| Atom tetrahedral and bond cis-trans stereo | Overlay presence and configuration kind; for the matching kind, interpret the coset under that kind. Normalize the projected stereo form. A present unknown configuration remains open under closure. |
+| Bond aromatic; binary dative aromatic | Overlay membership only; results are Boolean literals or top. |
+| Dative ring membership; non-binary dative aromatic | No defined projection; reads top, including under complete derivation. |
+| Aromatic-system and multicenter-bond electron count | Sum the stored electron vector by reference. No normalization or vector copy is needed. |
+| Noncovalent intramolecularity | Localized-bond connectivity only. Its graph traversal is independent of attribute normalization. |
+| Stereo-atom and stereo-bond constraint keys | No derived projection; all derived readings are top. |
+
+Evidence: [atom projections](../umol-graph-ir/src/ir/view/atom.rs),
+[ring projections](../umol-graph-ir/src/ir/view/ring.rs),
+[bond projections](../umol-graph-ir/src/ir/view/bond.rs),
+[dative projections](../umol-graph-ir/src/ir/view/dative.rs),
+[aromatic projections](../umol-graph-ir/src/ir/view/aromatic.rs),
+[multicenter projections](../umol-graph-ir/src/ir/view/multicenter.rs),
+[noncovalent projections](../umol-graph-ir/src/ir/view/noncovalent.rs), and
+[stereo projections](../umol-graph-ir/src/ir/view/stereo.rs).
+
+For asserted_complete, normalize the selected assertion before deciding whether
+it states anything. Close top only at a key with a definite negative. For
+derived_complete, retain overlay presence separately from its open value;
+normalization does not remove the overlay. The atom's additional aromatic
+evidence needs only the incident bonds' Boolean aromatic assertions, not their
+orders or whole bond forms. Evidenced readings combine these relevant sources;
+their implementation need not construct each public reading separately and
+then meet the resulting owned values.
+
+The proposed failure boundary is the relevant source interpretation. An empty
+numeric domain contributing to a valence sum yields bottom; an unrelated
+contradictory attribute does not. An undetermined summand must not hide a later
+contradictory contributing input. Electron-vector length and stereo frame
+agreement remain separate contextual questions, not newly imposed normalization
+checks. Attribute writes stay infallible because all interpretation is on the
+read path and writes establish no new normal-form invariant.
+
+The public projections need the same semantic contract. The
+constraint producers share valence, total, dative-pair, and ring-valence helpers
+with public entity-view accessors returning NumForm. Their current arithmetic
+collapses non-literal inputs to top, including inputs that normalize to a
+literal or contradiction. Normalizing that result cannot recover the lost
+information. A semantic constraint reader must interpret inputs before that
+collapse. The signature contract below follows that requirement;
+it does not establish a normal-form invariant on storage.
+
+**Copy classification.** Fix the input ownership, output type, and semantics
+before judging a copy. With borrowed source storage, owned F, and the existing
+Box/BTreeSet/String payloads, retained output data needs independent storage.
+That establishes a lower bound on result construction, not a requirement to
+clone the whole input. A copy is proven avoidable only when a concrete path
+preserves the same contract without it. Normalization working space is a third
+category: it may be justified by the chosen algorithm without being required
+by output ownership.
+
+| Case | Required by the result | Avoidable work demonstrated by the code |
+| --- | --- | --- |
+| Borrowed numeric set with several members, returned unchanged | Independent storage for the returned set while the original remains stored. | Top meet x currently clones the set into a normalized temporary, then clones it again; the temporary can be moved. |
+| Borrowed singleton numeric set, returned as a literal | Copy the one integer; no set in the result. | Cloning the entire set before inspecting its cardinality; a borrowed cardinality/value check produces the same result. |
+| Two numeric literal sets intersected | Construct the returned intersection if it remains a set. | meet first clones both operands, although their intersection can be computed from borrowed sets and only the result collected. |
+| Already owned normal result | Transfer its ownership to the caller. | Cloning it merely to pass through a one-source or top-identity branch. |
+| A symbolic expression normalizes to an expression | Independent representation of the retained result. | No general claim that all temporary work is avoidable; inspect the consuming normalizer before classifying each copy. |
+
+Two additional implementation costs are visible without measurement.
+stereo::canon_coset consumes its input but clones a plain LitSet while matching
+by reference; it can move that set. The finite-domain stereo constraint
+normalizer constructs sets even for Lit and Undetermined; those variants can
+return directly. Thus even a scalar result can currently incur temporary
+allocations, although output ownership does not require them. These are
+analysis findings, not authorization to broaden S3b with normalization refactors.
+
+**Optimization and measurement priorities.** Undetermined and Lit are by far
+the most frequent variants in the code base, as supplied by the user; sets and
+expressions are relevant but rare. Prioritize direct handling of Undetermined
+and scalar Lit, with no unnecessary normalization or allocation. A straightforward
+normalization fallback is acceptable for rare forms. The avoidable-copy examples
+above identify possibilities, not a requirement to specialize every rare variant.
+
+Performance comparisons must preserve the input distribution of the selected
+workloads. Report targeted set/expression cases separately; do not combine
+equally weighted variant cases into a headline result or inflate rare-form
+frequencies to stress normalization in the primary comparison. No numerical
+variant frequencies have been established. State the workloads and their
+composition, and distinguish their results from general runtime claims.
+Correctness obligations still cover every variant regardless of frequency.
+
+This analysis supports local interpretation without a normalized-storage
+invariant. Exact normal-form results have a concrete consumer benefit, but the
+cost of retained owned payloads remains a trade-off. The following contract
+specifies the signatures and closure boundary accepted after measurement.
+
+### S3b signature and closure contract (accepted 2026-10-12)
+
+**Settled result encoding.** Constraint readings share meet's Option semantics:
+None denotes bottom, and Some contains a form, including top. This applies to
+all six semantic readings and the numeric projections returning Option<NumForm>.
+Unknown or absent evidence is Some of the appropriate undetermined form;
+closure supplies the definite negative where its rule applies. This preserves
+the existing open/closed distinction while removing None's former use for
+missing evidence. For example, with no incident dative relation, derived at
+DonatedPairs changes from None to Some(DonatedPairs(Undetermined));
+derived_complete remains Some(DonatedPairs(Lit(0))). Ordinary storage lookups
+still report entry presence; they are not semantic readings.
+
+**Accepted output guarantee.** Each semantic reading returns a normal form:
+Some contains the interpreted value, including top, and None means bottom.
+Interpret only the contributing sources, before arithmetic or classification
+can discard information. Use direct Undetermined/Lit paths and consuming
+normalization as the fallback for rarer representations. This promises neither
+a more precise symbolic arithmetic nor normalization of unrelated attributes.
+Storage getters, constructors, attribute mutation, NumForm arithmetic, and
+AsLit retain their contracts.
+
+| Public surface | Return type | Relevant input |
+| --- | --- | --- |
+| All eight entity constraint containers: asserted, asserted_complete | Option<F>, with the entity's constraint form F and existing key argument | The own stored assertion; no molecule or ring context. |
+| All eight constraints views: asserted, asserted_complete, derived, derived_complete, evidenced, evidenced_complete | Option<F>, with the entity's constraint form F and existing key argument | Sources selected by the reading and key. |
+| AtomView: valence, donated_pairs, accepted_pairs | Option<NumForm> | Contributing bond or dative orders. |
+| AtomView: total_degree | Option<NumForm> | Implicit hydrogens plus topology counts. |
+| AtomView: total_hydrogens | Option<NumForm> | Implicit hydrogens and neighboring elements. |
+| AtomView: total_valence, covalence | Option<NumForm> | Localized valence and implicit hydrogens, plus their existing overlay contributions. |
+| AtomView: heavy_atom_degree, heavy_atom_valence | Option<NumForm> | Neighboring elements and, for valence, orders of contributing bonds. |
+| RingAtomView: ring_valence | Option<NumForm> | Orders of incident bonds selected by the supplied ring context. |
+| AtomView: degree, multicenter_degree, aromatic_valence, aromatic_covalence, multicenter_valence | NumForm, unchanged | Topology or electron-vector cells; no fallible normalization source. |
+| RingAtomView and RingBondView: ring_degree where provided, ring_membership, ring_count, ring_size_count | NumForm, unchanged | Supplied ring topology. |
+| Aromatic-system and multicenter-bond views, including editor and mutable views: electron_count | NumForm, unchanged | Borrowed electron-vector cells. |
+
+The heavy-atom properties are included because their element filter also changes
+under normalization: a singleton hydrogen set must filter like literal H.
+Keep their existing policy that a genuinely unresolved neighbor counts as
+heavy. A contradictory element gives bottom; a bond to a known hydrogen does
+not contribute to heavy_atom_valence, so its order need not be interpreted.
+Preserve total_hydrogens' existing arithmetic precision: with no neighbors its
+implicit-hydrogen form survives, rather than being collapsed by adding zero.
+
+Every reading and listed projection must agree exactly before and after a
+successful molecule normalization, with the same entity and ring context.
+Every Some result is normal. Relevant bottom propagates even if another input is
+top; unrelated bottom does not poison a reading. No new electron-vector length,
+stereo-frame, range, or mutation checks follow from this contract. The separate
+contextual integrity contracts still apply.
+
+**Complete readings.** Let A be normalized own assertion, D the open relation
+projection, and E their evidence meet, including incident-bond aromatic evidence
+on atoms. Bottom is preserved in every complete variant.
+
+| Reading | Closure rule |
+| --- | --- |
+| asserted_complete | Return A unless it is top; then use the key's definite negative if one exists. Never read incident bonds. |
+| derived_complete | Close absence of an overlay to its definite negative; preserve a present overlay's open value. For topology projections, return D. An unsupported projection stays top. |
+| evidenced_complete | Return E unless it is top; then return derived_complete. |
+
+The definite negatives are atom NotAromatic, NotMulticenter, NotStereo, and
+zero donated/accepted pairs; bond false aromaticity and NotStereo; and dative
+false aromaticity. Other keys have no closure negative. Nonbinary dative
+aromaticity has no defined projection and remains top on the derived side.
+An incident bond's true aromatic assertion contributes atom #a+ to E; false or
+absent contributes no positive evidence. A present stereo entity of unknown
+kind stays top under derived_complete; a known matching kind with an open coset
+retains its positive stereo form. Missing ring context retains the existing
+precondition and must not be encoded as bottom.
+
+**Caller migration.** The Option change is semantic even where the Rust type
+is unchanged. Existing source-selection matches use None for absence; retaining
+them after the change would misinterpret bottom and omit closure for Some(top).
+
+| Caller | Required migration |
+| --- | --- |
+| Constraint-view satisfies and is_compatible | Use evidenced_complete and evidenced respectively; bottom satisfies no entry and is incompatible. Include S3f in S3b. |
+| Atom-typing and counts admission; implicit-H inference | Use the S3c evidence contract in the same change, including NoMatch/no inferred count for bottom. Do not flatten bottom into existing unknown-value defaults. |
+| Incidence, ring, relational, and stereo constraint validation | Distinguish top from bottom before groundness tests. Use existing constraint-contradiction diagnostics or false predicate results for bottom. |
+| Valence invariant checking and enumeration | Handle bottom before literal extraction; enumeration yields no candidates. The check uses the diagnostic contract below. |
+| Counts classification | A contradictory projection cannot become zero through as_lit().unwrap_or(0); report CountsMismatch as specified below. |
+| Current resolver discharge | Migrate None handling while this code exists; None can no longer mean no derived source to check. Its later removal is not a saving credited to S3b. |
+| ECFP and Morgan extraction | Adapt property extraction under the existing molecule-is-concrete precondition, which excludes contradictory contributing attributes. Do not add a new public failure solely for the Option wrapper. |
+
+**Settled diagnostics (2026-10-12).** These changes preserve the existing
+operation-specific contradiction channels.
+
+- CountsMismatch uses valence: Option<i64>, with Some only when a literal is
+  available. Display the integer for Some and "valence unavailable" for None,
+  without inventing zero. This field reports diagnostic availability, not the
+  lattice reading. CountsError::NoMatch remains the admission outcome.
+- ValenceInvariantsValidator already reports an electron-conservation failure
+  as ValenceMismatch::OrbitalCount { atom_id, orbital_count, electron_count };
+  the composite validator wraps it in ValidateContradiction::ValenceInvariant.
+  Retain that existing diagnostic and terminology. It cannot describe a
+  contradictory projection before those counts exist, so retain the trial's
+  ValenceMismatch::ContradictoryConstraint { atom_id: AtomId,
+  key: AtomConstraintKey }. Keep ordinary open inputs underdetermined. The
+  standalone public validator cannot assume constraint validation already ran;
+  mapping bottom to underdetermination would lose the new distinction.
+
+**Settled standalone and Python interface (2026-10-12).** The two own-assertion
+readings belong on each Rust entity constraint container. For example,
+AtomConstraintsForm gains asserted(&self, key: AtomConstraintKey) and
+asserted_complete(&self, key: AtomConstraintKey), both returning
+Option<AtomConstraintForm>. The other seven containers use their corresponding
+key and form types. These methods own the normalization and own-assertion closure
+logic; molecule-backed constraints views delegate to them. Storage getters,
+container lattice comparisons, and mutation retain their existing contracts.
+
+Python keeps one constraints-view class per entity kind. Its existing backing
+storage enum distinguishes a molecule entity from a standalone form; no separate
+storage-proxy class is needed. Bind all six readings under their Rust names with
+the corresponding key argument and F | None result. The dispatch contract is:
+
+| View backing or context | Available operation | Outcome |
+| --- | --- | --- |
+| Molecule entity or standalone form | asserted, asserted_complete | Delegate to the Rust constraint container; None is bottom. asserted yields top for an absent assertion; asserted_complete closes top to the key's definite negative where defined. |
+| Molecule entity | derived, derived_complete, evidenced, evidenced_complete | Delegate to the Rust semantic view with the same evidence and closure rules. |
+| Standalone form | derived, derived_complete, evidenced, evidenced_complete, satisfies, is_compatible | Raise ValueError because molecule context is missing. |
+| Molecule entity without required ring context | A reading or view comparison that needs ring derivation | Raise ValueError; missing context is not bottom. |
+
+The view's satisfies reads evidenced_complete and is_compatible reads evidenced.
+Their molecule-context requirement applies even when a query could finish
+without examining a graph-dependent key. Raw container comparisons remain
+separate lattice operations. asserted and asserted_complete need no ring context,
+including at ring keys. A standalone form is not interpreted as an isolated
+molecule atom with known-empty incidence.
+
+Bind the ring-context creation and borrowing interface settled below, and the
+atom/bond constraints views' with_rings interface. with_rings returns another
+view of the same molecule entity with explicit ring context; it does not rewrite
+storage or clone the molecule.
+Semantic reading results are independent normal values. Ordinary attribute and
+entity-constraint mutation stays visible through live views, while consumption
+and structural mutation retain the existing accessor-invalidation contract.
+Existing consumed-owner and invalidated-view exceptions remain unchanged.
+The ten changed numeric projections bind as NumForm | None; typed storage
+getters retain their raw-storage meaning.
+
+S3b publishes the final asserted_complete rule together with its callers:
+S3c, S3f, and S3g are included in that migration, retaining their detailed scope
+below. No intermediate assertion reading keeps the incident-bond fallback.
+The reading signatures, closure rules, diagnostics, Python reading interface,
+and measured performance trade-off are accepted. S3b supplies the shared
+container implementation, diagnostic formatting, and Rust verification;
+S3b1–S3b3 implement ring ownership and the Python interface. The comparisons
+below emphasize common variants and keep rare-form stress results separate.
+
+### Ring data and view ownership (accepted 2026-10-12)
+
+RingSet owns the computed ring topology and retains no molecule reference.
+Ring membership, sizes, and relations remain reusable while the covalent
+topology and its atom/bond ids stay unchanged. Changing attributes, including
+bond orders, does not require enumerating the rings again. RingViews borrows
+the Molecule and internally holds Cow<'a, RingSet>; molecule-dependent readings
+such as ring valence use the molecule's current attributes. The view exposes
+immutable access, and Cow remains an internal ownership detail.
+
+The ring accessor produces a separate computed data object. This distinguishes
+it from atoms(), bonds(), and the other accessors that only expose views over
+data held elsewhere. Computing rings at molecule construction or rebuild was
+considered and rejected. Perception remains explicit, with the model and
+algorithms selected at the call, and there is no molecule-level ring cache.
+
+- Molecule::rings(&self, model, config) -> RingViews<'_> retains its current
+  signature and computes the set once for that call.
+- RingViews::new(molecule: &'a Molecule, rings: RingSet) -> Self remains
+  crate-private. It consumes the set into Cow::Owned without cloning.
+- RingViews::from_ring_set(rings: &'a RingSet, molecule: &'a Molecule) -> Self is
+  public and stores Cow::Borrowed. Reconstruction neither allocates, clones,
+  nor repeats perception.
+- RingViews::into_ring_set(self) -> RingSet remains public and calls into_owned:
+  it moves an owned set or clones a borrowed set into an independent value.
+  The borrowed case's copying cost is explicit in its contract.
+
+A caller can extract the owned set, mutate molecule attributes, and reconstruct
+a borrowed view over the same set. Contextual use requires that the set
+describes the supplied molecule's topology and id space. Mismatched inputs must
+not panic but have no specified semantic result. Local guards protect contextual
+access; reconstruction does not revalidate the entire topology or repeat
+perception.
+
+RingSet keeps its existing topology queries and remains operation-produced;
+this change adds no arbitrary-parts constructor. The atom/bond constraints
+views' with_rings methods continue to borrow RingSet. Existing owning RingViews
+consumers and rings(model, config).into_ring_set() callers retain their routes.
+Consumers holding an independent RingSet can reconstruct temporary borrowed
+views when needed.
+Ring models, enumeration algorithms, query meanings, and the current single-ring
+member accessors retain their contracts.
+
+The Python surface covers RingSetKind, RingModel, RingRelation, RingConnection,
+RingGraph, RingSet, RingViews, RingView, RingAtomView, and RingBondView, alongside
+the existing RingConfig and RingScope. Bind the corresponding Rust operations
+and the established collection protocols. A freshly computed Python RingViews
+owns the computed set and retains the Python Molecule owner; a reconstructed
+view retains the Python RingSet and Molecule owners. Each call reconstructs
+temporary Rust borrows without copying the ring data. Bind into_ring_set with
+the same consuming semantics and move-versus-clone costs; consumption invalidates
+the view's dependent accessors. Nested access and iteration retain their required
+owners and remain lazy. Attribute mutations remain visible through
+molecule-backed views; molecule consumption and structural operations invalidate
+those views under the existing accessor-counter contract. An independently held
+RingSet remains available for its own topology queries. RingSet::graph retains
+its current Rust contract of returning an owned graph copy, with no additional
+binding-side graph clone.
+
+The scope is this ring-ownership change and these bindings. The broader
+view-argument audit and ring-member-accessor redesign are outside this work.
+
+### S3b Rust trial (2026-10-12)
+
+The authorized in-tree trial implements the six normalized Option<F> readings
+on all eight views and the ten Option<NumForm> projections. Raw getters still
+borrow stored forms; mutation remains infallible and stores the supplied forms.
+Normalization is local to reads. Undetermined and Lit numeric/element sources
+avoid normalization and heap cloning; evidence composition moves a top identity
+operand's counterpart instead of cloning it. Finite stereo relation forms also
+return their already-normal Undetermined/Lit values directly.
+
+The trial includes the coupled S3c/S3f/S3g caller migration, existing discharge,
+constraint validation, and fingerprint extraction. Its CountsMismatch and
+ValenceMismatch payload changes are now accepted. The Python workspace still
+compiles. At this trial snapshot the shared container readings and accepted
+semantic-reader binding surface were not yet implemented; S3b completion below
+supplies the Rust containers and diagnostic formatting. S3b1–S3b3 supply ring
+ownership and bindings. S3d/S3e perception work and the separately verified
+S3a3/S3a4 items are not included.
+
+**Correctness.** Fixed cases distinguish absence, explicit top, literal,
+singleton, contradiction, top followed by bottom, and bottom followed by top.
+They check local interpretation without storage rewriting, infallible mutation,
+heavy/H classification, closure, and incident-bond aromatic evidence. Properties
+compare all six readings across successful whole-molecule normalization and
+check numeric evidence composition against an independent meet calculation.
+The reader property visits all eight entity families when generated, rather
+than assuming every generated molecule contains every family.
+
+Three matching expectations change with the settled evidence closure: a marked
+aromatic bond supplies positive atom evidence, excludes a negative atom query,
+and is not contradicted merely by the absence of an aromatic overlay. Resolver
+regression cases preserve stereo-entity assertions now that unsupported
+projection returns Some(top), rather than None. Bottom aromatic evidence on a
+ground atom produces NoMatch in both admission policies. A bottom localized
+valence exercises the new invariant diagnostic.
+
+The two generated H-elision suites retain their independent allowed-H oracles,
+registry permutations, duplicate rows, and generated valences. Their fixtures
+now realize a nonzero asserted valence with a bond; the supporting isotope-
+specified atom retains H explicitly. The former isolated-atom fixture
+contradicted its own nonzero valence assertion under the meet contract. Separate
+inference cases retain contradictory assertion/topology inputs and expect no
+inferred count.
+
+Verification passed:
+
+- Graph-IR tests with proptest: 9,791 unit tests and 430 property-target tests,
+  plus all enabled integration targets; four existing ignored tests remain.
+- Graph tests with proptest and conformance: 1,994 unit tests, 171 property-target
+  tests, 683 resolution conformance cases, and the other integration targets.
+- Workspace/all-targets check using Python 3.13.15; Clippy for both changed
+  crates, all targets, with the property and conformance features and warnings
+  denied; formatting and diff checks.
+
+**Measurement method.** The committed baseline is
+24bb200dd7eab8df2c1fdcbc061f338812c2086b, built with rustc 1.96.0
+(ac68faa20 2026-05-25). Saved baseline executables were measured before changes
+and again after the initial candidate. The final candidate includes the
+correctness fixes. Runs are sequential, with no concurrent builds or tests.
+Criterion uses 20 samples, 0.2 s warmup, and 0.5 s requested measurement time
+(long-running matching cases use Criterion's longer estimate). Reported times
+use Criterion's slope estimate when available and mean otherwise. The two
+baseline runs show drift separately from candidate differences; these short
+runs do not establish a production workload distribution.
+
+The new constraint_readings bench measures atom asserted, derived,
+derived_complete, valence, and satisfies calls. Absent, Undetermined, and Lit
+cases are reported separately from singleton sets, larger sets, and expressions;
+there is no equal-weight aggregate. Allocation counting is a separate run of
+1,000 calls per case, outside timed runs. Bytes count allocation/reallocation
+requests, not peak live memory. The harness includes common dispatch and
+black_box overhead. Baseline asserted borrows; candidate asserted owns and
+normalizes, so these are costs of the changed contract, not equivalent raw
+storage accessors.
+
+Saved executables, commands, per-case estimates and confidence intervals,
+allocation counts, and full comparison CSVs are in scratch/236-read-costs.
+The tracked bench is umol-graph-ir/benches/constraint_readings.rs. Reproduce the
+saved comparison with measure.py baseline-repeat baseline and measure.py
+candidate-final, sequentially, then summarize.py candidate-final.
+
+**Measured results.** Every common microcase (absent, Undetermined, Lit,
+across all five measured calls) makes zero allocations in both versions.
+Returning an owned scalar form does not introduce a heap clone. It does have a
+CPU cost in asserted/evidence paths. The two candidate runs agree on that
+micro-level direction and scale. Selected final-candidate times in ns/call:
+
+| Case | Baseline | Baseline repeat | Final trial |
+| --- | ---: | ---: | ---: |
+| Absent asserted | 4.36 | 4.18 | 6.09 |
+| Undetermined asserted | 5.74 | 5.94 | 15.44 |
+| Lit asserted | 5.72 | 5.71 | 16.19 |
+| Lit derived | 12.16 | 12.22 | 10.67 |
+| Lit valence | 10.49 | 10.44 | 9.13 |
+| Absent satisfies | 19.52 | 19.23 | 26.82 |
+| Undetermined satisfies | 32.59 | 31.48 | 41.18 |
+| Lit satisfies | 31.47 | 31.16 | 43.98 |
+
+Common derived/derived_complete/valence cases are approximately 11–15% faster
+than the repeated baseline. Common satisfies cases are 31–41% slower, or
+approximately 8–13 ns more per call. The much larger asserted percentage
+compares a cheap borrowed lookup with an owned semantic read; the unchanged
+raw getters remain available for callers that need storage access.
+
+Whole-operation examples, in microseconds per operation:
+
+| Case | Baseline | Baseline repeat | Final trial | Increase against the two baselines |
+| --- | ---: | ---: | ---: | ---: |
+| Ingest benzene | 19.03 | 18.70 | 19.92 | 4.7–6.5% |
+| Ingest octane | 12.76 | 12.62 | 13.42 | 5.2–6.4% |
+| Resolve branched | 11.98 | 11.79 | 12.57 | 4.9–6.6% |
+| Resolve chain_64 | 112.76 | 110.42 | 119.00 | 5.5–7.8% |
+| Resolve aromatic_fused | 43.84 | 42.16 | 46.25 | 5.5–9.7% |
+| Resolve shared_chain | 12.99 | 12.86 | 14.38 | 10.7–11.9% |
+
+The seven ingest cases and sixteen resolution-only cases are retained
+individually in the CSV. Their changes are not combined into a workload average.
+The resolution-only bench checks that each case determines before timing it.
+Alkene_four has 9.4% baseline drift and opposite signs against the two baselines;
+tetra_ring is effectively unchanged against the repeat. Those cases do not
+support a precise regression estimate. Other cases and the initial candidate
+also vary, so the table is evidence of this trial's cost, not a universal rate.
+
+The six existing OpenSMILES/VF2 corpus matching runs were also retained. Their
+patterns carry no constraint entries, and corpus loading silently skips ingest
+failures without recording workload parity. They therefore do not establish
+the cost of semantic constraint reads or equivalent end-to-end matching work.
+The direct satisfies benchmark does exercise a literal valence constraint.
+
+Rare-form allocation results are separate. Each cell is baseline → trial,
+written as allocations/requested bytes per call:
+
+| Source form | asserted | valence | satisfies |
+| --- | --- | --- | --- |
+| Singleton set | 0/0 → 2/128 | 2/128 → 2/128 | 4/256 → 4/256 |
+| Two-member set | 0/0 → 3/152 | 2/128 → 3/152 | 7/408 → 6/304 |
+| Constant expression | 0/0 → 3/224 | 2/96 → 3/224 | 5/320 → 6/448 |
+
+Final asserted timings for these rare cases are 52, 68, and 91 ns, respectively;
+valence is 51, 65, and 87 ns. The baseline borrowed assertions take about 6 ns.
+The rare derived results can differ semantically from the baseline because
+normalization now precedes information-losing arithmetic. These are not simply
+faster/slower implementations of an unchanged raw read.
+
+**Initial-trial assessment.** The semantic scheme is implementable without eager
+storage normalization or fallible attribute mutation. The tested common paths
+avoid new allocations, but the added CPU cost is measurable. These results do
+not establish an unavoidable cost of ownership or Option<F>: the trial also
+changes evidence composition, closure, and callers, and retains some repeated
+reads. Rare-form materialization has not been optimized. The optimization
+measurements below support acceptance of the revised implementation's cost;
+the trial does not justify declaring all assertion accessors owned.
+
+### S3b cost attribution (2026-10-12)
+
+The trial raised two questions: how much additional work the revised semantics
+require, and how much of the measured slowdown comes from avoidable work in
+the implementation. Allocation-free readings alone answer neither question;
+the following audit and caller experiments establish the measured acceptance
+trade-off without claiming an exact lower bound on semantic cost.
+
+The expected baseline for centralization is roughly unchanged total work when
+the core methods replace equivalent work formerly performed by callers. A
+check moved into a reading must not also remain in its caller without a reason.
+Centralization can improve cost by sharing results or simplifying branches; it
+does not inherently require more meets or more traversals. Function boundaries,
+enum materialization, dispatch, and inlining can still affect CPU time even
+without allocation. Those are implementation effects, not new semantic
+obligations or demonstrated unavoidable costs of Option<F>.
+
+Some obligations are genuinely stronger. A non-normal source must be
+interpreted before arithmetic loses its information, relevant bottom must
+survive other top inputs, and evidence from independently supplied sources must
+agree. For example, H inference previously accepted a literal assertion in
+preference to derivation; its new reading must also examine relation evidence
+to detect a conflict. However, Undetermined and Lit are already normal: their
+contract does not require a general normalization traversal. Nor does a check
+newly added to a reader establish net new work for a whole operation if that
+operation already performed the check elsewhere. Reuse must respect intervening
+mutation and each consumer's required result and diagnostic behavior.
+
+Source comparison against the measured committed baseline identifies concrete
+repetition in the trial:
+
+| Path | Finding and baseline distinction |
+| --- | --- |
+| All views' evidenced_complete | Calls evidenced, which derives the key, then calls derived_complete when the result is top. For topology keys those derivations are identical, so a top valence can traverse the same bonds twice. Overlay closure can also repeat presence queries; eliminating that repetition must preserve the distinction between an absent overlay and a present overlay with an open value. |
+| CountsValence::admitted_completions → CountsInput::for_molecule_atom | The new upfront aromatic evidenced_complete result is discarded on the ordinary non-ground path and recomputed by CountsInput. The valence precheck followed by another valence derivation also repeats work, but that duplication already existed in the baseline. It is an optimization opportunity, not solely a new cost attributable to centralization. |
+| AtomTypingValence admission | The trial reads aromatic evidence before row selection and reads it again for rows carrying the aromatic key. The old preliminary assertion reading was conditional on the atom being ground. Per-row recomputation of other keys existed before the trial; those readings are unchanged between rows for a fixed molecule and context, though their comparison with each row still differs. |
+| asserted → meet_readings → NumForm::meet | asserted clones and normalizes the own assertion. When both evidence operands are non-top, NumForm::meet clones and normalizes both again, including the already-normal derived value. The baseline meet already normalized its operands; the trial adds normalization before that meet. The top-identity path in meet_readings avoids this second meet, so it is not a cost of every read. |
+
+In particular, the baseline satisfies implementation already met asserted and
+derived evidence and then compared the host reading with the pattern. The
+literal satisfies slowdown cannot be explained simply by saying that meeting
+was newly required. The trial adds preparation of an owned normal assertion,
+which the subsequent numeric meet prepares again. In the top numeric case,
+the complete reading can additionally derive the same value twice. These are
+source-level findings; compiler optimization and measured contribution still
+need to be distinguished from the apparent work in the source.
+
+Meeting the host's evidence and comparing that host with a query are different
+obligations, so they are not automatically duplicate checks. The common numeric
+query comparison already uses a direct matches/is_compatible path rather than
+another general meet. Removing repeated preparation or repeated derivation
+must preserve both obligations, bottom propagation, and the closure policy.
+
+The trial therefore contains avoidable work; the recorded timings do not say
+how much of the slowdown it explains. The discriminating comparison is between
+implementations with the same new semantics, removing identified repetition
+and specializing already-normal common forms, then measuring the same common
+paths and whole operations against the saved results. Rare forms remain
+separate. The original-versus-trial comparison alone cannot isolate the cost
+of stronger semantics from the cost of this implementation. This attribution
+review records findings only; it does not change the trial code or claim that
+all of the slowdown can be recovered.
+
+### S3b implementation cost audit (2026-10-12)
+
+The optimized trial keeps the same semantic contract. All six semantic readers
+return normal Option<F> with None as bottom; storage remains raw, its getters
+borrow, and mutation remains infallible. No public symbols, unchecked reading
+methods, or caller-supplied trust flags were added in this optimization pass.
+
+**Work removed.** Complete evidence now derives each key once. Own and
+incident-bond evidence determine whether that derivation uses closure: a
+non-top meet operand cannot produce a top result, so closure cannot subsequently
+be needed in that branch. With top evidence, the complete derivation already
+preserves present open overlays and closes absent ones. The property suite
+checks this against the definition: complete evidence equals open evidence
+unless it is top, in which case it equals the complete derivation.
+
+Numeric assertions use the existing numeric reader directly, avoiding the
+enclosing constraint's clone/normalize path for Undetermined and Lit. Absent or
+top non-aromatic assertions go directly to derivation without materializing an
+intermediate top constraint. An already-positive own aromatic reading needs no
+incident-bond scan: positive bond marks can add no information to it, and
+negative marks do not negate atom aromaticity. The own reading is normalized
+before that shortcut; contradictory own evidence still returns bottom.
+
+Composition moves top and identical normal readings directly. NumForm::meet
+handles scalar top/literal pairs directly, and aromatic/multicenter meets let
+their numeric meet normalize the payload once instead of preparing it again
+at the enclosing level. Numeric and atom normalization have inline hints.
+Counts admission reuses its upfront aromatic reading; atom typing reuses it
+for aromatic row constraints and computes groundness once. All reuse is local
+to an immutable molecule/context.
+
+**Comparison.** The committed baseline remains 24bb200dd7eab8df2c1fdcbc061f338812c2086b.
+Saved binaries isolate the original trial, an intermediate optimization, and
+the final optimization. The first series ran baseline → trial → intermediate
+→ intermediate → trial → baseline. The final series ran final → baseline →
+final; its repeated reading timings cover the common cases, with rare cases
+timed separately in the first final run. Each case uses 30 samples, 0.3 s
+warm-up, and 1 s measurement. No builds or correctness checks ran alongside
+timing. The tables give arithmetic means of two per-case point estimates,
+using the last two baseline runs; they do not average different workloads or
+assign a variant frequency.
+
+| Common numeric reading, ns | Baseline | Original trial | Optimized trial |
+| --- | ---: | ---: | ---: |
+| Absent assertion: asserted | 4.25 | 5.97 | 6.02 |
+| Literal assertion: asserted | 5.80 | 15.14 | 10.06 |
+| Top assertion: asserted | 5.86 | 15.10 | 9.37 |
+| Absent assertion: satisfies | 19.61 | 26.28 | 18.30 |
+| Literal assertion: satisfies | 31.51 | 43.12 | 30.51 |
+| Top assertion: satisfies | 31.87 | 40.34 | 20.07 |
+
+The final common numeric valence and derived readings also remain faster than
+the committed baseline in these point estimates. Standalone owned assertion
+reads retain an absolute cost of roughly 2–4 ns over the old borrowed result;
+the composed matching path recovers that cost through less work elsewhere.
+All 15 tested common microcases still make zero allocation/reallocation
+requests. This is not a whole-workflow or all-form allocation claim.
+
+| Whole operation, µs | Baseline | Original trial | Optimized trial |
+| --- | ---: | ---: | ---: |
+| Ingest octane | 12.74 | 13.58 | 12.04 |
+| Ingest benzene | 19.13 | 19.87 | 18.58 |
+| Resolve chain_64 | 111.76 | 113.57 | 108.48 |
+| Resolve aromatic_fused | 43.07 | 43.46 | 43.39 |
+| Resolve shared_chain | 13.09 | 13.22 | 13.11 |
+| Resolve shared_branch | 15.08 | 15.31 | 15.46 |
+
+Across all 23 ingest/resolution cases, the optimized per-case changes range
+from −5.5% to +2.5% against baseline. Eleven are within ±2%, eleven are more
+than 2% faster, and one is more than 2% slower. These are descriptive counts,
+not significance tests or workload weights. Baseline repeats drift by up to
+4.7%; the two final shared_branch runs differ by 6.8%, exceeding its +2.5%
+midpoint difference. Small differences do not establish a remaining semantic
+penalty. The earlier trial's precise percentage regressions are likewise not
+stable across timing rounds.
+
+Rare forms remain separate. Final asserted readings take about 50 ns for a
+singleton set, 64 ns for a two-member set, and 90 ns for the constant expression;
+they still request 2/128, 3/152, and 3/224 allocations/bytes respectively.
+Their satisfies allocation counts remain 4/256, 6/304, and 6/448. These costs
+are not demonstrated lower bounds: for example, a singleton set could be
+recognized without first cloning its allocation.
+
+**Attribution and limits.** The original slowdown was substantially avoidable.
+The optimized implementation reaches roughly the committed baseline's cost
+on the measured whole operations while preserving the new semantics. This
+does not prove zero marginal semantic cost: primitive meet improvements also
+benefit code that existed before the trial, and this is not a comparison with
+an independently optimized old implementation. Nor do these measurements
+cover every constraint kind or atom-typing row workload. The corpus matching
+controls excluded above still supply no evidence for constraint-reading cost.
+
+Two further repetitions were identified for the follow-up below. Counts
+admission's raw-derived
+valence precheck is distinct from testing whether combined evidence is literal:
+an own literal assertion can make the latter literal while derivation remains
+unknown. Removing the precheck changes admission; avoiding its second traversal
+requires reusing the derivation while retaining that policy. Atom typing can
+still reread non-aromatic keys across rows. Neither repetition is an inherent
+semantic cost or a reason to introduce unchecked public APIs. No cache spanning
+mutation or broad replacement of semantic reads with raw getters was added.
+
+For the measured common paths, this evidence and the caller follow-up below
+support the accepted semantic contract and optimized implementation. They supply
+no performance justification for eager storage normalization, weaker bottom
+propagation, or a new unchecked reading surface. Performance acceptance and the
+diagnostic and binding contracts are settled. The S3b completion below records
+the final Rust work; ring ownership and bindings follow in S3b1–S3b3.
+
+**Verification and artifacts.** Graph-IR tests with proptest pass (9,794 unit
+tests and 430 property-target tests, plus integrations; four ignored). Graph
+tests with proptest and conformance pass (1,994 unit tests, 171 property-target
+tests, 683 resolution conformance cases, plus integrations). Relevant-crate
+Clippy with those features and all targets, workspace all-target checks with
+Python 3.13.15, formatting, and diff checks pass. Added aromatic cases cover
+positive literal, singleton, and contradictory own evidence; the closure law
+is checked through public readings. The existing mutation and bottom tests
+remain intact.
+
+The binaries, hashes, source snapshots, allocation counts, logs, per-run
+confidence intervals, and runner are under scratch/236-read-costs:
+optimization-experiment.json, optimized-final-source.patch,
+optimized-final-added-files, final-comparison.csv, the audit-* result files,
+and measure-focused.py. These preserve intermediate measurements as well as
+the final comparison.
+
+### S3b related caller optimizations (2026-10-12)
+
+This follow-up tests the remaining caller repetitions as performance work,
+independently of whether they arose with the semantic change. The selected
+implementation preserves the reading contract, raw storage, infallible mutation,
+and existing admission policy. It adds no public API or unchecked path.
+
+Atom typing reuses the registry lookup slice and caches requested complete
+readings within one atom's admission scan. Cached bottom rejects only rows
+requesting that key; it does not reject later rows that omit it. The cache
+includes the ring scope in its key, uses the same immutable ring context, and
+stores the five default-registry keys inline. Registries requesting more keys
+can spill to the heap. No cache survives the call or spans mutation.
+
+Counts reuse was tested in two forms. Both retained the admission precondition
+that derived valence be literal, including the skip when an own assertion could
+make unknown derivation literal. Meeting an assertion with an already-literal
+derivation can only return that same literal or bottom. The first version
+constructed a normal owned assertion and checked compatibility; its admission
+cost was essentially unchanged. The second used NumForm::is_compatible directly,
+whose contract is equivalence to canonicalizing meet existence, avoiding both
+the repeated traversal and assertion materialization. Direct admission improved
+about 1–3%, but shared-chain resolution was 7.9% slower than the control midpoint,
+with both repeats slower. Partial-triene resolution also spiked in one run.
+These observations do not establish a cause or an aggregate workload cost, but
+the benefit was insufficient to retain the rewrite. Counts production code was
+restored to the previous optimized trial; the added semantic regression cases
+remain. The derivation reuse is not an inherent semantic impossibility.
+
+The literal-derived guard skips a non-ground atom with unknown incident bond
+orders; it does not report NoMatch for that unknown value. Direct counts
+admission can therefore finish with no completion for that atom. A literal
+own assertion does not override the guard; the surrounding valence resolver
+can also return Underdetermined earlier when it cannot verify that assertion
+against incidence. Bond defaults do not infer orders. An otherwise ordinary
+acyclic input with unknown orders remains non-concrete and overall resolution
+returns Underdetermined. Bottom at the derived-valence check instead produces
+NoMatch. This admission restriction predates the reading changes.
+
+Two atom-typing experiments were rejected. Extending this cache to ground-atom
+classification increased its measured cost by 4.9–11.5%; attribute filtering
+already avoids most repeated reads there. Classification keeps direct readings
+and the single registry lookup. Unconditionally testing row constraints before
+attributes accelerated open-H admission but slowed methyl-radical admission
+and resolution. The selected ordering tests attributes first when the atom's
+implicit-H form is constrained, and cached constraints first when it is top.
+Each conjunction is unchanged, and attribute compatibility is evaluated at most
+once per row. This is an internal performance choice, not a new input contract.
+
+The new valence_readings benchmarks use the default registry and ordinary
+raised/resolved SMILES inputs: octane, a 64-carbon chain, benzene, pyridine,
+ammonium, and methyl radical. They measure counts admission, typing admission,
+typing classification, and complete typing resolution with MostSaturated.
+Parsing, raising, registry initialization, and resolver setup occur outside
+measurement; mutable resolution also excludes input cloning. Setup checks
+successful admission, classification, and resolution. These workloads exercise
+literal/undetermined forms; they imply no population frequencies and contain
+no synthetic set/expression weighting.
+
+**Final measurements.** Each case uses 30 samples, 0.3 s warm-up, and 1 s
+measurement, without concurrent builds or tests. The first experiment used
+control → candidate → candidate → control. Subsequent runs separately preserved
+the rejected filter ordering, the counts compatibility trial, two fresh runs
+of the committed baseline, a third control, and two final runs. The manifest
+records the complete order. The table averages each case's last two control
+point estimates and two final point estimates; it does not pool workloads.
+“Control” is the optimized S3b trial before this follow-up, with the same new
+benchmark functions. All times are microseconds.
+
+| Typing workload | Admit control | Admit final | Resolve control | Resolve final |
+| --- | ---: | ---: | ---: | ---: |
+| Octane | 12.933 | 10.338 | 23.469 | 20.479 |
+| 64-carbon chain | 105.954 | 83.228 | 192.994 | 175.592 |
+| Benzene | 6.699 | 5.031 | 24.302 | 23.310 |
+| Pyridine | 6.952 | 5.389 | 25.208 | 23.962 |
+| Ammonium | 0.611 | 0.619 | 1.689 | 1.720 |
+| Methyl radical | 0.819 | 0.815 | 1.911 | 1.901 |
+
+Admission improves 20–25% and complete typing resolution 4–13% on the four
+chain/aromatic inputs. Ground typing classification improves 2–5% after retaining
+only lookup reuse there. Methyl radical stays essentially unchanged. Ammonium
+admission is 1.4% slower (about 8 ns), and resolution is 1.8% slower (about 31 ns);
+the latter is within its final repeat spread. The result is not a uniform
+speedup across every input.
+
+With counts production code restored, direct counts admission differs by
+−0.6% to +1.7% from control. The 23 existing ingest/counts-resolution cases
+range from −3.4% to +2.5%; the shared-chain case returns to control cost
+(12.526 → 12.505 µs). Relative to the two fresh committed-baseline runs, those
+same cases range from −7.8% to −0.5%. Baseline repeats themselves differ by up
+to 5.5%, and control/final repeats also vary. These small percentages are
+measurements, not proof of exact semantic overhead or universal gains. The
+large typing-admission reductions survive the repeated controls clearly.
+
+The raw storage and six semantic readers are unchanged by this follow-up.
+Default-registry reading reuse adds no heap allocation for the cache itself;
+this is not a claim that admission as a whole is allocation-free. The final
+tree retains the typing changes and restores the counts implementation.
+The subsequent S3b completion is recorded below.
+
+**Verification and artifacts.** The final graph suite passes with proptest and
+conformance: 2,010 unit tests, 171 property-target tests, and 683 resolution
+conformance cases, plus integrations. Graph all-target Clippy with those
+features and warnings denied passes. Sixteen new exact cases cover counts'
+unknown-derived skip, assertion conflicts and bottom, repeated registry keys,
+top/bottom readings, a later row omitting a bottom key, and distinct ring scopes
+with more than five cached keys. Formatting and diff checks pass.
+
+The experiment manifest, immutable binaries, release-source snapshots, full
+source patch and added files, per-run confidence intervals, comparisons, and
+logs are under scratch/236-read-costs. related-experiment.json maps every
+variant; related-accepted-resolve is the final binary. The final comparisons
+are related-accepted-summary.json and the CSV files comparing related-control-b,
+related-control-c, related-accepted-a, and related-accepted-b, plus the separate
+committed-baseline comparison. Earlier binaries remain as rejected experiments.
+
+### S3b Rust completion (2026-10-12)
+
+All eight Rust constraint containers now supply asserted and asserted_complete;
+the views delegate their own-assertion readings to them. The shared atom reader
+retains the common-variant fast paths and evidence's single storage lookup.
+Raw storage and infallible attribute mutation are unchanged. CountsMismatch
+prints a literal valence as its integer and an unavailable valence as
+“valence unavailable”; public classification preserves None for a bottom
+projection. The accepted ValenceMismatch variants and coupled S3c/S3f/S3g
+migrations are retained. S3b is complete; S3b1–S3b3 follow separately.
+
+**Correctness and verification.** Added 102 container cases cover absence, top,
+normalization, bottom, closure, scoped keys, and unchanged storage. The existing
+normalization property now also checks container/view equality for both own
+readings across all eight families. Six diagnostic cases cover display and
+public counts classification without substituting zero for unavailable valence.
+The all-feature workspace test run passes 36,927 cases, including 430 graph-IR
+properties, 171 graph properties, and 683 resolution conformance cases. Three
+subsequently added classification cases pass in the focused ten-case run.
+Workspace all-target, all-feature Clippy with warnings denied, graph-IR rustdoc
+with warnings denied, formatting, and diff checks pass. Workspace commands use
+Python 3.13.15. The source and API review found no changes outside S3b's agreed
+Rust surface; the new Python methods are still scheduled in S3b2–S3b3.
+
+**Performance.** Repeated comparisons use the saved accepted reader/caller
+binaries for the completion changes, and the committed pre-S3b binary for the
+twelve fixed matching fixtures. Per-case timing changes are:
+
+| Cases | Count | Control | Change range |
+| --- | ---: | --- | ---: |
+| Common readings | 15 | Accepted reader implementation | −8.2% to +0.5% |
+| Rare set/expression readings | 15 | Accepted reader implementation | −1.6% to +1.4% |
+| Ingest and resolution | 23 | Accepted caller implementation | −1.0% to +1.9% |
+| Direct valence workloads | 24 | Accepted caller implementation | −1.4% to +1.1% |
+| Fixed overlay matching | 12 | Committed pre-S3b baseline | −0.8% to +1.7% |
+
+The common cases remain allocation-free; all rare-case allocation counts are
+unchanged. One common-reading repeat drifted by up to 195% on the same binary;
+it is retained, and a fresh complete common-group comparison agrees with the
+earlier stable run. The table uses the median of three run medians for each
+common case and the mean of two run medians elsewhere. Whole-operation repeat
+drift reaches 2.9%; small differences do not establish universal speedups or
+exact overhead. No workload average mixes the common and rare cases. The
+OpenSMILES corpus matching runs remain excluded for the workload-parity reason
+recorded above; no further investigation was performed.
+
+Commands, source snapshots, immutable binaries and hashes, all timing runs,
+allocation counts, and comparison CSVs are in scratch/236-s3b-completion.
+verification.json, build-manifest.json, benchmark-manifest.json,
+benchmark-summary.json, and common-repeat-summary.json identify the final
+checks and results.
+
 ## Decided: invariants
 
 These changes establish the following invariants. Each is a property in the
@@ -487,8 +1467,11 @@ plan.
     contribution.
 12. Every atom the kekulizer changes satisfies electron conservation and its own
     assertions.
-13. Every constraint reading returns the same value on a molecule and on its
-    normal form.
+13. Every constraint reading and the numeric projections listed in S3b agree
+    exactly before and after successful molecule normalization, with the same
+    entity and ring context. Every Some result is normal; None denotes bottom.
+    Only contributing sources are interpreted, without rewriting storage or
+    changing attribute-mutation fallibility.
 
 ## Copy-on-write storage
 
@@ -591,8 +1574,11 @@ calls chain left to right, needs a separate design.
 
 This plan runs before 181's. Both plans together are the 0.10 release blocker.
 
-No production change starts before its subitem is written here. Steps 2–8 gain
-subitems only after their decisions.
+No production change starts before its subitem is written here. Subitem labels
+remain stable; implementation follows document order and the explicit
+dependencies. S3c, S3f, and S3g specify parts of S3b, as marked below. S3b is the
+Rust reading migration; S3b1–S3b3 sequence ring ownership, ring bindings, and
+semantic-reading bindings after it.
 
 ### S0 — Normal-form tower
 
@@ -1140,20 +2126,74 @@ that read an absent key as `None`, which read `Undetermined`.
 **Verification:** the resolve and substructure bench groups, against a baseline
 taken before the change.
 
-#### S3b — Constraint readings as meets
+#### S3a3 — Vacuous stereo constraint matching
 
-**Modules:** graph-IR view/constraints and the entity view modules, and their
-callers in graph-IR, graph, io, and umol-py; umol-graph-ir tests/property;
+**Modules:** graph-IR constraint/stereo. **Green.** [dep: S3a2]
+
+In the shared stereo constraint-container matches implementation, compare each
+ligand-symmetry entry's invariant against the target's ligand_symmetry getter
+at that permutation, and each fluxionality entry's active value against the
+target's fluxionality getter. Absence then reads as top, as it already does for
+topicity and stereogenicity. Keep matching borrowed and pattern-driven.
+
+**Tests:** on both containers, cover all four keys with a vacuous pattern and
+an absent target entry; a target carrying only another parameterized key;
+matching and conflicting determined values; and a determined pattern against
+an absent or vacuous target. Check exact booleans against the meet-based
+definition and retain the existing normalization cases.
+
+#### S3a4 — Borrow stereo validation entries
+
+**Modules:** graph ops/validate/stereo. **Green.** [dep: S3a2]
+
+Pass the topicity and ligand-symmetry iterators directly from both stereo
+validation callers. Change the private validate_symmetry parameters to accept
+iterators of references, removing the two collected Vecs per entity. Clone a
+non-Copy asserted payload only when constructing a contradiction that owns it.
+Preserve validation order and all existing outcomes.
+
+**Tests:** migrate the private helper's existing cases to borrowed iterators;
+run the public stereo-conformance cases for determined, underdetermined, and
+contradictory results, including invalid topicity positions and permutation
+degrees. No new public API or result type.
+
+#### S3b — Constraint readings as meets **Done**
+
+**Completed (2026-10-12).** The six semantic readings return normalized owned
+forms with None as bottom, and the
+ten public numeric projections return Option<NumForm> under the same convention.
+The signature and closure contract above settles invariant 13 and the complete
+readings' source boundaries. The optimized trial and retained caller changes
+are accepted with their recorded measurement limits. Storage remains raw and
+attribute mutation infallible. The shared standalone-container implementation,
+diagnostic formatting, and Rust verification are complete. The settled
+Python interface follows in S3b2–S3b3 after the ring-ownership change in S3b1.
+
+**Modules:** graph-IR entity constraint containers, view/constraints and the entity
+view modules, and their callers in graph-IR, graph, io, and umol-py;
+umol-graph-ir tests/property;
 docs/development/nomenclature.md. **Breaking, red→green within the subitem.**
-[dep: S3a1]
+[dep: S3a, S3a1]
 
 Give the eight constraints views the six readings of the constraint-readings
-decision, each folding `meet` over its sources from `undetermined(key)` and
-returning `Option<F>`, with `None` as ⊥ and the vacuous form as no information.
+decision, semantically meeting their sources from undetermined(key) and
+returning Option<F>, with None as ⊥ and the vacuous form as no information.
+This specifies the result, not a requirement to invoke meet on every source:
+handle common Undetermined and Lit inputs directly and move owned intermediates.
+Interpret projection inputs before their information is lost in arithmetic.
 `asserted`, `asserted_complete`, `derived`, and `derived_complete` change from
 `Option<&F>` and `Option<F>` with `None` for absence; `evidenced` and
-`evidenced_complete` are added. `asserted_complete` changes only its encoding
-and keeps the incident-bond merge, which S3g removes. Callers migrate.
+`evidenced_complete` are added. asserted_complete closes only the own assertion
+from this subitem onward. Include the caller migrations detailed under S3c and
+S3f and the closure change under S3g in this breaking unit; those labels retain
+their scope below but are not subsequent intermediate contracts. Migrate the
+remaining consumers listed in the signature contract, including diagnostics.
+
+Finish the shared asserted and asserted_complete methods on all eight Rust
+constraint containers before binding them. Have the molecule-backed views
+delegate to these methods, preserving the accepted common-variant fast paths.
+S3b3 binds these shared implementations through each Python constraints view's
+backing-storage enum after S3b2 supplies the ring-context interface.
 
 In the nomenclature guide's Derived and asserted entry, define the six readings
 as meets, the closure of each complete variant, and the claim behind it, and
@@ -1175,12 +2215,103 @@ ring key with ring context. A property over generated molecules, for invariants
 their meet, an atom's own `#a+` and an incident bond's `#a` read alike, and
 every reading returns the same value on a molecule and on its normal form.
 
+Verify container/view equality for both assertion readings. Check the optional
+numeric projection results and diagnostic display without substituting zero
+for an unavailable literal. S3b2–S3b3 carry the Python cases.
+
 **Verification:** the resolve and substructure bench groups, against a baseline
-taken before the change.
+taken before the change. Preserve the selected workloads' variant distribution;
+report rare set/expression stress cases separately. Include projection
+invariance, bottom propagation, and unchanged infallible mutation in correctness
+coverage; performance acceptance does not replace these contracts.
 
-#### S3c — Valence admission and implicit hydrogen inference read evidenced_complete
+#### S3b1 — Owned and borrowed ring data in RingViews
 
-**Modules:** graph valence/atom_typing and valence/counts. **Green.** [dep: S3b]
+**Modules:** graph-IR ir/molecule, ir/ring, and ir/view/ring and their tests.
+**Additive, green.** [dep: S3b]
+
+Store Cow<'a, RingSet> inside RingViews alongside its molecule borrow. Preserve
+Molecule::rings(model, config) and crate-private RingViews::new, which consumes
+the computed set into Cow::Owned. Add public RingViews::from_ring_set(&RingSet,
+&Molecule) using Cow::Borrowed. Keep into_ring_set and implement it through
+into_owned, documenting the move for owned data and clone for borrowed data.
+Preserve the existing query implementations and use the same methods for both
+ownership modes. Enumeration occurs only at the explicit perception call.
+
+Guard contextual access so mismatched sets and molecules cannot cause a panic,
+without promising meaningful results or adding full topology validation.
+Existing owning consumers, including ConstraintEvaluation, keep their current
+storage and call signatures. The general view-argument cleanup is not part of
+this subitem.
+
+**Tests:** retain exact expected members, ids, relations, and readings for the
+existing owning route; exercise reconstruction and extraction for the borrowed
+route against independent expected values. Reuse one RingSet across a bond-order
+mutation, recreating the borrowed view: membership and sizes stay the same and
+ring valence reads the new order. Verify standalone topology queries after the
+source molecule is dropped and independence of a set extracted from a borrowed
+view after the source set is dropped. Cover mismatched contextual inputs without
+requiring a semantic result. Run the existing matching, fingerprint, aromaticity,
+and constraint-validation suites that exercise owning ring context.
+
+#### S3b2 — Python ring data and views
+
+**Modules:** umol-py ring and molecule bindings, extension registration, Python
+package exports, and ring tests. **Additive, green.** [dep: S3b1]
+
+Bind the ring family inventoried in the ownership decision, including
+Molecule.rings(model, config) -> RingViews,
+RingViews.from_ring_set(rings, molecule) -> RingViews, and
+RingViews.into_ring_set() -> RingSet. Preserve the distinction between owned
+and borrowed ring data and the consuming extraction's move-versus-clone costs.
+Retain the required Python owners and reconstruct Rust borrows per call. Bind
+the existing ring-set, ring-graph, individual-ring, ring-atom, and ring-bond
+queries, including RingAtomView.ring_valence -> NumForm | None. Keep borrowed
+collection access read-only and iteration lazy. Match Rust construction and
+field access, and use the existing enum, integer-id, indexing, and exception
+conventions. RingSet and RingGraph acquire no arbitrary-parts constructors;
+the crate-private consuming RingViews::new is not a Python constructor.
+
+**Tests:** exact ring membership, sizes, relations, graph connections, and
+atom/bond readings on representative ring configurations; indexing and absence;
+owner retention after dropping caller references; current attribute reads;
+structural invalidation and molecule consumption for nested views and iterators;
+and continued standalone RingSet access. Cover both ownership routes through
+into_ring_set, including consumption and dependent-accessor invalidation, and
+reconstruction with incompatible context without a panic. Distinguish bottom
+from top in ring valence. Verify that creating or partially advancing an iterator
+does not materialize the remaining entries.
+
+#### S3b3 — Python constraint readings and numeric projections
+
+**Modules:** umol-py entity constraint containers and views, atom/bond bindings,
+and Python tests. **Additive, green.** [dep: S3b, S3b2]
+
+Bind asserted and asserted_complete on all eight constraint containers and the
+six readings on their constraints views, using each family's existing key and
+form types. Bind view satisfies and is_compatible against the corresponding
+constraint container. Dispatch through the existing backing-storage enum and
+the shared Rust implementations, with the settled ValueError boundaries.
+
+Bind AtomConstraintsView.with_rings and BondConstraintsView.with_rings; the new
+view retains the RingSet owner and the same molecule entity. Add AtomView's nine
+optional numeric projections: valence, donated_pairs, accepted_pairs,
+total_degree, total_hydrogens, total_valence, covalence, heavy_atom_degree, and
+heavy_atom_valence. Together with S3b2's ring_valence, these are the ten settled
+NumForm | None projections. Typed storage getters keep their raw meaning.
+
+**Tests:** all eight entity families; standalone and molecule-backed assertion
+readings; ValueError for missing molecule or required ring context, including
+the settled empty-comparison case; successful explicit ring-context reads;
+bottom versus top; optional numeric results; and unchanged live-view mutation
+and invalidation. Verify Rust/Python reading parity and independent returned
+forms without introducing a Python-only reading implementation or a separate
+storage-proxy class.
+
+#### S3c — Valence admission and implicit hydrogen inference read evidenced_complete **Done**
+
+**Completed with S3b.** Modules: graph valence/atom_typing and
+valence/counts. Retained here to specify its behavior and tests.
 
 Atom typing matches each registry-row entry against the atom's
 `evidenced_complete` value, replacing the inline composition, and keeps a ground
@@ -1246,10 +2377,11 @@ and the negative leaves the site without an entity.
 **Tests:** existing stereo derivation and resolution results, including failures
 and mismatches.
 
-#### S3f — Matching reads evidenced_complete
+#### S3f — Matching reads evidenced_complete **Done**
 
-**Modules:** graph-IR view/constraints and the substructure tests;
-docs/development/nomenclature.md. **Green.** [dep: S3b, S3a]
+**Completed with S3b.** Modules: graph-IR view/constraints and the
+substructure tests; docs/development/nomenclature.md. Retained here to specify
+its behavior and tests; requires the completed S3a matching contract.
 
 Restate the constraints views' `satisfies` over `evidenced_complete`: every
 pattern entry is satisfied by the host's value at its key, and ⊥ satisfies no
@@ -1270,10 +2402,10 @@ stereo pattern entries.
 **Verification:** the substructure bench groups, against a baseline taken before
 the change.
 
-#### S3g — asserted_complete without the incident-bond merge
+#### S3g — asserted_complete without the incident-bond merge **Done**
 
-**Modules:** graph-IR view/atom and the view tests;
-docs/development/nomenclature.md. **Green.** [dep: S3c]
+**Completed with S3b.** Modules: graph-IR view/atom and the view tests;
+docs/development/nomenclature.md. Retained here to specify its behavior and tests.
 
 The atom's `asserted_complete` closes `asserted` alone, where it is top, to the
 absence cell, and no longer reads incident bonds. Move the guide's sentence on
@@ -1285,7 +2417,7 @@ non-aromatic under `asserted_complete`; the existing cases with own assertions.
 #### S3h — Raising writes #a! only next to an aromatic bond
 
 **Modules:** umol-io table_ir/raise and its tests; graph ingest tests.
-**Green.** [dep: S3c, S3d]
+**Green.** [dep: S3b, S3d]
 
 Raise an atom that the table marks non-aromatic with `#a!` only when one of its
 table bonds is aromatic.
@@ -1294,21 +2426,6 @@ table bonds is aromatic.
 `#a+` on every atom and the aromatic constraint on every bond; raising an
 aliphatic atom joined by an explicit aromatic bond writes `#a!` on it, and
 ingesting that input reports NoMatch; resolved ingestion results are unchanged.
-
-#### S3h1 — Raising writes #a! on a single bond between aromatic atoms
-
-**Modules:** umol-io table_ir/raise and its tests; graph ingest tests.
-**Green.** [dep: S3h, S3l]
-
-Raise a single table bond with `#a!` when the table marks both of its atoms
-aromatic. In SMILES this is an explicit single bond between aromatic atoms, such
-as the bond joining the rings of `c1ccccc1-c1ccccc1`, which SMILES defines as
-not aromatic.
-
-**Tests:** raising `c1ccccc1-c1ccccc1` writes `#a!` on the bond joining the
-rings and `#a` on every ring bond; raising `c1ccccc1C` and `CC` writes no
-aromatic constraint on their single bonds; ingesting `c1ccc-cc1` fails with an
-AromaticValenceFailure; other resolved ingestion results are unchanged.
 
 #### S3i — Aromaticity discharges what its systems realize
 
@@ -1375,6 +2492,21 @@ skeleton generator, for invariant 11: no system the resolver adds contains a
 bond asserting non-aromaticity or an atom whose evidence disagrees with its
 contribution.
 
+#### S3h1 — Raising writes #a! on a single bond between aromatic atoms
+
+**Modules:** umol-io table_ir/raise and its tests; graph ingest tests.
+**Green.** [dep: S3h, S3l]
+
+Raise a single table bond with `#a!` when the table marks both of its atoms
+aromatic. In SMILES this is an explicit single bond between aromatic atoms, such
+as the bond joining the rings of `c1ccccc1-c1ccccc1`, which SMILES defines as
+not aromatic.
+
+**Tests:** raising `c1ccccc1-c1ccccc1` writes `#a!` on the bond joining the
+rings and `#a` on every ring bond; raising `c1ccccc1C` and `CC` writes no
+aromatic constraint on their single bonds; ingesting `c1ccc-cc1` fails with an
+AromaticValenceFailure; other resolved ingestion results are unchanged.
+
 #### S3m — Closing discharge pass removed
 
 **Modules:** graph resolve and ingest tests; docs/development/nomenclature.md.
@@ -1432,24 +2564,6 @@ the DSL.
 **Tests:** aromatizer results without aromatic constraints on system bonds;
 existing resolution results.
 
-#### S4c — Resolver plan application as an invariant
-
-**Modules:** graph resolve, the five individual resolvers, and their tests.
-**Breaking, red→green within the subitem.** [dep: S3a]
-
-Replace post-plan `apply(edits)?`, `finish()?`, and `transact([edits])?` in the
-individual resolvers, and the composite resolver's phase-plan application, with
-expect and an invariant message, as the transformers do. Remove the Apply
-variants from the eight error types and the composite ResolveError mappings that
-wrap them.
-
-**Tests:** existing resolution and projection results; remove tests that
-construct the removed variants; a property over the skeleton generator, for
-invariant 1, replacing the four fixed-SMILES integrity properties: every
-determined result of the aromaticity resolver's resolve and project, the
-kekulizer, and the aromatizer passes the integrity check, and the consuming and
-in-place forms agree.
-
 #### S4d — Kekulizer validity during planning
 
 **Modules:** graph transform/kekulizer and the kekulization tests. **Breaking,
@@ -1490,18 +2604,6 @@ of through transact. Planning failures leave the receiver unchanged.
 
 **Tests:** existing transform_into results, and an unchanged receiver on
 Aromatizer planning failure.
-
-#### S4f — Individual resolver _into without a transaction
-
-**Modules:** graph resolve isotope, aromaticity, stereo, bonds, multicenter.
-**Green.** [dep: S4c]
-
-The eight resolve_into and project_into methods apply their plan in place
-instead of through transact. Outcomes decided during planning leave the receiver
-unchanged.
-
-**Tests:** existing _into results, and an unchanged receiver on
-underdetermination and contradiction.
 
 #### S4g — Mismatch policies removed
 
@@ -1602,6 +2704,38 @@ the stored systems are unchanged.
 
 **Verification:** the resolve bench's AromaticityResolver::resolve group,
 against a baseline taken before the change.
+
+#### S4c — Resolver plan application as an invariant
+
+**Modules:** graph resolve, the five individual resolvers, and their tests.
+**Breaking, red→green within the subitem.** [dep: S3a, S4j]
+
+S4j establishes the stored-system overlap check during planning before this
+subitem removes application errors. Replace post-plan `apply(edits)?`,
+`finish()?`, and `transact([edits])?` in the individual resolvers, and the
+composite resolver's phase-plan application, with expect and an invariant
+message, as the transformers do. Remove the Apply variants from the eight error
+types and the composite ResolveError mappings that wrap them.
+
+**Tests:** existing resolution and projection results, including S4j's overlap
+cases under Error and Keep through resolve and resolve_into; remove tests that
+construct the removed variants; a property over the skeleton generator, for
+invariant 1, replacing the four fixed-SMILES integrity properties: every
+determined result of the aromaticity resolver's resolve and project, the
+kekulizer, and the aromatizer passes the integrity check, and the consuming and
+in-place forms agree.
+
+#### S4f — Individual resolver _into without a transaction
+
+**Modules:** graph resolve isotope, aromaticity, stereo, bonds, multicenter.
+**Green.** [dep: S4c]
+
+The eight resolve_into and project_into methods apply their plan in place
+instead of through transact. Outcomes decided during planning leave the receiver
+unchanged.
+
+**Tests:** existing _into results, and an unchanged receiver on
+underdetermination and contradiction.
 
 #### S4k — Aromatizer reads evidenced
 
@@ -1718,12 +2852,13 @@ shared and of a uniquely owned reaction.
 
 #### S5c — ReactionSpan tables
 
-**Modules:** graph-IR reaction_span. **Green.** [dep: none]
+**Modules:** graph-IR reaction_span. **Green.** [dep: S2b]
 
 Change atoms, bonds, and constraints to `Arc<Vec<…>>`. Wrap at construction in
-from_entries, try_remap, and reverse_sides. normalize, reframe_by, and reframe
-rebuild each table with Arc::unwrap_or_clone. entries and try_remap clone the
-inner Vec where they need an owned table.
+from_entries, try_remap, and reverse_sides. normalize, reframe_by, reframe, and
+the consuming try_remap rebuild each table with Arc::unwrap_or_clone, moving
+uniquely owned tables and cloning shared ones. The borrowing entries accessor
+clones the inner Vec where it needs an owned table.
 
 **Tests:** clone-independence cases through normalize and reframe.
 
@@ -1800,4 +2935,6 @@ Run workspace tests and lints with all features, and the Python suite in the
 repository's Python 3.13 environment. Rerun benchmarks only for cases whose
 production code differs from what was measured.
 
-**Critical path:** S3a1 → S3b → S3d → S3l → S4j → S4l → S4n → S6a → S7a.
+**Critical paths:** S3a1 → S3b → S3d → S3l → S4j, then S4c → S4f → S4n
+and S4l → S4n. Both join S6a → S7a, after the remaining stage dependencies.
+The binding path is S3b → S3b1 → S3b2 → S3b3 → S7a.

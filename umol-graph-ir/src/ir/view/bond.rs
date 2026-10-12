@@ -11,7 +11,7 @@ use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{CisTransStereoForm, StereoKind};
-use super::super::traits::Lattice;
+use super::super::traits::{Lattice, Normalize};
 use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
 use super::constraints::BondConstraintsView;
@@ -374,33 +374,12 @@ pub(crate) fn bond_asserted_constraints(molecule: &Molecule, id: BondId) -> &Bon
     &molecule.bond(id).attributes().constraints
 }
 
-/// Asserted side of one bond constraint key under resolution's closed-world
-/// claim: the stored assertion, else the absence cell closed to its definite
-/// negative. Never reads relations — a bond inside a stored aromatic system
-/// without its own `#a` assertion reads `Lit(false)`.
-pub(crate) fn bond_asserted_complete_constraint(
-    molecule: &Molecule,
-    id: BondId,
-    key: BondConstraintKey,
-) -> Option<BondConstraintForm> {
-    if let Some(asserted) = bond_asserted_constraints(molecule, id).get(key) {
-        return Some(asserted.clone());
-    }
-    match key {
-        BondConstraintKey::Aromatic => Some(BondConstraintForm::aromatic(BooleanForm::Lit(false))),
-        BondConstraintKey::CisTransStereo => Some(BondConstraintForm::cis_trans_stereo(
-            CisTransStereoForm::NotStereo,
-        )),
-        BondConstraintKey::RingMembership(_) => None,
-    }
-}
-
 /// Derived side of one bond constraint key, read from the molecule's
 /// relations.
 ///
 /// `complete` selects the closure reading: absence of a resolution-written
 /// overlay yields its definite negative (`Aromatic(false)` / `NotStereo`)
-/// instead of no value. A bond is in an aromatic system iff both endpoints
+/// instead of top. A bond is in an aromatic system iff both endpoints
 /// belong to that system. Ring keys require `rings` and panic without it —
 /// the caller scanning keys decides whether to build the ring set.
 pub(crate) fn bond_derived_constraint(
@@ -417,7 +396,7 @@ pub(crate) fn bond_derived_constraint(
             } else if complete {
                 Some(BondConstraintForm::aromatic(BooleanForm::Lit(false)))
             } else {
-                None
+                Some(BondConstraintForm::undetermined(key))
             }
         }
         BondConstraintKey::CisTransStereo => {
@@ -436,13 +415,13 @@ pub(crate) fn bond_derived_constraint(
                     }
                     (Some(_), _) => CisTransStereoForm::NotStereo,
                 };
-                Some(BondConstraintForm::cis_trans_stereo(form))
+                BondConstraintForm::cis_trans_stereo(form).normalize().ok()
             } else if complete {
                 Some(BondConstraintForm::cis_trans_stereo(
                     CisTransStereoForm::NotStereo,
                 ))
             } else {
-                None
+                Some(BondConstraintForm::undetermined(key))
             }
         }
         BondConstraintKey::RingMembership(scope) => {

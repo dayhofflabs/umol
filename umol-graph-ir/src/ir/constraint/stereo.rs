@@ -180,6 +180,21 @@ macro_rules! stereo_constraint {
                 Self::default()
             }
 
+            /// The normalized own assertion: absence is top; contradiction is `None`.
+            /// Reads only this key and leaves storage unchanged.
+            pub fn asserted(&self, key: $key) -> Option<$constraint> {
+                match self.get(key) {
+                    Some(value) => value.clone().normalize().ok(),
+                    None => Some($constraint::undetermined(key)),
+                }
+            }
+
+            /// The normalized own assertion. This entity kind has no closure negative,
+            /// so this agrees with [`Self::asserted`]. Reads no molecule context.
+            pub fn asserted_complete(&self, key: $key) -> Option<$constraint> {
+                self.asserted(key)
+            }
+
             /// Ligand-symmetry constraints
             pub fn ligand_symmetries(&self) -> impl Iterator<Item = &LigandSymmetryForm> {
                 self.entries.iter().filter_map(|c| match c {
@@ -615,6 +630,9 @@ macro_rules! relation_form {
             /// `Undetermined`, singleton → `Lit`, else the smaller of positive /
             /// complement (tiebreak positive).
             fn normalize(self) -> Result<Self, Contradiction> {
+                if matches!(self, Self::Undetermined | Self::Lit(_)) {
+                    return Ok(self);
+                }
                 let set = self.to_set();
                 let domain: BTreeSet<$domain> = <$domain as VariantArray>::VARIANTS
                     .iter()
@@ -1551,6 +1569,32 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::absent(None, StereoAtomConstraintKey::Stereogenicity, Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)))]
+    #[case::top(Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), StereoAtomConstraintKey::Stereogenicity, Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)))]
+    #[case::literal(Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), StereoAtomConstraintKey::Stereogenicity, Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))))]
+    #[case::singleton(Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), StereoAtomConstraintKey::Stereogenicity, Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))))]
+    #[case::bottom(Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), StereoAtomConstraintKey::Stereogenicity, None, None)]
+    #[case::topicity_absent(None, StereoAtomConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))), Some(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })), Some(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })))]
+    #[case::topicity_top(Some(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })), StereoAtomConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))), Some(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })), Some(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })))]
+    #[case::ligand_symmetry_absent(None, StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }), Some(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })), Some(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })))]
+    #[case::ligand_symmetry_top(Some(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })), StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }), Some(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })), Some(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })))]
+    #[case::fluxionality_absent(None, StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]))), Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })), Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })))]
+    #[case::fluxionality_top(Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })), StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]))), Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })), Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })))]
+    fn test_stereo_atom_constraints_form_asserted(
+        #[case] source: Option<StereoAtomConstraintForm>,
+        #[case] key: StereoAtomConstraintKey,
+        #[case] expected: Option<StereoAtomConstraintForm>,
+        #[case] complete: Option<StereoAtomConstraintForm>,
+    ) {
+        let constraints: StereoAtomConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::stored(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, BooleanForm::Lit(true))]
     #[case::absent(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Improper }, BooleanForm::Undetermined)]
     fn test_stereo_atom_constraints_form_ligand_symmetry(#[case] permutation: OrientedLigandPermutation, #[case] expected: BooleanForm) {
@@ -2015,6 +2059,32 @@ mod tests {
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
         assert_eq!(cs.iter().count(), 0);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absent(None, StereoBondConstraintKey::Stereogenicity, Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)))]
+    #[case::top(Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), StereoBondConstraintKey::Stereogenicity, Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)), Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)))]
+    #[case::literal(Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), StereoBondConstraintKey::Stereogenicity, Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))))]
+    #[case::singleton(Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), StereoBondConstraintKey::Stereogenicity, Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))))]
+    #[case::bottom(Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), StereoBondConstraintKey::Stereogenicity, None, None)]
+    #[case::topicity_absent(None, StereoBondConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))), Some(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })), Some(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })))]
+    #[case::topicity_top(Some(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })), StereoBondConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))), Some(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })), Some(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined })))]
+    #[case::ligand_symmetry_absent(None, StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }), Some(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })), Some(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })))]
+    #[case::ligand_symmetry_top(Some(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })), StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }), Some(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })), Some(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })))]
+    #[case::fluxionality_absent(None, StereoBondConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]))), Some(StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })), Some(StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })))]
+    #[case::fluxionality_top(Some(StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })), StereoBondConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]))), Some(StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })), Some(StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Undetermined })))]
+    fn test_stereo_bond_constraints_form_asserted(
+        #[case] source: Option<StereoBondConstraintForm>,
+        #[case] key: StereoBondConstraintKey,
+        #[case] expected: Option<StereoBondConstraintForm>,
+        #[case] complete: Option<StereoBondConstraintForm>,
+    ) {
+        let constraints: StereoBondConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
     }
 
     #[rustfmt::skip]

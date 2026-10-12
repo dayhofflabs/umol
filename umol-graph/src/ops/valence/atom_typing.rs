@@ -7,7 +7,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, Lattice,
-    Molecule, NumForm,
+    Molecule, NumForm, RingConfig, RingModel,
 };
 use umol_utils::solution::Solution;
 
@@ -72,27 +72,56 @@ impl<'a> AtomTypingValence<'a> {
         id: AtomId,
     ) -> Result<Option<SmallVec<[AtomForm; 1]>>, AtomTypingError> {
         let atom = molecule.atom(id);
-        let ground_contribution_open = atom.is_ground()
-            && matches!(
-                atom.constraints()
-                    .asserted_complete(AtomConstraintKey::AromaticValence),
-                Some(AtomConstraintForm::AromaticValence(
-                    AromaticValenceForm::Aromatic(NumForm::Undetermined)
-                ))
-            )
-            && !atom.is_in_aromatic_system();
-        if atom.is_ground() && !ground_contribution_open {
-            return Ok(None);
-        }
         let Some(element) = atom.element().as_lit() else {
             return Ok(None);
         };
         let charge = atom.charge().as_lit().map(|n| n as i8);
-        let constraints = atom.constraints();
+        let aromatic = atom
+            .constraints()
+            .evidenced_complete(AtomConstraintKey::AromaticValence)
+            .ok_or(AtomTypingError::NoMatch {
+                atom_id: id,
+                element,
+                charge,
+            })?;
+        let is_ground = atom.is_ground();
+        let ground_contribution_open = is_ground
+            && matches!(
+                aromatic,
+                AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(
+                    NumForm::Undetermined
+                ))
+            );
+        if is_ground && !ground_contribution_open {
+            return Ok(None);
+        }
+        let rows = self.registry.lookup(element, charge);
+        let rings = rows
+            .iter()
+            .any(|row| {
+                row.constraints.iter().any(|c| {
+                    matches!(
+                        c.key(),
+                        AtomConstraintKey::RingDegree
+                            | AtomConstraintKey::RingValence
+                            | AtomConstraintKey::RingMembership(_)
+                    )
+                })
+            })
+            .then(|| {
+                molecule
+                    .rings(RingModel::default(), RingConfig::default())
+                    .into_ring_set()
+            });
+        let constraints = match &rings {
+            Some(rings) => atom.constraints().with_rings(rings),
+            None => atom.constraints(),
+        };
+        let mut readings = SmallVec::<[(AtomConstraintKey, Option<AtomConstraintForm>); 5]>::new();
+        readings.push((AtomConstraintKey::AromaticValence, Some(aromatic)));
+        let attributes_first = !atom.implicit_hydrogens().is_undetermined();
         let mut admitted = SmallVec::<[AtomForm; 1]>::new();
-        for candidate in self
-            .registry
-            .lookup(element, charge)
+        for candidate in rows
             .iter()
             .filter(|row| {
                 // A field-ground atom is under resolution only for its open
@@ -100,33 +129,24 @@ impl<'a> AtomTypingValence<'a> {
                 if ground_contribution_open && !row.constraints.aromatic_valence().is_aromatic() {
                     return false;
                 }
-                atom.attributes().is_compatible(row)
-                    && row.constraints.iter().all(|entry| {
-                        let key = entry.key();
-                        let derived = match key {
-                            AtomConstraintKey::RingDegree
-                            | AtomConstraintKey::RingValence
-                            | AtomConstraintKey::RingMembership(_) => None,
-                            _ => constraints.derived(key),
-                        };
-                        // The resolution reading: present evidence as in the
-                        // open-world check, but a key with neither side reads
-                        // the closed-world assertion — absence is actual
-                        // absence, so an unmarked atom admits no aromatic row.
-                        let host = match (constraints.asserted(key), derived) {
-                            (Some(asserted), Some(derived)) => match asserted.meet(&derived) {
-                                Some(host) => host,
-                                None => return false,
-                            },
-                            (Some(asserted), None) => asserted.clone(),
-                            (None, Some(derived)) => derived,
-                            (None, None) => match constraints.asserted_complete(key) {
-                                Some(closed) => closed,
-                                None => return true,
-                            },
-                        };
-                        entry.is_compatible(&host)
-                    })
+                if attributes_first && !atom.attributes().is_compatible(row) {
+                    return false;
+                }
+                row.constraints.iter().all(|entry| {
+                    let key = entry.key();
+                    let index = match readings.iter().position(|(stored, _)| *stored == key) {
+                        Some(index) => index,
+                        None => {
+                            let index = readings.len();
+                            readings.push((key, constraints.evidenced_complete(key)));
+                            index
+                        }
+                    };
+                    readings[index]
+                        .1
+                        .as_ref()
+                        .is_some_and(|host| entry.is_compatible(host))
+                }) && (attributes_first || atom.attributes().is_compatible(row))
             })
             .map(|row| {
                 atom.attributes()
@@ -152,10 +172,8 @@ impl<'a> AtomTypingValence<'a> {
     /// pattern admits it, `Contradictory` if none does, and `Underdetermined`
     /// if the atom is not ground.
     ///
-    /// Admission here reads the closure (`derived_complete`) per row key —
-    /// the conformance reading for a ground atom — composed from the view's
-    /// keyed core; ring keys compare against the asserted side only (no ring
-    /// context is built).
+    /// Admission compares each row key with `evidenced_complete`; contradictory
+    /// evidence admits no row. Ring context is built when a row requests it.
     pub fn classify_molecule_atom(
         &self,
         molecule: &Molecule,
@@ -169,27 +187,34 @@ impl<'a> AtomTypingValence<'a> {
             return Solution::Underdetermined(());
         };
         let charge = atom.charge().as_lit().map(|n| n as i8);
-        let constraints = atom.constraints();
-        let admitted = self.registry.lookup(element, charge).iter().any(|row| {
+        let rows = self.registry.lookup(element, charge);
+        let rings = rows
+            .iter()
+            .any(|row| {
+                row.constraints.iter().any(|c| {
+                    matches!(
+                        c.key(),
+                        AtomConstraintKey::RingDegree
+                            | AtomConstraintKey::RingValence
+                            | AtomConstraintKey::RingMembership(_)
+                    )
+                })
+            })
+            .then(|| {
+                molecule
+                    .rings(RingModel::default(), RingConfig::default())
+                    .into_ring_set()
+            });
+        let constraints = match &rings {
+            Some(rings) => atom.constraints().with_rings(rings),
+            None => atom.constraints(),
+        };
+        let admitted = rows.iter().any(|row| {
             atom.attributes().is_compatible(row)
                 && row.constraints.iter().all(|entry| {
-                    let key = entry.key();
-                    let derived = match key {
-                        AtomConstraintKey::RingDegree
-                        | AtomConstraintKey::RingValence
-                        | AtomConstraintKey::RingMembership(_) => None,
-                        _ => constraints.derived_complete(key),
-                    };
-                    let host = match (constraints.asserted(key), derived) {
-                        (Some(asserted), Some(derived)) => match asserted.meet(&derived) {
-                            Some(host) => host,
-                            None => return false,
-                        },
-                        (Some(asserted), None) => asserted.clone(),
-                        (None, Some(derived)) => derived,
-                        (None, None) => return true,
-                    };
-                    entry.is_compatible(&host)
+                    constraints
+                        .evidenced_complete(entry.key())
+                        .is_some_and(|host| entry.is_compatible(&host))
                 })
         });
         if admitted {
@@ -203,8 +228,8 @@ impl<'a> AtomTypingValence<'a> {
     ///
     /// Filters element/charge lookup results by localized valence, aromatic contribution,
     /// and retained unpaired-electron count/multiplicity. Other atom constraints do not enter
-    /// this calculation. Stored valence and aromatic assertions take precedence; absent values
-    /// are derived from bonds and aromatic systems. Returns None for an absent atom, missing
+    /// this calculation. Valence and aromatic evidence use the complete constraint reading,
+    /// meeting assertions with relation evidence. Returns None for an absent atom, missing
     /// concrete lookup evidence, no admissible row, a non-literal admitted H count, or distinct
     /// H counts under Strict.
     /// MostSaturated returns the greatest admitted H count.
@@ -224,17 +249,18 @@ impl<'a> AtomTypingValence<'a> {
         let element = atom.element().as_lit()?;
         let charge = i8::try_from(atom.charge().as_lit()?).ok()?;
         let constraints = atom.constraints();
-        let valence = NumForm::Lit(match constraints.valence() {
-            NumForm::Undetermined => atom.valence().as_lit()?,
-            asserted => asserted.as_lit()?,
-        });
-        let aromatic = match constraints.aromatic_valence() {
-            AromaticValenceForm::Undetermined if atom.is_in_aromatic_system() => {
-                AromaticValenceForm::aromatic(atom.aromatic_valence().as_lit()?)
-            }
-            AromaticValenceForm::Undetermined => AromaticValenceForm::NotAromatic,
-            asserted => AromaticValenceForm::from(asserted.as_lit()?),
+        let AtomConstraintForm::Valence(valence) =
+            constraints.evidenced_complete(AtomConstraintKey::Valence)?
+        else {
+            unreachable!()
         };
+        let valence = NumForm::Lit(valence.as_lit()?);
+        let AtomConstraintForm::AromaticValence(aromatic) =
+            constraints.evidenced_complete(AtomConstraintKey::AromaticValence)?
+        else {
+            unreachable!()
+        };
+        let aromatic = AromaticValenceForm::from(aromatic.as_lit()?);
         let mut hydrogens = None;
         for row in self.registry.lookup(element, Some(charge)) {
             if !atom
@@ -262,7 +288,9 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use smallvec::smallvec;
-    use umol_graph_ir::ir::{IsotopeMassForm, MoleculeEntries};
+    use umol_graph_ir::ir::{
+        BondForm, IsotopeMassForm, MoleculeEntries, RingMembershipForm, RingScope,
+    };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
@@ -407,6 +435,68 @@ mod tests {
     }
 
     #[rstest]
+    #[case::repeated_key(NumForm::Lit(1), vec!["C#c0#h3#v2", "C#c0#h3#v1", "C#c0#h3#v1"], vec!["C#c0#h3#v1"])]
+    #[case::top(NumForm::Undetermined, vec!["C#c0#h3#v2", "C#c0#h3#v1"], vec!["C#c0#h3#v2", "C#c0#h3#v1"])]
+    #[case::singleton(NumForm::lit_set([1]), vec!["C#c0#h3#v2", "C#c0#h3#v1"], vec!["C#c0#h3#v1"])]
+    #[case::bottom(NumForm::lit_set([]), vec!["C#c0#h3#v2", "C#c0#h3#v1"], vec![])]
+    #[case::unqueried_bottom(NumForm::lit_set([]), vec!["C#c0#h3#v1", "C#c0#h3"], vec!["C#c0#h3"])]
+    #[case::multiple_keys(NumForm::Lit(1), vec!["C#c0#h3#v1#t1", "C#c0#h3#v1#t0"], vec!["C#c0#h3#v1#t0"])]
+    fn test_atom_typing_valence_admit_readings(
+        #[case] order: NumForm,
+        #[case] rows: Vec<&str>,
+        #[case] expected: Vec<&str>,
+    ) {
+        let registry = AtomTypeRegistry::from_atoms(rows.into_iter().map(|row| atom_dsl!(row)));
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom_dsl!("C#c0"), atom_dsl!("C#i=#c0#h3#n0#u0#s")],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::new(order))],
+            ..Default::default()
+        });
+        let expected = if expected.is_empty() {
+            Solution::Contradictory(AtomTypingError::NoMatch {
+                atom_id: AtomId(0),
+                element: Element::C,
+                charge: Some(0),
+            })
+        } else {
+            Solution::Determined(AtomCompletions::from_iter([(
+                AtomId(0),
+                expected.into_iter().map(|row| atom_dsl!(row)).collect(),
+            )]))
+        };
+        assert_eq!(AtomTypingValence::new(&registry).admit(&molecule), expected);
+    }
+
+    #[rstest]
+    fn test_atom_typing_valence_admit_ring_readings() {
+        let row = atom_dsl!("C#c0#h2#n0#u0#s").with_constraints([
+            AtomConstraintForm::Valence(NumForm::Lit(2)),
+            AtomConstraintForm::DonatedPairs(NumForm::Lit(0)),
+            AtomConstraintForm::AcceptedPairs(NumForm::Lit(0)),
+            AtomConstraintForm::Degree(NumForm::Lit(2)),
+            AtomConstraintForm::TotalDegree(NumForm::Lit(4)),
+            AtomConstraintForm::RingMembership(RingMembershipForm::new(RingScope::Size(3), 1)),
+            AtomConstraintForm::RingMembership(RingMembershipForm::new(RingScope::Size(4), 0)),
+        ]);
+        let rejected = row
+            .clone()
+            .with_constraint(AtomConstraintForm::RingMembership(RingMembershipForm::new(
+                RingScope::Size(3),
+                0,
+            )));
+        let registry = AtomTypeRegistry::from_atoms([rejected, row.clone()]);
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#
+        );
+        assert_eq!(
+            AtomTypingValence::new(&registry).admit(&molecule),
+            Solution::Determined(AtomCompletions::from_iter([(AtomId(0), smallvec![row])])),
+        );
+    }
+
+    #[rstest]
     #[case::default_registry(Cow::Borrowed(AtomTypeRegistry::default_registry()))]
     #[case::empty_registry(Cow::Owned(AtomTypeRegistry::new()))]
     fn test_atom_typing_valence_admit_identity(#[case] registry: Cow<'static, AtomTypeRegistry>) {
@@ -446,6 +536,10 @@ mod tests {
             charge: Some(0),
         }
     )]
+    #[case::ground_aromatic_conflict(
+        mol_dsl!(r#"{:atoms ["C#c0#h3#n0#u0#s#a!" "C"] :bonds [[0 1 "1#a"]]}"#),
+        AtomTypingError::NoMatch { atom_id: AtomId(0), element: Element::C, charge: Some(0) }
+    )]
     fn test_atom_typing_valence_admit_error(
         atom_type_registry: AtomTypeRegistry,
         #[case] molecule: Molecule,
@@ -480,7 +574,7 @@ mod tests {
     #[case::filtered_nonliteral_h(vec!["C#c0#h*#v1", "C#c0#h4#v0"], r#"{:atoms ["C#c0#h4#u0#s"]}"#, Some(4), Some(4))]
     #[case::open_charge(vec!["C#c0#h4"], r#"{:atoms ["C#h4#u0#s"]}"#, None, None)]
     #[case::open_aromatic(vec!["C#c0#h1#a1"], r#"{:atoms ["C#c0#h1#u0#s#a*"]}"#, None, None)]
-    #[case::stored_valence(vec!["C#c0#h4#v0", "C#c0#h3#v1"], r#"{:atoms ["C#c0#h4#u0#s#v1"]}"#, Some(3), Some(3))]
+    #[case::stored_valence(vec!["C#c0#h4#v0", "C#c0#h3#v1"], r#"{:atoms ["C#c0#h4#u0#s#v1"]}"#, None, None)]
     #[case::aromatic_system(
         vec!["C#c0#h1#v2#a1", "C#c0#h0#v2#a2"],
         r#"{:atoms ["C#c0#h1#u0#s" "C" "C" "C" "C" "C"]
@@ -493,7 +587,7 @@ mod tests {
         r#"{:atoms ["C#c0#h1#u0#s#a2" "C" "C" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#,
-        Some(0), Some(0)
+        None, None
     )]
     #[case::aromatic_zero(vec!["C#c0#h2#a0", "C#c0#h4#a!"], r#"{:atoms ["C#c0#h2#u0#s#a0"]}"#, Some(2), Some(2))]
     fn test_atom_typing_valence_infer_implicit_hydrogens(

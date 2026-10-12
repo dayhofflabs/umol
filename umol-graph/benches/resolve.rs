@@ -7,6 +7,8 @@
 //!
 //! The `smiles_roundtrip/resolve` group isolates resolution with the SMILES counts
 //! model. Parsing, raising, resolver construction, and input cloning are outside timing.
+//! The `valence_readings` group measures counts/registry admission, registry
+//! classification of resolved molecules, and complete resolution with atom typing.
 
 use std::hint::black_box;
 
@@ -14,6 +16,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criteri
 use umol_graph::ingest::ingest_smiles;
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::{IsotopePolicy, ProjectFlags, ResolveConfig, Resolver};
+use umol_graph::ops::valence::{AtomTypeRegistry, AtomTypingValence, CountsValence, ValenceTable};
 use umol_graph_ir::ir::{Molecule, TryIntoIr};
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
@@ -83,6 +86,71 @@ fn bench_resolve(c: &mut Criterion) {
             "{name}"
         );
         group.bench_function(name, |b| {
+            b.iter_batched_ref(
+                || molecule.clone(),
+                |molecule| resolver.resolve_into(black_box(molecule)).unwrap(),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+fn bench_valence(c: &mut Criterion) {
+    let typing = AtomTypingValence::new(AtomTypeRegistry::default_registry());
+    let counts = CountsValence::new(ValenceTable::smiles_table());
+    let mut model = ChemistryModel::default();
+    model.valence.tie_break = ValenceTieBreak::MostSaturated;
+    let resolver = Resolver::with_config(
+        &model,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            ..Default::default()
+        },
+    );
+    let mut group = c.benchmark_group("valence_readings");
+    for (name, input) in [
+        ("octane", "CCCCCCCC"),
+        (
+            "chain_64",
+            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        ),
+        ("benzene", "c1ccccc1"),
+        ("pyridine", "c1ccncc1"),
+        ("charged", "[NH4+]"),
+        ("radical", "[CH3]"),
+    ] {
+        let table = Smiles::parse(input).unwrap().into_table_ir();
+        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let ground = ingest_smiles(input).unwrap();
+        assert!(matches!(typing.admit(&molecule), Solution::Determined(_)));
+        assert!(matches!(counts.admit(&molecule), Solution::Determined(_)));
+        for id in ground.atoms().ids() {
+            assert_eq!(
+                typing.classify_molecule_atom(&ground, id),
+                Solution::Determined(())
+            );
+        }
+        let mut checked = molecule.clone();
+        assert!(matches!(
+            resolver.resolve_into(&mut checked).unwrap(),
+            Solution::Determined(_)
+        ));
+        group.bench_function(BenchmarkId::new("counts_admit", name), |b| {
+            b.iter(|| counts.admit(black_box(&molecule)));
+        });
+        group.bench_function(BenchmarkId::new("typing_admit", name), |b| {
+            b.iter(|| typing.admit(black_box(&molecule)));
+        });
+        group.bench_function(BenchmarkId::new("typing_classify", name), |b| {
+            b.iter(|| {
+                let molecule = black_box(&ground);
+                for id in molecule.atoms().ids() {
+                    black_box(typing.classify_molecule_atom(molecule, id));
+                }
+            });
+        });
+        group.bench_function(BenchmarkId::new("typing_resolve", name), |b| {
             b.iter_batched_ref(
                 || molecule.clone(),
                 |molecule| resolver.resolve_into(black_box(molecule)).unwrap(),
@@ -302,6 +370,7 @@ criterion_group!(
     resolve,
     bench_ingest_smiles,
     bench_resolve,
+    bench_valence,
     bench_aromaticity_project,
     bench_stereo_project,
     bench_project,

@@ -45,7 +45,7 @@ use umol_graph_ir::ir::{
 use umol_graph_ir::{atom_dsl, mol_dsl_concrete};
 use umol_io::ctfile::parser::parse_mol_to_ir;
 use umol_io::smiles::{ReactionSmiles, Smiles, SmilesIoConfig};
-use umol_io::table_ir::{Atom, Molecule as TableMolecule};
+use umol_io::table_ir::{Atom, Bond, BondOrder, Molecule as TableMolecule};
 use umol_utils::solution::Solution;
 
 proptest! {
@@ -197,8 +197,13 @@ proptest! {
                 atom.lone_pairs = NumForm::Lit(lp);
                 atom.constraints.set(AtomConstraintForm::valence(valence));
                 atom.constraints.set(AtomConstraintForm::aromatic_valence(if is_aromatic { AromaticValenceForm::aromatic(aromatic) } else { AromaticValenceForm::NotAromatic }));
-                let original = Molecule::from_entries(MoleculeEntries { atoms: vec![atom.clone()], ..Default::default() });
-                let expected = TableMolecule {
+                let mut entries = MoleculeEntries { atoms: vec![atom.clone()], ..Default::default() };
+                if valence > 0 {
+                    entries.atoms.push(atom_dsl!("C#i13#c0#h0#n0#u0#s"));
+                    entries.bonds.push((AtomId(0), AtomId(1), BondForm::from_order(valence as u8).with_charge(0).with_unpaired_electrons((0_u8, 1_u8))));
+                }
+                let original = Molecule::from_entries(entries);
+                let mut expected = TableMolecule {
                     atoms: vec![Atom {
                         isotope_mass: if natural { None } else { Some(13) },
                         implicit_hydrogens: if natural && selected == Some(stored_h) { None } else { Some(stored_h as u8) },
@@ -208,6 +213,18 @@ proptest! {
                     }],
                     ..TableMolecule::empty()
                 };
+
+                if valence > 0 {
+                    expected.atoms.push(Atom {
+                        isotope_mass: Some(13), implicit_hydrogens: Some(0), charge: Some(0),
+                        lone_pairs: Some(0), unpaired_electrons: Some(0),
+                        multiplicity: Some(SpinMultiplicity::SINGLET), ..Atom::from_element(Element::C)
+                    });
+                    expected.bonds.push(Bond {
+                        charge: Some(0), unpaired_electrons: Some(0), multiplicity: Some(SpinMultiplicity::SINGLET),
+                        ..Bond::new(0, 1, BondOrder::from_value(valence as u8).unwrap())
+                    });
+                }
                 for valence_model in &models {
                     let mut model = ChemistryModel { valence: valence_model.clone(), ..Default::default() };
                     model.valence.tie_break = policy;
@@ -262,8 +279,13 @@ proptest! {
             atom.lone_pairs = NumForm::Lit(stored_lp);
             atom.constraints.set(AtomConstraintForm::valence(valence));
             atom.constraints.set(AtomConstraintForm::aromatic_valence(if is_aromatic { AromaticValenceForm::aromatic(aromatic) } else { AromaticValenceForm::NotAromatic }));
-            let original = Molecule::from_entries(MoleculeEntries { atoms: vec![atom], ..Default::default() });
-            let expected = TableMolecule {
+            let mut entries = MoleculeEntries { atoms: vec![atom], ..Default::default() };
+            if valence > 0 {
+                entries.atoms.push(atom_dsl!("C#i13#c0#h0#n0#u0#s"));
+                entries.bonds.push((AtomId(0), AtomId(1), BondForm::from_order(valence as u8).with_charge(0).with_unpaired_electrons((0_u8, 1_u8))));
+            }
+            let original = Molecule::from_entries(entries);
+            let mut expected = TableMolecule {
                 atoms: vec![Atom {
                     isotope_mass: if natural { None } else { Some(13) },
                     implicit_hydrogens: if natural && selected == Some(stored_h) { None } else { Some(stored_h as u8) },
@@ -273,6 +295,18 @@ proptest! {
                 }],
                 ..TableMolecule::empty()
             };
+
+            if valence > 0 {
+                expected.atoms.push(Atom {
+                    isotope_mass: Some(13), implicit_hydrogens: Some(0), charge: Some(0),
+                    lone_pairs: Some(0), unpaired_electrons: Some(0),
+                    multiplicity: Some(SpinMultiplicity::SINGLET), ..Atom::from_element(Element::C)
+                });
+                expected.bonds.push(Bond {
+                    charge: Some(0), unpaired_electrons: Some(0), multiplicity: Some(SpinMultiplicity::SINGLET),
+                    ..Bond::new(0, 1, BondOrder::from_value(valence as u8).unwrap())
+                });
+            }
             model.valence.tie_break = policy;
             let config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
             let molecule = original.clone();

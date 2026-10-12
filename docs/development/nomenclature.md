@@ -473,7 +473,7 @@ operation over it. Not an inherent field, which does contribute to identity.
 A **constraints view** is the constraint reading of one entity, reached by accessor chaining
 (`molecule.atom(id).constraints()`): the stored container's read API with its meanings intact —
 the typed getters, `iter`, and `is_empty` read the asserted side — plus the keyed accessors
-`asserted`, `derived`, and `derived_complete` and the comparisons `satisfies` and
+`asserted`, `derived`, `evidenced`, their `_complete` counterparts, and the comparisons `satisfies` and
 `is_compatible`. Scope lives in the receiver, not in name prefixes: `atom(i).valence()` is the
 derived quantity, `atom(i).constraints().valence()` the asserted payload. These entity constraint
 views are read-only.
@@ -598,27 +598,39 @@ would be the one to rename if either were.
 
 ### Derived and asserted
 
-A derivable constraint has an **asserted side** — the stored value, open-world by definition:
-absence is the vacuous constraint — and a **derived side**, obtained by projection from the
-relations the entity takes part in. The constraints views name the readings: `asserted(key)`
-reads storage; `asserted_complete(key)` reads storage under resolution's closed-world claim —
-absence of a constraint is actual absence, so the absence cell of an entity-creating overlay
-key closes to its definite negative, and aromatic evidence merges both dialect placements
-(the atom's own assertion or an incident bond's mark) without ever reading relations;
-`derived(key)` reads present relations only and is vacuous on absence;
-`derived_complete(key)` adds the closure — under the caller's claim that the relation set is
-complete, absence of a resolution-written overlay closes to its definite negative. Topology keys
-(valence, degree, the totals, the ring keys) read identically under both derived accessors and
-have no absence cell on the asserted side; only the overlay-incidence keys have one. The two
-closures are justified by different claims, so the four readings stay four flat accessors —
-each consumer picks exactly one statically: matching reads `asserted` (open-world — a pattern
-constrains only what it mentions), resolution's admission reads `asserted_complete`.
+A derivable constraint has an **asserted side**, read from its own stored assertion,
+and a **derived side**, projected from the relations the entity takes part in.
+The six keyed readings return normalized owned forms with meet's result semantics:
+`None` is bottom; `Some(undetermined(key))` is top, including absent evidence.
+Typed storage getters and iterators retain the stored forms and borrow them.
+
+`asserted(key)` reads the own assertion; `derived(key)` reads present relations.
+`evidenced(key)` meets those readings with applicable additional evidence: an
+incident bond's positive aromatic assertion contributes aromatic atom evidence.
+Contradictory contributing evidence yields bottom.
+
+The eight entity constraint containers supply `asserted` and `asserted_complete`
+without molecule or ring context. Their molecule-backed views delegate these
+own-assertion readings to the containers.
+
+`asserted_complete(key)` closes top own assertions to the definite negative for
+overlay keys, without reading incident bond assertions or relations.
+`derived_complete(key)` closes absent overlays under the caller's claim that
+relations are complete. Topology keys agree with `derived`.
+`evidenced_complete(key)` uses complete derivation only when the combined evidence
+is top; it preserves non-vacuous evidence and bottom. Host-side `satisfies` reads
+`evidenced_complete`; `is_compatible` reads `evidenced`.
+Pattern entries are own assertions; resolution admission and matching hosts use
+complete evidence, while aromatization uses open evidence.
+
+These readings do not rewrite storage or change mutation fallibility. Successfully
+normalizing a molecule preserves its readings in the same context.
 
 **Not:** `projected` for the reading — *projection* names the operation yielding the derived
-side; not a mode parameter or stored molecule state — the closure choice is per call; no
-parameterized accessor unifying the readings.
-**In code:** `asserted`, `asserted_complete`, `derived`, `derived_complete` on the
-constraints views.
+side; not a mode parameter or stored molecule state — the closure choice is per call.
+**In code:** `asserted`, `asserted_complete`, `derived`, `derived_complete`,
+`evidenced`, `evidenced_complete` on the constraints views; `asserted` and
+`asserted_complete` on the eight entity constraint containers.
 
 ### Description level
 

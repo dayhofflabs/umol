@@ -863,15 +863,15 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C#a!"] :bonds []}"#),
         vec![vec![AtomId(0)], vec![AtomId(1)]]
     )]
-    #[case::atom_aromatic_bond_marked_unresolved(
+    #[case::atom_aromatic_bond_evidence(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         mol_dsl!(r#"{:atoms ["C#a+"] :bonds []}"#),
-        vec![]
+        vec![vec![AtomId(0)], vec![AtomId(1)]]
     )]
-    #[case::atom_not_aromatic_bond_marked_unresolved(
+    #[case::atom_not_aromatic_bond_evidence(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         mol_dsl!(r#"{:atoms ["C#a!"] :bonds []}"#),
-        vec![vec![AtomId(0)], vec![AtomId(1)]]
+        vec![]
     )]
     #[case::atom_multicenter_valence(
         mol_dsl!(r#"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#),
@@ -908,10 +908,10 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*#a"]]}"#),
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
     )]
-    #[case::bond_aromatic_asserted_conflict(
+    #[case::bond_aromatic_asserted_without_overlay(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*#a"]]}"#),
-        vec![]
+        vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
     )]
     #[case::bond_not_cis_trans(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),

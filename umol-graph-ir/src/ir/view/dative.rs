@@ -457,23 +457,6 @@ pub(crate) fn dative_bond_asserted_constraints(
     &molecule.dative_bond(id).attributes().constraints
 }
 
-/// Asserted side of one dative-bond constraint key under resolution's
-/// closed-world claim: the stored assertion, else the absence cell closed to
-/// its definite negative. Never reads relations.
-pub(crate) fn dative_bond_asserted_complete_constraint(
-    molecule: &Molecule,
-    id: DativeBondId,
-    key: DativeBondConstraintKey,
-) -> Option<DativeBondConstraintForm> {
-    if let Some(asserted) = dative_bond_asserted_constraints(molecule, id).get(key) {
-        return Some(asserted.clone());
-    }
-    match key {
-        DativeBondConstraintKey::Aromatic => Some(DativeBondConstraintForm::aromatic(false)),
-        DativeBondConstraintKey::RingMembership(_) => None,
-    }
-}
-
 /// Derived side of one dative-bond constraint key. Aromatic incidence is
 /// defined only for a binary dative bond (doc 117 stub for multi-donor
 /// entries): the donor and acceptor share an aromatic system. The ring key
@@ -488,7 +471,7 @@ pub(crate) fn dative_bond_derived_constraint(
         DativeBondConstraintKey::Aromatic => {
             let view = molecule.dative_bond(id);
             if view.donor_count() != 1 {
-                return None;
+                return Some(DativeBondConstraintForm::undetermined(key));
             }
             let donor_system = view.donors().next().and_then(|d| d.aromatic_system_id());
             let shared =
@@ -498,10 +481,12 @@ pub(crate) fn dative_bond_derived_constraint(
             } else if complete {
                 Some(DativeBondConstraintForm::aromatic(false))
             } else {
-                None
+                Some(DativeBondConstraintForm::undetermined(key))
             }
         }
-        DativeBondConstraintKey::RingMembership(_) => None,
+        DativeBondConstraintKey::RingMembership(_) => {
+            Some(DativeBondConstraintForm::undetermined(key))
+        }
     }
 }
 

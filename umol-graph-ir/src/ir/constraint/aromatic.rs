@@ -131,6 +131,27 @@ impl AromaticSystemConstraintsForm {
         Self(Vec::new())
     }
 
+    /// The normalized own assertion: absence is top; contradiction is `None`.
+    /// Reads only this key and leaves storage unchanged.
+    pub fn asserted(
+        &self,
+        key: AromaticSystemConstraintKey,
+    ) -> Option<AromaticSystemConstraintForm> {
+        match self.get(key) {
+            Some(value) => value.clone().normalize().ok(),
+            None => Some(AromaticSystemConstraintForm::undetermined(key)),
+        }
+    }
+
+    /// The normalized own assertion. This entity kind has no closure negative,
+    /// so this agrees with [`Self::asserted`]. Reads no molecule context.
+    pub fn asserted_complete(
+        &self,
+        key: AromaticSystemConstraintKey,
+    ) -> Option<AromaticSystemConstraintForm> {
+        self.asserted(key)
+    }
+
     /// The system's electron count, or `Undetermined` when no `ElectronCount` constraint is present.
     pub fn electron_count(&self) -> &NumForm {
         match self.get(AromaticSystemConstraintKey::ElectronCount) {
@@ -550,6 +571,26 @@ mod tests {
         let cs = AromaticSystemConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absent(None, AromaticSystemConstraintKey::ElectronCount, Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)))]
+    #[case::top(Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), AromaticSystemConstraintKey::ElectronCount, Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), Some(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)))]
+    #[case::literal(Some(AromaticSystemConstraintForm::electron_count(NumForm::Lit(2))), AromaticSystemConstraintKey::ElectronCount, Some(AromaticSystemConstraintForm::electron_count(2)), Some(AromaticSystemConstraintForm::electron_count(2)))]
+    #[case::singleton(Some(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([2]))), AromaticSystemConstraintKey::ElectronCount, Some(AromaticSystemConstraintForm::electron_count(2)), Some(AromaticSystemConstraintForm::electron_count(2)))]
+    #[case::bottom(Some(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([]))), AromaticSystemConstraintKey::ElectronCount, None, None)]
+    fn test_aromatic_system_constraints_form_asserted(
+        #[case] source: Option<AromaticSystemConstraintForm>,
+        #[case] key: AromaticSystemConstraintKey,
+        #[case] expected: Option<AromaticSystemConstraintForm>,
+        #[case] complete: Option<AromaticSystemConstraintForm>,
+    ) {
+        let constraints: AromaticSystemConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
     }
 
     #[rstest]

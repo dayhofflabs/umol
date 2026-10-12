@@ -8,6 +8,8 @@
 #[cfg(test)]
 use std::fmt::Debug;
 
+use super::num::read_num;
+
 mod aromatic;
 mod atom;
 mod bond;
@@ -18,6 +20,8 @@ mod ligand;
 mod multicenter;
 mod neighbor;
 mod noncovalent;
+#[cfg(test)]
+mod readings;
 mod ring;
 mod stereo;
 

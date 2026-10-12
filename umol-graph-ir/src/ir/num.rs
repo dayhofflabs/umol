@@ -29,6 +29,14 @@ pub enum NumForm {
     PredExpr(Box<PredExpr>),
 }
 
+pub(crate) fn read_num(value: &NumForm) -> Option<NumForm> {
+    match value {
+        NumForm::Undetermined => Some(NumForm::Undetermined),
+        NumForm::Lit(n) => Some(NumForm::Lit(*n)),
+        _ => value.clone().normalize().ok(),
+    }
+}
+
 /// Arithmetic expression over `i64`, the value-sort half of the field grammar. `Sum`
 /// and `Product` are n-ary (associative + commutative by construction);
 /// subtraction lowers to `Sum([a, Neg(b)])`; `Div`/`Rem` stay binary. A ground
@@ -117,6 +125,7 @@ impl From<BTreeSet<i64>> for NumForm {
 }
 
 impl Normalize for NumForm {
+    #[inline]
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             NumForm::Undetermined => NumForm::Undetermined,
@@ -505,6 +514,14 @@ impl Lattice for NumForm {
     /// Distinct symbolic forms (`ArithExpr`/`PredExpr`) meet only when equal once
     /// normalized; symbolic versus concrete is rejected.
     fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Undetermined, Self::Undetermined) => return Some(Self::Undetermined),
+            (Self::Undetermined, Self::Lit(n)) | (Self::Lit(n), Self::Undetermined) => {
+                return Some(Self::Lit(*n));
+            }
+            (Self::Lit(a), Self::Lit(b)) => return (a == b).then_some(Self::Lit(*a)),
+            _ => {}
+        }
         let a = self.clone().normalize().ok()?;
         let b = other.clone().normalize().ok()?;
         use NumForm::*;

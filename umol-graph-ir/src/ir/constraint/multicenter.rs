@@ -131,6 +131,27 @@ impl MulticenterBondConstraintsForm {
         Self(Vec::new())
     }
 
+    /// The normalized own assertion: absence is top; contradiction is `None`.
+    /// Reads only this key and leaves storage unchanged.
+    pub fn asserted(
+        &self,
+        key: MulticenterBondConstraintKey,
+    ) -> Option<MulticenterBondConstraintForm> {
+        match self.get(key) {
+            Some(value) => value.clone().normalize().ok(),
+            None => Some(MulticenterBondConstraintForm::undetermined(key)),
+        }
+    }
+
+    /// The normalized own assertion. This entity kind has no closure negative,
+    /// so this agrees with [`Self::asserted`]. Reads no molecule context.
+    pub fn asserted_complete(
+        &self,
+        key: MulticenterBondConstraintKey,
+    ) -> Option<MulticenterBondConstraintForm> {
+        self.asserted(key)
+    }
+
     /// The bond's electron count, or `Undetermined` when no `ElectronCount` constraint is present.
     pub fn electron_count(&self) -> &NumForm {
         match self.get(MulticenterBondConstraintKey::ElectronCount) {
@@ -552,6 +573,26 @@ mod tests {
         let cs = MulticenterBondConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absent(None, MulticenterBondConstraintKey::ElectronCount, Some(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), Some(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)))]
+    #[case::top(Some(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), MulticenterBondConstraintKey::ElectronCount, Some(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), Some(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)))]
+    #[case::literal(Some(MulticenterBondConstraintForm::electron_count(NumForm::Lit(2))), MulticenterBondConstraintKey::ElectronCount, Some(MulticenterBondConstraintForm::electron_count(2)), Some(MulticenterBondConstraintForm::electron_count(2)))]
+    #[case::singleton(Some(MulticenterBondConstraintForm::electron_count(NumForm::lit_set([2]))), MulticenterBondConstraintKey::ElectronCount, Some(MulticenterBondConstraintForm::electron_count(2)), Some(MulticenterBondConstraintForm::electron_count(2)))]
+    #[case::bottom(Some(MulticenterBondConstraintForm::electron_count(NumForm::lit_set([]))), MulticenterBondConstraintKey::ElectronCount, None, None)]
+    fn test_multicenter_bond_constraints_form_asserted(
+        #[case] source: Option<MulticenterBondConstraintForm>,
+        #[case] key: MulticenterBondConstraintKey,
+        #[case] expected: Option<MulticenterBondConstraintForm>,
+        #[case] complete: Option<MulticenterBondConstraintForm>,
+    ) {
+        let constraints: MulticenterBondConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
     }
 
     #[rstest]

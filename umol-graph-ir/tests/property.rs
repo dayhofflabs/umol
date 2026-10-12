@@ -15,6 +15,8 @@ mod strategies;
 
 #[path = "property/constraint.rs"]
 mod constraint;
+#[path = "property/constraint_readings.rs"]
+mod constraint_readings;
 #[path = "property/delta.rs"]
 mod delta;
 #[path = "property/edit.rs"]

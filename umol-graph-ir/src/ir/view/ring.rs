@@ -5,6 +5,7 @@ use super::super::id::{AtomId, BondId};
 use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::ring::{RingId, RingSet, RingSetKind};
+use super::read_num;
 
 /// Molecule ring views: owned ring set plus borrow of molecule.
 #[derive(Debug)]
@@ -145,8 +146,8 @@ impl<'a> RingAtomView<'a> {
     }
 
     /// Sum of bond orders of incident bonds that lie in a ring. `Undetermined`
-    /// if any contributing bond's order is non-`Lit`.
-    pub fn ring_valence(&self) -> NumForm {
+    /// if a normalized order remains non-`Lit`; contradiction returns `None`.
+    pub fn ring_valence(&self) -> Option<NumForm> {
         atom_ring_valence(self.molecule, self.rings, self.id)
     }
 }
@@ -211,13 +212,18 @@ pub(crate) fn atom_ring_degree(molecule: &Molecule, rings: &RingSet, id: AtomId)
 }
 
 /// Sum of bond orders of incident bonds of atom `id` that lie in a ring.
-/// `Undetermined` if any contributing bond's order is non-`Lit`.
-pub(crate) fn atom_ring_valence(molecule: &Molecule, rings: &RingSet, id: AtomId) -> NumForm {
+/// `Undetermined` if a normalized order remains non-`Lit`; contradiction returns `None`.
+pub(crate) fn atom_ring_valence(
+    molecule: &Molecule,
+    rings: &RingSet,
+    id: AtomId,
+) -> Option<NumForm> {
     molecule
         .neighbors(id)
         .filter(|n| rings.contains_bond(n.bond().id()))
-        .map(|n| n.bond().order().clone())
-        .fold(NumForm::Lit(0), |acc, order| acc + order)
+        .try_fold(NumForm::Lit(0), |sum, n| {
+            Some(sum + read_num(n.bond().order())?)
+        })
 }
 
 /// Count of rings containing bond `id` and matching `scope`. Always `Lit`.
@@ -502,7 +508,7 @@ mod tests {
                 .rings(RingModel::default(), RingConfig::default())
                 .atom(atom)
                 .ring_valence(),
-            expected
+            Some(expected)
         );
     }
 

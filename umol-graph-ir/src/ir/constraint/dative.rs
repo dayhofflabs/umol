@@ -155,6 +155,31 @@ impl DativeBondConstraintsForm {
         Self(Vec::new())
     }
 
+    /// The normalized own assertion: absence is top; contradiction is `None`.
+    /// Reads only this key and leaves storage unchanged.
+    pub fn asserted(&self, key: DativeBondConstraintKey) -> Option<DativeBondConstraintForm> {
+        match self.get(key) {
+            Some(value) => value.clone().normalize().ok(),
+            None => Some(DativeBondConstraintForm::undetermined(key)),
+        }
+    }
+
+    /// Close top aromaticity to false. Ring keys retain top; bottom remains bottom.
+    /// Reads no molecule or ring context.
+    pub fn asserted_complete(
+        &self,
+        key: DativeBondConstraintKey,
+    ) -> Option<DativeBondConstraintForm> {
+        let asserted = self.asserted(key)?;
+        if !asserted.is_undetermined() {
+            return Some(asserted);
+        }
+        Some(match key {
+            DativeBondConstraintKey::Aromatic => DativeBondConstraintForm::aromatic(false),
+            _ => asserted,
+        })
+    }
+
     /// The dative bond's aromatic value, or `Undetermined` when no `Aromatic` constraint is present.
     pub fn aromatic(&self) -> &BooleanForm {
         match self.get(DativeBondConstraintKey::Aromatic) {
@@ -599,6 +624,30 @@ mod tests {
         let cs = DativeBondConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ring_all_absent(None, DativeBondConstraintKey::RingMembership(RingScope::All), Some(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)), Some(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)))]
+    #[case::ring_all_top(Some(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)), DativeBondConstraintKey::RingMembership(RingScope::All), Some(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)), Some(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)))]
+    #[case::ring_size6_absent(None, DativeBondConstraintKey::RingMembership(RingScope::Size(6)), Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)))]
+    #[case::ring_size6_top(Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), DativeBondConstraintKey::RingMembership(RingScope::Size(6)), Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)))]
+    #[case::ring_singleton(Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::lit_set([1]))), DativeBondConstraintKey::RingMembership(RingScope::Size(6)), Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1)), Some(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1)))]
+    #[case::ring_bottom(Some(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([]))), DativeBondConstraintKey::RingMembership(RingScope::All), None, None)]
+    #[case::aromatic_absent(None, DativeBondConstraintKey::Aromatic, Some(DativeBondConstraintForm::Aromatic(BooleanForm::Undetermined)), Some(DativeBondConstraintForm::aromatic(false)))]
+    #[case::aromatic_top(Some(DativeBondConstraintForm::Aromatic(BooleanForm::Undetermined)), DativeBondConstraintKey::Aromatic, Some(DativeBondConstraintForm::Aromatic(BooleanForm::Undetermined)), Some(DativeBondConstraintForm::aromatic(false)))]
+    #[case::aromatic_positive(Some(DativeBondConstraintForm::aromatic(true)), DativeBondConstraintKey::Aromatic, Some(DativeBondConstraintForm::aromatic(true)), Some(DativeBondConstraintForm::aromatic(true)))]
+    fn test_dative_bond_constraints_form_asserted(
+        #[case] source: Option<DativeBondConstraintForm>,
+        #[case] key: DativeBondConstraintKey,
+        #[case] expected: Option<DativeBondConstraintForm>,
+        #[case] complete: Option<DativeBondConstraintForm>,
+    ) {
+        let constraints: DativeBondConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
     }
 
     #[rstest]

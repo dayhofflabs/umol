@@ -823,10 +823,10 @@ pub(crate) fn stereo_atom_asserted_constraints(
 pub(crate) fn stereo_atom_derived_constraint(
     _molecule: &Molecule,
     _id: StereoAtomId,
-    _key: StereoAtomConstraintKey,
+    key: StereoAtomConstraintKey,
     _complete: bool,
 ) -> Option<StereoAtomConstraintForm> {
-    None
+    Some(StereoAtomConstraintForm::undetermined(key))
 }
 
 /// Stored constraint container of the stereo bond `id`.
@@ -841,10 +841,10 @@ pub(crate) fn stereo_bond_asserted_constraints(
 pub(crate) fn stereo_bond_derived_constraint(
     _molecule: &Molecule,
     _id: StereoBondId,
-    _key: StereoBondConstraintKey,
+    key: StereoBondConstraintKey,
     _complete: bool,
 ) -> Option<StereoBondConstraintForm> {
-    None
+    Some(StereoBondConstraintForm::undetermined(key))
 }
 
 #[cfg(test)]

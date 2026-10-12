@@ -157,6 +157,31 @@ impl BondConstraintsForm {
         Self(Vec::new())
     }
 
+    /// The normalized own assertion: absence is top; contradiction is `None`.
+    /// Reads only this key and leaves storage unchanged.
+    pub fn asserted(&self, key: BondConstraintKey) -> Option<BondConstraintForm> {
+        match self.get(key) {
+            Some(value) => value.clone().normalize().ok(),
+            None => Some(BondConstraintForm::undetermined(key)),
+        }
+    }
+
+    /// Close top aromaticity to false and top stereo to `NotStereo`.
+    /// Ring keys retain top; bottom remains bottom. Reads no molecule or ring context.
+    pub fn asserted_complete(&self, key: BondConstraintKey) -> Option<BondConstraintForm> {
+        let asserted = self.asserted(key)?;
+        if !asserted.is_undetermined() {
+            return Some(asserted);
+        }
+        Some(match key {
+            BondConstraintKey::Aromatic => BondConstraintForm::aromatic(false),
+            BondConstraintKey::CisTransStereo => {
+                BondConstraintForm::cis_trans_stereo(CisTransStereoForm::NotStereo)
+            }
+            _ => asserted,
+        })
+    }
+
     /// The bond's aromatic value, or `Undetermined` when no `Aromatic` constraint is present.
     pub fn aromatic(&self) -> &BooleanForm {
         match self.get(BondConstraintKey::Aromatic) {
@@ -572,6 +597,32 @@ mod tests {
         let cs = BondConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ring_all_absent(None, BondConstraintKey::RingMembership(RingScope::All), Some(BondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)), Some(BondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)))]
+    #[case::ring_all_top(Some(BondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)), BondConstraintKey::RingMembership(RingScope::All), Some(BondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)), Some(BondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined)))]
+    #[case::ring_size6_absent(None, BondConstraintKey::RingMembership(RingScope::Size(6)), Some(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), Some(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)))]
+    #[case::ring_size6_top(Some(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), BondConstraintKey::RingMembership(RingScope::Size(6)), Some(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), Some(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)))]
+    #[case::ring_singleton(Some(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::lit_set([1]))), BondConstraintKey::RingMembership(RingScope::Size(6)), Some(BondConstraintForm::ring_membership(RingScope::Size(6), 1)), Some(BondConstraintForm::ring_membership(RingScope::Size(6), 1)))]
+    #[case::ring_bottom(Some(BondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([]))), BondConstraintKey::RingMembership(RingScope::All), None, None)]
+    #[case::aromatic_absent(None, BondConstraintKey::Aromatic, Some(BondConstraintForm::Aromatic(BooleanForm::Undetermined)), Some(BondConstraintForm::aromatic(false)))]
+    #[case::aromatic_top(Some(BondConstraintForm::Aromatic(BooleanForm::Undetermined)), BondConstraintKey::Aromatic, Some(BondConstraintForm::Aromatic(BooleanForm::Undetermined)), Some(BondConstraintForm::aromatic(false)))]
+    #[case::aromatic_positive(Some(BondConstraintForm::aromatic(true)), BondConstraintKey::Aromatic, Some(BondConstraintForm::aromatic(true)), Some(BondConstraintForm::aromatic(true)))]
+    #[case::stereo_absent(None, BondConstraintKey::CisTransStereo, Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::Undetermined)), Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo)))]
+    #[case::stereo_top(Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::Undetermined)), BondConstraintKey::CisTransStereo, Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::Undetermined)), Some(BondConstraintForm::CisTransStereo(CisTransStereoForm::NotStereo)))]
+    fn test_bond_constraints_form_asserted(
+        #[case] source: Option<BondConstraintForm>,
+        #[case] key: BondConstraintKey,
+        #[case] expected: Option<BondConstraintForm>,
+        #[case] complete: Option<BondConstraintForm>,
+    ) {
+        let constraints: BondConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
     }
 
     #[rstest]

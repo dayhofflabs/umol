@@ -103,6 +103,10 @@ harness = false
 name = "editor"
 harness = false
 
+[[bench]]
+name = "constraint_readings"
+harness = false
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"

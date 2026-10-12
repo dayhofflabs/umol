@@ -1189,7 +1189,9 @@ impl<'a> Resolver<'a> {
                     reading = reading.with_rings(rings);
                 }
                 let Some(derived) = reading.derived_complete(asserted.key()) else {
-                    continue;
+                    return Ok(Err(DischargeContradiction::Assertion {
+                        constraint: Constraint::Atom(id, asserted.clone()),
+                    }));
                 };
                 match asserted.meet(&derived) {
                     None => {
@@ -1246,7 +1248,9 @@ impl<'a> Resolver<'a> {
                     reading = reading.with_rings(rings);
                 }
                 let Some(derived) = reading.derived_complete(asserted.key()) else {
-                    continue;
+                    return Ok(Err(DischargeContradiction::Assertion {
+                        constraint: Constraint::Bond(id, asserted.clone()),
+                    }));
                 };
                 match asserted.meet(&derived) {
                     None => {
@@ -1295,7 +1299,9 @@ impl<'a> Resolver<'a> {
                     .constraints()
                     .derived_complete(asserted.key())
                 else {
-                    continue;
+                    return Ok(Err(DischargeContradiction::Assertion {
+                        constraint: Constraint::DativeBond(id, asserted.clone()),
+                    }));
                 };
                 match asserted.meet(&derived) {
                     None => {
@@ -1336,7 +1342,9 @@ impl<'a> Resolver<'a> {
                     .constraints()
                     .derived_complete(asserted.key())
                 else {
-                    continue;
+                    return Ok(Err(DischargeContradiction::Assertion {
+                        constraint: Constraint::AromaticSystem(id, asserted.clone()),
+                    }));
                 };
                 match asserted.meet(&derived) {
                     None => {
@@ -1369,7 +1377,9 @@ impl<'a> Resolver<'a> {
                     .constraints()
                     .derived_complete(asserted.key())
                 else {
-                    continue;
+                    return Ok(Err(DischargeContradiction::Assertion {
+                        constraint: Constraint::MulticenterBond(id, asserted.clone()),
+                    }));
                 };
                 match asserted.meet(&derived) {
                     None => {
@@ -1402,7 +1412,9 @@ impl<'a> Resolver<'a> {
                     .constraints()
                     .derived_complete(asserted.key())
                 else {
-                    continue;
+                    return Ok(Err(DischargeContradiction::Assertion {
+                        constraint: Constraint::NoncovalentBond(id, asserted.clone()),
+                    }));
                 };
                 match asserted.meet(&derived) {
                     None => {
@@ -1423,33 +1435,6 @@ impl<'a> Resolver<'a> {
                 }
             }
         }
-        // Stereo entity constraint keys derive vacuous, so their assertions
-        // are always kept; the loops exist for the uniform surface.
-        for id in molecule.stereo_atoms().ids() {
-            for asserted in molecule.stereo_atom(id).attributes().constraints.iter() {
-                if molecule
-                    .stereo_atom(id)
-                    .constraints()
-                    .derived_complete(asserted.key())
-                    .is_some()
-                {
-                    unreachable!("stereo atom constraint keys have no projection");
-                }
-            }
-        }
-        for id in molecule.stereo_bonds().ids() {
-            for asserted in molecule.stereo_bond(id).attributes().constraints.iter() {
-                if molecule
-                    .stereo_bond(id)
-                    .constraints()
-                    .derived_complete(asserted.key())
-                    .is_some()
-                {
-                    unreachable!("stereo bond constraint keys have no projection");
-                }
-            }
-        }
-
         let validator = ConstraintInvariantsValidator::new(ConstraintValidateConfig {
             relevant_cycle_algorithm: self
                 .config
@@ -2328,6 +2313,27 @@ mod tests {
             )))
         );
         assert_eq!(molecule, before);
+    }
+
+    #[rstest]
+    #[case::atom(mol_dsl_concrete!(r#"{
+        :atoms ["C#h" "F" "Cl" "Br"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]
+    }"#))]
+    #[case::bond(mol_dsl_concrete!(r#"{
+        :atoms ["C" "C" "F" "Cl" "Br" "I"]
+        :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1#o(0,1)="}]
+    }"#))]
+    fn test_resolver_resolve_stereo_assertions(
+        chemistry_model: ChemistryModel,
+        #[case] molecule: Molecule,
+    ) {
+        assert_eq!(
+            Resolver::new(&chemistry_model).resolve(molecule.clone()),
+            Ok(Solution::Determined(molecule))
+        );
     }
 
     #[rstest]

@@ -10,8 +10,8 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::{
-    aromatic_covalence, AsLit, AtomConstraintForm, AtomConstraintsForm, AtomForm, AtomId,
-    ElementForm, Lattice, Molecule, NumForm, UnpairedElectronsForm,
+    aromatic_covalence, AsLit, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
+    AtomForm, AtomId, ElementForm, Lattice, Molecule, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -36,6 +36,11 @@ pub enum ValenceInvariantsError {}
 /// A model-independent electron-conservation contradiction.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceMismatch {
+    #[error("atom {atom_id:?}: contradictory {key:?} reading")]
+    ContradictoryConstraint {
+        atom_id: AtomId,
+        key: AtomConstraintKey,
+    },
     #[error("atom {atom_id:?}: orbital count {orbital_count} != electron count {electron_count}")]
     OrbitalCount {
         atom_id: AtomId,
@@ -165,7 +170,13 @@ impl ValenceInvariants {
         let valence = match atom.constraints().valence() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.valence() {
-                NumForm::Lit(t) if t >= 0 => t,
+                Some(NumForm::Lit(t)) if t >= 0 => t,
+                None => {
+                    return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+                        atom_id,
+                        key: AtomConstraintKey::Valence,
+                    })
+                }
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
@@ -173,7 +184,13 @@ impl ValenceInvariants {
         let donated = match atom.constraints().donated_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.donated_pairs() {
-                NumForm::Lit(t) if t >= 0 => t,
+                Some(NumForm::Lit(t)) if t >= 0 => t,
+                None => {
+                    return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+                        atom_id,
+                        key: AtomConstraintKey::DonatedPairs,
+                    })
+                }
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
@@ -181,7 +198,13 @@ impl ValenceInvariants {
         let accepted = match atom.constraints().accepted_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.accepted_pairs() {
-                NumForm::Lit(t) if t >= 0 => t,
+                Some(NumForm::Lit(t)) if t >= 0 => t,
+                None => {
+                    return Solution::Contradictory(ValenceMismatch::ContradictoryConstraint {
+                        atom_id,
+                        key: AtomConstraintKey::AcceptedPairs,
+                    })
+                }
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
@@ -260,7 +283,7 @@ impl ValenceInvariants {
         let valence = match atom.constraints().valence() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.valence() {
-                NumForm::Lit(t) if t >= 0 => t,
+                Some(NumForm::Lit(t)) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
@@ -268,7 +291,7 @@ impl ValenceInvariants {
         let donated = match atom.constraints().donated_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.donated_pairs() {
-                NumForm::Lit(t) if t >= 0 => t,
+                Some(NumForm::Lit(t)) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
@@ -276,7 +299,7 @@ impl ValenceInvariants {
         let accepted = match atom.constraints().accepted_pairs() {
             NumForm::Lit(v) if *v >= 0 => *v,
             NumForm::Undetermined => match atom.accepted_pairs() {
-                NumForm::Lit(t) if t >= 0 => t,
+                Some(NumForm::Lit(t)) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
@@ -474,7 +497,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{
-        AromaticValenceForm, AtomConstraintForm, AtomConstraintsForm, AtomForm, AtomId,
+        AromaticValenceForm, AtomConstraintForm, AtomConstraintsForm, AtomForm, AtomId, BondForm,
         ElementForm, IsotopeMassForm, Molecule, MoleculeEntries, NumForm, UnpairedElectronsForm,
     };
 
@@ -516,6 +539,20 @@ mod tests {
         }], bonds: vec![], ..Default::default() }),
         AtomId(0),
         Solution::Contradictory(ValenceMismatch::OrbitalCount { atom_id: AtomId(0), orbital_count: 198, electron_count: 103 }),
+    )]
+    #[case::contradictory_valence(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm {
+                element: ElementForm::Lit(Element::C), charge: NumForm::Lit(0),
+                implicit_hydrogens: NumForm::Lit(3), lone_pairs: NumForm::Lit(0),
+                unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
+                ..Default::default()
+            }; 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::new(NumForm::lit_set([])))],
+            ..Default::default()
+        }),
+        AtomId(0),
+        Solution::Contradictory(ValenceMismatch::ContradictoryConstraint { atom_id: AtomId(0), key: AtomConstraintKey::Valence }),
     )]
     fn test_valence_invariants_check_molecule_atom(
         #[case] molecule: Molecule,

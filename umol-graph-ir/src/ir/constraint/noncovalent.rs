@@ -135,6 +135,27 @@ impl NoncovalentBondConstraintsForm {
         Self(Vec::new())
     }
 
+    /// The normalized own assertion: absence is top; contradiction is `None`.
+    /// Reads only this key and leaves storage unchanged.
+    pub fn asserted(
+        &self,
+        key: NoncovalentBondConstraintKey,
+    ) -> Option<NoncovalentBondConstraintForm> {
+        match self.get(key) {
+            Some(value) => value.clone().normalize().ok(),
+            None => Some(NoncovalentBondConstraintForm::undetermined(key)),
+        }
+    }
+
+    /// The normalized own assertion. This entity kind has no closure negative,
+    /// so this agrees with [`Self::asserted`]. Reads no molecule context.
+    pub fn asserted_complete(
+        &self,
+        key: NoncovalentBondConstraintKey,
+    ) -> Option<NoncovalentBondConstraintForm> {
+        self.asserted(key)
+    }
+
     /// The bond's intramolecular value, or `Undetermined` when no `Intramolecular` constraint is present.
     pub fn intramolecular(&self) -> &BooleanForm {
         match self.get(NoncovalentBondConstraintKey::Intramolecular) {
@@ -556,6 +577,25 @@ mod tests {
         let cs = NoncovalentBondConstraintsForm::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absent(None, NoncovalentBondConstraintKey::Intramolecular, Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)), Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)))]
+    #[case::top(Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)), NoncovalentBondConstraintKey::Intramolecular, Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)), Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined)))]
+    #[case::positive(Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))), NoncovalentBondConstraintKey::Intramolecular, Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))), Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))))]
+    #[case::negative(Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false))), NoncovalentBondConstraintKey::Intramolecular, Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false))), Some(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false))))]
+    fn test_noncovalent_bond_constraints_form_asserted(
+        #[case] source: Option<NoncovalentBondConstraintForm>,
+        #[case] key: NoncovalentBondConstraintKey,
+        #[case] expected: Option<NoncovalentBondConstraintForm>,
+        #[case] complete: Option<NoncovalentBondConstraintForm>,
+    ) {
+        let constraints: NoncovalentBondConstraintsForm = source.into_iter().collect();
+        let before = constraints.clone();
+        assert_eq!(constraints.asserted(key), expected);
+        assert_eq!(constraints.asserted_complete(key), complete);
+        assert_eq!(constraints, before);
     }
 
     #[rstest]
